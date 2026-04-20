@@ -6,7 +6,7 @@
 #   fly deploy
 
 app = "shukajpes-api"
-primary_region = "waw"  # Warsaw — closest low-latency PoP for Kyiv users.
+primary_region = "fra"  # Frankfurt — low-latency for Kyiv users.
 
 [build]
   dockerfile = "server/Dockerfile"
