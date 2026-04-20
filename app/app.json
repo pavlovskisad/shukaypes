@@ -1,0 +1,42 @@
+{
+  "expo": {
+    "name": "шукайпес",
+    "slug": "shukajpes",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "shukajpes",
+    "userInterfaceStyle": "light",
+    "newArchEnabled": true,
+    "ios": {
+      "supportsTablet": false,
+      "bundleIdentifier": "com.shukajpes.app",
+      "infoPlist": {
+        "NSLocationWhenInUseUsageDescription": "шукайпес needs your location to show your companion on the map and guide you through walks."
+      }
+    },
+    "android": {
+      "package": "com.shukajpes.app",
+      "permissions": ["ACCESS_COARSE_LOCATION", "ACCESS_FINE_LOCATION"]
+    },
+    "web": {
+      "bundler": "metro",
+      "output": "single"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "шукайпес uses your location to show your companion and nearby quests."
+        }
+      ]
+    ],
+    "experiments": {
+      "typedRoutes": true
+    },
+    "extra": {
+      "apiUrl": "http://localhost:3000"
+    }
+  }
+}
