@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { balance } from '../constants/balance';
 import type { FoodItem, LatLng, Quest, Token } from '@shukajpes/shared';
+import { api } from '../services/api';
 
 interface GameState {
   hunger: number;
@@ -15,24 +16,22 @@ interface GameState {
   currentScreen: 'map' | 'tasks' | 'chat' | 'spots' | 'profile';
   tokens: Token[];
   foodItems: FoodItem[];
+  syncing: boolean;
+  lastSyncError: string | null;
 
   setUserPosition: (pos: LatLng) => void;
   setHomePosition: (pos: LatLng) => void;
-  collectToken: (id: string) => void;
-  eatFood: (id: string) => void;
-  startQuestBoost: () => void;
-  walkBoost: () => void;
-  decayTick: () => void;
+  collectToken: (id: string) => Promise<void>;
+  eatFood: (id: string) => Promise<void>;
   setMenuOpen: (open: boolean) => void;
   setScreen: (screen: GameState['currentScreen']) => void;
   setActiveQuest: (quest: Quest | null) => void;
-  seedTokens: (tokens: Token[]) => void;
-  seedFood: (items: FoodItem[]) => void;
+  syncState: () => Promise<void>;
+  syncTokens: (pos: LatLng) => Promise<void>;
+  syncFood: (pos: LatLng) => Promise<void>;
 }
 
-const clamp = (n: number) => Math.max(0, Math.min(100, n));
-
-export const useGameStore = create<GameState>((set) => ({
+export const useGameStore = create<GameState>((set, get) => ({
   hunger: balance.hunger.start,
   happiness: balance.happiness.start,
   tokensCollected: 0,
@@ -45,6 +44,8 @@ export const useGameStore = create<GameState>((set) => ({
   currentScreen: 'map',
   tokens: [],
   foodItems: [],
+  syncing: false,
+  lastSyncError: null,
 
   setUserPosition: (pos) =>
     set((s) => ({
@@ -54,47 +55,86 @@ export const useGameStore = create<GameState>((set) => ({
 
   setHomePosition: (pos) => set({ homePosition: pos }),
 
-  collectToken: (id) =>
-    set((s) => {
-      const tok = s.tokens.find((t) => t.id === id);
-      if (!tok || tok.collectedAt) return s;
-      return {
-        tokens: s.tokens.map((t) =>
-          t.id === id ? { ...t, collectedAt: new Date().toISOString(), collectedBy: 'me' } : t
-        ),
-        tokensCollected: s.tokensCollected + 1,
-        points: s.points + tok.value,
-        hunger: clamp(s.hunger + balance.token.hunger),
-        happiness: clamp(s.happiness + balance.token.happiness),
-      };
-    }),
-
-  eatFood: (id) =>
-    set((s) => {
-      const f = s.foodItems.find((x) => x.id === id);
-      if (!f) return s;
-      return {
-        foodItems: s.foodItems.filter((x) => x.id !== id),
-        hunger: clamp(s.hunger + balance.bone.hunger),
-        happiness: clamp(s.happiness + balance.bone.happiness),
-      };
-    }),
-
-  startQuestBoost: () =>
-    set((s) => ({ happiness: clamp(s.happiness + balance.searchQuest.happiness) })),
-
-  walkBoost: () =>
-    set((s) => ({ happiness: clamp(s.happiness + balance.walk.happiness) })),
-
-  decayTick: () =>
+  collectToken: async (id) => {
+    const { userPosition, tokens } = get();
+    const tok = tokens.find((t) => t.id === id);
+    if (!tok || tok.collectedAt || !userPosition) return;
+    // Optimistic UI.
     set((s) => ({
-      hunger: clamp(s.hunger - balance.hunger.decay),
-      happiness: clamp(s.happiness - balance.happiness.decay),
-    })),
+      tokens: s.tokens.map((t) =>
+        t.id === id ? { ...t, collectedAt: new Date().toISOString() } : t,
+      ),
+      tokensCollected: s.tokensCollected + 1,
+      points: s.points + tok.value,
+    }));
+    try {
+      await api.collectToken(id, userPosition);
+      await get().syncState();
+    } catch (err) {
+      set((s) => ({
+        tokens: s.tokens.map((t) =>
+          t.id === id ? { ...t, collectedAt: undefined } : t,
+        ),
+        tokensCollected: Math.max(0, s.tokensCollected - 1),
+        points: Math.max(0, s.points - tok.value),
+        lastSyncError: (err as Error).message,
+      }));
+    }
+  },
+
+  eatFood: async (id) => {
+    const { userPosition, foodItems } = get();
+    const f = foodItems.find((x) => x.id === id);
+    if (!f || !userPosition) return;
+    set((s) => ({ foodItems: s.foodItems.filter((x) => x.id !== id) }));
+    try {
+      await api.feed(id, userPosition);
+      await get().syncState();
+    } catch (err) {
+      set((s) => ({
+        foodItems: [...s.foodItems, f],
+        lastSyncError: (err as Error).message,
+      }));
+    }
+  },
 
   setMenuOpen: (menuOpen) => set({ menuOpen }),
   setScreen: (currentScreen) => set({ currentScreen }),
   setActiveQuest: (activeQuest) => set({ activeQuest }),
-  seedTokens: (tokens) => set({ tokens }),
-  seedFood: (foodItems) => set({ foodItems }),
+
+  syncState: async () => {
+    set({ syncing: true });
+    try {
+      const s = await api.getState();
+      set({
+        points: s.user.points,
+        tokensCollected: s.user.totalTokens,
+        hunger: s.companion.hunger,
+        happiness: s.companion.happiness,
+        companionName: s.companion.name,
+        syncing: false,
+        lastSyncError: null,
+      });
+    } catch (err) {
+      set({ syncing: false, lastSyncError: (err as Error).message });
+    }
+  },
+
+  syncTokens: async (pos) => {
+    try {
+      const { tokens } = await api.getTokensNearby(pos);
+      set({ tokens });
+    } catch (err) {
+      set({ lastSyncError: (err as Error).message });
+    }
+  },
+
+  syncFood: async (pos) => {
+    try {
+      const { food } = await api.getFoodNearby(pos);
+      set({ foodItems: food });
+    } catch (err) {
+      set({ lastSyncError: (err as Error).message });
+    }
+  },
 }));

@@ -10,15 +10,18 @@ const AMBIENT_MESSAGES = [
   'good walk',
 ];
 
+const STATE_POLL_MS = 5000;
+
 export function useGameLoop(onAmbient: (msg: string) => void) {
   const currentScreen = useGameStore((s) => s.currentScreen);
 
+  // Server-authoritative state — poll every 5s while app is open.
   useEffect(() => {
-    const decay = setInterval(() => {
-      useGameStore.getState().decayTick();
-    }, balance.hunger.interval);
-
-    return () => clearInterval(decay);
+    useGameStore.getState().syncState();
+    const id = setInterval(() => {
+      useGameStore.getState().syncState();
+    }, STATE_POLL_MS);
+    return () => clearInterval(id);
   }, []);
 
   useEffect(() => {

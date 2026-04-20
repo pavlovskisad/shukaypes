@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GoogleMap, useJsApiLoader, OverlayView } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader } from '@react-google-maps/api';
 import { View, Text, StyleSheet } from 'react-native';
 import { env } from '../../constants/env';
 import { colors } from '../../constants/colors';
@@ -9,15 +9,15 @@ import { useGameStore } from '../../stores/gameStore';
 import { useLocation } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
 import { useGameLoop } from '../../hooks/useGameLoop';
-import { distanceMeters, scatter } from '../../utils/geo';
+import { distanceMeters } from '../../utils/geo';
 import { Companion } from './Companion';
 import { UserMarker } from './UserMarker';
 import { TokenMarker } from './TokenMarker';
 import { FoodMarker } from './FoodMarker';
-import type { FoodItem, LatLng, Token } from '@shukajpes/shared';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
 const LIBRARIES: ('places')[] = ['places'];
+const TOKEN_REFRESH_MS = 15000;
 
 export default function MapViewWeb() {
   const { isLoaded, loadError } = useJsApiLoader({
@@ -31,53 +31,42 @@ export default function MapViewWeb() {
   const userPos = location.position;
 
   const companionPos = useCompanion(userPos);
-  const seedTokens = useGameStore((s) => s.seedTokens);
-  const seedFood = useGameStore((s) => s.seedFood);
   const tokens = useGameStore((s) => s.tokens);
   const foodItems = useGameStore((s) => s.foodItems);
   const collectToken = useGameStore((s) => s.collectToken);
   const eatFood = useGameStore((s) => s.eatFood);
   const setUserPosition = useGameStore((s) => s.setUserPosition);
+  const syncTokens = useGameStore((s) => s.syncTokens);
+  const syncFood = useGameStore((s) => s.syncFood);
 
   const showBubble = useCallback((msg: string, duration?: number) => {
     setBubble(msg);
     if (bubbleTimeoutRef.current) clearTimeout(bubbleTimeoutRef.current);
     bubbleTimeoutRef.current = setTimeout(
       () => setBubble(null),
-      duration ?? balance.bubbleDuration
+      duration ?? balance.bubbleDuration,
     );
   }, []);
 
   useGameLoop(showBubble);
 
-  // Sync location into gameStore for other screens.
   useEffect(() => {
     if (userPos) setUserPosition(userPos);
   }, [userPos?.lat, userPos?.lng, setUserPosition]);
 
-  // Seed tokens + food once when we first have a position.
-  const seededRef = useRef(false);
+  // Fetch server-spawned tokens + food when we first have a position, then refresh periodically.
   useEffect(() => {
-    if (!userPos || seededRef.current) return;
-    seededRef.current = true;
-    const tokenPositions = scatter(userPos, balance.tokenCount, 0.016, 0.016);
-    const newTokens: Token[] = tokenPositions.map((pos, i) => ({
-      id: `r${i}`,
-      type: 'regular',
-      position: pos,
-      value: 1 + Math.floor(Math.random() * 3),
-      spawnedAt: new Date().toISOString(),
-    }));
-    seedTokens(newTokens);
-    const foodPositions = scatter(userPos, balance.foodCount, 0.014, 0.014);
-    const newFood: FoodItem[] = foodPositions.map((pos, i) => ({
-      id: `f${i}`,
-      position: pos,
-      value: 1,
-      spawnedAt: new Date().toISOString(),
-    }));
-    seedFood(newFood);
-  }, [userPos?.lat, userPos?.lng, seedTokens, seedFood]);
+    if (!userPos) return;
+    syncTokens(userPos);
+    syncFood(userPos);
+    const id = setInterval(() => {
+      const pos = useGameStore.getState().userPosition;
+      if (!pos) return;
+      syncTokens(pos);
+      syncFood(pos);
+    }, TOKEN_REFRESH_MS);
+    return () => clearInterval(id);
+  }, [userPos?.lat, userPos?.lng, syncTokens, syncFood]);
 
   // Auto-collect tokens within 50m of companion.
   useEffect(() => {
@@ -118,7 +107,7 @@ export default function MapViewWeb() {
       gestureHandling: 'greedy' as const,
       clickableIcons: false,
     }),
-    []
+    [],
   );
 
   if (!env.googleMapsApiKey) {

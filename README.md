@@ -16,10 +16,16 @@ reference/    Original HTML prototype — read-only, source of truth for UX deta
 
 ## Quick start
 
-Requires Node 22+, pnpm 10+ (`corepack enable`).
+Requires Node 22+, pnpm 10+ (`corepack enable`), Docker.
 
 ```sh
 pnpm install
+
+# Postgres + PostGIS + Redis
+docker compose up -d
+
+# One-time (and whenever schema changes): apply Drizzle migrations
+pnpm --filter @shukajpes/server db:migrate
 
 # API server (port 3000, health check at /health)
 pnpm dev:server
@@ -29,7 +35,8 @@ pnpm web
 ```
 
 Copy `server/.env.example` → `server/.env` and fill in keys.
-Copy `app/.env.example` → `app/.env` and fill in `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`.
+Copy `app/.env.example` → `app/.env` and fill in `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`
+and `EXPO_PUBLIC_API_URL` (defaults to `http://localhost:3000`).
 
 The Anthropic key goes into `server/.env` only. It is never exposed to the client bundle.
 
@@ -46,9 +53,9 @@ The Anthropic key goes into `server/.env` only. It is never exposed to the clien
 
 See `/root/.claude/plans/hello-dear-sir-please-wobbly-marble.md` or `docs/TRANSFORMATION.md` for the full plan.
 
-- **Phase 1** — Scaffold (this commit) ✓
-- **Phase 2** — Map + companion overlay with roaming, menus, status bar, tokens
-- **Phase 3** — Postgres + PostGIS + Redis, server-authoritative game state
+- **Phase 1** — Scaffold ✓
+- **Phase 2** — Map + companion overlay with roaming, menus, status bar, tokens ✓
+- **Phase 3** — Postgres + PostGIS + Redis, server-authoritative game state ✓
 - **Phase 4** — Claude chat via backend proxy with 4-layer prompt assembly
 - **Phase 5** — Lost dog pipeline, detective quests, invisible search layer
 - **Phase 6** — Social, skins, push, launch prep
