@@ -1,6 +1,7 @@
 # Fly.io app config for the шукайпес API.
-# First-time deploy:
-#   cd server && fly launch --no-deploy --copy-config --name shukajpes-api
+# Lives at repo root so the Docker build context includes app/ + shared/ + server/.
+# First-time deploy (from repo root):
+#   fly launch --no-deploy --copy-config --name shukajpes-api
 #   fly secrets set DATABASE_URL=... REDIS_URL=... ANTHROPIC_API_KEY=... GOOGLE_MAPS_API_KEY=...
 #   fly deploy
 
@@ -8,7 +9,7 @@ app = "shukajpes-api"
 primary_region = "waw"  # Warsaw — closest low-latency PoP for Kyiv users.
 
 [build]
-  dockerfile = "Dockerfile"
+  dockerfile = "server/Dockerfile"
 
 [env]
   NODE_ENV = "production"

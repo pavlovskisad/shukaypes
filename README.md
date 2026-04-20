@@ -57,7 +57,7 @@ Pilot stack: **Fly.io** (server) + **Supabase** (Postgres + PostGIS) + **Upstash
 
 1. **Supabase** — [supabase.com](https://supabase.com) → new project in `eu-central` → Settings → Database → copy the Postgres connection string (use the **session-pooler** URL on port `5432`, not the transaction pooler). PostGIS is enabled by default; if not, run `create extension postgis;` in the SQL editor.
 2. **Upstash** — [upstash.com](https://upstash.com) → Redis → create DB in `eu-west-1` → copy the `UPSTASH_REDIS_REST_URL` that starts with `rediss://`.
-3. **Fly.io** — `brew install flyctl && fly auth signup` → from `server/` run:
+3. **Fly.io** — `brew install flyctl && fly auth signup` → from repo root run:
    ```sh
    fly launch --no-deploy --copy-config --name shukajpes-api
    fly secrets set \
