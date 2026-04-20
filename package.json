@@ -1,0 +1,17 @@
+{
+  "name": "shukaypes",
+  "version": "0.1.0",
+  "private": true,
+  "description": "шукайпес — AI-powered geo-quest app for dog owners and lovers",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "packageManager": "pnpm@10.33.0",
+  "scripts": {
+    "typecheck": "pnpm -r typecheck",
+    "lint": "pnpm -r lint",
+    "dev:app": "pnpm --filter app dev",
+    "dev:server": "pnpm --filter server dev",
+    "web": "pnpm --filter app web"
+  }
+}

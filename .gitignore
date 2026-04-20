@@ -1,0 +1,44 @@
+# deps
+node_modules/
+.pnpm-store/
+
+# build
+dist/
+build/
+.expo/
+.expo-shared/
+web-build/
+.next/
+
+# env
+.env
+.env.local
+.env.*.local
+!.env.example
+
+# iOS / Android
+ios/Pods/
+ios/build/
+android/.gradle/
+android/build/
+android/app/build/
+*.keystore
+!debug.keystore
+
+# editors
+.vscode/
+.idea/
+.DS_Store
+*.swp
+
+# logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+
+# TypeScript
+*.tsbuildinfo
+
+# Expo
+.expo/
