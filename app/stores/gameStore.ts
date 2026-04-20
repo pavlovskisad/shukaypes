@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { balance } from '../constants/balance';
-import type { LatLng, Quest } from '@shukajpes/shared';
+import type { FoodItem, LatLng, Quest, Token } from '@shukajpes/shared';
 
 interface GameState {
   hunger: number;
@@ -13,17 +13,21 @@ interface GameState {
   activeQuest: Quest | null;
   menuOpen: boolean;
   currentScreen: 'map' | 'tasks' | 'chat' | 'spots' | 'profile';
+  tokens: Token[];
+  foodItems: FoodItem[];
 
   setUserPosition: (pos: LatLng) => void;
   setHomePosition: (pos: LatLng) => void;
-  collectToken: (value?: number) => void;
-  eatFood: () => void;
+  collectToken: (id: string) => void;
+  eatFood: (id: string) => void;
   startQuestBoost: () => void;
   walkBoost: () => void;
   decayTick: () => void;
   setMenuOpen: (open: boolean) => void;
   setScreen: (screen: GameState['currentScreen']) => void;
   setActiveQuest: (quest: Quest | null) => void;
+  seedTokens: (tokens: Token[]) => void;
+  seedFood: (items: FoodItem[]) => void;
 }
 
 const clamp = (n: number) => Math.max(0, Math.min(100, n));
@@ -39,6 +43,8 @@ export const useGameStore = create<GameState>((set) => ({
   activeQuest: null,
   menuOpen: false,
   currentScreen: 'map',
+  tokens: [],
+  foodItems: [],
 
   setUserPosition: (pos) =>
     set((s) => ({
@@ -48,19 +54,31 @@ export const useGameStore = create<GameState>((set) => ({
 
   setHomePosition: (pos) => set({ homePosition: pos }),
 
-  collectToken: (value = 1) =>
-    set((s) => ({
-      tokensCollected: s.tokensCollected + 1,
-      points: s.points + value,
-      hunger: clamp(s.hunger + balance.token.hunger),
-      happiness: clamp(s.happiness + balance.token.happiness),
-    })),
+  collectToken: (id) =>
+    set((s) => {
+      const tok = s.tokens.find((t) => t.id === id);
+      if (!tok || tok.collectedAt) return s;
+      return {
+        tokens: s.tokens.map((t) =>
+          t.id === id ? { ...t, collectedAt: new Date().toISOString(), collectedBy: 'me' } : t
+        ),
+        tokensCollected: s.tokensCollected + 1,
+        points: s.points + tok.value,
+        hunger: clamp(s.hunger + balance.token.hunger),
+        happiness: clamp(s.happiness + balance.token.happiness),
+      };
+    }),
 
-  eatFood: () =>
-    set((s) => ({
-      hunger: clamp(s.hunger + balance.bone.hunger),
-      happiness: clamp(s.happiness + balance.bone.happiness),
-    })),
+  eatFood: (id) =>
+    set((s) => {
+      const f = s.foodItems.find((x) => x.id === id);
+      if (!f) return s;
+      return {
+        foodItems: s.foodItems.filter((x) => x.id !== id),
+        hunger: clamp(s.hunger + balance.bone.hunger),
+        happiness: clamp(s.happiness + balance.bone.happiness),
+      };
+    }),
 
   startQuestBoost: () =>
     set((s) => ({ happiness: clamp(s.happiness + balance.searchQuest.happiness) })),
@@ -77,4 +95,6 @@ export const useGameStore = create<GameState>((set) => ({
   setMenuOpen: (menuOpen) => set({ menuOpen }),
   setScreen: (currentScreen) => set({ currentScreen }),
   setActiveQuest: (activeQuest) => set({ activeQuest }),
+  seedTokens: (tokens) => set({ tokens }),
+  seedFood: (foodItems) => set({ foodItems }),
 }));

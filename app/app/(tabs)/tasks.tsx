@@ -1,9 +1,14 @@
+import { useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
 
 export default function TasksScreen() {
   const tokensCollected = useGameStore((s) => s.tokensCollected);
+  useFocusEffect(useCallback(() => {
+    useGameStore.getState().setScreen('tasks');
+  }, []));
   const tokenTarget = 10;
   const tokenProgress = Math.min(tokensCollected / tokenTarget, 1);
 

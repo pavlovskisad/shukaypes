@@ -1,7 +1,13 @@
+import { useCallback } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../../constants/colors';
+import { useGameStore } from '../../stores/gameStore';
 
 export default function ChatScreen() {
+  useFocusEffect(useCallback(() => {
+    useGameStore.getState().setScreen('chat');
+  }, []));
   return (
     <View style={styles.root}>
       <Text style={styles.title}>chat</Text>
