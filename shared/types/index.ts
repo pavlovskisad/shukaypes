@@ -114,3 +114,14 @@ export interface WalkerSession {
   companionName: string;
   lastPingAt: string;
 }
+
+export type ChatRole = 'user' | 'assistant';
+export type ChatMode = 'active' | 'ambient';
+
+export interface ChatMessage {
+  id: string;
+  role: ChatRole;
+  content: string;
+  mode: ChatMode;
+  createdAt: string;
+}

@@ -1,4 +1,4 @@
-import type { FoodItem, LatLng, Token } from '@shukajpes/shared';
+import type { ChatMessage, FoodItem, LatLng, Token } from '@shukajpes/shared';
 import { env } from '../constants/env';
 import { getDeviceId } from './deviceId';
 
@@ -56,5 +56,19 @@ export const api = {
     req<{ ok: true }>('/feed', {
       method: 'POST',
       body: JSON.stringify({ foodId, lat: pos.lat, lng: pos.lng }),
+    }),
+
+  getChatHistory: () => req<{ messages: ChatMessage[] }>('/chat/history'),
+
+  sendChat: (text: string, pos: LatLng | null, greet = false) =>
+    req<{ id: string; text: string; action: string | null }>('/chat', {
+      method: 'POST',
+      body: JSON.stringify({ text, greet, lat: pos?.lat, lng: pos?.lng }),
+    }),
+
+  ambientChat: (pos: LatLng | null) =>
+    req<{ text: string }>('/chat/ambient', {
+      method: 'POST',
+      body: JSON.stringify({ lat: pos?.lat, lng: pos?.lng }),
     }),
 };

@@ -118,6 +118,30 @@ export const sightings = pgTable('sightings', {
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
 });
 
+// Chat messages between a user and their companion. Keep full history for
+// memory-note summarization and debugging; send only the last N to Claude.
+export const messages = pgTable(
+  'messages',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    role: text('role').notNull(), // user | assistant
+    content: text('content').notNull(),
+    mode: text('mode').notNull().default('active'), // active | ambient
+    model: text('model'),
+    inputTokens: integer('input_tokens'),
+    outputTokens: integer('output_tokens'),
+    cacheReadTokens: integer('cache_read_tokens'),
+    cacheWriteTokens: integer('cache_write_tokens'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userCreatedIdx: index('messages_user_created_idx').on(t.userId, t.createdAt),
+  }),
+);
+
 // Rate-limit / anti-cheat log — quick audit trail for collect actions.
 export const collectEvents = pgTable(
   'collect_events',
