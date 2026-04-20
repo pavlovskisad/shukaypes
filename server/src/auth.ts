@@ -33,7 +33,8 @@ const plugin: FastifyPluginAsync = async (app) => {
   app.decorateRequest('deviceId', '');
 
   app.addHook('preHandler', async (req: FastifyRequest, reply) => {
-    if (req.routeOptions?.url === '/health') return;
+    const url = req.routeOptions?.url;
+    if (url === '/health' || url === '/health/deep') return;
     const header = req.headers[DEVICE_ID_HEADER];
     const deviceId = Array.isArray(header) ? header[0] : header;
     if (!deviceId || deviceId.length < 8 || deviceId.length > 128) {

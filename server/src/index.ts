@@ -9,6 +9,8 @@ import foodRoute from './routes/food.js';
 import dogsRoute from './routes/dogs.js';
 import { startDecayCron } from './services/decay.js';
 import { balance } from './config/balance.js';
+import { pg } from './db/index.js';
+import { redis } from './db/redis.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -32,6 +34,25 @@ async function buildServer() {
   });
 
   app.get('/health', async () => ({ ok: true, ts: new Date().toISOString() }));
+
+  app.get('/health/deep', async (_req, reply) => {
+    const checks: Record<string, string> = {};
+    try {
+      await pg`select 1`;
+      checks.db = 'ok';
+    } catch (err) {
+      checks.db = `fail: ${(err as Error).message}`;
+    }
+    try {
+      if (redis.status !== 'ready') await redis.connect().catch(() => {});
+      checks.redis = (await redis.ping()) === 'PONG' ? 'ok' : 'fail';
+    } catch (err) {
+      checks.redis = `fail: ${(err as Error).message}`;
+    }
+    const ok = Object.values(checks).every((v) => v === 'ok');
+    reply.code(ok ? 200 : 503);
+    return { ok, checks, ts: new Date().toISOString() };
+  });
 
   await app.register(authPlugin);
   await app.register(stateRoute);

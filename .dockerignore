@@ -1,0 +1,14 @@
+# Files we never want in any Docker build context at repo root.
+**/node_modules
+**/dist
+**/.expo
+**/.next
+**/.turbo
+**/.env
+**/.env.*
+!.env.example
+**/*.log
+.git
+.github
+docs
+reference
