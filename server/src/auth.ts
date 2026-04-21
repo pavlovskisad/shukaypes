@@ -35,6 +35,9 @@ const plugin: FastifyPluginAsync = async (app) => {
   app.addHook('preHandler', async (req: FastifyRequest, reply) => {
     const url = req.routeOptions?.url;
     if (url === '/health' || url === '/health/deep') return;
+    // Admin routes have their own bearer-token check in routes/admin.ts —
+    // they must not require a per-device identity header.
+    if (url?.startsWith('/admin/')) return;
     const header = req.headers[DEVICE_ID_HEADER];
     const deviceId = Array.isArray(header) ? header[0] : header;
     if (!deviceId || deviceId.length < 8 || deviceId.length > 128) {
