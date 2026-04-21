@@ -12,6 +12,7 @@ import { startDecayCron } from './services/decay.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
 import { redis } from './db/redis.js';
+import { seedOnBootIfEmpty } from './db/seed-dogs.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -67,6 +68,7 @@ async function buildServer() {
 
 async function main() {
   const app = await buildServer();
+  await seedOnBootIfEmpty(app.log);
   const stopDecay = startDecayCron();
   try {
     await app.listen({ port: PORT, host: HOST });
