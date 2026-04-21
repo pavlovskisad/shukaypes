@@ -15,6 +15,13 @@
       "when": 1776716433688,
       "tag": "0001_melted_xorn",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1776803071886,
+      "tag": "0002_bored_king_cobra",
+      "breakpoints": true
     }
   ]
 }

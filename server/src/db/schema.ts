@@ -162,3 +162,23 @@ export const collectEvents = pgTable(
     userAtIdx: index('collect_user_at_idx').on(t.userId, t.at),
   }),
 );
+
+// Scrape log — one row per ad url the scraper has ever seen, so an hourly
+// cron doesn't re-Haiku the same post. dogId is set only when the parse
+// actually produced (or matched) a row in lost_dogs.
+export const scrapeLog = pgTable(
+  'scrape_log',
+  {
+    url: text('url').primaryKey(),
+    source: text('source').notNull(), // olx | telegram:<channel> | ...
+    title: text('title'),
+    dogId: text('dog_id').references(() => lostDogs.id, { onDelete: 'set null' }),
+    parseConfidence: doublePrecision('parse_confidence'),
+    ingestAction: text('ingest_action'), // inserted | updated | duplicate | skipped
+    skipReason: text('skip_reason'),
+    firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    sourceIdx: index('scrape_log_source_idx').on(t.source, t.firstSeenAt),
+  }),
+);
