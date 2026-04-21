@@ -93,7 +93,9 @@ const plugin: FastifyPluginAsync = async (app) => {
         return { error: 'text required' };
       }
 
-      const userText = greet ? '*user opened chat*' : rawText;
+      const userText = greet
+        ? '*user just opened chat and has not said anything yet. you have no language signal from them. greet warmly in english with one short ukrainian phrase alongside (e.g. "hi / привіт") so they can pick the language with their reply. one short sentence, dog voice, no stacked questions.*'
+        : rawText;
       const pos: Pos = { lat: body.lat, lng: body.lng };
 
       // Persist user message first so it's in history even if Claude fails.
