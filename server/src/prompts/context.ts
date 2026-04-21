@@ -1,6 +1,6 @@
 // Layer 3: live context. ~400–800 tokens. Built fresh per call, never cached.
 
-import { and, desc, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 
 interface ContextInput {
@@ -31,21 +31,26 @@ export async function buildContextBlock({ userId, pos }: ContextInput): Promise<
 
   let nearbyDogs: string[] = [];
   if (pos) {
+    // Filter by distance in SQL, then order by distance ASC so the closest
+    // three reports come back even if older dogs are the closest.
+    const distExpr = sql<number>`(6371000 * acos(cos(radians(${pos.lat})) * cos(radians(last_seen_lat)) * cos(radians(last_seen_lng) - radians(${pos.lng})) + sin(radians(${pos.lat})) * sin(radians(last_seen_lat))))`;
     const dogs = await db
       .select({
         id: schema.lostDogs.id,
         name: schema.lostDogs.name,
         breed: schema.lostDogs.breed,
         urgency: schema.lostDogs.urgency,
-        dist: sql<number>`(6371000 * acos(cos(radians(${pos.lat})) * cos(radians(last_seen_lat)) * cos(radians(last_seen_lng) - radians(${pos.lng})) + sin(radians(${pos.lat})) * sin(radians(last_seen_lat))))`,
+        description: schema.lostDogs.lastSeenDescription,
+        dist: distExpr,
       })
       .from(schema.lostDogs)
-      .where(eq(schema.lostDogs.status, 'active'))
-      .orderBy(desc(schema.lostDogs.createdAt))
+      .where(and(eq(schema.lostDogs.status, 'active'), sql`${distExpr} < 3000`))
+      .orderBy(distExpr)
       .limit(3);
-    nearbyDogs = dogs
-      .filter((d) => d.dist < 3000)
-      .map((d) => `  - ${d.name} (${d.breed}, ${d.urgency}), ~${Math.round(d.dist)}m away [id:${d.id}]`);
+    nearbyDogs = dogs.map((d) => {
+      const desc = d.description ? ` — ${d.description}` : '';
+      return `  - ${d.name} (${d.breed}, ${d.urgency}), ~${Math.round(d.dist)}m away${desc} [id:${d.id}]`;
+    });
   }
 
   const kyivTime = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Kyiv' });
