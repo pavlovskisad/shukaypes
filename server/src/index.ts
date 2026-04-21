@@ -8,6 +8,7 @@ import tokensRoute from './routes/tokens.js';
 import foodRoute from './routes/food.js';
 import dogsRoute from './routes/dogs.js';
 import chatRoute from './routes/chat.js';
+import adminRoute from './routes/admin.js';
 import { startDecayCron } from './services/decay.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
@@ -62,6 +63,7 @@ async function buildServer() {
   await app.register(foodRoute);
   await app.register(dogsRoute);
   await app.register(chatRoute);
+  await app.register(adminRoute);
 
   return app;
 }
