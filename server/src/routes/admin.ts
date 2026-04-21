@@ -9,8 +9,11 @@
 // write-anything-to-the-db endpoint.
 
 import type { FastifyPluginAsync } from 'fastify';
+import { desc } from 'drizzle-orm';
+import { db, schema } from '../db/index.js';
 import { parseDogPost } from '../pipeline/parser.js';
 import { upsertLostDog } from '../pipeline/upsert.js';
+import { runAllSources } from '../services/scrape.js';
 
 const MAX_TEXT_CHARS = 4000;
 
@@ -86,6 +89,56 @@ const plugin: FastifyPluginAsync = async (app) => {
         reply.code(502);
         return { error: 'parse or upsert failed', detail: (err as Error).message };
       }
+    },
+  );
+
+  // Force-run every scrape source immediately. Useful for verifying an OLX
+  // change landed, or for pulling a fresh batch on demand. Rate-limited more
+  // aggressively because each call can burn multiple Haiku parses.
+  app.post(
+    '/admin/lost-dogs/scrape-now',
+    { config: { rateLimit: { max: 4, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      if (!checkAdminAuth(req.headers.authorization)) {
+        reply.code(401);
+        return { error: 'unauthorized' };
+      }
+      try {
+        const results = await runAllSources(req.log);
+        return { ok: true, results };
+      } catch (err) {
+        req.log.error({ err: (err as Error).message }, 'scrape-now failed');
+        reply.code(502);
+        return { error: 'scrape failed', detail: (err as Error).message };
+      }
+    },
+  );
+
+  // Peek at recent scrape_log entries for debugging — what the scraper saw,
+  // what it decided, why. Read-only.
+  app.get<{ Querystring: { source?: string; limit?: string } }>(
+    '/admin/lost-dogs/scrape-log',
+    async (req, reply) => {
+      if (!checkAdminAuth(req.headers.authorization)) {
+        reply.code(401);
+        return { error: 'unauthorized' };
+      }
+      const limit = Math.min(Math.max(parseInt(req.query?.limit ?? '50', 10) || 50, 1), 200);
+      const rows = await db
+        .select({
+          url: schema.scrapeLog.url,
+          source: schema.scrapeLog.source,
+          title: schema.scrapeLog.title,
+          dogId: schema.scrapeLog.dogId,
+          confidence: schema.scrapeLog.parseConfidence,
+          action: schema.scrapeLog.ingestAction,
+          skipReason: schema.scrapeLog.skipReason,
+          firstSeenAt: schema.scrapeLog.firstSeenAt,
+        })
+        .from(schema.scrapeLog)
+        .orderBy(desc(schema.scrapeLog.firstSeenAt))
+        .limit(limit);
+      return { count: rows.length, rows };
     },
   );
 };

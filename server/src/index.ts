@@ -10,6 +10,7 @@ import dogsRoute from './routes/dogs.js';
 import chatRoute from './routes/chat.js';
 import adminRoute from './routes/admin.js';
 import { startDecayCron } from './services/decay.js';
+import { startScrapeCron } from './services/scrape.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
 import { redis } from './db/redis.js';
@@ -72,16 +73,19 @@ async function main() {
   const app = await buildServer();
   await seedOnBootIfEmpty(app.log);
   const stopDecay = startDecayCron();
+  const stopScrape = startScrapeCron(app.log);
   try {
     await app.listen({ port: PORT, host: HOST });
   } catch (err) {
     app.log.error(err);
     stopDecay();
+    stopScrape();
     process.exit(1);
   }
 
   const shutdown = async () => {
     stopDecay();
+    stopScrape();
     await app.close();
     process.exit(0);
   };
