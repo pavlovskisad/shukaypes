@@ -61,19 +61,57 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -65, y: -65 })}
+      getPixelPositionOffset={() => ({ x: -85, y: -85 })}
     >
       <div
         style={{
           position: 'relative',
-          width: 130,
-          height: 130,
+          width: 170,
+          height: 170,
         }}
       >
+        {/* Aura rings — ported faithfully from the prototype (.cglow):
+            two white rings starting at the companion center, each scaling
+            from 1x to 8x over 3s, staggered 1.5s, opacity 0.8 → 0. This is
+            the "sensor" beat the prototype had; we tried stripping it and
+            stripping felt dead. Pointer-events off so taps go through to
+            the nose below. */}
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 12,
+            height: 12,
+            marginLeft: -6,
+            marginTop: -6,
+            borderRadius: '50%',
+            border: '3px solid rgba(255,255,255,1)',
+            animation: 'co-aura 3s ease-out infinite',
+            pointerEvents: 'none',
+          }}
+        />
+        <div
+          aria-hidden="true"
+          style={{
+            position: 'absolute',
+            top: '50%',
+            left: '50%',
+            width: 12,
+            height: 12,
+            marginLeft: -6,
+            marginTop: -6,
+            borderRadius: '50%',
+            border: '3px solid rgba(255,255,255,1)',
+            animation: 'co-aura 3s ease-out infinite 1.5s',
+            pointerEvents: 'none',
+          }}
+        />
+
         {/* companion body — just the nose glyph with a layered white glow.
-            three stacked drop-shadows: tight bright halo, softer mid bloom,
-            wide diffuse outer. reads as "strong presence" from a distance
-            without a hard edge. no circle underneath. */}
+            three stacked drop-shadows for a subtle "strong presence" halo
+            even between aura pulses. no circle underneath. */}
         <div
           role="button"
           tabIndex={0}
@@ -103,6 +141,10 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
         <RadialMenu open={menuOpen} actions={PRIMARY_ACTIONS} onSelect={handleAction} />
 
         <style>{`
+          @keyframes co-aura {
+            0%   { transform: scale(1); opacity: 0.7; }
+            100% { transform: scale(8); opacity: 0; }
+          }
           @keyframes co-float {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-3px); }
