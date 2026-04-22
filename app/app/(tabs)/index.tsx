@@ -5,7 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from '../../components/map';
 import { StatusBar } from '../../components/ui/StatusBar';
 import { useGameStore } from '../../stores/gameStore';
-import logoSquare from '../../assets/logo-square.jpeg';
+import logoSquare from '../../assets/logo-square.png';
 
 // Logo is the brand anchor in the top-left. Tight-cropped asset (no
 // transparent padding) so the visible square matches the rendered box,
