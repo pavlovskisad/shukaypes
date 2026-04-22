@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleMap, useJsApiLoader } from '@react-google-maps/api';
 import { View, Text, StyleSheet } from 'react-native';
-import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
+import type { UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../../constants/env';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
@@ -19,7 +19,7 @@ import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
-import { clusterByDistance } from '../../utils/cluster';
+import { clusterByDistance, spiderifyPositions } from '../../utils/cluster';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
 const LIBRARIES: ('places')[] = ['places'];
@@ -41,6 +41,11 @@ export default function MapViewWeb() {
   const [bubble, setBubble] = useState<string | null>(null);
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  // Which cluster is currently "spiderified" — tapping a cluster pops its
+  // pets out around the center. Tapping elsewhere (the map background or
+  // another cluster) collapses it. Lives locally because nothing else in
+  // the app cares about this transient view-state.
+  const [expandedClusterKey, setExpandedClusterKey] = useState<string | null>(null);
   const userPos = location.position;
 
   const companionPos = useCompanion(userPos);
@@ -142,17 +147,20 @@ export default function MapViewWeb() {
     [lostDogs],
   );
 
-  const handleClusterTap = useCallback((center: LatLng, count: number) => {
-    const map = mapRef.current;
-    if (!map) return;
-    const current = map.getZoom() ?? balance.mapZoomDefault;
-    map.panTo(center as unknown as google.maps.LatLngLiteral);
-    // Dense clusters jump straight to max zoom — at +2 the pins can still
-    // be bunched and the tap "feels like nothing happened". For smaller
-    // clusters a +2 step is enough to separate them.
-    const target = count >= 5 ? balance.mapZoomMax : Math.min(current + 2, balance.mapZoomMax);
-    map.setZoom(target);
-  }, []);
+  // Keys cluster identity on the sorted ids of its members so taps remain
+  // stable across re-renders even if the center drifts slightly.
+  const clusterKey = useCallback(
+    (items: { id: string }[]) => items.map((i) => i.id).sort().join('|'),
+    [],
+  );
+
+  const handleClusterTap = useCallback(
+    (items: { id: string }[]) => {
+      const key = clusterKey(items);
+      setExpandedClusterKey((prev) => (prev === key ? null : key));
+    },
+    [clusterKey],
+  );
 
   if (!env.googleMapsApiKey) {
     return (
@@ -197,6 +205,7 @@ export default function MapViewWeb() {
         onUnmount={() => {
           mapRef.current = null;
         }}
+        onClick={() => setExpandedClusterKey(null)}
       >
         <UserMarker position={userPos} />
 
@@ -214,10 +223,10 @@ export default function MapViewWeb() {
             />
           ))}
 
-        {clusters.map((c) => {
+        {clusters.flatMap((c) => {
           if (c.items.length === 1) {
             const d = c.items[0]!.dog;
-            return (
+            return [
               <LostDogMarker
                 key={d.id}
                 position={d.lastSeen.position}
@@ -225,8 +234,32 @@ export default function MapViewWeb() {
                 name={d.name}
                 urgency={d.urgency}
                 onTap={() => setSelectedDog(d.id)}
-              />
-            );
+              />,
+            ];
+          }
+          const key = clusterKey(c.items);
+          // Expanded cluster: pets pop out around the center at spider
+          // positions and are individually tappable. Collapse on the same
+          // cluster's badge or on a map background tap.
+          if (expandedClusterKey === key) {
+            const positions = spiderifyPositions(c.center, c.items.length);
+            return c.items.map((item, i) => {
+              const d = item.dog;
+              const p = positions[i] ?? d.lastSeen.position;
+              return (
+                <LostDogMarker
+                  key={`expanded-${d.id}`}
+                  position={p}
+                  emoji={d.emoji}
+                  name={d.name}
+                  urgency={d.urgency}
+                  onTap={() => {
+                    setExpandedClusterKey(null);
+                    setSelectedDog(d.id);
+                  }}
+                />
+              );
+            });
           }
           const dominantUrgency = c.items
             .map((i) => i.dog.urgency)
@@ -239,16 +272,16 @@ export default function MapViewWeb() {
           const emojiHint = Array.from(new Set(c.items.map((i) => i.dog.emoji)))
             .slice(0, 2)
             .join('');
-          return (
+          return [
             <LostDogCluster
-              key={`cluster-${c.items.map((i) => i.id).join('-')}`}
+              key={`cluster-${key}`}
               position={c.center}
               count={c.items.length}
               dominantUrgency={dominantUrgency}
               emojiHint={emojiHint}
-              onTap={() => handleClusterTap(c.center, c.items.length)}
-            />
-          );
+              onTap={() => handleClusterTap(c.items)}
+            />,
+          ];
         })}
 
         {tokens

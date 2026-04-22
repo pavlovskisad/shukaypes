@@ -44,3 +44,46 @@ export function clusterByDistance<T extends ClusterItem>(
   }
   return clusters;
 }
+
+// Spiderify — when a cluster is tapped, spread its members around the
+// cluster center in a circle so each one is individually tappable. Works
+// regardless of zoom, which matters because many OLX posts end up pinned
+// to the exact same landmark coord — no amount of zoom separates them.
+//
+// Ring radius and pet count per ring are tuned for the default zoom; at
+// bigger clusters (10+) we switch to a two-ring layout so things don't
+// collide at the rim.
+export function spiderifyPositions(center: LatLng, count: number): LatLng[] {
+  if (count <= 1) return [center];
+
+  const INNER_RING_RADIUS_DEG = 0.00045; // ~50m at Kyiv's latitude
+  const OUTER_RING_RADIUS_DEG = 0.00085; // ~95m
+  const INNER_RING_CAPACITY = 8;
+
+  const positions: LatLng[] = [];
+  const innerCount = Math.min(count, INNER_RING_CAPACITY);
+  const outerCount = Math.max(0, count - innerCount);
+
+  for (let i = 0; i < innerCount; i++) {
+    // Start at -π/2 so the first pin sits above the center (easier to read).
+    const angle = -Math.PI / 2 + (2 * Math.PI * i) / innerCount;
+    positions.push({
+      lat: center.lat + INNER_RING_RADIUS_DEG * Math.sin(angle),
+      lng: center.lng + INNER_RING_RADIUS_DEG * Math.cos(angle),
+    });
+  }
+
+  if (outerCount > 0) {
+    // Offset the outer ring by half an angle so rim pins don't line up
+    // behind inner pins radially.
+    for (let i = 0; i < outerCount; i++) {
+      const angle = -Math.PI / 2 + Math.PI / outerCount + (2 * Math.PI * i) / outerCount;
+      positions.push({
+        lat: center.lat + OUTER_RING_RADIUS_DEG * Math.sin(angle),
+        lng: center.lng + OUTER_RING_RADIUS_DEG * Math.cos(angle),
+      });
+    }
+  }
+
+  return positions;
+}
