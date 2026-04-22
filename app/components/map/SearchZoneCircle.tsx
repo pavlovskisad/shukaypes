@@ -1,4 +1,4 @@
-import { Circle } from '@react-google-maps/api';
+import { CircleF } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 
 const URGENCY_COLOR: Record<UrgencyLevel, string> = {
@@ -18,7 +18,7 @@ interface SearchZoneCircleProps {
 export function SearchZoneCircle({ center, radiusM, urgency }: SearchZoneCircleProps) {
   const color = URGENCY_COLOR[urgency];
   return (
-    <Circle
+    <CircleF
       center={center as unknown as google.maps.LatLngLiteral}
       radius={radiusM}
       options={{

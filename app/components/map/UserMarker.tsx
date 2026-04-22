@@ -1,12 +1,12 @@
-import { OverlayView } from '@react-google-maps/api';
+import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
 
 // Black dot with a subtle breathing ring (demo lines 172-177).
 export function UserMarker({ position }: { position: LatLng }) {
   return (
-    <OverlayView
+    <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={OverlayView.FLOAT_PANE}
+      mapPaneName={FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -6, y: -6 })}
     >
       <div style={{ position: 'relative', width: 12, height: 12 }}>
@@ -42,6 +42,6 @@ export function UserMarker({ position }: { position: LatLng }) {
           }
         `}</style>
       </div>
-    </OverlayView>
+    </OverlayViewF>
   );
 }
