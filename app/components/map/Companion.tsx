@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { OverlayView } from '@react-google-maps/api';
+import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import { useGameStore } from '../../stores/gameStore';
 import { SpeechBubble } from '../ui/SpeechBubble';
 import { RadialMenu, PRIMARY_ACTIONS } from './RadialMenu';
@@ -45,9 +45,9 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
   const activeBubble = bubble ?? localBubble;
 
   return (
-    <OverlayView
+    <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={OverlayView.FLOAT_PANE}
+      mapPaneName={FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -45, y: -45 })}
     >
       <div
@@ -117,6 +117,6 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
           }
         `}</style>
       </div>
-    </OverlayView>
+    </OverlayViewF>
   );
 }

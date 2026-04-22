@@ -1,12 +1,12 @@
-import { OverlayView } from '@react-google-maps/api';
+import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
 
 // 🐾 token with lime glow (demo line 319 / TO class).
 export function TokenMarker({ position, onTap }: { position: LatLng; onTap: () => void }) {
   return (
-    <OverlayView
+    <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={OverlayView.FLOAT_PANE}
+      mapPaneName={FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -13, y: -13 })}
     >
       <div
@@ -33,6 +33,6 @@ export function TokenMarker({ position, onTap }: { position: LatLng; onTap: () =
           }
         `}</style>
       </div>
-    </OverlayView>
+    </OverlayViewF>
   );
 }

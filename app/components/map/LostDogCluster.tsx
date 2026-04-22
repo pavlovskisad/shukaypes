@@ -1,4 +1,4 @@
-import { OverlayView } from '@react-google-maps/api';
+import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import type { NearbyLostDog } from '../../services/api';
 
@@ -55,9 +55,9 @@ export function LostDogCluster({
 }: LostDogClusterProps) {
   const count = items.length;
   return (
-    <OverlayView
+    <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={OverlayView.FLOAT_PANE}
+      mapPaneName={FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -CONTAINER_CENTER, y: -CONTAINER_CENTER })}
     >
       <div
@@ -175,7 +175,7 @@ export function LostDogCluster({
           );
         })}
       </div>
-    </OverlayView>
+    </OverlayViewF>
   );
 }
 

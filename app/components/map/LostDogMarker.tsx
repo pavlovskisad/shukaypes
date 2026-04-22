@@ -1,4 +1,4 @@
-import { OverlayView } from '@react-google-maps/api';
+import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 
 const URGENCY_SHADOW: Record<UrgencyLevel, string> = {
@@ -19,9 +19,9 @@ interface LostDogMarkerProps {
 // label below. Ported from demo .dpin / .dpb (line 29-35).
 export function LostDogMarker({ position, emoji, name, urgency, onTap }: LostDogMarkerProps) {
   return (
-    <OverlayView
+    <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={OverlayView.FLOAT_PANE}
+      mapPaneName={FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -18, y: -46 })}
     >
       <div
@@ -72,6 +72,6 @@ export function LostDogMarker({ position, emoji, name, urgency, onTap }: LostDog
           }
         `}</style>
       </div>
-    </OverlayView>
+    </OverlayViewF>
   );
 }

@@ -1,12 +1,12 @@
-import { OverlayView } from '@react-google-maps/api';
+import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
 
 // 🦴 bone with warm amber glow (demo line 353).
 export function FoodMarker({ position, onTap }: { position: LatLng; onTap: () => void }) {
   return (
-    <OverlayView
+    <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={OverlayView.FLOAT_PANE}
+      mapPaneName={FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -12, y: -12 })}
     >
       <div
@@ -26,6 +26,6 @@ export function FoodMarker({ position, onTap }: { position: LatLng; onTap: () =>
       >
         🦴
       </div>
-    </OverlayView>
+    </OverlayViewF>
   );
 }
