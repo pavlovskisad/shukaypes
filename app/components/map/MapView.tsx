@@ -19,7 +19,7 @@ import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
-import { clusterByDistance, ringPositions } from '../../utils/cluster';
+import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
 const LIBRARIES: ('places')[] = ['places'];
@@ -139,9 +139,24 @@ export default function MapViewWeb() {
     [],
   );
 
-  // Group overlapping pets so dense neighborhoods (5 posts all pinned to
-  // Podil center) don't render as an unreadable emoji pile. Each cluster
-  // with 2+ members renders as one badge; singletons render as normal pins.
+  // Each pet gets a deterministic display offset inside its own
+  // searchZoneRadiusM — posted location is a landmark-level approximation,
+  // and the zone radius is the uncertainty radius the parser already gave us.
+  // So floating the pin within its zone is both more readable (pets spread
+  // out instead of stacking on one crossroad) and more honest ("somewhere
+  // in this zone, we don't know exactly where").
+  const displayPositions = useMemo(() => {
+    const map = new Map<string, { lat: number; lng: number }>();
+    for (const d of lostDogs) {
+      map.set(d.id, jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, d.id));
+    }
+    return map;
+  }, [lostDogs]);
+
+  // Clustering still runs against TRUE positions so "genuinely close reports"
+  // are grouped regardless of display jitter. The cluster badge sits at the
+  // true centroid; individual pets (singletons + members of small clusters)
+  // render at their jittered positions from displayPositions.
   const clusters = useMemo(
     () =>
       clusterByDistance(
@@ -233,7 +248,7 @@ export default function MapViewWeb() {
             return [
               <LostDogMarker
                 key={d.id}
-                position={d.lastSeen.position}
+                position={displayPositions.get(d.id) ?? d.lastSeen.position}
                 emoji={d.emoji}
                 name={d.name}
                 urgency={d.urgency}
@@ -241,19 +256,17 @@ export default function MapViewWeb() {
               />,
             ];
           }
-          // Small groups just float around the cluster center — zone-
-          // outline feel, no tap-to-expand needed. Display positions are
-          // on a ring around the centroid; the pet's true coord still
-          // drives the modal and search zone when tapped.
+          // Small groups: no cluster badge, each pet renders at its own
+          // zone-jittered position. Because every pet has its own radius
+          // and hash, 4 pets all reported at "Podil center" fan out across
+          // their respective zones instead of stacking.
           if (c.items.length < CLUSTER_BADGE_THRESHOLD) {
-            const positions = ringPositions(c.center, c.items.length);
-            return c.items.map((item, i) => {
+            return c.items.map((item) => {
               const d = item.dog;
-              const p = positions[i] ?? d.lastSeen.position;
               return (
                 <LostDogMarker
                   key={d.id}
-                  position={p}
+                  position={displayPositions.get(d.id) ?? d.lastSeen.position}
                   emoji={d.emoji}
                   name={d.name}
                   urgency={d.urgency}

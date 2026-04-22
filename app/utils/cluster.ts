@@ -50,20 +50,33 @@ export function clusterByDistance<T extends ClusterItem>(
 // on "which pets belong together".
 
 // Small-group dispersal: when a cluster has a few members (2-5 typically),
-// we don't want to hide them behind a badge — just float them in a ring
-// around the center so the map reads as "zone of activity here" at a
-// glance. Geographic precision is intentionally sacrificed — the ring
-// positions are display-only, not the pet's real last-seen coord.
-export function ringPositions(center: LatLng, count: number, radiusDeg = 0.0004): LatLng[] {
-  if (count <= 1) return [center];
-  const positions: LatLng[] = [];
-  for (let i = 0; i < count; i++) {
-    // First pin above the center so the ring reads predictably.
-    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / count;
-    positions.push({
-      lat: center.lat + radiusDeg * Math.sin(angle),
-      lng: center.lng + radiusDeg * Math.cos(angle),
-    });
-  }
-  return positions;
+// we don't want to hide them behind a badge — each pet just floats
+// somewhere inside its own search-zone radius so the map reads as "pet
+// is somewhere around here" at a glance. Geographic precision is
+// intentionally sacrificed — the display position is display-only, not
+// the pet's real last-seen coord.
+
+function hashSeed(seed: string): number {
+  // djb2 — good enough for positional jitter, fast, stable across platforms.
+  let h = 5381;
+  for (let i = 0; i < seed.length; i++) h = ((h << 5) + h + seed.charCodeAt(i)) | 0;
+  return h >>> 0;
+}
+
+// Deterministic pseudo-random offset inside a circle of `radiusM` meters
+// around `center`. Same seed always maps to the same point — so a pet
+// displayed at a given offset stays at that offset across renders.
+// The display sits between 35% and 90% of the radius from the center so
+// pets don't all pile at the middle AND don't brush the rim.
+export function jitterInRadius(center: LatLng, radiusM: number, seed: string): LatLng {
+  const h = hashSeed(seed);
+  const angle = ((h % 10_000) / 10_000) * 2 * Math.PI;
+  const distFrac = 0.35 + (((h >>> 14) % 10_000) / 10_000) * 0.55;
+  const dist = radiusM * distFrac;
+  const LAT_M = 1 / 111_320;
+  const LNG_M = 1 / (111_320 * Math.cos((center.lat * Math.PI) / 180));
+  return {
+    lat: center.lat + dist * LAT_M * Math.sin(angle),
+    lng: center.lng + dist * LNG_M * Math.cos(angle),
+  };
 }
