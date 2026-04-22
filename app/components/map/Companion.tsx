@@ -11,9 +11,10 @@ interface CompanionProps {
   onTapCompanion?: () => void;
 }
 
-// Companion overlay — aura rings, float keyframe, tap-to-open radial menu.
-// All children (bubble, menu) live inside this OverlayView div so they move
-// with the map (demo's floatPane pattern).
+// Companion overlay — float keyframe, tap-to-open radial menu. All children
+// (bubble, menu) live inside this OverlayView div so they move with the map
+// (demo's floatPane pattern). The expanding aura rings were a bit much —
+// we'll revisit that animation later when we have the right sensor metaphor.
 export function Companion({ position, bubble, onTapCompanion }: CompanionProps) {
   const menuOpen = useGameStore((s) => s.menuOpen);
   const setMenuOpen = useGameStore((s) => s.setMenuOpen);
@@ -57,28 +58,6 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
           height: 90,
         }}
       >
-        {/* aura rings */}
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: '50%',
-            border: '3px solid rgba(255,255,255,1)',
-            animation: 'co-aura 3s ease-out infinite',
-            pointerEvents: 'none',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            inset: 0,
-            borderRadius: '50%',
-            border: '3px solid rgba(255,255,255,1)',
-            animation: 'co-aura 3s ease-out infinite 1.5s',
-            pointerEvents: 'none',
-          }}
-        />
-
         {/* companion body */}
         <div
           role="button"
@@ -107,10 +86,6 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
         <RadialMenu open={menuOpen} actions={PRIMARY_ACTIONS} onSelect={handleAction} />
 
         <style>{`
-          @keyframes co-aura {
-            0% { transform: scale(1); opacity: 0.7; }
-            100% { transform: scale(8); opacity: 0; }
-          }
           @keyframes co-float {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-3px); }
