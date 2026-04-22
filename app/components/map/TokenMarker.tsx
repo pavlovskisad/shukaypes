@@ -11,10 +11,8 @@ function TokenMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => v
       mapPaneName={FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -13, y: -13 })}
     >
-      {/* text-shadow instead of filter:drop-shadow and no animation —
-          there are ~30 of these, and filter + keyframes were the main
-          paint cost that made scrolling jank. glow still reads at a
-          glance via a stacked text-shadow. */}
+      {/* No glow, no animation — tokens are static collectibles, low
+          paint cost so the map scrolls smoothly. */}
       <div
         role="button"
         tabIndex={0}
@@ -26,7 +24,6 @@ function TokenMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => v
           lineHeight: '26px',
           textAlign: 'center',
           cursor: 'pointer',
-          textShadow: '0 0 6px rgba(200,255,0,0.6), 0 0 10px rgba(200,255,0,0.35)',
           userSelect: 'none',
         }}
       >
