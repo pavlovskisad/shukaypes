@@ -48,7 +48,7 @@ export function StatusBar() {
       <MeterSection icon="☀️" value={happiness} label="happiness" />
       <View style={styles.divider} />
       <View style={styles.tokens}>
-        <Text style={styles.emoji}>🐾</Text>
+        <Text style={styles.tokenEmoji}>🐾</Text>
         <Text style={styles.tokenCount}>{tokensCollected}</Text>
       </View>
     </View>
@@ -110,8 +110,15 @@ const styles = StyleSheet.create({
   tokens: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    gap: 6,
+    height: PILL_HEIGHT,
+    paddingHorizontal: 14,
+    // Explicit minWidth so emoji and count don't collide on render when
+    // react-native-web's flex gap behaves inconsistently.
+    minWidth: 72,
+  },
+  tokenEmoji: {
+    fontSize: 15,
+    marginRight: 6,
   },
   tokenCount: {
     color: colors.white,
