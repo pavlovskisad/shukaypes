@@ -2,17 +2,11 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 
-const URGENCY_SHADOW: Record<UrgencyLevel, string> = {
-  urgent: '0 0 20px rgba(232,64,64,0.45), 0 3px 12px rgba(0,0,0,0.15)',
-  medium: '0 0 20px rgba(217,160,48,0.45), 0 3px 12px rgba(0,0,0,0.15)',
-  resolved: '0 3px 12px rgba(0,0,0,0.15)',
-};
-
-const URGENCY_RING: Record<UrgencyLevel, string> = {
-  urgent: 'rgba(232,64,64,0.5)',
-  medium: 'rgba(217,160,48,0.5)',
-  resolved: 'rgba(170,170,170,0.4)',
-};
+// Every lost pet reads with the same red urgency now — lost is lost,
+// the gradations (medium / resolved) weren't pulling their weight on a
+// quick-glance map and user asked for one visual language.
+const LOST_GLOW = '0 0 20px rgba(232,64,64,0.45), 0 3px 12px rgba(0,0,0,0.15)';
+const LOST_RING = 'rgba(232,64,64,0.5)';
 
 // Wander amplitude in pixels — small enough to read as "ambient drift"
 // rather than "pet is running around".
@@ -122,7 +116,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
               height: 36,
               marginLeft: -18,
               borderRadius: '50%',
-              border: `2px solid ${URGENCY_RING[urgency]}`,
+              border: `2px solid ${LOST_RING}`,
               animation: `sos-beep ${BEEP_DURATION_MS}ms ease-out forwards`,
               pointerEvents: 'none',
             }}
@@ -145,7 +139,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
             justifyContent: 'center',
             fontSize: 18,
             overflow: 'hidden',
-            boxShadow: URGENCY_SHADOW[urgency],
+            boxShadow: LOST_GLOW,
           }}
         >
           <span style={{ position: 'absolute' }}>{emoji}</span>

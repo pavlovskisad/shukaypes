@@ -6,7 +6,7 @@ import logoFull from '../../assets/logo-full.png';
 // beat. Web-specific — Expo's native splash-screen plugin covers iOS/
 // Android separately. Keeps the brand the first thing you see even while
 // the bundle finishes booting (cold load on mobile LTE can take a second).
-const VISIBLE_MS = 700;
+const VISIBLE_MS = 1000;
 const FADE_MS = 400;
 
 export function Splash() {
@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
     transition: `opacity ${FADE_MS}ms ease`,
   },
   logo: {
-    width: 200,
-    height: 200,
+    width: 600,
+    height: 600,
   },
 });
