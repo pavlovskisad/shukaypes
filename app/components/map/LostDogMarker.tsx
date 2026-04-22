@@ -2,11 +2,12 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 
-// Every lost pet reads with the same red urgency now — lost is lost,
-// the gradations (medium / resolved) weren't pulling their weight on a
-// quick-glance map and user asked for one visual language.
-const LOST_GLOW = '0 0 20px rgba(232,64,64,0.45), 0 3px 12px rgba(0,0,0,0.15)';
-const LOST_RING = 'rgba(232,64,64,0.5)';
+// Every lost pet reads with the same yellow glow — lost is lost, the
+// gradations (medium / resolved) weren't pulling their weight on a
+// quick-glance map. Yellow reads as "attention" without the full alarm
+// of red.
+const LOST_GLOW = '0 0 22px rgba(241,196,15,0.55), 0 3px 12px rgba(0,0,0,0.15)';
+const LOST_RING = 'rgba(241,196,15,0.6)';
 
 // Wander amplitude in pixels — small enough to read as "ambient drift"
 // rather than "pet is running around".

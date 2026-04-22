@@ -70,48 +70,12 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
           height: 170,
         }}
       >
-        {/* Aura rings — ported faithfully from the prototype (.cglow):
-            two white rings starting at the companion center, each scaling
-            from 1x to 8x over 3s, staggered 1.5s, opacity 0.8 → 0. This is
-            the "sensor" beat the prototype had; we tried stripping it and
-            stripping felt dead. Pointer-events off so taps go through to
-            the nose below. */}
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            width: 12,
-            height: 12,
-            marginLeft: -6,
-            marginTop: -6,
-            borderRadius: '50%',
-            border: '3px solid rgba(255,255,255,1)',
-            animation: 'co-aura 3s ease-out infinite',
-            pointerEvents: 'none',
-          }}
-        />
-        <div
-          aria-hidden="true"
-          style={{
-            position: 'absolute',
-            top: '50%',
-            left: '50%',
-            width: 12,
-            height: 12,
-            marginLeft: -6,
-            marginTop: -6,
-            borderRadius: '50%',
-            border: '3px solid rgba(255,255,255,1)',
-            animation: 'co-aura 3s ease-out infinite 1.5s',
-            pointerEvents: 'none',
-          }}
-        />
-
-        {/* companion body — just the nose glyph with a layered white glow.
-            three stacked drop-shadows for a subtle "strong presence" halo
-            even between aura pulses. no circle underneath. */}
+        {/* Companion body — just the nose glyph sitting on a big intense
+            white drop-shadow halo. No radar rings, no black circle — the
+            logo has enough distinctive form on its own, the glow is what
+            distinguishes it from the rest of the map. Stacked layers:
+            inner tight bright halo, a mid bloom, and a wide atmospheric
+            outer so it reads at any zoom. */}
         <div
           role="button"
           tabIndex={0}
@@ -125,7 +89,7 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
             cursor: 'pointer',
             animation: 'co-float 2.4s ease-in-out infinite',
             filter:
-              'drop-shadow(0 0 10px rgba(255,255,255,1)) drop-shadow(0 0 22px rgba(255,255,255,0.85)) drop-shadow(0 0 44px rgba(255,255,255,0.5))',
+              'drop-shadow(0 0 14px rgba(255,255,255,1)) drop-shadow(0 0 30px rgba(255,255,255,1)) drop-shadow(0 0 60px rgba(255,255,255,0.75))',
             userSelect: 'none',
           }}
         >
@@ -141,10 +105,6 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
         <RadialMenu open={menuOpen} actions={PRIMARY_ACTIONS} onSelect={handleAction} />
 
         <style>{`
-          @keyframes co-aura {
-            0%   { transform: scale(1); opacity: 0.7; }
-            100% { transform: scale(8); opacity: 0; }
-          }
           @keyframes co-float {
             0%, 100% { transform: translateY(0); }
             50% { transform: translateY(-3px); }
