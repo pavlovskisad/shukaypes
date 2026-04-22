@@ -142,12 +142,16 @@ export default function MapViewWeb() {
     [lostDogs],
   );
 
-  const handleClusterTap = useCallback((center: LatLng) => {
+  const handleClusterTap = useCallback((center: LatLng, count: number) => {
     const map = mapRef.current;
     if (!map) return;
     const current = map.getZoom() ?? balance.mapZoomDefault;
     map.panTo(center as unknown as google.maps.LatLngLiteral);
-    map.setZoom(Math.min(current + 2, balance.mapZoomMax));
+    // Dense clusters jump straight to max zoom — at +2 the pins can still
+    // be bunched and the tap "feels like nothing happened". For smaller
+    // clusters a +2 step is enough to separate them.
+    const target = count >= 5 ? balance.mapZoomMax : Math.min(current + 2, balance.mapZoomMax);
+    map.setZoom(target);
   }, []);
 
   if (!env.googleMapsApiKey) {
@@ -242,7 +246,7 @@ export default function MapViewWeb() {
               count={c.items.length}
               dominantUrgency={dominantUrgency}
               emojiHint={emojiHint}
-              onTap={() => handleClusterTap(c.center)}
+              onTap={() => handleClusterTap(c.center, c.items.length)}
             />
           );
         })}

@@ -45,7 +45,13 @@ export async function buildContextBlock({ userId, pos }: ContextInput): Promise<
         dist: distExpr,
       })
       .from(schema.lostDogs)
-      .where(and(eq(schema.lostDogs.status, 'active'), sql`${distExpr} < 5000`))
+      .where(
+        and(
+          eq(schema.lostDogs.status, 'active'),
+          sql`NOT (${schema.lostDogs.lastSeenLat} = 50.4501 AND ${schema.lostDogs.lastSeenLng} = 30.5234)`,
+          sql`${distExpr} < 5000`,
+        ),
+      )
       .orderBy(distExpr)
       .limit(3);
     nearbyPets = pets.map((p) => {
