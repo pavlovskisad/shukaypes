@@ -2,7 +2,10 @@
 // sideload today, Telegram/OLX/shelter scrapers later — parses raw text into
 // ParsedDog, then `upsertLostDog` is what actually touches the DB.
 
-export type Urgency = 'urgent' | 'medium' | 'resolved';
+// "rehoming" is a signal from the parser that the post is offering a dog for
+// adoption, not reporting a lost one. Callers are expected to drop these
+// before upsert — they're not lost dogs, they don't belong on the map.
+export type Urgency = 'urgent' | 'medium' | 'resolved' | 'rehoming';
 
 export interface ParsedDog {
   name: string;

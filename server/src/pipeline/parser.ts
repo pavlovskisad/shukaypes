@@ -68,7 +68,7 @@ const OUTPUT_SCHEMA = `OUTPUT: a single JSON object with these fields, no prose,
     "lastSeenLng": number
     "lastSeenDescription": string   // 1 short english sentence about where and how seen — for the companion to quote. keep under 140 chars. no phone numbers, no personal contact info.
     "lastSeenAt": string      // ISO8601. if post gives a date use that. if it says "today/сьогодні/сегодня" use NOW. if vague ("this week"), use NOW minus 2 days.
-    "urgency": "urgent" | "medium" | "resolved"
+    "urgency": "urgent" | "medium" | "resolved" | "rehoming"
     "searchZoneRadiusM": number   // 500..1500. urgent=500-700, medium=600-900, older leads=900-1500
     "rewardPoints": number    // 100 default, 200 if urgent or explicit reward mentioned
     "photoUrl": string | null // if an image URL is present in the post, else null
@@ -77,8 +77,9 @@ const OUTPUT_SCHEMA = `OUTPUT: a single JSON object with these fields, no prose,
   }
 
 URGENCY RULES
-- "urgent" when: nursing mother, puppy, needs meds, disabled, last seen <24h, cold/rain/dangerous area, child's dog, reward offered.
-- "resolved" when: the post is marked found / знайшли / повернули / нашли.
+- "rehoming" when: the post is OFFERING a dog for adoption / giveaway / to a new home — someone wants a new family for a dog they have, not reporting one missing. Key signals: "шукає дім", "шукає родину", "в добрі руки", "віддам / віддаю / віддамо", "роздаю / роздаємо", "в дар", "безкоштовно собаку", "отдам", "раздам", "в хорошие руки", "pristroi / пристрій". These posts must be flagged as rehoming no matter how urgent the title sounds — "ТЕРМІНОВО шукає дім" is still rehoming, not lost. NEVER use "rehoming" for a post that describes a dog that went missing or a stray that was found.
+- "urgent" when: nursing mother, puppy, needs meds, disabled, last seen <24h, cold/rain/dangerous area, child's dog, reward offered. Only apply AFTER ruling out rehoming.
+- "resolved" when: the post is marked found / знайшли / повернули / нашли (and the original report was about a lost dog).
 - "medium" otherwise.
 
 STRICTNESS
@@ -106,7 +107,13 @@ INPUT:
 ЗНАЙШЛИ! дякуємо всім, Арчі вдома 🙏
 
 OUTPUT:
-{"name":"Арчі","breed":"unknown","emoji":"🐕","lastSeenLat":50.4501,"lastSeenLng":30.5234,"lastSeenDescription":"reported as found and reunited with family","lastSeenAt":"{{NOW}}","urgency":"resolved","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.4,"parseNotes":"post is a resolution notice, no last-seen data — coordinates fallback to city center"}`;
+{"name":"Арчі","breed":"unknown","emoji":"🐕","lastSeenLat":50.4501,"lastSeenLng":30.5234,"lastSeenDescription":"reported as found and reunited with family","lastSeenAt":"{{NOW}}","urgency":"resolved","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.4,"parseNotes":"post is a resolution notice, no last-seen data — coordinates fallback to city center"}
+
+INPUT:
+Цуценя хлопчик ТЕРМІНОВО шукає дім! 3 місяці, здоровий, ігривий, привчений до повідця. Віддамо в добрі руки, бажано в приватний будинок.
+
+OUTPUT:
+{"name":"цуценя хлопчик","breed":"mixed","emoji":"🐶","lastSeenLat":50.4501,"lastSeenLng":30.5234,"lastSeenDescription":"healthy 3-month puppy being offered for adoption, not lost","lastSeenAt":"{{NOW}}","urgency":"rehoming","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.95,"parseNotes":"rehoming / adoption post — 'шукає дім' and 'віддамо в добрі руки' are unambiguous offer-for-adoption phrases. the word ТЕРМІНОВО does not make this a lost dog."}`;
 
 function buildSystemPrompt(): string {
   return [
@@ -140,7 +147,7 @@ function clampRadius(r: unknown): number {
 }
 
 function normalizeUrgency(u: unknown): Urgency {
-  if (u === 'urgent' || u === 'resolved') return u;
+  if (u === 'urgent' || u === 'resolved' || u === 'rehoming') return u;
   return 'medium';
 }
 
