@@ -5,12 +5,12 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from '../../components/map';
 import { StatusBar } from '../../components/ui/StatusBar';
 import { useGameStore } from '../../stores/gameStore';
-import logoSquare from '../../assets/logo-square.png';
+import logoSquare from '../../assets/logo-square.jpeg';
 
-// Logo is the brand anchor in the top-left. Bigger than the pill but not
-// so big its internal transparent padding pushes the visible square far
-// below where the pill sits.
-const HUD_ICON_SIZE = 100;
+// Logo is the brand anchor in the top-left. Tight-cropped asset (no
+// transparent padding) so the visible square matches the rendered box,
+// letting us align it cleanly with the pill on the right.
+const HUD_ICON_SIZE = 200;
 
 export default function MapScreen() {
   useFocusEffect(useCallback(() => {
@@ -50,9 +50,9 @@ const styles = StyleSheet.create({
   hudRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    // Both items anchor to the top of the row — the pill stays at its
-    // small size up top while the big logo extends down beside it.
-    alignItems: 'flex-start',
+    // Center vertically so the pill sits on the logo's horizontal midline.
+    // Equal paddingHorizontal keeps distance-to-edge matching on both sides.
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingTop: 8,
   },
