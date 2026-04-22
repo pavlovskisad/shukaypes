@@ -1,4 +1,4 @@
-import { memo, useEffect, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 
@@ -8,16 +8,24 @@ const URGENCY_SHADOW: Record<UrgencyLevel, string> = {
   resolved: '0 3px 12px rgba(0,0,0,0.15)',
 };
 
-// Visual wander amplitude in pixels. Small enough to read as "alive",
-// large enough to be noticed at default zoom. Zoom-independent on purpose —
-// it's a vibe effect, not a geographic one.
-const WANDER_PX = 18;
-// New target every 4-8s (jittered per marker so 20 pets don't all tick in
-// sync, which would look robotic). CSS transition below handles the smooth
-// interpolation on the GPU — React only re-renders the marker once per
-// target change, not per frame.
-const WANDER_MIN_MS = 4000;
-const WANDER_MAX_MS = 8000;
+const URGENCY_RING: Record<UrgencyLevel, string> = {
+  urgent: 'rgba(232,64,64,0.5)',
+  medium: 'rgba(217,160,48,0.5)',
+  resolved: 'rgba(170,170,170,0.4)',
+};
+
+// Wander amplitude in pixels — visible movement at default zoom but small
+// enough not to overshoot the pet's search zone when zoomed in.
+const WANDER_PX = 50;
+// New target every 3s while the CSS transition runs 6s — the element is
+// always moving toward SOME target. Mid-transition target changes smoothly
+// redirect, so the motion reads as continuous drift rather than stop/start.
+const RETARGET_MS = 3000;
+const TRANSITION_MS = 6000;
+// SOS beep: a ring emanates from the pet every BEEP_PERIOD_MS — subtle
+// "I'm here" pulse. Delay per pet is randomized so pets don't beep in sync.
+const BEEP_PERIOD_MS = 22_000;
+const BEEP_DURATION_MS = 1800;
 
 interface LostDogMarkerProps {
   position: LatLng;
@@ -28,31 +36,53 @@ interface LostDogMarkerProps {
 }
 
 // Dog pin — white circle with emoji, urgency-colored glow, handwritten name
-// label below. Memoized because ~20 of these render on the map and the map
-// re-renders on every pan.
+// label below. Memoized because ~20 of these render on the map.
 //
-// Wander: the marker's lat/lng position is static (pet sits at its jittered
-// coord inside its zone). A small CSS transform inside the marker drifts
-// to a new random offset every few seconds, smoothed by `transition:
-// transform`. GPU does the interpolation so it stays cheap even with many
-// markers. No lat/lng snap = no teleport, no rotation sync across pets.
+// Wander: lat/lng stays static; the pin's inner div drifts via a CSS
+// `translate()` transform that updates to a new random target every 3s.
+// The 6s transition duration overlaps successive targets so the element
+// never stops moving. GPU does the interpolation.
+//
+// Beep: a translucent ring expands out of the pin every ~22s. Per-pet
+// random phase so they don't synchronize across the map.
 function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMarkerProps) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
+  const [beeping, setBeeping] = useState(false);
+  const beepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Continuous wander — setInterval means exactly one pending timer per
+  // marker regardless of mount/unmount timing. Cleared synchronously on
+  // unmount.
   useEffect(() => {
-    let timeoutId: ReturnType<typeof setTimeout>;
-    const drift = () => {
+    const id = setInterval(() => {
       setOffset({
         x: (Math.random() * 2 - 1) * WANDER_PX,
         y: (Math.random() * 2 - 1) * WANDER_PX,
       });
-      const next = WANDER_MIN_MS + Math.random() * (WANDER_MAX_MS - WANDER_MIN_MS);
-      timeoutId = setTimeout(drift, next);
+    }, RETARGET_MS);
+    return () => clearInterval(id);
+  }, []);
+
+  // SOS beep. Initial delay is random per pet so 20 pets don't beep in
+  // unison, then regular period after that. We schedule via setTimeout +
+  // re-arm so the beep can outlast a single interval tick cleanly.
+  useEffect(() => {
+    let cancelled = false;
+    const schedule = (delay: number) => {
+      beepTimeoutRef.current = setTimeout(() => {
+        if (cancelled) return;
+        setBeeping(true);
+        setTimeout(() => {
+          if (!cancelled) setBeeping(false);
+        }, BEEP_DURATION_MS);
+        schedule(BEEP_PERIOD_MS);
+      }, delay);
     };
-    // First drift fires on a short initial delay so ~20 pets don't all pick
-    // targets in the same tick on mount.
-    timeoutId = setTimeout(drift, Math.random() * WANDER_MAX_MS);
-    return () => clearTimeout(timeoutId);
+    schedule(Math.random() * BEEP_PERIOD_MS);
+    return () => {
+      cancelled = true;
+      if (beepTimeoutRef.current) clearTimeout(beepTimeoutRef.current);
+    };
   }, []);
 
   return (
@@ -66,16 +96,35 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMar
         tabIndex={0}
         onClick={onTap}
         style={{
+          position: 'relative',
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
           cursor: 'pointer',
           userSelect: 'none',
           transform: `translate(${offset.x}px, ${offset.y}px)`,
-          transition: 'transform 4s ease-in-out',
-          willChange: 'transform',
+          transition: `transform ${TRANSITION_MS}ms linear`,
         }}
       >
+        {/* SOS beep ring — absolute so it expands out of the pin center
+            without reflowing layout. Rendered only while `beeping` so
+            it's zero paint cost 90% of the time. */}
+        {beeping ? (
+          <div
+            style={{
+              position: 'absolute',
+              top: 0,
+              left: '50%',
+              width: 36,
+              height: 36,
+              marginLeft: -18,
+              borderRadius: '50%',
+              border: `2px solid ${URGENCY_RING[urgency]}`,
+              animation: `sos-beep ${BEEP_DURATION_MS}ms ease-out forwards`,
+              pointerEvents: 'none',
+            }}
+          />
+        ) : null}
         <div
           style={{
             width: 36,
@@ -104,6 +153,12 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMar
         >
           {name}
         </div>
+        <style>{`
+          @keyframes sos-beep {
+            0%   { transform: scale(1); opacity: 0.7; }
+            100% { transform: scale(4.5); opacity: 0; }
+          }
+        `}</style>
       </div>
     </OverlayViewF>
   );

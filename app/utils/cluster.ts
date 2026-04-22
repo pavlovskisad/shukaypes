@@ -87,13 +87,13 @@ function avoidWater(center: LatLng, jittered: LatLng): LatLng {
 // Deterministic pseudo-random offset inside a circle of `radiusM` meters
 // around `center`. Same seed always maps to the same point — so a pet
 // displayed at a given offset stays at that offset across renders.
-// Distance sits between 60% and 95% of the radius so pets are pushed to
-// the outer part of their zone — dense neighborhoods get better angular
-// spread because pets radiate outward rather than crowding the middle.
-// When `angleOverrideRad` is supplied (set for pets in a shared cluster),
-// we skip the hash-derived angle and use the provided one — this
-// guarantees fanned separation for pets that happen to land on the same
-// landmark, instead of relying on hash coincidence.
+// Distance spans 5% to 90% of the radius so pets can sit anywhere inside
+// the zone — earlier 60-95% version pushed them to the rim and made the
+// formation look like "pets orbiting the border" instead of "scattered
+// inside the area". When `angleOverrideRad` is supplied (set for pets in
+// a shared cluster), we skip the hash-derived angle and use the provided
+// one — this guarantees fanned separation for pets that happen to land
+// on the same landmark, instead of relying on hash coincidence.
 // Jittered positions that fall in the Dnieper main channel are reflected
 // back to whichever bank the pet's true coord is on.
 export function jitterInRadius(
@@ -105,7 +105,7 @@ export function jitterInRadius(
   const h = hashSeed(seed);
   const angle =
     angleOverrideRad ?? ((h % 10_000) / 10_000) * 2 * Math.PI;
-  const distFrac = 0.6 + (((h >>> 14) % 10_000) / 10_000) * 0.35;
+  const distFrac = 0.05 + (((h >>> 14) % 10_000) / 10_000) * 0.85;
   const dist = radiusM * distFrac;
   const LAT_M = 1 / 111_320;
   const LNG_M = 1 / (111_320 * Math.cos((center.lat * Math.PI) / 180));
