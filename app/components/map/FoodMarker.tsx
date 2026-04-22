@@ -6,7 +6,7 @@ export function FoodMarker({ position, onTap }: { position: LatLng; onTap: () =>
   return (
     <OverlayView
       position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+      mapPaneName={OverlayView.FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -12, y: -12 })}
     >
       <div

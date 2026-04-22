@@ -19,7 +19,7 @@ import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
-import { clusterByDistance, spiderifyPositions } from '../../utils/cluster';
+import { clusterByDistance } from '../../utils/cluster';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
 const LIBRARIES: ('places')[] = ['places'];
@@ -238,29 +238,7 @@ export default function MapViewWeb() {
             ];
           }
           const key = clusterKey(c.items);
-          // Expanded cluster: pets pop out around the center at spider
-          // positions and are individually tappable. Collapse on the same
-          // cluster's badge or on a map background tap.
-          if (expandedClusterKey === key) {
-            const positions = spiderifyPositions(c.center, c.items.length);
-            return c.items.map((item, i) => {
-              const d = item.dog;
-              const p = positions[i] ?? d.lastSeen.position;
-              return (
-                <LostDogMarker
-                  key={`expanded-${d.id}`}
-                  position={p}
-                  emoji={d.emoji}
-                  name={d.name}
-                  urgency={d.urgency}
-                  onTap={() => {
-                    setExpandedClusterKey(null);
-                    setSelectedDog(d.id);
-                  }}
-                />
-              );
-            });
-          }
+          const expanded = expandedClusterKey === key;
           const dominantUrgency = c.items
             .map((i) => i.dog.urgency)
             .reduce<UrgencyLevel>(
@@ -276,10 +254,15 @@ export default function MapViewWeb() {
             <LostDogCluster
               key={`cluster-${key}`}
               position={c.center}
-              count={c.items.length}
+              items={c.items.map((i) => i.dog)}
               dominantUrgency={dominantUrgency}
               emojiHint={emojiHint}
-              onTap={() => handleClusterTap(c.items)}
+              expanded={expanded}
+              onToggle={() => handleClusterTap(c.items)}
+              onSelectItem={(id) => {
+                setExpandedClusterKey(null);
+                setSelectedDog(id);
+              }}
             />,
           ];
         })}
