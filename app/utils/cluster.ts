@@ -48,3 +48,22 @@ export function clusterByDistance<T extends ClusterItem>(
 // Expansion into a ring is CSS-pixel-based inside LostDogCluster's
 // OverlayView container — see that component. Keeping cluster.ts focused
 // on "which pets belong together".
+
+// Small-group dispersal: when a cluster has a few members (2-5 typically),
+// we don't want to hide them behind a badge — just float them in a ring
+// around the center so the map reads as "zone of activity here" at a
+// glance. Geographic precision is intentionally sacrificed — the ring
+// positions are display-only, not the pet's real last-seen coord.
+export function ringPositions(center: LatLng, count: number, radiusDeg = 0.0004): LatLng[] {
+  if (count <= 1) return [center];
+  const positions: LatLng[] = [];
+  for (let i = 0; i < count; i++) {
+    // First pin above the center so the ring reads predictably.
+    const angle = -Math.PI / 2 + (i * 2 * Math.PI) / count;
+    positions.push({
+      lat: center.lat + radiusDeg * Math.sin(angle),
+      lng: center.lng + radiusDeg * Math.cos(angle),
+    });
+  }
+  return positions;
+}
