@@ -59,7 +59,16 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.black,
+    // Half-transparent black + backdrop blur = frosted glass on web.
+    // Safari/chrome/firefox all support backdrop-filter now; anything
+    // that doesn't still sees the translucent background (just no blur).
+    // react-native-web passes unknown style keys to CSS, which is how
+    // backdropFilter reaches the DOM.
+    backgroundColor: 'rgba(26,26,26,0.5)',
+    // Web-only style keys; react-native-web passes them through to CSS.
+    backdropFilter: 'blur(14px) saturate(160%)',
+    // @ts-expect-error — safari prefix not in RN style types
+    WebkitBackdropFilter: 'blur(14px) saturate(160%)',
     borderRadius: PILL_HEIGHT / 2,
     height: PILL_HEIGHT,
     overflow: 'hidden',
