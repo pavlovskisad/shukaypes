@@ -1,6 +1,22 @@
-import type { ChatMessage, FoodItem, LatLng, Token } from '@shukajpes/shared';
+import type { ChatMessage, FoodItem, LatLng, Token, UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../constants/env';
 import { getDeviceId } from './deviceId';
+
+// Projection returned by /dogs/nearby — narrower than the full LostDog type
+// (no description, source, status, reportedBy). Radius is named with the
+// trailing M to match the DB column; other types in @shukajpes/shared predate
+// the backend and use a different name, which we'd reconcile in a later slice.
+export interface NearbyLostDog {
+  id: string;
+  name: string;
+  breed: string;
+  emoji: string;
+  photoUrl: string | null;
+  urgency: UrgencyLevel;
+  rewardPoints: number;
+  searchZoneRadiusM: number;
+  lastSeen: { position: LatLng; at: string };
+}
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const res = await fetch(`${env.apiUrl}${path}`, {
@@ -45,6 +61,11 @@ export const api = {
 
   getFoodNearby: (pos: LatLng) =>
     req<{ food: FoodItem[] }>(`/food/nearby?lat=${pos.lat}&lng=${pos.lng}`),
+
+  getLostDogsNearby: (pos: LatLng, radiusM = 5000) =>
+    req<{ dogs: NearbyLostDog[] }>(
+      `/dogs/nearby?lat=${pos.lat}&lng=${pos.lng}&radius=${radiusM}`,
+    ),
 
   collectToken: (tokenId: string, pos: LatLng) =>
     req<{ ok: true; value: number }>('/collect/token', {
