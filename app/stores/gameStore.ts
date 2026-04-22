@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { balance } from '../constants/balance';
 import type { FoodItem, LatLng, Quest, Token } from '@shukajpes/shared';
-import { api } from '../services/api';
+import { api, type NearbyLostDog } from '../services/api';
 
 interface GameState {
   hunger: number;
@@ -16,6 +16,8 @@ interface GameState {
   currentScreen: 'map' | 'tasks' | 'chat' | 'spots' | 'profile';
   tokens: Token[];
   foodItems: FoodItem[];
+  lostDogs: NearbyLostDog[];
+  selectedDogId: string | null;
   syncing: boolean;
   lastSyncError: string | null;
 
@@ -29,6 +31,8 @@ interface GameState {
   syncState: () => Promise<void>;
   syncTokens: (pos: LatLng) => Promise<void>;
   syncFood: (pos: LatLng) => Promise<void>;
+  syncLostDogs: (pos: LatLng) => Promise<void>;
+  setSelectedDog: (id: string | null) => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -44,6 +48,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentScreen: 'map',
   tokens: [],
   foodItems: [],
+  lostDogs: [],
+  selectedDogId: null,
   syncing: false,
   lastSyncError: null,
 
@@ -137,4 +143,15 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ lastSyncError: (err as Error).message });
     }
   },
+
+  syncLostDogs: async (pos) => {
+    try {
+      const { dogs } = await api.getLostDogsNearby(pos);
+      set({ lostDogs: dogs });
+    } catch (err) {
+      set({ lastSyncError: (err as Error).message });
+    }
+  },
+
+  setSelectedDog: (selectedDogId) => set({ selectedDogId }),
 }));

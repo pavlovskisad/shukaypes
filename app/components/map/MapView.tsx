@@ -14,6 +14,9 @@ import { Companion } from './Companion';
 import { UserMarker } from './UserMarker';
 import { TokenMarker } from './TokenMarker';
 import { FoodMarker } from './FoodMarker';
+import { LostDogMarker } from './LostDogMarker';
+import { SearchZoneCircle } from './SearchZoneCircle';
+import { LostDogModal } from '../ui/LostDogModal';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
 const LIBRARIES: ('places')[] = ['places'];
@@ -33,11 +36,15 @@ export default function MapViewWeb() {
   const companionPos = useCompanion(userPos);
   const tokens = useGameStore((s) => s.tokens);
   const foodItems = useGameStore((s) => s.foodItems);
+  const lostDogs = useGameStore((s) => s.lostDogs);
+  const selectedDogId = useGameStore((s) => s.selectedDogId);
   const collectToken = useGameStore((s) => s.collectToken);
   const eatFood = useGameStore((s) => s.eatFood);
   const setUserPosition = useGameStore((s) => s.setUserPosition);
   const syncTokens = useGameStore((s) => s.syncTokens);
   const syncFood = useGameStore((s) => s.syncFood);
+  const syncLostDogs = useGameStore((s) => s.syncLostDogs);
+  const setSelectedDog = useGameStore((s) => s.setSelectedDog);
 
   const showBubble = useCallback((msg: string, duration?: number) => {
     setBubble(msg);
@@ -54,19 +61,22 @@ export default function MapViewWeb() {
     if (userPos) setUserPosition(userPos);
   }, [userPos?.lat, userPos?.lng, setUserPosition]);
 
-  // Fetch server-spawned tokens + food when we first have a position, then refresh periodically.
+  // Fetch server state tied to position: spawned tokens + food + nearby lost
+  // dogs. All three refresh on the same interval.
   useEffect(() => {
     if (!userPos) return;
     syncTokens(userPos);
     syncFood(userPos);
+    syncLostDogs(userPos);
     const id = setInterval(() => {
       const pos = useGameStore.getState().userPosition;
       if (!pos) return;
       syncTokens(pos);
       syncFood(pos);
+      syncLostDogs(pos);
     }, TOKEN_REFRESH_MS);
     return () => clearInterval(id);
-  }, [userPos?.lat, userPos?.lng, syncTokens, syncFood]);
+  }, [userPos?.lat, userPos?.lng, syncTokens, syncFood, syncLostDogs]);
 
   // Auto-collect tokens within 50m of companion.
   useEffect(() => {
@@ -147,6 +157,26 @@ export default function MapViewWeb() {
       >
         <UserMarker position={userPos} />
 
+        {lostDogs.map((d) => (
+          <SearchZoneCircle
+            key={`zone-${d.id}`}
+            center={d.lastSeen.position}
+            radiusM={d.searchZoneRadiusM}
+            urgency={d.urgency}
+          />
+        ))}
+
+        {lostDogs.map((d) => (
+          <LostDogMarker
+            key={d.id}
+            position={d.lastSeen.position}
+            emoji={d.emoji}
+            name={d.name}
+            urgency={d.urgency}
+            onTap={() => setSelectedDog(d.id)}
+          />
+        ))}
+
         {tokens
           .filter((t) => !t.collectedAt)
           .map((t) => (
@@ -165,6 +195,15 @@ export default function MapViewWeb() {
           <Companion position={companionPos} bubble={bubble} onTapCompanion={() => showBubble('woof 🐾', 2000)} />
         ) : null}
       </GoogleMap>
+
+      <LostDogModal
+        dog={lostDogs.find((d) => d.id === selectedDogId) ?? null}
+        onClose={() => setSelectedDog(null)}
+        onJoinSearch={(d) => {
+          setSelectedDog(null);
+          showBubble(`looking for ${d.name}… 🐾`, 3000);
+        }}
+      />
     </div>
   );
 }
