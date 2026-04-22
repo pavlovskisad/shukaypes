@@ -291,6 +291,7 @@ export default function MapViewWeb() {
                 emoji={d.emoji}
                 name={d.name}
                 urgency={d.urgency}
+                photoUrl={d.photoUrl}
                 onTap={petTapHandlers.get(d.id)!}
               />,
             ];
@@ -309,6 +310,7 @@ export default function MapViewWeb() {
                   emoji={d.emoji}
                   name={d.name}
                   urgency={d.urgency}
+                  photoUrl={d.photoUrl}
                   onTap={petTapHandlers.get(d.id)!}
                 />
               );

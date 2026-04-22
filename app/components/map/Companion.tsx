@@ -61,18 +61,19 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -45, y: -45 })}
+      getPixelPositionOffset={() => ({ x: -65, y: -65 })}
     >
       <div
         style={{
           position: 'relative',
-          width: 90,
-          height: 90,
+          width: 130,
+          height: 130,
         }}
       >
-        {/* companion body — just the nose glyph on its own with a soft
-            white glow. no black circle underneath; the glow is what
-            reads the pet as "alive" against the map. */}
+        {/* companion body — just the nose glyph with a layered white glow.
+            three stacked drop-shadows: tight bright halo, softer mid bloom,
+            wide diffuse outer. reads as "strong presence" from a distance
+            without a hard edge. no circle underneath. */}
         <div
           role="button"
           tabIndex={0}
@@ -86,7 +87,7 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
             cursor: 'pointer',
             animation: 'co-float 2.4s ease-in-out infinite',
             filter:
-              'drop-shadow(0 0 12px rgba(255,255,255,0.95)) drop-shadow(0 0 26px rgba(255,255,255,0.6))',
+              'drop-shadow(0 0 10px rgba(255,255,255,1)) drop-shadow(0 0 22px rgba(255,255,255,0.85)) drop-shadow(0 0 44px rgba(255,255,255,0.5))',
             userSelect: 'none',
           }}
         >
