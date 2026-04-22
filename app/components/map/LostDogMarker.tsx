@@ -159,6 +159,9 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
+                // Crop a bit tighter so the pet fills the frame and
+                // background/edges don't dilute the avatar.
+                transform: 'scale(1.2)',
               }}
               onError={(e) => {
                 // Some hotlinked images 403 — hide the img so the emoji
