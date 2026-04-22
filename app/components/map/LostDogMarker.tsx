@@ -35,7 +35,6 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMar
           flexDirection: 'column',
           alignItems: 'center',
           cursor: 'pointer',
-          animation: 'dpin-bob 3s ease-in-out infinite',
           userSelect: 'none',
         }}
       >
@@ -67,12 +66,6 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMar
         >
           {name}
         </div>
-        <style>{`
-          @keyframes dpin-bob {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-4px); }
-          }
-        `}</style>
       </div>
     </OverlayViewF>
   );
