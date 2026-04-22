@@ -32,6 +32,7 @@ interface LostDogMarkerProps {
   emoji: string;
   name: string;
   urgency: UrgencyLevel;
+  photoUrl?: string | null;
   onTap: () => void;
 }
 
@@ -45,7 +46,7 @@ interface LostDogMarkerProps {
 //
 // Beep: a translucent ring expands out of the pin every ~22s. Per-pet
 // random phase so they don't synchronize across the map.
-function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMarkerProps) {
+function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: LostDogMarkerProps) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [beeping, setBeeping] = useState(false);
   const beepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -125,8 +126,14 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMar
             }}
           />
         ) : null}
+        {/* Photo when the parser pulled one off the post; emoji fallback
+            otherwise. White ring + urgency glow are unchanged so the pet's
+            urgency still reads at a glance whichever way it renders. The
+            emoji always renders behind the img so a failed/loading image
+            naturally falls back to the emoji without extra state. */}
         <div
           style={{
+            position: 'relative',
             width: 36,
             height: 36,
             borderRadius: '50%',
@@ -135,10 +142,31 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMar
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: 18,
+            overflow: 'hidden',
             boxShadow: URGENCY_SHADOW[urgency],
           }}
         >
-          {emoji}
+          <span style={{ position: 'absolute' }}>{emoji}</span>
+          {photoUrl ? (
+            <img
+              src={photoUrl}
+              alt={name}
+              draggable={false}
+              referrerPolicy="no-referrer"
+              loading="lazy"
+              style={{
+                position: 'relative',
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+              }}
+              onError={(e) => {
+                // Some hotlinked images 403 — hide the img so the emoji
+                // sitting behind it shows through.
+                (e.currentTarget as HTMLImageElement).style.display = 'none';
+              }}
+            />
+          ) : null}
         </div>
         <div style={{ width: 1.5, height: 5, background: '#aaa' }} />
         <div
