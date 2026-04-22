@@ -31,7 +31,7 @@ export function LostDogCluster({ position, count, dominantUrgency, emojiHint, on
     <OverlayView
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-      getPixelPositionOffset={() => ({ x: -30, y: -58 })}
+      getPixelPositionOffset={() => ({ x: -22, y: -48 })}
     >
       <div
         role="button"
@@ -47,8 +47,8 @@ export function LostDogCluster({ position, count, dominantUrgency, emojiHint, on
       >
         <div
           style={{
-            width: 60,
-            height: 60,
+            width: 44,
+            height: 44,
             borderRadius: '50%',
             background: '#ffffff',
             display: 'flex',
@@ -60,16 +60,16 @@ export function LostDogCluster({ position, count, dominantUrgency, emojiHint, on
             lineHeight: 1,
           }}
         >
-          <span style={{ fontSize: 18 }}>{emojiHint}</span>
-          <span style={{ fontSize: 20, fontWeight: 700, color: '#1a1a1a', marginTop: 2 }}>
+          <span style={{ fontSize: 14 }}>{emojiHint}</span>
+          <span style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', marginTop: 1 }}>
             {count}
           </span>
         </div>
-        <div style={{ width: 2, height: 6, background: '#aaa' }} />
+        <div style={{ width: 1.5, height: 5, background: '#aaa' }} />
         <div
           style={{
             fontFamily: "'Caveat', cursive",
-            fontSize: 14,
+            fontSize: 12,
             fontWeight: 600,
             color: '#1a1a1a',
             textShadow: '0 1px 4px rgba(255,255,255,0.95)',

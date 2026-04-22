@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { and, eq, sql } from 'drizzle-orm';
+import { and, eq, not, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 
 interface NearbyQuery {
@@ -7,6 +7,14 @@ interface NearbyQuery {
   lng: string;
   radius?: string;
 }
+
+// The parser falls back to the Kyiv city-center coord when a post gives no
+// geographic signal. Those pets exist in the DB (they're real lost-pet
+// reports) but they shouldn't render on the map — users see a pile of
+// dozens of pins at exactly one landmark and the clustering goes wild.
+// Filter them here; admin endpoints still see the full set.
+const FALLBACK_LAT = 50.4501;
+const FALLBACK_LNG = 30.5234;
 
 const plugin: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: NearbyQuery }>('/dogs/nearby', async (req, reply) => {
@@ -38,6 +46,12 @@ const plugin: FastifyPluginAsync = async (app) => {
       .where(
         and(
           eq(schema.lostDogs.status, 'active'),
+          not(
+            and(
+              eq(schema.lostDogs.lastSeenLat, FALLBACK_LAT),
+              eq(schema.lostDogs.lastSeenLng, FALLBACK_LNG),
+            )!,
+          ),
           sql`
             2 * 6371000 * ASIN(SQRT(
               POWER(SIN(RADIANS(${lat} - ${schema.lostDogs.lastSeenLat}) / 2), 2)

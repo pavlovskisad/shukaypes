@@ -22,7 +22,7 @@ export function LostDogMarker({ position, emoji, name, urgency, onTap }: LostDog
     <OverlayView
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-      getPixelPositionOffset={() => ({ x: -26, y: -60 })}
+      getPixelPositionOffset={() => ({ x: -18, y: -46 })}
     >
       <div
         role="button"
@@ -39,24 +39,24 @@ export function LostDogMarker({ position, emoji, name, urgency, onTap }: LostDog
       >
         <div
           style={{
-            width: 52,
-            height: 52,
+            width: 36,
+            height: 36,
             borderRadius: '50%',
             background: '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 26,
+            fontSize: 18,
             boxShadow: URGENCY_SHADOW[urgency],
           }}
         >
           {emoji}
         </div>
-        <div style={{ width: 2, height: 6, background: '#aaa' }} />
+        <div style={{ width: 1.5, height: 5, background: '#aaa' }} />
         <div
           style={{
             fontFamily: "'Caveat', cursive",
-            fontSize: 15,
+            fontSize: 13,
             fontWeight: 700,
             color: '#1a1a1a',
             textShadow: '0 1px 4px rgba(255,255,255,0.95)',
