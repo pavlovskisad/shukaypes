@@ -7,9 +7,12 @@ import { colors } from '../../constants/colors';
 // Below the `lowThreshold` the fill switches to red. The +12px edge extension
 // on fills ensures the rounded right edge is covered (ported exactly).
 
-const SECTION_WIDTH = 78;
-const PILL_HEIGHT = 48;
-const EDGE_EXTENSION = 14;
+// Pill has to share the top-of-screen row with the 200px logo on the
+// left on a ~390px device; the previous SECTION_WIDTH + minWidth combo
+// ran the pill off the right edge. Compact sections keep it on-screen.
+const SECTION_WIDTH = 56;
+const PILL_HEIGHT = 44;
+const EDGE_EXTENSION = 12;
 
 function MeterSection({ icon, value, label }: { icon: string; value: number; label: string }) {
   const isLow = value < balance.lowThreshold;
@@ -61,7 +64,8 @@ const styles = StyleSheet.create({
     height: PILL_HEIGHT,
     overflow: 'hidden',
     paddingHorizontal: 4,
-    minWidth: SECTION_WIDTH * 2 + 80,
+    // Dropped the minWidth — sections define their own width and we
+    // don't want the pill stretching to push past the screen edge.
   },
   section: {
     width: SECTION_WIDTH,
@@ -79,30 +83,30 @@ const styles = StyleSheet.create({
   },
   emoji: {
     position: 'absolute',
-    left: 10,
-    fontSize: 18,
+    left: 8,
+    fontSize: 15,
   },
   value: {
     position: 'absolute',
-    right: 10,
+    right: 8,
     color: colors.white,
-    fontSize: 15,
+    fontSize: 13,
     fontWeight: '600',
   },
   divider: {
     width: 1,
-    height: 26,
+    height: 22,
     backgroundColor: 'rgba(255,255,255,0.15)',
   },
   tokens: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    gap: 8,
+    paddingHorizontal: 10,
+    gap: 6,
   },
   tokenCount: {
     color: colors.white,
-    fontSize: 16,
+    fontSize: 14,
     fontWeight: '600',
   },
 });
