@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import { useGameStore } from '../../stores/gameStore';
 import { SpeechBubble } from '../ui/SpeechBubble';
@@ -19,6 +19,15 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
   const menuOpen = useGameStore((s) => s.menuOpen);
   const setMenuOpen = useGameStore((s) => s.setMenuOpen);
   const [localBubble, setLocalBubble] = useState<string | null>(null);
+  // Track the "coming soon" bubble timeout so rapid menu taps don't
+  // accumulate dangling timers — each new tap cancels the previous one.
+  const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (bubbleTimeoutRef.current) clearTimeout(bubbleTimeoutRef.current);
+    };
+  }, []);
 
   const handleTap = useCallback(
     (e: React.MouseEvent) => {
@@ -38,7 +47,8 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
       setMenuOpen(false);
       const label = PRIMARY_ACTIONS.find((a) => a.id === id)?.label ?? id;
       setLocalBubble(`${label}! coming soon 🐾`);
-      setTimeout(() => setLocalBubble(null), 2500);
+      if (bubbleTimeoutRef.current) clearTimeout(bubbleTimeoutRef.current);
+      bubbleTimeoutRef.current = setTimeout(() => setLocalBubble(null), 2500);
     },
     [setMenuOpen]
   );
