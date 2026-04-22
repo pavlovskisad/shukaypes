@@ -1,15 +1,17 @@
-// Lost-dog parser. Takes raw free-form text from a Telegram/OLX/FB post and
-// returns a structured ParsedDog. Uses Haiku 4.5 — fast, cheap (~$0.001/call),
-// plenty capable at extraction. We ask the model to also *infer* lat/lng from
-// Kyiv landmarks in the post so we don't need to wire a paid geocoding API
-// just to ship Slice 2. This is "good enough" for a 500–1000m search zone.
+// Lost-pet parser. Takes raw free-form text from a Telegram/OLX/FB post and
+// returns a structured ParsedDog. Covers dogs + cats — the type name is kept
+// from the dog-first era because renaming cascades through too many callers.
+// Uses Haiku 4.5 — fast, cheap (~$0.001/call), plenty capable at extraction.
+// We ask the model to also *infer* lat/lng from Kyiv landmarks in the post so
+// we don't need to wire a paid geocoding API just to ship Slice 2. This is
+// "good enough" for a 500–1000m search zone.
 //
 // The prompt includes a district/landmark coordinate table so coordinates
 // don't drift outside Kyiv. Any text the model can't geolocate → the city-
 // center fallback, with parseConfidence dropped accordingly.
 
 import { anthropic } from '../services/anthropic.js';
-import type { ParsedDog, Urgency } from './types.js';
+import type { ParsedDog, Species, Urgency } from './types.js';
 
 const PARSER_MODEL = 'claude-haiku-4-5';
 
@@ -61,9 +63,10 @@ city-center fallback (use only if nothing else matches): 50.4501, 30.5234`;
 
 const OUTPUT_SCHEMA = `OUTPUT: a single JSON object with these fields, no prose, no markdown fence:
   {
-    "name": string            // dog's name, or a short descriptor if unnamed ("чорний пес без нашийника")
-    "breed": string           // lowercase. ukrainian OR english is fine — "двортер'єр", "mixed", "jack russell"
-    "emoji": string           // one emoji that fits — default 🐕. use 🐺 for husky/malamute, 🐶 for small/cute, 🐕‍🦺 for shepherd/working dog, 🦊 for shiba, 🦮 for guide/lab
+    "name": string            // pet's name, or a short descriptor if unnamed ("чорний пес без нашийника")
+    "species": "dog" | "cat"  // read from the post. default "dog" when species is genuinely ambiguous and the listing category leans dog. emit "cat" for кіт/кот/кошеня/котик/cat/kitten posts.
+    "breed": string           // lowercase. ukrainian OR english is fine — "двортер'єр", "mixed", "jack russell", "метис", "британська", "сфінкс"
+    "emoji": string           // one emoji that fits the species. dogs: 🐕 default, 🐺 husky/malamute, 🐶 small/cute, 🐕‍🦺 shepherd/working, 🦊 shiba, 🦮 guide/lab. cats: 🐈 default, 🐈‍⬛ black cat, 😺 playful, 🐱 kitten. never emit a cat emoji for a dog or vice versa.
     "lastSeenLat": number     // decimal degrees, must be inside Kyiv (49.9..50.6, 30.2..30.9)
     "lastSeenLng": number
     "lastSeenDescription": string   // 1 short english sentence about where and how seen — for the companion to quote. keep under 140 chars. no phone numbers, no personal contact info.
@@ -85,6 +88,7 @@ URGENCY RULES
 STRICTNESS
 - never invent a name if the post doesn't give one. use a descriptor.
 - never invent a breed. if unclear → "mixed" or "unknown".
+- species must be read from the post. "собака / пес / щеня / dog" → dog. "кіт / кот / кошеня / котик / cat / kitten" → cat. if both are mentioned, pick the one the post is primarily ABOUT. if genuinely unclear → default "dog" and lower confidence.
 - never fabricate dates. if nothing fits, use NOW and say so in parseNotes.
 - never place coordinates outside Kyiv. if the post is about another city, still emit JSON but set urgency to "resolved", confidence 0, and explain in parseNotes.
 - strip phone numbers, full names, car plates, telegram @handles from lastSeenDescription.`;
@@ -95,25 +99,31 @@ INPUT:
 Пропав пес! Бусинка, маленька рудa дворняга, нашийник червоний. Вчора ввечері біля Контрактової вирвалась з рук. Дуже боїться людей, ховається у під'їздах. Нагорода 2000 грн. Телефон 067-555-1234
 
 OUTPUT:
-{"name":"Бусинка","breed":"mixed / дворняга","emoji":"🐕","lastSeenLat":50.4612,"lastSeenLng":30.5172,"lastSeenDescription":"small tan mix, red collar, slipped leash near Kontraktova yesterday evening, scared of strangers","lastSeenAt":"{{NOW_MINUS_1D}}","urgency":"urgent","searchZoneRadiusM":600,"rewardPoints":200,"photoUrl":null,"parseConfidence":0.9,"parseNotes":""}
+{"name":"Бусинка","species":"dog","breed":"mixed / дворняга","emoji":"🐕","lastSeenLat":50.4612,"lastSeenLng":30.5172,"lastSeenDescription":"small tan mix, red collar, slipped leash near Kontraktova yesterday evening, scared of strangers","lastSeenAt":"{{NOW_MINUS_1D}}","urgency":"urgent","searchZoneRadiusM":600,"rewardPoints":200,"photoUrl":null,"parseConfidence":0.9,"parseNotes":""}
 
 INPUT:
 Lost dog in Troieshchyna area! Lora, yellow labrador, ~4yo, no collar, answers to name. Last seen near the river embankment 3 days ago. Please call if you see her.
 
 OUTPUT:
-{"name":"Лора","breed":"labrador","emoji":"🦮","lastSeenLat":50.5167,"lastSeenLng":30.6083,"lastSeenDescription":"yellow lab, ~4yo, no collar, answers to name, near Troieshchyna river embankment 3 days ago","lastSeenAt":"{{NOW_MINUS_3D}}","urgency":"medium","searchZoneRadiusM":800,"rewardPoints":100,"photoUrl":null,"parseConfidence":0.85,"parseNotes":""}
+{"name":"Лора","species":"dog","breed":"labrador","emoji":"🦮","lastSeenLat":50.5167,"lastSeenLng":30.6083,"lastSeenDescription":"yellow lab, ~4yo, no collar, answers to name, near Troieshchyna river embankment 3 days ago","lastSeenAt":"{{NOW_MINUS_3D}}","urgency":"medium","searchZoneRadiusM":800,"rewardPoints":100,"photoUrl":null,"parseConfidence":0.85,"parseNotes":""}
+
+INPUT:
+Зник кіт, чорно-білий, на Печерську біля клоВської. Мурзик, 3 роки, нашийник червоний. Дуже лякливий. Якщо побачите — не ловіть самі, подзвоніть. Винагорода.
+
+OUTPUT:
+{"name":"Мурзик","species":"cat","breed":"mixed","emoji":"🐈‍⬛","lastSeenLat":50.4442,"lastSeenLng":30.5459,"lastSeenDescription":"black-and-white cat, 3yo, red collar, near Klovska on Pechersk, very skittish — call instead of chasing","lastSeenAt":"{{NOW}}","urgency":"urgent","searchZoneRadiusM":500,"rewardPoints":200,"photoUrl":null,"parseConfidence":0.9,"parseNotes":"reward offered so urgency bumped to urgent. cats have smaller search zones than dogs — they hide close."}
 
 INPUT:
 ЗНАЙШЛИ! дякуємо всім, Арчі вдома 🙏
 
 OUTPUT:
-{"name":"Арчі","breed":"unknown","emoji":"🐕","lastSeenLat":50.4501,"lastSeenLng":30.5234,"lastSeenDescription":"reported as found and reunited with family","lastSeenAt":"{{NOW}}","urgency":"resolved","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.4,"parseNotes":"post is a resolution notice, no last-seen data — coordinates fallback to city center"}
+{"name":"Арчі","species":"dog","breed":"unknown","emoji":"🐕","lastSeenLat":50.4501,"lastSeenLng":30.5234,"lastSeenDescription":"reported as found and reunited with family","lastSeenAt":"{{NOW}}","urgency":"resolved","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.4,"parseNotes":"post is a resolution notice, no last-seen data — coordinates fallback to city center"}
 
 INPUT:
 Цуценя хлопчик ТЕРМІНОВО шукає дім! 3 місяці, здоровий, ігривий, привчений до повідця. Віддамо в добрі руки, бажано в приватний будинок.
 
 OUTPUT:
-{"name":"цуценя хлопчик","breed":"mixed","emoji":"🐶","lastSeenLat":50.4501,"lastSeenLng":30.5234,"lastSeenDescription":"healthy 3-month puppy being offered for adoption, not lost","lastSeenAt":"{{NOW}}","urgency":"rehoming","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.95,"parseNotes":"rehoming / adoption post — 'шукає дім' and 'віддамо в добрі руки' are unambiguous offer-for-adoption phrases. the word ТЕРМІНОВО does not make this a lost dog."}`;
+{"name":"цуценя хлопчик","species":"dog","breed":"mixed","emoji":"🐶","lastSeenLat":50.4501,"lastSeenLng":30.5234,"lastSeenDescription":"healthy 3-month puppy being offered for adoption, not lost","lastSeenAt":"{{NOW}}","urgency":"rehoming","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.95,"parseNotes":"rehoming / adoption post — 'шукає дім' and 'віддамо в добрі руки' are unambiguous offer-for-adoption phrases. the word ТЕРМІНОВО does not make this a lost dog."}`;
 
 function buildSystemPrompt(): string {
   return [
@@ -149,6 +159,10 @@ function clampRadius(r: unknown): number {
 function normalizeUrgency(u: unknown): Urgency {
   if (u === 'urgent' || u === 'resolved' || u === 'rehoming') return u;
   return 'medium';
+}
+
+function normalizeSpecies(s: unknown): Species {
+  return s === 'cat' ? 'cat' : 'dog';
 }
 
 function stripJsonFence(raw: string): string {
@@ -200,10 +214,14 @@ export async function parseDogPost(input: ParseDogPostInput): Promise<ParsedDog>
   const lastSeenAtRaw = typeof raw.lastSeenAt === 'string' ? raw.lastSeenAt : new Date().toISOString();
   const lastSeenAt = isNaN(new Date(lastSeenAtRaw).getTime()) ? new Date().toISOString() : lastSeenAtRaw;
 
+  const species = normalizeSpecies(raw.species);
+  const defaultEmoji = species === 'cat' ? '🐈' : '🐕';
+
   return {
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : 'безіменний',
+    species,
     breed: typeof raw.breed === 'string' && raw.breed.trim() ? raw.breed.trim().slice(0, 80) : 'unknown',
-    emoji: typeof raw.emoji === 'string' && raw.emoji.trim() ? raw.emoji.trim().slice(0, 8) : '🐕',
+    emoji: typeof raw.emoji === 'string' && raw.emoji.trim() ? raw.emoji.trim().slice(0, 8) : defaultEmoji,
     lastSeenLat: safeLat,
     lastSeenLng: safeLng,
     lastSeenDescription:

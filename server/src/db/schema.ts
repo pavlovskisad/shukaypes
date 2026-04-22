@@ -85,6 +85,7 @@ export const lostDogs = pgTable(
   {
     id: text('id').primaryKey(),
     name: text('name').notNull(),
+    species: text('species').notNull().default('dog'), // dog | cat
     breed: text('breed').notNull(),
     emoji: text('emoji').notNull().default('🐕'),
     photoUrl: text('photo_url'),

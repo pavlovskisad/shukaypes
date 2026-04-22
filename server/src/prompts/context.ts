@@ -29,15 +29,16 @@ export async function buildContextBlock({ userId, pos }: ContextInput): Promise<
     .from(schema.tokens)
     .where(and(eq(schema.tokens.ownerId, userId), isNull(schema.tokens.collectedAt)));
 
-  let nearbyDogs: string[] = [];
+  let nearbyPets: string[] = [];
   if (pos) {
     // Filter by distance in SQL, then order by distance ASC so the closest
-    // three reports come back even if older dogs are the closest.
+    // three reports come back even if older pets are the closest.
     const distExpr = sql<number>`(6371000 * acos(cos(radians(${pos.lat})) * cos(radians(last_seen_lat)) * cos(radians(last_seen_lng) - radians(${pos.lng})) + sin(radians(${pos.lat})) * sin(radians(last_seen_lat))))`;
-    const dogs = await db
+    const pets = await db
       .select({
         id: schema.lostDogs.id,
         name: schema.lostDogs.name,
+        species: schema.lostDogs.species,
         breed: schema.lostDogs.breed,
         urgency: schema.lostDogs.urgency,
         description: schema.lostDogs.lastSeenDescription,
@@ -47,9 +48,9 @@ export async function buildContextBlock({ userId, pos }: ContextInput): Promise<
       .where(and(eq(schema.lostDogs.status, 'active'), sql`${distExpr} < 5000`))
       .orderBy(distExpr)
       .limit(3);
-    nearbyDogs = dogs.map((d) => {
-      const desc = d.description ? ` — ${d.description}` : '';
-      return `  - ${d.name} (${d.breed}, ${d.urgency}), ~${Math.round(d.dist)}m away${desc} [id:${d.id}]`;
+    nearbyPets = pets.map((p) => {
+      const desc = p.description ? ` — ${p.description}` : '';
+      return `  - ${p.name} (${p.species}, ${p.breed}, ${p.urgency}), ~${Math.round(p.dist)}m away${desc} [id:${p.id}]`;
     });
   }
 
@@ -62,7 +63,7 @@ export async function buildContextBlock({ userId, pos }: ContextInput): Promise<
     `- the human has ${user.points} treats saved up and ${user.totalTokens} tokens picked up so far.`,
     `- uncollected tokens still on the map: ${uncollectedTokens[0]?.n ?? 0}`,
     pos ? `- current GPS: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}` : '- GPS not shared this turn',
-    nearbyDogs.length ? `- lost dogs nearby you could mention:\n${nearbyDogs.join('\n')}` : '- no active lost-dog reports in your radius',
+    nearbyPets.length ? `- lost pets nearby you could mention (dogs or cats — mention by name if natural):\n${nearbyPets.join('\n')}` : '- no active lost-pet reports in your radius',
   ];
   return lines.join('\n');
 }

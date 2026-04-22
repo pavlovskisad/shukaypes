@@ -21,26 +21,30 @@ const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (
 const SOURCE = 'olx';
 
 // URLs to poll each tick. Start narrow; broaden as we see real volume.
-// byuro-nahodok (bureau of found-and-lost) is the obvious category; the
-// site-wide search catches posts mis-categorized into generic "dogs".
+// byuro-nahodok (bureau of found-and-lost) is the obvious category and
+// already mixes dogs + cats + other pets; site-wide searches catch posts
+// mis-categorized into generic "dogs" / "cats".
 const LISTING_URLS = [
   'https://www.olx.ua/uk/zhivotnye/byuro-nahodok/kiev/',
   'https://www.olx.ua/uk/list/q-пропав-собака/?search%5Bcity_id%5D=8',
   'https://www.olx.ua/uk/list/q-знайшли-собаку/?search%5Bcity_id%5D=8',
+  'https://www.olx.ua/uk/list/q-пропав-кіт/?search%5Bcity_id%5D=8',
+  'https://www.olx.ua/uk/list/q-знайшли-кота/?search%5Bcity_id%5D=8',
 ];
 
-// Pre-filter ad titles. We only want posts that describe a dog that went
-// missing or a stray that was found — not adoption / rehoming listings.
-// OLX's byuro-nahodok category mixes all three, so we have to gate hard.
+// Pre-filter ad titles. We only want posts that describe a pet (dog or cat)
+// that went missing or a stray that was found — not adoption / rehoming
+// listings. OLX's byuro-nahodok category mixes all three freely, so we
+// have to gate hard.
 //
-// A title must have BOTH a dog word AND a lost/found word, AND must not
+// A title must have BOTH a pet word AND a lost/found word, AND must not
 // contain any unambiguous rehoming phrase. The REHOMING check runs first
 // and wins even when the title also mentions urgency (e.g. "ТЕРМІНОВО
 // шукає дім" is still rehoming — parser few-shot backs this up).
 //
 // Misses from this filter are caught by Haiku's `urgency: "rehoming"`
 // classification after the full body is parsed.
-const DOG_KEYWORDS = /(собак|пес|пёс|щен|цуценя|dog|puppy|hound|шпіц|хаск|ретрівер|бульдог|лабрад|пудель|такса|вівчарка|джек-рассел|джек рассел|чихуахуа|корг|шарпей|шиба|боксер|шпіц)/i;
+const PET_KEYWORDS = /(собак|пес|пёс|щен|цуценя|dog|puppy|hound|шпіц|хаск|ретрівер|бульдог|лабрад|пудель|такса|вівчарка|джек-рассел|джек рассел|чихуахуа|корг|шарпей|шиба|боксер|кіт|кот|кота|котик|кошен|кошеня|кошеня|кошеня|cat|kitten|tabby|британ|мейн-кун|мейнкун|перс|сфінкс|сиам|сіам|рагдол|бенгал)/i;
 const LOST_KEYWORDS = /(пропа|лост|загуб|зник|знайд|найден|нашли|знайшли|сбеж|втеч|lost|found)/i;
 const REHOMING_KEYWORDS = /(шука[єют][^.!?\n]{0,20}дім|шука[єют][^.!?\n]{0,20}домівк|шука[єют][^.!?\n]{0,20}родин|шука[єют][^.!?\n]{0,20}госпо|в\s+добрі\s+руки|в\s+добрые\s+руки|в\s+хорошие\s+руки|віддам|віддаю|віддає|віддаєм|роздам|роздаю|роздає|роздаєм|отдам|отдаю|раздам|раздаю|в\s+дар|пристр[оау]|ищет\s+дом|ищу\s+дом|безкоштовно|бесплатно)/i;
 
@@ -153,9 +157,9 @@ export class OlxSource implements Source {
       }
 
       const looksLikeRehoming = REHOMING_KEYWORDS.test(card.title);
-      const looksLikeLostDog =
-        DOG_KEYWORDS.test(card.title) && LOST_KEYWORDS.test(card.title);
-      if (looksLikeRehoming || !looksLikeLostDog) {
+      const looksLikeLostPet =
+        PET_KEYWORDS.test(card.title) && LOST_KEYWORDS.test(card.title);
+      if (looksLikeRehoming || !looksLikeLostPet) {
         await db
           .insert(schema.scrapeLog)
           .values({

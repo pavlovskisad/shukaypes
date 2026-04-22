@@ -32,6 +32,7 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
     .select({
       id: schema.lostDogs.id,
       name: schema.lostDogs.name,
+      species: schema.lostDogs.species,
       lastSeenAt: schema.lostDogs.lastSeenAt,
       source: schema.lostDogs.source,
       dist: distExpr,
@@ -42,6 +43,9 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
 
   const candidateName = parsed.name.toLowerCase().trim();
   const match = candidates.find((c) => {
+    // A dog named Murka and a cat named Murka on the same block are two pets,
+    // not a dedupe. Species must match before we consider anything a repost.
+    if (c.species !== parsed.species) return false;
     const cn = c.name.toLowerCase().trim();
     const nameHit = cn === candidateName || cn.includes(candidateName) || candidateName.includes(cn);
     if (!nameHit) return false;
@@ -77,6 +81,7 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
   await db.insert(schema.lostDogs).values({
     id,
     name: parsed.name,
+    species: parsed.species,
     breed: parsed.breed,
     emoji: parsed.emoji,
     photoUrl: parsed.photoUrl ?? null,
