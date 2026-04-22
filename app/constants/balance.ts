@@ -6,7 +6,7 @@ export const balance = {
   searchQuest: { happiness: 15 },
   walk: { happiness: 10 },
   lowThreshold: 30,
-  tokenCount: 30,
+  tokenCount: 15,
   bonusPerDog: 6,
   foodCount: 8,
   roamRadius: 0.001,
