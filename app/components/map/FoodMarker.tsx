@@ -11,6 +11,8 @@ function FoodMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => vo
       mapPaneName={FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -12, y: -12 })}
     >
+      {/* text-shadow instead of filter:drop-shadow — same paint-cost
+          reasoning as TokenMarker. */}
       <div
         role="button"
         tabIndex={0}
@@ -22,7 +24,7 @@ function FoodMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => vo
           lineHeight: '24px',
           textAlign: 'center',
           cursor: 'pointer',
-          filter: 'drop-shadow(0 0 6px rgba(255,200,100,0.6))',
+          textShadow: '0 0 6px rgba(255,200,100,0.6), 0 0 10px rgba(255,200,100,0.35)',
           userSelect: 'none',
         }}
       >

@@ -11,6 +11,10 @@ function TokenMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => v
       mapPaneName={FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -13, y: -13 })}
     >
+      {/* text-shadow instead of filter:drop-shadow and no animation —
+          there are ~30 of these, and filter + keyframes were the main
+          paint cost that made scrolling jank. glow still reads at a
+          glance via a stacked text-shadow. */}
       <div
         role="button"
         tabIndex={0}
@@ -22,18 +26,11 @@ function TokenMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => v
           lineHeight: '26px',
           textAlign: 'center',
           cursor: 'pointer',
-          filter: 'drop-shadow(0 0 6px rgba(200,255,0,0.6))',
-          animation: 'tok-float 2s ease-in-out infinite',
+          textShadow: '0 0 6px rgba(200,255,0,0.6), 0 0 10px rgba(200,255,0,0.35)',
           userSelect: 'none',
         }}
       >
         🐾
-        <style>{`
-          @keyframes tok-float {
-            0%, 100% { transform: translateY(0) scale(1); }
-            50% { transform: translateY(-2px) scale(1.02); }
-          }
-        `}</style>
       </div>
     </OverlayViewF>
   );
