@@ -1,8 +1,10 @@
+import { memo } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
 
-// 🦴 bone with warm amber glow (demo line 353).
-export function FoodMarker({ position, onTap }: { position: LatLng; onTap: () => void }) {
+// 🦴 bone with warm amber glow (demo line 353). Memoized — ~8 of these
+// render but the map re-renders on every pan so it's still worth it.
+function FoodMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => void }) {
   return (
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
@@ -29,3 +31,5 @@ export function FoodMarker({ position, onTap }: { position: LatLng; onTap: () =>
     </OverlayViewF>
   );
 }
+
+export const FoodMarker = memo(FoodMarkerImpl);

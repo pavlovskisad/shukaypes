@@ -1,8 +1,10 @@
+import { memo } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
 
-// Black dot with a subtle breathing ring (demo lines 172-177).
-export function UserMarker({ position }: { position: LatLng }) {
+// Black dot with a subtle breathing ring (demo lines 172-177). Memoized so
+// GPS ticks don't force the other overlays to flicker.
+function UserMarkerImpl({ position }: { position: LatLng }) {
   return (
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
@@ -45,3 +47,5 @@ export function UserMarker({ position }: { position: LatLng }) {
     </OverlayViewF>
   );
 }
+
+export const UserMarker = memo(UserMarkerImpl);

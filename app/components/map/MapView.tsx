@@ -166,6 +166,28 @@ export default function MapViewWeb() {
     [lostDogs],
   );
 
+  // Stable per-id tap handlers so memoized markers don't re-render every
+  // time the map re-renders. Without this, inline `() => setSelectedDog(id)`
+  // is a new function every render and defeats React.memo entirely — which
+  // is why scrolling felt slow: every pan re-ran every overlay.
+  const petTapHandlers = useMemo(() => {
+    const m = new Map<string, () => void>();
+    for (const d of lostDogs) m.set(d.id, () => setSelectedDog(d.id));
+    return m;
+  }, [lostDogs, setSelectedDog]);
+
+  const tokenTapHandlers = useMemo(() => {
+    const m = new Map<string, () => void>();
+    for (const t of tokens) m.set(t.id, () => collectToken(t.id));
+    return m;
+  }, [tokens, collectToken]);
+
+  const foodTapHandlers = useMemo(() => {
+    const m = new Map<string, () => void>();
+    for (const f of foodItems) m.set(f.id, () => eatFood(f.id));
+    return m;
+  }, [foodItems, eatFood]);
+
   // Keys cluster identity on the sorted ids of its members so taps remain
   // stable across re-renders even if the center drifts slightly.
   const clusterKey = useCallback(
@@ -252,7 +274,7 @@ export default function MapViewWeb() {
                 emoji={d.emoji}
                 name={d.name}
                 urgency={d.urgency}
-                onTap={() => setSelectedDog(d.id)}
+                onTap={petTapHandlers.get(d.id)!}
               />,
             ];
           }
@@ -270,7 +292,7 @@ export default function MapViewWeb() {
                   emoji={d.emoji}
                   name={d.name}
                   urgency={d.urgency}
-                  onTap={() => setSelectedDog(d.id)}
+                  onTap={petTapHandlers.get(d.id)!}
                 />
               );
             });
@@ -311,12 +333,12 @@ export default function MapViewWeb() {
             <TokenMarker
               key={t.id}
               position={t.position}
-              onTap={() => collectToken(t.id)}
+              onTap={tokenTapHandlers.get(t.id)!}
             />
           ))}
 
         {foodItems.map((f) => (
-          <FoodMarker key={f.id} position={f.position} onTap={() => eatFood(f.id)} />
+          <FoodMarker key={f.id} position={f.position} onTap={foodTapHandlers.get(f.id)!} />
         ))}
 
         {companionPos ? (
