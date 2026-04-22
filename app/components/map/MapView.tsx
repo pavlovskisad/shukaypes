@@ -139,21 +139,7 @@ export default function MapViewWeb() {
     [],
   );
 
-  // Each pet gets a deterministic display offset inside its own
-  // searchZoneRadiusM — posted location is a landmark-level approximation,
-  // and the zone radius is the uncertainty radius the parser already gave us.
-  // So floating the pin within its zone is both more readable (pets spread
-  // out instead of stacking on one crossroad) and more honest ("somewhere
-  // in this zone, we don't know exactly where").
-  const displayPositions = useMemo(() => {
-    const map = new Map<string, { lat: number; lng: number }>();
-    for (const d of lostDogs) {
-      map.set(d.id, jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, d.id));
-    }
-    return map;
-  }, [lostDogs]);
-
-  // Clustering still runs against TRUE positions so "genuinely close reports"
+  // Clustering runs against TRUE positions so "genuinely close reports"
   // are grouped regardless of display jitter. The cluster badge sits at the
   // true centroid; individual pets (singletons + members of small clusters)
   // render at their jittered positions from displayPositions.
@@ -165,6 +151,34 @@ export default function MapViewWeb() {
       ),
     [lostDogs],
   );
+
+  // Each pet gets a deterministic display offset inside its own
+  // searchZoneRadiusM — posted location is a landmark-level approximation,
+  // and the zone radius is the uncertainty radius the parser already gave us.
+  // For pets sharing a cluster we OVERRIDE the hash-derived angle with an
+  // evenly-fanned one (sorted by id for stability), so pets that land on
+  // the same landmark radiate in different directions instead of relying on
+  // hash coincidence. Singletons keep the random hash angle.
+  const displayPositions = useMemo(() => {
+    const map = new Map<string, { lat: number; lng: number }>();
+    for (const c of clusters) {
+      if (c.items.length === 1) {
+        const d = c.items[0]!.dog;
+        map.set(d.id, jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, d.id));
+        continue;
+      }
+      const sorted = [...c.items].sort((a, b) => a.id.localeCompare(b.id));
+      sorted.forEach((item, i) => {
+        const angle = -Math.PI / 2 + (i * 2 * Math.PI) / sorted.length;
+        const d = item.dog;
+        map.set(
+          d.id,
+          jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, d.id, angle),
+        );
+      });
+    }
+    return map;
+  }, [clusters]);
 
   // Stable per-id tap handlers so memoized markers don't re-render every
   // time the map re-renders. Without this, inline `() => setSelectedDog(id)`

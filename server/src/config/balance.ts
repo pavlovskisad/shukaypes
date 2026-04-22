@@ -9,7 +9,7 @@ export const balance = {
   // Seeding radii (approx degrees at Kyiv latitude ≈ 0.016° ≈ 1.2km).
   tokenSpreadDeg: 0.016,
   foodSpreadDeg: 0.014,
-  tokenCount: 30,
+  tokenCount: 15,
   foodCount: 8,
   // Anti-cheat: max distance between client-reported collect position and target.
   collectMaxDistanceM: 80,
