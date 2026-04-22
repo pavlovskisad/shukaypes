@@ -7,9 +7,9 @@ import { colors } from '../../constants/colors';
 // Below the `lowThreshold` the fill switches to red. The +12px edge extension
 // on fills ensures the rounded right edge is covered (ported exactly).
 
-const SECTION_WIDTH = 72;
-const PILL_HEIGHT = 34;
-const EDGE_EXTENSION = 12;
+const SECTION_WIDTH = 78;
+const PILL_HEIGHT = 48;
+const EDGE_EXTENSION = 14;
 
 function MeterSection({ icon, value, label }: { icon: string; value: number; label: string }) {
   const isLow = value < balance.lowThreshold;
@@ -79,30 +79,30 @@ const styles = StyleSheet.create({
   },
   emoji: {
     position: 'absolute',
-    left: 8,
-    fontSize: 14,
+    left: 10,
+    fontSize: 18,
   },
   value: {
     position: 'absolute',
-    right: 8,
+    right: 10,
     color: colors.white,
-    fontSize: 12,
+    fontSize: 15,
     fontWeight: '600',
   },
   divider: {
     width: 1,
-    height: 18,
+    height: 26,
     backgroundColor: 'rgba(255,255,255,0.15)',
   },
   tokens: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 10,
-    gap: 6,
+    paddingHorizontal: 12,
+    gap: 8,
   },
   tokenCount: {
     color: colors.white,
-    fontSize: 13,
+    fontSize: 16,
     fontWeight: '600',
   },
 });

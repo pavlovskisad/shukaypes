@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
     transition: `opacity ${FADE_MS}ms ease`,
   },
   logo: {
-    width: 600,
-    height: 600,
+    width: 300,
+    height: 300,
   },
 });
