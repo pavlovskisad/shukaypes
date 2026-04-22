@@ -23,6 +23,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       .select({
         id: schema.lostDogs.id,
         name: schema.lostDogs.name,
+        species: schema.lostDogs.species,
         breed: schema.lostDogs.breed,
         emoji: schema.lostDogs.emoji,
         photoUrl: schema.lostDogs.photoUrl,
@@ -51,6 +52,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       dogs: rows.map((r) => ({
         id: r.id,
         name: r.name,
+        species: r.species,
         breed: r.breed,
         emoji: r.emoji,
         photoUrl: r.photoUrl,

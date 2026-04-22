@@ -6,9 +6,14 @@ import { getDeviceId } from './deviceId';
 // (no description, source, status, reportedBy). Radius is named with the
 // trailing M to match the DB column; other types in @shukajpes/shared predate
 // the backend and use a different name, which we'd reconcile in a later slice.
+// The type name keeps "Dog" because renaming cascades into store, components,
+// and modal — tracked as a v2 cleanup.
+export type PetSpecies = 'dog' | 'cat';
+
 export interface NearbyLostDog {
   id: string;
   name: string;
+  species: PetSpecies;
   breed: string;
   emoji: string;
   photoUrl: string | null;
