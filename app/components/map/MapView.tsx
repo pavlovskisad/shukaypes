@@ -19,17 +19,21 @@ import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
-import { clusterByDistance } from '../../utils/cluster';
+import { clusterByDistance, ringPositions } from '../../utils/cluster';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
 const LIBRARIES: ('places')[] = ['places'];
 const TOKEN_REFRESH_MS = 15000;
 
-// Two pets within this radius collapse into a single cluster badge. Large
-// enough to catch parser landmark-fallback pile-ups (5 posts all coord'd
-// to Podil center), small enough that genuinely separate reports in the
-// same neighborhood still render individually at city zoom.
+// Two pets within this radius are visually grouped together — either
+// floated in a ring (zone-outline feel) or collapsed behind a cluster
+// badge if the group is big enough to warrant the interaction cost.
 const PIN_CLUSTER_RADIUS_M = 250;
+
+// At or above this group size we switch from "disperse in a ring" to
+// "show a cluster badge, tap to expand". Below it, the pets just float
+// around the cluster center so the user sees them at a glance.
+const CLUSTER_BADGE_THRESHOLD = 6;
 
 export default function MapViewWeb() {
   const { isLoaded, loadError } = useJsApiLoader({
@@ -236,6 +240,27 @@ export default function MapViewWeb() {
                 onTap={() => setSelectedDog(d.id)}
               />,
             ];
+          }
+          // Small groups just float around the cluster center — zone-
+          // outline feel, no tap-to-expand needed. Display positions are
+          // on a ring around the centroid; the pet's true coord still
+          // drives the modal and search zone when tapped.
+          if (c.items.length < CLUSTER_BADGE_THRESHOLD) {
+            const positions = ringPositions(c.center, c.items.length);
+            return c.items.map((item, i) => {
+              const d = item.dog;
+              const p = positions[i] ?? d.lastSeen.position;
+              return (
+                <LostDogMarker
+                  key={d.id}
+                  position={p}
+                  emoji={d.emoji}
+                  name={d.name}
+                  urgency={d.urgency}
+                  onTap={() => setSelectedDog(d.id)}
+                />
+              );
+            });
           }
           const key = clusterKey(c.items);
           const expanded = expandedClusterKey === key;
