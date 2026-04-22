@@ -35,6 +35,11 @@ const PIN_CLUSTER_RADIUS_M = 250;
 // around the cluster center so the user sees them at a glance.
 const CLUSTER_BADGE_THRESHOLD = 6;
 
+// Pets re-roll their jitter position this often — feels like the dogs are
+// wandering around their search zones rather than sitting at fixed spots.
+// 6s is long enough that it reads as "drifting" rather than "teleporting".
+const PET_ROAM_INTERVAL_MS = 6000;
+
 export default function MapViewWeb() {
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: env.googleMapsApiKey,
@@ -50,7 +55,15 @@ export default function MapViewWeb() {
   // another cluster) collapses it. Lives locally because nothing else in
   // the app cares about this transient view-state.
   const [expandedClusterKey, setExpandedClusterKey] = useState<string | null>(null);
+  // Bump-counter that drives pet roaming — every tick, each pet re-jitters
+  // to a new spot inside its zone.
+  const [roamTick, setRoamTick] = useState(0);
   const userPos = location.position;
+
+  useEffect(() => {
+    const id = setInterval(() => setRoamTick((t) => t + 1), PET_ROAM_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, []);
 
   const companionPos = useCompanion(userPos);
   const tokens = useGameStore((s) => s.tokens);
@@ -155,30 +168,38 @@ export default function MapViewWeb() {
   // Each pet gets a deterministic display offset inside its own
   // searchZoneRadiusM — posted location is a landmark-level approximation,
   // and the zone radius is the uncertainty radius the parser already gave us.
+  // Seed includes roamTick so the jitter moves over time — pets "wander"
+  // around their zones instead of sitting static.
+  //
   // For pets sharing a cluster we OVERRIDE the hash-derived angle with an
-  // evenly-fanned one (sorted by id for stability), so pets that land on
-  // the same landmark radiate in different directions instead of relying on
-  // hash coincidence. Singletons keep the random hash angle.
+  // evenly-fanned one (sorted by id for stability), so pets radiate in
+  // different directions even from the same landmark. The whole cluster
+  // slowly rotates as roamTick advances (0.4 radians per tick), so the
+  // formation orbits its landmark over minutes.
   const displayPositions = useMemo(() => {
     const map = new Map<string, { lat: number; lng: number }>();
+    const rotation = roamTick * 0.4;
     for (const c of clusters) {
       if (c.items.length === 1) {
         const d = c.items[0]!.dog;
-        map.set(d.id, jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, d.id));
+        map.set(
+          d.id,
+          jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, `${d.id}|${roamTick}`),
+        );
         continue;
       }
       const sorted = [...c.items].sort((a, b) => a.id.localeCompare(b.id));
       sorted.forEach((item, i) => {
-        const angle = -Math.PI / 2 + (i * 2 * Math.PI) / sorted.length;
+        const angle = -Math.PI / 2 + (i * 2 * Math.PI) / sorted.length + rotation;
         const d = item.dog;
         map.set(
           d.id,
-          jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, d.id, angle),
+          jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, `${d.id}|${roamTick}`, angle),
         );
       });
     }
     return map;
-  }, [clusters]);
+  }, [clusters, roamTick]);
 
   // Stable per-id tap handlers so memoized markers don't re-render every
   // time the map re-renders. Without this, inline `() => setSelectedDog(id)`
