@@ -29,10 +29,20 @@ const LISTING_URLS = [
   'https://www.olx.ua/uk/list/q-знайшли-собаку/?search%5Bcity_id%5D=8',
 ];
 
-// Pre-filter ad titles. Fires the Haiku parser only on ads that look
-// dog-related. Misses are caught on the next tick if an ad is edited.
+// Pre-filter ad titles. We only want posts that describe a dog that went
+// missing or a stray that was found — not adoption / rehoming listings.
+// OLX's byuro-nahodok category mixes all three, so we have to gate hard.
+//
+// A title must have BOTH a dog word AND a lost/found word, AND must not
+// contain any unambiguous rehoming phrase. The REHOMING check runs first
+// and wins even when the title also mentions urgency (e.g. "ТЕРМІНОВО
+// шукає дім" is still rehoming — parser few-shot backs this up).
+//
+// Misses from this filter are caught by Haiku's `urgency: "rehoming"`
+// classification after the full body is parsed.
 const DOG_KEYWORDS = /(собак|пес|пёс|щен|цуценя|dog|puppy|hound|шпіц|хаск|ретрівер|бульдог|лабрад|пудель|такса|вівчарка|джек-рассел|джек рассел|чихуахуа|корг|шарпей|шиба|боксер|шпіц)/i;
 const LOST_KEYWORDS = /(пропа|лост|загуб|зник|знайд|найден|нашли|знайшли|сбеж|втеч|lost|found)/i;
+const REHOMING_KEYWORDS = /(шука[єют][^.!?\n]{0,20}дім|шука[єют][^.!?\n]{0,20}домівк|шука[єют][^.!?\n]{0,20}родин|шука[єют][^.!?\n]{0,20}госпо|в\s+добрі\s+руки|в\s+добрые\s+руки|в\s+хорошие\s+руки|віддам|віддаю|віддає|віддаєм|роздам|роздаю|роздає|роздаєм|отдам|отдаю|раздам|раздаю|в\s+дар|пристр[оау]|ищет\s+дом|ищу\s+дом|безкоштовно|бесплатно)/i;
 
 interface Card {
   url: string;
@@ -142,8 +152,10 @@ export class OlxSource implements Source {
         continue;
       }
 
-      const titleLooksLikeDog = DOG_KEYWORDS.test(card.title) || LOST_KEYWORDS.test(card.title);
-      if (!titleLooksLikeDog) {
+      const looksLikeRehoming = REHOMING_KEYWORDS.test(card.title);
+      const looksLikeLostDog =
+        DOG_KEYWORDS.test(card.title) && LOST_KEYWORDS.test(card.title);
+      if (looksLikeRehoming || !looksLikeLostDog) {
         await db
           .insert(schema.scrapeLog)
           .values({
@@ -151,7 +163,7 @@ export class OlxSource implements Source {
             source: SOURCE,
             title: card.title,
             ingestAction: 'skipped',
-            skipReason: 'title-filter',
+            skipReason: looksLikeRehoming ? 'rehoming' : 'title-filter',
           })
           .onConflictDoNothing({ target: schema.scrapeLog.url });
         summary.skipped++;
@@ -178,6 +190,22 @@ export class OlxSource implements Source {
 
         const parsed = await parseDogPost({ text, photoUrl });
         summary.parsed++;
+
+        if (parsed.urgency === 'rehoming') {
+          await db
+            .insert(schema.scrapeLog)
+            .values({
+              url: card.url,
+              source: SOURCE,
+              title: card.title,
+              parseConfidence: parsed.parseConfidence,
+              ingestAction: 'skipped',
+              skipReason: 'rehoming',
+            })
+            .onConflictDoNothing({ target: schema.scrapeLog.url });
+          summary.skipped++;
+          continue;
+        }
 
         if (parsed.parseConfidence < 0.25) {
           await db
