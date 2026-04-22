@@ -157,14 +157,19 @@ export default function MapViewWeb() {
       >
         <UserMarker position={userPos} />
 
-        {lostDogs.map((d) => (
-          <SearchZoneCircle
-            key={`zone-${d.id}`}
-            center={d.lastSeen.position}
-            radiusM={d.searchZoneRadiusM}
-            urgency={d.urgency}
-          />
-        ))}
+        {/* Zone is only drawn for the currently-selected pet — otherwise
+            overlapping circles turn dense neighborhoods (Podil, Pechersk)
+            into a lava lamp. Tapping a pin blooms the zone for that pet. */}
+        {lostDogs
+          .filter((d) => d.id === selectedDogId)
+          .map((d) => (
+            <SearchZoneCircle
+              key={`zone-${d.id}`}
+              center={d.lastSeen.position}
+              radiusM={d.searchZoneRadiusM}
+              urgency={d.urgency}
+            />
+          ))}
 
         {lostDogs.map((d) => (
           <LostDogMarker
