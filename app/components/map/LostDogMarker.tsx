@@ -21,7 +21,7 @@ export function LostDogMarker({ position, emoji, name, urgency, onTap }: LostDog
   return (
     <OverlayView
       position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+      mapPaneName={OverlayView.FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -18, y: -46 })}
     >
       <div

@@ -6,7 +6,7 @@ export function UserMarker({ position }: { position: LatLng }) {
   return (
     <OverlayView
       position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
+      mapPaneName={OverlayView.FLOAT_PANE}
       getPixelPositionOffset={() => ({ x: -6, y: -6 })}
     >
       <div style={{ position: 'relative', width: 12, height: 12 }}>

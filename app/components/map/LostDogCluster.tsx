@@ -1,5 +1,6 @@
 import { OverlayView } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
+import type { NearbyLostDog } from '../../services/api';
 
 // Dominant-urgency wins the glow color. Urgent beats medium beats resolved
 // so the cluster reads "there's an urgent pet in here" at a glance.
@@ -15,38 +16,71 @@ const URGENCY_SHADOW: Record<UrgencyLevel, string> = {
   resolved: '0 3px 12px rgba(0,0,0,0.15)',
 };
 
+const PIN_URGENCY_SHADOW: Record<UrgencyLevel, string> = {
+  urgent: '0 0 14px rgba(232,64,64,0.45), 0 2px 8px rgba(0,0,0,0.15)',
+  medium: '0 0 14px rgba(217,160,48,0.45), 0 2px 8px rgba(0,0,0,0.15)',
+  resolved: '0 2px 8px rgba(0,0,0,0.15)',
+};
+
+// Ring geometry — matches the companion RadialMenu proportions so the two
+// expansion patterns feel like one language. 210x210 container centered on
+// the cluster badge, buttons arranged on a circle of radius 75.
+const CONTAINER_SIZE = 210;
+const CONTAINER_CENTER = 105;
+const RING_RADIUS = 75;
+const BUTTON_SIZE = 40;
+
 interface LostDogClusterProps {
   position: LatLng;
-  count: number;
+  items: NearbyLostDog[];
   dominantUrgency: UrgencyLevel;
-  // Up to two emojis to hint at what's inside (dog + cat, two dogs, etc.)
   emojiHint: string;
-  onTap: () => void;
+  expanded: boolean;
+  onToggle: () => void;
+  onSelectItem: (id: string) => void;
 }
 
 // Cluster badge shown when 2+ lost pets share the same landmark-ish coord.
-// Ported aesthetic from LostDogMarker so the map reads as one family of pins.
-export function LostDogCluster({ position, count, dominantUrgency, emojiHint, onTap }: LostDogClusterProps) {
+// When tapped, the member pets float out in a ring around the badge (same
+// animation pattern as the companion radial menu). Tap the badge again or
+// tap a member pin to collapse.
+export function LostDogCluster({
+  position,
+  items,
+  dominantUrgency,
+  emojiHint,
+  expanded,
+  onToggle,
+  onSelectItem,
+}: LostDogClusterProps) {
+  const count = items.length;
   return (
     <OverlayView
       position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={OverlayView.OVERLAY_MOUSE_TARGET}
-      getPixelPositionOffset={() => ({ x: -22, y: -48 })}
+      mapPaneName={OverlayView.FLOAT_PANE}
+      getPixelPositionOffset={() => ({ x: -CONTAINER_CENTER, y: -CONTAINER_CENTER })}
     >
       <div
-        role="button"
-        tabIndex={0}
-        onClick={onTap}
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          cursor: 'pointer',
-          userSelect: 'none',
+          position: 'relative',
+          width: CONTAINER_SIZE,
+          height: CONTAINER_SIZE,
+          pointerEvents: 'none',
         }}
       >
+        {/* Center badge — anchor point. Always visible, shows "..." when
+            expanded as a discoverable "tap me again to close" affordance. */}
         <div
+          role="button"
+          tabIndex={0}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggle();
+          }}
           style={{
+            position: 'absolute',
+            left: CONTAINER_CENTER - 22,
+            top: CONTAINER_CENTER - 22,
             width: 44,
             height: 44,
             borderRadius: '50%',
@@ -58,26 +92,88 @@ export function LostDogCluster({ position, count, dominantUrgency, emojiHint, on
             boxShadow: URGENCY_SHADOW[dominantUrgency],
             fontFamily: "'Caveat', cursive",
             lineHeight: 1,
+            cursor: 'pointer',
+            userSelect: 'none',
+            pointerEvents: 'auto',
+            zIndex: 2,
           }}
         >
-          <span style={{ fontSize: 14 }}>{emojiHint}</span>
-          <span style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', marginTop: 1 }}>
-            {count}
-          </span>
+          {expanded ? (
+            <span style={{ fontSize: 22, fontWeight: 700, color: '#1a1a1a' }}>…</span>
+          ) : (
+            <>
+              <span style={{ fontSize: 14 }}>{emojiHint}</span>
+              <span style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', marginTop: 1 }}>
+                {count}
+              </span>
+            </>
+          )}
         </div>
-        <div style={{ width: 1.5, height: 5, background: '#aaa' }} />
-        <div
-          style={{
-            fontFamily: "'Caveat', cursive",
-            fontSize: 12,
-            fontWeight: 600,
-            color: '#1a1a1a',
-            textShadow: '0 1px 4px rgba(255,255,255,0.95)',
-            whiteSpace: 'nowrap',
-          }}
-        >
-          {count} lost pets
-        </div>
+
+        {!expanded && (
+          <div
+            style={{
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              top: CONTAINER_CENTER + 24,
+              textAlign: 'center',
+              fontFamily: "'Caveat', cursive",
+              fontSize: 12,
+              fontWeight: 600,
+              color: '#1a1a1a',
+              textShadow: '0 1px 4px rgba(255,255,255,0.95)',
+              whiteSpace: 'nowrap',
+              pointerEvents: 'none',
+            }}
+          >
+            {count} lost pets
+          </div>
+        )}
+
+        {/* Radial ring of pet buttons. Trig-positioned around the center,
+            first pin above (angle -π/2), staggered 40ms scale-in per item
+            to match the companion menu's pop-out feel. */}
+        {items.map((d, i) => {
+          const ang = -Math.PI / 2 + (i * 2 * Math.PI) / count;
+          const bx = CONTAINER_CENTER + Math.cos(ang) * RING_RADIUS;
+          const by = CONTAINER_CENTER + Math.sin(ang) * RING_RADIUS;
+          return (
+            <button
+              key={d.id}
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelectItem(d.id);
+              }}
+              style={{
+                position: 'absolute',
+                left: bx - BUTTON_SIZE / 2,
+                top: by - BUTTON_SIZE / 2,
+                width: BUTTON_SIZE,
+                height: BUTTON_SIZE,
+                borderRadius: '50%',
+                border: 'none',
+                background: '#ffffff',
+                fontSize: 20,
+                cursor: 'pointer',
+                opacity: expanded ? 1 : 0,
+                transform: expanded ? 'scale(1)' : 'scale(0.4)',
+                transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
+                pointerEvents: expanded ? 'auto' : 'none',
+                boxShadow: PIN_URGENCY_SHADOW[d.urgency],
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                userSelect: 'none',
+                zIndex: 1,
+              }}
+              aria-label={d.name}
+            >
+              {d.emoji}
+            </button>
+          );
+        })}
       </div>
     </OverlayView>
   );
