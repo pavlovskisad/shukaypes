@@ -14,14 +14,16 @@ const URGENCY_RING: Record<UrgencyLevel, string> = {
   resolved: 'rgba(170,170,170,0.4)',
 };
 
-// Wander amplitude in pixels — visible movement at default zoom but small
-// enough not to overshoot the pet's search zone when zoomed in.
-const WANDER_PX = 50;
-// New target every 3s while the CSS transition runs 6s — the element is
-// always moving toward SOME target. Mid-transition target changes smoothly
-// redirect, so the motion reads as continuous drift rather than stop/start.
-const RETARGET_MS = 3000;
-const TRANSITION_MS = 6000;
+// Wander amplitude in pixels — small enough to read as "ambient drift"
+// rather than "pet is running around".
+const WANDER_PX = 35;
+// Long transition + longer retarget interval = turtle-pace drift. Each
+// step takes 30s to complete; retarget fires every 25s so the next leg
+// starts during the tail of the previous one — motion is continuous but
+// glacial. ease-in-out softens direction reversals so they don't read
+// as jerks.
+const RETARGET_MS = 25_000;
+const TRANSITION_MS = 30_000;
 // SOS beep: a ring emanates from the pet every BEEP_PERIOD_MS — subtle
 // "I'm here" pulse. Delay per pet is randomized so pets don't beep in sync.
 const BEEP_PERIOD_MS = 22_000;
@@ -104,7 +106,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
           cursor: 'pointer',
           userSelect: 'none',
           transform: `translate(${offset.x}px, ${offset.y}px)`,
-          transition: `transform ${TRANSITION_MS}ms linear`,
+          transition: `transform ${TRANSITION_MS}ms ease-in-out`,
         }}
       >
         {/* SOS beep ring — absolute so it expands out of the pin center
