@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useState } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 
@@ -7,6 +7,17 @@ const URGENCY_SHADOW: Record<UrgencyLevel, string> = {
   medium: '0 0 20px rgba(217,160,48,0.45), 0 3px 12px rgba(0,0,0,0.15)',
   resolved: '0 3px 12px rgba(0,0,0,0.15)',
 };
+
+// Visual wander amplitude in pixels. Small enough to read as "alive",
+// large enough to be noticed at default zoom. Zoom-independent on purpose —
+// it's a vibe effect, not a geographic one.
+const WANDER_PX = 18;
+// New target every 4-8s (jittered per marker so 20 pets don't all tick in
+// sync, which would look robotic). CSS transition below handles the smooth
+// interpolation on the GPU — React only re-renders the marker once per
+// target change, not per frame.
+const WANDER_MIN_MS = 4000;
+const WANDER_MAX_MS = 8000;
 
 interface LostDogMarkerProps {
   position: LatLng;
@@ -17,9 +28,33 @@ interface LostDogMarkerProps {
 }
 
 // Dog pin — white circle with emoji, urgency-colored glow, handwritten name
-// label below. Ported from demo .dpin / .dpb (line 29-35). Memoized because
-// ~20 of these render on the map and the map re-renders on every pan.
+// label below. Memoized because ~20 of these render on the map and the map
+// re-renders on every pan.
+//
+// Wander: the marker's lat/lng position is static (pet sits at its jittered
+// coord inside its zone). A small CSS transform inside the marker drifts
+// to a new random offset every few seconds, smoothed by `transition:
+// transform`. GPU does the interpolation so it stays cheap even with many
+// markers. No lat/lng snap = no teleport, no rotation sync across pets.
 function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMarkerProps) {
+  const [offset, setOffset] = useState({ x: 0, y: 0 });
+
+  useEffect(() => {
+    let timeoutId: ReturnType<typeof setTimeout>;
+    const drift = () => {
+      setOffset({
+        x: (Math.random() * 2 - 1) * WANDER_PX,
+        y: (Math.random() * 2 - 1) * WANDER_PX,
+      });
+      const next = WANDER_MIN_MS + Math.random() * (WANDER_MAX_MS - WANDER_MIN_MS);
+      timeoutId = setTimeout(drift, next);
+    };
+    // First drift fires on a short initial delay so ~20 pets don't all pick
+    // targets in the same tick on mount.
+    timeoutId = setTimeout(drift, Math.random() * WANDER_MAX_MS);
+    return () => clearTimeout(timeoutId);
+  }, []);
+
   return (
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
@@ -36,6 +71,9 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMar
           alignItems: 'center',
           cursor: 'pointer',
           userSelect: 'none',
+          transform: `translate(${offset.x}px, ${offset.y}px)`,
+          transition: 'transform 4s ease-in-out',
+          willChange: 'transform',
         }}
       >
         <div
