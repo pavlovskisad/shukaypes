@@ -33,11 +33,16 @@ const plugin: FastifyPluginAsync = async (app) => {
   app.decorateRequest('deviceId', '');
 
   app.addHook('preHandler', async (req: FastifyRequest, reply) => {
-    const url = req.routeOptions?.url;
-    if (url === '/health' || url === '/health/deep') return;
+    // routeOptions.url is unset on unmatched routes — 404s, and the deploy-lag
+    // window when new routes aren't registered yet. Fall back to the raw URL
+    // so the /admin/* bypass holds before Fastify has matched anything.
+    const matched = req.routeOptions?.url;
+    const raw = req.url ? req.url.split('?')[0] : undefined;
+    const path = matched ?? raw;
+    if (path === '/health' || path === '/health/deep') return;
     // Admin routes have their own bearer-token check in routes/admin.ts —
     // they must not require a per-device identity header.
-    if (url?.startsWith('/admin/')) return;
+    if (path?.startsWith('/admin/')) return;
     const header = req.headers[DEVICE_ID_HEADER];
     const deviceId = Array.isArray(header) ? header[0] : header;
     if (!deviceId || deviceId.length < 8 || deviceId.length > 128) {
