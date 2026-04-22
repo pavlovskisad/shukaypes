@@ -1,9 +1,11 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Image } from 'react-native';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import { useGameStore } from '../../stores/gameStore';
 import { SpeechBubble } from '../ui/SpeechBubble';
 import { RadialMenu, PRIMARY_ACTIONS } from './RadialMenu';
 import type { LatLng } from '@shukajpes/shared';
+import logoNose from '../../assets/logo-nose.png';
 
 interface CompanionProps {
   position: LatLng;
@@ -68,7 +70,9 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
           height: 90,
         }}
       >
-        {/* companion body */}
+        {/* companion body — just the nose glyph on its own with a soft
+            white glow. no black circle underneath; the glow is what
+            reads the pet as "alive" against the map. */}
         <div
           role="button"
           tabIndex={0}
@@ -76,20 +80,22 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
           style={{
             position: 'absolute',
             inset: 0,
-            borderRadius: '50%',
-            background: '#1a1a1a',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 44,
-            color: '#ffffff',
             cursor: 'pointer',
             animation: 'co-float 2.4s ease-in-out infinite',
-            boxShadow: '0 4px 18px rgba(0,0,0,0.35)',
+            filter:
+              'drop-shadow(0 0 12px rgba(255,255,255,0.95)) drop-shadow(0 0 26px rgba(255,255,255,0.6))',
             userSelect: 'none',
           }}
         >
-          🐕
+          <Image
+            source={logoNose}
+            resizeMode="contain"
+            style={{ width: '100%', height: '100%' }}
+            accessibilityLabel="шукайпес"
+          />
         </div>
 
         <SpeechBubble text={activeBubble} />

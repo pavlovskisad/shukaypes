@@ -1,10 +1,14 @@
 import { useCallback } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { View, StyleSheet } from 'react-native';
+import { View, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from '../../components/map';
 import { StatusBar } from '../../components/ui/StatusBar';
 import { useGameStore } from '../../stores/gameStore';
+import logoSquare from '../../assets/logo-square.png';
+
+// Pill is 34px tall; logo matches so the two sit visually balanced.
+const HUD_ICON_SIZE = 34;
 
 export default function MapScreen() {
   useFocusEffect(useCallback(() => {
@@ -17,7 +21,13 @@ export default function MapScreen() {
         <MapView />
       </View>
       <SafeAreaView style={styles.hud} pointerEvents="box-none" edges={['top']}>
-        <View style={styles.statusBarWrap}>
+        <View style={styles.hudRow}>
+          <Image
+            source={logoSquare}
+            style={styles.logo}
+            resizeMode="contain"
+            accessibilityLabel="шукайпес"
+          />
           <StatusBar />
         </View>
       </SafeAreaView>
@@ -35,9 +45,15 @@ const styles = StyleSheet.create({
     right: 0,
     zIndex: 10,
   },
-  statusBarWrap: {
-    alignItems: 'flex-end',
+  hudRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
     paddingHorizontal: 12,
     paddingTop: 8,
+  },
+  logo: {
+    width: HUD_ICON_SIZE,
+    height: HUD_ICON_SIZE,
   },
 });
