@@ -1,8 +1,10 @@
+import { memo } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
 
-// 🐾 token with lime glow (demo line 319 / TO class).
-export function TokenMarker({ position, onTap }: { position: LatLng; onTap: () => void }) {
+// 🐾 token with lime glow (demo line 319 / TO class). Memoized — ~30 of
+// these render, map re-renders on every pan.
+function TokenMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => void }) {
   return (
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
@@ -36,3 +38,5 @@ export function TokenMarker({ position, onTap }: { position: LatLng; onTap: () =
     </OverlayViewF>
   );
 }
+
+export const TokenMarker = memo(TokenMarkerImpl);

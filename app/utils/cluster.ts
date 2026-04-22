@@ -63,11 +63,30 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
+// Rough Dnieper corridor through Kyiv. Narrow enough to not exclude bank
+// neighborhoods (Podil, Poznyaky), wide enough to catch the main channel.
+// Pilot-grade approximation — an actual water polygon would be nicer but
+// would drag in a geo-data dependency for what's a simple visual fix.
+const DNIEPER_LNG_MIN = 30.555;
+const DNIEPER_LNG_MAX = 30.62;
+
+function avoidWater(center: LatLng, jittered: LatLng): LatLng {
+  if (jittered.lng > DNIEPER_LNG_MIN && jittered.lng < DNIEPER_LNG_MAX) {
+    // Push to whichever bank the pet's true coord is on. If the true coord
+    // is somehow in the corridor (island, bridge area), leave it alone —
+    // the jitter won't make it worse.
+    if (center.lng <= DNIEPER_LNG_MIN) return { ...jittered, lng: DNIEPER_LNG_MIN };
+    if (center.lng >= DNIEPER_LNG_MAX) return { ...jittered, lng: DNIEPER_LNG_MAX };
+  }
+  return jittered;
+}
+
 // Deterministic pseudo-random offset inside a circle of `radiusM` meters
 // around `center`. Same seed always maps to the same point — so a pet
 // displayed at a given offset stays at that offset across renders.
 // The display sits between 35% and 90% of the radius from the center so
-// pets don't all pile at the middle AND don't brush the rim.
+// pets don't all pile at the middle AND don't brush the rim. Jittered
+// positions that fall in the Dnieper are reflected back to the pet's bank.
 export function jitterInRadius(center: LatLng, radiusM: number, seed: string): LatLng {
   const h = hashSeed(seed);
   const angle = ((h % 10_000) / 10_000) * 2 * Math.PI;
@@ -75,8 +94,9 @@ export function jitterInRadius(center: LatLng, radiusM: number, seed: string): L
   const dist = radiusM * distFrac;
   const LAT_M = 1 / 111_320;
   const LNG_M = 1 / (111_320 * Math.cos((center.lat * Math.PI) / 180));
-  return {
+  const raw: LatLng = {
     lat: center.lat + dist * LAT_M * Math.sin(angle),
     lng: center.lng + dist * LNG_M * Math.cos(angle),
   };
+  return avoidWater(center, raw);
 }

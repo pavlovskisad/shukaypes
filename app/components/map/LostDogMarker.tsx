@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 
@@ -16,8 +17,9 @@ interface LostDogMarkerProps {
 }
 
 // Dog pin — white circle with emoji, urgency-colored glow, handwritten name
-// label below. Ported from demo .dpin / .dpb (line 29-35).
-export function LostDogMarker({ position, emoji, name, urgency, onTap }: LostDogMarkerProps) {
+// label below. Ported from demo .dpin / .dpb (line 29-35). Memoized because
+// ~20 of these render on the map and the map re-renders on every pan.
+function LostDogMarkerImpl({ position, emoji, name, urgency, onTap }: LostDogMarkerProps) {
   return (
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
@@ -75,3 +77,5 @@ export function LostDogMarker({ position, emoji, name, urgency, onTap }: LostDog
     </OverlayViewF>
   );
 }
+
+export const LostDogMarker = memo(LostDogMarkerImpl);
