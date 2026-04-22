@@ -7,10 +7,10 @@ import { StatusBar } from '../../components/ui/StatusBar';
 import { useGameStore } from '../../stores/gameStore';
 import logoSquare from '../../assets/logo-square.png';
 
-// Logo is the brand anchor in the top-left. Tight-cropped asset (no
-// transparent padding) so the visible square matches the rendered box,
-// letting us align it cleanly with the pill on the right.
-const HUD_ICON_SIZE = 200;
+// Logo is the brand anchor in the top-left. Prototype has it roughly
+// pill-height; matching that so it reads as a peer of the status pill
+// rather than dominating the map.
+const HUD_ICON_SIZE = 44;
 
 export default function MapScreen() {
   useFocusEffect(useCallback(() => {
