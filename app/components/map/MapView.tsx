@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { GoogleMap, useJsApiLoader } from '@react-google-maps/api';
 import { View, Text, StyleSheet } from 'react-native';
+import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../../constants/env';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
@@ -15,12 +16,20 @@ import { UserMarker } from './UserMarker';
 import { TokenMarker } from './TokenMarker';
 import { FoodMarker } from './FoodMarker';
 import { LostDogMarker } from './LostDogMarker';
+import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
+import { clusterByDistance } from '../../utils/cluster';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
 const LIBRARIES: ('places')[] = ['places'];
 const TOKEN_REFRESH_MS = 15000;
+
+// Two pets within this radius collapse into a single cluster badge. Large
+// enough to catch parser landmark-fallback pile-ups (5 posts all coord'd
+// to Podil center), small enough that genuinely separate reports in the
+// same neighborhood still render individually at city zoom.
+const PIN_CLUSTER_RADIUS_M = 250;
 
 export default function MapViewWeb() {
   const { isLoaded, loadError } = useJsApiLoader({
@@ -31,6 +40,7 @@ export default function MapViewWeb() {
   const location = useLocation();
   const [bubble, setBubble] = useState<string | null>(null);
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const mapRef = useRef<google.maps.Map | null>(null);
   const userPos = location.position;
 
   const companionPos = useCompanion(userPos);
@@ -120,6 +130,26 @@ export default function MapViewWeb() {
     [],
   );
 
+  // Group overlapping pets so dense neighborhoods (5 posts all pinned to
+  // Podil center) don't render as an unreadable emoji pile. Each cluster
+  // with 2+ members renders as one badge; singletons render as normal pins.
+  const clusters = useMemo(
+    () =>
+      clusterByDistance(
+        lostDogs.map((d) => ({ id: d.id, position: d.lastSeen.position, dog: d })),
+        PIN_CLUSTER_RADIUS_M,
+      ),
+    [lostDogs],
+  );
+
+  const handleClusterTap = useCallback((center: LatLng) => {
+    const map = mapRef.current;
+    if (!map) return;
+    const current = map.getZoom() ?? balance.mapZoomDefault;
+    map.panTo(center as unknown as google.maps.LatLngLiteral);
+    map.setZoom(Math.min(current + 2, balance.mapZoomMax));
+  }, []);
+
   if (!env.googleMapsApiKey) {
     return (
       <View style={styles.msg}>
@@ -151,9 +181,18 @@ export default function MapViewWeb() {
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
       <GoogleMap
         mapContainerStyle={CONTAINER_STYLE as unknown as React.CSSProperties}
-        center={userPos as unknown as google.maps.LatLngLiteral}
-        zoom={balance.mapZoomDefault}
         options={mapOptions}
+        onLoad={(map) => {
+          mapRef.current = map;
+          // Center + zoom are applied once on load and then left uncontrolled.
+          // Passing `center` as a prop made the map re-pan on every GPS tick
+          // and fought our cluster-tap setZoom calls.
+          map.setCenter(userPos as unknown as google.maps.LatLngLiteral);
+          map.setZoom(balance.mapZoomDefault);
+        }}
+        onUnmount={() => {
+          mapRef.current = null;
+        }}
       >
         <UserMarker position={userPos} />
 
@@ -171,16 +210,42 @@ export default function MapViewWeb() {
             />
           ))}
 
-        {lostDogs.map((d) => (
-          <LostDogMarker
-            key={d.id}
-            position={d.lastSeen.position}
-            emoji={d.emoji}
-            name={d.name}
-            urgency={d.urgency}
-            onTap={() => setSelectedDog(d.id)}
-          />
-        ))}
+        {clusters.map((c) => {
+          if (c.items.length === 1) {
+            const d = c.items[0]!.dog;
+            return (
+              <LostDogMarker
+                key={d.id}
+                position={d.lastSeen.position}
+                emoji={d.emoji}
+                name={d.name}
+                urgency={d.urgency}
+                onTap={() => setSelectedDog(d.id)}
+              />
+            );
+          }
+          const dominantUrgency = c.items
+            .map((i) => i.dog.urgency)
+            .reduce<UrgencyLevel>(
+              (best, u) => (URGENCY_RANK[u] > URGENCY_RANK[best] ? u : best),
+              'resolved',
+            );
+          // Up to two distinct emojis, in the order they appear, so the
+          // badge hints "dog + cat" vs "two dogs" without clutter.
+          const emojiHint = Array.from(new Set(c.items.map((i) => i.dog.emoji)))
+            .slice(0, 2)
+            .join('');
+          return (
+            <LostDogCluster
+              key={`cluster-${c.items.map((i) => i.id).join('-')}`}
+              position={c.center}
+              count={c.items.length}
+              dominantUrgency={dominantUrgency}
+              emojiHint={emojiHint}
+              onTap={() => handleClusterTap(c.center)}
+            />
+          );
+        })}
 
         {tokens
           .filter((t) => !t.collectedAt)
