@@ -133,36 +133,45 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -55, y: -55 })}
+      getPixelPositionOffset={() => ({ x: -60, y: -60 })}
     >
+      {/* Outer container is 120×120 — the entire box is the tap target
+          even though the visible nose glyph is only 55×55 centered.
+          Previously the tappable area matched the small visual glyph,
+          which — combined with the companion's constant motion plus the
+          glow filter visually implying a bigger hit zone — meant a lot
+          of map-zoomed-out taps missed entirely. */}
       <div
+        role="button"
+        tabIndex={0}
+        onClick={handleTap}
         style={{
           position: 'relative',
-          width: 110,
-          height: 110,
+          width: 120,
+          height: 120,
+          cursor: 'pointer',
+          userSelect: 'none',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
         }}
       >
-        {/* Companion body — just the nose glyph sitting on a big intense
-            white drop-shadow halo. No radar rings, no black circle — the
-            logo has enough distinctive form on its own, the glow is what
-            distinguishes it from the rest of the map. Stacked layers:
-            inner tight bright halo, a mid bloom, and a wide atmospheric
-            outer so it reads at any zoom. */}
+        {/* Companion body — 55×55 nose glyph with layered white halo,
+            centered in the larger tap container. pointer-events:none so
+            the tap is captured by the outer container and not swallowed
+            by the glyph's filter hitmap. */}
         <div
-          role="button"
-          tabIndex={0}
-          onClick={handleTap}
+          aria-hidden
           style={{
-            position: 'absolute',
-            inset: 0,
+            width: 55,
+            height: 55,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            cursor: 'pointer',
             animation: 'co-float 2.4s ease-in-out infinite',
             filter:
-              'drop-shadow(0 0 14px rgba(255,255,255,1)) drop-shadow(0 0 30px rgba(255,255,255,1)) drop-shadow(0 0 60px rgba(255,255,255,0.75))',
-            userSelect: 'none',
+              'drop-shadow(0 0 10px rgba(255,255,255,1)) drop-shadow(0 0 22px rgba(255,255,255,1)) drop-shadow(0 0 44px rgba(255,255,255,0.7))',
+            pointerEvents: 'none',
           }}
         >
           <Image

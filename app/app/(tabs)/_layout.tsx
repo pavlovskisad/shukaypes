@@ -15,20 +15,24 @@ export default function TabsLayout() {
         headerShown: false,
         tabBarActiveTintColor: colors.black,
         tabBarInactiveTintColor: colors.grey,
-        // Frosted-glass dashboard floating over the map. position:absolute
-        // so the map extends to the bottom of the screen and its footer
-        // is covered by the translucent bar.
+        // Frosted-glass dashboard floating over the map, same visual
+        // language as the status pills: near-opaque white, soft diffuse
+        // shadow, no border.
         tabBarStyle: {
           position: 'absolute',
           left: 0,
           right: 0,
           bottom: 0,
-          backgroundColor: 'rgba(255,255,255,0.65)',
-          // Web-only; react-native-web passes through to CSS.
+          backgroundColor: 'rgba(255,255,255,0.85)',
           backdropFilter: 'blur(18px) saturate(160%)',
           // @ts-expect-error — safari prefix not in RN style types
           WebkitBackdropFilter: 'blur(18px) saturate(160%)',
-          borderTopColor: 'rgba(26,26,26,0.08)',
+          borderTopWidth: 0,
+          shadowColor: '#000',
+          shadowOffset: { width: 0, height: -4 },
+          shadowOpacity: 0.08,
+          shadowRadius: 20,
+          elevation: 8,
         },
       }}
     >
