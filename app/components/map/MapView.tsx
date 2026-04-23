@@ -395,9 +395,16 @@ export default function MapViewWeb() {
       <LostDogModal
         dog={lostDogs.find((d) => d.id === selectedDogId) ?? null}
         onClose={() => setSelectedDog(null)}
-        onJoinSearch={(d) => {
+        onReportSighting={async (d) => {
           setSelectedDog(null);
-          showBubble(`looking for ${d.name}… 🐾`, 3000);
+          const res = await useGameStore.getState().reportSighting(d.id);
+          if (res?.ok && res.trusted) {
+            showBubble(`thanks — moved ${d.name}'s pin 📍`, 3000);
+          } else if (res?.ok) {
+            showBubble(`thanks — sighting logged 👀`, 3000);
+          } else {
+            showBubble(`couldn't report that one — try again`, 3000);
+          }
         }}
       />
     </div>

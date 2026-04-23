@@ -15,6 +15,7 @@ export interface DailyTasks {
   bones: number;
   lostPetChecks: number;
   spotVisits: number;
+  sightings: number;
 }
 
 const DAILY_TARGETS = {
@@ -22,6 +23,7 @@ const DAILY_TARGETS = {
   bones: 3,
   lostPetChecks: 2,
   spotVisits: 1,
+  sightings: 1,
 };
 
 function todayLocal(): string {
@@ -41,6 +43,7 @@ function loadTasks(): DailyTasks {
     bones: 0,
     lostPetChecks: 0,
     spotVisits: 0,
+    sightings: 0,
   };
   if (typeof window === 'undefined' || !window.localStorage) return blank;
   try {
@@ -101,6 +104,7 @@ interface GameState {
   setSelectedDog: (id: string | null) => void;
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
+  reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean } | void>;
   tickDailyTask: (key: keyof Omit<DailyTasks, 'date'>, amount?: number) => void;
   refreshDailyTasksIfStale: () => void;
 }
@@ -249,11 +253,28 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (selectedSpotId) get().tickDailyTask('spotVisits');
   },
 
+  reportSighting: async (dogId) => {
+    const { userPosition } = get();
+    if (!userPosition) return;
+    try {
+      const res = await api.reportSighting(dogId, userPosition);
+      get().tickDailyTask('sightings');
+      // If the server accepted it as close-enough, the dog's last-seen
+      // coord was refreshed — re-pull the nearby list so the pin moves
+      // to match without waiting for the next 15s tick.
+      if (res.trusted) await get().syncLostDogs(userPosition);
+      return { ok: true, trusted: res.trusted };
+    } catch (err) {
+      set({ lastSyncError: (err as Error).message });
+      return { ok: false };
+    }
+  },
+
   tickDailyTask: (key, amount = 1) => {
     const prev = get().dailyTasks;
     const today = todayLocal();
     const base: DailyTasks =
-      prev.date === today ? prev : { date: today, tokens: 0, bones: 0, lostPetChecks: 0, spotVisits: 0 };
+      prev.date === today ? prev : { date: today, tokens: 0, bones: 0, lostPetChecks: 0, spotVisits: 0, sightings: 0 };
     const next: DailyTasks = { ...base, [key]: base[key] + amount };
     set({ dailyTasks: next });
     saveTasks(next);
@@ -268,6 +289,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       bones: 0,
       lostPetChecks: 0,
       spotVisits: 0,
+      sightings: 0,
     };
     set({ dailyTasks: fresh });
     saveTasks(fresh);

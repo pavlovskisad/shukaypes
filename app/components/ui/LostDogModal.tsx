@@ -3,7 +3,7 @@ import type { NearbyLostDog } from '../../services/api';
 interface LostDogModalProps {
   dog: NearbyLostDog | null;
   onClose: () => void;
-  onJoinSearch?: (dog: NearbyLostDog) => void;
+  onReportSighting?: (dog: NearbyLostDog) => void;
 }
 
 function relativeTime(iso: string): string {
@@ -19,7 +19,7 @@ function relativeTime(iso: string): string {
 
 // Slide-up dog detail sheet. Demo lines 105-113. First iteration — photo
 // pop-ups and "I've seen this dog" reporting land in a later slice.
-export function LostDogModal({ dog, onClose, onJoinSearch }: LostDogModalProps) {
+export function LostDogModal({ dog, onClose, onReportSighting }: LostDogModalProps) {
   if (!dog) return null;
 
   const urgent = dog.urgency === 'urgent';
@@ -151,7 +151,7 @@ export function LostDogModal({ dog, onClose, onJoinSearch }: LostDogModalProps) 
         </div>
 
         <button
-          onClick={() => onJoinSearch?.(dog)}
+          onClick={() => onReportSighting?.(dog)}
           style={{
             width: '100%',
             background: '#1a1a1a',
@@ -165,7 +165,7 @@ export function LostDogModal({ dog, onClose, onJoinSearch }: LostDogModalProps) 
             cursor: 'pointer',
           }}
         >
-          🔍 join search
+          👀 i've seen them
         </button>
 
         <style>{`

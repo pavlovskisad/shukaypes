@@ -4,7 +4,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { colors } from '../../constants/colors';
 import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
 
-type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits';
+type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings';
 
 interface TaskRow {
   key: TaskKey;
@@ -18,6 +18,7 @@ const TASKS: TaskRow[] = [
   { key: 'bones', icon: '🦴', label: 'feed 3 bones', target: DAILY_TARGETS.bones },
   { key: 'lostPetChecks', icon: '🔍', label: 'check 2 lost pets', target: DAILY_TARGETS.lostPetChecks },
   { key: 'spotVisits', icon: '☕', label: 'visit a spot', target: DAILY_TARGETS.spotVisits },
+  { key: 'sightings', icon: '👀', label: "report you've seen a pet", target: DAILY_TARGETS.sightings },
 ];
 
 export default function TasksScreen() {
