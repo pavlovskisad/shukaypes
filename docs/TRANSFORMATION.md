@@ -1,5 +1,7 @@
 # Transformation Plan — Demo → Production App
 
+> **State as of 2026-04-23:** Phases 1–4 + Phase 5 slices 1–4 are merged to `main`. Map, companion, server-authoritative state, Claude chat proxy, lost-pet pipeline with OLX auto-ingestion, and the first UI surface (pins + zones + modal + pet-photo avatars + wander + SOS beep) are all live at https://shukaypes.vercel.app. See the session-recovery plan at `/root/.claude/plans/dont-worry-sir-we-ll-polished-biscuit.md` for the full PR timeline, lessons, and next-slice queue.
+
 ## Target Stack
 
 | Component | Technology |
