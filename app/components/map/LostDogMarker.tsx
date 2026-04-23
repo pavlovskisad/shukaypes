@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
+import { SYSTEM_FONT } from '../../constants/fonts';
 
 // Every lost pet reads with a terminal-blue glow + matching SOS ring —
 // the red felt alarm-y and the yellow felt "caution"; terminal blue
@@ -170,7 +171,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
         <div style={{ width: 1.5, height: 5, background: '#aaa' }} />
         <div
           style={{
-            fontFamily: "'Caveat', cursive",
+            fontFamily: SYSTEM_FONT,
             fontSize: 13,
             fontWeight: 700,
             color: '#1a1a1a',

@@ -1,4 +1,5 @@
 import type { NearbyLostDog } from '../../services/api';
+import { SYSTEM_FONT } from '../../constants/fonts';
 
 interface LostDogModalProps {
   dog: NearbyLostDog | null;
@@ -123,7 +124,7 @@ export function LostDogModal({ dog, onClose, onReportSighting }: LostDogModalPro
             </div>
           )}
           <div>
-            <div style={{ fontFamily: "'Caveat', cursive", fontSize: 24, fontWeight: 700 }}>
+            <div style={{ fontFamily: SYSTEM_FONT, fontSize: 24, fontWeight: 700 }}>
               {dog.name}
             </div>
             <div style={{ fontSize: 13, color: '#777', marginTop: 2 }}>{dog.breed}</div>
@@ -146,7 +147,7 @@ export function LostDogModal({ dog, onClose, onReportSighting }: LostDogModalPro
         >
           <span style={{ fontSize: 22 }}>🐾</span>
           <div>
-            <div style={{ fontFamily: "'Caveat', cursive", fontSize: 17, fontWeight: 700 }}>
+            <div style={{ fontFamily: SYSTEM_FONT, fontSize: 17, fontWeight: 700 }}>
               {dog.rewardPoints} pts reward
             </div>
             <div style={{ fontSize: 11, color: '#777' }}>bonus tokens near search zone</div>
@@ -162,7 +163,7 @@ export function LostDogModal({ dog, onClose, onReportSighting }: LostDogModalPro
             border: 'none',
             borderRadius: 16,
             padding: '14px 18px',
-            fontFamily: "'Caveat', cursive",
+            fontFamily: SYSTEM_FONT,
             fontSize: 20,
             fontWeight: 700,
             cursor: 'pointer',

@@ -3,6 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { colors } from '../../constants/colors';
 import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
+import { SYSTEM_FONT } from '../../constants/fonts';
 
 type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings';
 
@@ -86,7 +87,7 @@ const styles = StyleSheet.create({
     marginBottom: 22,
   },
   title: {
-    fontFamily: 'Caveat',
+    fontFamily: SYSTEM_FONT,
     fontSize: 28,
     color: colors.black,
   },

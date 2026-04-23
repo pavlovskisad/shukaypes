@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
+import { SYSTEM_FONT } from '../../constants/fonts';
 
 // Small emoji pin for a Google Places result. Same OverlayViewF pattern
 // as LostDogMarker; blue-ish shadow to distinguish from the yellow
@@ -42,12 +43,13 @@ function PoiMarkerImpl({ position, emoji, name, selected, onTap }: PoiMarkerProp
             width: 36,
             height: 36,
             borderRadius: '50%',
-            // Way more translucent + way softer halo — spots are ambient
-            // "places to wander", not signals. White frosted with a
-            // whisper of yellow glow.
-            background: 'rgba(255,255,255,0.2)',
-            backdropFilter: 'blur(6px) saturate(110%)',
-            WebkitBackdropFilter: 'blur(6px) saturate(110%)',
+            // Real glass: almost fully see-through with just a
+            // whisper of blur. No saturation boost — the previous
+            // chrome-ish feel was the 110% saturate baking a white
+            // film over everything.
+            background: 'rgba(255,255,255,0.08)',
+            backdropFilter: 'blur(6px)',
+            WebkitBackdropFilter: 'blur(6px)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -64,7 +66,7 @@ function PoiMarkerImpl({ position, emoji, name, selected, onTap }: PoiMarkerProp
             <div style={{ width: 1.5, height: 5, background: '#aaa' }} />
             <div
               style={{
-                fontFamily: "'Caveat', cursive",
+                fontFamily: SYSTEM_FONT,
                 fontSize: 14,
                 fontWeight: 700,
                 color: '#1a1a1a',

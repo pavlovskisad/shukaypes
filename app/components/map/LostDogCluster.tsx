@@ -1,6 +1,7 @@
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import type { NearbyLostDog } from '../../services/api';
+import { SYSTEM_FONT } from '../../constants/fonts';
 
 // Dominant-urgency wins the glow color. Urgent beats medium beats resolved
 // so the cluster reads "there's an urgent pet in here" at a glance.
@@ -90,7 +91,7 @@ export function LostDogCluster({
             alignItems: 'center',
             justifyContent: 'center',
             boxShadow: URGENCY_SHADOW[dominantUrgency],
-            fontFamily: "'Caveat', cursive",
+            fontFamily: SYSTEM_FONT,
             lineHeight: 1,
             cursor: 'pointer',
             userSelect: 'none',
@@ -118,7 +119,7 @@ export function LostDogCluster({
               right: 0,
               top: CONTAINER_CENTER + 24,
               textAlign: 'center',
-              fontFamily: "'Caveat', cursive",
+              fontFamily: SYSTEM_FONT,
               fontSize: 12,
               fontWeight: 600,
               color: '#1a1a1a',
