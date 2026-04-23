@@ -4,6 +4,67 @@ import type { FoodItem, LatLng, Quest, Token } from '@shukajpes/shared';
 import { api, type NearbyLostDog } from '../services/api';
 import { fetchNearbySpots, type Spot } from '../services/places';
 
+// Daily tasks — client-side for pilot; promote to server when we add
+// server-auth'd quests. Each field is a monotonic counter for today;
+// progress = min(counter, target). Reset when `date` flips vs local
+// today. Persisted via localStorage on web; on native we'd wire
+// AsyncStorage but native map is stubbed anyway, so ignoring for now.
+export interface DailyTasks {
+  date: string; // YYYY-MM-DD local
+  tokens: number;
+  bones: number;
+  lostPetChecks: number;
+  spotVisits: number;
+}
+
+const DAILY_TARGETS = {
+  tokens: 10,
+  bones: 3,
+  lostPetChecks: 2,
+  spotVisits: 1,
+};
+
+function todayLocal(): string {
+  const d = new Date();
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+const TASKS_STORAGE_KEY = 'shukajpes.dailyTasks.v1';
+
+function loadTasks(): DailyTasks {
+  const blank: DailyTasks = {
+    date: todayLocal(),
+    tokens: 0,
+    bones: 0,
+    lostPetChecks: 0,
+    spotVisits: 0,
+  };
+  if (typeof window === 'undefined' || !window.localStorage) return blank;
+  try {
+    const raw = window.localStorage.getItem(TASKS_STORAGE_KEY);
+    if (!raw) return blank;
+    const parsed = JSON.parse(raw) as DailyTasks;
+    if (parsed.date !== todayLocal()) return blank;
+    return parsed;
+  } catch {
+    return blank;
+  }
+}
+
+function saveTasks(t: DailyTasks): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    window.localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(t));
+  } catch {
+    // storage full / disabled — silently skip
+  }
+}
+
+export { DAILY_TARGETS };
+
 interface GameState {
   hunger: number;
   happiness: number;
@@ -22,6 +83,7 @@ interface GameState {
   spots: Spot[];
   spotsLoading: boolean;
   selectedSpotId: string | null;
+  dailyTasks: DailyTasks;
   syncing: boolean;
   lastSyncError: string | null;
 
@@ -39,6 +101,8 @@ interface GameState {
   setSelectedDog: (id: string | null) => void;
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
+  tickDailyTask: (key: keyof Omit<DailyTasks, 'date'>, amount?: number) => void;
+  refreshDailyTasksIfStale: () => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -59,6 +123,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   spots: [],
   spotsLoading: false,
   selectedSpotId: null,
+  dailyTasks: loadTasks(),
   syncing: false,
   lastSyncError: null,
 
@@ -84,6 +149,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }));
     try {
       await api.collectToken(id, userPosition);
+      get().tickDailyTask('tokens');
       await get().syncState();
     } catch (err) {
       set((s) => ({
@@ -104,6 +170,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     set((s) => ({ foodItems: s.foodItems.filter((x) => x.id !== id) }));
     try {
       await api.feed(id, userPosition);
+      get().tickDailyTask('bones');
       await get().syncState();
     } catch (err) {
       set((s) => ({
@@ -162,7 +229,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  setSelectedDog: (selectedDogId) => set({ selectedDogId }),
+  setSelectedDog: (selectedDogId) => {
+    set({ selectedDogId });
+    if (selectedDogId) get().tickDailyTask('lostPetChecks');
+  },
 
   syncSpots: async (pos) => {
     set({ spotsLoading: true });
@@ -174,5 +244,32 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  setSelectedSpot: (selectedSpotId) => set({ selectedSpotId }),
+  setSelectedSpot: (selectedSpotId) => {
+    set({ selectedSpotId });
+    if (selectedSpotId) get().tickDailyTask('spotVisits');
+  },
+
+  tickDailyTask: (key, amount = 1) => {
+    const prev = get().dailyTasks;
+    const today = todayLocal();
+    const base: DailyTasks =
+      prev.date === today ? prev : { date: today, tokens: 0, bones: 0, lostPetChecks: 0, spotVisits: 0 };
+    const next: DailyTasks = { ...base, [key]: base[key] + amount };
+    set({ dailyTasks: next });
+    saveTasks(next);
+  },
+
+  refreshDailyTasksIfStale: () => {
+    const prev = get().dailyTasks;
+    if (prev.date === todayLocal()) return;
+    const fresh: DailyTasks = {
+      date: todayLocal(),
+      tokens: 0,
+      bones: 0,
+      lostPetChecks: 0,
+      spotVisits: 0,
+    };
+    set({ dailyTasks: fresh });
+    saveTasks(fresh);
+  },
 }));
