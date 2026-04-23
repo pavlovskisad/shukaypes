@@ -127,7 +127,10 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
     [setMenuOpen, setSelectedDog, setSelectedSpot, router, flash]
   );
 
-  const activeBubble = bubble ?? localBubble;
+  // Hide bubbles while the radial menu is open — otherwise the bubble
+  // (above the companion) and the top "search" button fight for the
+  // same vertical slot.
+  const activeBubble = menuOpen ? null : bubble ?? localBubble;
 
   return (
     <OverlayViewF

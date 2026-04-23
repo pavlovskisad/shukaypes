@@ -20,7 +20,7 @@ export const balance = {
   ambientChance: 0.25,
   ambientMax: 10,
   bubbleDuration: 5000,
-  menuRadius: 95,
+  menuRadius: 60,
   subMenuRadius: 100,
   mapZoomMin: 14,
   mapZoomMax: 19,
