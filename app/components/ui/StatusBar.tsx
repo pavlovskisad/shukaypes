@@ -15,8 +15,8 @@ const EDGE_EXTENSION = 12;
 
 const PROGRESS_BLUE = 'rgba(0,60,255,0.85)';
 const LOW_RED = 'rgba(232,64,64,0.9)';
-const GLASS_BG = 'rgba(255,255,255,0.55)';
-const GLASS_BORDER = 'rgba(26,26,26,0.08)';
+const GLASS_BG = 'rgba(255,255,255,0.85)';
+const GLASS_SHADOW_COLOR = '#000';
 
 function MeterPill({ icon, value, label }: { icon: string; value: number; label: string }) {
   const isLow = value < balance.lowThreshold;
@@ -77,10 +77,14 @@ const styles = StyleSheet.create({
     backdropFilter: 'blur(14px) saturate(160%)',
     // @ts-expect-error — safari prefix not in RN style types
     WebkitBackdropFilter: 'blur(14px) saturate(160%)',
-    borderWidth: 1,
-    borderColor: GLASS_BORDER,
+    // Soft diffuse shadow instead of a hard border — matches the
+    // reference pill treatment (clean white with a gentle lift).
+    shadowColor: GLASS_SHADOW_COLOR,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.1,
+    shadowRadius: 16,
+    elevation: 3,
     position: 'relative',
-    // Each meter pill is fixed-width; token pill overrides below.
     width: METER_WIDTH,
     justifyContent: 'center',
   },

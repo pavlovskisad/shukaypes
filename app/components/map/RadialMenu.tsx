@@ -37,7 +37,7 @@ export function RadialMenu({
   // the companion already reads as translucent, and the map below is the
   // primary context. `inverted` kept for API compatibility but no longer
   // changes colors.
-  const bg = 'rgba(255,255,255,0.55)';
+  const bg = 'rgba(255,255,255,0.85)';
   const fg = '#1a1a1a';
   void inverted;
 
@@ -71,16 +71,17 @@ export function RadialMenu({
               width: 56,
               height: 56,
               borderRadius: 28,
-              border: '1px solid rgba(26,26,26,0.08)',
+              border: 'none',
               background: bg,
               color: fg,
-              fontSize: 20,
+              fontSize: 22,
               cursor: 'pointer',
               opacity: open ? 1 : 0,
               transform: open ? 'scale(1)' : 'scale(0.4)',
               transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
               pointerEvents: open ? 'auto' : 'none',
-              boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
+              // Diffuse lift shadow — matches the pill reference.
+              boxShadow: '0 6px 24px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
               backdropFilter: 'blur(14px) saturate(160%)',
               WebkitBackdropFilter: 'blur(14px) saturate(160%)',
               display: 'flex',
