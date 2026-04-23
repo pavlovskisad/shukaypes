@@ -2,8 +2,10 @@ interface SpeechBubbleProps {
   text: string | null;
 }
 
-// Dark bubble above the companion (demo lines 296-304). The parent is the
-// companion's overlay div, so it moves with the map.
+// Dark bubble just above the companion (demo lines 296-304). The parent
+// is the companion's overlay div, so it moves with the map. `bottom:85%`
+// places the bubble's bottom edge ~14px above the nose so it hugs the
+// companion instead of floating up into the top radial-menu button.
 export function SpeechBubble({ text }: SpeechBubbleProps) {
   if (!text) return null;
   return (
@@ -11,7 +13,7 @@ export function SpeechBubble({ text }: SpeechBubbleProps) {
       style={{
         position: 'absolute',
         left: '50%',
-        bottom: '110%',
+        bottom: '85%',
         transform: 'translateX(-50%)',
         background: '#1a1a1a',
         color: '#ffffff',

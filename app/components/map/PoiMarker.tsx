@@ -45,9 +45,9 @@ function PoiMarkerImpl({ position, emoji, name, selected, onTap }: PoiMarkerProp
             // Way more translucent + way softer halo — spots are ambient
             // "places to wander", not signals. White frosted with a
             // whisper of yellow glow.
-            background: 'rgba(255,255,255,0.35)',
-            backdropFilter: 'blur(10px) saturate(140%)',
-            WebkitBackdropFilter: 'blur(10px) saturate(140%)',
+            background: 'rgba(255,255,255,0.2)',
+            backdropFilter: 'blur(6px) saturate(110%)',
+            WebkitBackdropFilter: 'blur(6px) saturate(110%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',

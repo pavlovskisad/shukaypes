@@ -279,7 +279,13 @@ export default function MapViewWeb() {
         onUnmount={() => {
           mapRef.current = null;
         }}
-        onClick={() => setExpandedClusterKey(null)}
+        onClick={() => {
+          setExpandedClusterKey(null);
+          // Tapping the map background collapses the companion's radial
+          // menu too — matches the prototype's "tap anywhere else to
+          // dismiss" pattern.
+          useGameStore.getState().setMenuOpen(false);
+        }}
       >
         <UserMarker position={userPos} />
 

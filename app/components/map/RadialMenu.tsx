@@ -32,12 +32,14 @@ export function RadialMenu({
   inverted = false,
 }: RadialMenuProps) {
   const N = actions.length;
-  const CENTER = 105;
-  // Frosted-glass buttons regardless of `inverted` — the white halo around
-  // the companion already reads as translucent, and the map below is the
-  // primary context. `inverted` kept for API compatibility but no longer
-  // changes colors.
-  const bg = 'rgba(255,255,255,0.85)';
+  // Menu container is centered on the parent via 50/50 + translate(-50,-50)
+  // so the ring is truly centered on the companion, regardless of companion
+  // size. Size is 2*radius + button + buffer so rim buttons fit.
+  const CONTAINER = radius * 2 + 80;
+  const CENTER = CONTAINER / 2;
+  // Frosted-glass buttons regardless of `inverted`. `inverted` kept for
+  // API compatibility but no longer changes colors.
+  const bg = 'rgba(255,255,255,0.55)';
   const fg = '#1a1a1a';
   void inverted;
 
@@ -45,10 +47,11 @@ export function RadialMenu({
     <div
       style={{
         position: 'absolute',
-        left: -60,
-        top: -60,
-        width: 210,
-        height: 210,
+        left: '50%',
+        top: '50%',
+        width: CONTAINER,
+        height: CONTAINER,
+        transform: 'translate(-50%, -50%)',
         pointerEvents: 'none',
       }}
     >
@@ -81,9 +84,9 @@ export function RadialMenu({
               transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
               pointerEvents: open ? 'auto' : 'none',
               // Diffuse lift shadow — matches the pill reference.
-              boxShadow: '0 6px 24px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
-              backdropFilter: 'blur(14px) saturate(160%)',
-              WebkitBackdropFilter: 'blur(14px) saturate(160%)',
+              boxShadow: '0 6px 20px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.05)',
+              backdropFilter: 'blur(8px) saturate(120%)',
+              WebkitBackdropFilter: 'blur(8px) saturate(120%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
