@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from
 import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
 import type { Spot } from '../../services/places';
+import { SYSTEM_FONT } from '../../constants/fonts';
 
 const CATEGORY_LABEL: Record<string, string> = {
   cafe: 'cafe',
@@ -76,7 +77,7 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.white },
   content: { padding: 16, paddingBottom: 120 },
   title: {
-    fontFamily: 'Caveat',
+    fontFamily: SYSTEM_FONT,
     fontSize: 26,
     color: colors.black,
     marginBottom: 14,
@@ -118,5 +119,5 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 5,
   },
-  addr: { fontSize: 12, fontFamily: 'Caveat', color: colors.black },
+  addr: { fontSize: 12, fontFamily: SYSTEM_FONT, color: colors.black },
 });
