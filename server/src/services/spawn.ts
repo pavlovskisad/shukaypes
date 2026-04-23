@@ -16,6 +16,27 @@ async function weightedPositions(
 }
 
 export async function ensureTokensForUser(userId: string, center: LatLng) {
+  // Cull: uncollected tokens more than `tokenCullRadiusM` from the user's
+  // current position get soft-collected (collectedAt = now, no collector).
+  // Keeps the on-map count tight around the walker as they move across
+  // town, rather than accumulating stale pins behind them. The subsequent
+  // count+spawn then tops the live set back up at the new center.
+  const distExpr = sql<number>`(6371000 * acos(
+    cos(radians(${center.lat})) * cos(radians(${schema.tokens.lat}))
+    * cos(radians(${schema.tokens.lng}) - radians(${center.lng}))
+    + sin(radians(${center.lat})) * sin(radians(${schema.tokens.lat}))
+  ))`;
+  await db
+    .update(schema.tokens)
+    .set({ collectedAt: new Date() })
+    .where(
+      and(
+        eq(schema.tokens.ownerId, userId),
+        isNull(schema.tokens.collectedAt),
+        sql`${distExpr} > ${balance.tokenCullRadiusM}`,
+      ),
+    );
+
   const rows0 = await db
     .select({ live: sql<number>`count(*)::int` })
     .from(schema.tokens)
