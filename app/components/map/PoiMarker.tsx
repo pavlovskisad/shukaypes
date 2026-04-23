@@ -43,13 +43,11 @@ function PoiMarkerImpl({ position, emoji, name, selected, onTap }: PoiMarkerProp
             width: 36,
             height: 36,
             borderRadius: '50%',
-            // Real glass: almost fully see-through with just a
-            // whisper of blur. No saturation boost — the previous
-            // chrome-ish feel was the 110% saturate baking a white
-            // film over everything.
-            background: 'rgba(255,255,255,0.08)',
-            backdropFilter: 'blur(6px)',
-            WebkitBackdropFilter: 'blur(6px)',
+            // No backdrop-filter — with 5-20 spots visible, each blur
+            // pass was re-running on every map frame and was the main
+            // reason scrolling felt heavy. Plain rgba bg reads as glass
+            // against the greyscale map without the GPU cost.
+            background: 'rgba(255,255,255,0.2)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
