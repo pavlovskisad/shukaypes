@@ -283,7 +283,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 8,
     padding: 10,
-    paddingBottom: 14,
+    // Floating tab bar covers ~60-80px at the bottom; lift the input
+    // row above it so the send button is reachable.
+    paddingBottom: 90,
     borderTopWidth: 1,
     borderTopColor: colors.greyBg,
   },

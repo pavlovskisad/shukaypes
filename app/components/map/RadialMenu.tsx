@@ -33,8 +33,13 @@ export function RadialMenu({
 }: RadialMenuProps) {
   const N = actions.length;
   const CENTER = 105;
-  const bg = inverted ? '#ffffff' : '#1a1a1a';
-  const fg = inverted ? '#1a1a1a' : '#ffffff';
+  // Frosted-glass buttons regardless of `inverted` — the white halo around
+  // the companion already reads as translucent, and the map below is the
+  // primary context. `inverted` kept for API compatibility but no longer
+  // changes colors.
+  const bg = 'rgba(255,255,255,0.55)';
+  const fg = '#1a1a1a';
+  void inverted;
 
   return (
     <div
@@ -66,7 +71,7 @@ export function RadialMenu({
               width: 56,
               height: 56,
               borderRadius: 28,
-              border: 'none',
+              border: '1px solid rgba(26,26,26,0.08)',
               background: bg,
               color: fg,
               fontSize: 20,
@@ -75,7 +80,9 @@ export function RadialMenu({
               transform: open ? 'scale(1)' : 'scale(0.4)',
               transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
               pointerEvents: open ? 'auto' : 'none',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+              boxShadow: '0 6px 18px rgba(0,0,0,0.18)',
+              backdropFilter: 'blur(14px) saturate(160%)',
+              WebkitBackdropFilter: 'blur(14px) saturate(160%)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',

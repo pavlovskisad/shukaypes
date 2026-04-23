@@ -3,35 +3,44 @@ import { useGameStore } from '../../stores/gameStore';
 import { balance } from '../../constants/balance';
 import { colors } from '../../constants/colors';
 
-// Unified pill: hunger / happiness / tokens (demo lines 362-368).
-// Below the `lowThreshold` the fill switches to red. The +12px edge extension
-// on fills ensures the rounded right edge is covered (ported exactly).
+// Three separate white-frosted-glass pills instead of one combined dark
+// pill — each meter reads as its own module. Progress fills use terminal
+// blue to match the lost-pet beacon language elsewhere on the map; low
+// state is red as before. Icons are unchanged.
 
-// Pill has to share the top-of-screen row with the 200px logo on the
-// left on a ~390px device; the previous SECTION_WIDTH + minWidth combo
-// ran the pill off the right edge. Compact sections keep it on-screen.
-const SECTION_WIDTH = 56;
-const PILL_HEIGHT = 44;
+const PILL_HEIGHT = 38;
+const METER_WIDTH = 78;
+const TOKEN_MIN_WIDTH = 62;
 const EDGE_EXTENSION = 12;
 
-function MeterSection({ icon, value, label }: { icon: string; value: number; label: string }) {
+const PROGRESS_BLUE = 'rgba(0,60,255,0.85)';
+const LOW_RED = 'rgba(232,64,64,0.9)';
+const GLASS_BG = 'rgba(255,255,255,0.55)';
+const GLASS_BORDER = 'rgba(26,26,26,0.08)';
+
+function MeterPill({ icon, value, label }: { icon: string; value: number; label: string }) {
   const isLow = value < balance.lowThreshold;
-  const fillWidth = Math.round((SECTION_WIDTH * value) / 100) + EDGE_EXTENSION;
+  const fillWidth = Math.round((METER_WIDTH * value) / 100) + EDGE_EXTENSION;
   return (
-    <View style={styles.section}>
+    <View style={styles.pill}>
       <View
         style={[
           styles.fill,
-          { width: fillWidth, backgroundColor: isLow ? colors.red : colors.accent },
+          {
+            width: fillWidth,
+            backgroundColor: isLow ? LOW_RED : PROGRESS_BLUE,
+          },
         ]}
       />
-      <Text style={styles.emoji}>{icon}</Text>
-      <Text
-        style={styles.value}
-        accessibilityLabel={`${label} ${Math.round(value)} percent`}
-      >
-        {Math.round(value)}
-      </Text>
+      <View style={styles.meterBody}>
+        <Text style={styles.emoji}>{icon}</Text>
+        <Text
+          style={styles.value}
+          accessibilityLabel={`${label} ${Math.round(value)} percent`}
+        >
+          {Math.round(value)}
+        </Text>
+      </View>
     </View>
   );
 }
@@ -42,13 +51,11 @@ export function StatusBar() {
   const tokensCollected = useGameStore((s) => s.tokensCollected);
 
   return (
-    <View style={styles.pill} pointerEvents="none">
-      <MeterSection icon="🦴" value={hunger} label="hunger" />
-      <View style={styles.divider} />
-      <MeterSection icon="☀️" value={happiness} label="happiness" />
-      <View style={styles.divider} />
-      <View style={styles.tokens}>
-        <Text style={styles.tokenEmoji}>🐾</Text>
+    <View style={styles.wrap} pointerEvents="none">
+      <MeterPill icon="🦴" value={hunger} label="hunger" />
+      <MeterPill icon="☀️" value={happiness} label="happiness" />
+      <View style={[styles.pill, styles.tokenPill]}>
+        <Text style={styles.emoji}>🐾</Text>
         <Text style={styles.tokenCount}>{tokensCollected}</Text>
       </View>
     </View>
@@ -56,73 +63,61 @@ export function StatusBar() {
 }
 
 const styles = StyleSheet.create({
-  pill: {
+  wrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    // Half-transparent black + backdrop blur = frosted glass on web.
-    // Safari/chrome/firefox all support backdrop-filter now; anything
-    // that doesn't still sees the translucent background (just no blur).
-    // react-native-web passes unknown style keys to CSS, which is how
-    // backdropFilter reaches the DOM.
-    backgroundColor: 'rgba(26,26,26,0.5)',
-    // Web-only style keys; react-native-web passes them through to CSS.
+    gap: 6,
+  },
+  pill: {
+    height: PILL_HEIGHT,
+    borderRadius: PILL_HEIGHT / 2,
+    overflow: 'hidden',
+    backgroundColor: GLASS_BG,
+    // Web-only; react-native-web passes through to CSS.
     backdropFilter: 'blur(14px) saturate(160%)',
     // @ts-expect-error — safari prefix not in RN style types
     WebkitBackdropFilter: 'blur(14px) saturate(160%)',
-    borderRadius: PILL_HEIGHT / 2,
-    height: PILL_HEIGHT,
-    overflow: 'hidden',
-    paddingHorizontal: 4,
-    // Dropped the minWidth — sections define their own width and we
-    // don't want the pill stretching to push past the screen edge.
-  },
-  section: {
-    width: SECTION_WIDTH,
-    height: PILL_HEIGHT,
-    justifyContent: 'center',
-    overflow: 'hidden',
+    borderWidth: 1,
+    borderColor: GLASS_BORDER,
     position: 'relative',
+    // Each meter pill is fixed-width; token pill overrides below.
+    width: METER_WIDTH,
+    justifyContent: 'center',
+  },
+  tokenPill: {
+    width: undefined,
+    minWidth: TOKEN_MIN_WIDTH,
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 12,
+    gap: 6,
   },
   fill: {
     position: 'absolute',
     left: -EDGE_EXTENSION,
     top: 0,
     bottom: 0,
-    opacity: 0.85,
+    opacity: 0.75,
   },
-  emoji: {
-    position: 'absolute',
-    left: 8,
-    fontSize: 15,
-  },
-  value: {
-    position: 'absolute',
-    right: 8,
-    color: colors.white,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  divider: {
-    width: 1,
-    height: 22,
-    backgroundColor: 'rgba(255,255,255,0.15)',
-  },
-  tokens: {
+  meterBody: {
+    flex: 1,
+    height: PILL_HEIGHT,
     flexDirection: 'row',
     alignItems: 'center',
-    height: PILL_HEIGHT,
-    paddingHorizontal: 14,
-    // Explicit minWidth so emoji and count don't collide on render when
-    // react-native-web's flex gap behaves inconsistently.
-    minWidth: 72,
+    justifyContent: 'space-between',
+    paddingHorizontal: 10,
   },
-  tokenEmoji: {
-    fontSize: 15,
-    marginRight: 6,
+  emoji: {
+    fontSize: 14,
+  },
+  value: {
+    color: colors.black,
+    fontSize: 13,
+    fontWeight: '700',
   },
   tokenCount: {
-    color: colors.white,
+    color: colors.black,
     fontSize: 14,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });
