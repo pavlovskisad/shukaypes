@@ -2,12 +2,11 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 
-// Every lost pet reads with the same yellow glow — lost is lost, the
-// gradations (medium / resolved) weren't pulling their weight on a
-// quick-glance map. Yellow reads as "attention" without the full alarm
-// of red.
-const LOST_GLOW = '0 0 22px rgba(241,196,15,0.55), 0 3px 12px rgba(0,0,0,0.15)';
-const LOST_RING = 'rgba(241,196,15,0.6)';
+// Every lost pet reads with a terminal-blue glow + matching SOS ring —
+// the red felt alarm-y and the yellow felt "caution"; terminal blue
+// reads as "beacon / signal" which matches the SOS metaphor better.
+const LOST_GLOW = '0 0 22px rgba(0,0,255,0.6), 0 3px 12px rgba(0,0,0,0.15)';
+const LOST_RING = 'rgba(0,0,255,0.65)';
 
 // Wander amplitude in pixels — small enough to read as "ambient drift"
 // rather than "pet is running around".
