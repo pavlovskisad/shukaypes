@@ -18,7 +18,17 @@ const LOW_RED = 'rgba(232,64,64,0.9)';
 const GLASS_BG = 'rgba(255,255,255,0.85)';
 const GLASS_SHADOW_COLOR = '#000';
 
-function MeterPill({ icon, value, label }: { icon: string; value: number; label: string }) {
+function MeterPill({
+  icon,
+  value,
+  label,
+  suffix,
+}: {
+  icon: string;
+  value: number;
+  label: string;
+  suffix?: string;
+}) {
   const isLow = value < balance.lowThreshold;
   // Progress fill is sized relative to pill's minWidth; the pill itself
   // may grow slightly if the value takes extra chars ("100%") but the
@@ -38,9 +48,9 @@ function MeterPill({ icon, value, label }: { icon: string; value: number; label:
       <Text style={styles.emoji}>{icon}</Text>
       <Text
         style={styles.value}
-        accessibilityLabel={`${label} ${Math.round(value)} percent`}
+        accessibilityLabel={`${label} ${Math.round(value)}${suffix === '%' ? ' percent' : ''}`}
       >
-        {Math.round(value)}%
+        {Math.round(value)}{suffix ?? ''}
       </Text>
     </View>
   );
@@ -53,8 +63,8 @@ export function StatusBar() {
 
   return (
     <View style={styles.wrap} pointerEvents="none">
+      <MeterPill icon="☀️" value={happiness} label="happiness" suffix="%" />
       <MeterPill icon="🦴" value={hunger} label="hunger" />
-      <MeterPill icon="☀️" value={happiness} label="happiness" />
       <View style={[styles.pill, styles.tokenPill]}>
         <Text style={styles.emoji}>🐾</Text>
         <Text style={styles.value}>{tokensCollected}</Text>
