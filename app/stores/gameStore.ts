@@ -2,6 +2,7 @@ import { create } from 'zustand';
 import { balance } from '../constants/balance';
 import type { FoodItem, LatLng, Quest, Token } from '@shukajpes/shared';
 import { api, type NearbyLostDog } from '../services/api';
+import { fetchNearbySpots, type Spot } from '../services/places';
 
 interface GameState {
   hunger: number;
@@ -18,6 +19,9 @@ interface GameState {
   foodItems: FoodItem[];
   lostDogs: NearbyLostDog[];
   selectedDogId: string | null;
+  spots: Spot[];
+  spotsLoading: boolean;
+  selectedSpotId: string | null;
   syncing: boolean;
   lastSyncError: string | null;
 
@@ -33,6 +37,8 @@ interface GameState {
   syncFood: (pos: LatLng) => Promise<void>;
   syncLostDogs: (pos: LatLng) => Promise<void>;
   setSelectedDog: (id: string | null) => void;
+  syncSpots: (pos: LatLng) => Promise<void>;
+  setSelectedSpot: (id: string | null) => void;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -50,6 +56,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   foodItems: [],
   lostDogs: [],
   selectedDogId: null,
+  spots: [],
+  spotsLoading: false,
+  selectedSpotId: null,
   syncing: false,
   lastSyncError: null,
 
@@ -154,4 +163,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setSelectedDog: (selectedDogId) => set({ selectedDogId }),
+
+  syncSpots: async (pos) => {
+    set({ spotsLoading: true });
+    try {
+      const spots = await fetchNearbySpots(pos);
+      set({ spots, spotsLoading: false });
+    } catch (err) {
+      set({ spotsLoading: false, lastSyncError: (err as Error).message });
+    }
+  },
+
+  setSelectedSpot: (selectedSpotId) => set({ selectedSpotId }),
 }));
