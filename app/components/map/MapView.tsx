@@ -19,6 +19,7 @@ import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
+import { PoiMarker } from './PoiMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
@@ -57,6 +58,9 @@ export default function MapViewWeb() {
   const foodItems = useGameStore((s) => s.foodItems);
   const lostDogs = useGameStore((s) => s.lostDogs);
   const selectedDogId = useGameStore((s) => s.selectedDogId);
+  const spots = useGameStore((s) => s.spots);
+  const selectedSpotId = useGameStore((s) => s.selectedSpotId);
+  const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   const collectToken = useGameStore((s) => s.collectToken);
   const eatFood = useGameStore((s) => s.eatFood);
   const setUserPosition = useGameStore((s) => s.setUserPosition);
@@ -220,6 +224,18 @@ export default function MapViewWeb() {
     [clusterKey],
   );
 
+  // When the Spots tab routes the user here with a selection, pan + zoom
+  // to that spot once per selection change.
+  useEffect(() => {
+    if (!selectedSpotId) return;
+    const spot = spots.find((s) => s.id === selectedSpotId);
+    const map = mapRef.current;
+    if (!spot || !map) return;
+    map.panTo(spot.position as unknown as google.maps.LatLngLiteral);
+    const current = map.getZoom() ?? balance.mapZoomDefault;
+    if (current < 17) map.setZoom(17);
+  }, [selectedSpotId, spots]);
+
   if (!env.googleMapsApiKey) {
     return (
       <View style={styles.msg}>
@@ -358,6 +374,17 @@ export default function MapViewWeb() {
 
         {foodItems.map((f) => (
           <FoodMarker key={f.id} position={f.position} onTap={foodTapHandlers.get(f.id)!} />
+        ))}
+
+        {spots.map((s) => (
+          <PoiMarker
+            key={s.id}
+            position={s.position}
+            emoji={s.icon ?? '📍'}
+            name={s.name}
+            selected={s.id === selectedSpotId}
+            onTap={() => setSelectedSpot(s.id === selectedSpotId ? null : s.id)}
+          />
         ))}
 
         {companionPos ? (
