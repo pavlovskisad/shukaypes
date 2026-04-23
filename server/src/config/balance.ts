@@ -11,12 +11,17 @@ export const balance = {
   // to pick up as they move; far ones get culled each sync (see
   // ensureTokensForUser). Bones scatter wider on purpose — they're not
   // a walking beacon, just treats the companion stumbles on.
-  tokenSpreadDeg: 0.005,
+  // Tokens cluster DENSELY inside a small walking radius so a couple
+  // dozen tiny pawprints read as a trail around the walker.
+  // 0.001° at Kyiv ≈ ±110m lat / ±70m lng → ~280×140m box.
+  tokenSpreadDeg: 0.001,
   foodSpreadDeg: 0.014,
   // Anything farther than this from the walker gets expired on the next
-  // sync — no point dragging a 2km-away paw around.
-  tokenCullRadiusM: 1500,
-  tokenCount: 15,
+  // sync. Kept generous (500m vs the tighter 140m spread) so tokens
+  // behind the walker stick around briefly after they move — you don't
+  // instantly lose uncollected ones for being 100m behind.
+  tokenCullRadiusM: 500,
+  tokenCount: 20,
   foodCount: 8,
   // Anti-cheat: max distance between client-reported collect position and target.
   collectMaxDistanceM: 80,
