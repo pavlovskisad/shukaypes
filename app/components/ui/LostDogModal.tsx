@@ -37,6 +37,9 @@ export function LostDogModal({ dog, onClose, onReportSighting }: LostDogModalPro
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
+        // Lift the sheet above the floating tab bar (~60-80px) so the
+        // "i've seen them" button isn't covered by the dashboard.
+        paddingBottom: 80,
         zIndex: 50,
       }}
     >
@@ -44,8 +47,8 @@ export function LostDogModal({ dog, onClose, onReportSighting }: LostDogModalPro
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#ffffff',
-          borderRadius: '24px 24px 0 0',
-          padding: '22px 20px 28px',
+          borderRadius: 24,
+          padding: '22px 20px 22px',
           width: '100%',
           maxWidth: 430,
           animation: 'dog-modal-up 0.3s cubic-bezier(0.4,0,0.2,1)',
