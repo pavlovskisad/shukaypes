@@ -9,9 +9,9 @@ import { colors } from '../../constants/colors';
 // (terminal blue; red when low).
 
 const PILL_HEIGHT = 38;
-const METER_MIN_WIDTH = 74;
-const TOKEN_MIN_WIDTH = 62;
-const EDGE_EXTENSION = 12;
+// Minimum so a 1-char value doesn't collapse the pill awkwardly; beyond
+// that, each pill sizes to its content and grows when the number widens.
+const PILL_MIN_WIDTH = 50;
 
 const PROGRESS_BLUE = 'rgba(0,60,255,0.85)';
 const LOW_RED = 'rgba(232,64,64,0.9)';
@@ -30,17 +30,14 @@ function MeterPill({
   suffix?: string;
 }) {
   const isLow = value < balance.lowThreshold;
-  // Progress fill is sized relative to pill's minWidth; the pill itself
-  // may grow slightly if the value takes extra chars ("100%") but the
-  // fill happily stretches because it's absolute inset.
-  const fillWidth = Math.round((METER_MIN_WIDTH * value) / 100) + EDGE_EXTENSION;
+  const fillPct = Math.max(0, Math.min(100, Math.round(value)));
   return (
     <View style={[styles.pill, styles.meterPill]}>
       <View
         style={[
           styles.fill,
           {
-            width: fillWidth,
+            width: `${fillPct}%` as unknown as number,
             backgroundColor: isLow ? LOW_RED : PROGRESS_BLUE,
           },
         ]}
@@ -102,14 +99,14 @@ const styles = StyleSheet.create({
     gap: 6,
   },
   meterPill: {
-    minWidth: METER_MIN_WIDTH,
+    minWidth: PILL_MIN_WIDTH,
   },
   tokenPill: {
-    minWidth: TOKEN_MIN_WIDTH,
+    minWidth: PILL_MIN_WIDTH,
   },
   fill: {
     position: 'absolute',
-    left: -EDGE_EXTENSION,
+    left: 0,
     top: 0,
     bottom: 0,
     opacity: 0.75,
