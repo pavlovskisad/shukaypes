@@ -9,19 +9,20 @@ function TokenMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => v
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -13, y: -13 })}
+      getPixelPositionOffset={() => ({ x: -8, y: -8 })}
     >
-      {/* No glow, no animation — tokens are static collectibles, low
-          paint cost so the map scrolls smoothly. */}
+      {/* Small footprint — literal tiny pawprints the walker picks up.
+          40% smaller than before so a cluster of them reads as a trail
+          rather than a grid of emoji badges. */}
       <div
         role="button"
         tabIndex={0}
         onClick={onTap}
         style={{
-          width: 26,
-          height: 26,
-          fontSize: 20,
-          lineHeight: '26px',
+          width: 16,
+          height: 16,
+          fontSize: 13,
+          lineHeight: '16px',
           textAlign: 'center',
           cursor: 'pointer',
           userSelect: 'none',
