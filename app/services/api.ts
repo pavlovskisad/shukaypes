@@ -97,4 +97,10 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ lat: pos?.lat, lng: pos?.lng }),
     }),
+
+  reportSighting: (dogId: string, pos: LatLng, note?: string) =>
+    req<{ ok: true; id: string; trusted: boolean; distM: number }>('/sightings', {
+      method: 'POST',
+      body: JSON.stringify({ dogId, lat: pos.lat, lng: pos.lng, note }),
+    }),
 };
