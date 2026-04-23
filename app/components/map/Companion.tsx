@@ -133,13 +133,13 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -85, y: -85 })}
+      getPixelPositionOffset={() => ({ x: -55, y: -55 })}
     >
       <div
         style={{
           position: 'relative',
-          width: 170,
-          height: 170,
+          width: 110,
+          height: 110,
         }}
       >
         {/* Companion body — just the nose glyph sitting on a big intense

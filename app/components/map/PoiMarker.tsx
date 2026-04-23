@@ -42,14 +42,19 @@ function PoiMarkerImpl({ position, emoji, name, selected, onTap }: PoiMarkerProp
             width: 36,
             height: 36,
             borderRadius: '50%',
-            background: '#ffffff',
+            // More translucent than the pet pins so spots read as ambient,
+            // not as alerts. White-frosted, yellow halo for a warm "places
+            // to visit" feel.
+            background: 'rgba(255,255,255,0.6)',
+            backdropFilter: 'blur(8px) saturate(140%)',
+            WebkitBackdropFilter: 'blur(8px) saturate(140%)',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: 18,
             boxShadow: selected
-              ? '0 0 22px rgba(100,160,255,0.6), 0 3px 12px rgba(0,0,0,0.15)'
-              : '0 0 14px rgba(100,160,255,0.3), 0 3px 10px rgba(0,0,0,0.12)',
+              ? '0 0 22px rgba(255,200,50,0.75), 0 4px 14px rgba(0,0,0,0.1)'
+              : '0 0 16px rgba(255,200,50,0.45), 0 3px 10px rgba(0,0,0,0.08)',
           }}
         >
           {emoji}
