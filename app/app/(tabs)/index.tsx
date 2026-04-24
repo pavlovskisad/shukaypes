@@ -4,6 +4,7 @@ import { View, Image, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from '../../components/map';
 import { StatusBar } from '../../components/ui/StatusBar';
+import { QuestPill } from '../../components/ui/QuestPill';
 import { useGameStore } from '../../stores/gameStore';
 import logoSquare from '../../assets/logo-square.png';
 
@@ -32,6 +33,11 @@ export default function MapScreen() {
           />
           <StatusBar />
         </View>
+        {/* Active-quest banner centered under the top row. Renders
+            nothing when no quest is live so it doesn't steal space. */}
+        <View style={styles.questRow} pointerEvents="box-none">
+          <QuestPill />
+        </View>
       </SafeAreaView>
     </View>
   );
@@ -59,5 +65,11 @@ const styles = StyleSheet.create({
   logo: {
     width: HUD_ICON_SIZE,
     height: HUD_ICON_SIZE,
+  },
+  questRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    marginTop: 8,
+    paddingHorizontal: 12,
   },
 });

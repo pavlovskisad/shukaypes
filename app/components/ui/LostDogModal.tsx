@@ -5,6 +5,11 @@ interface LostDogModalProps {
   dog: NearbyLostDog | null;
   onClose: () => void;
   onReportSighting?: (dog: NearbyLostDog) => void;
+  onStartSearch?: (dog: NearbyLostDog) => void;
+  // When this dog already has an active detective quest, swap the
+  // "start search" button for a muted "searching…" affordance that
+  // leads to the abandon-via-pill flow instead of double-starting.
+  searchActive?: boolean;
 }
 
 function relativeTime(iso: string): string {
@@ -20,7 +25,13 @@ function relativeTime(iso: string): string {
 
 // Slide-up dog detail sheet. Demo lines 105-113. First iteration — photo
 // pop-ups and "I've seen this dog" reporting land in a later slice.
-export function LostDogModal({ dog, onClose, onReportSighting }: LostDogModalProps) {
+export function LostDogModal({
+  dog,
+  onClose,
+  onReportSighting,
+  onStartSearch,
+  searchActive,
+}: LostDogModalProps) {
   if (!dog) return null;
 
   const urgent = dog.urgency === 'urgent';
@@ -170,6 +181,28 @@ export function LostDogModal({ dog, onClose, onReportSighting }: LostDogModalPro
           }}
         >
           👀 i've seen them
+        </button>
+
+        <button
+          onClick={() => onStartSearch?.(dog)}
+          disabled={searchActive}
+          style={{
+            width: '100%',
+            background: searchActive ? '#e8e8f2' : 'rgba(0,0,255,0.06)',
+            color: searchActive ? '#777' : 'rgba(0,0,255,0.85)',
+            border: searchActive
+              ? '1px solid #d4d4dc'
+              : '1px solid rgba(0,0,255,0.3)',
+            borderRadius: 16,
+            padding: '12px 18px',
+            marginTop: 10,
+            fontFamily: SYSTEM_FONT,
+            fontSize: 17,
+            fontWeight: 700,
+            cursor: searchActive ? 'default' : 'pointer',
+          }}
+        >
+          {searchActive ? '🔍 search in progress…' : '🔍 start search'}
         </button>
 
         <style>{`

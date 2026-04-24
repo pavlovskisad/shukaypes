@@ -27,6 +27,11 @@ interface AbandonBody {
 // One active quest per user at a time. Starting a new one flips any
 // existing active quest to 'abandoned' first.
 
+// Response matches the shared Quest type: currentWaypoint (not
+// currentIndex), waypoints carry clue as string|undefined (shared uses
+// optional). We also surface `status` even though the shared type
+// doesn't — harmless extra field, useful for the client to branch on
+// active vs completed.
 function rowToQuest(r: {
   id: string;
   userId: string;
@@ -45,8 +50,12 @@ function rowToQuest(r: {
     dogId: r.dogId ?? undefined,
     type: r.type,
     status: r.status,
-    waypoints: r.waypoints,
-    currentIndex: r.currentIndex,
+    waypoints: r.waypoints.map((w) => ({
+      position: w.position,
+      clue: w.clue ?? undefined,
+      reached: w.reached,
+    })),
+    currentWaypoint: r.currentIndex,
     rewardPoints: r.rewardPoints,
     startedAt: r.startedAt.toISOString(),
     completedAt: r.completedAt?.toISOString(),

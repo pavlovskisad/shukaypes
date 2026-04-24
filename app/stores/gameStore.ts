@@ -117,6 +117,13 @@ interface GameState {
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean } | void>;
+  // Detective quests. Start flips any existing active quest to abandoned
+  // server-side. advance checks proximity to the current waypoint and
+  // progresses (or completes). abandon closes the current one.
+  syncActiveQuest: () => Promise<void>;
+  startQuest: (dogId: string) => Promise<Quest | null>;
+  advanceQuestIfNear: (pos: LatLng) => Promise<{ advanced: boolean; completed: boolean }>;
+  abandonActiveQuest: () => Promise<void>;
   tickDailyTask: (key: keyof Omit<DailyTasks, 'date'>, amount?: number) => void;
   refreshDailyTasksIfStale: () => void;
 }
@@ -217,6 +224,77 @@ export const useGameStore = create<GameState>((set, get) => ({
   setMenuOpen: (menuOpen) => set({ menuOpen }),
   setScreen: (currentScreen) => set({ currentScreen }),
   setActiveQuest: (activeQuest) => set({ activeQuest }),
+
+  syncActiveQuest: async () => {
+    try {
+      const { quest } = await api.getActiveQuest();
+      // Server includes a `status` field alongside the shared Quest
+      // shape. We only keep a quest in local state while it's active;
+      // completed/abandoned ones live only as historical records.
+      set({ activeQuest: quest && quest.status === 'active' ? quest : null });
+    } catch (err) {
+      set({ lastSyncError: (err as Error).message });
+    }
+  },
+
+  startQuest: async (dogId) => {
+    const { userPosition } = get();
+    if (!userPosition) return null;
+    try {
+      const { quest } = await api.startQuest(dogId, userPosition);
+      set({ activeQuest: quest.status === 'active' ? quest : null });
+      return quest;
+    } catch (err) {
+      set({ lastSyncError: (err as Error).message });
+      return null;
+    }
+  },
+
+  advanceQuestIfNear: async (pos) => {
+    const { activeQuest } = get();
+    if (!activeQuest) return { advanced: false, completed: false };
+    // Proximity check is re-done server-side with a 60m anti-cheat
+    // radius; we gate the request client-side with a slightly tighter
+    // 50m so a 401-esque rapid chatter around the waypoint doesn't
+    // spam /advance.
+    const waypoint = activeQuest.waypoints[activeQuest.currentWaypoint];
+    if (!waypoint) return { advanced: false, completed: false };
+    const dLat = pos.lat - waypoint.position.lat;
+    const dLng = pos.lng - waypoint.position.lng;
+    // Quick degrees→meters approximation at Kyiv lat (fine for gating).
+    const dM =
+      Math.sqrt(
+        dLat * dLat * 111_000 * 111_000 +
+          dLng * dLng * 71_000 * 71_000,
+      );
+    if (dM > 50) return { advanced: false, completed: false };
+    try {
+      const { quest, completed } = await api.advanceQuest(activeQuest.id, pos);
+      set({
+        activeQuest: !completed && quest.status === 'active' ? quest : null,
+      });
+      return { advanced: true, completed };
+    } catch (err) {
+      // 403 (too far) is expected when GPS jitters — don't noise the
+      // error bar for that.
+      const msg = (err as Error).message;
+      if (!msg.includes('403')) set({ lastSyncError: msg });
+      return { advanced: false, completed: false };
+    }
+  },
+
+  abandonActiveQuest: async () => {
+    const { activeQuest } = get();
+    if (!activeQuest) return;
+    set({ activeQuest: null });
+    try {
+      await api.abandonQuest(activeQuest.id);
+    } catch (err) {
+      // Best-effort — we already dropped it locally, no point re-injecting
+      // an abandoned quest because of a transient server blip.
+      set({ lastSyncError: (err as Error).message });
+    }
+  },
 
   syncState: async () => {
     set({ syncing: true });

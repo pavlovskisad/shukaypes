@@ -1,4 +1,4 @@
-import type { ChatMessage, FoodItem, LatLng, Token, UrgencyLevel } from '@shukajpes/shared';
+import type { ChatMessage, FoodItem, LatLng, Quest, Token, UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../constants/env';
 import { getDeviceId } from './deviceId';
 
@@ -112,5 +112,29 @@ export const api = {
     req<{ ok: true; id: string; trusted: boolean; distM: number }>('/sightings', {
       method: 'POST',
       body: JSON.stringify({ dogId, lat: pos.lat, lng: pos.lng, note }),
+    }),
+
+  // Detective quest endpoints. The response quest shape matches shared
+  // Quest (currentWaypoint, waypoints as Waypoint[]). Server also
+  // returns a `status` field we read to branch active/completed.
+  startQuest: (dogId: string, pos: LatLng) =>
+    req<{ quest: Quest & { status: string } }>('/quests/start', {
+      method: 'POST',
+      body: JSON.stringify({ dogId, lat: pos.lat, lng: pos.lng }),
+    }),
+
+  getActiveQuest: () =>
+    req<{ quest: (Quest & { status: string }) | null }>('/quests/active'),
+
+  advanceQuest: (questId: string, pos: LatLng) =>
+    req<{ quest: Quest & { status: string }; completed: boolean }>('/quests/advance', {
+      method: 'POST',
+      body: JSON.stringify({ questId, lat: pos.lat, lng: pos.lng }),
+    }),
+
+  abandonQuest: (questId: string) =>
+    req<{ ok: true }>('/quests/abandon', {
+      method: 'POST',
+      body: JSON.stringify({ questId }),
     }),
 };
