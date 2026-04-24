@@ -7,6 +7,11 @@ import {
   generateDetectiveWaypoints,
   WAYPOINT_REACH_RADIUS_M,
 } from '../services/quest.js';
+import {
+  narrateQuestStart,
+  narrateWaypointReached,
+  narrateQuestComplete,
+} from '../services/questNarration.js';
 
 interface StartBody {
   dogId: string;
@@ -73,6 +78,9 @@ const plugin: FastifyPluginAsync = async (app) => {
     const [dog] = await db
       .select({
         id: schema.lostDogs.id,
+        name: schema.lostDogs.name,
+        species: schema.lostDogs.species,
+        breed: schema.lostDogs.breed,
         lat: schema.lostDogs.lastSeenLat,
         lng: schema.lostDogs.lastSeenLng,
         zoneRadiusM: schema.lostDogs.searchZoneRadiusM,
@@ -119,7 +127,12 @@ const plugin: FastifyPluginAsync = async (app) => {
       })
       .returning();
 
-    return { quest: rowToQuest(inserted!) };
+    const narration = await narrateQuestStart(
+      { name: dog.name, species: dog.species, breed: dog.breed },
+      waypoints.length,
+    );
+
+    return { quest: rowToQuest(inserted!), narration };
   });
 
   app.get('/quests/active', async (req) => {
@@ -196,7 +209,28 @@ const plugin: FastifyPluginAsync = async (app) => {
       return res;
     });
 
-    return { quest: rowToQuest(updated!), completed: done };
+    // Pull the pet for narration context. Cheap lookup (1 row) and only
+    // happens on waypoint arrivals, not the 100ms poll — client gates
+    // /advance behind a 50m pre-check.
+    let narration: string | null = null;
+    if (row.dogId) {
+      const [dog] = await db
+        .select({
+          name: schema.lostDogs.name,
+          species: schema.lostDogs.species,
+          breed: schema.lostDogs.breed,
+        })
+        .from(schema.lostDogs)
+        .where(eq(schema.lostDogs.id, row.dogId))
+        .limit(1);
+      if (dog) {
+        narration = done
+          ? await narrateQuestComplete(dog, nextWaypoints.length)
+          : await narrateWaypointReached(dog, row.currentIndex, nextWaypoints.length);
+      }
+    }
+
+    return { quest: rowToQuest(updated!), completed: done, narration };
   });
 
   app.post<{ Body: AbandonBody }>('/quests/abandon', async (req, reply) => {

@@ -122,11 +122,11 @@ export default function MapViewWeb() {
     const id = setInterval(async () => {
       const pos = useGameStore.getState().userPosition;
       if (!pos) return;
-      const { advanced, completed } = await advanceQuestIfNear(pos);
+      const { advanced, completed, narration } = await advanceQuestIfNear(pos);
       if (completed) {
-        showBubble(`found something! quest complete 🎉`, 4000);
+        showBubble(narration ?? `found something! quest complete 🎉`, 4000);
       } else if (advanced) {
-        showBubble(`paw print here — let's keep going 🐾`, 3000);
+        showBubble(narration ?? `paw print here — let's keep going 🐾`, 3000);
       }
     }, balance.roamTick);
     return () => clearInterval(id);
@@ -452,10 +452,13 @@ export default function MapViewWeb() {
         }}
         onStartSearch={async (d) => {
           setSelectedDog(null);
-          const quest = await useGameStore.getState().startQuest(d.id);
+          const { quest, narration } = await useGameStore
+            .getState()
+            .startQuest(d.id);
           if (quest) {
             showBubble(
-              `on it — ${quest.waypoints.length} spots to check for ${d.name} 🔍`,
+              narration ??
+                `on it — ${quest.waypoints.length} spots to check for ${d.name} 🔍`,
               4000,
             );
           } else {
