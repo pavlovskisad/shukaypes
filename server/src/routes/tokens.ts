@@ -18,12 +18,11 @@ interface CollectBody {
 }
 
 // Distance beyond which an uncollected token is not returned to the
-// client, even if it still belongs to this user. Sized to cover the
-// spawn pools (user area + per-pet zones scanned up to
-// dogAreaScanRadiusM + zone radius). Without this, /tokens/nearby
-// returns every live token accumulated across the whole city, which
-// piles up on the map at session start until age-out trims it down.
-const TOKEN_VIEW_RADIUS_M = 5000;
+// client, even if it still belongs to this user. Sized to the spawn
+// pools' current reach: userAreaRadiusM (800m) + dogAreaScanRadiusM
+// (1500m) + zone radius (~500m) ≈ 2km with buffer. Keeps the client
+// from rendering a citywide pile of paws accumulated across sessions.
+const TOKEN_VIEW_RADIUS_M = 2000;
 
 const plugin: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: NearbyQuery }>('/tokens/nearby', async (req, reply) => {

@@ -13,7 +13,13 @@ export const balance = {
   tokensInUserArea: 10,
   userAreaRadiusM: 800,
   tokensPerDogArea: 18,
-  dogAreaScanRadiusM: 4000,
+  // Walking-radius scoping: 20-30min reach rather than 1-2hr. Previously
+  // seeded paws in zones up to 4km away; combined with lots of active
+  // pets that'd load 50+ pins the walker will never reach. 1500m keeps
+  // the cluster "next neighborhood over" — the natural exploration
+  // range — while the per-pet pool is still visible when you wander
+  // toward a zone.
+  dogAreaScanRadiusM: 1500,
   // Uncollected tokens older than this get soft-collected on the next
   // sync. Kept short so the per-pool top-up (both user-area and
   // per-pet zones) re-seeds positions every few minutes, and legacy

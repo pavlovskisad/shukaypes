@@ -109,10 +109,9 @@ export async function fetchNearbySpots(
 
 // Nearby parks for the bones pool. Separate from fetchNearbySpots because
 // bones live purely on park coords — we don't care about names or icons,
-// just positions the server can seed food at. Radius is wider than the
-// Spots tab default because parks are rarer than cafes and bones should
-// feel like "treats the companion stumbles on" across the neighborhood.
-const PARK_RADIUS_M = 2000;
+// just positions the server can seed food at. 1200m covers the ~15min
+// walking neighborhood; parks farther than that are next-door's problem.
+const PARK_RADIUS_M = 1200;
 
 export async function fetchNearbyParks(center: LatLng): Promise<LatLng[]> {
   if (typeof google === 'undefined' || !google.maps?.places) return [];
