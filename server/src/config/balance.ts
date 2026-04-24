@@ -22,6 +22,10 @@ export const balance = {
   // they move.
   tokenCullRadiusM: 1200,
   tokenCount: 60,
+  // Radial density bias around the walker. 0 = uniform across the box,
+  // 0.5 = areal density ∝ 1/r (visibly denser near the walker, sparser
+  // at the edge), 1 = strong nest. See scatter() in utils/geo.ts.
+  tokenCenterBias: 0.5,
   foodCount: 8,
   // Anti-cheat: max distance between client-reported collect position and target.
   collectMaxDistanceM: 80,
