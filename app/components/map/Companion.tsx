@@ -172,14 +172,15 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
             width: 66,
             height: 66,
             borderRadius: '50%',
-            // Barely-there tint — the shape comes from the backdrop blur
-            // + saturate, not the bg. 0.2 white read as a solid disk;
-            // 0.05 lets what's underneath (map, paws) ghost through and
-            // only the lensing sells the bubble.
-            background: 'rgba(255,255,255,0.05)',
-            backdropFilter: 'blur(14px) saturate(160%)',
-            WebkitBackdropFilter: 'blur(14px) saturate(160%)',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+            // Near-transparent glass, light blur. Previous
+            // blur(14px) saturate(160%) at 5% white still read as a
+            // visible disc against the map; dropping saturate and
+            // halving blur to 7px + 3% white lets the paws behind come
+            // through almost sharp, only the edges soften.
+            background: 'rgba(255,255,255,0.03)',
+            backdropFilter: 'blur(7px)',
+            WebkitBackdropFilter: 'blur(7px)',
+            boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
             pointerEvents: 'none',
           }}
         />
