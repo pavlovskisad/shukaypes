@@ -16,6 +16,10 @@ import { db, schema } from '../../db/index.js';
 import { parseDogPost } from '../parser.js';
 import { upsertLostDog } from '../upsert.js';
 import { emptySummary, type Source, type SourceRunSummary } from '../source.js';
+import {
+  looksLikeLostPet,
+  looksLikeRehoming,
+} from '../keywords.js';
 
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36';
 const SOURCE = 'olx';
@@ -32,21 +36,11 @@ const LISTING_URLS = [
   'https://www.olx.ua/uk/list/q-знайшли-кота/?search%5Bcity_id%5D=8',
 ];
 
-// Pre-filter ad titles. We only want posts that describe a pet (dog or cat)
-// that went missing or a stray that was found — not adoption / rehoming
-// listings. OLX's byuro-nahodok category mixes all three freely, so we
-// have to gate hard.
-//
-// A title must have BOTH a pet word AND a lost/found word, AND must not
-// contain any unambiguous rehoming phrase. The REHOMING check runs first
-// and wins even when the title also mentions urgency (e.g. "ТЕРМІНОВО
-// шукає дім" is still rehoming — parser few-shot backs this up).
-//
-// Misses from this filter are caught by Haiku's `urgency: "rehoming"`
-// classification after the full body is parsed.
-const PET_KEYWORDS = /(собак|пес|пёс|щен|цуценя|dog|puppy|hound|шпіц|хаск|ретрівер|бульдог|лабрад|пудель|такса|вівчарка|джек-рассел|джек рассел|чихуахуа|корг|шарпей|шиба|боксер|кіт|кот|кота|котик|кошен|кошеня|кошеня|кошеня|cat|kitten|tabby|британ|мейн-кун|мейнкун|перс|сфінкс|сиам|сіам|рагдол|бенгал)/i;
-const LOST_KEYWORDS = /(пропа|лост|загуб|зник|знайд|найден|нашли|знайшли|сбеж|втеч|lost|found)/i;
-const REHOMING_KEYWORDS = /(шука[єют][^.!?\n]{0,20}дім|шука[єют][^.!?\n]{0,20}домівк|шука[єют][^.!?\n]{0,20}родин|шука[єют][^.!?\n]{0,20}госпо|в\s+добрі\s+руки|в\s+добрые\s+руки|в\s+хорошие\s+руки|віддам|віддаю|віддає|віддаєм|роздам|роздаю|роздає|роздаєм|отдам|отдаю|раздам|раздаю|в\s+дар|пристр[оау]|ищет\s+дом|ищу\s+дом|безкоштовно|бесплатно)/i;
+// Title-level filter + rehoming guard live in pipeline/keywords so
+// every source (Telegram next) runs the same rules. Rehoming wins over
+// lost even when urgency words are present — e.g. "ТЕРМІНОВО шукає дім"
+// is rehoming, not lost. Misses here get caught by the parser's own
+// urgency:'rehoming' classification after the full body goes through.
 
 interface Card {
   url: string;
@@ -156,10 +150,9 @@ export class OlxSource implements Source {
         continue;
       }
 
-      const looksLikeRehoming = REHOMING_KEYWORDS.test(card.title);
-      const looksLikeLostPet =
-        PET_KEYWORDS.test(card.title) && LOST_KEYWORDS.test(card.title);
-      if (looksLikeRehoming || !looksLikeLostPet) {
+      const rehoming = looksLikeRehoming(card.title);
+      const lost = looksLikeLostPet(card.title);
+      if (rehoming || !lost) {
         await db
           .insert(schema.scrapeLog)
           .values({
@@ -167,7 +160,7 @@ export class OlxSource implements Source {
             source: SOURCE,
             title: card.title,
             ingestAction: 'skipped',
-            skipReason: looksLikeRehoming ? 'rehoming' : 'title-filter',
+            skipReason: rehoming ? 'rehoming' : 'title-filter',
           })
           .onConflictDoNothing({ target: schema.scrapeLog.url });
         summary.skipped++;
