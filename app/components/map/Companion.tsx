@@ -169,13 +169,17 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
           aria-hidden
           style={{
             position: 'absolute',
-            width: 82,
-            height: 82,
+            width: 66,
+            height: 66,
             borderRadius: '50%',
-            background: 'rgba(255,255,255,0.2)',
+            // Barely-there tint — the shape comes from the backdrop blur
+            // + saturate, not the bg. 0.2 white read as a solid disk;
+            // 0.05 lets what's underneath (map, paws) ghost through and
+            // only the lensing sells the bubble.
+            background: 'rgba(255,255,255,0.05)',
             backdropFilter: 'blur(14px) saturate(160%)',
             WebkitBackdropFilter: 'blur(14px) saturate(160%)',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
             pointerEvents: 'none',
           }}
         />
