@@ -171,6 +171,21 @@ export default function MapViewWeb() {
       maxZoom: balance.mapZoomMax,
       gestureHandling: 'greedy' as const,
       clickableIcons: false,
+      // Hard-box the viewport around central Kyiv so panning + zoom
+      // don't spill into empty map tiles + wasted /tokens/nearby,
+      // /dogs/nearby queries. ±0.045° lat / ±0.07° lng ≈ a 10×10km
+      // square centered on the Maidan-ish area — covers Podil,
+      // Pechersk, Lukianivka, Solomianka, Vynohradar. Outside the
+      // pilot geography we'll swap this for a per-user anchor.
+      restriction: {
+        latLngBounds: {
+          north: 50.4951,
+          south: 50.4051,
+          east: 30.5934,
+          west: 30.4534,
+        },
+        strictBounds: true,
+      },
     }),
     [],
   );
@@ -483,6 +498,33 @@ export default function MapViewWeb() {
         dog={lostDogs.find((d) => d.id === selectedDogId) ?? null}
         onClose={() => setSelectedDog(null)}
         searchActive={!!activeQuest && activeQuest.dogId === selectedDogId}
+        onPrev={selectedDogId ? (() => {
+          // Cycle by distance from user — pressing ‹ walks through the
+          // nearby list in order so the closest pet comes first, the
+          // farthest last. Wraps at the ends.
+          if (!userPos || !selectedDogId) return;
+          const sorted = [...lostDogs].sort(
+            (a, b) =>
+              distanceMeters(userPos, a.lastSeen.position) -
+              distanceMeters(userPos, b.lastSeen.position),
+          );
+          const idx = sorted.findIndex((d) => d.id === selectedDogId);
+          if (idx < 0) return;
+          const prev = sorted[(idx - 1 + sorted.length) % sorted.length]!;
+          setSelectedDog(prev.id);
+        }) : undefined}
+        onNext={selectedDogId ? (() => {
+          if (!userPos || !selectedDogId) return;
+          const sorted = [...lostDogs].sort(
+            (a, b) =>
+              distanceMeters(userPos, a.lastSeen.position) -
+              distanceMeters(userPos, b.lastSeen.position),
+          );
+          const idx = sorted.findIndex((d) => d.id === selectedDogId);
+          if (idx < 0) return;
+          const next = sorted[(idx + 1) % sorted.length]!;
+          setSelectedDog(next.id);
+        }) : undefined}
         onReportSighting={async (d) => {
           setSelectedDog(null);
           const res = await useGameStore.getState().reportSighting(d.id);

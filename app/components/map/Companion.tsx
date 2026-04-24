@@ -136,27 +136,32 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -60, y: -60 })}
+      getPixelPositionOffset={() => ({ x: -70, y: -70 })}
     >
-      {/* Outer container is 120×120 — the entire box is the tap target
+      {/* Outer container is 140×140 — the entire box is the tap target
           even though the visible nose glyph is only 55×55 centered.
-          Previously the tappable area matched the small visual glyph,
-          which — combined with the companion's constant motion plus the
-          glow filter visually implying a bigger hit zone — meant a lot
-          of map-zoomed-out taps missed entirely. */}
+          At map-zoomed-out the companion sits on top of the UserMarker's
+          breathing ring; a tighter 120px hit box was catching map-pan
+          gestures on the edges. 140px + touchAction:manipulation + stop
+          propagation on pointerDown make the tap land reliably without
+          Google Maps' 'greedy' gesture handler hijacking it as a pan. */}
       <div
         role="button"
         tabIndex={0}
         onClick={handleTap}
+        onPointerDown={(e) => e.stopPropagation()}
+        onTouchStart={(e) => e.stopPropagation()}
         style={{
           position: 'relative',
-          width: 120,
-          height: 120,
+          width: 140,
+          height: 140,
           cursor: 'pointer',
           userSelect: 'none',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
+          touchAction: 'manipulation',
+          zIndex: 2,
         }}
       >
         {/* Frosted-glass halo behind the nose. Same recipe the POIs used

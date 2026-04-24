@@ -1,3 +1,4 @@
+import { useRef } from 'react';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
@@ -10,7 +11,17 @@ interface LostDogModalProps {
   // "start search" button for a muted "searching…" affordance that
   // leads to the abandon-via-pill flow instead of double-starting.
   searchActive?: boolean;
+  // Optional prev/next cycling between the nearby pets. When wired up,
+  // the modal shows ‹ › chevrons and responds to horizontal swipe
+  // gestures on the sheet. Either both or neither.
+  onPrev?: () => void;
+  onNext?: () => void;
 }
+
+// Horizontal swipe threshold (px). Matches iOS's "decisive swipe"
+// feel — small enough to trigger with a thumb flick, big enough that
+// vertical scroll gestures on the sheet don't trip it.
+const SWIPE_THRESHOLD_PX = 60;
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -31,8 +42,25 @@ export function LostDogModal({
   onReportSighting,
   onStartSearch,
   searchActive,
+  onPrev,
+  onNext,
 }: LostDogModalProps) {
+  const touchStartXRef = useRef<number | null>(null);
   if (!dog) return null;
+
+  const handleTouchStart = (e: React.TouchEvent) => {
+    touchStartXRef.current = e.touches[0]?.clientX ?? null;
+  };
+  const handleTouchEnd = (e: React.TouchEvent) => {
+    const start = touchStartXRef.current;
+    touchStartXRef.current = null;
+    if (start == null) return;
+    const end = e.changedTouches[0]?.clientX ?? start;
+    const delta = end - start;
+    if (Math.abs(delta) < SWIPE_THRESHOLD_PX) return;
+    if (delta > 0) onPrev?.();
+    else onNext?.();
+  };
 
   const urgent = dog.urgency === 'urgent';
   const badgeText = urgent ? '🚨 URGENT' : '⚠️ searching';
@@ -57,16 +85,74 @@ export function LostDogModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         style={{
           background: '#ffffff',
           borderRadius: 24,
           padding: '22px 20px 22px',
           width: '100%',
           maxWidth: 430,
+          position: 'relative',
           animation: 'dog-modal-up 0.3s cubic-bezier(0.4,0,0.2,1)',
           boxShadow: '0 -12px 40px rgba(0,0,0,0.2)',
         }}
       >
+        {/* Prev/next chevrons — only rendered when the parent supplies
+            cycle handlers. Positioned absolute so they sit in the
+            sheet's side margins without reflowing the card content. */}
+        {onPrev ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onPrev();
+            }}
+            aria-label="previous pet"
+            style={{
+              position: 'absolute',
+              left: 6,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              border: 'none',
+              background: 'rgba(0,0,0,0.05)',
+              color: '#444',
+              fontSize: 22,
+              lineHeight: 1,
+              cursor: 'pointer',
+            }}
+          >
+            ‹
+          </button>
+        ) : null}
+        {onNext ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              onNext();
+            }}
+            aria-label="next pet"
+            style={{
+              position: 'absolute',
+              right: 6,
+              top: '50%',
+              transform: 'translateY(-50%)',
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              border: 'none',
+              background: 'rgba(0,0,0,0.05)',
+              color: '#444',
+              fontSize: 22,
+              lineHeight: 1,
+              cursor: 'pointer',
+            }}
+          >
+            ›
+          </button>
+        ) : null}
         <div
           style={{
             display: 'flex',
