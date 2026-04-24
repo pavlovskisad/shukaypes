@@ -80,6 +80,14 @@ interface GameState {
   menuOpen: boolean;
   currentScreen: 'map' | 'tasks' | 'chat' | 'spots' | 'profile';
   tokens: Token[];
+  // Ids we've optimistically collected but whose server commit may still
+  // be in flight (or may have already landed but the next /tokens/nearby
+  // poll fired before the commit was visible). We filter these out of
+  // sync responses and short-circuit repeat collect() calls so the
+  // auto-collect loop + 15s poll can't fight each other — without this,
+  // the token blinks back on the map and the counter goes +1/-1 every
+  // time the poll catches the race.
+  recentlyCollectedIds: Set<string>;
   foodItems: FoodItem[];
   lostDogs: NearbyLostDog[];
   selectedDogId: string | null;
@@ -121,6 +129,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   menuOpen: false,
   currentScreen: 'map',
   tokens: [],
+  recentlyCollectedIds: new Set<string>(),
   foodItems: [],
   lostDogs: [],
   selectedDogId: null,
@@ -140,30 +149,47 @@ export const useGameStore = create<GameState>((set, get) => ({
   setHomePosition: (pos) => set({ homePosition: pos }),
 
   collectToken: async (id) => {
-    const { userPosition, tokens } = get();
+    const { userPosition, tokens, recentlyCollectedIds } = get();
+    // Short-circuit the moment we've started collecting this id — if the
+    // 15s sync races ahead and brings the token back as uncollected, the
+    // auto-collect loop would otherwise re-fire and produce +1/-1 thrash.
+    if (recentlyCollectedIds.has(id)) return;
     const tok = tokens.find((t) => t.id === id);
     if (!tok || tok.collectedAt || !userPosition) return;
-    // Optimistic UI.
-    set((s) => ({
-      tokens: s.tokens.map((t) =>
-        t.id === id ? { ...t, collectedAt: new Date().toISOString() } : t,
-      ),
-      tokensCollected: s.tokensCollected + 1,
-      points: s.points + tok.value,
-    }));
+    // Optimistic UI + in-flight guard.
+    set((s) => {
+      const next = new Set(s.recentlyCollectedIds);
+      next.add(id);
+      return {
+        recentlyCollectedIds: next,
+        tokens: s.tokens.map((t) =>
+          t.id === id ? { ...t, collectedAt: new Date().toISOString() } : t,
+        ),
+        tokensCollected: s.tokensCollected + 1,
+        points: s.points + tok.value,
+      };
+    });
     try {
       await api.collectToken(id, userPosition);
       get().tickDailyTask('tokens');
-      await get().syncState();
+      // No syncState() here — it'd race with concurrent collects and let
+      // an older /state response clobber a newer counter. The 15s poll
+      // reconciles points/companion and syncState is monotonic for the
+      // counter anyway.
     } catch (err) {
-      set((s) => ({
-        tokens: s.tokens.map((t) =>
-          t.id === id ? { ...t, collectedAt: undefined } : t,
-        ),
-        tokensCollected: Math.max(0, s.tokensCollected - 1),
-        points: Math.max(0, s.points - tok.value),
-        lastSyncError: (err as Error).message,
-      }));
+      set((s) => {
+        const next = new Set(s.recentlyCollectedIds);
+        next.delete(id);
+        return {
+          recentlyCollectedIds: next,
+          tokens: s.tokens.map((t) =>
+            t.id === id ? { ...t, collectedAt: undefined } : t,
+          ),
+          tokensCollected: Math.max(0, s.tokensCollected - 1),
+          points: Math.max(0, s.points - tok.value),
+          lastSyncError: (err as Error).message,
+        };
+      });
     }
   },
 
@@ -192,15 +218,19 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ syncing: true });
     try {
       const s = await api.getState();
-      set({
+      set((prev) => ({
         points: s.user.points,
-        tokensCollected: s.user.totalTokens,
+        // Monotonic. A stale /state response (commit not yet visible, or
+        // arriving out of order after a later one) must not shrink the
+        // counter — the optimistic path only ever adds, so the local
+        // value is always a valid lower bound.
+        tokensCollected: Math.max(prev.tokensCollected, s.user.totalTokens),
         hunger: s.companion.hunger,
         happiness: s.companion.happiness,
         companionName: s.companion.name,
         syncing: false,
         lastSyncError: null,
-      });
+      }));
     } catch (err) {
       set({ syncing: false, lastSyncError: (err as Error).message });
     }
@@ -209,7 +239,14 @@ export const useGameStore = create<GameState>((set, get) => ({
   syncTokens: async (pos) => {
     try {
       const { tokens } = await api.getTokensNearby(pos);
-      set({ tokens });
+      const collected = get().recentlyCollectedIds;
+      // Drop anything we've already collected locally — otherwise a poll
+      // that races ahead of the server commit re-injects the token and
+      // the auto-collect loop picks it up a second time.
+      const filtered = collected.size
+        ? tokens.filter((t) => !collected.has(t.id))
+        : tokens;
+      set({ tokens: filtered });
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
     }
