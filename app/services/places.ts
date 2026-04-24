@@ -107,6 +107,30 @@ export async function fetchNearbySpots(
   return sorted;
 }
 
+// Nearby parks for the bones pool. Separate from fetchNearbySpots because
+// bones live purely on park coords — we don't care about names or icons,
+// just positions the server can seed food at. Radius is wider than the
+// Spots tab default because parks are rarer than cafes and bones should
+// feel like "treats the companion stumbles on" across the neighborhood.
+const PARK_RADIUS_M = 2000;
+
+export async function fetchNearbyParks(center: LatLng): Promise<LatLng[]> {
+  if (typeof google === 'undefined' || !google.maps?.places) return [];
+  const attrContainer = document.createElement('div');
+  const svc = new google.maps.places.PlacesService(attrContainer);
+  const results = await runSearch(svc, {
+    location: center as unknown as google.maps.LatLngLiteral,
+    radius: PARK_RADIUS_M,
+    type: 'park',
+  });
+  const out: LatLng[] = [];
+  for (const r of results) {
+    if (!r.geometry?.location) continue;
+    out.push({ lat: r.geometry.location.lat(), lng: r.geometry.location.lng() });
+  }
+  return out;
+}
+
 function haversineM(a: LatLng, b: LatLng): number {
   const R = 6371000;
   const toRad = (d: number) => (d * Math.PI) / 180;

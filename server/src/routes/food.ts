@@ -9,6 +9,22 @@ import { ensureFoodForUser } from '../services/spawn.js';
 interface NearbyQuery {
   lat: string;
   lng: string;
+  // Optional pipe-delimited park coords: "lat,lng|lat,lng|...". When
+  // present, ensureFoodForUser seeds bones at those positions instead
+  // of scattering uniformly.
+  parks?: string;
+}
+
+function parseParks(raw?: string): LatLng[] {
+  if (!raw) return [];
+  const out: LatLng[] = [];
+  for (const chunk of raw.split('|')) {
+    const [latStr, lngStr] = chunk.split(',');
+    const lat = Number(latStr);
+    const lng = Number(lngStr);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) out.push({ lat, lng });
+  }
+  return out;
 }
 
 interface FeedBody {
@@ -26,7 +42,8 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { error: 'invalid lat/lng' };
     }
 
-    await ensureFoodForUser(req.userId, { lat, lng });
+    const parks = parseParks(req.query.parks);
+    await ensureFoodForUser(req.userId, { lat, lng }, parks);
 
     const rows = await db
       .select({

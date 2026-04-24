@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import { balance } from '../constants/balance';
 import type { FoodItem, LatLng, Quest, Token } from '@shukajpes/shared';
 import { api, type NearbyLostDog } from '../services/api';
-import { fetchNearbySpots, type Spot } from '../services/places';
+import { fetchNearbySpots, fetchNearbyParks, type Spot } from '../services/places';
 
 // Daily tasks — client-side for pilot; promote to server when we add
 // server-auth'd quests. Each field is a monotonic counter for today;
@@ -89,6 +89,10 @@ interface GameState {
   // time the poll catches the race.
   recentlyCollectedIds: Set<string>;
   foodItems: FoodItem[];
+  // Nearby park coords fetched once via Google Places; server seeds
+  // bones at these positions. Cached across food syncs — parks don't
+  // move and we don't want a Places round-trip on every 15s tick.
+  parks: LatLng[];
   lostDogs: NearbyLostDog[];
   selectedDogId: string | null;
   spots: Spot[];
@@ -131,6 +135,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   tokens: [],
   recentlyCollectedIds: new Set<string>(),
   foodItems: [],
+  parks: [],
   lostDogs: [],
   selectedDogId: null,
   spots: [],
@@ -254,7 +259,19 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   syncFood: async (pos) => {
     try {
-      const { food } = await api.getFoodNearby(pos);
+      // Lazy-load parks on the first food sync — they're static, so
+      // once cached we keep reusing them. If Places hasn't loaded yet
+      // the fetch returns []; we just skip the parks arg, server
+      // falls back to uniform scatter, next sync tries again.
+      let parks = get().parks;
+      if (!parks.length) {
+        const fetched = await fetchNearbyParks(pos);
+        if (fetched.length) {
+          parks = fetched;
+          set({ parks });
+        }
+      }
+      const { food } = await api.getFoodNearby(pos, parks.length ? parks : undefined);
       set({ foodItems: food });
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
