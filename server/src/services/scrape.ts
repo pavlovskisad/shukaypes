@@ -9,6 +9,7 @@
 
 import type { FastifyBaseLogger } from 'fastify';
 import { OlxSource } from '../pipeline/sources/olx.js';
+import { TelegramSource } from '../pipeline/sources/telegram.js';
 import type { Source, SourceRunSummary } from '../pipeline/source.js';
 
 const INTERVAL_MS = 60 * 60 * 1000; // 1h
@@ -16,8 +17,11 @@ const INITIAL_DELAY_MIN_MS = 30_000;
 const INITIAL_DELAY_MAX_MS = 120_000;
 
 function sources(): Source[] {
-  // Only OLX today. Telegram/shelter sources slot in here next.
-  return [new OlxSource()];
+  // Telegram is env-gated: when TELEGRAM_CHANNELS is empty it's a
+  // cheap no-op (returns on first line of runOnce), so it's safe to
+  // register unconditionally. Shelter-registry sources slot in here
+  // next.
+  return [new OlxSource(), new TelegramSource()];
 }
 
 export async function runAllSources(log: Pick<FastifyBaseLogger, 'info' | 'warn'>): Promise<SourceRunSummary[]> {
