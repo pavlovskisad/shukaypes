@@ -133,6 +133,14 @@ interface GameState {
     completed: boolean;
     narration: string | null;
   }>;
+  // Tap-to-complete the current waypoint. Forces the server-side
+  // distance check off — useful for walking through the flow at your
+  // desk without simulating GPS.
+  forceAdvanceActiveWaypoint: () => Promise<{
+    advanced: boolean;
+    completed: boolean;
+    narration: string | null;
+  }>;
   abandonActiveQuest: () => Promise<void>;
   tickDailyTask: (key: keyof Omit<DailyTasks, 'date'>, amount?: number) => void;
   refreshDailyTasksIfStale: () => void;
@@ -286,6 +294,27 @@ export const useGameStore = create<GameState>((set, get) => ({
     } catch (err) {
       const msg = (err as Error).message;
       if (!msg.includes('403')) set({ lastSyncError: msg });
+      return { advanced: false, completed: false, narration: null };
+    }
+  },
+
+  forceAdvanceActiveWaypoint: async () => {
+    const { activeQuest, userPosition } = get();
+    if (!activeQuest || !userPosition) {
+      return { advanced: false, completed: false, narration: null };
+    }
+    try {
+      const { quest, completed, narration } = await api.advanceQuest(
+        activeQuest.id,
+        userPosition,
+        true,
+      );
+      set({
+        activeQuest: !completed && quest.status === 'active' ? quest : null,
+      });
+      return { advanced: true, completed, narration };
+    } catch (err) {
+      set({ lastSyncError: (err as Error).message });
       return { advanced: false, completed: false, narration: null };
     }
   },
