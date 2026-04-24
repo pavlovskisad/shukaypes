@@ -17,6 +17,14 @@ interface CollectBody {
   lng: number;
 }
 
+// Distance beyond which an uncollected token is not returned to the
+// client, even if it still belongs to this user. Sized to cover the
+// spawn pools (user area + per-pet zones scanned up to
+// dogAreaScanRadiusM + zone radius). Without this, /tokens/nearby
+// returns every live token accumulated across the whole city, which
+// piles up on the map at session start until age-out trims it down.
+const TOKEN_VIEW_RADIUS_M = 5000;
+
 const plugin: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: NearbyQuery }>('/tokens/nearby', async (req, reply) => {
     const lat = Number(req.query.lat);
@@ -39,7 +47,17 @@ const plugin: FastifyPluginAsync = async (app) => {
       })
       .from(schema.tokens)
       .where(
-        and(eq(schema.tokens.ownerId, req.userId), isNull(schema.tokens.collectedAt)),
+        and(
+          eq(schema.tokens.ownerId, req.userId),
+          isNull(schema.tokens.collectedAt),
+          sql`(
+            2 * 6371000 * ASIN(SQRT(
+              POWER(SIN(RADIANS(${lat} - ${schema.tokens.lat}) / 2), 2)
+              + COS(RADIANS(${lat})) * COS(RADIANS(${schema.tokens.lat}))
+              * POWER(SIN(RADIANS(${lng} - ${schema.tokens.lng}) / 2), 2)
+            ))
+          ) <= ${TOKEN_VIEW_RADIUS_M}`,
+        ),
       );
 
     return {

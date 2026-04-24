@@ -182,19 +182,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       // reconciles points/companion and syncState is monotonic for the
       // counter anyway.
     } catch (err) {
-      set((s) => {
-        const next = new Set(s.recentlyCollectedIds);
-        next.delete(id);
-        return {
-          recentlyCollectedIds: next,
-          tokens: s.tokens.map((t) =>
-            t.id === id ? { ...t, collectedAt: undefined } : t,
-          ),
-          tokensCollected: Math.max(0, s.tokensCollected - 1),
-          points: Math.max(0, s.points - tok.value),
-          lastSyncError: (err as Error).message,
-        };
-      });
+      // Revert ONLY counter + points. Keep the token flagged collected
+      // locally and keep its id in recentlyCollectedIds — otherwise the
+      // 100ms auto-collect loop sees it as uncollected again, refires
+      // collectToken, server rejects (already-collected / too-far /
+      // whatever), we roll back, loop refires … one failing token would
+      // spin +1/-1 forever. The server is the source of truth; if it
+      // already collected the token, our optimistic state was correct.
+      set((s) => ({
+        tokensCollected: Math.max(0, s.tokensCollected - 1),
+        points: Math.max(0, s.points - tok.value),
+        lastSyncError: (err as Error).message,
+      }));
     }
   },
 

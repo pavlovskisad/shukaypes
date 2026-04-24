@@ -32,7 +32,7 @@ export const balance = {
   // `parkScatterRadiusM` so bones read as "dropped at the park edge"
   // instead of stacked at the pin. foodSpreadDeg/foodCount are the
   // fallback shape when the client hasn't supplied parks yet.
-  bonesPerPark: 2,
+  bonesPerPark: 1,
   parkScatterRadiusM: 35,
   foodExpireMinutes: 10,
   foodSpreadDeg: 0.014,
