@@ -22,6 +22,8 @@ import { LostDogModal } from '../ui/LostDogModal';
 import { PoiMarker } from './PoiMarker';
 import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
+import { fetchWalkingRoute } from '../../services/directions';
+import type { LatLng } from '@shukajpes/shared';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
 const LIBRARIES: ('places')[] = ['places'];
@@ -73,6 +75,26 @@ export default function MapViewWeb() {
   const syncActiveQuest = useGameStore((s) => s.syncActiveQuest);
   const advanceQuestIfNear = useGameStore((s) => s.advanceQuestIfNear);
   const forceAdvanceActiveWaypoint = useGameStore((s) => s.forceAdvanceActiveWaypoint);
+
+  // Street-hugging walking route through the active quest's waypoints.
+  // Fetched once per quest (by id) so GPS ticks don't re-quota the
+  // Directions API. Renders as a thicker polyline when available;
+  // straight-line fallback otherwise (see below).
+  const [questRoute, setQuestRoute] = useState<LatLng[] | null>(null);
+  useEffect(() => {
+    setQuestRoute(null);
+    if (!activeQuest || !userPos) return;
+    let cancelled = false;
+    fetchWalkingRoute(
+      userPos,
+      activeQuest.waypoints.map((w) => w.position),
+    ).then((path) => {
+      if (!cancelled) setQuestRoute(path);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [activeQuest?.id]);
 
   const showBubble = useCallback((msg: string, duration?: number) => {
     setBubble(msg);
@@ -431,22 +453,37 @@ export default function MapViewWeb() {
 
         {activeQuest ? (
           <>
-            {/* Route polyline through all waypoints in order. Terminal
-                blue, low-opacity — reads as a faint trail, doesn't
-                fight the paw field. clickable=false so it can't steal
-                taps from overlays sitting on top. */}
-            <PolylineF
-              path={activeQuest.waypoints.map((w) => ({
-                lat: w.position.lat,
-                lng: w.position.lng,
-              }))}
-              options={{
-                strokeColor: '#0000ff',
-                strokeOpacity: 0.45,
-                strokeWeight: 2.5,
-                clickable: false,
-              }}
-            />
+            {/* Walking route through the waypoints. When the Directions
+                API answers, we draw the street-hugging path — a bit
+                heavier and clearly "walk here". Otherwise (Directions
+                still in flight / failed / quota), fall back to a thin
+                straight line between waypoints so the user always sees
+                *some* ordering hint. clickable=false on both so the
+                line never steals taps from overlays on top. */}
+            {questRoute && questRoute.length > 1 ? (
+              <PolylineF
+                path={questRoute}
+                options={{
+                  strokeColor: '#0000ff',
+                  strokeOpacity: 0.55,
+                  strokeWeight: 4,
+                  clickable: false,
+                }}
+              />
+            ) : (
+              <PolylineF
+                path={activeQuest.waypoints.map((w) => ({
+                  lat: w.position.lat,
+                  lng: w.position.lng,
+                }))}
+                options={{
+                  strokeColor: '#0000ff',
+                  strokeOpacity: 0.35,
+                  strokeWeight: 2,
+                  clickable: false,
+                }}
+              />
+            )}
             {activeQuest.waypoints.map((w, i) => {
               const state =
                 i < activeQuest.currentWaypoint
