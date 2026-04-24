@@ -12,7 +12,7 @@ export const balance = {
   // pickups than walking random streets.
   tokensInUserArea: 10,
   userAreaRadiusM: 800,
-  tokensPerDogArea: 7,
+  tokensPerDogArea: 18,
   dogAreaScanRadiusM: 4000,
   // Uncollected tokens older than this get soft-collected on the next
   // sync. Kept short so the per-pool top-up (both user-area and
