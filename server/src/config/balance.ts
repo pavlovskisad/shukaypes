@@ -15,10 +15,12 @@ export const balance = {
   tokensPerDogArea: 7,
   dogAreaScanRadiusM: 4000,
   // Uncollected tokens older than this get soft-collected on the next
-  // sync. Replaces the old distance-based cull — a paw seeded inside a
-  // dog's zone 3km away is legitimate even if the walker is elsewhere,
-  // so age expiry keeps the set bounded without wiping valid zones.
-  tokenExpireMinutes: 45,
+  // sync. Kept short so the per-pool top-up (both user-area and
+  // per-pet zones) re-seeds positions every few minutes, and legacy
+  // tokens from previous spawn strategies don't pile up with new
+  // pools stacking on top. The pools self-heal on every 15s poll, so
+  // shuffled positions just read as "fresh paws", not flicker.
+  tokenExpireMinutes: 5,
   // Radial density bias inside the user-area pool. 0 = uniform disk,
   // 0.5 = areal density ∝ 1/r (visibly denser near the walker), 1 =
   // strong nest. Dog-area pools spawn uniformly (bias=0) so zones
