@@ -20,6 +20,7 @@ import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
 import { PoiMarker } from './PoiMarker';
+import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
@@ -68,6 +69,9 @@ export default function MapViewWeb() {
   const syncFood = useGameStore((s) => s.syncFood);
   const syncLostDogs = useGameStore((s) => s.syncLostDogs);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
+  const activeQuest = useGameStore((s) => s.activeQuest);
+  const syncActiveQuest = useGameStore((s) => s.syncActiveQuest);
+  const advanceQuestIfNear = useGameStore((s) => s.advanceQuestIfNear);
 
   const showBubble = useCallback((msg: string, duration?: number) => {
     setBubble(msg);
@@ -100,6 +104,33 @@ export default function MapViewWeb() {
     }, TOKEN_REFRESH_MS);
     return () => clearInterval(id);
   }, [userPos?.lat, userPos?.lng, syncTokens, syncFood, syncLostDogs]);
+
+  // Pull the active quest (if any) on mount so a refreshed tab sees the
+  // quest the user started earlier. No polling — quest state only changes
+  // on explicit user actions (start / advance / abandon).
+  useEffect(() => {
+    syncActiveQuest();
+  }, [syncActiveQuest]);
+
+  // Auto-advance: when the user crosses into the current waypoint's
+  // radius, POST /quests/advance and (optionally) complete. Runs on
+  // the same 100ms tick as auto-collect so progression feels immediate.
+  // advanceQuestIfNear short-circuits outside 50m, so the API only
+  // fires on actual waypoint arrivals.
+  useEffect(() => {
+    if (!activeQuest) return;
+    const id = setInterval(async () => {
+      const pos = useGameStore.getState().userPosition;
+      if (!pos) return;
+      const { advanced, completed } = await advanceQuestIfNear(pos);
+      if (completed) {
+        showBubble(`found something! quest complete 🎉`, 4000);
+      } else if (advanced) {
+        showBubble(`paw print here — let's keep going 🐾`, 3000);
+      }
+    }, balance.roamTick);
+    return () => clearInterval(id);
+  }, [activeQuest?.id, activeQuest?.currentWaypoint, advanceQuestIfNear, showBubble]);
 
   // Auto-collect tokens within 50m of companion.
   useEffect(() => {
@@ -382,6 +413,23 @@ export default function MapViewWeb() {
           />
         ))}
 
+        {activeQuest
+          ? activeQuest.waypoints.map((w, i) => (
+              <WaypointMarker
+                key={`${activeQuest.id}-${i}`}
+                position={w.position}
+                index={i}
+                state={
+                  i < activeQuest.currentWaypoint
+                    ? 'reached'
+                    : i === activeQuest.currentWaypoint
+                    ? 'active'
+                    : 'future'
+                }
+              />
+            ))
+          : null}
+
         {companionPos ? (
           <Companion position={companionPos} bubble={bubble} onTapCompanion={() => showBubble('woof 🐾', 2000)} />
         ) : null}
@@ -390,6 +438,7 @@ export default function MapViewWeb() {
       <LostDogModal
         dog={lostDogs.find((d) => d.id === selectedDogId) ?? null}
         onClose={() => setSelectedDog(null)}
+        searchActive={!!activeQuest && activeQuest.dogId === selectedDogId}
         onReportSighting={async (d) => {
           setSelectedDog(null);
           const res = await useGameStore.getState().reportSighting(d.id);
@@ -399,6 +448,18 @@ export default function MapViewWeb() {
             showBubble(`thanks — sighting logged 👀`, 3000);
           } else {
             showBubble(`couldn't report that one — try again`, 3000);
+          }
+        }}
+        onStartSearch={async (d) => {
+          setSelectedDog(null);
+          const quest = await useGameStore.getState().startQuest(d.id);
+          if (quest) {
+            showBubble(
+              `on it — ${quest.waypoints.length} spots to check for ${d.name} 🔍`,
+              4000,
+            );
+          } else {
+            showBubble("couldn't start the search — try again", 3000);
           }
         }}
       />
