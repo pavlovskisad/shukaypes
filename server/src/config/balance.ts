@@ -7,21 +7,20 @@ export const balance = {
   bone: { hunger: 20, happiness: 8 },
   token: { hunger: 2, happiness: 5 },
   // Seeding radii (approx degrees at Kyiv latitude ≈ 0.016° ≈ 1.2km).
-  // Tokens cluster tight around the walker (~500m) so there's always a few
-  // to pick up as they move; far ones get culled each sync (see
-  // ensureTokensForUser). Bones scatter wider on purpose — they're not
-  // a walking beacon, just treats the companion stumbles on.
-  // Tokens cluster DENSELY inside a small walking radius so a couple
-  // dozen tiny pawprints read as a trail around the walker.
-  // 0.001° at Kyiv ≈ ±110m lat / ±70m lng → ~280×140m box.
-  tokenSpreadDeg: 0.001,
+  // Tokens cluster around the walker so there's always some to pick up
+  // as they move; far ones get culled each sync (see ensureTokensForUser).
+  // Bones scatter wider on purpose — they're not a walking beacon, just
+  // treats the companion stumbles on.
+  // 0.00175° at Kyiv ≈ ±195m lat / ±125m lng → ~490×250m box (≈3× the
+  // previous 0.001° area, packed with more pins so the cluster reads
+  // as a dense trail without bleeding off the viewport).
+  tokenSpreadDeg: 0.00175,
   foodSpreadDeg: 0.014,
   // Anything farther than this from the walker gets expired on the next
-  // sync. Kept generous (500m vs the tighter 140m spread) so tokens
-  // behind the walker stick around briefly after they move — you don't
-  // instantly lose uncollected ones for being 100m behind.
-  tokenCullRadiusM: 500,
-  tokenCount: 20,
+  // sync. Scales with the wider spread so tokens behind the walker stick
+  // around briefly after they move instead of vanishing instantly.
+  tokenCullRadiusM: 900,
+  tokenCount: 35,
   foodCount: 8,
   // Anti-cheat: max distance between client-reported collect position and target.
   collectMaxDistanceM: 80,

@@ -1,12 +1,11 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
-import { balance } from '../../constants/balance';
 import { colors } from '../../constants/colors';
 
-// Three separate white-frosted-glass pills, all laid out the same way:
-// icon + value next to each other with a consistent gap, so hunger,
-// happiness and tokens read as siblings. Progress fill behind the content
-// (terminal blue; red when low).
+// Three white-frosted-glass pills laid out identically: icon + value with
+// a consistent gap so happiness / hunger / tokens read as one family.
+// Only happiness shows a progress fill — it's the mood meter and the one
+// that reads as a %. Hunger and tokens are plain counters.
 
 const PILL_HEIGHT = 38;
 // Minimum so a 1-char value doesn't collapse the pill awkwardly; beyond
@@ -14,22 +13,10 @@ const PILL_HEIGHT = 38;
 const PILL_MIN_WIDTH = 50;
 
 const PROGRESS_BLUE = 'rgba(0,60,255,0.85)';
-const LOW_RED = 'rgba(232,64,64,0.9)';
 const GLASS_BG = 'rgba(255,255,255,0.85)';
 const GLASS_SHADOW_COLOR = '#000';
 
-function MeterPill({
-  icon,
-  value,
-  label,
-  suffix,
-}: {
-  icon: string;
-  value: number;
-  label: string;
-  suffix?: string;
-}) {
-  const isLow = value < balance.lowThreshold;
+function HappinessPill({ value }: { value: number }) {
   const fillPct = Math.max(0, Math.min(100, Math.round(value)));
   return (
     <View style={[styles.pill, styles.meterPill]}>
@@ -38,16 +25,27 @@ function MeterPill({
           styles.fill,
           {
             width: `${fillPct}%` as unknown as number,
-            backgroundColor: isLow ? LOW_RED : PROGRESS_BLUE,
+            backgroundColor: PROGRESS_BLUE,
           },
         ]}
       />
-      <Text style={styles.emoji}>{icon}</Text>
+      <Text style={styles.emoji}>☀️</Text>
       <Text
         style={styles.value}
-        accessibilityLabel={`${label} ${Math.round(value)}${suffix === '%' ? ' percent' : ''}`}
+        accessibilityLabel={`happiness ${Math.round(value)} percent`}
       >
-        {Math.round(value)}{suffix ?? ''}
+        {Math.round(value)}%
+      </Text>
+    </View>
+  );
+}
+
+function CounterPill({ icon, value, label }: { icon: string; value: number; label: string }) {
+  return (
+    <View style={[styles.pill, styles.counterPill]}>
+      <Text style={styles.emoji}>{icon}</Text>
+      <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
+        {Math.round(value)}
       </Text>
     </View>
   );
@@ -60,12 +58,9 @@ export function StatusBar() {
 
   return (
     <View style={styles.wrap} pointerEvents="none">
-      <MeterPill icon="☀️" value={happiness} label="happiness" suffix="%" />
-      <MeterPill icon="🦴" value={hunger} label="hunger" />
-      <View style={[styles.pill, styles.tokenPill]}>
-        <Text style={styles.emoji}>🐾</Text>
-        <Text style={styles.value}>{tokensCollected}</Text>
-      </View>
+      <HappinessPill value={happiness} />
+      <CounterPill icon="🦴" value={hunger} label="hunger" />
+      <CounterPill icon="🐾" value={tokensCollected} label="tokens" />
     </View>
   );
 }
@@ -89,10 +84,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.1,
     shadowRadius: 16,
     elevation: 3,
-    // All pills use the same row layout with a consistent inner gap so
-    // hunger/happiness/tokens read as one family (previously meter pills
-    // used space-between, which spread the icon and value artificially
-    // wide compared to the tight token pill).
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 12,
@@ -101,7 +92,7 @@ const styles = StyleSheet.create({
   meterPill: {
     minWidth: PILL_MIN_WIDTH,
   },
-  tokenPill: {
+  counterPill: {
     minWidth: PILL_MIN_WIDTH,
   },
   fill: {
