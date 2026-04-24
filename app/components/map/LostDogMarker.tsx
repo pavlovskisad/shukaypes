@@ -19,9 +19,14 @@ const WANDER_PX = 35;
 // as jerks.
 const RETARGET_MS = 25_000;
 const TRANSITION_MS = 30_000;
-// SOS beep: a ring emanates from the pet every BEEP_PERIOD_MS — subtle
-// "I'm here" pulse. Delay per pet is randomized so pets don't beep in sync.
-const BEEP_PERIOD_MS = 22_000;
+// SOS beep: a ring emanates from the pet on its own cadence. Each pet
+// gets a unique period inside [BEEP_PERIOD_MIN_MS, BEEP_PERIOD_MAX_MS]
+// at mount + a random initial delay, so the map as a whole doesn't
+// breathe in sync. Single-period + random offset still drifts back
+// into phase after a few cycles, which read as "the city is beeping at
+// us"; giving each pet its own rhythm keeps the field asynchronous.
+const BEEP_PERIOD_MIN_MS = 18_000;
+const BEEP_PERIOD_MAX_MS = 42_000;
 const BEEP_DURATION_MS = 1800;
 
 interface LostDogMarkerProps {
@@ -61,11 +66,15 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
     return () => clearInterval(id);
   }, []);
 
-  // SOS beep. Initial delay is random per pet so 20 pets don't beep in
-  // unison, then regular period after that. We schedule via setTimeout +
-  // re-arm so the beep can outlast a single interval tick cleanly.
+  // SOS beep. Each pet rolls its own period at mount (inside the
+  // min/max band above) so the map doesn't breathe in sync. A random
+  // initial delay spreads the first ping, then the re-arm uses the
+  // pet's own period for every subsequent one.
   useEffect(() => {
     let cancelled = false;
+    const periodMs =
+      BEEP_PERIOD_MIN_MS +
+      Math.random() * (BEEP_PERIOD_MAX_MS - BEEP_PERIOD_MIN_MS);
     const schedule = (delay: number) => {
       beepTimeoutRef.current = setTimeout(() => {
         if (cancelled) return;
@@ -73,10 +82,10 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
         setTimeout(() => {
           if (!cancelled) setBeeping(false);
         }, BEEP_DURATION_MS);
-        schedule(BEEP_PERIOD_MS);
+        schedule(periodMs);
       }, delay);
     };
-    schedule(Math.random() * BEEP_PERIOD_MS);
+    schedule(Math.random() * periodMs);
     return () => {
       cancelled = true;
       if (beepTimeoutRef.current) clearTimeout(beepTimeoutRef.current);
