@@ -123,10 +123,18 @@ export async function fetchNearbyParks(center: LatLng): Promise<LatLng[]> {
     radius: PARK_RADIUS_M,
     type: 'park',
   });
+  // Dedupe overlapping Places entries for the same physical park. Google
+  // often returns 4-6 rows for one big park (sub-sections, different
+  // entrances). With 1 bone per park that still became a pile of 4-6
+  // bones within 100m. Collapse anything within 120m of an already-
+  // accepted park.
+  const DEDUPE_RADIUS_M = 120;
   const out: LatLng[] = [];
   for (const r of results) {
     if (!r.geometry?.location) continue;
-    out.push({ lat: r.geometry.location.lat(), lng: r.geometry.location.lng() });
+    const pos = { lat: r.geometry.location.lat(), lng: r.geometry.location.lng() };
+    const dup = out.some((p) => haversineM(p, pos) < DEDUPE_RADIUS_M);
+    if (!dup) out.push(pos);
   }
   return out;
 }

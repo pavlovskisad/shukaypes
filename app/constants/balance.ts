@@ -14,7 +14,7 @@ export const balance = {
   roamRadiusWobble: 0.0003,
   roamRadiusWobblePeriod: 7000,
   autoCollectToken: 50,
-  autoCollectFood: 40,
+  autoCollectFood: 80,
   foodCheckInterval: 500,
   ambientInterval: 40000,
   ambientChance: 0.25,
