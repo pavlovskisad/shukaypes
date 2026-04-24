@@ -126,15 +126,66 @@ export async function ensureTokensForUser(userId: string, center: LatLng) {
   }
 }
 
-export async function ensureFoodForUser(userId: string, center: LatLng) {
+export async function ensureFoodForUser(
+  userId: string,
+  center: LatLng,
+  parks: LatLng[] = [],
+) {
+  // Age out uncollected bones the same way tokens do — keeps legacy
+  // uniform-scatter bones from lingering once we switch to park mode,
+  // and refreshes positions over time.
+  await db
+    .update(schema.foodItems)
+    .set({ consumedAt: new Date() })
+    .where(
+      and(
+        eq(schema.foodItems.ownerId, userId),
+        isNull(schema.foodItems.consumedAt),
+        sql`${schema.foodItems.spawnedAt} < NOW() - make_interval(mins => ${balance.foodExpireMinutes})`,
+      ),
+    );
+
+  // Park mode: each park gets topped up to `bonesPerPark`, with a
+  // small random offset so they don't stack at the exact pin. Matches
+  // the paws-per-pet pattern — places earn bones, not random streets.
+  if (parks.length) {
+    for (const park of parks) {
+      const distExpr = haversineSql(park, schema.foodItems.lat, schema.foodItems.lng);
+      const zoneRows = await db
+        .select({ live: sql<number>`count(*)::int` })
+        .from(schema.foodItems)
+        .where(
+          and(
+            eq(schema.foodItems.ownerId, userId),
+            isNull(schema.foodItems.consumedAt),
+            sql`${distExpr} <= ${balance.parkScatterRadiusM}`,
+          ),
+        );
+      const zoneLive = zoneRows[0]?.live ?? 0;
+      if (zoneLive >= balance.bonesPerPark) continue;
+      const missing = balance.bonesPerPark - zoneLive;
+      const positions = scatterInRadius(park, missing, balance.parkScatterRadiusM);
+      const rows = positions.map((p) => ({
+        id: nanoid(),
+        ownerId: userId,
+        lat: p.lat,
+        lng: p.lng,
+        value: 1,
+      }));
+      if (rows.length) await db.insert(schema.foodItems).values(rows);
+    }
+    return;
+  }
+
+  // No parks supplied (Places hasn't loaded yet, or the native stub
+  // isn't wired). Fall back to the old uniform-scatter so the feature
+  // degrades gracefully instead of leaving the walker with no bones.
   const rows0 = await db
     .select({ live: sql<number>`count(*)::int` })
     .from(schema.foodItems)
     .where(and(eq(schema.foodItems.ownerId, userId), isNull(schema.foodItems.consumedAt)));
   const live = rows0[0]?.live ?? 0;
-
   if (live >= balance.foodCount) return;
-
   const missing = balance.foodCount - live;
   const positions = scatter(center, missing, balance.foodSpreadDeg, balance.foodSpreadDeg);
   const rows = positions.map((p) => ({

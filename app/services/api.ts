@@ -64,8 +64,18 @@ export const api = {
   getTokensNearby: (pos: LatLng) =>
     req<{ tokens: Token[] }>(`/tokens/nearby?lat=${pos.lat}&lng=${pos.lng}`),
 
-  getFoodNearby: (pos: LatLng) =>
-    req<{ food: FoodItem[] }>(`/food/nearby?lat=${pos.lat}&lng=${pos.lng}`),
+  getFoodNearby: (pos: LatLng, parks?: LatLng[]) => {
+    const params = new URLSearchParams({
+      lat: String(pos.lat),
+      lng: String(pos.lng),
+    });
+    if (parks && parks.length) {
+      // Compact pipe-delimited format — keeps the URL short even with
+      // a dozen parks. Server splits on '|', then on ','.
+      params.set('parks', parks.map((p) => `${p.lat},${p.lng}`).join('|'));
+    }
+    return req<{ food: FoodItem[] }>(`/food/nearby?${params.toString()}`);
+  },
 
   getLostDogsNearby: (pos: LatLng, radiusM = 5000) =>
     req<{ dogs: NearbyLostDog[] }>(

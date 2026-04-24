@@ -26,6 +26,15 @@ export const balance = {
   // strong nest. Dog-area pools spawn uniformly (bias=0) so zones
   // read evenly inside the circle.
   tokenCenterBias: 0.5,
+  // Bones drop in parks (see ensureFoodForUser). The client fetches
+  // nearby parks via Google Places and passes them as a query param;
+  // the server tops up each park to `bonesPerPark` within a small
+  // `parkScatterRadiusM` so bones read as "dropped at the park edge"
+  // instead of stacked at the pin. foodSpreadDeg/foodCount are the
+  // fallback shape when the client hasn't supplied parks yet.
+  bonesPerPark: 2,
+  parkScatterRadiusM: 35,
+  foodExpireMinutes: 10,
   foodSpreadDeg: 0.014,
   foodCount: 8,
   // Anti-cheat: max distance between client-reported collect position and target.
