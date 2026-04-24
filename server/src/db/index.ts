@@ -9,3 +9,4 @@ if (!url) throw new Error('DATABASE_URL is required');
 export const pg = postgres(url, { prepare: false });
 export const db = drizzle(pg, { schema });
 export { schema };
+export type { StoredWaypoint } from './schema.js';

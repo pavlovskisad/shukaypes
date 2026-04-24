@@ -10,6 +10,7 @@ import dogsRoute from './routes/dogs.js';
 import chatRoute from './routes/chat.js';
 import adminRoute from './routes/admin.js';
 import sightingsRoute from './routes/sightings.js';
+import questsRoute from './routes/quests.js';
 import { startDecayCron } from './services/decay.js';
 import { startScrapeCron } from './services/scrape.js';
 import { balance } from './config/balance.js';
@@ -67,6 +68,7 @@ async function buildServer() {
   await app.register(chatRoute);
   await app.register(adminRoute);
   await app.register(sightingsRoute);
+  await app.register(questsRoute);
 
   return app;
 }

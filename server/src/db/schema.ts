@@ -5,6 +5,7 @@ import {
   timestamp,
   doublePrecision,
   boolean,
+  jsonb,
   index,
 } from 'drizzle-orm/pg-core';
 
@@ -161,6 +162,38 @@ export const collectEvents = pgTable(
   },
   (t) => ({
     userAtIdx: index('collect_user_at_idx').on(t.userId, t.at),
+  }),
+);
+
+// Detective quest state. One active quest per user at a time; abandoning
+// or completing flips the existing one before a new one starts. Waypoints
+// live in a single jsonb column — they're only ever read back whole for a
+// quest, no point normalizing. Shape mirrors the shared Waypoint type
+// (position + clue + reached).
+export interface StoredWaypoint {
+  position: { lat: number; lng: number };
+  clue: string | null;
+  reached: boolean;
+}
+
+export const quests = pgTable(
+  'quests',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    dogId: text('dog_id').references(() => lostDogs.id, { onDelete: 'set null' }),
+    type: text('type').notNull().default('detective'),
+    status: text('status').notNull().default('active'), // active | completed | abandoned
+    waypoints: jsonb('waypoints').$type<StoredWaypoint[]>().notNull(),
+    currentIndex: integer('current_index').notNull().default(0),
+    rewardPoints: integer('reward_points').notNull().default(50),
+    startedAt: timestamp('started_at', { withTimezone: true }).notNull().defaultNow(),
+    completedAt: timestamp('completed_at', { withTimezone: true }),
+  },
+  (t) => ({
+    activeIdx: index('quests_active_idx').on(t.userId, t.status),
   }),
 );
 
