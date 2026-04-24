@@ -50,3 +50,28 @@ export function scatter(
   }
   return out;
 }
+
+// Meter-native disk scatter. Converts meter offsets to lat/lng at the
+// given center latitude so the sampled points form a roughly circular
+// disk on the ground rather than an ellipse stretched by degrees-of-
+// longitude distortion. Shares centerBias semantics with scatter().
+export function scatterInRadius(
+  center: LatLng,
+  count: number,
+  radiusM: number,
+  centerBias = 0,
+): LatLng[] {
+  const latMetersPerDeg = 111_000;
+  const lngMetersPerDeg = 111_000 * Math.cos((center.lat * Math.PI) / 180);
+  const out: LatLng[] = [];
+  for (let i = 0; i < count; i++) {
+    const u = Math.random();
+    const theta = Math.random() * 2 * Math.PI;
+    const rM = radiusM * Math.pow(u, 0.5 + Math.max(0, centerBias));
+    out.push({
+      lat: center.lat + (Math.sin(theta) * rM) / latMetersPerDeg,
+      lng: center.lng + (Math.cos(theta) * rM) / lngMetersPerDeg,
+    });
+  }
+  return out;
+}
