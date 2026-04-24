@@ -38,8 +38,10 @@ export async function ensureTokensForUser(userId: string, center: LatLng) {
   // previous distance-based cull didn't fit the new pool model — a paw
   // seeded inside a dog's zone 3km from the walker is legitimate even
   // when the walker is elsewhere. Time-based expiry keeps the set
-  // bounded without touching pool correctness.
-  const ageCutoff = new Date(Date.now() - balance.tokenExpireMinutes * 60_000);
+  // bounded without touching pool correctness. The cutoff is computed
+  // in SQL via make_interval — postgres-js 3.4 rejects JS Date bind
+  // params and would 500 the whole /tokens/nearby call (paws vanish
+  // client-side because the sync errors).
   await db
     .update(schema.tokens)
     .set({ collectedAt: new Date() })
@@ -47,7 +49,7 @@ export async function ensureTokensForUser(userId: string, center: LatLng) {
       and(
         eq(schema.tokens.ownerId, userId),
         isNull(schema.tokens.collectedAt),
-        sql`${schema.tokens.spawnedAt} < ${ageCutoff}`,
+        sql`${schema.tokens.spawnedAt} < NOW() - make_interval(mins => ${balance.tokenExpireMinutes})`,
       ),
     );
 
