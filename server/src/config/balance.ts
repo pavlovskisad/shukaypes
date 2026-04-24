@@ -34,7 +34,7 @@ export const balance = {
   // fallback shape when the client hasn't supplied parks yet.
   bonesPerPark: 1,
   parkScatterRadiusM: 35,
-  foodExpireMinutes: 10,
+  foodExpireMinutes: 5,
   foodSpreadDeg: 0.014,
   foodCount: 8,
   // Anti-cheat: max distance between client-reported collect position and target.
