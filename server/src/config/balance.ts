@@ -21,7 +21,7 @@ export const balance = {
   // just passed sticks around briefly instead of vanishing the moment
   // they move.
   tokenCullRadiusM: 1200,
-  tokenCount: 30,
+  tokenCount: 60,
   foodCount: 8,
   // Anti-cheat: max distance between client-reported collect position and target.
   collectMaxDistanceM: 80,
