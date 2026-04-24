@@ -11,8 +11,9 @@ async function weightedPositions(
   center: LatLng,
   count: number,
   spread: number,
+  centerBias = 0,
 ): Promise<LatLng[]> {
-  return scatter(center, count, spread, spread);
+  return scatter(center, count, spread, spread, centerBias);
 }
 
 export async function ensureTokensForUser(userId: string, center: LatLng) {
@@ -46,7 +47,12 @@ export async function ensureTokensForUser(userId: string, center: LatLng) {
   if (live >= balance.tokenCount) return;
 
   const missing = balance.tokenCount - live;
-  const positions = await weightedPositions(center, missing, balance.tokenSpreadDeg);
+  const positions = await weightedPositions(
+    center,
+    missing,
+    balance.tokenSpreadDeg,
+    balance.tokenCenterBias,
+  );
   const rows = positions.map((p) => ({
     id: nanoid(),
     ownerId: userId,
