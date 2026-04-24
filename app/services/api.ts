@@ -114,20 +114,30 @@ export const api = {
       body: JSON.stringify({ dogId, lat: pos.lat, lng: pos.lng, note }),
     }),
 
-  // Detective quest endpoints. The response quest shape matches shared
-  // Quest (currentWaypoint, waypoints as Waypoint[]). Server also
-  // returns a `status` field we read to branch active/completed.
+  // Detective quest endpoints. Response shape matches shared Quest
+  // (currentWaypoint, waypoints as Waypoint[]) plus a `status` field
+  // the client branches on. Start and advance also include `narration`
+  // — a Claude-Haiku-authored one-liner in the companion's voice to
+  // use as the bubble. Null when the narration call failed, so the
+  // client should always have a hardcoded fallback.
   startQuest: (dogId: string, pos: LatLng) =>
-    req<{ quest: Quest & { status: string } }>('/quests/start', {
-      method: 'POST',
-      body: JSON.stringify({ dogId, lat: pos.lat, lng: pos.lng }),
-    }),
+    req<{ quest: Quest & { status: string }; narration: string | null }>(
+      '/quests/start',
+      {
+        method: 'POST',
+        body: JSON.stringify({ dogId, lat: pos.lat, lng: pos.lng }),
+      },
+    ),
 
   getActiveQuest: () =>
     req<{ quest: (Quest & { status: string }) | null }>('/quests/active'),
 
   advanceQuest: (questId: string, pos: LatLng) =>
-    req<{ quest: Quest & { status: string }; completed: boolean }>('/quests/advance', {
+    req<{
+      quest: Quest & { status: string };
+      completed: boolean;
+      narration: string | null;
+    }>('/quests/advance', {
       method: 'POST',
       body: JSON.stringify({ questId, lat: pos.lat, lng: pos.lng }),
     }),
