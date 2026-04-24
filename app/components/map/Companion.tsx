@@ -159,6 +159,27 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
           justifyContent: 'center',
         }}
       >
+        {/* Frosted-glass halo behind the nose. Same recipe the POIs used
+            to carry — rgba(255,255,255,0.2) + blur(14px) saturate(160%)
+            — which we had to strip from POIs because 20 simultaneous
+            backdrop-filter layers murdered scroll perf. On a single
+            instance like the companion it's fine, and it reads as a
+            soft glass bubble around the dog. */}
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            width: 82,
+            height: 82,
+            borderRadius: '50%',
+            background: 'rgba(255,255,255,0.2)',
+            backdropFilter: 'blur(14px) saturate(160%)',
+            WebkitBackdropFilter: 'blur(14px) saturate(160%)',
+            boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+            pointerEvents: 'none',
+          }}
+        />
+
         {/* Companion body — 55×55 nose glyph with layered white halo,
             centered in the larger tap container. pointer-events:none so
             the tap is captured by the outer container and not swallowed
@@ -166,6 +187,7 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
         <div
           aria-hidden
           style={{
+            position: 'relative',
             width: 55,
             height: 55,
             display: 'flex',
