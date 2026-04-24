@@ -132,14 +132,17 @@ export const api = {
   getActiveQuest: () =>
     req<{ quest: (Quest & { status: string }) | null }>('/quests/active'),
 
-  advanceQuest: (questId: string, pos: LatLng) =>
+  // Set `force: true` to skip the server's distance check — used for
+  // the tap-to-complete affordance on active waypoint pins during
+  // testing. Without force, server rejects with 403 outside 60m.
+  advanceQuest: (questId: string, pos: LatLng, force?: boolean) =>
     req<{
       quest: Quest & { status: string };
       completed: boolean;
       narration: string | null;
     }>('/quests/advance', {
       method: 'POST',
-      body: JSON.stringify({ questId, lat: pos.lat, lng: pos.lng }),
+      body: JSON.stringify({ questId, lat: pos.lat, lng: pos.lng, force }),
     }),
 
   abandonQuest: (questId: string) =>

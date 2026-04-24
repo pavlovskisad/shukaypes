@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { GoogleMap, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap, PolylineF, useJsApiLoader } from '@react-google-maps/api';
 import { View, Text, StyleSheet } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../../constants/env';
@@ -72,6 +72,7 @@ export default function MapViewWeb() {
   const activeQuest = useGameStore((s) => s.activeQuest);
   const syncActiveQuest = useGameStore((s) => s.syncActiveQuest);
   const advanceQuestIfNear = useGameStore((s) => s.advanceQuestIfNear);
+  const forceAdvanceActiveWaypoint = useGameStore((s) => s.forceAdvanceActiveWaypoint);
 
   const showBubble = useCallback((msg: string, duration?: number) => {
     setBubble(msg);
@@ -170,6 +171,21 @@ export default function MapViewWeb() {
       maxZoom: balance.mapZoomMax,
       gestureHandling: 'greedy' as const,
       clickableIcons: false,
+      // Hard-box the viewport around central Kyiv so panning + zoom
+      // don't spill into empty map tiles + wasted /tokens/nearby,
+      // /dogs/nearby queries. ±0.045° lat / ±0.07° lng ≈ a 10×10km
+      // square centered on the Maidan-ish area — covers Podil,
+      // Pechersk, Lukianivka, Solomianka, Vynohradar. Outside the
+      // pilot geography we'll swap this for a per-user anchor.
+      restriction: {
+        latLngBounds: {
+          north: 50.4951,
+          south: 50.4051,
+          east: 30.5934,
+          west: 30.4534,
+        },
+        strictBounds: true,
+      },
     }),
     [],
   );
@@ -413,22 +429,65 @@ export default function MapViewWeb() {
           />
         ))}
 
-        {activeQuest
-          ? activeQuest.waypoints.map((w, i) => (
-              <WaypointMarker
-                key={`${activeQuest.id}-${i}`}
-                position={w.position}
-                index={i}
-                state={
-                  i < activeQuest.currentWaypoint
-                    ? 'reached'
-                    : i === activeQuest.currentWaypoint
-                    ? 'active'
-                    : 'future'
-                }
-              />
-            ))
-          : null}
+        {activeQuest ? (
+          <>
+            {/* Route polyline through all waypoints in order. Terminal
+                blue, low-opacity — reads as a faint trail, doesn't
+                fight the paw field. clickable=false so it can't steal
+                taps from overlays sitting on top. */}
+            <PolylineF
+              path={activeQuest.waypoints.map((w) => ({
+                lat: w.position.lat,
+                lng: w.position.lng,
+              }))}
+              options={{
+                strokeColor: '#0000ff',
+                strokeOpacity: 0.45,
+                strokeWeight: 2.5,
+                clickable: false,
+              }}
+            />
+            {activeQuest.waypoints.map((w, i) => {
+              const state =
+                i < activeQuest.currentWaypoint
+                  ? 'reached'
+                  : i === activeQuest.currentWaypoint
+                  ? 'active'
+                  : 'future';
+              return (
+                <WaypointMarker
+                  key={`${activeQuest.id}-${i}`}
+                  position={w.position}
+                  index={i}
+                  state={state}
+                  // Tap-to-complete on the active pin only. Bypasses the
+                  // server's 60m check (force=true) so we can walk
+                  // through the flow from a desk. Passive pins (reached
+                  // / future) don't get a handler — nothing to do on tap.
+                  onTap={
+                    state === 'active'
+                      ? async () => {
+                          const { advanced, completed, narration } =
+                            await forceAdvanceActiveWaypoint();
+                          if (completed) {
+                            showBubble(
+                              narration ?? `found something! quest complete 🎉`,
+                              4000,
+                            );
+                          } else if (advanced) {
+                            showBubble(
+                              narration ?? `paw print here — let's keep going 🐾`,
+                              3000,
+                            );
+                          }
+                        }
+                      : undefined
+                  }
+                />
+              );
+            })}
+          </>
+        ) : null}
 
         {companionPos ? (
           <Companion position={companionPos} bubble={bubble} onTapCompanion={() => showBubble('woof 🐾', 2000)} />
@@ -439,6 +498,33 @@ export default function MapViewWeb() {
         dog={lostDogs.find((d) => d.id === selectedDogId) ?? null}
         onClose={() => setSelectedDog(null)}
         searchActive={!!activeQuest && activeQuest.dogId === selectedDogId}
+        onPrev={selectedDogId ? (() => {
+          // Cycle by distance from user — pressing ‹ walks through the
+          // nearby list in order so the closest pet comes first, the
+          // farthest last. Wraps at the ends.
+          if (!userPos || !selectedDogId) return;
+          const sorted = [...lostDogs].sort(
+            (a, b) =>
+              distanceMeters(userPos, a.lastSeen.position) -
+              distanceMeters(userPos, b.lastSeen.position),
+          );
+          const idx = sorted.findIndex((d) => d.id === selectedDogId);
+          if (idx < 0) return;
+          const prev = sorted[(idx - 1 + sorted.length) % sorted.length]!;
+          setSelectedDog(prev.id);
+        }) : undefined}
+        onNext={selectedDogId ? (() => {
+          if (!userPos || !selectedDogId) return;
+          const sorted = [...lostDogs].sort(
+            (a, b) =>
+              distanceMeters(userPos, a.lastSeen.position) -
+              distanceMeters(userPos, b.lastSeen.position),
+          );
+          const idx = sorted.findIndex((d) => d.id === selectedDogId);
+          if (idx < 0) return;
+          const next = sorted[(idx + 1) % sorted.length]!;
+          setSelectedDog(next.id);
+        }) : undefined}
         onReportSighting={async (d) => {
           setSelectedDog(null);
           const res = await useGameStore.getState().reportSighting(d.id);

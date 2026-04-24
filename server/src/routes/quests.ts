@@ -23,6 +23,11 @@ interface AdvanceBody {
   questId: string;
   lat: number;
   lng: number;
+  // Testing flag — skips the WAYPOINT_REACH_RADIUS_M check so the
+  // current waypoint can be marked reached via a tap instead of
+  // physically walking to it. Gate this later if it ever ships to
+  // non-dev builds.
+  force?: boolean;
 }
 
 interface AbandonBody {
@@ -150,7 +155,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Body: AdvanceBody }>('/quests/advance', async (req, reply) => {
-    const { questId, lat, lng } = req.body ?? ({} as AdvanceBody);
+    const { questId, lat, lng, force } = req.body ?? ({} as AdvanceBody);
     if (!questId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.code(400);
       return { error: 'invalid body' };
@@ -177,10 +182,12 @@ const plugin: FastifyPluginAsync = async (app) => {
     }
 
     const userPos: LatLng = { lat, lng };
-    const dist = distanceMeters(userPos, waypoint.position);
-    if (dist > WAYPOINT_REACH_RADIUS_M) {
-      reply.code(403);
-      return { error: 'too far from waypoint', distM: Math.round(dist) };
+    if (!force) {
+      const dist = distanceMeters(userPos, waypoint.position);
+      if (dist > WAYPOINT_REACH_RADIUS_M) {
+        reply.code(403);
+        return { error: 'too far from waypoint', distM: Math.round(dist) };
+      }
     }
 
     const nextWaypoints: StoredWaypoint[] = row.waypoints.map((w, i) =>
