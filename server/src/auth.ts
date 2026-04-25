@@ -40,6 +40,11 @@ const plugin: FastifyPluginAsync = async (app) => {
     const raw = req.url ? req.url.split('?')[0] : undefined;
     const path = matched ?? raw;
     if (path === '/health' || path === '/health/deep') return;
+    // Public read-only stats endpoint — surfaces aggregate counts +
+    // recent scrape outcomes so anyone with the URL can see how the
+    // pipeline is doing without an admin token. No PII (group titles
+    // are public, ids are nanoids).
+    if (path === '/stats') return;
     // Admin routes have their own bearer-token check in routes/admin.ts —
     // they must not require a per-device identity header.
     if (path?.startsWith('/admin/')) return;
