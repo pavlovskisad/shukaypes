@@ -19,7 +19,7 @@ import { inArray } from 'drizzle-orm';
 import { db, schema } from '../../db/index.js';
 import { parseDogPost } from '../parser.js';
 import { upsertLostDog } from '../upsert.js';
-import { emptySummary, type Source, type SourceRunSummary } from '../source.js';
+import { emptySummary, recordError, type Source, type SourceRunSummary } from '../source.js';
 import { looksLikeLostPet, looksLikeRehoming } from '../keywords.js';
 
 const UA =
@@ -134,12 +134,9 @@ export class FacebookSource implements Source {
         const xml = await fetchText(url);
         all.push(...parseRss(xml, id));
       } catch (err) {
-        summary.errors++;
-        console.warn(
-          '[facebook] feed fetch failed',
-          url,
-          (err as Error).message,
-        );
+        const msg = `[feed ${id}] ${(err as Error).message}`;
+        recordError(summary, msg);
+        console.warn('[facebook] feed fetch failed', url, msg);
       }
     }
 
@@ -265,12 +262,9 @@ export class FacebookSource implements Source {
           })
           .onConflictDoNothing({ target: schema.scrapeLog.url });
       } catch (err) {
-        summary.errors++;
-        console.warn(
-          '[facebook] item parse failed',
-          item.link,
-          (err as Error).message,
-        );
+        const msg = `[item ${item.link}] ${(err as Error).message}`;
+        recordError(summary, msg);
+        console.warn('[facebook] item parse failed', msg);
         await db
           .insert(schema.scrapeLog)
           .values({

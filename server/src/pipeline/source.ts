@@ -12,6 +12,9 @@ export interface SourceRunSummary {
   updated: number;
   duplicate: number;
   errors: number;
+  // First 5 error messages from this tick. Surfaced via /stats so
+  // we can diagnose "source ran zero" without Fly log access.
+  errorMessages?: string[];
 }
 
 export interface Source {
@@ -30,4 +33,15 @@ export function emptySummary(source: string): SourceRunSummary {
     duplicate: 0,
     errors: 0,
   };
+}
+
+// Caller-side error helper. Each source uses this in catch blocks so
+// error counts + messages stay co-located in the summary, which the
+// scrape cron passes to scrape-history for /stats visibility.
+export function recordError(summary: SourceRunSummary, message: string): void {
+  summary.errors++;
+  const trimmed = message.slice(0, 200);
+  const list = summary.errorMessages ?? [];
+  if (list.length < 5) list.push(trimmed);
+  summary.errorMessages = list;
 }
