@@ -86,11 +86,17 @@ const plugin: FastifyPluginAsync = async (app) => {
       sourceTotals[row.source]![action] = row.n;
     }
 
+    const total = activeRow[0]?.n ?? 0;
+    const atFallback = fallbackRow[0]?.n ?? 0;
     return {
       ts: new Date().toISOString(),
       lostDogsActive: {
-        total: activeRow[0]?.n ?? 0,
-        atFallbackCoord: fallbackRow[0]?.n ?? 0,
+        total,
+        // What /dogs/nearby actually shows — fallback-coord pets are
+        // hidden from the map but kept in the DB for audit, so the
+        // headline number matches what users see.
+        totalOnMap: total - atFallback,
+        atFallbackCoord: atFallback,
         byUrgency: Object.fromEntries(byUrgency.map((r) => [r.urgency, r.n])),
         bySource: Object.fromEntries(bySource.map((r) => [r.source, r.n])),
       },

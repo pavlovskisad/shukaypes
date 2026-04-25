@@ -250,6 +250,7 @@ export class FacebookSource implements Source {
         if (result.action === 'inserted') summary.inserted++;
         else if (result.action === 'updated') summary.updated++;
         else if (result.action === 'duplicate') summary.duplicate++;
+        else if (result.action === 'skipped') summary.skipped++;
 
         await db
           .insert(schema.scrapeLog)
@@ -260,6 +261,7 @@ export class FacebookSource implements Source {
             dogId: result.id,
             parseConfidence: parsed.parseConfidence,
             ingestAction: result.action,
+            skipReason: result.skipReason,
           })
           .onConflictDoNothing({ target: schema.scrapeLog.url });
       } catch (err) {

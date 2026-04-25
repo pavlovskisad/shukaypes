@@ -33,10 +33,14 @@ export interface ParsedDog {
   parseNotes: string;
 }
 
-export type IngestAction = 'inserted' | 'updated' | 'duplicate';
+export type IngestAction = 'inserted' | 'updated' | 'duplicate' | 'skipped';
 
 export interface IngestResult {
-  id: string;
+  // null only when action='skipped' before we touched any row.
+  id: string | null;
   action: IngestAction;
+  // Set when action='skipped' so callers can log a meaningful
+  // scrape_log row instead of an opaque skip.
+  skipReason?: string;
   parsed: ParsedDog;
 }
