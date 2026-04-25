@@ -1,13 +1,14 @@
-// Facebook scraper via RSSHub-style RSS bridge. Going through an RSS
-// bridge lets us avoid FB auth + the JS-rendered DOM entirely — we
-// fetch a public RSS feed and parse it like the OLX listing pages.
-// Trade-off: external dependency on whichever bridge we point at. If
-// rsshub.app rate-limits or rotates routes we swap RSSHUB_BASE_URL
-// to a self-hosted instance.
+// Facebook scraper via RSSHub-style RSS bridge. Going through a bridge
+// lets us avoid FB auth + the JS-rendered DOM entirely — we fetch a
+// public RSS feed and parse it like the OLX listing pages. Trade-off:
+// external dependency. The public rsshub.app instance has been 403-ing
+// FB routes so we support a fallback list of mirrors and try them in
+// order until one returns 200.
 //
 // Config:
 //   FACEBOOK_GROUP_IDS=1059982300752044,40176110019418  (defaults below)
-//   RSSHUB_BASE_URL=https://rsshub.app                  (default)
+//   RSSHUB_BASE_URLS=url1,url2,url3                      (tried in order)
+//   RSSHUB_BASE_URL=url                                  (single, alt to URLS)
 //
 // Each RSS <item> becomes a scrape_log row keyed on its <link> — same
 // idempotency model as OLX/Telegram. <description> usually carries
@@ -28,7 +29,18 @@ const UA =
 // User-supplied seed groups (Kyiv lost-pet groups). Override via env if
 // the curation set changes.
 const DEFAULT_GROUP_IDS = ['1059982300752044', '40176110019418'];
-const DEFAULT_RSSHUB_BASE = 'https://rsshub.app';
+
+// Default fallback chain of public RSSHub mirrors. Order matters: we
+// try left-to-right and stop at the first 2xx. rsshub.app is the
+// official upstream and is what new FB routes ship against, but it's
+// been 403-ing for FB groups; the others are community mirrors that
+// historically have different IP allowances.
+const DEFAULT_RSSHUB_BASES = [
+  'https://rsshub.app',
+  'https://rsshub.rssforever.com',
+  'https://rsshub.feeded.xyz',
+  'https://rsshub.pseudoyu.com',
+];
 
 const MIN_BODY_CHARS = 60;
 
@@ -49,8 +61,17 @@ function groupIds(): string[] {
     .filter(Boolean);
 }
 
-function rsshubBase(): string {
-  return (process.env.RSSHUB_BASE_URL ?? DEFAULT_RSSHUB_BASE).replace(/\/$/, '');
+function rsshubBases(): string[] {
+  // Plural env wins; falls through to singular env; falls through to
+  // the bundled default chain. All forms get trailing-slash trimmed.
+  const raw =
+    process.env.RSSHUB_BASE_URLS ??
+    process.env.RSSHUB_BASE_URL ??
+    DEFAULT_RSSHUB_BASES.join(',');
+  return raw
+    .split(',')
+    .map((s) => s.trim().replace(/\/$/, ''))
+    .filter(Boolean);
 }
 
 async function fetchText(url: string): Promise<string> {
@@ -125,18 +146,30 @@ export class FacebookSource implements Source {
     const summary = emptySummary('facebook');
     const groups = groupIds();
     if (groups.length === 0) return summary;
-    const base = rsshubBase();
+    const bases = rsshubBases();
+    if (bases.length === 0) return summary;
 
     const all: FbItem[] = [];
     for (const id of groups) {
-      const url = `${base}/facebook/group/${id}`;
-      try {
-        const xml = await fetchText(url);
-        all.push(...parseRss(xml, id));
-      } catch (err) {
-        const msg = `[feed ${id}] ${(err as Error).message}`;
+      // Try each mirror in order; first 2xx wins. Collect per-attempt
+      // errors so /stats can show "tried A, tried B, none worked".
+      let landed = false;
+      const attemptErrors: string[] = [];
+      for (const base of bases) {
+        const url = `${base}/facebook/group/${id}`;
+        try {
+          const xml = await fetchText(url);
+          all.push(...parseRss(xml, id));
+          landed = true;
+          break;
+        } catch (err) {
+          attemptErrors.push(`${base} -> ${(err as Error).message}`);
+        }
+      }
+      if (!landed) {
+        const msg = `[feed ${id}] all bases failed: ${attemptErrors.join(' | ')}`;
         recordError(summary, msg);
-        console.warn('[facebook] feed fetch failed', url, msg);
+        console.warn('[facebook] feed fetch failed', id, msg);
       }
     }
 
