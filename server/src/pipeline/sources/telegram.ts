@@ -22,7 +22,7 @@ import { inArray } from 'drizzle-orm';
 import { db, schema } from '../../db/index.js';
 import { parseDogPost } from '../parser.js';
 import { upsertLostDog } from '../upsert.js';
-import { emptySummary, type Source, type SourceRunSummary } from '../source.js';
+import { emptySummary, recordError, type Source, type SourceRunSummary } from '../source.js';
 import { looksLikeLostPet, looksLikeRehoming } from '../keywords.js';
 
 const UA =
@@ -117,12 +117,9 @@ export class TelegramSource implements Source {
         const msgs = parseChannelPage(html, ch);
         allMessages.push(...msgs);
       } catch (err) {
-        summary.errors++;
-        console.warn(
-          '[telegram] channel fetch failed',
-          ch,
-          (err as Error).message,
-        );
+        const msg = `[channel ${ch}] ${(err as Error).message}`;
+        recordError(summary, msg);
+        console.warn('[telegram] channel fetch failed', msg);
       }
     }
 
@@ -242,12 +239,9 @@ export class TelegramSource implements Source {
           })
           .onConflictDoNothing({ target: schema.scrapeLog.url });
       } catch (err) {
-        summary.errors++;
-        console.warn(
-          '[telegram] msg parse failed',
-          msg.url,
-          (err as Error).message,
-        );
+        const errMsg = `[msg ${msg.url}] ${(err as Error).message}`;
+        recordError(summary, errMsg);
+        console.warn('[telegram] msg parse failed', errMsg);
         await db
           .insert(schema.scrapeLog)
           .values({

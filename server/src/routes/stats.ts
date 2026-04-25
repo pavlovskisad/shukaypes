@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
+import { getTickHistory } from '../services/scrape-history.js';
 
 // Public read-only pipeline status. Hit from anywhere — phone browser,
 // curl, dashboard. No auth, returns aggregate counts + the last N
@@ -101,6 +102,11 @@ const plugin: FastifyPluginAsync = async (app) => {
         bySource: Object.fromEntries(bySource.map((r) => [r.source, r.n])),
       },
       scrapeLifetime: sourceTotals,
+      // Last N tick summaries per source — surfaces sources that ran
+      // with discovered=0 (bridge empty / channels unset) and sources
+      // that threw before writing any scrape_log row. Gone on restart;
+      // promote to redis if we ever scale beyond one machine.
+      recentTicks: getTickHistory(),
       recentScrape: recentScrapeLog.map((r) => ({
         source: r.source,
         title: r.title,

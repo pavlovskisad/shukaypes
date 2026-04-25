@@ -15,7 +15,7 @@ import { eq, inArray } from 'drizzle-orm';
 import { db, schema } from '../../db/index.js';
 import { parseDogPost } from '../parser.js';
 import { upsertLostDog } from '../upsert.js';
-import { emptySummary, type Source, type SourceRunSummary } from '../source.js';
+import { emptySummary, recordError, type Source, type SourceRunSummary } from '../source.js';
 import {
   looksLikeLostPet,
   looksLikeRehoming,
@@ -123,8 +123,9 @@ export class OlxSource implements Source {
         const cards = parseCards(html, listUrl);
         allCards.push(...cards);
       } catch (err) {
-        summary.errors++;
-        console.warn('[olx] listing fetch failed', listUrl, (err as Error).message);
+        const msg = `[listing ${listUrl}] ${(err as Error).message}`;
+        recordError(summary, msg);
+        console.warn('[olx] listing fetch failed', msg);
       }
     }
 
@@ -239,8 +240,9 @@ export class OlxSource implements Source {
           })
           .onConflictDoNothing({ target: schema.scrapeLog.url });
       } catch (err) {
-        summary.errors++;
-        console.warn('[olx] ad parse failed', card.url, (err as Error).message);
+        const msg = `[ad ${card.url}] ${(err as Error).message}`;
+        recordError(summary, msg);
+        console.warn('[olx] ad parse failed', msg);
         // Log the failure so we don't retry on every tick. First failure gets
         // a row with skipReason=error; next tick will see it in seenUrls.
         await db

@@ -12,6 +12,7 @@ import { OlxSource } from '../pipeline/sources/olx.js';
 import { TelegramSource } from '../pipeline/sources/telegram.js';
 import { FacebookSource } from '../pipeline/sources/facebook.js';
 import type { Source, SourceRunSummary } from '../pipeline/source.js';
+import { recordTick } from './scrape-history.js';
 
 const INTERVAL_MS = 60 * 60 * 1000; // 1h
 const INITIAL_DELAY_MIN_MS = 30_000;
@@ -32,9 +33,24 @@ export async function runAllSources(log: Pick<FastifyBaseLogger, 'info' | 'warn'
     try {
       const summary = await s.runOnce();
       log.info({ kind: 'scrape_tick', ...summary }, `[${s.name}] tick complete`);
+      recordTick(summary);
       results.push(summary);
     } catch (err) {
       log.warn({ kind: 'scrape_tick_failed', source: s.name, err: (err as Error).message }, 'scrape source failed');
+      // Record a synthetic failed tick so /stats can show source ran
+      // and threw, instead of silently absent. errors=1 + a single
+      // errorMessage carrying the throw.
+      recordTick({
+        source: s.name,
+        discovered: 0,
+        skipped: 0,
+        parsed: 0,
+        inserted: 0,
+        updated: 0,
+        duplicate: 0,
+        errors: 1,
+        errorMessages: [(err as Error).message.slice(0, 200)],
+      });
     }
   }
   return results;
