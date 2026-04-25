@@ -10,6 +10,7 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { OlxSource } from '../pipeline/sources/olx.js';
 import { TelegramSource } from '../pipeline/sources/telegram.js';
+import { FacebookSource } from '../pipeline/sources/facebook.js';
 import type { Source, SourceRunSummary } from '../pipeline/source.js';
 
 const INTERVAL_MS = 60 * 60 * 1000; // 1h
@@ -17,11 +18,12 @@ const INITIAL_DELAY_MIN_MS = 30_000;
 const INITIAL_DELAY_MAX_MS = 120_000;
 
 function sources(): Source[] {
-  // Telegram is env-gated: when TELEGRAM_CHANNELS is empty it's a
-  // cheap no-op (returns on first line of runOnce), so it's safe to
-  // register unconditionally. Shelter-registry sources slot in here
-  // next.
-  return [new OlxSource(), new TelegramSource()];
+  // Telegram is env-gated (TELEGRAM_CHANNELS); empty = no-op.
+  // Facebook ships with two seed group IDs hard-coded as defaults
+  // and override via FACEBOOK_GROUP_IDS — also a cheap no-op when
+  // the bridge can't reach the groups. Shelter-registry sources
+  // slot in here next.
+  return [new OlxSource(), new TelegramSource(), new FacebookSource()];
 }
 
 export async function runAllSources(log: Pick<FastifyBaseLogger, 'info' | 'warn'>): Promise<SourceRunSummary[]> {
