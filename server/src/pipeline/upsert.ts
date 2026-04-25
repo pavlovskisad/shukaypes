@@ -15,6 +15,35 @@ import type { IngestAction, IngestResult, ParsedDog } from './types.js';
 const DEDUPE_RADIUS_M = 1500;
 const DEDUPE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
+// Greater Kyiv bounding box — generous enough to include Vyshgorod,
+// Brovary, Bucha, Boryspil, Vasylkiv approaches, but small enough to
+// reject Dnipro / Kryvyi Rih / Lviv etc that occasionally slip past
+// the title filter when a pet name happens to overlap. Pets whose
+// parsed coords fall outside this box are skipped at upsert time;
+// fallback-coord pets (geocode failure → city center) stay in because
+// they're already filtered from /dogs/nearby on the way out.
+const KYIV_BBOX = {
+  north: 50.65,
+  south: 50.20,
+  west: 30.10,
+  east: 30.90,
+};
+const FALLBACK_LAT = 50.4501;
+const FALLBACK_LNG = 30.5234;
+
+function inKyivBbox(lat: number, lng: number): boolean {
+  return (
+    lat >= KYIV_BBOX.south &&
+    lat <= KYIV_BBOX.north &&
+    lng >= KYIV_BBOX.west &&
+    lng <= KYIV_BBOX.east
+  );
+}
+
+function isFallbackCoord(lat: number, lng: number): boolean {
+  return lat === FALLBACK_LAT && lng === FALLBACK_LNG;
+}
+
 interface UpsertInput {
   parsed: ParsedDog;
   source: string;          // 'admin-sideload' | 'telegram:<channel>' | 'olx' | ...
@@ -22,6 +51,22 @@ interface UpsertInput {
 }
 
 export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput): Promise<IngestResult> {
+  // Geo gate first — outside Greater Kyiv we don't want the pet on
+  // the map at all. Fallback coords (geocode failure) are allowed
+  // through; they're filtered from /dogs/nearby separately so they
+  // never show but stay in the DB for audit.
+  if (
+    !isFallbackCoord(parsed.lastSeenLat, parsed.lastSeenLng) &&
+    !inKyivBbox(parsed.lastSeenLat, parsed.lastSeenLng)
+  ) {
+    return {
+      id: null,
+      action: 'skipped',
+      skipReason: `out-of-region (${parsed.lastSeenLat.toFixed(3)}, ${parsed.lastSeenLng.toFixed(3)})`,
+      parsed,
+    };
+  }
+
   const lastSeenAt = new Date(parsed.lastSeenAt);
   const lastSeenMs = lastSeenAt.getTime();
 

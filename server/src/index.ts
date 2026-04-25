@@ -17,7 +17,6 @@ import { startScrapeCron } from './services/scrape.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
 import { redis } from './db/redis.js';
-import { seedOnBootIfEmpty } from './db/seed-dogs.js';
 
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
@@ -77,7 +76,8 @@ async function buildServer() {
 
 async function main() {
   const app = await buildServer();
-  await seedOnBootIfEmpty(app.log);
+  // Boot-seed dropped — pilot now runs on real scraped pets only.
+  // The seedLostDogs() CLI in db/seed-dogs.ts still works for local dev.
   const stopDecay = startDecayCron();
   const stopScrape = startScrapeCron(app.log);
   try {
