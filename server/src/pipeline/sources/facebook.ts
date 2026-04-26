@@ -1,19 +1,27 @@
-// Facebook scraper via RSSHub-style RSS bridge. Going through a bridge
-// lets us avoid FB auth + the JS-rendered DOM entirely — we fetch a
-// public RSS feed and parse it like the OLX listing pages. Trade-off:
-// external dependency. The public rsshub.app instance has been 403-ing
-// FB routes so we support a fallback list of mirrors and try them in
-// order until one returns 200.
+// Facebook scraper via mbasic.facebook.com with a saved login session.
+// We tried RSSHub bridges first (#79, #84) — every public mirror 403'd,
+// the closed groups need actual auth. mbasic is FB's stripped-down
+// mobile site: light HTML, no JS, parseable with cheerio. Sending the
+// session cookies of a logged-in throwaway account passes the gate
+// without spinning up Chromium.
 //
 // Config:
 //   FACEBOOK_GROUP_IDS=1059982300752044,40176110019418  (defaults below)
-//   RSSHUB_BASE_URLS=url1,url2,url3                      (tried in order)
-//   RSSHUB_BASE_URL=url                                  (single, alt to URLS)
+//   FACEBOOK_COOKIES="c_user=…; xs=…; datr=…; fr=…"     (Cookie header)
 //
-// Each RSS <item> becomes a scrape_log row keyed on its <link> — same
-// idempotency model as OLX/Telegram. <description> usually carries
-// post HTML; we strip tags for the parser body and pluck the first
-// <img src> as photoUrl. <title> seeds the lost/rehoming classifier.
+// How to get cookies (one-time, ~5min):
+//   1. Log into facebook.com on a desktop browser (use a throwaway
+//      account, never your main — bot detection can ban it).
+//   2. DevTools → Application → Cookies → facebook.com.
+//   3. Copy at least: c_user, xs, datr, fr, sb, presence.
+//      Format: "name=value; name=value; …"
+//   4. flyctl secrets set FACEBOOK_COOKIES="…"
+//
+// Sessions usually live weeks → months. When we start seeing "session-
+// expired" errors in /stats.recentTicks.facebook, re-export.
+//
+// Each post becomes a scrape_log row keyed on its permalink — same
+// idempotency model as OLX/Telegram/RSSHub.
 
 import { load as loadHtml } from 'cheerio';
 import { inArray } from 'drizzle-orm';
@@ -23,28 +31,16 @@ import { upsertLostDog } from '../upsert.js';
 import { emptySummary, recordError, type Source, type SourceRunSummary } from '../source.js';
 import { looksLikeLostPet, looksLikeRehoming } from '../keywords.js';
 
+// Mobile Safari UA — mbasic prefers mobile clients and serves cleaner
+// HTML to them. Desktop UA gets a different layout and sometimes a
+// "switch to mobile" interstitial.
 const UA =
-  'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36';
+  'Mozilla/5.0 (iPhone; CPU iPhone OS 16_5 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/16.5 Mobile/15E148 Safari/604.1';
 
-// User-supplied seed groups (Kyiv lost-pet groups). Override via env if
-// the curation set changes.
 const DEFAULT_GROUP_IDS = ['1059982300752044', '40176110019418'];
-
-// Default fallback chain of public RSSHub mirrors. Order matters: we
-// try left-to-right and stop at the first 2xx. rsshub.app is the
-// official upstream and is what new FB routes ship against, but it's
-// been 403-ing for FB groups; the others are community mirrors that
-// historically have different IP allowances.
-const DEFAULT_RSSHUB_BASES = [
-  'https://rsshub.app',
-  'https://rsshub.rssforever.com',
-  'https://rsshub.feeded.xyz',
-  'https://rsshub.pseudoyu.com',
-];
-
 const MIN_BODY_CHARS = 60;
 
-interface FbItem {
+interface FbPost {
   link: string;
   title: string;
   body: string;
@@ -61,82 +57,107 @@ function groupIds(): string[] {
     .filter(Boolean);
 }
 
-function rsshubBases(): string[] {
-  // Plural env wins; falls through to singular env; falls through to
-  // the bundled default chain. All forms get trailing-slash trimmed.
-  const raw =
-    process.env.RSSHUB_BASE_URLS ??
-    process.env.RSSHUB_BASE_URL ??
-    DEFAULT_RSSHUB_BASES.join(',');
-  return raw
-    .split(',')
-    .map((s) => s.trim().replace(/\/$/, ''))
-    .filter(Boolean);
+function cookieHeader(): string | null {
+  const raw = process.env.FACEBOOK_COOKIES?.trim();
+  if (!raw) return null;
+  return raw;
 }
 
-async function fetchText(url: string): Promise<string> {
+async function fetchGroupHtml(
+  groupId: string,
+  cookies: string,
+): Promise<string> {
+  const url = `https://mbasic.facebook.com/groups/${groupId}`;
   const res = await fetch(url, {
     headers: {
       'user-agent': UA,
       'accept-language': 'uk-UA,uk;q=0.9,ru;q=0.8,en;q=0.6',
-      accept: 'application/rss+xml, application/xml, text/xml, */*',
+      cookie: cookies,
     },
     redirect: 'follow',
   });
   if (!res.ok) throw new Error(`${url} -> ${res.status}`);
+  // FB silently 200s the login page when cookies are stale. The final
+  // URL after redirects gives it away.
+  const finalUrl = res.url;
+  if (/\/login(?:\.php)?(?:[/?]|$)/i.test(finalUrl) ||
+      /\/checkpoint/i.test(finalUrl)) {
+    throw new Error(`session-expired (redirected to ${finalUrl})`);
+  }
   return res.text();
 }
 
-// RSSHub's <description> is HTML escaped inside a CDATA. cheerio in
-// xmlMode pulls the unescaped string; we then re-load it as HTML to
-// get text + first image.
-function extractFromDescription(descHtml: string): {
-  body: string;
-  photoUrl: string | null;
-} {
-  if (!descHtml) return { body: '', photoUrl: null };
-  const $ = loadHtml(descHtml);
-  // Replace <br> with newlines so the body retains paragraphing.
-  $('br').replaceWith('\n');
-  // Drop image-only nodes from the text but pluck their src.
-  const photoUrl =
-    $('img').first().attr('src') ?? $('media\\:content').attr('url') ?? null;
-  // strip out images so the alt text doesn't leak into the body.
-  $('img').remove();
-  const body = $('body').length
-    ? $('body').text().trim()
-    : $.root().text().trim();
-  return {
-    body: body.replace(/\s+\n/g, '\n').replace(/\n{3,}/g, '\n\n').trim(),
-    photoUrl,
-  };
-}
+// mbasic group page wraps each post in `article[data-store]` or
+// `div[role="article"]` depending on the layout flavor. We try a few
+// selectors; whatever lands is fine. Permalink is always anchor with
+// `/groups/<id>/permalink/` or `?story_fbid=`.
+function parseGroupPage(html: string, groupId: string): FbPost[] {
+  const $ = loadHtml(html);
+  const out: FbPost[] = [];
+  const seenLinks = new Set<string>();
 
-function parseRss(xml: string, groupId: string): FbItem[] {
-  const $ = loadHtml(xml, { xmlMode: true });
-  const items: FbItem[] = [];
-  $('item').each((_i, el) => {
+  // Multiple selectors because mbasic's per-post wrapper varies. Order:
+  // most specific to least.
+  const candidates = $(
+    'article[data-store], div[role="article"], div.story_body_container, #m_story_permalink_view article',
+  );
+
+  candidates.each((_i, el) => {
     const $el = $(el);
-    const link = $el.find('link').first().text().trim();
-    const title = $el.find('title').first().text().trim();
-    if (!link) return;
-    const description = $el.find('description').first().text();
-    const { body, photoUrl } = extractFromDescription(description);
-    // Some bridges put media:content as a sibling instead of inside
-    // description — pick that up too.
-    const altPhoto =
-      $el.find('media\\:content').first().attr('url') ??
-      $el.find('enclosure[type^="image/"]').first().attr('url') ??
-      null;
-    items.push({
+
+    // Find the first permalink-shaped anchor inside.
+    let href: string | undefined;
+    $el
+      .find(`a[href*="/groups/${groupId}/permalink/"], a[href*="story_fbid="]`)
+      .each((_j, a) => {
+        const h = $(a).attr('href');
+        if (h && !href) href = h;
+      });
+    if (!href) return;
+    let link = href.startsWith('http') ? href : `https://www.facebook.com${href}`;
+    try {
+      // Canonical: drop query (besides story_fbid which we keep).
+      const u = new URL(link);
+      // story_fbid + id pair is the canonical permalink format on legacy
+      // posts; preserve those, drop tracking params.
+      const keep = new URLSearchParams();
+      const sf = u.searchParams.get('story_fbid');
+      const ide = u.searchParams.get('id');
+      if (sf) keep.set('story_fbid', sf);
+      if (ide) keep.set('id', ide);
+      u.search = keep.toString() ? `?${keep.toString()}` : '';
+      u.hash = '';
+      link = u.toString();
+    } catch {
+      /* leave as-is */
+    }
+    if (seenLinks.has(link)) return;
+    seenLinks.add(link);
+
+    // Body text: collect all visible text under the article, drop
+    // navigational / chrome bits.
+    const $clone = $el.clone();
+    $clone.find('script, style, nav, footer').remove();
+    const body = $clone
+      .text()
+      .replace(/\s+\n/g, '\n')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+    if (body.length < 30) return;
+
+    // First non-emoji image.
+    const photoUrl = $el.find('img').first().attr('src') ?? null;
+
+    out.push({
       link,
-      title,
+      title: body.slice(0, 120),
       body,
-      photoUrl: photoUrl ?? altPhoto,
+      photoUrl,
       groupId,
     });
   });
-  return items;
+
+  return out;
 }
 
 export class FacebookSource implements Source {
@@ -144,74 +165,69 @@ export class FacebookSource implements Source {
 
   async runOnce(): Promise<SourceRunSummary> {
     const summary = emptySummary('facebook');
+    const cookies = cookieHeader();
+    if (!cookies) {
+      // No-op when cookies aren't configured — same pattern as Telegram
+      // when TELEGRAM_CHANNELS is unset. Surfaces a clear "needs config"
+      // signal at /stats without throwing on every tick.
+      recordError(summary, 'FACEBOOK_COOKIES not set — source disabled');
+      return summary;
+    }
     const groups = groupIds();
     if (groups.length === 0) return summary;
-    const bases = rsshubBases();
-    if (bases.length === 0) return summary;
 
-    const all: FbItem[] = [];
+    const all: FbPost[] = [];
     for (const id of groups) {
-      // Try each mirror in order; first 2xx wins. Collect per-attempt
-      // errors so /stats can show "tried A, tried B, none worked".
-      let landed = false;
-      const attemptErrors: string[] = [];
-      for (const base of bases) {
-        const url = `${base}/facebook/group/${id}`;
-        try {
-          const xml = await fetchText(url);
-          all.push(...parseRss(xml, id));
-          landed = true;
-          break;
-        } catch (err) {
-          attemptErrors.push(`${base} -> ${(err as Error).message}`);
+      try {
+        const html = await fetchGroupHtml(id, cookies);
+        const posts = parseGroupPage(html, id);
+        if (posts.length === 0) {
+          // Page loaded but parsed nothing — usually means mbasic
+          // changed its post wrapper. Surface so we can adjust selectors.
+          recordError(summary, `[group ${id}] page loaded, 0 posts parsed`);
         }
-      }
-      if (!landed) {
-        const msg = `[feed ${id}] all bases failed: ${attemptErrors.join(' | ')}`;
-        recordError(summary, msg);
-        console.warn('[facebook] feed fetch failed', id, msg);
+        all.push(...posts);
+      } catch (err) {
+        recordError(summary, `[group ${id}] ${(err as Error).message}`);
+        console.warn('[facebook] group fetch failed', id, (err as Error).message);
       }
     }
 
-    // De-dupe by link within the run — the same post can appear in two
-    // groups if cross-shared.
+    // Same pipeline as RSSHub version: dedupe → filter seen → classify
+    // → parse → upsert → log.
     const seenThisRun = new Set<string>();
-    const deduped = all.filter((m) =>
-      seenThisRun.has(m.link) ? false : seenThisRun.add(m.link),
+    const deduped = all.filter((p) =>
+      seenThisRun.has(p.link) ? false : seenThisRun.add(p.link),
     );
     summary.discovered = deduped.length;
     if (deduped.length === 0) return summary;
 
-    const links = deduped.map((m) => m.link);
+    const links = deduped.map((p) => p.link);
     const seen = await db
       .select({ url: schema.scrapeLog.url })
       .from(schema.scrapeLog)
       .where(inArray(schema.scrapeLog.url, links));
     const seenLinks = new Set(seen.map((r) => r.url));
 
-    for (const item of deduped) {
-      if (seenLinks.has(item.link)) {
+    for (const post of deduped) {
+      if (seenLinks.has(post.link)) {
         summary.skipped++;
         continue;
       }
 
-      const tag = `facebook:${item.groupId}`;
-      // Prefer the title for the lost/rehoming gate when present, fall
-      // back to first body line. RSSHub sometimes leaves the title as
-      // "Post by <name>" — the body's first line is then the actual
-      // signal.
-      const classifierSeed =
-        item.title && !/^post by /i.test(item.title)
-          ? item.title
-          : (item.body.split(/\r?\n/).find((l) => l.trim()) ?? '').slice(0, 200);
+      const tag = `facebook:${post.groupId}`;
+      // Title-or-first-line classifier seed (FB has no separate title
+      // field; the first line of the post usually carries the signal).
+      const seed =
+        (post.body.split(/\r?\n/).find((l) => l.trim()) ?? '').slice(0, 200);
 
-      if (item.body.length < MIN_BODY_CHARS) {
+      if (post.body.length < MIN_BODY_CHARS) {
         await db
           .insert(schema.scrapeLog)
           .values({
-            url: item.link,
+            url: post.link,
             source: tag,
-            title: classifierSeed,
+            title: seed,
             ingestAction: 'skipped',
             skipReason: 'too-short',
           })
@@ -220,15 +236,15 @@ export class FacebookSource implements Source {
         continue;
       }
 
-      const rehoming = looksLikeRehoming(classifierSeed);
-      const lost = looksLikeLostPet(classifierSeed);
+      const rehoming = looksLikeRehoming(seed);
+      const lost = looksLikeLostPet(seed);
       if (rehoming || !lost) {
         await db
           .insert(schema.scrapeLog)
           .values({
-            url: item.link,
+            url: post.link,
             source: tag,
-            title: classifierSeed,
+            title: seed,
             ingestAction: 'skipped',
             skipReason: rehoming ? 'rehoming' : 'title-filter',
           })
@@ -239,8 +255,8 @@ export class FacebookSource implements Source {
 
       try {
         const parsed = await parseDogPost({
-          text: item.body,
-          photoUrl: item.photoUrl,
+          text: post.body,
+          photoUrl: post.photoUrl,
         });
         summary.parsed++;
 
@@ -248,9 +264,9 @@ export class FacebookSource implements Source {
           await db
             .insert(schema.scrapeLog)
             .values({
-              url: item.link,
+              url: post.link,
               source: tag,
-              title: classifierSeed,
+              title: seed,
               parseConfidence: parsed.parseConfidence,
               ingestAction: 'skipped',
               skipReason: 'rehoming',
@@ -264,9 +280,9 @@ export class FacebookSource implements Source {
           await db
             .insert(schema.scrapeLog)
             .values({
-              url: item.link,
+              url: post.link,
               source: tag,
-              title: classifierSeed,
+              title: seed,
               parseConfidence: parsed.parseConfidence,
               ingestAction: 'skipped',
               skipReason: 'low-confidence',
@@ -285,9 +301,9 @@ export class FacebookSource implements Source {
         await db
           .insert(schema.scrapeLog)
           .values({
-            url: item.link,
+            url: post.link,
             source: tag,
-            title: classifierSeed,
+            title: seed,
             dogId: result.id,
             parseConfidence: parsed.parseConfidence,
             ingestAction: result.action,
@@ -295,15 +311,15 @@ export class FacebookSource implements Source {
           })
           .onConflictDoNothing({ target: schema.scrapeLog.url });
       } catch (err) {
-        const msg = `[item ${item.link}] ${(err as Error).message}`;
-        recordError(summary, msg);
-        console.warn('[facebook] item parse failed', msg);
+        const errMsg = `[post ${post.link}] ${(err as Error).message}`;
+        recordError(summary, errMsg);
+        console.warn('[facebook] post parse failed', errMsg);
         await db
           .insert(schema.scrapeLog)
           .values({
-            url: item.link,
+            url: post.link,
             source: tag,
-            title: classifierSeed,
+            title: seed,
             ingestAction: 'skipped',
             skipReason: `error: ${(err as Error).message.slice(0, 200)}`,
           })
