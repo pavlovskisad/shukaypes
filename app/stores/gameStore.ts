@@ -102,6 +102,13 @@ interface GameState {
   // whether spots are loaded into the array — the user can declutter
   // the map without losing the cached Places fetch.
   spotsVisible: boolean;
+  // Pre-computed walking route from companion's "walk" radial leaf.
+  // Polyline is fetched once via the Directions API and stored here so
+  // the map can render it without re-quotaing on every tick. shape
+  // distinguishes roundtrip (origin → dest → origin) from one-way
+  // (origin → dest) so MapView can label or style differently.
+  walkRoute: LatLng[] | null;
+  walkRouteMeta: { shape: 'roundtrip' | 'oneway'; spotId: string } | null;
   dailyTasks: DailyTasks;
   syncing: boolean;
   lastSyncError: string | null;
@@ -121,6 +128,10 @@ interface GameState {
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
+  setWalkRoute: (
+    route: LatLng[] | null,
+    meta: { shape: 'roundtrip' | 'oneway'; spotId: string } | null,
+  ) => void;
   reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean } | void>;
   // Detective quests. Start flips any existing active quest to abandoned
   // server-side. advance checks proximity to the current waypoint and
@@ -175,6 +186,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   // the layer via the HUD toggle. Avoids cluttering the map at first
   // load with every nearby cafe and pet store.
   spotsVisible: false,
+  walkRoute: null,
+  walkRouteMeta: null,
   dailyTasks: loadTasks(),
   syncing: false,
   lastSyncError: null,
@@ -430,6 +443,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
+
+  setWalkRoute: (walkRoute, walkRouteMeta) => set({ walkRoute, walkRouteMeta }),
 
   reportSighting: async (dogId) => {
     const { userPosition } = get();

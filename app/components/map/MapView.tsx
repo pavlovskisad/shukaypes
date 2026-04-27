@@ -84,6 +84,9 @@ export default function MapViewWeb() {
   const syncActiveQuest = useGameStore((s) => s.syncActiveQuest);
   const advanceQuestIfNear = useGameStore((s) => s.advanceQuestIfNear);
   const forceAdvanceActiveWaypoint = useGameStore((s) => s.forceAdvanceActiveWaypoint);
+  const walkRoute = useGameStore((s) => s.walkRoute);
+  const walkRouteMeta = useGameStore((s) => s.walkRouteMeta);
+  const setWalkRoute = useGameStore((s) => s.setWalkRoute);
 
   // Street-hugging walking route through the active quest's waypoints.
   // Fetched once per quest (by id) so GPS ticks don't re-quota the
@@ -360,6 +363,10 @@ export default function MapViewWeb() {
           // menu too — matches the prototype's "tap anywhere else to
           // dismiss" pattern.
           useGameStore.getState().setMenuOpen(false);
+          // Tapping background also dismisses an active walking route.
+          // Quest routes are sticky to the active quest and aren't
+          // touched here.
+          setWalkRoute(null, null);
         }}
       >
         <UserMarker position={userPos} />
@@ -543,6 +550,24 @@ export default function MapViewWeb() {
               );
             })}
           </>
+        ) : null}
+
+        {/* Walking route from the companion's "walk" radial leaf.
+            Distinct visual from quest routes: thinner + slightly more
+            transparent so it reads as "suggested route" not "active
+            mission." Roundtrip and one-way share the same styling
+            today; if we ever differentiate, dashed for one of them
+            would be the move. clickable=false so taps go through. */}
+        {walkRoute && walkRoute.length > 1 ? (
+          <PolylineF
+            path={walkRoute}
+            options={{
+              strokeColor: '#0000ff',
+              strokeOpacity: 0.4,
+              strokeWeight: 3,
+              clickable: false,
+            }}
+          />
         ) : null}
 
         {companionPos ? (
