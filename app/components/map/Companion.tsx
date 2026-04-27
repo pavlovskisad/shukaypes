@@ -1,13 +1,93 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import { useGameStore } from '../../stores/gameStore';
 import { SpeechBubble } from '../ui/SpeechBubble';
-import { RadialMenu, PRIMARY_ACTIONS } from './RadialMenu';
+import {
+  RadialMenu,
+  PRIMARY_ACTIONS,
+  WALK_SHAPE_ACTIONS,
+  WALK_DISTANCE_ACTIONS,
+  VISIT_CATEGORY_ACTIONS,
+  type RadialAction,
+} from './RadialMenu';
 import type { LatLng } from '@shukajpes/shared';
 import { distanceMeters } from '../../utils/geo';
+import type { SpotCategory, Spot } from '../../services/places';
 import logoNose from '../../assets/logo-nose.png';
+
+// Walk distance budgets — close ≈ 1km radius, far ≈ 3km. Both used for
+// roundtrip and one-way; the leaf handler picks a destination from the
+// loaded spots that matches.
+const WALK_CLOSE_M = 1000;
+const WALK_FAR_M = 3000;
+const SPOT_BUCKET_M = 500; // tolerance band around the target distance
+const VISIT_LEAVES_PER_CATEGORY = 3;
+
+// Resolves the actions for the current menu level. Path is a stack of
+// branch ids ('walk', 'walk:roundtrip', etc). Empty = root.
+function getCurrentActions(
+  path: string[],
+  spots: Spot[],
+  userPos: LatLng | null,
+): RadialAction[] {
+  const head = path[0];
+  if (!head) return PRIMARY_ACTIONS;
+  if (head === 'walk') {
+    if (path.length === 1) return WALK_SHAPE_ACTIONS;
+    // path[1] is 'walk:roundtrip' or 'walk:oneway'; rewrite the leaf
+    // ids to encode the full shape:distance combo so the handler can
+    // dispatch on a single string.
+    const shape = path[1]!.replace('walk:', ''); // 'roundtrip' | 'oneway'
+    return WALK_DISTANCE_ACTIONS.map((a) => ({
+      ...a,
+      id: `walk:${shape}${a.id}`, // a.id starts with ':', e.g. ':close'
+    }));
+  }
+  if (head === 'visit') {
+    if (path.length === 1) return VISIT_CATEGORY_ACTIONS;
+    if (!userPos) return [];
+    const category = path[1]!.replace('visit:', '') as SpotCategory;
+    return spots
+      .filter((s) => s.category === category)
+      .map((s) => ({ s, d: distanceMeters(userPos, s.position) }))
+      .sort((a, b) => a.d - b.d)
+      .slice(0, VISIT_LEAVES_PER_CATEGORY)
+      .map(({ s }) => ({
+        id: `visit:spot:${s.id}`,
+        icon: s.icon ?? '📍',
+        label: s.name.slice(0, 16),
+      }));
+  }
+  return PRIMARY_ACTIONS;
+}
+
+// Pick a destination spot near the requested distance for walk leaves.
+// Doesn't have to be exact — any spot within ±SPOT_BUCKET_M of the
+// target reads as "close" or "far" to a walker. Returns null when no
+// spots loaded or none in the band.
+function pickWalkSpot(
+  spots: Spot[],
+  userPos: LatLng,
+  targetM: number,
+): Spot | null {
+  if (spots.length === 0) return null;
+  const inBand = spots
+    .map((s) => ({ s, d: distanceMeters(userPos, s.position) }))
+    .filter(({ d }) => Math.abs(d - targetM) <= SPOT_BUCKET_M);
+  if (inBand.length > 0) {
+    // Pick the closest to the target distance for a confident match.
+    inBand.sort((a, b) => Math.abs(a.d - targetM) - Math.abs(b.d - targetM));
+    return inBand[0]!.s;
+  }
+  // Fallback: closest spot to the target distance overall, even if
+  // outside the band. Better than telling the user "no spots."
+  const sorted = spots
+    .map((s) => ({ s, d: distanceMeters(userPos, s.position) }))
+    .sort((a, b) => Math.abs(a.d - targetM) - Math.abs(b.d - targetM));
+  return sorted[0]?.s ?? null;
+}
 
 interface CompanionProps {
   position: LatLng;
@@ -30,7 +110,14 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
   const setMenuOpen = useGameStore((s) => s.setMenuOpen);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
+  const spots = useGameStore((s) => s.spots);
+  const userPosition = useGameStore((s) => s.userPosition);
   const [localBubble, setLocalBubble] = useState<string | null>(null);
+  // Stack of branch ids representing the current menu drill-down. Empty
+  // = root (PRIMARY_ACTIONS). Tapping the companion always resets to
+  // root from any depth (matches user expectation: "essentials are
+  // always one tap away on the dog").
+  const [menuPath, setMenuPath] = useState<string[]>([]);
   // Track the "coming soon" bubble timeout so rapid menu taps don't
   // accumulate dangling timers — each new tap cancels the previous one.
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -47,6 +134,12 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
     };
   }, []);
 
+  // Reset the drill-down whenever the menu closes (outside tap, action
+  // fired, etc). Without this, re-opening would land mid-tree.
+  useEffect(() => {
+    if (!menuOpen) setMenuPath([]);
+  }, [menuOpen]);
+
   const handleTap = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
@@ -54,86 +147,130 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
       // Google's map-level onClick can race against ours at low zoom and
       // would otherwise close the menu we just opened.
       onTap?.();
-      if (menuOpen) {
-        setMenuOpen(false);
+      if (!menuOpen) {
+        setMenuOpen(true);
+        onTapCompanion?.();
         return;
       }
-      setMenuOpen(true);
-      onTapCompanion?.();
+      // Already open: tap on the dog jumps back to the root level if
+      // we're drilled in, or closes the menu if we're already at root.
+      // Same gesture handles "back to essentials" and "dismiss".
+      if (menuPath.length > 0) {
+        setMenuPath([]);
+        return;
+      }
+      setMenuOpen(false);
     },
-    [menuOpen, setMenuOpen, onTapCompanion, onTap]
+    [menuOpen, menuPath, setMenuOpen, onTapCompanion, onTap]
   );
 
-  const handleAction = useCallback(
+  const fireLeafAction = useCallback(
     (id: string) => {
-      setMenuOpen(false);
-      // Each action pulls fresh data from the store so the handler doesn't
-      // need to subscribe to every slice.
-      const { lostDogs, spots, userPosition } = useGameStore.getState();
+      const { lostDogs, spots: ctxSpots, userPosition: ctxPos } = useGameStore.getState();
 
       switch (id) {
         case 'search': {
-          // Find the closest lost pet to the user (not the companion —
-          // companion wanders off) and open its modal. If none nearby,
-          // tell the user instead of silently failing.
-          if (!userPosition || lostDogs.length === 0) {
+          if (!ctxPos || lostDogs.length === 0) {
             flash('no lost pets in range yet');
             return;
           }
           const closest = lostDogs.reduce((best, d) => {
-            const dd = distanceMeters(userPosition, d.lastSeen.position);
-            const bd = distanceMeters(userPosition, best.lastSeen.position);
+            const dd = distanceMeters(ctxPos, d.lastSeen.position);
+            const bd = distanceMeters(ctxPos, best.lastSeen.position);
             return dd < bd ? d : best;
           }, lostDogs[0]!);
           setSelectedDog(closest.id);
           flash(`sniffed out ${closest.name} 🔍`);
           return;
         }
-        case 'visit': {
-          // Highlight the nearest spot if we've got one loaded; otherwise
-          // send the user to the Spots tab so the fetch can kick off.
-          if (spots.length > 0 && userPosition) {
-            const closest = spots.reduce((best, s) => {
-              const dd = distanceMeters(userPosition, s.position);
-              const bd = distanceMeters(userPosition, best.position);
-              return dd < bd ? s : best;
-            }, spots[0]!);
-            setSelectedSpot(closest.id);
-            flash(`let's check out ${closest.name} ${closest.icon ?? '📍'}`);
-            return;
-          }
-          router.push('/spots');
-          return;
-        }
         case 'chat': {
           router.push('/chat');
           return;
         }
-        case 'walk': {
-          // Minimal "walk" for now: if we know about spots, pick a random
-          // one and suggest it. Directions API comes in a later slice.
-          if (spots.length > 0 && userPosition) {
-            const pick = spots[Math.floor(Math.random() * spots.length)]!;
-            setSelectedSpot(pick.id);
-            flash(`let's walk to ${pick.name} 🚶`);
-          } else {
-            flash('pick a spot first and i\'ll lead you there');
-          }
-          return;
-        }
         case 'meet': {
-          // Social / walker presence — not built yet. Honest no-op so
-          // the user doesn't think the button's broken.
           flash('no walkers around yet 👥');
           return;
         }
-        default: {
-          const label = PRIMARY_ACTIONS.find((a) => a.id === id)?.label ?? id;
-          flash(`${label}! coming soon 🐾`);
-        }
       }
+
+      // Walk leaves: walk:<shape>:<distance>. Pick a destination spot
+      // near the target distance band and select it on the map. Real
+      // routing (one-way vs roundtrip distinct paths) lands in a later
+      // slice — for now both reuse the existing Directions polyline
+      // pattern via setSelectedSpot.
+      if (id.startsWith('walk:')) {
+        const parts = id.split(':'); // ['walk', shape, distance]
+        const shape = parts[1] ?? 'roundtrip';
+        const distance = parts[2] ?? 'close';
+        if (!ctxPos) {
+          flash("can't walk without knowing where we are");
+          return;
+        }
+        if (ctxSpots.length === 0) {
+          flash("let me sniff out some spots first — open Spots tab");
+          return;
+        }
+        const targetM = distance === 'far' ? WALK_FAR_M : WALK_CLOSE_M;
+        const pick = pickWalkSpot(ctxSpots, ctxPos, targetM);
+        if (!pick) {
+          flash('no spot at that distance — try the other one');
+          return;
+        }
+        setSelectedSpot(pick.id);
+        const shapeLabel = shape === 'roundtrip' ? 'roundtrip' : 'one-way';
+        const distLabel = distance === 'far' ? 'long' : 'short';
+        flash(`${distLabel} ${shapeLabel} to ${pick.name} 🚶`);
+        return;
+      }
+
+      // Visit leaves: visit:spot:<spotId>. Select that spot on the map.
+      if (id.startsWith('visit:spot:')) {
+        const spotId = id.replace('visit:spot:', '');
+        const spot = ctxSpots.find((s) => s.id === spotId);
+        if (!spot) {
+          flash("can't find that one anymore");
+          return;
+        }
+        setSelectedSpot(spot.id);
+        flash(`let's check out ${spot.name} ${spot.icon ?? '📍'}`);
+        return;
+      }
+
+      const label = PRIMARY_ACTIONS.find((a) => a.id === id)?.label ?? id;
+      flash(`${label}! coming soon 🐾`);
     },
-    [setMenuOpen, setSelectedDog, setSelectedSpot, router, flash]
+    [router, setSelectedDog, setSelectedSpot, flash]
+  );
+
+  const handleSelect = useCallback(
+    (id: string) => {
+      // At root: walk and visit branch deeper, everything else is a leaf.
+      if (menuPath.length === 0) {
+        if (id === 'walk' || id === 'visit') {
+          setMenuPath([id]);
+          return;
+        }
+        fireLeafAction(id);
+        setMenuOpen(false);
+        return;
+      }
+      // At level 2 (under a branch root): every option drills one
+      // level deeper — walk shapes branch to distances, visit
+      // categories branch to spot lists.
+      if (menuPath.length === 1) {
+        setMenuPath([...menuPath, id]);
+        return;
+      }
+      // Level 3 = leaves only.
+      fireLeafAction(id);
+      setMenuOpen(false);
+    },
+    [menuPath, fireLeafAction, setMenuOpen]
+  );
+
+  const currentActions = useMemo(
+    () => getCurrentActions(menuPath, spots, userPosition),
+    [menuPath, spots, userPosition]
   );
 
   // Hide bubbles while the radial menu is open — otherwise the bubble
@@ -227,7 +364,7 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
         </div>
 
         <SpeechBubble text={activeBubble} />
-        <RadialMenu open={menuOpen} actions={PRIMARY_ACTIONS} onSelect={handleAction} />
+        <RadialMenu open={menuOpen} actions={currentActions} onSelect={handleSelect} />
 
         <style>{`
           @keyframes co-float {
