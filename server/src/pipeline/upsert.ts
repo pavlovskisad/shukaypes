@@ -15,6 +15,15 @@ import type { IngestAction, IngestResult, ParsedDog } from './types.js';
 const DEDUPE_RADIUS_M = 1500;
 const DEDUPE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
 
+// Newer reposts of the same dog often have coords that drift 30-150m
+// from the original — different parser run, slightly different landmark
+// match, etc. Below this threshold we keep the existing pin coords and
+// only refresh the other fields (description, urgency, photo, lastSeenAt).
+// Above it, we treat it as a real geographic update and move the pin.
+// Sightings (real user-driven moves) take a different code path
+// (routes/sightings.ts) and are not subject to this threshold.
+const POSITION_UPDATE_THRESHOLD_M = 150;
+
 // Greater Kyiv bounding box — generous enough to include Vyshgorod,
 // Brovary, Bucha, Boryspil, Vasylkiv approaches, but small enough to
 // reject Dnipro / Kryvyi Rih / Lviv etc that occasionally slip past
@@ -102,18 +111,29 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
     // Only refresh if the incoming post is newer. Keeps older re-posts from
     // pushing the search zone backward in time.
     if (lastSeenMs > match.lastSeenAt.getTime()) {
+      // Two-tier update: small coord deltas (< POSITION_UPDATE_THRESHOLD_M)
+      // are treated as parser noise and don't move the pin — the pet still
+      // lives where the original post placed it. Bigger deltas (a real
+      // geographic update via a follow-up post that mentions a new
+      // landmark) do move it. Sightings take a separate code path
+      // (routes/sightings.ts) and are not subject to this threshold.
+      const coordDriftSmall =
+        typeof match.dist === 'number' && match.dist < POSITION_UPDATE_THRESHOLD_M;
+      const updateFields: Record<string, unknown> = {
+        lastSeenAt,
+        lastSeenDescription: parsed.lastSeenDescription,
+        urgency: parsed.urgency === 'resolved' ? 'resolved' : parsed.urgency,
+        searchZoneRadiusM: parsed.searchZoneRadiusM,
+        status: parsed.urgency === 'resolved' ? 'found' : 'active',
+        photoUrl: parsed.photoUrl ?? undefined,
+      };
+      if (!coordDriftSmall) {
+        updateFields.lastSeenLat = parsed.lastSeenLat;
+        updateFields.lastSeenLng = parsed.lastSeenLng;
+      }
       await db
         .update(schema.lostDogs)
-        .set({
-          lastSeenAt,
-          lastSeenLat: parsed.lastSeenLat,
-          lastSeenLng: parsed.lastSeenLng,
-          lastSeenDescription: parsed.lastSeenDescription,
-          urgency: parsed.urgency === 'resolved' ? 'resolved' : parsed.urgency,
-          searchZoneRadiusM: parsed.searchZoneRadiusM,
-          status: parsed.urgency === 'resolved' ? 'found' : 'active',
-          photoUrl: parsed.photoUrl ?? undefined,
-        })
+        .set(updateFields)
         .where(eq(schema.lostDogs.id, match.id));
       const action: IngestAction = 'updated';
       return { id: match.id, action, parsed };
