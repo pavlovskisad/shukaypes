@@ -15,6 +15,7 @@ import {
 import type { LatLng } from '@shukajpes/shared';
 import { distanceMeters } from '../../utils/geo';
 import type { SpotCategory, Spot } from '../../services/places';
+import { fetchWalkingRoute } from '../../services/directions';
 import logoNose from '../../assets/logo-nose.png';
 
 // Walk distance budgets — close ≈ 1km radius, far ≈ 3km. Both used for
@@ -200,14 +201,19 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
       // pattern via setSelectedSpot.
       if (id.startsWith('walk:')) {
         const parts = id.split(':'); // ['walk', shape, distance]
-        const shape = parts[1] ?? 'roundtrip';
+        const shape = (parts[1] ?? 'roundtrip') as 'roundtrip' | 'oneway';
         const distance = parts[2] ?? 'close';
         if (!ctxPos) {
           flash("can't walk without knowing where we are");
           return;
         }
         if (ctxSpots.length === 0) {
-          flash("let me sniff out some spots first — open Spots tab");
+          // Lazy-fetch — leaves were probably hit immediately after
+          // tapping "walk" before the categories prefetch landed. Kick
+          // it again and ask the user to retry in a moment.
+          const { syncSpots: doSync } = useGameStore.getState();
+          void doSync(ctxPos);
+          flash("sniffing out spots… try again in a sec");
           return;
         }
         const targetM = distance === 'far' ? WALK_FAR_M : WALK_CLOSE_M;
@@ -220,6 +226,20 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
         const shapeLabel = shape === 'roundtrip' ? 'roundtrip' : 'one-way';
         const distLabel = distance === 'far' ? 'long' : 'short';
         flash(`${distLabel} ${shapeLabel} to ${pick.name} 🚶`);
+        // Fetch the walking polyline asynchronously and stash on the
+        // store. Roundtrip = origin → dest → origin (dest as stopover);
+        // one-way = origin → dest. MapView renders whatever lands.
+        const waypoints =
+          shape === 'roundtrip'
+            ? [pick.position, ctxPos]
+            : [pick.position];
+        void fetchWalkingRoute(ctxPos, waypoints).then((route) => {
+          if (route) {
+            useGameStore
+              .getState()
+              .setWalkRoute(route, { shape, spotId: pick.id });
+          }
+        });
         return;
       }
 
@@ -248,6 +268,15 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
       if (menuPath.length === 0) {
         if (id === 'walk' || id === 'visit') {
           setMenuPath([id]);
+          // Both branches need spots populated for their leaves. Lazy-
+          // fetch here so the user doesn't have to manually visit the
+          // Spots tab first. No-op if already loaded.
+          const {
+            spots: ctxSpots,
+            syncSpots: doSync,
+            userPosition: ctxPos,
+          } = useGameStore.getState();
+          if (ctxSpots.length === 0 && ctxPos) void doSync(ctxPos);
           return;
         }
         fireLeafAction(id);
