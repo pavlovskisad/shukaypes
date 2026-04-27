@@ -49,6 +49,14 @@ export default function MapViewWeb() {
   const [bubble, setBubble] = useState<string | null>(null);
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
+  // Google Maps fires its own onClick on the map div independently of
+  // DOM event propagation — `stopPropagation` inside an OverlayViewF
+  // child doesn't reach it. At low zoom the companion overlaps the map
+  // surface enough that opening the radial menu also triggers a
+  // "background click" that closes it ~1 frame later. Record every
+  // companion tap and suppress the map onClick for a short window.
+  const companionTappedAtRef = useRef<number>(0);
+  const SUPPRESS_MAP_CLICK_MS = 300;
   // Which cluster is currently "spiderified" — tapping a cluster pops its
   // pets out around the center. Tapping elsewhere (the map background or
   // another cluster) collapses it. Lives locally because nothing else in
@@ -338,6 +346,14 @@ export default function MapViewWeb() {
           mapRef.current = null;
         }}
         onClick={() => {
+          // Suppress when the click came right after a companion tap —
+          // Google fires the map-level click independently of DOM
+          // propagation, which would otherwise close the menu we just
+          // opened (very visible at low zoom where the companion sits
+          // on top of the map surface).
+          if (Date.now() - companionTappedAtRef.current < SUPPRESS_MAP_CLICK_MS) {
+            return;
+          }
           setExpandedClusterKey(null);
           // Tapping the map background collapses the companion's radial
           // menu too — matches the prototype's "tap anywhere else to
@@ -527,7 +543,14 @@ export default function MapViewWeb() {
         ) : null}
 
         {companionPos ? (
-          <Companion position={companionPos} bubble={bubble} onTapCompanion={() => showBubble('woof 🐾', 2000)} />
+          <Companion
+            position={companionPos}
+            bubble={bubble}
+            onTap={() => {
+              companionTappedAtRef.current = Date.now();
+            }}
+            onTapCompanion={() => showBubble('woof 🐾', 2000)}
+          />
         ) : null}
       </GoogleMap>
 
