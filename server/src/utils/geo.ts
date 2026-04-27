@@ -5,6 +5,25 @@ export interface LatLng {
 
 const R = 6371000;
 
+// Rough Dnieper main channel through Kyiv. Mirrors the client's
+// avoidWater() in app/utils/cluster.ts. Anything sampled inside this
+// longitude band gets reflected to whichever bank the originating
+// center is closer to. Coarser than a real water polygon but enough
+// that paws + bones stop landing on water.
+const RIVER_WEST_EDGE = 30.555;
+const RIVER_EAST_EDGE = 30.598;
+
+function avoidWater(center: LatLng, sampled: LatLng): LatLng {
+  if (sampled.lng <= RIVER_WEST_EDGE || sampled.lng >= RIVER_EAST_EDGE) {
+    return sampled;
+  }
+  const midRiver = (RIVER_WEST_EDGE + RIVER_EAST_EDGE) / 2;
+  return {
+    ...sampled,
+    lng: center.lng < midRiver ? RIVER_WEST_EDGE : RIVER_EAST_EDGE,
+  };
+}
+
 export function distanceMeters(a: LatLng, b: LatLng): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -33,20 +52,22 @@ export function scatter(
 ): LatLng[] {
   const out: LatLng[] = [];
   for (let i = 0; i < count; i++) {
+    let sampled: LatLng;
     if (centerBias > 0) {
       const u = Math.random();
       const theta = Math.random() * 2 * Math.PI;
       const r = Math.pow(u, 0.5 + centerBias);
-      out.push({
+      sampled = {
         lat: center.lat + Math.sin(theta) * r * latSpread,
         lng: center.lng + Math.cos(theta) * r * lngSpread,
-      });
+      };
     } else {
-      out.push({
+      sampled = {
         lat: center.lat + (Math.random() - 0.5) * 2 * latSpread,
         lng: center.lng + (Math.random() - 0.5) * 2 * lngSpread,
-      });
+      };
     }
+    out.push(avoidWater(center, sampled));
   }
   return out;
 }
@@ -68,10 +89,11 @@ export function scatterInRadius(
     const u = Math.random();
     const theta = Math.random() * 2 * Math.PI;
     const rM = radiusM * Math.pow(u, 0.5 + Math.max(0, centerBias));
-    out.push({
+    const sampled: LatLng = {
       lat: center.lat + (Math.sin(theta) * rM) / latMetersPerDeg,
       lng: center.lng + (Math.cos(theta) * rM) / lngMetersPerDeg,
-    });
+    };
+    out.push(avoidWater(center, sampled));
   }
   return out;
 }
