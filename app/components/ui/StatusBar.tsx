@@ -1,11 +1,12 @@
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
 
-// Three white-frosted-glass pills laid out identically: icon + value with
-// a consistent gap so happiness / hunger / tokens read as one family.
-// Only happiness shows a progress fill — it's the mood meter and the one
-// that reads as a %. Hunger and tokens are plain counters.
+// Four white-frosted-glass pills laid out identically: icon + value with
+// a consistent gap so happiness / hunger / tokens / spots-toggle read
+// as one family. Happiness shows a progress fill (mood meter, only %
+// pill). Hunger and tokens are plain counters. The rightmost is a
+// tap-to-toggle visibility switch for the spots layer.
 
 const PILL_HEIGHT = 38;
 // Minimum so a 1-char value doesn't collapse the pill awkwardly; beyond
@@ -51,16 +52,44 @@ function CounterPill({ icon, value, label }: { icon: string; value: number; labe
   );
 }
 
+// Tap-to-toggle visibility of the spots overlay. When OFF the pill
+// dims + the icon goes faint; when ON it reads identical to the
+// other pills. Independent of whether spots are loaded into the
+// store — the user can hide the cached layer without re-fetching.
+function SpotsTogglePill() {
+  const visible = useGameStore((s) => s.spotsVisible);
+  const setVisible = useGameStore((s) => s.setSpotsVisible);
+  return (
+    <Pressable
+      onPress={() => setVisible(!visible)}
+      accessibilityRole="switch"
+      accessibilityState={{ checked: visible }}
+      accessibilityLabel={`spots ${visible ? 'visible' : 'hidden'}`}
+      style={({ pressed }) => [
+        styles.pill,
+        styles.togglePill,
+        !visible && styles.togglePillOff,
+        pressed && { opacity: 0.7 },
+      ]}
+    >
+      <Text style={[styles.emoji, !visible && styles.emojiOff]}>📍</Text>
+    </Pressable>
+  );
+}
+
 export function StatusBar() {
   const hunger = useGameStore((s) => s.hunger);
   const happiness = useGameStore((s) => s.happiness);
   const tokensCollected = useGameStore((s) => s.tokensCollected);
 
   return (
-    <View style={styles.wrap} pointerEvents="none">
+    // box-none so the toggle pill receives taps while the wrap itself
+    // doesn't swallow gestures aimed at the map.
+    <View style={styles.wrap} pointerEvents="box-none">
       <HappinessPill value={happiness} />
       <CounterPill icon="🦴" value={hunger} label="hunger" />
       <CounterPill icon="🐾" value={tokensCollected} label="tokens" />
+      <SpotsTogglePill />
     </View>
   );
 }
@@ -94,6 +123,18 @@ const styles = StyleSheet.create({
   },
   counterPill: {
     minWidth: PILL_MIN_WIDTH,
+  },
+  togglePill: {
+    // No min-width — single icon, hugs content. Slightly tighter
+    // padding than the counter pills so the pill reads as a control,
+    // not a counter.
+    paddingHorizontal: 10,
+  },
+  togglePillOff: {
+    backgroundColor: 'rgba(255,255,255,0.55)',
+  },
+  emojiOff: {
+    opacity: 0.4,
   },
   fill: {
     position: 'absolute',
