@@ -171,7 +171,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   spots: [],
   spotsLoading: false,
   selectedSpotId: null,
-  spotsVisible: true,
+  // Default off — POIs only render once the user explicitly enables
+  // the layer via the HUD toggle. Avoids cluttering the map at first
+  // load with every nearby cafe and pet store.
+  spotsVisible: false,
   dailyTasks: loadTasks(),
   syncing: false,
   lastSyncError: null,
