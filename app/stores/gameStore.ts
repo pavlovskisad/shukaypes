@@ -98,6 +98,10 @@ interface GameState {
   spots: Spot[];
   spotsLoading: boolean;
   selectedSpotId: string | null;
+  // Map-overlay visibility toggle for the spots layer. Independent of
+  // whether spots are loaded into the array — the user can declutter
+  // the map without losing the cached Places fetch.
+  spotsVisible: boolean;
   dailyTasks: DailyTasks;
   syncing: boolean;
   lastSyncError: string | null;
@@ -116,6 +120,7 @@ interface GameState {
   setSelectedDog: (id: string | null) => void;
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
+  setSpotsVisible: (visible: boolean) => void;
   reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean } | void>;
   // Detective quests. Start flips any existing active quest to abandoned
   // server-side. advance checks proximity to the current waypoint and
@@ -166,6 +171,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   spots: [],
   spotsLoading: false,
   selectedSpotId: null,
+  spotsVisible: true,
   dailyTasks: loadTasks(),
   syncing: false,
   lastSyncError: null,
@@ -419,6 +425,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ selectedSpotId });
     if (selectedSpotId) get().tickDailyTask('spotVisits');
   },
+
+  setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
 
   reportSighting: async (dogId) => {
     const { userPosition } = get();
