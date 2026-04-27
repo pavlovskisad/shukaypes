@@ -13,13 +13,18 @@ interface CompanionProps {
   position: LatLng;
   bubble: string | null;
   onTapCompanion?: () => void;
+  // Fires on EVERY tap (open and close), before the menu state changes.
+  // Parent uses it to record a timestamp and suppress the map-level
+  // onClick that Google Maps fires independently of DOM event flow —
+  // without this, low-zoom taps open the menu and immediately close it.
+  onTap?: () => void;
 }
 
 // Companion overlay — float keyframe, tap-to-open radial menu. All children
 // (bubble, menu) live inside this OverlayView div so they move with the map
 // (demo's floatPane pattern). The expanding aura rings were a bit much —
 // we'll revisit that animation later when we have the right sensor metaphor.
-export function Companion({ position, bubble, onTapCompanion }: CompanionProps) {
+export function Companion({ position, bubble, onTapCompanion, onTap }: CompanionProps) {
   const router = useRouter();
   const menuOpen = useGameStore((s) => s.menuOpen);
   const setMenuOpen = useGameStore((s) => s.setMenuOpen);
@@ -45,6 +50,10 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
   const handleTap = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
+      // Fire the parent-side suppress hook BEFORE we mutate menu state —
+      // Google's map-level onClick can race against ours at low zoom and
+      // would otherwise close the menu we just opened.
+      onTap?.();
       if (menuOpen) {
         setMenuOpen(false);
         return;
@@ -52,7 +61,7 @@ export function Companion({ position, bubble, onTapCompanion }: CompanionProps) 
       setMenuOpen(true);
       onTapCompanion?.();
     },
-    [menuOpen, setMenuOpen, onTapCompanion]
+    [menuOpen, setMenuOpen, onTapCompanion, onTap]
   );
 
   const handleAction = useCallback(
