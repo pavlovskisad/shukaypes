@@ -14,6 +14,28 @@ export const PRIMARY_ACTIONS: RadialAction[] = [
   { id: 'chat', icon: '💬', label: 'chat' },
 ];
 
+// Walk drills two levels deep: shape (roundtrip / one-way) → distance
+// (close ~1km / far ~3km). Leaf fires the route flow.
+export const WALK_SHAPE_ACTIONS: RadialAction[] = [
+  { id: 'walk:roundtrip', icon: '🔄', label: 'roundtrip' },
+  { id: 'walk:oneway', icon: '➡️', label: 'one-way' },
+];
+
+export const WALK_DISTANCE_ACTIONS: RadialAction[] = [
+  { id: ':close', icon: '🏘', label: 'close' },
+  { id: ':far', icon: '🌆', label: 'far' },
+];
+
+// Visit drills two levels deep: category → 3 closest spots in that
+// category. Closest-spots level is computed at runtime in Companion.
+export const VISIT_CATEGORY_ACTIONS: RadialAction[] = [
+  { id: 'visit:cafe', icon: '☕', label: 'cafe' },
+  { id: 'visit:restaurant', icon: '🍜', label: 'food' },
+  { id: 'visit:bar', icon: '🍹', label: 'bar' },
+  { id: 'visit:pet_store', icon: '🐶', label: 'pet store' },
+  { id: 'visit:veterinary_care', icon: '⛑️', label: 'vet' },
+];
+
 // Trig-positioned radial around a center point (105, 105) with radius R (demo lines 187-210).
 // The container div is 210x210 centered on the companion.
 interface RadialMenuProps {
