@@ -52,10 +52,10 @@ function CounterPill({ icon, value, label }: { icon: string; value: number; labe
   );
 }
 
-// Tap-to-toggle visibility of the spots overlay. When OFF the pill
-// dims + the icon goes faint; when ON it reads identical to the
-// other pills. Independent of whether spots are loaded into the
-// store — the user can hide the cached layer without re-fetching.
+// Tap-to-toggle visibility of the spots overlay. The eye-with-slash
+// overlay on top of the pin reads as a familiar "hidden" stamp; ON
+// state shows just the pin. Default is OFF so first load isn't
+// cluttered with every nearby cafe — user explicitly opts in.
 function SpotsTogglePill() {
   const visible = useGameStore((s) => s.spotsVisible);
   const setVisible = useGameStore((s) => s.setSpotsVisible);
@@ -72,7 +72,14 @@ function SpotsTogglePill() {
         pressed && { opacity: 0.7 },
       ]}
     >
-      <Text style={[styles.emoji, !visible && styles.emojiOff]}>📍</Text>
+      <View style={styles.iconStack}>
+        <Text style={[styles.emoji, !visible && styles.emojiDim]}>📍</Text>
+        {!visible ? (
+          <Text style={styles.iconStampOff} accessibilityElementsHidden>
+            🚫
+          </Text>
+        ) : null}
+      </View>
     </Pressable>
   );
 }
@@ -125,16 +132,28 @@ const styles = StyleSheet.create({
     minWidth: PILL_MIN_WIDTH,
   },
   togglePill: {
-    // No min-width — single icon, hugs content. Slightly tighter
-    // padding than the counter pills so the pill reads as a control,
-    // not a counter.
-    paddingHorizontal: 10,
+    // No min-width — icon hugs content. Slightly wider padding than
+    // the counter pills so the pin + stamp overlay sit comfortably.
+    paddingHorizontal: 12,
   },
   togglePillOff: {
     backgroundColor: 'rgba(255,255,255,0.55)',
   },
-  emojiOff: {
-    opacity: 0.4,
+  iconStack: {
+    position: 'relative',
+    width: 18,
+    height: 18,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconStampOff: {
+    position: 'absolute',
+    fontSize: 16,
+    top: -2,
+    left: -1,
+  },
+  emojiDim: {
+    opacity: 0.55,
   },
   fill: {
     position: 'absolute',
