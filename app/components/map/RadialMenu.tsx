@@ -44,6 +44,10 @@ interface RadialMenuProps {
   onSelect: (id: string) => void;
   radius?: number;
   inverted?: boolean;
+  // When true, render the action's label below the icon. Used at the
+  // deepest drill-down (named spots) where the icon alone can't tell
+  // a cafe from another cafe.
+  showLabels?: boolean;
 }
 
 export function RadialMenu({
@@ -52,6 +56,7 @@ export function RadialMenu({
   onSelect,
   radius = balance.menuRadius,
   inverted = false,
+  showLabels = false,
 }: RadialMenuProps) {
   const N = actions.length;
   // Menu container is centered on the parent via 50/50 + translate(-50,-50)
@@ -82,42 +87,71 @@ export function RadialMenu({
         const bx = CENTER + Math.cos(ang) * radius;
         const by = CENTER + Math.sin(ang) * radius;
         return (
-          <button
+          <div
             key={a.id}
-            type="button"
-            onClick={(e) => {
-              e.stopPropagation();
-              onSelect(a.id);
-            }}
             style={{
               position: 'absolute',
-              left: bx - 28,
+              left: bx - 50,
               top: by - 28,
-              width: 56,
-              height: 56,
-              borderRadius: 28,
-              border: 'none',
-              background: bg,
-              color: fg,
-              fontSize: 22,
-              cursor: 'pointer',
+              width: 100,
               opacity: open ? 1 : 0,
               transform: open ? 'scale(1)' : 'scale(0.4)',
               transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
               pointerEvents: open ? 'auto' : 'none',
-              // Diffuse lift shadow — matches the pill reference.
-              boxShadow: '0 6px 20px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.05)',
-              backdropFilter: 'blur(8px) saturate(120%)',
-              WebkitBackdropFilter: 'blur(8px) saturate(120%)',
               display: 'flex',
+              flexDirection: 'column',
               alignItems: 'center',
-              justifyContent: 'center',
-              userSelect: 'none',
+              justifyContent: 'flex-start',
             }}
-            aria-label={a.label}
           >
-            {a.icon}
-          </button>
+            <button
+              type="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                onSelect(a.id);
+              }}
+              style={{
+                width: 56,
+                height: 56,
+                borderRadius: 28,
+                border: 'none',
+                background: bg,
+                color: fg,
+                fontSize: 22,
+                cursor: 'pointer',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.05)',
+                backdropFilter: 'blur(8px) saturate(120%)',
+                WebkitBackdropFilter: 'blur(8px) saturate(120%)',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                userSelect: 'none',
+              }}
+              aria-label={a.label}
+            >
+              {a.icon}
+            </button>
+            {showLabels ? (
+              <span
+                style={{
+                  marginTop: 4,
+                  fontSize: 11,
+                  fontWeight: 700,
+                  color: '#1a1a1a',
+                  textShadow: '0 1px 4px rgba(255,255,255,0.95)',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  maxWidth: 100,
+                  textAlign: 'center',
+                  pointerEvents: 'none',
+                  userSelect: 'none',
+                }}
+              >
+                {a.label}
+              </span>
+            ) : null}
+          </div>
         );
       })}
     </div>

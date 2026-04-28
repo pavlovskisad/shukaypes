@@ -19,10 +19,11 @@ import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
+import { SpotModal } from '../ui/SpotModal';
+import { fetchWalkingRoute } from '../../services/directions';
 import { PoiMarker } from './PoiMarker';
 import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
-import { fetchWalkingRoute } from '../../services/directions';
 import type { LatLng } from '@shukajpes/shared';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
@@ -464,8 +465,24 @@ export default function MapViewWeb() {
           <FoodMarker key={f.id} position={f.position} onTap={foodTapHandlers.get(f.id)!} />
         ))}
 
-        {spotsVisible
-          ? spots.map((s) => (
+        {/* Spots layer. Toggle off hides the field, but two spots are
+            still rendered when relevant: the user's current selection
+            (so the modal's pin still shows) and the walk-route
+            destination (so the polyline always points to a visible
+            marker). Both stay visible even when the layer is "off"
+            because they're the user's current focus, not ambient
+            decoration. */}
+        {(() => {
+          const renderSet = new Set<string>();
+          if (spotsVisible) {
+            for (const s of spots) renderSet.add(s.id);
+          } else {
+            if (selectedSpotId) renderSet.add(selectedSpotId);
+            if (walkRouteMeta?.spotId) renderSet.add(walkRouteMeta.spotId);
+          }
+          return spots
+            .filter((s) => renderSet.has(s.id))
+            .map((s) => (
               <PoiMarker
                 key={s.id}
                 position={s.position}
@@ -474,8 +491,8 @@ export default function MapViewWeb() {
                 selected={s.id === selectedSpotId}
                 onTap={() => setSelectedSpot(s.id === selectedSpotId ? null : s.id)}
               />
-            ))
-          : null}
+            ));
+        })()}
 
         {activeQuest ? (
           <>
@@ -638,6 +655,34 @@ export default function MapViewWeb() {
           } else {
             showBubble("couldn't start the search — try again", 3000);
           }
+        }}
+      />
+
+      <SpotModal
+        spot={spots.find((s) => s.id === selectedSpotId) ?? null}
+        onClose={() => setSelectedSpot(null)}
+        onWalkHere={async (spot, shape) => {
+          if (!userPos) {
+            showBubble("can't walk without knowing where we are", 3000);
+            return;
+          }
+          // Generate the walking polyline first, then close the modal
+          // — closing first would briefly show a bare map before the
+          // route lands. Bubble announces intent immediately so the
+          // user has feedback while Directions fetches.
+          showBubble(
+            shape === 'roundtrip'
+              ? `roundtrip to ${spot.name} 🚶`
+              : `walking to ${spot.name} 🚶`,
+            3000,
+          );
+          const waypoints =
+            shape === 'roundtrip' ? [spot.position, userPos] : [spot.position];
+          const route = await fetchWalkingRoute(userPos, waypoints);
+          if (route) {
+            useGameStore.getState().setWalkRoute(route, { shape, spotId: spot.id });
+          }
+          setSelectedSpot(null);
         }}
       />
     </div>
