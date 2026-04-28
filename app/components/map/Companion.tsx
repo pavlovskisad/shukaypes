@@ -64,30 +64,52 @@ function getCurrentActions(
   return PRIMARY_ACTIONS;
 }
 
-// Pick a destination spot near the requested distance for walk leaves.
-// Doesn't have to be exact — any spot within ±SPOT_BUCKET_M of the
-// target reads as "close" or "far" to a walker. Returns null when no
-// spots loaded or none in the band.
+// Walk-friendliness: certain categories are nicer destinations for an
+// idle stroll. Cafe/restaurant/bar are "ok let's go sit somewhere"
+// energy; pet store and vet are errands, less inviting. Lower number
+// = more preferred.
+const WALK_CATEGORY_BIAS: Record<string, number> = {
+  cafe: 0,
+  restaurant: 0,
+  bar: 0.5,
+  pet_store: 1.5,
+  veterinary_care: 2.5,
+};
+
+// Pick a destination spot near the target distance, biased toward
+// higher-rated and walk-friendly categories. Score formula combines:
+//   distance fit  — squared error vs target (low is good, dominant)
+//   rating        — 5★ subtracted (negative, lower is better)
+//   category bias — pet_store/vet penalty (higher is worse)
+// First search inside a ±SPOT_BUCKET_M band; if empty, widen to all.
 function pickWalkSpot(
   spots: Spot[],
   userPos: LatLng,
   targetM: number,
 ): Spot | null {
   if (spots.length === 0) return null;
-  const inBand = spots
+  const score = (s: Spot, d: number): number => {
+    const distErr = Math.abs(d - targetM) / targetM; // 0 at perfect, 1 at 100% off
+    const distScore = distErr * distErr * 10; // squared, weighted heavily
+    const ratingScore = -(s.rating ?? 3) * 0.4; // 5★ ≈ −2, 1★ ≈ −0.4
+    const catBias = WALK_CATEGORY_BIAS[s.category] ?? 1;
+    return distScore + ratingScore + catBias;
+  };
+  const ranked = spots
     .map((s) => ({ s, d: distanceMeters(userPos, s.position) }))
+    .map((x) => ({ ...x, score: score(x.s, x.d) }))
+    // Prefer the band but allow fallback if empty.
     .filter(({ d }) => Math.abs(d - targetM) <= SPOT_BUCKET_M);
-  if (inBand.length > 0) {
-    // Pick the closest to the target distance for a confident match.
-    inBand.sort((a, b) => Math.abs(a.d - targetM) - Math.abs(b.d - targetM));
-    return inBand[0]!.s;
+  if (ranked.length > 0) {
+    ranked.sort((a, b) => a.score - b.score);
+    return ranked[0]!.s;
   }
-  // Fallback: closest spot to the target distance overall, even if
-  // outside the band. Better than telling the user "no spots."
-  const sorted = spots
+  // Fallback: best-scoring overall.
+  const all = spots
     .map((s) => ({ s, d: distanceMeters(userPos, s.position) }))
-    .sort((a, b) => Math.abs(a.d - targetM) - Math.abs(b.d - targetM));
-  return sorted[0]?.s ?? null;
+    .map((x) => ({ ...x, score: score(x.s, x.d) }))
+    .sort((a, b) => a.score - b.score);
+  return all[0]?.s ?? null;
 }
 
 interface CompanionProps {
@@ -194,11 +216,12 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
         }
       }
 
-      // Walk leaves: walk:<shape>:<distance>. Pick a destination spot
-      // near the target distance band and select it on the map. Real
-      // routing (one-way vs roundtrip distinct paths) lands in a later
-      // slice — for now both reuse the existing Directions polyline
-      // pattern via setSelectedSpot.
+      // Walk leaves: walk:<shape>:<distance>. Pick a scored destination
+      // for this distance bucket, fetch the polyline, render it. We
+      // deliberately don't setSelectedSpot — that's the "open details
+      // modal" channel and a walk shouldn't pop a modal. Instead the
+      // destination spot is communicated via the bubble + the polyline
+      // ending at it.
       if (id.startsWith('walk:')) {
         const parts = id.split(':'); // ['walk', shape, distance]
         const shape = (parts[1] ?? 'roundtrip') as 'roundtrip' | 'oneway';
@@ -222,13 +245,11 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           flash('no spot at that distance — try the other one');
           return;
         }
-        setSelectedSpot(pick.id);
+        // Clear any open spot-detail modal — the user shifted intent.
+        setSelectedSpot(null);
         const shapeLabel = shape === 'roundtrip' ? 'roundtrip' : 'one-way';
         const distLabel = distance === 'far' ? 'long' : 'short';
         flash(`${distLabel} ${shapeLabel} to ${pick.name} 🚶`);
-        // Fetch the walking polyline asynchronously and stash on the
-        // store. Roundtrip = origin → dest → origin (dest as stopover);
-        // one-way = origin → dest. MapView renders whatever lands.
         const waypoints =
           shape === 'roundtrip'
             ? [pick.position, ctxPos]
@@ -393,7 +414,15 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
         </div>
 
         <SpeechBubble text={activeBubble} />
-        <RadialMenu open={menuOpen} actions={currentActions} onSelect={handleSelect} />
+        <RadialMenu
+          open={menuOpen}
+          actions={currentActions}
+          onSelect={handleSelect}
+          // Show readable names at the named-spot leaves only — every
+          // other level has self-explanatory icons and a label below
+          // each ring item would clutter the cardinal slots.
+          showLabels={menuPath.length === 2 && menuPath[0] === 'visit'}
+        />
 
         <style>{`
           @keyframes co-float {
