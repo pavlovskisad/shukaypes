@@ -36,6 +36,27 @@ export function distanceMeters(a: LatLng, b: LatLng): number {
   return 2 * R * Math.asin(Math.sqrt(h));
 }
 
+// Closest point on the line segment AB to P, in the planar
+// (lat, lng treated as Cartesian) approximation. Then we measure the
+// haversine distance from P to that closest point so the returned
+// number is in real-world meters. Good enough for short urban
+// segments (Kyiv) — the planar projection error over a few km is
+// well below the auto-collect tolerance (90m).
+export function pointToSegmentDistanceM(
+  p: LatLng,
+  a: LatLng,
+  b: LatLng,
+): number {
+  const dx = b.lat - a.lat;
+  const dy = b.lng - a.lng;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) return distanceMeters(p, a);
+  let t = ((p.lat - a.lat) * dx + (p.lng - a.lng) * dy) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  const closest: LatLng = { lat: a.lat + t * dx, lng: a.lng + t * dy };
+  return distanceMeters(p, closest);
+}
+
 // centerBias shapes the radial distribution when > 0:
 //   0   — uniform box (lat/lng each independently uniform in ±spread).
 //   0.5 — polar disk, r = u (linear). Areal density ∝ 1/r → visibly

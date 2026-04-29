@@ -130,6 +130,11 @@ interface GameState {
   setScreen: (screen: GameState['currentScreen']) => void;
   setActiveQuest: (quest: Quest | null) => void;
   syncState: () => Promise<void>;
+  // Sweeps any uncollected token / uneaten bone the user walked past
+  // while the tab was suspended (or just between 100ms loop ticks).
+  // Server diff'ed against its own Redis-stored last position, so this
+  // only ever credits a real corridor, not a teleport.
+  collectPath: (pos: LatLng) => Promise<void>;
   syncTokens: (pos: LatLng) => Promise<void>;
   syncFood: (pos: LatLng) => Promise<void>;
   syncLostDogs: (pos: LatLng) => Promise<void>;
@@ -401,6 +406,22 @@ export const useGameStore = create<GameState>((set, get) => ({
       }));
     } catch (err) {
       set({ syncing: false, lastSyncError: (err as Error).message });
+    }
+  },
+
+  collectPath: async (pos) => {
+    try {
+      const res = await api.collectPath(pos);
+      // If anything got swept, the server bumped points / counters /
+      // companion stats — pull the fresh values so the HUD updates.
+      if (res.tokensCollected > 0 || res.foodConsumed > 0) {
+        void get().syncState();
+      }
+    } catch (err) {
+      // Path collection is a convenience layer — don't surface a
+      // failure as a hard error; the regular foreground auto-collect
+      // still works.
+      set({ lastSyncError: (err as Error).message });
     }
   },
 

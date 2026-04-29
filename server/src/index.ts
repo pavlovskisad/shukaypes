@@ -13,6 +13,7 @@ import sightingsRoute from './routes/sightings.js';
 import questsRoute from './routes/quests.js';
 import statsRoute from './routes/stats.js';
 import profileRoute from './routes/profile.js';
+import pathRoute from './routes/path.js';
 import { startDecayCron } from './services/decay.js';
 import { startScrapeCron } from './services/scrape.js';
 import { balance } from './config/balance.js';
@@ -72,6 +73,7 @@ async function buildServer() {
   await app.register(questsRoute);
   await app.register(statsRoute);
   await app.register(profileRoute);
+  await app.register(pathRoute);
 
   return app;
 }
