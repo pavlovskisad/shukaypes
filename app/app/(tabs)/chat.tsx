@@ -269,22 +269,12 @@ const CARD_SHADOW = {
   elevation: 2,
 } as const;
 
-// Approximate visible heights for the floating bands. Used as scroll
-// content padding so the first/last bubble can scroll past the band's
-// frosted bg without ever sitting flush against it.
+// Approximate visible heights for the floating pills. Used as scroll
+// content padding so the first/last bubble can scroll past each pill
+// without ever sitting flush against it.
 const HEADER_BAND_HEIGHT = 80;   // headerCard + its margins
 const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 const TAB_BAR_HEIGHT = 60;       // matches _layout.tsx tabBarStyle
-
-// Translucent backdrop matching the dashboard tab bar recipe so the
-// header + input bands feel part of the same family. Bubbles sliding
-// under read as frosted-glass occlusion, not hard cuts.
-const FROSTED_BG = {
-  backgroundColor: 'rgba(245,245,245,0.85)',
-  backdropFilter: 'blur(18px) saturate(160%)',
-  WebkitBackdropFilter: 'blur(18px) saturate(160%)',
-} as const;
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
@@ -295,9 +285,7 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingBottom: 8,
     zIndex: 5,
-    ...FROSTED_BG,
   },
   bottomBandWrap: {
     position: 'absolute',
@@ -307,8 +295,7 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   bottomBand: {
-    paddingVertical: 8,
-    ...FROSTED_BG,
+    paddingVertical: 4,
   },
   headerCard: {
     marginHorizontal: 16,
