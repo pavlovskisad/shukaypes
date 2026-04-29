@@ -81,6 +81,7 @@ export default function MapViewWeb() {
   const syncTokens = useGameStore((s) => s.syncTokens);
   const syncFood = useGameStore((s) => s.syncFood);
   const syncLostDogs = useGameStore((s) => s.syncLostDogs);
+  const collectPath = useGameStore((s) => s.collectPath);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const activeQuest = useGameStore((s) => s.activeQuest);
   const syncActiveQuest = useGameStore((s) => s.syncActiveQuest);
@@ -156,21 +157,26 @@ export default function MapViewWeb() {
   }, [userPos?.lat, userPos?.lng, setUserPosition]);
 
   // Fetch server state tied to position: spawned tokens + food + nearby lost
-  // dogs. All three refresh on the same interval.
+  // dogs. All three refresh on the same interval. collectPath fires
+  // first so any token / bone the user walked past while the tab was
+  // suspended (Safari pauses JS) gets credited *before* the nearby
+  // GETs would otherwise filter them out as still-uncollected.
   useEffect(() => {
     if (!userPos) return;
+    void collectPath(userPos);
     syncTokens(userPos);
     syncFood(userPos);
     syncLostDogs(userPos);
     const id = setInterval(() => {
       const pos = useGameStore.getState().userPosition;
       if (!pos) return;
+      void collectPath(pos);
       syncTokens(pos);
       syncFood(pos);
       syncLostDogs(pos);
     }, TOKEN_REFRESH_MS);
     return () => clearInterval(id);
-  }, [userPos?.lat, userPos?.lng, syncTokens, syncFood, syncLostDogs]);
+  }, [userPos?.lat, userPos?.lng, collectPath, syncTokens, syncFood, syncLostDogs]);
 
   // Pull the active quest (if any) on mount so a refreshed tab sees the
   // quest the user started earlier. No polling — quest state only changes

@@ -128,6 +128,21 @@ export const api = {
       body: JSON.stringify({ foodId, lat: pos.lat, lng: pos.lng, force }),
     }),
 
+  // Path-collection sweep — server compares the segment from the
+  // user's last recorded position (kept in Redis) to the position
+  // sent here, and credits any token / bone within auto-collect
+  // radius of that segment. Lets the foreground app catch up after
+  // a backgrounded walk where the JS timers were paused by Safari.
+  collectPath: (pos: LatLng) =>
+    req<{
+      tokensCollected: number;
+      foodConsumed: number;
+      reason?: string;
+    }>('/collect/path', {
+      method: 'POST',
+      body: JSON.stringify({ lat: pos.lat, lng: pos.lng }),
+    }),
+
   getChatHistory: () => req<{ messages: ChatMessage[] }>('/chat/history'),
 
   sendChat: (text: string, pos: LatLng | null, greet = false) =>
