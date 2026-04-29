@@ -41,12 +41,23 @@ function HappinessPill({ value }: { value: number }) {
   );
 }
 
-function CounterPill({ icon, value, label }: { icon: string; value: number; label: string }) {
+function CounterPill({
+  icon,
+  value,
+  label,
+  suffix,
+}: {
+  icon: string;
+  value: number;
+  label: string;
+  suffix?: string;
+}) {
   return (
     <View style={[styles.pill, styles.counterPill]}>
       <Text style={styles.emoji}>{icon}</Text>
       <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
         {Math.round(value)}
+        {suffix ?? ''}
       </Text>
     </View>
   );
@@ -85,10 +96,13 @@ export function StatusBar() {
   return (
     // box-none so the toggle pill receives taps while the wrap itself
     // doesn't swallow gestures aimed at the map.
+    // Hunger reads as % (0-100 meter, like happiness) so a +20 bump
+    // is obviously "+20% fed", not "I ate 20 bones". Paw pill keeps
+    // the lifetime collected count.
     <View style={styles.wrap} pointerEvents="box-none">
       <HappinessPill value={happiness} />
-      <CounterPill icon="🦴" value={hunger} label="hunger" />
-      <CounterPill icon="🐾" value={tokensCollected} label="tokens" />
+      <CounterPill icon="🦴" value={hunger} label="hunger" suffix="%" />
+      <CounterPill icon="🐾" value={tokensCollected} label="paws" />
       <SpotsTogglePill />
     </View>
   );
