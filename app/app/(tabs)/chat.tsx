@@ -12,7 +12,7 @@ import {
   Linking,
   ActivityIndicator,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
@@ -136,56 +136,79 @@ export default function ChatScreen() {
 
   const header = useMemo(() => companionName || 'шукайпес', [companionName]);
 
+  const insets = useSafeAreaInsets();
+  // Padding the scroll content reserves an empty band at top + bottom
+  // so the first/last bubbles can scroll freely behind the floating
+  // header + input cards (which sit on top of the scroll view as
+  // frosted overlays). Numbers approximate the cards' on-screen
+  // heights — generous so multi-line names/inputs don't overlap.
+  const topPad = insets.top + HEADER_BAND_HEIGHT + 8;
+  const bottomPad = TAB_BAR_HEIGHT + INPUT_BAND_HEIGHT + 8;
+
   return (
-    <SafeAreaView style={styles.root} edges={['top']}>
-      <KeyboardAvoidingView
-        style={styles.flex}
-        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+    <View style={styles.root}>
+      {/* Scroll fills the entire screen — header + input bands sit on
+          top as overlays so bubbles slide under their frosted bg
+          instead of being shoved by sibling layout. */}
+      <ScrollView
+        ref={scrollRef}
+        style={StyleSheet.absoluteFill}
+        contentContainerStyle={[
+          styles.listContent,
+          { paddingTop: topPad, paddingBottom: bottomPad },
+        ]}
+        keyboardShouldPersistTaps="handled"
       >
-        {/* Header card — matches the profile family. Companion name +
-            small "chat" subtitle so the screen has the same "title in
-            card" anchor as the others. */}
-        <View style={styles.headerCard}>
+        {bootError ? <Text style={styles.error}>{bootError}</Text> : null}
+        {messages.map((m) => (
+          <Bubble key={m.id} msg={m} />
+        ))}
+        {typing ? <TypingIndicator /> : null}
+      </ScrollView>
+
+      {/* Top frosted band — covers the safe-area inset + header pill so
+          messages scrolling up disappear under it cleanly. */}
+      <View
+        style={[styles.topBand, { paddingTop: insets.top }]}
+        pointerEvents="box-none"
+      >
+        <View style={styles.headerCard} pointerEvents="auto">
           <Text style={styles.headerTitle}>{header}</Text>
           <Text style={styles.headerSub}>chat</Text>
         </View>
+      </View>
 
-        <ScrollView
-          ref={scrollRef}
-          style={styles.list}
-          contentContainerStyle={styles.listContent}
-          keyboardShouldPersistTaps="handled"
-        >
-          {bootError ? <Text style={styles.error}>{bootError}</Text> : null}
-          {messages.map((m) => (
-            <Bubble key={m.id} msg={m} />
-          ))}
-          {typing ? <TypingIndicator /> : null}
-        </ScrollView>
-
-        {/* Input row floats as its own card just above the floating tab
-            bar. Same shadow/radius recipe as the rest of the family. */}
-        <View style={styles.inputCard}>
-          <TextInput
-            style={styles.input}
-            value={draft}
-            onChangeText={setDraft}
-            placeholder={`talk to ${header}…`}
-            placeholderTextColor="#999"
-            onSubmitEditing={send}
-            editable={!sending}
-            returnKeyType="send"
-          />
-          <Pressable style={styles.sendBtn} onPress={send} disabled={sending}>
-            {sending ? (
-              <ActivityIndicator size="small" color="#fff" />
-            ) : (
-              <Text style={styles.sendBtnText}>→</Text>
-            )}
-          </Pressable>
+      {/* Bottom frosted band — sits just above the dashboard tab bar.
+          KAV pushes it up when the keyboard appears on iOS native;
+          on web Safari handles its own viewport adjustment. */}
+      <KeyboardAvoidingView
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+        style={styles.bottomBandWrap}
+        pointerEvents="box-none"
+      >
+        <View style={styles.bottomBand} pointerEvents="box-none">
+          <View style={styles.inputCard} pointerEvents="auto">
+            <TextInput
+              style={styles.input}
+              value={draft}
+              onChangeText={setDraft}
+              placeholder={`talk to ${header}…`}
+              placeholderTextColor="#999"
+              onSubmitEditing={send}
+              editable={!sending}
+              returnKeyType="send"
+            />
+            <Pressable style={styles.sendBtn} onPress={send} disabled={sending}>
+              {sending ? (
+                <ActivityIndicator size="small" color="#fff" />
+              ) : (
+                <Text style={styles.sendBtnText}>→</Text>
+              )}
+            </Pressable>
+          </View>
         </View>
       </KeyboardAvoidingView>
-    </SafeAreaView>
+    </View>
   );
 }
 
@@ -246,12 +269,47 @@ const CARD_SHADOW = {
   elevation: 2,
 } as const;
 
+// Approximate visible heights for the floating bands. Used as scroll
+// content padding so the first/last bubble can scroll past the band's
+// frosted bg without ever sitting flush against it.
+const HEADER_BAND_HEIGHT = 80;   // headerCard + its margins
+const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
+const TAB_BAR_HEIGHT = 60;       // matches _layout.tsx tabBarStyle
+
+// Translucent backdrop matching the dashboard tab bar recipe so the
+// header + input bands feel part of the same family. Bubbles sliding
+// under read as frosted-glass occlusion, not hard cuts.
+const FROSTED_BG = {
+  backgroundColor: 'rgba(245,245,245,0.85)',
+  backdropFilter: 'blur(18px) saturate(160%)',
+  WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+} as const;
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.greyBg,
   },
-  flex: { flex: 1 },
+  topBand: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    paddingBottom: 8,
+    zIndex: 5,
+    ...FROSTED_BG,
+  },
+  bottomBandWrap: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    bottom: TAB_BAR_HEIGHT,
+    zIndex: 5,
+  },
+  bottomBand: {
+    paddingVertical: 8,
+    ...FROSTED_BG,
+  },
   headerCard: {
     marginHorizontal: 16,
     marginTop: 12,
@@ -277,15 +335,10 @@ const styles = StyleSheet.create({
     textTransform: 'lowercase',
     letterSpacing: 0.3,
   },
-  list: { flex: 1 },
   listContent: {
     paddingHorizontal: 16,
-    // Generous top/bottom padding so the first and last bubbles
-    // sit clearly above/below the header + input cards instead of
-    // appearing to slide under them. The inputCard sits in flex
-    // flow above this padding band.
-    paddingTop: 12,
-    paddingBottom: 40,
+    // paddingTop/paddingBottom are set inline so the bands' on-screen
+    // heights (incl. safe-area inset) can drive the value at runtime.
     gap: 8,
   },
   bubble: {
@@ -334,7 +387,6 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
     marginHorizontal: 16,
-    marginBottom: 70, // sit just above the tab bar with a small gap
     paddingHorizontal: 8,
     paddingVertical: 8,
     backgroundColor: '#ffffff',
