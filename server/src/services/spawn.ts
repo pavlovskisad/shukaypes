@@ -74,6 +74,7 @@ export async function ensureTokensForUser(userId: string, center: LatLng) {
       missing,
       balance.userAreaRadiusM,
       balance.tokenCenterBias,
+      balance.userAreaInnerRadiusM,
     );
     const rows = buildTokenRows(userId, positions);
     if (rows.length) await db.insert(schema.tokens).values(rows);

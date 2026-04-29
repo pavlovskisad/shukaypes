@@ -76,19 +76,33 @@ export function scatter(
 // given center latitude so the sampled points form a roughly circular
 // disk on the ground rather than an ellipse stretched by degrees-of-
 // longitude distortion. Shares centerBias semantics with scatter().
+//
+// Optional `minRadiusM` carves out an inner exclusion zone so the
+// scatter samples land in an annulus instead of a full disk. Used by
+// the user-area token pool to keep paws from spawning *inside* the
+// auto-collect radius (otherwise they get vacuumed instantly and the
+// counter ticks up while the user is standing still).
 export function scatterInRadius(
   center: LatLng,
   count: number,
   radiusM: number,
   centerBias = 0,
+  minRadiusM = 0,
 ): LatLng[] {
   const latMetersPerDeg = 111_000;
   const lngMetersPerDeg = 111_000 * Math.cos((center.lat * Math.PI) / 180);
   const out: LatLng[] = [];
+  const minSq = minRadiusM * minRadiusM;
+  const maxSq = radiusM * radiusM;
+  const span = maxSq - minSq;
+  const biasExp = 1 + 2 * Math.max(0, centerBias);
   for (let i = 0; i < count; i++) {
     const u = Math.random();
     const theta = Math.random() * 2 * Math.PI;
-    const rM = radiusM * Math.pow(u, 0.5 + Math.max(0, centerBias));
+    // Biased uniform-area sampling on the annulus [minR, maxR].
+    // Reduces to the disk case when minRadiusM = 0.
+    const uBiased = Math.pow(u, biasExp);
+    const rM = Math.sqrt(minSq + uBiased * span);
     const sampled: LatLng = {
       lat: center.lat + (Math.sin(theta) * rM) / latMetersPerDeg,
       lng: center.lng + (Math.cos(theta) * rM) / lngMetersPerDeg,

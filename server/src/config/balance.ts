@@ -20,6 +20,12 @@ export const balance = {
   // pickups than walking random streets.
   tokensInUserArea: 10,
   userAreaRadiusM: 800,
+  // Inner exclusion radius for the user-area pool — paws never spawn
+  // inside this disk. Without it, the 15s topup keeps dropping new
+  // paws inside the 90m auto-collect radius and they get vacuumed
+  // instantly, ticking the counter up while the user is standing
+  // still. Sized comfortably above autoCollectToken (90m).
+  userAreaInnerRadiusM: 130,
   tokensPerDogArea: 18,
   // Walking-radius scoping: 20-30min reach rather than 1-2hr. Previously
   // seeded paws in zones up to 4km away; combined with lots of active
