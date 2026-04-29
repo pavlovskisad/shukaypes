@@ -51,8 +51,11 @@ export const balance = {
   foodExpireMinutes: 5,
   foodSpreadDeg: 0.014,
   foodCount: 8,
-  // Anti-cheat: max distance between client-reported collect position and target.
-  collectMaxDistanceM: 80,
+  // Anti-cheat: max distance between client-reported collect position
+  // and target. Sized slightly above the client's auto-collect radius
+  // (130m for food, 90m for tokens) so the auto-collect band doesn't
+  // race the server gate and cause "disappear without payoff" bugs.
+  collectMaxDistanceM: 150,
   // Rate limit (hits) per 1min window on /collect.
   collectRateLimitPerMin: 120,
 } as const;

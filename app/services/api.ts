@@ -116,16 +116,16 @@ export const api = {
       `/dogs/nearby?lat=${pos.lat}&lng=${pos.lng}&radius=${radiusM}`,
     ),
 
-  collectToken: (tokenId: string, pos: LatLng) =>
+  collectToken: (tokenId: string, pos: LatLng, force = false) =>
     req<{ ok: true; value: number }>('/collect/token', {
       method: 'POST',
-      body: JSON.stringify({ tokenId, lat: pos.lat, lng: pos.lng }),
+      body: JSON.stringify({ tokenId, lat: pos.lat, lng: pos.lng, force }),
     }),
 
-  feed: (foodId: string, pos: LatLng) =>
+  feed: (foodId: string, pos: LatLng, force = false) =>
     req<{ ok: true }>('/feed', {
       method: 'POST',
-      body: JSON.stringify({ foodId, lat: pos.lat, lng: pos.lng }),
+      body: JSON.stringify({ foodId, lat: pos.lat, lng: pos.lng, force }),
     }),
 
   getChatHistory: () => req<{ messages: ChatMessage[] }>('/chat/history'),

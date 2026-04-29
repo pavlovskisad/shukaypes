@@ -306,15 +306,18 @@ export default function MapViewWeb() {
     return m;
   }, [lostDogs, setSelectedDog]);
 
+  // Taps pass force=true so a visible paw/bone is always collectable
+  // regardless of distance — auto-collect (the 100ms loop further up)
+  // calls without the flag so the server gate still applies there.
   const tokenTapHandlers = useMemo(() => {
     const m = new Map<string, () => void>();
-    for (const t of tokens) m.set(t.id, () => collectToken(t.id));
+    for (const t of tokens) m.set(t.id, () => collectToken(t.id, true));
     return m;
   }, [tokens, collectToken]);
 
   const foodTapHandlers = useMemo(() => {
     const m = new Map<string, () => void>();
-    for (const f of foodItems) m.set(f.id, () => eatFood(f.id));
+    for (const f of foodItems) m.set(f.id, () => eatFood(f.id, true));
     return m;
   }, [foodItems, eatFood]);
 

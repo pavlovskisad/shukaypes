@@ -31,6 +31,10 @@ interface FeedBody {
   foodId: string;
   lat: number;
   lng: number;
+  // Tap-to-eat bypass for the distance check. Same pattern as
+  // /collect/token's force flag — UI taps send true, auto-eat
+  // doesn't.
+  force?: boolean;
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
@@ -72,7 +76,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Body: FeedBody }>('/feed', async (req, reply) => {
-    const { foodId, lat, lng } = req.body ?? ({} as FeedBody);
+    const { foodId, lat, lng, force } = req.body ?? ({} as FeedBody);
     if (!foodId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.code(400);
       return { error: 'invalid body' };
@@ -107,11 +111,13 @@ const plugin: FastifyPluginAsync = async (app) => {
       reply.code(409);
       return { error: 'already consumed' };
     }
-    const dist = distanceMeters({ lat, lng }, { lat: food.lat, lng: food.lng });
-    if (dist > balance.collectMaxDistanceM) {
-      await logReject(`too_far_${Math.round(dist)}m`);
-      reply.code(403);
-      return { error: 'too far from food' };
+    if (!force) {
+      const dist = distanceMeters({ lat, lng }, { lat: food.lat, lng: food.lng });
+      if (dist > balance.collectMaxDistanceM) {
+        await logReject(`too_far_${Math.round(dist)}m`);
+        reply.code(403);
+        return { error: 'too far from food' };
+      }
     }
 
     const now = new Date();

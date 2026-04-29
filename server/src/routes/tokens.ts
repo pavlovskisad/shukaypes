@@ -15,6 +15,11 @@ interface CollectBody {
   tokenId: string;
   lat: number;
   lng: number;
+  // Tap-to-collect bypass for the distance check. Auto-collect always
+  // sends false/undefined; UI taps send true so the user can pick up
+  // any visible paw without "walk closer" friction. Mirrors the
+  // /quests/advance force pattern.
+  force?: boolean;
 }
 
 // Distance beyond which an uncollected token is not returned to the
@@ -71,7 +76,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   });
 
   app.post<{ Body: CollectBody }>('/collect/token', async (req, reply) => {
-    const { tokenId, lat, lng } = req.body ?? ({} as CollectBody);
+    const { tokenId, lat, lng, force } = req.body ?? ({} as CollectBody);
     if (!tokenId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.code(400);
       return { error: 'invalid body' };
@@ -106,14 +111,16 @@ const plugin: FastifyPluginAsync = async (app) => {
       reply.code(409);
       return { error: 'already collected' };
     }
-    const dist = distanceMeters(
-      { lat, lng },
-      { lat: token.lat, lng: token.lng },
-    );
-    if (dist > balance.collectMaxDistanceM) {
-      await logReject(`too_far_${Math.round(dist)}m`);
-      reply.code(403);
-      return { error: 'too far from token' };
+    if (!force) {
+      const dist = distanceMeters(
+        { lat, lng },
+        { lat: token.lat, lng: token.lng },
+      );
+      if (dist > balance.collectMaxDistanceM) {
+        await logReject(`too_far_${Math.round(dist)}m`);
+        reply.code(403);
+        return { error: 'too far from token' };
+      }
     }
 
     // Mark collected + credit points + bump companion stats, atomically.
