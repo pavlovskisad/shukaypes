@@ -168,14 +168,19 @@ export default function MapViewWeb() {
     return () => clearInterval(id);
   }, [activeQuest?.id, activeQuest?.currentWaypoint, advanceQuestIfNear, showBubble]);
 
-  // Auto-collect tokens within 50m of companion.
+  // Auto-collect tokens. Uses min(user, companion) distance — the
+  // companion orbits the walker at ~110m, so paws right at the user's
+  // feet would otherwise sit just outside the companion's 90m disk
+  // (donut-of-detection bug). Either being in range is enough.
   useEffect(() => {
-    if (!companionPos) return;
     const id = setInterval(() => {
-      const { tokens: ts } = useGameStore.getState();
+      const { tokens: ts, userPosition: u } = useGameStore.getState();
+      if (!u && !companionPos) return;
       ts.forEach((t) => {
         if (t.collectedAt) return;
-        if (distanceMeters(companionPos, t.position) < balance.autoCollectToken) {
+        const dCompanion = companionPos ? distanceMeters(companionPos, t.position) : Infinity;
+        const dUser = u ? distanceMeters(u, t.position) : Infinity;
+        if (Math.min(dCompanion, dUser) < balance.autoCollectToken) {
           collectToken(t.id);
         }
       });
@@ -183,13 +188,15 @@ export default function MapViewWeb() {
     return () => clearInterval(id);
   }, [companionPos?.lat, companionPos?.lng, collectToken]);
 
-  // Auto-eat food within 40m.
+  // Auto-eat food. Same min(user, companion) trick as paws.
   useEffect(() => {
-    if (!companionPos) return;
     const id = setInterval(() => {
-      const { foodItems: fs } = useGameStore.getState();
+      const { foodItems: fs, userPosition: u } = useGameStore.getState();
+      if (!u && !companionPos) return;
       fs.forEach((f) => {
-        if (distanceMeters(companionPos, f.position) < balance.autoCollectFood) {
+        const dCompanion = companionPos ? distanceMeters(companionPos, f.position) : Infinity;
+        const dUser = u ? distanceMeters(u, f.position) : Infinity;
+        if (Math.min(dCompanion, dUser) < balance.autoCollectFood) {
           eatFood(f.id);
         }
       });

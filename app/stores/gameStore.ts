@@ -89,6 +89,12 @@ interface GameState {
   // time the poll catches the race.
   recentlyCollectedIds: Set<string>;
   foodItems: FoodItem[];
+  // Symmetric guard for food eat — same race as paw collect: auto-eat
+  // loop and a user tap can both fire /feed for the same bone in the
+  // same 100ms window. Without this Set, the second request 409s and
+  // its catch re-adds the bone to the list = "ghost" reappear after
+  // tap.
+  recentlyConsumedIds: Set<string>;
   // Nearby park coords fetched once via Google Places; server seeds
   // bones at these positions. Cached across food syncs — parks don't
   // move and we don't want a Places round-trip on every 15s tick.
@@ -175,6 +181,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   currentScreen: 'map',
   tokens: [],
   recentlyCollectedIds: new Set<string>(),
+  recentlyConsumedIds: new Set<string>(),
   foodItems: [],
   parks: [],
   lostDogs: [],
@@ -224,10 +231,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     try {
       await api.collectToken(id, userPosition);
       get().tickDailyTask('tokens');
-      // No syncState() here — it'd race with concurrent collects and let
-      // an older /state response clobber a newer counter. The 15s poll
-      // reconciles points/companion and syncState is monotonic for the
-      // counter anyway.
+      // Pull fresh hunger/happiness so the meters reflect the +2/+5
+      // bumps immediately rather than waiting for the 5s poll. Counter
+      // can't go backwards: syncState's tokensCollected is Math.max
+      // against local, so a stale /state response is harmless.
+      void get().syncState();
     } catch (err) {
       // Revert ONLY counter + points. Keep the token flagged collected
       // locally and keep its id in recentlyCollectedIds — otherwise the
@@ -245,19 +253,36 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   eatFood: async (id) => {
-    const { userPosition, foodItems } = get();
+    const { userPosition, foodItems, recentlyConsumedIds } = get();
+    // Same in-flight guard as collectToken — auto-eat loop and a user
+    // tap can both fire /feed for the same bone in the same 100ms
+    // window. Without this, the second request would 409 and re-add
+    // the bone, then next sync would remove it again — visible "blip
+    // back" + no counter increment.
+    if (recentlyConsumedIds.has(id)) return;
     const f = foodItems.find((x) => x.id === id);
     if (!f || !userPosition) return;
-    set((s) => ({ foodItems: s.foodItems.filter((x) => x.id !== id) }));
+    set((s) => {
+      const next = new Set(s.recentlyConsumedIds);
+      next.add(id);
+      return {
+        recentlyConsumedIds: next,
+        foodItems: s.foodItems.filter((x) => x.id !== id),
+      };
+    });
     try {
       await api.feed(id, userPosition);
       get().tickDailyTask('bones');
-      await get().syncState();
+      // syncState pulls fresh hunger/happiness so the +20/+8 bumps
+      // land immediately. tokensCollected stays monotonic via Math.max.
+      void get().syncState();
     } catch (err) {
-      set((s) => ({
-        foodItems: [...s.foodItems, f],
-        lastSyncError: (err as Error).message,
-      }));
+      // Same shape as collectToken's error path: keep the Set entry
+      // so the auto-eat loop doesn't refire, only surface the error.
+      // Don't re-add the bone to foodItems — the next /food/nearby
+      // poll reconciles authoritatively (server already 409'd, so
+      // the bone is gone server-side).
+      set({ lastSyncError: (err as Error).message });
     }
   },
 
@@ -407,7 +432,14 @@ export const useGameStore = create<GameState>((set, get) => ({
         }
       }
       const { food } = await api.getFoodNearby(pos, parks.length ? parks : undefined);
-      set({ foodItems: food });
+      // Same defense as syncTokens: drop server rows we've already
+      // consumed locally so a poll racing ahead of /feed commit can't
+      // re-inject a ghost bone.
+      const consumed = get().recentlyConsumedIds;
+      const filtered = consumed.size
+        ? food.filter((f) => !consumed.has(f.id))
+        : food;
+      set({ foodItems: filtered });
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
     }
