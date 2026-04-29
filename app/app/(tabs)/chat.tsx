@@ -280,8 +280,12 @@ const styles = StyleSheet.create({
   list: { flex: 1 },
   listContent: {
     paddingHorizontal: 16,
-    paddingTop: 4,
-    paddingBottom: 12,
+    // Generous top/bottom padding so the first and last bubbles
+    // sit clearly above/below the header + input cards instead of
+    // appearing to slide under them. The inputCard sits in flex
+    // flow above this padding band.
+    paddingTop: 12,
+    paddingBottom: 40,
     gap: 8,
   },
   bubble: {
