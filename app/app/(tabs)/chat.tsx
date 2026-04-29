@@ -166,15 +166,15 @@ export default function ChatScreen() {
         {typing ? <TypingIndicator /> : null}
       </ScrollView>
 
-      {/* Top frosted band — covers the safe-area inset + header pill so
-          messages scrolling up disappear under it cleanly. */}
+      {/* Top pill — compact companion-handle so it reads as "who
+          you're talking to" rather than a hero card. */}
       <View
         style={[styles.topBand, { paddingTop: insets.top }]}
         pointerEvents="box-none"
       >
         <View style={styles.headerCard} pointerEvents="auto">
+          <Text style={styles.headerEmoji}>🐶</Text>
           <Text style={styles.headerTitle}>{header}</Text>
-          <Text style={styles.headerSub}>chat</Text>
         </View>
       </View>
 
@@ -272,7 +272,7 @@ const CARD_SHADOW = {
 // Approximate visible heights for the floating pills. Used as scroll
 // content padding so the first/last bubble can scroll past each pill
 // without ever sitting flush against it.
-const HEADER_BAND_HEIGHT = 80;   // headerCard + its margins
+const HEADER_BAND_HEIGHT = 56;   // compact pill + its top/bottom margins
 const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 const TAB_BAR_HEIGHT = 60;       // matches _layout.tsx tabBarStyle
 const styles = StyleSheet.create({
@@ -298,29 +298,26 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   headerCard: {
-    marginHorizontal: 16,
-    marginTop: 12,
+    alignSelf: 'center',
+    marginTop: 10,
     marginBottom: 8,
     backgroundColor: '#ffffff',
-    borderRadius: 20,
-    paddingVertical: 14,
-    paddingHorizontal: 18,
+    borderRadius: 999,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    flexDirection: 'row',
     alignItems: 'center',
+    gap: 8,
     ...CARD_SHADOW,
+  },
+  headerEmoji: {
+    fontSize: 16,
   },
   headerTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 20,
+    fontSize: 15,
     fontWeight: '700',
     color: colors.black,
-  },
-  headerSub: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: 12,
-    color: '#777',
-    marginTop: 2,
-    textTransform: 'lowercase',
-    letterSpacing: 0.3,
   },
   listContent: {
     paddingHorizontal: 16,
