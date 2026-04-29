@@ -4,7 +4,18 @@ import { colors } from '../../constants/colors';
 
 function TabIcon({ icon, focused }: { icon: string; focused: boolean }) {
   return (
-    <Text style={{ fontSize: 22, opacity: focused ? 1 : 0.5 }}>{icon}</Text>
+    <Text
+      style={{
+        fontSize: 22,
+        // Inactive tabs read as b&w — grayscale strips the color from
+        // emoji glyphs (RN Web passes `filter` through to CSS), opacity
+        // softens them further so the focused tab visibly pops.
+        filter: focused ? undefined : 'grayscale(1)',
+        opacity: focused ? 1 : 0.55,
+      }}
+    >
+      {icon}
+    </Text>
   );
 }
 
