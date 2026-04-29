@@ -41,12 +41,23 @@ function HappinessPill({ value }: { value: number }) {
   );
 }
 
-function CounterPill({ icon, value, label }: { icon: string; value: number; label: string }) {
+function CounterPill({
+  icon,
+  value,
+  label,
+  suffix,
+}: {
+  icon: string;
+  value: number;
+  label: string;
+  suffix?: string;
+}) {
   return (
     <View style={[styles.pill, styles.counterPill]}>
       <Text style={styles.emoji}>{icon}</Text>
       <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
         {Math.round(value)}
+        {suffix ?? ''}
       </Text>
     </View>
   );
@@ -78,20 +89,19 @@ function SpotsTogglePill() {
 }
 
 export function StatusBar() {
+  const hunger = useGameStore((s) => s.hunger);
   const happiness = useGameStore((s) => s.happiness);
-  const bonesEaten = useGameStore((s) => s.bonesEaten);
   const tokensCollected = useGameStore((s) => s.tokensCollected);
 
   return (
     // box-none so the toggle pill receives taps while the wrap itself
     // doesn't swallow gestures aimed at the map.
-    // Three pills now follow the same rule: emoji + lifetime count
-    // for paws/bones, percent fill for happiness. Hunger lives on the
-    // profile screen — keeping it here as a +20 jumper next to "+1
-    // paw" reads as "1 bone = 20 bones" which it isn't.
+    // Hunger reads as % (0-100 meter, like happiness) so a +20 bump
+    // is obviously "+20% fed", not "I ate 20 bones". Paw pill keeps
+    // the lifetime collected count.
     <View style={styles.wrap} pointerEvents="box-none">
       <HappinessPill value={happiness} />
-      <CounterPill icon="🦴" value={bonesEaten} label="bones" />
+      <CounterPill icon="🦴" value={hunger} label="hunger" suffix="%" />
       <CounterPill icon="🐾" value={tokensCollected} label="paws" />
       <SpotsTogglePill />
     </View>

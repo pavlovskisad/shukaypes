@@ -72,7 +72,6 @@ interface GameState {
   hunger: number;
   happiness: number;
   tokensCollected: number;
-  bonesEaten: number;
   points: number;
   companionName: string;
   userPosition: LatLng | null;
@@ -176,7 +175,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   hunger: balance.hunger.start,
   happiness: balance.happiness.start,
   tokensCollected: 0,
-  bonesEaten: 0,
   points: 0,
   companionName: 'шукайпес',
   userPosition: null,
@@ -273,27 +271,21 @@ export const useGameStore = create<GameState>((set, get) => ({
       return {
         recentlyConsumedIds: next,
         foodItems: s.foodItems.filter((x) => x.id !== id),
-        bonesEaten: s.bonesEaten + 1,
       };
     });
     try {
       await api.feed(id, userPosition, force);
       get().tickDailyTask('bones');
       // syncState pulls fresh hunger/happiness so the +20/+8 bumps
-      // land immediately. tokensCollected/bonesEaten stay monotonic
-      // via Math.max so a stale /state response can't shrink them.
+      // land immediately. tokensCollected stays monotonic via Math.max.
       void get().syncState();
     } catch (err) {
       // Same shape as collectToken's error path: keep the Set entry
       // so the auto-eat loop doesn't refire, only surface the error.
       // Don't re-add the bone to foodItems — the next /food/nearby
       // poll reconciles authoritatively (server already 409'd, so
-      // the bone is gone server-side). Counter does revert: if the
-      // server rejected, we shouldn't have credited the bone.
-      set((s) => ({
-        bonesEaten: Math.max(0, s.bonesEaten - 1),
-        lastSyncError: (err as Error).message,
-      }));
+      // the bone is gone server-side).
+      set({ lastSyncError: (err as Error).message });
     }
   },
 
@@ -401,7 +393,6 @@ export const useGameStore = create<GameState>((set, get) => ({
         // counter — the optimistic path only ever adds, so the local
         // value is always a valid lower bound.
         tokensCollected: Math.max(prev.tokensCollected, s.user.totalTokens),
-        bonesEaten: Math.max(prev.bonesEaten, s.user.totalBones),
         hunger: s.companion.hunger,
         happiness: s.companion.happiness,
         companionName: s.companion.name,

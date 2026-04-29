@@ -45,7 +45,6 @@ export interface StateResponse {
     username: string;
     points: number;
     totalTokens: number;
-    totalBones: number;
     totalDistanceMeters: number;
   };
   companion: {
