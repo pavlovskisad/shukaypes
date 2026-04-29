@@ -10,9 +10,15 @@ import type { LatLng, FoodItem, Token } from '@shukajpes/shared';
 // Sized so it covers a comfortable two blocks around the walker.
 const HUNT_RADIUS_M = 200;
 
-// How fast the companion slides toward its current target each tick.
-// 0.18 = 18% closer per 100ms = visually decisive but smooth, no jump.
-const PURSUIT_LERP = 0.18;
+// Pursuit speed cap. Movement per 100ms tick is min(MAX_STEP_M,
+// remaining * LERP_TAIL) — lerp shape gives smooth deceleration as
+// the companion arrives, the cap prevents the "flash" effect on far
+// targets where lerping a percentage of a 100m gap covers tens of
+// meters in a single frame.
+//   MAX_STEP_M = 0.3 → 3 m/s, brisk dog trot, faster than walker.
+//   LERP_TAIL  = 0.18 → only ever active in the last ~2m, soft stop.
+const MAX_STEP_M = 0.3;
+const LERP_TAIL = 0.18;
 
 function findNearestTarget(
   userPos: LatLng,
@@ -57,15 +63,19 @@ export function useCompanion(userPos: LatLng | null): LatLng | null {
       const hunt = findNearestTarget(userPos, tokens, foodItems);
 
       if (hunt) {
-        // Slide toward the prey position. We update via the functional
-        // form so concurrent ticks compose, and lerp from the previous
-        // companion pos rather than the user pos — gives a real chase
-        // visual rather than a teleport.
+        // Slide toward the prey position with a meter-based step so far
+        // targets don't flash by in 1-2 ticks. Updates via the functional
+        // form so concurrent ticks compose, and moves from the previous
+        // companion pos rather than the user pos — real chase visual.
         setPos((prev) => {
           const from = prev ?? userPos;
+          const distM = distanceMeters(from, hunt);
+          if (distM < 0.5) return hunt;
+          const stepM = Math.min(MAX_STEP_M, distM * LERP_TAIL);
+          const ratio = stepM / distM;
           return {
-            lat: from.lat + (hunt.lat - from.lat) * PURSUIT_LERP,
-            lng: from.lng + (hunt.lng - from.lng) * PURSUIT_LERP,
+            lat: from.lat + (hunt.lat - from.lat) * ratio,
+            lng: from.lng + (hunt.lng - from.lng) * ratio,
           };
         });
         return;
