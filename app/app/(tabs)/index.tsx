@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { View, Image, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -14,12 +14,39 @@ import logoSquare from '../../assets/logo-square.png';
 // rather than dominating the map.
 const HUD_ICON_SIZE = 55;
 
+// localStorage flag — once dismissed, the about sheet doesn't pop on
+// future visits. Cheap onboarding without server state.
+const ABOUT_SEEN_KEY = 'shukajpes:aboutSeen';
+
 export default function MapScreen() {
   const [aboutOpen, setAboutOpen] = useState(false);
 
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('map');
   }, []));
+
+  // Auto-open on the first ever visit. Wrapped in try/catch in case
+  // localStorage is unavailable (private mode etc) — failing silent
+  // is fine, the user can still tap the logo.
+  useEffect(() => {
+    try {
+      if (typeof window === 'undefined') return;
+      if (!window.localStorage.getItem(ABOUT_SEEN_KEY)) {
+        setAboutOpen(true);
+      }
+    } catch {
+      // ignore
+    }
+  }, []);
+
+  const handleAboutClose = useCallback(() => {
+    setAboutOpen(false);
+    try {
+      window.localStorage.setItem(ABOUT_SEEN_KEY, '1');
+    } catch {
+      // ignore
+    }
+  }, []);
 
   return (
     <View style={styles.root}>
@@ -48,7 +75,7 @@ export default function MapScreen() {
           <QuestPill />
         </View>
       </SafeAreaView>
-      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
+      <AboutModal open={aboutOpen} onClose={handleAboutClose} />
     </View>
   );
 }
