@@ -121,8 +121,11 @@ interface GameState {
 
   setUserPosition: (pos: LatLng) => void;
   setHomePosition: (pos: LatLng) => void;
-  collectToken: (id: string) => Promise<void>;
-  eatFood: (id: string) => Promise<void>;
+  // `force` skips the server distance check — used for explicit user
+  // taps on a paw/bone marker so a visible item is always collectable.
+  // Auto-collect leaves it false so the anti-cheat gate still applies.
+  collectToken: (id: string, force?: boolean) => Promise<void>;
+  eatFood: (id: string, force?: boolean) => Promise<void>;
   setMenuOpen: (open: boolean) => void;
   setScreen: (screen: GameState['currentScreen']) => void;
   setActiveQuest: (quest: Quest | null) => void;
@@ -207,7 +210,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setHomePosition: (pos) => set({ homePosition: pos }),
 
-  collectToken: async (id) => {
+  collectToken: async (id, force = false) => {
     const { userPosition, tokens, recentlyCollectedIds } = get();
     // Short-circuit the moment we've started collecting this id — if the
     // 15s sync races ahead and brings the token back as uncollected, the
@@ -229,7 +232,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       };
     });
     try {
-      await api.collectToken(id, userPosition);
+      await api.collectToken(id, userPosition, force);
       get().tickDailyTask('tokens');
       // Pull fresh hunger/happiness so the meters reflect the +2/+5
       // bumps immediately rather than waiting for the 5s poll. Counter
@@ -252,7 +255,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  eatFood: async (id) => {
+  eatFood: async (id, force = false) => {
     const { userPosition, foodItems, recentlyConsumedIds } = get();
     // Same in-flight guard as collectToken — auto-eat loop and a user
     // tap can both fire /feed for the same bone in the same 100ms
@@ -271,7 +274,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       };
     });
     try {
-      await api.feed(id, userPosition);
+      await api.feed(id, userPosition, force);
       get().tickDailyTask('bones');
       // syncState pulls fresh hunger/happiness so the +20/+8 bumps
       // land immediately. tokensCollected stays monotonic via Math.max.
