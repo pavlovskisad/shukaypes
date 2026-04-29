@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { eq } from 'drizzle-orm';
+import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { xpProgress, MAX_LEVEL } from '../lib/xp.js';
 
@@ -19,6 +19,21 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     if (!user || !companion) return { error: 'user not found' };
 
+    // Lifetime bones-eaten — counted from accepted food collect_events
+    // to mirror tokensCollected. Cheaper than denormalising onto the
+    // users row; /state runs ~5s and the table has an index on user_id.
+    const [bonesRow] = await db
+      .select({ n: sql<number>`count(*)::int` })
+      .from(schema.collectEvents)
+      .where(
+        and(
+          eq(schema.collectEvents.userId, userId),
+          eq(schema.collectEvents.kind, 'food'),
+          eq(schema.collectEvents.accepted, true),
+        ),
+      );
+    const totalBones = bonesRow?.n ?? 0;
+
     // Level is derived from xp via the shared curve — we don't trust
     // companion.level (legacy column kept for migration safety) so the
     // curve can be tuned without DB writes.
@@ -30,6 +45,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         username: user.username,
         points: user.points,
         totalTokens: user.totalTokens,
+        totalBones,
         totalDistanceMeters: user.totalDistanceMeters,
       },
       companion: {

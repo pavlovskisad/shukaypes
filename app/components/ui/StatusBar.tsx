@@ -78,17 +78,21 @@ function SpotsTogglePill() {
 }
 
 export function StatusBar() {
-  const hunger = useGameStore((s) => s.hunger);
   const happiness = useGameStore((s) => s.happiness);
+  const bonesEaten = useGameStore((s) => s.bonesEaten);
   const tokensCollected = useGameStore((s) => s.tokensCollected);
 
   return (
     // box-none so the toggle pill receives taps while the wrap itself
     // doesn't swallow gestures aimed at the map.
+    // Three pills now follow the same rule: emoji + lifetime count
+    // for paws/bones, percent fill for happiness. Hunger lives on the
+    // profile screen — keeping it here as a +20 jumper next to "+1
+    // paw" reads as "1 bone = 20 bones" which it isn't.
     <View style={styles.wrap} pointerEvents="box-none">
       <HappinessPill value={happiness} />
-      <CounterPill icon="🦴" value={hunger} label="hunger" />
-      <CounterPill icon="🐾" value={tokensCollected} label="tokens" />
+      <CounterPill icon="🦴" value={bonesEaten} label="bones" />
+      <CounterPill icon="🐾" value={tokensCollected} label="paws" />
       <SpotsTogglePill />
     </View>
   );
