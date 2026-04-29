@@ -61,6 +61,37 @@ export interface StateResponse {
 export const api = {
   getState: () => req<StateResponse>('/state'),
 
+  // Profile aggregates — fetched once per Profile tab focus, not on
+  // every game-loop poll. Separate endpoint so the count queries
+  // don't run inside /state's hot path.
+  getProfile: () =>
+    req<{
+      user: {
+        id: string;
+        username: string;
+        createdAt: string;
+        points: number;
+        totalTokens: number;
+        totalDistanceMeters: number;
+      };
+      companion: {
+        name: string;
+        level: number;
+        xp: number;
+        hunger: number;
+        happiness: number;
+      };
+      stats: {
+        daysPlayed: number;
+        pawsCollected: number;
+        bonesEaten: number;
+        petsSearched: number;
+        questsCompleted: number;
+        questsAbandoned: number;
+        sightingsReported: number;
+      };
+    }>('/profile/me'),
+
   getTokensNearby: (pos: LatLng) =>
     req<{ tokens: Token[] }>(`/tokens/nearby?lat=${pos.lat}&lng=${pos.lng}`),
 
