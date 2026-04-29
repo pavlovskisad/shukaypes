@@ -137,7 +137,7 @@ export default function ProfileScreen() {
             </View>
             <View style={styles.meterPill}>
               <Text style={styles.meterEmoji}>🦴</Text>
-              <Text style={styles.meterValue}>{Math.round(data?.companion.hunger ?? 0)}</Text>
+              <Text style={styles.meterValue}>{Math.round(data?.companion.hunger ?? 0)}%</Text>
             </View>
             <View style={styles.meterPill}>
               <Text style={styles.meterEmoji}>🐾</Text>
