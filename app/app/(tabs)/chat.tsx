@@ -12,13 +12,16 @@ import {
   Linking,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
-import { fonts } from '../../constants/fonts';
+import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
 import { api } from '../../services/api';
 import type { ChatMessage } from '@shukajpes/shared';
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
+
+const ACCENT_BLUE = 'rgba(0,60,255,0.85)';
 
 function linkify(text: string): Array<{ kind: 'text' | 'link'; value: string }> {
   const parts: Array<{ kind: 'text' | 'link'; value: string }> = [];
@@ -134,47 +137,55 @@ export default function ChatScreen() {
   const header = useMemo(() => companionName || 'шукайпес', [companionName]);
 
   return (
-    <KeyboardAvoidingView
-      style={styles.root}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-    >
-      <View style={styles.header}>
-        <Text style={styles.headerTitle}>{header}</Text>
-      </View>
-
-      <ScrollView
-        ref={scrollRef}
-        style={styles.list}
-        contentContainerStyle={styles.listContent}
-        keyboardShouldPersistTaps="handled"
+    <SafeAreaView style={styles.root} edges={['top']}>
+      <KeyboardAvoidingView
+        style={styles.flex}
+        behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       >
-        {bootError && <Text style={styles.error}>{bootError}</Text>}
-        {messages.map((m) => (
-          <Bubble key={m.id} msg={m} />
-        ))}
-        {typing && <TypingIndicator />}
-      </ScrollView>
+        {/* Header card — matches the profile family. Companion name +
+            small "chat" subtitle so the screen has the same "title in
+            card" anchor as the others. */}
+        <View style={styles.headerCard}>
+          <Text style={styles.headerTitle}>{header}</Text>
+          <Text style={styles.headerSub}>chat</Text>
+        </View>
 
-      <View style={styles.inputRow}>
-        <TextInput
-          style={styles.input}
-          value={draft}
-          onChangeText={setDraft}
-          placeholder={`talk to ${header}...`}
-          placeholderTextColor={colors.grey}
-          onSubmitEditing={send}
-          editable={!sending}
-          returnKeyType="send"
-        />
-        <Pressable style={styles.sendBtn} onPress={send} disabled={sending}>
-          {sending ? (
-            <ActivityIndicator size="small" color={colors.accent} />
-          ) : (
-            <Text style={styles.sendBtnText}>→</Text>
-          )}
-        </Pressable>
-      </View>
-    </KeyboardAvoidingView>
+        <ScrollView
+          ref={scrollRef}
+          style={styles.list}
+          contentContainerStyle={styles.listContent}
+          keyboardShouldPersistTaps="handled"
+        >
+          {bootError ? <Text style={styles.error}>{bootError}</Text> : null}
+          {messages.map((m) => (
+            <Bubble key={m.id} msg={m} />
+          ))}
+          {typing ? <TypingIndicator /> : null}
+        </ScrollView>
+
+        {/* Input row floats as its own card just above the floating tab
+            bar. Same shadow/radius recipe as the rest of the family. */}
+        <View style={styles.inputCard}>
+          <TextInput
+            style={styles.input}
+            value={draft}
+            onChangeText={setDraft}
+            placeholder={`talk to ${header}…`}
+            placeholderTextColor="#999"
+            onSubmitEditing={send}
+            editable={!sending}
+            returnKeyType="send"
+          />
+          <Pressable style={styles.sendBtn} onPress={send} disabled={sending}>
+            {sending ? (
+              <ActivityIndicator size="small" color="#fff" />
+            ) : (
+              <Text style={styles.sendBtnText}>→</Text>
+            )}
+          </Pressable>
+        </View>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }
 
@@ -182,13 +193,23 @@ function Bubble({ msg }: { msg: ChatMessage }) {
   const isUser = msg.role === 'user';
   const parts = linkify(msg.content);
   return (
-    <View style={[styles.bubble, isUser ? styles.userBubble : styles.assistantBubble]}>
-      <Text style={[styles.bubbleText, isUser ? styles.userText : styles.assistantText]}>
+    <View
+      style={[
+        styles.bubble,
+        isUser ? styles.userBubble : styles.assistantBubble,
+      ]}
+    >
+      <Text
+        style={[
+          styles.bubbleText,
+          isUser ? styles.userText : styles.assistantText,
+        ]}
+      >
         {parts.map((p, i) =>
           p.kind === 'link' ? (
             <Text
               key={i}
-              style={styles.link}
+              style={[styles.link, isUser ? styles.userText : styles.assistantText]}
               onPress={() => Linking.openURL(p.value).catch(() => {})}
             >
               {p.value}
@@ -217,99 +238,124 @@ function TypingIndicator() {
   );
 }
 
+const CARD_SHADOW = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 4 },
+  shadowOpacity: 0.06,
+  shadowRadius: 12,
+  elevation: 2,
+} as const;
+
 const styles = StyleSheet.create({
   root: {
     flex: 1,
-    backgroundColor: colors.white,
+    backgroundColor: colors.greyBg,
   },
-  header: {
-    paddingTop: 16,
-    paddingBottom: 12,
+  flex: { flex: 1 },
+  headerCard: {
+    marginHorizontal: 16,
+    marginTop: 12,
+    marginBottom: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    paddingVertical: 14,
+    paddingHorizontal: 18,
     alignItems: 'center',
-    borderBottomWidth: 1,
-    borderBottomColor: colors.greyBg,
+    ...CARD_SHADOW,
   },
   headerTitle: {
-    fontFamily: fonts.heading,
-    fontSize: 22,
+    fontFamily: SYSTEM_FONT,
+    fontSize: 20,
+    fontWeight: '700',
     color: colors.black,
+  },
+  headerSub: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: 12,
+    color: '#777',
+    marginTop: 2,
+    textTransform: 'lowercase',
+    letterSpacing: 0.3,
   },
   list: { flex: 1 },
   listContent: {
-    padding: 14,
-    gap: 10,
+    paddingHorizontal: 16,
+    paddingTop: 4,
+    paddingBottom: 12,
+    gap: 8,
   },
   bubble: {
     maxWidth: '82%',
     paddingVertical: 10,
     paddingHorizontal: 14,
-    borderRadius: 16,
+    borderRadius: 18,
   },
   assistantBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: colors.greyBg,
-    borderBottomLeftRadius: 4,
+    backgroundColor: '#ffffff',
+    borderBottomLeftRadius: 6,
+    ...CARD_SHADOW,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: colors.black,
-    borderBottomRightRadius: 4,
+    backgroundColor: ACCENT_BLUE,
+    borderBottomRightRadius: 6,
+    ...CARD_SHADOW,
   },
   bubbleText: {
-    fontSize: 16,
+    fontFamily: SYSTEM_FONT,
+    fontSize: 15,
     lineHeight: 22,
   },
   assistantText: {
     color: colors.black,
-    fontFamily: fonts.heading,
-    fontSize: 18,
   },
   userText: {
-    color: colors.white,
-    fontFamily: fonts.body,
+    color: '#ffffff',
   },
   link: {
     textDecorationLine: 'underline',
   },
   typing: {
-    opacity: 0.8,
+    opacity: 0.85,
   },
   error: {
-    color: colors.red,
+    color: '#a33',
     fontSize: 12,
     alignSelf: 'center',
+    marginVertical: 8,
   },
-  inputRow: {
+  inputCard: {
     flexDirection: 'row',
     gap: 8,
-    padding: 10,
-    // Floating tab bar covers ~60-80px at the bottom; lift the input
-    // row above it so the send button is reachable.
-    paddingBottom: 90,
-    borderTopWidth: 1,
-    borderTopColor: colors.greyBg,
+    alignItems: 'center',
+    marginHorizontal: 16,
+    marginBottom: 90, // float above the tab bar
+    paddingHorizontal: 8,
+    paddingVertical: 8,
+    backgroundColor: '#ffffff',
+    borderRadius: 26,
+    ...CARD_SHADOW,
   },
   input: {
     flex: 1,
-    backgroundColor: colors.greyBg,
-    borderRadius: 22,
-    paddingHorizontal: 18,
-    paddingVertical: 10,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
     fontSize: 15,
-    fontFamily: fonts.body,
+    fontFamily: SYSTEM_FONT,
     color: colors.black,
   },
   sendBtn: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: colors.black,
+    width: 38,
+    height: 38,
+    borderRadius: 19,
+    backgroundColor: ACCENT_BLUE,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendBtnText: {
-    color: colors.accent,
-    fontSize: 20,
-    fontWeight: '600',
+    color: '#ffffff',
+    fontSize: 18,
+    fontWeight: '700',
   },
 });
