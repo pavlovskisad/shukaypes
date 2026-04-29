@@ -3,9 +3,17 @@
 // these are the canonical numbers for state transitions and reward math.
 export const balance = {
   hunger: { start: 80, decay: 2, intervalMs: 8000, min: 0, max: 100 },
-  happiness: { start: 60, decay: 1, intervalMs: 8000, min: 0, max: 100 },
-  bone: { hunger: 20, happiness: 8 },
-  token: { hunger: 2, happiness: 5 },
+  // Happiness starts high (the dog is excited), decays slow, and gets
+  // big visible bumps on collect + quest milestones. Decay runs at the
+  // hunger cron's interval so SQL ROUND lands on a non-zero step;
+  // raising decay's intervalMs above the cron rate would round-to-zero
+  // and stall the meter entirely.
+  happiness: { start: 80, decay: 1, intervalMs: 8000, min: 0, max: 100 },
+  bone: { hunger: 20, happiness: 18 },
+  token: { hunger: 2, happiness: 12 },
+  // Per-waypoint progression bump + extra payoff at the final waypoint.
+  // Walking the route is the main "we did it together" signal in v1.
+  quest: { happinessPerWaypoint: 8, happinessOnComplete: 25 },
   // Token spawning is location-driven: a base pool around the walker
   // (always something underfoot) plus extra pools inside each nearby
   // active lost-pet search zone, so following a pet's zone earns more

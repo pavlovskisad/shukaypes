@@ -12,6 +12,7 @@ import {
   narrateWaypointReached,
   narrateQuestComplete,
 } from '../services/questNarration.js';
+import { balance } from '../config/balance.js';
 
 interface StartBody {
   dogId: string;
@@ -212,6 +213,21 @@ const plugin: FastifyPluginAsync = async (app) => {
           .update(schema.users)
           .set({ points: sql`${schema.users.points} + ${row.rewardPoints}` })
           .where(eq(schema.users.id, req.userId));
+      }
+      // Bump companion happiness on every waypoint reached, plus an
+      // extra payoff on the final one. Visible feedback for the
+      // "we did it together" loop — points alone weren't moving the
+      // mood meter despite the user finishing whole quests.
+      const happyDelta =
+        balance.quest.happinessPerWaypoint +
+        (done ? balance.quest.happinessOnComplete : 0);
+      if (happyDelta > 0) {
+        await tx
+          .update(schema.companionState)
+          .set({
+            happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${happyDelta})`,
+          })
+          .where(eq(schema.companionState.userId, req.userId));
       }
       return res;
     });

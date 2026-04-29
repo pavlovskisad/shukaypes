@@ -1,10 +1,8 @@
 export const balance = {
   hunger: { start: 80, decay: 2, interval: 8000 },
-  happiness: { start: 60, decay: 1, interval: 8000 },
-  bone: { hunger: 20, happiness: 8 },
-  token: { hunger: 2, happiness: 5 },
-  searchQuest: { happiness: 15 },
-  walk: { happiness: 10 },
+  happiness: { start: 80, decay: 1, interval: 8000 },
+  bone: { hunger: 20, happiness: 18 },
+  token: { hunger: 2, happiness: 12 },
   lowThreshold: 30,
   tokenCount: 15,
   bonusPerDog: 6,
