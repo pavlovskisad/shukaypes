@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
@@ -19,6 +20,8 @@ const CATEGORY_LABEL: Record<string, string> = {
   veterinary_care: 'vet',
 };
 
+const SHEET_ANIM_MS = 280;
+
 function ratingStars(rating?: number): string {
   if (typeof rating !== 'number') return '';
   const full = Math.floor(rating);
@@ -28,14 +31,36 @@ function ratingStars(rating?: number): string {
 
 // Slide-up POI sheet. Mirrors LostDogModal's shape so the two read as
 // one family — frosted-corner card, big primary action button, ✕ to
-// close. Differentiated from lost-pet sheet by the photo slot
-// (category emoji here, pet photo there) and the action ("walk here"
-// vs "i've seen them").
+// close. Animates in on mount, animates out before unmounting via the
+// closing-state timeout so dismiss feels reversible.
 export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
-  if (!spot) return null;
+  const [renderSpot, setRenderSpot] = useState<Spot | null>(spot);
+  const [closing, setClosing] = useState(false);
 
-  const categoryLabel = CATEGORY_LABEL[spot.category] ?? spot.category;
-  const stars = ratingStars(spot.rating);
+  // Three transitions matter:
+  //   prop spot: A   →  prop spot: B    (swap content, no animation)
+  //   prop spot: A   →  null            (start closing → unmount after MS)
+  //   prop spot: null → A               (mount, enter animation runs)
+  useEffect(() => {
+    if (spot) {
+      setRenderSpot(spot);
+      setClosing(false);
+      return;
+    }
+    if (renderSpot && !closing) {
+      setClosing(true);
+      const t = setTimeout(() => {
+        setRenderSpot(null);
+        setClosing(false);
+      }, SHEET_ANIM_MS);
+      return () => clearTimeout(t);
+    }
+  }, [spot]);
+
+  if (!renderSpot) return null;
+
+  const categoryLabel = CATEGORY_LABEL[renderSpot.category] ?? renderSpot.category;
+  const stars = ratingStars(renderSpot.rating);
 
   return (
     <div
@@ -47,8 +72,12 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
-        paddingBottom: 80,
+        // Lift the sheet above the floating tab bar (60h + 12 bottom +
+        // breathing room) so the primary action isn't covered.
+        paddingBottom: 96,
         zIndex: 50,
+        opacity: closing ? 0 : 1,
+        transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
       }}
     >
       <div
@@ -59,8 +88,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           padding: '22px 20px 22px',
           width: '100%',
           maxWidth: 430,
-          animation: 'spot-modal-up 0.3s cubic-bezier(0.4,0,0.2,1)',
-          boxShadow: '0 -12px 40px rgba(0,0,0,0.2)',
+          animation: `sheet-${closing ? 'down' : 'up'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
+          boxShadow: '0 -10px 30px rgba(0,0,0,0.12)',
         }}
       >
         <div
@@ -115,7 +144,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               flexShrink: 0,
             }}
           >
-            {spot.icon ?? '📍'}
+            {renderSpot.icon ?? '📍'}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div
@@ -126,26 +155,26 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 lineHeight: 1.2,
               }}
             >
-              {spot.name}
+              {renderSpot.name}
             </div>
             {stars ? (
               <div style={{ fontSize: 13, color: '#d9a030', marginTop: 4 }}>
                 {stars}{' '}
                 <span style={{ color: '#777', fontSize: 12 }}>
-                  {typeof spot.rating === 'number' ? spot.rating.toFixed(1) : ''}
+                  {typeof renderSpot.rating === 'number' ? renderSpot.rating.toFixed(1) : ''}
                 </span>
               </div>
             ) : null}
-            {spot.address ? (
+            {renderSpot.address ? (
               <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>
-                {spot.address}
+                {renderSpot.address}
               </div>
             ) : null}
           </div>
         </div>
 
         <button
-          onClick={() => onWalkHere?.(spot, 'oneway')}
+          onClick={() => onWalkHere?.(renderSpot, 'oneway')}
           style={{
             width: '100%',
             background: '#1a1a1a',
@@ -163,7 +192,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         </button>
 
         <button
-          onClick={() => onWalkHere?.(spot, 'roundtrip')}
+          onClick={() => onWalkHere?.(renderSpot, 'roundtrip')}
           style={{
             width: '100%',
             background: 'rgba(0,0,255,0.06)',
@@ -182,9 +211,13 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         </button>
 
         <style>{`
-          @keyframes spot-modal-up {
+          @keyframes sheet-up {
             from { transform: translateY(100%); }
             to { transform: translateY(0); }
+          }
+          @keyframes sheet-down {
+            from { transform: translateY(0); }
+            to { transform: translateY(100%); }
           }
         `}</style>
       </div>

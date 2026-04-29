@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
@@ -23,6 +23,8 @@ interface LostDogModalProps {
 // vertical scroll gestures on the sheet don't trip it.
 const SWIPE_THRESHOLD_PX = 60;
 
+const SHEET_ANIM_MS = 280;
+
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
   const now = Date.now();
@@ -34,8 +36,10 @@ function relativeTime(iso: string): string {
   return `${diffD}d ago`;
 }
 
-// Slide-up dog detail sheet. Demo lines 105-113. First iteration — photo
-// pop-ups and "I've seen this dog" reporting land in a later slice.
+// Slide-up dog detail sheet. Animates in on mount, animates out before
+// unmounting via the closing-state timeout so dismiss feels reversible.
+// Same recipe lives in SpotModal — refactor into a shared <BottomSheet>
+// helper if a third sheet shows up.
 export function LostDogModal({
   dog,
   onClose,
@@ -46,7 +50,30 @@ export function LostDogModal({
   onNext,
 }: LostDogModalProps) {
   const touchStartXRef = useRef<number | null>(null);
-  if (!dog) return null;
+  const [renderDog, setRenderDog] = useState<NearbyLostDog | null>(dog);
+  const [closing, setClosing] = useState(false);
+
+  // Three transitions matter:
+  //   prop dog: A   →  prop dog: B    (swap content, no animation)
+  //   prop dog: A   →  null           (start closing → unmount after MS)
+  //   prop dog: null → A              (mount, enter animation runs)
+  useEffect(() => {
+    if (dog) {
+      setRenderDog(dog);
+      setClosing(false);
+      return;
+    }
+    if (renderDog && !closing) {
+      setClosing(true);
+      const t = setTimeout(() => {
+        setRenderDog(null);
+        setClosing(false);
+      }, SHEET_ANIM_MS);
+      return () => clearTimeout(t);
+    }
+  }, [dog]);
+
+  if (!renderDog) return null;
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0]?.clientX ?? null;
@@ -62,7 +89,7 @@ export function LostDogModal({
     else onNext?.();
   };
 
-  const urgent = dog.urgency === 'urgent';
+  const urgent = renderDog.urgency === 'urgent';
   const badgeText = urgent ? '🚨 URGENT' : '⚠️ searching';
   const badgeBg = urgent ? '#fde8e8' : '#fdf3e0';
   const badgeFg = urgent ? '#e84040' : '#d9a030';
@@ -77,10 +104,12 @@ export function LostDogModal({
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
-        // Lift the sheet above the floating tab bar (~60-80px) so the
-        // "i've seen them" button isn't covered by the dashboard.
-        paddingBottom: 80,
+        // Lift the sheet above the floating tab bar (60h + 12 bottom +
+        // breathing room) so the "i've seen them" button isn't covered.
+        paddingBottom: 96,
         zIndex: 50,
+        opacity: closing ? 0 : 1,
+        transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
       }}
     >
       <div
@@ -94,8 +123,8 @@ export function LostDogModal({
           width: '100%',
           maxWidth: 430,
           position: 'relative',
-          animation: 'dog-modal-up 0.3s cubic-bezier(0.4,0,0.2,1)',
-          boxShadow: '0 -12px 40px rgba(0,0,0,0.2)',
+          animation: `sheet-${closing ? 'down' : 'up'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
+          boxShadow: '0 -10px 30px rgba(0,0,0,0.12)',
         }}
       >
         {/* Prev/next chevrons — only rendered when the parent supplies
@@ -191,10 +220,10 @@ export function LostDogModal({
         </div>
 
         <div style={{ display: 'flex', gap: 14, marginBottom: 18, alignItems: 'center' }}>
-          {dog.photoUrl ? (
+          {renderDog.photoUrl ? (
             <img
-              src={dog.photoUrl}
-              alt={dog.name}
+              src={renderDog.photoUrl}
+              alt={renderDog.name}
               style={{
                 width: 68,
                 height: 68,
@@ -217,16 +246,16 @@ export function LostDogModal({
                 flexShrink: 0,
               }}
             >
-              {dog.emoji}
+              {renderDog.emoji}
             </div>
           )}
           <div>
             <div style={{ fontFamily: SYSTEM_FONT, fontSize: 24, fontWeight: 700 }}>
-              {dog.name}
+              {renderDog.name}
             </div>
-            <div style={{ fontSize: 13, color: '#777', marginTop: 2 }}>{dog.breed}</div>
+            <div style={{ fontSize: 13, color: '#777', marginTop: 2 }}>{renderDog.breed}</div>
             <div style={{ fontSize: 12, color: '#777', marginTop: 3 }}>
-              last seen {relativeTime(dog.lastSeen.at)}
+              last seen {relativeTime(renderDog.lastSeen.at)}
             </div>
           </div>
         </div>
@@ -245,14 +274,14 @@ export function LostDogModal({
           <span style={{ fontSize: 22 }}>🐾</span>
           <div>
             <div style={{ fontFamily: SYSTEM_FONT, fontSize: 17, fontWeight: 700 }}>
-              {dog.rewardPoints} pts reward
+              {renderDog.rewardPoints} pts reward
             </div>
             <div style={{ fontSize: 11, color: '#777' }}>bonus tokens near search zone</div>
           </div>
         </div>
 
         <button
-          onClick={() => onReportSighting?.(dog)}
+          onClick={() => onReportSighting?.(renderDog)}
           style={{
             width: '100%',
             background: '#1a1a1a',
@@ -270,7 +299,7 @@ export function LostDogModal({
         </button>
 
         <button
-          onClick={() => onStartSearch?.(dog)}
+          onClick={() => onStartSearch?.(renderDog)}
           disabled={searchActive}
           style={{
             width: '100%',
@@ -292,9 +321,13 @@ export function LostDogModal({
         </button>
 
         <style>{`
-          @keyframes dog-modal-up {
+          @keyframes sheet-up {
             from { transform: translateY(100%); }
             to { transform: translateY(0); }
+          }
+          @keyframes sheet-down {
+            from { transform: translateY(0); }
+            to { transform: translateY(100%); }
           }
         `}</style>
       </div>
