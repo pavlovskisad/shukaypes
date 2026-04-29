@@ -4,8 +4,8 @@ import { colors } from '../../constants/colors';
 
 // Four white-frosted-glass pills laid out identically: icon + value with
 // a consistent gap so happiness / hunger / tokens / spots-toggle read
-// as one family. Happiness shows a progress fill (mood meter, only %
-// pill). Hunger and tokens are plain counters. The rightmost is a
+// as one family. Happiness + hunger are 0-100 meters with a blue
+// progress fill; the paw pill is a lifetime count. The rightmost is a
 // tap-to-toggle visibility switch for the spots layer.
 
 const PILL_HEIGHT = 38;
@@ -17,7 +17,15 @@ const PROGRESS_BLUE = 'rgba(0,60,255,0.85)';
 const GLASS_BG = 'rgba(255,255,255,0.85)';
 const GLASS_SHADOW_COLOR = '#000';
 
-function HappinessPill({ value }: { value: number }) {
+function MeterPill({
+  icon,
+  value,
+  label,
+}: {
+  icon: string;
+  value: number;
+  label: string;
+}) {
   const fillPct = Math.max(0, Math.min(100, Math.round(value)));
   return (
     <View style={[styles.pill, styles.meterPill]}>
@@ -30,12 +38,12 @@ function HappinessPill({ value }: { value: number }) {
           },
         ]}
       />
-      <Text style={styles.emoji}>☀️</Text>
+      <Text style={styles.emoji}>{icon}</Text>
       <Text
         style={styles.value}
-        accessibilityLabel={`happiness ${Math.round(value)} percent`}
+        accessibilityLabel={`${label} ${fillPct} percent`}
       >
-        {Math.round(value)}%
+        {fillPct}%
       </Text>
     </View>
   );
@@ -100,8 +108,8 @@ export function StatusBar() {
     // is obviously "+20% fed", not "I ate 20 bones". Paw pill keeps
     // the lifetime collected count.
     <View style={styles.wrap} pointerEvents="box-none">
-      <HappinessPill value={happiness} />
-      <CounterPill icon="🦴" value={hunger} label="hunger" suffix="%" />
+      <MeterPill icon="☀️" value={happiness} label="happiness" />
+      <MeterPill icon="🦴" value={hunger} label="hunger" />
       <CounterPill icon="🐾" value={tokensCollected} label="paws" />
       <SpotsTogglePill />
     </View>
