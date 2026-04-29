@@ -343,16 +343,6 @@ export default function MapViewWeb() {
 
   return (
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
-      {/* Lift Google's bottom-anchored UI (logo, "Terms"/"Map data"
-          attribution) above the dashboard so it stays visible —
-          clipping it would violate Maps ToS. */}
-      <style>{`
-        .gm-style-cc { bottom: 70px !important; }
-        a[href^="https://maps.google.com/maps"],
-        a[href^="https://www.google.com/maps"] {
-          bottom: 70px !important;
-        }
-      `}</style>
       <GoogleMap
         mapContainerStyle={CONTAINER_STYLE as unknown as React.CSSProperties}
         options={mapOptions}
