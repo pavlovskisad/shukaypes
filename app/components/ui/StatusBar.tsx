@@ -72,7 +72,7 @@ function SpotsTogglePill() {
         pressed && { opacity: 0.7 },
       ]}
     >
-      <Text style={[styles.emoji, !visible && styles.emojiDim]}>📍</Text>
+      <Text style={[styles.emoji, !visible && styles.emojiOff]}>📍</Text>
     </Pressable>
   );
 }
@@ -130,8 +130,11 @@ const styles = StyleSheet.create({
   togglePillOff: {
     backgroundColor: 'rgba(255,255,255,0.55)',
   },
-  emojiDim: {
-    opacity: 0.55,
+  emojiOff: {
+    // grayscale the color emoji so the "off" state reads as b&w —
+    // RN Web passes `filter` straight through to CSS.
+    filter: 'grayscale(1)',
+    opacity: 0.7,
   },
   fill: {
     position: 'absolute',
