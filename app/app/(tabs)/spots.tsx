@@ -18,7 +18,7 @@ const CATEGORY_LABEL: Record<string, string> = {
   cafe: 'cafe',
   restaurant: 'eat',
   bar: 'drink',
-  pet_store: 'doggos',
+  pet_store: 'pet shop',
   veterinary_care: 'vet',
 };
 
