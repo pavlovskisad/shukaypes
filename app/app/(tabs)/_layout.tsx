@@ -13,6 +13,12 @@ export default function TabsLayout() {
     <Tabs
       screenOptions={{
         headerShown: false,
+        // Slide screens horizontally based on tab order. React Navigation
+        // v7's bottom-tabs supports `animation: 'shift'` which translates
+        // each screen by its sibling-distance on focus — moves left/right
+        // matching the tab strip, looks like a real swipe even though
+        // gestures aren't wired.
+        animation: 'shift',
         tabBarActiveTintColor: colors.black,
         tabBarInactiveTintColor: colors.grey,
         // Frosted-glass dashboard floating over the map, same visual

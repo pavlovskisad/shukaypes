@@ -1,6 +1,14 @@
 import { useCallback, useEffect } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { View, Text, StyleSheet, Pressable, ScrollView, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Pressable,
+  ScrollView,
+  ActivityIndicator,
+} from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
 import type { Spot } from '../../services/places';
@@ -40,84 +48,116 @@ export default function SpotsScreen() {
   };
 
   return (
-    <ScrollView style={styles.root} contentContainerStyle={styles.content}>
-      <Text style={styles.title}>nearby spots</Text>
-      {!userPos ? (
-        <Text style={styles.placeholder}>locating…</Text>
-      ) : loading && spots.length === 0 ? (
-        <ActivityIndicator style={{ marginTop: 24 }} />
-      ) : spots.length === 0 ? (
-        <Text style={styles.placeholder}>nothing within 800m — walk somewhere and pull back</Text>
-      ) : (
-        spots.map((s) => (
-          <Pressable key={s.id} style={styles.card} onPress={() => onPickSpot(s)}>
-            <View style={styles.icon}><Text style={styles.iconText}>{s.icon}</Text></View>
-            <View style={styles.body}>
-              <Text style={styles.name} numberOfLines={1}>{s.name}</Text>
-              <View style={styles.metaRow}>
-                <Text style={styles.meta}>{CATEGORY_LABEL[s.category] ?? s.category}</Text>
-                {typeof s.rating === 'number' ? (
-                  <Text style={styles.meta}>· ⭐ {s.rating.toFixed(1)}</Text>
-                ) : null}
-              </View>
-              {s.address ? (
-                <View style={styles.addrPill}>
-                  <Text style={styles.addr} numberOfLines={1}>📍 {s.address}</Text>
+    <SafeAreaView style={styles.root} edges={['top']}>
+      <ScrollView contentContainerStyle={styles.content}>
+        {/* Same frosted-card recipe as profile.tsx — greyBg root, one
+            white card per group with shadowed lift, hairline-divided
+            rows inside. Empty / loading / error states get their own
+            small card so the screen never feels empty. */}
+        {!userPos ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>nearby spots</Text>
+            <Text style={styles.placeholder}>locating…</Text>
+          </View>
+        ) : loading && spots.length === 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>nearby spots</Text>
+            <ActivityIndicator style={{ marginTop: 12 }} />
+          </View>
+        ) : spots.length === 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>nearby spots</Text>
+            <Text style={styles.placeholder}>
+              nothing within 800m — walk somewhere and pull back
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>nearby spots</Text>
+            {spots.map((s, i) => (
+              <Pressable
+                key={s.id}
+                onPress={() => onPickSpot(s)}
+                style={({ pressed }) => [
+                  styles.row,
+                  i > 0 && styles.rowDivider,
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <View style={styles.icon}>
+                  <Text style={styles.iconText}>{s.icon}</Text>
                 </View>
-              ) : null}
-            </View>
-          </Pressable>
-        ))
-      )}
-    </ScrollView>
+                <View style={styles.body}>
+                  <Text style={styles.name} numberOfLines={1}>
+                    {s.name}
+                  </Text>
+                  <View style={styles.metaRow}>
+                    <Text style={styles.meta}>
+                      {CATEGORY_LABEL[s.category] ?? s.category}
+                    </Text>
+                    {typeof s.rating === 'number' ? (
+                      <Text style={styles.meta}>· ⭐ {s.rating.toFixed(1)}</Text>
+                    ) : null}
+                  </View>
+                  {s.address ? (
+                    <Text style={styles.addr} numberOfLines={1}>
+                      {s.address}
+                    </Text>
+                  ) : null}
+                </View>
+              </Pressable>
+            ))}
+          </View>
+        )}
+      </ScrollView>
+    </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.white },
-  content: { padding: 16, paddingBottom: 120 },
-  title: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: 26,
-    color: colors.black,
-    marginBottom: 14,
-    marginTop: 8,
-  },
-  placeholder: { fontSize: 13, color: colors.grey, marginTop: 12 },
+  root: { flex: 1, backgroundColor: colors.greyBg },
+  content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 120, gap: 12 },
   card: {
+    backgroundColor: '#ffffff',
+    borderRadius: 20,
+    padding: 18,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.06,
+    shadowRadius: 12,
+    elevation: 2,
+  },
+  cardTitle: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: 14,
+    color: '#777',
+    marginBottom: 10,
+    textTransform: 'lowercase',
+    letterSpacing: 0.3,
+  },
+  placeholder: { fontSize: 13, color: '#777', paddingVertical: 8 },
+  row: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: colors.greyBg,
-    borderRadius: 16,
-    padding: 12,
-    marginBottom: 10,
     gap: 12,
+    paddingVertical: 10,
+  },
+  rowDivider: {
+    borderTopWidth: 1,
+    borderTopColor: 'rgba(0,0,0,0.05)',
   },
   icon: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    backgroundColor: colors.white,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    backgroundColor: '#f0f0f0',
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconText: { fontSize: 24 },
+  iconText: { fontSize: 20 },
   body: { flex: 1, minWidth: 0 },
-  name: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: colors.black,
-  },
+  name: { fontSize: 15, fontWeight: '700', color: colors.black },
   metaRow: { flexDirection: 'row', gap: 6, marginTop: 2 },
-  meta: { fontSize: 12, color: colors.grey },
-  addrPill: {
-    marginTop: 6,
-    backgroundColor: colors.white,
-    alignSelf: 'flex-start',
-    maxWidth: '100%',
-    borderRadius: 10,
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-  },
-  addr: { fontSize: 12, fontFamily: SYSTEM_FONT, color: colors.black },
+  meta: { fontSize: 12, color: '#777' },
+  addr: { fontSize: 12, color: '#999', marginTop: 4 },
 });
