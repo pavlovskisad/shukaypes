@@ -121,11 +121,33 @@ export default function MapViewWeb() {
 
   useGameLoop(showBubble);
 
-  // Greet on every map-tab focus — companion barks once. Stable across
-  // tab switches; the showBubble timeout cleans itself up.
+  // Greet on every map-tab focus — pick a random "woof" so it doesn't
+  // get repetitive. Same energy as Claude Code's *percolating* /
+  // *combobulating* spinner words.
   useFocusEffect(
     useCallback(() => {
-      showBubble('woof 🐾', 2000);
+      const woofs = [
+        'woof 🐾',
+        '*sniff sniff*',
+        'ruff ruff 🐶',
+        'bork bork',
+        '*tail wag*',
+        '*ears perk*',
+        '*zoomies* 💨',
+        '*butt wiggle*',
+        '*play bow*',
+        'arf arf!',
+        '*nose boop*',
+        '*happy pant*',
+        'yip yip!',
+        '*floof shake*',
+        '*scout mode* 🔍',
+        '*sploot*',
+        '*boof*',
+        '*mlem*',
+      ];
+      const pick = woofs[Math.floor(Math.random() * woofs.length)] ?? 'woof 🐾';
+      showBubble(pick, 2000);
     }, [showBubble]),
   );
 
