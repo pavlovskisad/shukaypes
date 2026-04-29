@@ -11,14 +11,16 @@ import type { LatLng, FoodItem, Token } from '@shukajpes/shared';
 const HUNT_RADIUS_M = 200;
 
 // Pursuit speed cap. Movement per 100ms tick is min(MAX_STEP_M,
-// remaining * LERP_TAIL) — lerp shape gives smooth deceleration as
-// the companion arrives, the cap prevents the "flash" effect on far
+// remaining * LERP_TAIL). Lerp shape gives smooth deceleration as
+// the companion arrives; the cap prevents the "flash" effect on far
 // targets where lerping a percentage of a 100m gap covers tens of
 // meters in a single frame.
-//   MAX_STEP_M = 0.3 → 3 m/s, brisk dog trot, faster than walker.
-//   LERP_TAIL  = 0.18 → only ever active in the last ~2m, soft stop.
-const MAX_STEP_M = 0.3;
-const LERP_TAIL = 0.18;
+//   MAX_STEP_M = 0.8 → 8 m/s, decisive dog run, fast enough to close
+//                      on items as the walker keeps moving but well
+//                      shy of a teleport.
+//   LERP_TAIL  = 0.2 → only ever active in the last ~4m, soft stop.
+const MAX_STEP_M = 0.8;
+const LERP_TAIL = 0.2;
 
 function findNearestTarget(
   userPos: LatLng,
