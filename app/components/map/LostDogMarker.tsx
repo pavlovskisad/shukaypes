@@ -3,11 +3,25 @@ import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
-// Every lost pet reads with a terminal-blue glow + matching SOS ring —
-// the red felt alarm-y and the yellow felt "caution"; terminal blue
-// reads as "beacon / signal" which matches the SOS metaphor better.
-const LOST_GLOW = '0 0 22px rgba(0,0,255,0.6), 0 3px 12px rgba(0,0,0,0.15)';
-const LOST_RING = 'rgba(0,0,255,0.65)';
+// Urgency drives the glow color: red = urgent (act now), amber =
+// searching (still hot), grey = resolved. Toned down from earlier
+// passes — the previous full-saturation halo bled across half the
+// pin and made dense clusters feel chaotic. Softer, smaller halo
+// reads as "beacon" without dominating.
+const URGENCY_HALO: Record<UrgencyLevel, { glow: string; ring: string }> = {
+  urgent: {
+    glow: '0 0 14px rgba(232,64,64,0.45), 0 2px 8px rgba(0,0,0,0.12)',
+    ring: 'rgba(232,64,64,0.6)',
+  },
+  medium: {
+    glow: '0 0 14px rgba(217,160,48,0.45), 0 2px 8px rgba(0,0,0,0.12)',
+    ring: 'rgba(217,160,48,0.6)',
+  },
+  resolved: {
+    glow: '0 0 10px rgba(160,160,160,0.3), 0 2px 6px rgba(0,0,0,0.1)',
+    ring: 'rgba(160,160,160,0.4)',
+  },
+};
 
 // Wander amplitude in pixels — small enough to read as "ambient drift"
 // rather than "pet is running around".
@@ -52,6 +66,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [beeping, setBeeping] = useState(false);
   const beepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const halo = URGENCY_HALO[urgency];
 
   // Continuous wander — setInterval means exactly one pending timer per
   // marker regardless of mount/unmount timing. Cleared synchronously on
@@ -126,7 +141,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
               height: 36,
               marginLeft: -18,
               borderRadius: '50%',
-              border: `2px solid ${LOST_RING}`,
+              border: `2px solid ${halo.ring}`,
               animation: `sos-beep ${BEEP_DURATION_MS}ms ease-out forwards`,
               pointerEvents: 'none',
             }}
@@ -149,7 +164,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
             justifyContent: 'center',
             fontSize: 18,
             overflow: 'hidden',
-            boxShadow: LOST_GLOW,
+            boxShadow: halo.glow,
           }}
         >
           <span style={{ position: 'absolute' }}>{emoji}</span>

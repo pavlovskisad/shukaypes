@@ -4,10 +4,9 @@ import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
 // Small emoji pin for a Google Places result. Same OverlayViewF pattern
-// as LostDogMarker; blue-ish shadow to distinguish from the yellow
-// pet pins. When selected we scale up + show the name label — matches
-// prototype's `.poi` + `.poi-prev` behaviour without the preview card,
-// which we'll add in a follow-up.
+// as LostDogMarker; soft blue glow distinguishes "places to walk to"
+// from the warm-tone lost-pet pins (red/amber). When selected we scale
+// up + show the name label.
 
 interface PoiMarkerProps {
   position: LatLng;
@@ -53,8 +52,8 @@ function PoiMarkerImpl({ position, emoji, name, selected, onTap }: PoiMarkerProp
             justifyContent: 'center',
             fontSize: 18,
             boxShadow: selected
-              ? '0 0 18px rgba(255,200,50,0.4), 0 3px 8px rgba(0,0,0,0.08)'
-              : '0 0 10px rgba(255,200,50,0.18), 0 2px 6px rgba(0,0,0,0.05)',
+              ? '0 0 18px rgba(60,120,255,0.45), 0 3px 8px rgba(0,0,0,0.08)'
+              : '0 0 10px rgba(60,120,255,0.22), 0 2px 6px rgba(0,0,0,0.05)',
           }}
         >
           {emoji}

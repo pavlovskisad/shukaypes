@@ -126,6 +126,10 @@ const plugin: FastifyPluginAsync = async (app) => {
           hunger: sql`LEAST(${balance.hunger.max}, ${schema.companionState.hunger} + ${balance.bone.hunger})`,
           happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${balance.bone.happiness})`,
           lastFedAt: now,
+          // See note in tokens.ts collect — reset decay clock on every
+          // active interaction so a single post-idle tick can't eat the
+          // bump.
+          lastDecayAt: now,
         })
         .where(eq(schema.companionState.userId, req.userId));
       await tx.insert(schema.collectEvents).values({
