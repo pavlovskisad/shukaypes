@@ -78,6 +78,9 @@ export const api = {
         name: string;
         level: number;
         xp: number;
+        xpInLevel: number;
+        xpForNextLevel: number;
+        maxLevel: number;
         hunger: number;
         happiness: number;
       };

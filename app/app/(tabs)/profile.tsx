@@ -25,6 +25,9 @@ interface ProfileData {
     name: string;
     level: number;
     xp: number;
+    xpInLevel: number;
+    xpForNextLevel: number;
+    maxLevel: number;
     hunger: number;
     happiness: number;
   };
@@ -91,8 +94,40 @@ export default function ProfileScreen() {
           <Text style={styles.companionEmoji}>🐶</Text>
           <Text style={styles.companionName}>{data?.companion.name ?? companionName}</Text>
           <Text style={styles.companionMeta}>
-            level {data?.companion.level ?? 1} · {data?.companion.xp ?? 0} xp
+            level {data?.companion.level ?? 1}
+            {data && data.companion.level < data.companion.maxLevel
+              ? ` · ${data.companion.xpInLevel} / ${data.companion.xpForNextLevel} xp`
+              : data?.companion.level === data?.companion.maxLevel
+                ? ' · max'
+                : ''}
           </Text>
+          {data ? (
+            <View
+              style={styles.xpBarTrack}
+              accessibilityLabel={
+                data.companion.level >= data.companion.maxLevel
+                  ? 'max level'
+                  : `${data.companion.xpInLevel} of ${data.companion.xpForNextLevel} experience to next level`
+              }
+            >
+              <View
+                style={[
+                  styles.xpBarFill,
+                  {
+                    width: `${
+                      data.companion.level >= data.companion.maxLevel
+                        ? 100
+                        : Math.round(
+                            (data.companion.xpInLevel /
+                              Math.max(1, data.companion.xpForNextLevel)) *
+                              100,
+                          )
+                    }%` as unknown as number,
+                  },
+                ]}
+              />
+            </View>
+          ) : null}
           <View style={styles.meterRow}>
             <View style={styles.meterPill}>
               <Text style={styles.meterEmoji}>☀️</Text>
@@ -177,7 +212,20 @@ const styles = StyleSheet.create({
     color: '#777',
     textAlign: 'center',
     marginTop: 2,
+    marginBottom: 8,
+  },
+  xpBarTrack: {
+    height: 6,
+    borderRadius: 3,
+    backgroundColor: 'rgba(0,0,0,0.06)',
+    marginHorizontal: 24,
     marginBottom: 14,
+    overflow: 'hidden',
+  },
+  xpBarFill: {
+    height: '100%',
+    backgroundColor: 'rgba(0,60,255,0.85)',
+    borderRadius: 3,
   },
   meterRow: {
     flexDirection: 'row',
