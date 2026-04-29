@@ -226,6 +226,8 @@ const plugin: FastifyPluginAsync = async (app) => {
           .update(schema.companionState)
           .set({
             happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${happyDelta})`,
+            // Reset decay clock — see tokens.ts collect for rationale.
+            lastDecayAt: sql`NOW()`,
           })
           .where(eq(schema.companionState.userId, req.userId));
       }

@@ -137,6 +137,12 @@ const plugin: FastifyPluginAsync = async (app) => {
           hunger: sql`LEAST(${balance.hunger.max}, ${schema.companionState.hunger} + ${balance.token.hunger})`,
           happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${balance.token.happiness})`,
           xp: sql`${schema.companionState.xp} + ${token.value}`,
+          // Reset the decay clock — the user is actively engaged, the
+          // companion isn't sitting alone losing happiness. Without
+          // this, the first collect after a long idle gap gets clobbered
+          // by a single -30 decay tick (the per-tick cap), making the
+          // meter visibly drop *despite* the +bump landing.
+          lastDecayAt: now,
         })
         .where(eq(schema.companionState.userId, req.userId));
       await tx.insert(schema.collectEvents).values({
