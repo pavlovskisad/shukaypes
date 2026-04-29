@@ -330,7 +330,7 @@ const styles = StyleSheet.create({
     gap: 8,
     alignItems: 'center',
     marginHorizontal: 16,
-    marginBottom: 96, // float above the tab bar (60h + 12 bottom + gap)
+    marginBottom: 70, // sit just above the tab bar with a small gap
     paddingHorizontal: 8,
     paddingVertical: 8,
     backgroundColor: '#ffffff',
