@@ -49,12 +49,23 @@ function MeterPill({
   );
 }
 
-function CounterPill({ icon, value, label }: { icon: string; value: number; label: string }) {
+function CounterPill({
+  icon,
+  value,
+  label,
+  suffix,
+}: {
+  icon: string;
+  value: number;
+  label: string;
+  suffix?: string;
+}) {
   return (
     <View style={[styles.pill, styles.counterPill]}>
       <Text style={styles.emoji}>{icon}</Text>
       <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
         {Math.round(value)}
+        {suffix ?? ''}
       </Text>
     </View>
   );
