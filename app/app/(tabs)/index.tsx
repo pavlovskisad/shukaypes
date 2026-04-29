@@ -1,10 +1,11 @@
-import { useCallback } from 'react';
+import { useCallback, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { View, Image, StyleSheet } from 'react-native';
+import { View, Image, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from '../../components/map';
 import { StatusBar } from '../../components/ui/StatusBar';
 import { QuestPill } from '../../components/ui/QuestPill';
+import { AboutModal } from '../../components/ui/AboutModal';
 import { useGameStore } from '../../stores/gameStore';
 import logoSquare from '../../assets/logo-square.png';
 
@@ -14,6 +15,8 @@ import logoSquare from '../../assets/logo-square.png';
 const HUD_ICON_SIZE = 55;
 
 export default function MapScreen() {
+  const [aboutOpen, setAboutOpen] = useState(false);
+
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('map');
   }, []));
@@ -25,12 +28,18 @@ export default function MapScreen() {
       </View>
       <SafeAreaView style={styles.hud} pointerEvents="box-none" edges={['top']}>
         <View style={styles.hudRow}>
-          <Image
-            source={logoSquare}
-            style={styles.logo}
-            resizeMode="contain"
-            accessibilityLabel="шукайпес"
-          />
+          <Pressable
+            onPress={() => setAboutOpen(true)}
+            accessibilityRole="button"
+            accessibilityLabel="about шукайпес"
+            hitSlop={8}
+          >
+            <Image
+              source={logoSquare}
+              style={styles.logo}
+              resizeMode="contain"
+            />
+          </Pressable>
           <StatusBar />
         </View>
         {/* Active-quest banner centered under the top row. Renders
@@ -39,6 +48,7 @@ export default function MapScreen() {
           <QuestPill />
         </View>
       </SafeAreaView>
+      <AboutModal open={aboutOpen} onClose={() => setAboutOpen(false)} />
     </View>
   );
 }

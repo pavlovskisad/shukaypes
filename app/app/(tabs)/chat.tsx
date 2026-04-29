@@ -341,7 +341,9 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingHorizontal: 14,
     paddingVertical: 8,
-    fontSize: 15,
+    // 16px keeps iOS Safari from auto-zooming on focus. Anything < 16
+    // triggers the zoom and never zooms back out cleanly.
+    fontSize: 16,
     fontFamily: SYSTEM_FONT,
     color: colors.black,
   },
