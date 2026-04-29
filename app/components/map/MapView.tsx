@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 import { GoogleMap, PolylineF, useJsApiLoader } from '@react-google-maps/api';
 import { View, Text, StyleSheet } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
@@ -119,6 +120,14 @@ export default function MapViewWeb() {
   }, []);
 
   useGameLoop(showBubble);
+
+  // Greet on every map-tab focus — companion barks once. Stable across
+  // tab switches; the showBubble timeout cleans itself up.
+  useFocusEffect(
+    useCallback(() => {
+      showBubble('woof 🐾', 2000);
+    }, [showBubble]),
+  );
 
   useEffect(() => {
     if (userPos) setUserPosition(userPos);
