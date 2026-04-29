@@ -104,9 +104,9 @@ export function LostDogModal({
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
-        // Lift the sheet above the floating tab bar (60h + 12 bottom +
-        // breathing room) so the "i've seen them" button isn't covered.
-        paddingBottom: 96,
+        // Lift the sheet above the bottom dashboard so the "i've seen
+        // them" button isn't covered.
+        paddingBottom: 80,
         zIndex: 50,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,

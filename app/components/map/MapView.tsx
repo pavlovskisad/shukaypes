@@ -344,14 +344,13 @@ export default function MapViewWeb() {
   return (
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
       {/* Lift Google's bottom-anchored UI (logo, "Terms"/"Map data"
-          attribution) above the floating tab bar — the bar sits at
-          bottom: 12 + height: 60, so 84px clears it with a small gap.
-          Clipping the legend out instead would violate Maps ToS. */}
+          attribution) above the dashboard so it stays visible —
+          clipping it would violate Maps ToS. */}
       <style>{`
-        .gm-style-cc { bottom: 84px !important; }
+        .gm-style-cc { bottom: 70px !important; }
         a[href^="https://maps.google.com/maps"],
         a[href^="https://www.google.com/maps"] {
-          bottom: 84px !important;
+          bottom: 70px !important;
         }
       `}</style>
       <GoogleMap

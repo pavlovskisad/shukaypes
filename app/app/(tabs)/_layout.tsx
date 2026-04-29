@@ -21,27 +21,27 @@ export default function TabsLayout() {
         animation: 'shift',
         tabBarActiveTintColor: colors.black,
         tabBarInactiveTintColor: colors.grey,
-        // Floating frosted-glass dashboard, same card recipe as the
-        // profile/spots/tasks/chat family: rounded, side-margined,
-        // soft diffuse shadow. Frosted blur is kept (it's the HUD
-        // signature when it sits over the map).
+        // Frosted-glass dashboard flush to the bottom edge with rounded
+        // top corners — pill shape on top, full-bleed on the bottom so
+        // it reads as a "drawer pulled up from the floor". Family
+        // shadow recipe (softer, lifted upward).
         tabBarStyle: {
           position: 'absolute',
-          left: 16,
-          right: 16,
-          bottom: 12,
-          height: 60,
-          borderRadius: 20,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          borderTopLeftRadius: 24,
+          borderTopRightRadius: 24,
           backgroundColor: 'rgba(255,255,255,0.85)',
           backdropFilter: 'blur(18px) saturate(160%)',
           // @ts-expect-error — safari prefix not in RN style types
           WebkitBackdropFilter: 'blur(18px) saturate(160%)',
           borderTopWidth: 0,
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
+          shadowOffset: { width: 0, height: -2 },
           shadowOpacity: 0.06,
           shadowRadius: 12,
-          elevation: 2,
+          elevation: 4,
         },
         tabBarItemStyle: {
           paddingVertical: 6,
