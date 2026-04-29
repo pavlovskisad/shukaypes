@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
+import { xpProgress, MAX_LEVEL } from '../lib/xp.js';
 
 // Profile endpoint — aggregate counts for the Profile tab. Separate
 // from /state (which is hot-pathed every 5s by useGameLoop) so the
@@ -70,6 +71,8 @@ const plugin: FastifyPluginAsync = async (app) => {
       Math.floor((Date.now() - user.createdAt.getTime()) / MS_PER_DAY) + 1,
     );
 
+    const { level, xpInLevel, xpForNextLevel } = xpProgress(companion.xp);
+
     return {
       user: {
         id: user.id,
@@ -81,8 +84,11 @@ const plugin: FastifyPluginAsync = async (app) => {
       },
       companion: {
         name: companion.name,
-        level: companion.level,
+        level,
         xp: companion.xp,
+        xpInLevel,
+        xpForNextLevel,
+        maxLevel: MAX_LEVEL,
         hunger: companion.hunger,
         happiness: companion.happiness,
       },

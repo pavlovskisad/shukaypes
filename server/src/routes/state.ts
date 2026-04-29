@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
+import { xpProgress, MAX_LEVEL } from '../lib/xp.js';
 
 const plugin: FastifyPluginAsync = async (app) => {
   app.get('/state', async (req) => {
@@ -18,6 +19,11 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     if (!user || !companion) return { error: 'user not found' };
 
+    // Level is derived from xp via the shared curve — we don't trust
+    // companion.level (legacy column kept for migration safety) so the
+    // curve can be tuned without DB writes.
+    const { level, xpInLevel, xpForNextLevel } = xpProgress(companion.xp);
+
     return {
       user: {
         id: user.id,
@@ -28,8 +34,11 @@ const plugin: FastifyPluginAsync = async (app) => {
       },
       companion: {
         name: companion.name,
-        level: companion.level,
+        level,
         xp: companion.xp,
+        xpInLevel,
+        xpForNextLevel,
+        maxLevel: MAX_LEVEL,
         skinId: companion.skinId,
         hunger: companion.hunger,
         happiness: companion.happiness,
