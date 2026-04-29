@@ -275,7 +275,6 @@ const CARD_SHADOW = {
 const HEADER_BAND_HEIGHT = 80;   // headerCard + its margins
 const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 const TAB_BAR_HEIGHT = 60;       // matches _layout.tsx tabBarStyle
-
 const styles = StyleSheet.create({
   root: {
     flex: 1,
