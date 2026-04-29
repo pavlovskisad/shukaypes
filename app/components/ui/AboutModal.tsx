@@ -47,7 +47,7 @@ const ROWS: Row[] = [
   {
     emoji: '💬',
     title: 'chat',
-    body: 'talk to me. i remember our walks, the pets we searched, the spots we passed.',
+    body: 'talk to me about anything. i sniff out other dogs nearby (yes, really), know vet + health stuff when something feels off, help when you need a hand fast, and remember every walk we share.',
   },
   {
     emoji: '📍',
@@ -159,7 +159,8 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           </div>
           <div style={{ fontSize: 14, color: '#444', marginTop: 6, lineHeight: 1.45 }}>
             привіт! i'm <strong>шукайпес</strong> — your companion for finding lost pets in
-            kyiv. we walk, we sniff, we help bring animals home. here's what's on the map:
+            kyiv and having good times. we walk, we sniff, we help bring animals home.
+            here's what's on the map:
           </div>
         </div>
 
