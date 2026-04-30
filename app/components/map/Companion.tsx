@@ -371,24 +371,23 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           aria-hidden
           style={{
             position: 'absolute',
-            width: 110,
-            height: 110,
+            width: 55,
+            height: 55,
             borderRadius: '50%',
             background:
               'radial-gradient(circle at 30% 30%, rgba(150,180,255,0.75), rgba(40,90,230,0.55) 45%, rgba(0,40,200,0) 100%)',
             backdropFilter: 'blur(10px) saturate(260%)',
             WebkitBackdropFilter: 'blur(10px) saturate(260%)',
             boxShadow:
-              '0 0 28px rgba(0,80,255,0.5), 0 0 56px rgba(80,140,255,0.25)',
-            animation: 'companion-aura 8s ease-in-out infinite',
+              '0 0 18px rgba(0,80,255,0.45), 0 0 36px rgba(80,140,255,0.2)',
+            animation: 'companion-aura 12s ease-in-out infinite',
             pointerEvents: 'none',
           }}
         />
         <style>{`
           @keyframes companion-aura {
-            0%   { transform: scale(1) rotate(0deg); }
-            50%  { transform: scale(1.08) rotate(180deg); }
-            100% { transform: scale(1) rotate(360deg); }
+            0%, 100% { transform: scale(1); }
+            50%      { transform: scale(1.04); }
           }
         `}</style>
 
