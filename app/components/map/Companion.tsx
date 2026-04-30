@@ -360,73 +360,44 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           zIndex: 2,
         }}
       >
-        {/* Living blue aura — three sharp-cored color blobs drift on
-            independent timings inside the circular clip, like a
-            digital liquid lava-lamp. Tight gradient stops (instead of
-            soft blur) keep each blob's centre vivid and the
-            transitions crisp. Outer disc keeps the heavy backdrop
-            saturation so the map below still tints into the field. */}
+        {/* Frosted-glass halo — original recipe (3% white + 7px blur,
+            paws behind read almost sharp), now with a subtle chromatic
+            touch:
+              · edges: red offset −1px, cyan offset +1px give a faint
+                dispersion rim — chromatic-aberration style — without
+                dominating the soft glass feel.
+              · fill: a near-transparent magenta→cyan gradient laid on
+                top with mix-blend-mode: screen, so it only adds a
+                tint to the existing frosted pixels instead of
+                muddying them. */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
-            width: 55,
-            height: 55,
+            width: 66,
+            height: 66,
             borderRadius: '50%',
-            overflow: 'hidden',
-            backdropFilter: 'blur(8px) saturate(280%)',
-            WebkitBackdropFilter: 'blur(8px) saturate(280%)',
+            background: 'rgba(255,255,255,0.03)',
+            backdropFilter: 'blur(7px)',
+            WebkitBackdropFilter: 'blur(7px)',
             boxShadow:
-              '0 0 18px rgba(0,80,255,0.5), 0 0 36px rgba(80,180,255,0.25)',
-            background:
-              'linear-gradient(135deg, rgba(15,40,200,0.55), rgba(60,170,255,0.45))',
+              '-1px 0 0 0 rgba(255,80,80,0.18), 1px 0 0 0 rgba(80,180,255,0.22), 0 1px 4px rgba(0,0,0,0.06)',
             pointerEvents: 'none',
           }}
         >
           <div
+            aria-hidden
             style={{
               position: 'absolute',
               inset: 0,
+              borderRadius: '50%',
               background:
-                'radial-gradient(circle at 30% 30%, rgba(180,230,255,0.95) 0%, rgba(80,170,255,0.55) 28%, rgba(80,170,255,0) 50%)',
-              animation: 'companion-blob-a 7s ease-in-out infinite',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background:
-                'radial-gradient(circle at 70% 65%, rgba(60,210,255,0.9) 0%, rgba(20,90,230,0.5) 32%, rgba(20,90,230,0) 55%)',
-              animation: 'companion-blob-b 11s ease-in-out infinite',
-            }}
-          />
-          <div
-            style={{
-              position: 'absolute',
-              inset: 0,
-              background:
-                'radial-gradient(circle at 55% 40%, rgba(220,250,255,0.85) 0%, rgba(150,230,255,0.4) 18%, rgba(150,230,255,0) 35%)',
-              animation: 'companion-blob-c 5s ease-in-out infinite',
+                'linear-gradient(135deg, rgba(255,170,255,0.07), rgba(140,230,255,0.07))',
+              mixBlendMode: 'screen',
+              pointerEvents: 'none',
             }}
           />
         </div>
-        <style>{`
-          @keyframes companion-blob-a {
-            0%, 100% { transform: translate(0px, 0px) scale(1); }
-            33%      { transform: translate(8px, -6px) scale(1.08); }
-            66%      { transform: translate(-7px, 7px) scale(0.92); }
-          }
-          @keyframes companion-blob-b {
-            0%, 100% { transform: translate(0px, 0px) scale(1); }
-            40%      { transform: translate(-9px, -5px) scale(1.1); }
-            70%      { transform: translate(6px, 7px) scale(0.9); }
-          }
-          @keyframes companion-blob-c {
-            0%, 100% { transform: translate(0px, 0px) scale(1); }
-            50%      { transform: translate(4px, 5px) scale(1.15); }
-          }
-        `}</style>
 
         {/* Companion body — 55×55 nose glyph with layered white halo,
             centered in the larger tap container. pointer-events:none so
