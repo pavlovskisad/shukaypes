@@ -422,10 +422,10 @@ export default function MapViewWeb() {
     return { left: `${ex * 100}%`, top: `${ey * 100}%` };
   })();
 
-  const recenterOnCompanion = useCallback(() => {
+  const recenterOnCompanion = () => {
     if (!companionPos || !mapRef.current) return;
     mapRef.current.panTo(companionPos as unknown as google.maps.LatLngLiteral);
-  }, [companionPos?.lat, companionPos?.lng]);
+  };
 
   return (
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
