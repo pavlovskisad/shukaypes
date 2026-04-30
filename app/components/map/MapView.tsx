@@ -67,6 +67,7 @@ export default function MapViewWeb() {
   const userPos = location.position;
 
   const companionPos = useCompanion(userPos);
+  const [currentZoom, setCurrentZoom] = useState<number | null>(null);
   const tokens = useGameStore((s) => s.tokens);
   const foodItems = useGameStore((s) => s.foodItems);
   const lostDogs = useGameStore((s) => s.lostDogs);
@@ -383,6 +384,25 @@ export default function MapViewWeb() {
 
   return (
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
+      {/* TEMP — current zoom readout. Used to pick the right
+          mapZoomMin lock; remove once the value is decided. */}
+      <div
+        style={{
+          position: 'absolute',
+          top: 8,
+          right: 8,
+          zIndex: 30,
+          background: 'rgba(0,0,0,0.7)',
+          color: '#fff',
+          fontFamily: 'monospace',
+          fontSize: 12,
+          padding: '4px 8px',
+          borderRadius: 6,
+          pointerEvents: 'none',
+        }}
+      >
+        z: {currentZoom !== null ? currentZoom.toFixed(2) : '—'}
+      </div>
       <GoogleMap
         mapContainerStyle={CONTAINER_STYLE as unknown as React.CSSProperties}
         options={mapOptions}
@@ -393,9 +413,14 @@ export default function MapViewWeb() {
           // and fought our cluster-tap setZoom calls.
           map.setCenter(userPos as unknown as google.maps.LatLngLiteral);
           map.setZoom(balance.mapZoomDefault);
+          setCurrentZoom(map.getZoom() ?? balance.mapZoomDefault);
         }}
         onUnmount={() => {
           mapRef.current = null;
+        }}
+        onZoomChanged={() => {
+          const z = mapRef.current?.getZoom();
+          if (typeof z === 'number') setCurrentZoom(z);
         }}
         onClick={() => {
           // Suppress when the click came right after a companion tap —
