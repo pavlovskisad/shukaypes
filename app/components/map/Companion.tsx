@@ -381,7 +381,7 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             backdropFilter: 'blur(7px)',
             WebkitBackdropFilter: 'blur(7px)',
             boxShadow:
-              '-1px 0 0 0 rgba(255,80,80,0.18), 1px 0 0 0 rgba(80,180,255,0.22), 0 1px 4px rgba(0,0,0,0.06)',
+              '-1px 0 2px rgba(255,80,80,0.22), 1px 0 2px rgba(80,180,255,0.26), 0 1px 4px rgba(0,0,0,0.06)',
             pointerEvents: 'none',
           }}
         >
@@ -392,7 +392,7 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
               inset: 0,
               borderRadius: '50%',
               background:
-                'linear-gradient(135deg, rgba(255,170,255,0.07), rgba(140,230,255,0.07))',
+                'linear-gradient(135deg, rgba(255,170,255,0.14), rgba(140,230,255,0.14))',
               mixBlendMode: 'screen',
               pointerEvents: 'none',
             }}
