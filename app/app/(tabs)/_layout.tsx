@@ -69,8 +69,8 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="tasks"
         options={{
-          title: 'tasks',
-          tabBarIcon: ({ focused }) => <TabIcon icon="✓" focused={focused} />,
+          title: 'quests',
+          tabBarIcon: ({ focused }) => <TabIcon icon="🎯" focused={focused} />,
         }}
       />
       <Tabs.Screen

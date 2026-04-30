@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import {
   View,
@@ -11,7 +11,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
-import type { Spot } from '../../services/places';
+import type { Spot, SpotCategory } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
 const CATEGORY_LABEL: Record<string, string> = {
@@ -22,6 +22,25 @@ const CATEGORY_LABEL: Record<string, string> = {
   veterinary_care: 'vet',
 };
 
+type FilterValue = 'all' | SpotCategory;
+
+interface FilterOption {
+  value: FilterValue;
+  label: string;
+  icon: string;
+}
+
+// Order matches the radial menu's visit submenu so the user sees the
+// same category vocabulary in both surfaces.
+const FILTERS: FilterOption[] = [
+  { value: 'all', label: 'all', icon: '✨' },
+  { value: 'cafe', label: 'cafe', icon: '☕' },
+  { value: 'restaurant', label: 'eat', icon: '🍽' },
+  { value: 'bar', label: 'drink', icon: '🍻' },
+  { value: 'pet_store', label: 'pet shop', icon: '🐶' },
+  { value: 'veterinary_care', label: 'vet', icon: '🩺' },
+];
+
 export default function SpotsScreen() {
   const router = useRouter();
   const userPos = useGameStore((s) => s.userPosition);
@@ -29,6 +48,7 @@ export default function SpotsScreen() {
   const loading = useGameStore((s) => s.spotsLoading);
   const syncSpots = useGameStore((s) => s.syncSpots);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
+  const [filter, setFilter] = useState<FilterValue>('all');
 
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('spots');
@@ -42,6 +62,22 @@ export default function SpotsScreen() {
     if (spots.length === 0) syncSpots(userPos);
   }, [userPos?.lat, userPos?.lng, spots.length, syncSpots]);
 
+  // Counts per category drive the chip badges so the user sees how
+  // many spots a filter would yield without tapping it. Computed once
+  // per spots-array change.
+  const categoryCounts = useMemo(() => {
+    const counts: Partial<Record<FilterValue, number>> = { all: spots.length };
+    for (const s of spots) {
+      counts[s.category] = (counts[s.category] ?? 0) + 1;
+    }
+    return counts;
+  }, [spots]);
+
+  const visibleSpots = useMemo(
+    () => (filter === 'all' ? spots : spots.filter((s) => s.category === filter)),
+    [spots, filter],
+  );
+
   const onPickSpot = (s: Spot) => {
     setSelectedSpot(s.id);
     router.push('/');
@@ -50,6 +86,59 @@ export default function SpotsScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
+        {/* Filter chips. Horizontal scroll so all six fit on a narrow
+            screen without wrapping into the next row. Counts come
+            from the loaded spots so the chip already tells you what
+            tapping it will yield. */}
+        {spots.length > 0 ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.filtersRow}
+          >
+            {FILTERS.map((opt) => {
+              const active = filter === opt.value;
+              const count = categoryCounts[opt.value] ?? 0;
+              const muted = count === 0 && opt.value !== 'all';
+              return (
+                <Pressable
+                  key={opt.value}
+                  onPress={() => setFilter(opt.value)}
+                  disabled={muted}
+                  style={({ pressed }) => [
+                    styles.filterChip,
+                    active && styles.filterChipActive,
+                    muted && styles.filterChipMuted,
+                    pressed && !muted && { opacity: 0.7 },
+                  ]}
+                >
+                  <Text style={[styles.filterChipIcon, muted && styles.filterChipMutedText]}>
+                    {opt.icon}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.filterChipLabel,
+                      active && styles.filterChipLabelActive,
+                      muted && styles.filterChipMutedText,
+                    ]}
+                  >
+                    {opt.label}
+                  </Text>
+                  <Text
+                    style={[
+                      styles.filterChipCount,
+                      active && styles.filterChipCountActive,
+                      muted && styles.filterChipMutedText,
+                    ]}
+                  >
+                    {count}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </ScrollView>
+        ) : null}
+
         {/* Same frosted-card recipe as profile.tsx — greyBg root, one
             white card per group with shadowed lift, hairline-divided
             rows inside. Empty / loading / error states get their own
@@ -71,10 +160,21 @@ export default function SpotsScreen() {
               nothing within 800m — walk somewhere and pull back
             </Text>
           </View>
-        ) : (
+        ) : visibleSpots.length === 0 ? (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>nearby spots</Text>
-            {spots.map((s, i) => (
+            <Text style={styles.placeholder}>
+              no {CATEGORY_LABEL[filter] ?? filter} nearby — try another filter
+            </Text>
+          </View>
+        ) : (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>
+              {filter === 'all'
+                ? 'nearby spots'
+                : `nearby ${CATEGORY_LABEL[filter] ?? filter}`}
+            </Text>
+            {visibleSpots.map((s, i) => (
               <Pressable
                 key={s.id}
                 onPress={() => onPickSpot(s)}
@@ -136,6 +236,46 @@ const styles = StyleSheet.create({
     letterSpacing: 0.3,
   },
   placeholder: { fontSize: 13, color: '#777', paddingVertical: 8 },
+  filtersRow: {
+    paddingHorizontal: 4,
+    gap: 8,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  filterChip: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    paddingHorizontal: 12,
+    height: 34,
+    borderRadius: 17,
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.05,
+    shadowRadius: 6,
+    elevation: 1,
+  },
+  filterChipActive: {
+    backgroundColor: 'rgba(0,60,255,0.85)',
+  },
+  filterChipMuted: {
+    backgroundColor: 'rgba(255,255,255,0.6)',
+  },
+  filterChipIcon: { fontSize: 14 },
+  filterChipLabel: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: colors.black,
+  },
+  filterChipLabelActive: { color: '#fff' },
+  filterChipCount: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#999',
+  },
+  filterChipCountActive: { color: 'rgba(255,255,255,0.85)' },
+  filterChipMutedText: { color: '#bbb' },
   row: {
     flexDirection: 'row',
     alignItems: 'center',
