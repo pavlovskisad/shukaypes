@@ -410,13 +410,18 @@ export default function MapViewWeb() {
     const ny = (n - companionPos.lat) / (n - s);
     const dx = nx - 0.5;
     const dy = ny - 0.5;
-    // Clamp the (cx + dx*k, cy + dy*k) ray to a 0.05..0.95 box so the
-    // indicator stays inside the viewport with a small margin.
-    const margin = 0.05;
-    const k = Math.min(
-      (0.5 - margin) / Math.max(Math.abs(dx), 1e-6),
-      (0.5 - margin) / Math.max(Math.abs(dy), 1e-6),
-    );
+    // Clamp the (cx + dx*k, cy + dy*k) ray to a box that *isn't*
+    // square: top reserve keeps the indicator below the HUD pills,
+    // bottom reserve keeps it above the dashboard tab bar.
+    const sideReserve = 0.05;
+    const topReserve = 0.15;
+    const bottomReserve = 0.14;
+    const xLimit = (0.5 - sideReserve) / Math.max(Math.abs(dx), 1e-6);
+    const yLimit =
+      dy < 0
+        ? (0.5 - topReserve) / Math.max(Math.abs(dy), 1e-6)
+        : (0.5 - bottomReserve) / Math.max(Math.abs(dy), 1e-6);
+    const k = Math.min(xLimit, yLimit);
     const ex = 0.5 + dx * k;
     const ey = 0.5 + dy * k;
     return { left: `${ex * 100}%`, top: `${ey * 100}%` };
