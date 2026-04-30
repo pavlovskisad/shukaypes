@@ -367,6 +367,12 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             the backdrop so the map below tints blue, soft outer glow,
             and a slow scale + rotate animation so the gradient never
             sits frozen. */}
+        {/* Living blue aura — circular clip with two soft "blobs" of
+            light drifting on different timings inside, like digital
+            liquid. The outer disc carries the heavy backdrop blur +
+            saturation so the map below tints blue; the inner blobs
+            are translated/scaled, never wandering off the circle
+            edge thanks to overflow:hidden. */}
         <div
           aria-hidden
           style={{
@@ -374,20 +380,47 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             width: 55,
             height: 55,
             borderRadius: '50%',
-            background:
-              'radial-gradient(circle at 30% 30%, rgba(150,180,255,0.75), rgba(40,90,230,0.55) 45%, rgba(0,40,200,0) 100%)',
+            overflow: 'hidden',
             backdropFilter: 'blur(10px) saturate(260%)',
             WebkitBackdropFilter: 'blur(10px) saturate(260%)',
             boxShadow:
               '0 0 18px rgba(0,80,255,0.45), 0 0 36px rgba(80,140,255,0.2)',
-            animation: 'companion-aura 12s ease-in-out infinite',
+            background:
+              'radial-gradient(circle at 50% 50%, rgba(40,90,230,0.45), rgba(0,40,200,0) 80%)',
             pointerEvents: 'none',
           }}
-        />
+        >
+          <div
+            style={{
+              position: 'absolute',
+              inset: -10,
+              background:
+                'radial-gradient(circle at 30% 30%, rgba(160,190,255,0.85), rgba(160,190,255,0) 55%)',
+              filter: 'blur(2px)',
+              animation: 'companion-blob-a 7s ease-in-out infinite',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              inset: -10,
+              background:
+                'radial-gradient(circle at 70% 65%, rgba(110,160,255,0.7), rgba(110,160,255,0) 55%)',
+              filter: 'blur(2px)',
+              animation: 'companion-blob-b 11s ease-in-out infinite',
+            }}
+          />
+        </div>
         <style>{`
-          @keyframes companion-aura {
-            0%, 100% { transform: scale(1); }
-            50%      { transform: scale(1.04); }
+          @keyframes companion-blob-a {
+            0%, 100% { transform: translate(0px, 0px) scale(1); }
+            33%      { transform: translate(7px, -5px) scale(1.05); }
+            66%      { transform: translate(-6px, 6px) scale(0.95); }
+          }
+          @keyframes companion-blob-b {
+            0%, 100% { transform: translate(0px, 0px) scale(1); }
+            40%      { transform: translate(-8px, -4px) scale(1.08); }
+            70%      { transform: translate(5px, 6px) scale(0.95); }
           }
         `}</style>
 
