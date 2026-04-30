@@ -381,7 +381,7 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             backdropFilter: 'blur(7px)',
             WebkitBackdropFilter: 'blur(7px)',
             boxShadow:
-              '-1px 0 2px rgba(255,80,80,0.22), 1px 0 2px rgba(80,180,255,0.26), 0 1px 4px rgba(0,0,0,0.06)',
+              '-1px 0 2px rgba(255,80,80,0.22), 1px 0 2px rgba(80,180,255,0.26), -4px 3px 14px rgba(255,140,210,0.25), 4px 3px 14px rgba(140,210,255,0.25), 0 2px 6px rgba(0,0,0,0.06)',
             pointerEvents: 'none',
           }}
         >
