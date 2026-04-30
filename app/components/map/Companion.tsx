@@ -360,31 +360,37 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           zIndex: 2,
         }}
       >
-        {/* Frosted-glass halo behind the nose. Same recipe the POIs used
-            to carry — rgba(255,255,255,0.2) + blur(14px) saturate(160%)
-            — which we had to strip from POIs because 20 simultaneous
-            backdrop-filter layers murdered scroll perf. On a single
-            instance like the companion it's fine, and it reads as a
-            soft glass bubble around the dog. */}
+        {/* Living blue aura — magnified halo that always feels alive
+            even when the dog stands still. Vivid radial gradient (off-
+            centre highlight at 30/30 reads as light hitting the
+            companion from the upper-left), heavy saturation through
+            the backdrop so the map below tints blue, soft outer glow,
+            and a slow scale + rotate animation so the gradient never
+            sits frozen. */}
         <div
           aria-hidden
           style={{
             position: 'absolute',
-            width: 66,
-            height: 66,
+            width: 110,
+            height: 110,
             borderRadius: '50%',
-            // Near-transparent glass, light blur. Previous
-            // blur(14px) saturate(160%) at 5% white still read as a
-            // visible disc against the map; dropping saturate and
-            // halving blur to 7px + 3% white lets the paws behind come
-            // through almost sharp, only the edges soften.
-            background: 'rgba(255,255,255,0.03)',
-            backdropFilter: 'blur(7px)',
-            WebkitBackdropFilter: 'blur(7px)',
-            boxShadow: '0 1px 4px rgba(0,0,0,0.05)',
+            background:
+              'radial-gradient(circle at 30% 30%, rgba(150,180,255,0.75), rgba(40,90,230,0.55) 45%, rgba(0,40,200,0) 100%)',
+            backdropFilter: 'blur(10px) saturate(260%)',
+            WebkitBackdropFilter: 'blur(10px) saturate(260%)',
+            boxShadow:
+              '0 0 28px rgba(0,80,255,0.5), 0 0 56px rgba(80,140,255,0.25)',
+            animation: 'companion-aura 8s ease-in-out infinite',
             pointerEvents: 'none',
           }}
         />
+        <style>{`
+          @keyframes companion-aura {
+            0%   { transform: scale(1) rotate(0deg); }
+            50%  { transform: scale(1.08) rotate(180deg); }
+            100% { transform: scale(1) rotate(360deg); }
+          }
+        `}</style>
 
         {/* Companion body — 55×55 nose glyph with layered white halo,
             centered in the larger tap container. pointer-events:none so
