@@ -11,6 +11,7 @@ import {
   narrateQuestStart,
   narrateWaypointReached,
   narrateQuestComplete,
+  narrateWaypointClues,
 } from '../services/questNarration.js';
 import { balance } from '../config/balance.js';
 
@@ -118,6 +119,16 @@ const plugin: FastifyPluginAsync = async (app) => {
       3,
     );
 
+    // One Haiku call up-front fills clue strings per waypoint so we
+    // don't burn a model call on every /advance. Fail-soft → clues
+    // stay null, client falls back to the generic arrival narration.
+    const dogCtx = { name: dog.name, species: dog.species, breed: dog.breed };
+    const clues = await narrateWaypointClues(dogCtx, waypoints.length);
+    const waypointsWithClues: StoredWaypoint[] = waypoints.map((w, i) => ({
+      ...w,
+      clue: clues?.[i] ?? null,
+    }));
+
     const id = nanoid();
     const [inserted] = await db
       .insert(schema.quests)
@@ -127,18 +138,59 @@ const plugin: FastifyPluginAsync = async (app) => {
         dogId: dog.id,
         type: 'detective',
         status: 'active',
-        waypoints,
+        waypoints: waypointsWithClues,
         currentIndex: 0,
         rewardPoints: 50,
       })
       .returning();
 
     const narration = await narrateQuestStart(
-      { name: dog.name, species: dog.species, breed: dog.breed },
-      waypoints.length,
+      dogCtx,
+      waypointsWithClues.length,
     );
 
     return { quest: rowToQuest(inserted!), narration };
+  });
+
+  // Recent completed/abandoned quests for the tasks-tab history list.
+  // Caps at HISTORY_LIMIT so we don't ship a city-wide list when the
+  // user opens the tab. Pet name + outcome + when it ended.
+  app.get('/quests/history', async (req) => {
+    const HISTORY_LIMIT = 20;
+    const rows = await db
+      .select({
+        id: schema.quests.id,
+        dogId: schema.quests.dogId,
+        status: schema.quests.status,
+        completedAt: schema.quests.completedAt,
+        startedAt: schema.quests.startedAt,
+        rewardPoints: schema.quests.rewardPoints,
+        dogName: schema.lostDogs.name,
+        dogEmoji: schema.lostDogs.emoji,
+      })
+      .from(schema.quests)
+      .leftJoin(schema.lostDogs, eq(schema.quests.dogId, schema.lostDogs.id))
+      .where(
+        and(
+          eq(schema.quests.userId, req.userId),
+          sql`${schema.quests.status} IN ('completed','abandoned')`,
+        ),
+      )
+      .orderBy(sql`COALESCE(${schema.quests.completedAt}, ${schema.quests.startedAt}) DESC`)
+      .limit(HISTORY_LIMIT);
+
+    return {
+      quests: rows.map((r) => ({
+        id: r.id,
+        dogId: r.dogId,
+        dogName: r.dogName ?? null,
+        dogEmoji: r.dogEmoji ?? null,
+        status: r.status as 'completed' | 'abandoned',
+        startedAt: r.startedAt.toISOString(),
+        endedAt: (r.completedAt ?? r.startedAt).toISOString(),
+        rewardPoints: r.rewardPoints,
+      })),
+    };
   });
 
   app.get('/quests/active', async (req) => {
@@ -249,9 +301,19 @@ const plugin: FastifyPluginAsync = async (app) => {
         .where(eq(schema.lostDogs.id, row.dogId))
         .limit(1);
       if (dog) {
-        narration = done
-          ? await narrateQuestComplete(dog, nextWaypoints.length)
-          : await narrateWaypointReached(dog, row.currentIndex, nextWaypoints.length);
+        if (done) {
+          narration = await narrateQuestComplete(dog, nextWaypoints.length);
+        } else {
+          // Prefer the clue we generated at quest start (zero extra
+          // Haiku call), fall back to the live waypoint-reached
+          // narration if no clue was stored or the index is somehow
+          // off. The clue describes what we notice at the waypoint
+          // we just reached.
+          const reachedClue = nextWaypoints[row.currentIndex]?.clue;
+          narration = reachedClue
+            ? `*sniff* ${reachedClue}`
+            : await narrateWaypointReached(dog, row.currentIndex, nextWaypoints.length);
+        }
       }
     }
 
