@@ -360,12 +360,12 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           zIndex: 2,
         }}
       >
-        {/* Living blue aura — circular clip with two soft "blobs" of
-            light drifting on different timings inside, like digital
-            liquid. The outer disc carries the heavy backdrop blur +
-            saturation so the map below tints blue; the inner blobs
-            are translated/scaled, never wandering off the circle
-            edge thanks to overflow:hidden. */}
+        {/* Living blue aura — three sharp-cored color blobs drift on
+            independent timings inside the circular clip, like a
+            digital liquid lava-lamp. Tight gradient stops (instead of
+            soft blur) keep each blob's centre vivid and the
+            transitions crisp. Outer disc keeps the heavy backdrop
+            saturation so the map below still tints into the field. */}
         <div
           aria-hidden
           style={{
@@ -374,46 +374,57 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             height: 55,
             borderRadius: '50%',
             overflow: 'hidden',
-            backdropFilter: 'blur(10px) saturate(260%)',
-            WebkitBackdropFilter: 'blur(10px) saturate(260%)',
+            backdropFilter: 'blur(8px) saturate(280%)',
+            WebkitBackdropFilter: 'blur(8px) saturate(280%)',
             boxShadow:
-              '0 0 18px rgba(0,80,255,0.45), 0 0 36px rgba(80,140,255,0.2)',
+              '0 0 18px rgba(0,80,255,0.5), 0 0 36px rgba(80,180,255,0.25)',
             background:
-              'radial-gradient(circle at 50% 50%, rgba(40,90,230,0.45), rgba(0,40,200,0) 80%)',
+              'linear-gradient(135deg, rgba(15,40,200,0.55), rgba(60,170,255,0.45))',
             pointerEvents: 'none',
           }}
         >
           <div
             style={{
               position: 'absolute',
-              inset: -10,
+              inset: 0,
               background:
-                'radial-gradient(circle at 30% 30%, rgba(160,190,255,0.85), rgba(160,190,255,0) 55%)',
-              filter: 'blur(2px)',
+                'radial-gradient(circle at 30% 30%, rgba(180,230,255,0.95) 0%, rgba(80,170,255,0.55) 28%, rgba(80,170,255,0) 50%)',
               animation: 'companion-blob-a 7s ease-in-out infinite',
             }}
           />
           <div
             style={{
               position: 'absolute',
-              inset: -10,
+              inset: 0,
               background:
-                'radial-gradient(circle at 70% 65%, rgba(110,160,255,0.7), rgba(110,160,255,0) 55%)',
-              filter: 'blur(2px)',
+                'radial-gradient(circle at 70% 65%, rgba(60,210,255,0.9) 0%, rgba(20,90,230,0.5) 32%, rgba(20,90,230,0) 55%)',
               animation: 'companion-blob-b 11s ease-in-out infinite',
+            }}
+          />
+          <div
+            style={{
+              position: 'absolute',
+              inset: 0,
+              background:
+                'radial-gradient(circle at 55% 40%, rgba(220,250,255,0.85) 0%, rgba(150,230,255,0.4) 18%, rgba(150,230,255,0) 35%)',
+              animation: 'companion-blob-c 5s ease-in-out infinite',
             }}
           />
         </div>
         <style>{`
           @keyframes companion-blob-a {
             0%, 100% { transform: translate(0px, 0px) scale(1); }
-            33%      { transform: translate(7px, -5px) scale(1.05); }
-            66%      { transform: translate(-6px, 6px) scale(0.95); }
+            33%      { transform: translate(8px, -6px) scale(1.08); }
+            66%      { transform: translate(-7px, 7px) scale(0.92); }
           }
           @keyframes companion-blob-b {
             0%, 100% { transform: translate(0px, 0px) scale(1); }
-            40%      { transform: translate(-8px, -4px) scale(1.08); }
-            70%      { transform: translate(5px, 6px) scale(0.95); }
+            40%      { transform: translate(-9px, -5px) scale(1.1); }
+            70%      { transform: translate(6px, 7px) scale(0.9); }
+          }
+          @keyframes companion-blob-c {
+            0%, 100% { transform: translate(0px, 0px) scale(1); }
+            50%      { transform: translate(4px, 5px) scale(1.15); }
           }
         `}</style>
 
