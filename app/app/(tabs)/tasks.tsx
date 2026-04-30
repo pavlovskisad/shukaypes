@@ -1,11 +1,13 @@
-import { useCallback, useEffect, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useFocusEffect, useRouter } from 'expo-router';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { api } from '../../services/api';
+import { api, type NearbyLostDog } from '../../services/api';
+import { distanceMeters } from '../../utils/geo';
+import type { LatLng } from '@shukajpes/shared';
 
 interface QuestHistoryRow {
   id: string;
@@ -24,6 +26,23 @@ function relativeWhen(iso: string): string {
   if (diffH < 24) return `${diffH}h ago`;
   const diffD = Math.round(diffH / 24);
   return `${diffD}d ago`;
+}
+
+// Distance from the user to the *nearest edge* of the pet's search
+// zone. Friendliest "is this walkable?" signal — being inside the
+// zone reads as "in your area" instead of a misleading 0m.
+function formatDistanceToZone(userPos: LatLng | null, dog: NearbyLostDog): string {
+  if (!userPos) return '';
+  const d = distanceMeters(userPos, dog.lastSeen.position);
+  const edge = Math.max(0, d - dog.searchZoneRadiusM);
+  if (edge === 0) return 'in your area';
+  if (edge < 1000) return `${Math.round(edge / 50) * 50}m away`;
+  return `${(edge / 1000).toFixed(1)}km away`;
+}
+
+function distanceToZoneEdge(userPos: LatLng | null, dog: NearbyLostDog): number {
+  if (!userPos) return Infinity;
+  return Math.max(0, distanceMeters(userPos, dog.lastSeen.position) - dog.searchZoneRadiusM);
 }
 
 type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings';
@@ -54,9 +73,44 @@ const TASKS: TaskRow[] = [
 ];
 
 export default function TasksScreen() {
+  const router = useRouter();
   const dailyTasks = useGameStore((s) => s.dailyTasks);
   const refresh = useGameStore((s) => s.refreshDailyTasksIfStale);
+  const lostDogs = useGameStore((s) => s.lostDogs);
+  const userPos = useGameStore((s) => s.userPosition);
+  const activeQuest = useGameStore((s) => s.activeQuest);
+  const startQuest = useGameStore((s) => s.startQuest);
+  const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
+  const [expandedDogId, setExpandedDogId] = useState<string | null>(null);
+  const [startingDogId, setStartingDogId] = useState<string | null>(null);
+
+  // Sort by distance-to-zone-edge so the closest pet (most walkable
+  // search) sits at the top. In-zone pets bubble to the very top.
+  const sortedDogs = useMemo(
+    () =>
+      [...lostDogs].sort(
+        (a, b) => distanceToZoneEdge(userPos, a) - distanceToZoneEdge(userPos, b),
+      ),
+    [lostDogs, userPos?.lat, userPos?.lng],
+  );
+
+  const handleStartSearch = useCallback(
+    async (dog: NearbyLostDog) => {
+      if (startingDogId) return;
+      setStartingDogId(dog.id);
+      try {
+        await startQuest(dog.id);
+        setSelectedDog(null);
+        router.push('/');
+      } catch {
+        /* gameStore surfaces the error; keep the row open so the user can retry */
+      } finally {
+        setStartingDogId(null);
+      }
+    },
+    [startQuest, setSelectedDog, startingDogId, router],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -159,6 +213,89 @@ export default function TasksScreen() {
             );
           })}
         </View>
+
+        {/* Lost pets in your area — sorted by distance to the
+            search-zone edge, so the closest walkable search sits at
+            the top. Tap a row to expand inline (photo, breed, "start
+            search" CTA). Only one row open at a time keeps the
+            card scannable. */}
+        {sortedDogs.length > 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>lost pets nearby</Text>
+            {sortedDogs.map((d, i) => {
+              const expanded = expandedDogId === d.id;
+              const isActive = !!activeQuest && activeQuest.dogId === d.id;
+              const distLabel = formatDistanceToZone(userPos, d);
+              const urgent = d.urgency === 'urgent';
+              return (
+                <View key={d.id} style={[i > 0 && styles.taskDivider]}>
+                  <Pressable
+                    onPress={() =>
+                      setExpandedDogId((prev) => (prev === d.id ? null : d.id))
+                    }
+                    style={({ pressed }) => [
+                      styles.petRow,
+                      pressed && { opacity: 0.6 },
+                    ]}
+                  >
+                    <Text style={styles.icon}>{d.emoji ?? '🐶'}</Text>
+                    <View style={styles.petBody}>
+                      <View style={styles.petTopRow}>
+                        <Text style={styles.petName} numberOfLines={1}>
+                          {d.name}
+                        </Text>
+                        <Text
+                          style={[
+                            styles.urgencyTag,
+                            urgent ? styles.urgencyUrgent : styles.urgencyMedium,
+                          ]}
+                        >
+                          {urgent ? 'urgent' : 'searching'}
+                        </Text>
+                      </View>
+                      <Text style={styles.petMeta}>
+                        {distLabel}
+                        {d.breed ? ` · ${d.breed}` : ''}
+                      </Text>
+                    </View>
+                    <Text style={styles.expandChevron}>{expanded ? '−' : '+'}</Text>
+                  </Pressable>
+                  {expanded ? (
+                    <View style={styles.petExpanded}>
+                      <Text style={styles.petExpandedMeta}>
+                        last seen {relativeWhen(d.lastSeen.at)} · search zone
+                        {' '}
+                        {Math.round(d.searchZoneRadiusM)}m
+                      </Text>
+                      <Pressable
+                        onPress={() => handleStartSearch(d)}
+                        disabled={isActive || startingDogId === d.id}
+                        style={({ pressed }) => [
+                          styles.startBtn,
+                          isActive && styles.startBtnMuted,
+                          pressed && !isActive && { opacity: 0.7 },
+                        ]}
+                      >
+                        {startingDogId === d.id ? (
+                          <ActivityIndicator color="#fff" size="small" />
+                        ) : (
+                          <Text
+                            style={[
+                              styles.startBtnText,
+                              isActive && styles.startBtnTextMuted,
+                            ]}
+                          >
+                            {isActive ? '🔍 search in progress' : '🔍 start search'}
+                          </Text>
+                        )}
+                      </Pressable>
+                    </View>
+                  ) : null}
+                </View>
+              );
+            })}
+          </View>
+        ) : null}
 
         {/* Past searches — completed/abandoned quests, most recent
             first. Only renders the card when there's something to
@@ -275,6 +412,57 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   barFill: { height: '100%', borderRadius: 3 },
+  petRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+  },
+  petBody: { flex: 1, minWidth: 0 },
+  petTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  petName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.black,
+    flexShrink: 1,
+  },
+  urgencyTag: {
+    fontSize: 10,
+    fontWeight: '700',
+    paddingHorizontal: 6,
+    paddingVertical: 2,
+    borderRadius: 8,
+    overflow: 'hidden',
+    textTransform: 'lowercase',
+    letterSpacing: 0.3,
+  },
+  urgencyUrgent: { backgroundColor: '#fde8e8', color: '#e84040' },
+  urgencyMedium: { backgroundColor: '#fdf3e0', color: '#d9a030' },
+  petMeta: { fontSize: 12, color: '#777', marginTop: 2 },
+  expandChevron: {
+    fontSize: 18,
+    color: '#aaa',
+    fontWeight: '500',
+    paddingHorizontal: 4,
+  },
+  petExpanded: {
+    paddingBottom: 12,
+    paddingLeft: 30, // align past the emoji column
+    gap: 10,
+  },
+  petExpandedMeta: { fontSize: 12, color: '#777' },
+  startBtn: {
+    backgroundColor: 'rgba(0,60,255,0.85)',
+    borderRadius: 14,
+    paddingVertical: 10,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+    justifyContent: 'center',
+    flexDirection: 'row',
+  },
+  startBtnMuted: { backgroundColor: '#e8e8f2' },
+  startBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
+  startBtnTextMuted: { color: '#777' },
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
