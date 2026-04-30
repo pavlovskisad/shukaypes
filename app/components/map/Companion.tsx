@@ -360,13 +360,6 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           zIndex: 2,
         }}
       >
-        {/* Living blue aura — magnified halo that always feels alive
-            even when the dog stands still. Vivid radial gradient (off-
-            centre highlight at 30/30 reads as light hitting the
-            companion from the upper-left), heavy saturation through
-            the backdrop so the map below tints blue, soft outer glow,
-            and a slow scale + rotate animation so the gradient never
-            sits frozen. */}
         {/* Living blue aura — circular clip with two soft "blobs" of
             light drifting on different timings inside, like digital
             liquid. The outer disc carries the heavy backdrop blur +
