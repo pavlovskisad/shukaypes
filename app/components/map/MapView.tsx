@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { GoogleMap, PolylineF, useJsApiLoader } from '@react-google-maps/api';
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../../constants/env';
 import { colors } from '../../constants/colors';
@@ -13,6 +13,7 @@ import { useCompanion } from '../../hooks/useCompanion';
 import { useGameLoop } from '../../hooks/useGameLoop';
 import { distanceMeters } from '../../utils/geo';
 import { Companion } from './Companion';
+import logoNose from '../../assets/logo-nose.png';
 import { UserMarker } from './UserMarker';
 import { TokenMarker } from './TokenMarker';
 import { FoodMarker } from './FoodMarker';
@@ -67,7 +68,12 @@ export default function MapViewWeb() {
   const userPos = location.position;
 
   const companionPos = useCompanion(userPos);
-  const [currentZoom, setCurrentZoom] = useState<number | null>(null);
+  // Tracks the map's visible bounds so we can detect when the
+  // companion has wandered (or been panned) off-screen and surface a
+  // tap-to-recenter indicator at the screen edge.
+  const [mapBounds, setMapBounds] = useState<{
+    n: number; s: number; e: number; w: number;
+  } | null>(null);
   const tokens = useGameStore((s) => s.tokens);
   const foodItems = useGameStore((s) => s.foodItems);
   const lostDogs = useGameStore((s) => s.lostDogs);
@@ -382,29 +388,47 @@ export default function MapViewWeb() {
     );
   }
 
+  // Off-screen companion indicator: when the companion drifts (or the
+  // user pans away) outside the map's visible bounds, a small icon
+  // sticks to the screen edge nearest to the companion. Tap recenters.
+  // `mapBounds` is the latest snapshot from the map's `idle` event; the
+  // edge position is computed against the current companion lat/lng.
+  const offscreenIndicator = (() => {
+    if (!mapBounds || !companionPos) return null;
+    const { n, s, e, w } = mapBounds;
+    if (
+      companionPos.lat <= n &&
+      companionPos.lat >= s &&
+      companionPos.lng <= e &&
+      companionPos.lng >= w
+    ) {
+      return null;
+    }
+    // Normalised position 0..1 across the map viewport. Linear is fine
+    // at our zooms; pole-distortion is a non-issue in Kyiv.
+    const nx = (companionPos.lng - w) / (e - w);
+    const ny = (n - companionPos.lat) / (n - s);
+    const dx = nx - 0.5;
+    const dy = ny - 0.5;
+    // Clamp the (cx + dx*k, cy + dy*k) ray to a 0.05..0.95 box so the
+    // indicator stays inside the viewport with a small margin.
+    const margin = 0.05;
+    const k = Math.min(
+      (0.5 - margin) / Math.max(Math.abs(dx), 1e-6),
+      (0.5 - margin) / Math.max(Math.abs(dy), 1e-6),
+    );
+    const ex = 0.5 + dx * k;
+    const ey = 0.5 + dy * k;
+    return { left: `${ex * 100}%`, top: `${ey * 100}%` };
+  })();
+
+  const recenterOnCompanion = useCallback(() => {
+    if (!companionPos || !mapRef.current) return;
+    mapRef.current.panTo(companionPos as unknown as google.maps.LatLngLiteral);
+  }, [companionPos?.lat, companionPos?.lng]);
+
   return (
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
-      {/* TEMP — current zoom readout. Used to pick the right
-          mapZoomMin lock; remove once the value is decided. Pinned
-          bottom-right above the dashboard so it doesn't hide behind
-          the HUD pills at the top. */}
-      <div
-        style={{
-          position: 'absolute',
-          bottom: 80,
-          right: 8,
-          zIndex: 30,
-          background: 'rgba(0,0,0,0.7)',
-          color: '#fff',
-          fontFamily: 'monospace',
-          fontSize: 14,
-          padding: '6px 10px',
-          borderRadius: 6,
-          pointerEvents: 'none',
-        }}
-      >
-        z: {currentZoom !== null ? currentZoom.toFixed(2) : '—'}
-      </div>
       <GoogleMap
         mapContainerStyle={CONTAINER_STYLE as unknown as React.CSSProperties}
         options={mapOptions}
@@ -415,14 +439,23 @@ export default function MapViewWeb() {
           // and fought our cluster-tap setZoom calls.
           map.setCenter(userPos as unknown as google.maps.LatLngLiteral);
           map.setZoom(balance.mapZoomDefault);
-          setCurrentZoom(map.getZoom() ?? balance.mapZoomDefault);
         }}
         onUnmount={() => {
           mapRef.current = null;
         }}
-        onZoomChanged={() => {
-          const z = mapRef.current?.getZoom();
-          if (typeof z === 'number') setCurrentZoom(z);
+        onIdle={() => {
+          // Sync mapBounds for the off-screen indicator math. Fires
+          // after every pan / zoom completes, plus once on initial load.
+          const b = mapRef.current?.getBounds();
+          if (!b) return;
+          const ne = b.getNorthEast();
+          const sw = b.getSouthWest();
+          setMapBounds({
+            n: ne.lat(),
+            s: sw.lat(),
+            e: ne.lng(),
+            w: sw.lng(),
+          });
         }}
         onClick={() => {
           // Suppress when the click came right after a companion tap —
@@ -672,6 +705,41 @@ export default function MapViewWeb() {
           />
         ) : null}
       </GoogleMap>
+
+      {/* Off-screen companion bookmark. Sticks to the viewport edge
+          along the line from map center to the companion's position
+          so the user can always see where they are even after panning
+          far away. Tap recenters the map. */}
+      {offscreenIndicator ? (
+        <div
+          onClick={recenterOnCompanion}
+          role="button"
+          aria-label="recenter on companion"
+          style={{
+            position: 'absolute',
+            left: offscreenIndicator.left,
+            top: offscreenIndicator.top,
+            transform: 'translate(-50%, -50%)',
+            zIndex: 25,
+            cursor: 'pointer',
+            background: '#ffffff',
+            borderRadius: '50%',
+            width: 44,
+            height: 44,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+            border: '2px solid rgba(0,0,0,0.06)',
+          }}
+        >
+          <Image
+            source={logoNose}
+            style={{ width: 30, height: 30 }}
+            resizeMode="contain"
+          />
+        </div>
+      ) : null}
 
       <LostDogModal
         dog={lostDogs.find((d) => d.id === selectedDogId) ?? null}
