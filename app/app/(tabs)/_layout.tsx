@@ -70,7 +70,7 @@ export default function TabsLayout() {
         name="tasks"
         options={{
           title: 'quests',
-          tabBarIcon: ({ focused }) => <TabIcon icon="🎯" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon icon="✓" focused={focused} />,
         }}
       />
       <Tabs.Screen

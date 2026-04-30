@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
@@ -83,6 +83,7 @@ export default function TasksScreen() {
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
   const [expandedDogId, setExpandedDogId] = useState<string | null>(null);
+  const [petsListOpen, setPetsListOpen] = useState(false);
   const [startingDogId, setStartingDogId] = useState<string | null>(null);
 
   // Sort by distance-to-zone-edge so the closest pet (most walkable
@@ -216,13 +217,29 @@ export default function TasksScreen() {
 
         {/* Lost pets in your area — sorted by distance to the
             search-zone edge, so the closest walkable search sits at
-            the top. Tap a row to expand inline (photo, breed, "start
-            search" CTA). Only one row open at a time keeps the
-            card scannable. */}
+            the top. The whole card collapses by default so a long
+            list doesn't push past searches off-screen. Tap the
+            header row to toggle; tap an individual pet to reveal
+            its details + "start search" CTA inline. */}
         {sortedDogs.length > 0 ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>lost pets nearby</Text>
-            {sortedDogs.map((d, i) => {
+            <Pressable
+              onPress={() => setPetsListOpen((v) => !v)}
+              style={({ pressed }) => [
+                styles.cardHeaderRow,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.cardTitle}>lost pets nearby</Text>
+              <View style={styles.cardHeaderRight}>
+                <Text style={styles.cardHeaderCount}>{sortedDogs.length}</Text>
+                <Text style={styles.expandChevron}>
+                  {petsListOpen ? '−' : '+'}
+                </Text>
+              </View>
+            </Pressable>
+            {petsListOpen
+              ? sortedDogs.map((d, i) => {
               const expanded = expandedDogId === d.id;
               const isActive = !!activeQuest && activeQuest.dogId === d.id;
               const distLabel = formatDistanceToZone(userPos, d);
@@ -238,7 +255,16 @@ export default function TasksScreen() {
                       pressed && { opacity: 0.6 },
                     ]}
                   >
-                    <Text style={styles.icon}>{d.emoji ?? '🐶'}</Text>
+                    <View style={styles.petAvatar}>
+                      <Text style={styles.petAvatarEmoji}>{d.emoji ?? '🐶'}</Text>
+                      {d.photoUrl ? (
+                        <Image
+                          source={{ uri: d.photoUrl }}
+                          style={styles.petAvatarImg}
+                          resizeMode="cover"
+                        />
+                      ) : null}
+                    </View>
                     <View style={styles.petBody}>
                       <View style={styles.petTopRow}>
                         <Text style={styles.petName} numberOfLines={1}>
@@ -293,7 +319,8 @@ export default function TasksScreen() {
                   ) : null}
                 </View>
               );
-            })}
+                })
+              : null}
           </View>
         ) : null}
 
@@ -412,12 +439,39 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   barFill: { height: '100%', borderRadius: 3 },
+  cardHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+  },
+  cardHeaderRight: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 6,
+    marginBottom: 10, // align with cardTitle's marginBottom
+  },
+  cardHeaderCount: {
+    fontSize: 12,
+    fontWeight: '700',
+    color: '#999',
+  },
   petRow: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
     paddingVertical: 12,
   },
+  petAvatar: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    backgroundColor: '#f0f0f0',
+    overflow: 'hidden',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  petAvatarEmoji: { fontSize: 20, position: 'absolute' },
+  petAvatarImg: { width: '100%', height: '100%' },
   petBody: { flex: 1, minWidth: 0 },
   petTopRow: { flexDirection: 'row', alignItems: 'center', gap: 8 },
   petName: {
