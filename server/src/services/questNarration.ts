@@ -74,3 +74,48 @@ export async function narrateQuestComplete(
     `We finished all ${total} spots looking for ${dog.name}. No confirmed sighting yet. One short closing line — hint that if the walker spots ${dog.name} somewhere they can tap "i've seen them", or that we keep eyes open as we walk on.`,
   );
 }
+
+// Per-waypoint clues. Generated once at quest start so we don't burn a
+// Haiku call per arrival. Returns N short clues — each one describes
+// what the companion notices / suspects at that specific waypoint
+// ("she'd nap by the warm vent", "kids feed strays here at dusk").
+// Fails soft: returns null if the API call or the JSON parse fails;
+// the caller leaves clue=null and the client falls back to the
+// generic narrateWaypointReached on advance.
+export async function narrateWaypointClues(
+  dog: DogContext,
+  count: number,
+): Promise<string[] | null> {
+  try {
+    const resp = await anthropic().messages.create({
+      model: AMBIENT_MODEL,
+      max_tokens: 220,
+      temperature: 0.8,
+      system: QUEST_NARRATION_SYSTEM,
+      messages: [
+        {
+          role: 'user',
+          content: `We're about to start a detective search for ${dog.name} (${dog.species}, ${dog.breed}) — ${count} stops along the way.
+
+For each stop in order, write ONE short clue (5-10 words) the companion would notice or suspect there. Vary the clues — different sensory details, different hunches. Don't number them. Don't add quotes. Output ONLY a JSON array of ${count} strings, nothing else.
+
+Example shape: ["warm vent under the steps — she'd nap here", "kids feed strays at the corner store", "scent fades by the playground gate"]`,
+        },
+      ],
+    });
+    const block = resp.content.find((c) => c.type === 'text');
+    if (!block || block.type !== 'text') return null;
+    const raw = block.text.trim();
+    // Strip code fences if Haiku wraps the JSON.
+    const cleaned = raw.replace(/^```(?:json)?\s*|\s*```$/g, '').trim();
+    const parsed: unknown = JSON.parse(cleaned);
+    if (!Array.isArray(parsed)) return null;
+    const clues = parsed
+      .map((c) => (typeof c === 'string' ? c.trim() : ''))
+      .filter((c) => c.length > 0);
+    if (clues.length < count) return null;
+    return clues.slice(0, count);
+  } catch {
+    return null;
+  }
+}

@@ -1,10 +1,30 @@
-import { useCallback } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { api } from '../../services/api';
+
+interface QuestHistoryRow {
+  id: string;
+  dogName: string | null;
+  dogEmoji: string | null;
+  status: 'completed' | 'abandoned';
+  endedAt: string;
+  rewardPoints: number;
+}
+
+function relativeWhen(iso: string): string {
+  const then = new Date(iso).getTime();
+  const diffM = Math.max(0, Math.round((Date.now() - then) / 60000));
+  if (diffM < 60) return `${diffM}m ago`;
+  const diffH = Math.round(diffM / 60);
+  if (diffH < 24) return `${diffH}h ago`;
+  const diffD = Math.round(diffH / 24);
+  return `${diffD}d ago`;
+}
 
 type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings';
 
@@ -36,6 +56,7 @@ const TASKS: TaskRow[] = [
 export default function TasksScreen() {
   const dailyTasks = useGameStore((s) => s.dailyTasks);
   const refresh = useGameStore((s) => s.refreshDailyTasksIfStale);
+  const [history, setHistory] = useState<QuestHistoryRow[]>([]);
 
   useFocusEffect(
     useCallback(() => {
@@ -44,6 +65,35 @@ export default function TasksScreen() {
       // counters to today's date if the stored entry is from yesterday.
       refresh();
     }, [refresh])
+  );
+
+  // Refetch quest history on focus so a freshly completed quest shows
+  // up immediately. Errors fail silent — the card just stays empty.
+  useFocusEffect(
+    useCallback(() => {
+      let cancelled = false;
+      api
+        .getQuestHistory()
+        .then((res) => {
+          if (cancelled) return;
+          setHistory(
+            res.quests.map((q) => ({
+              id: q.id,
+              dogName: q.dogName,
+              dogEmoji: q.dogEmoji,
+              status: q.status,
+              endedAt: q.endedAt,
+              rewardPoints: q.rewardPoints,
+            })),
+          );
+        })
+        .catch(() => {
+          /* fail silent */
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, []),
   );
 
   const doneCount = TASKS.filter((t) => dailyTasks[t.key] >= t.target).length;
@@ -109,6 +159,35 @@ export default function TasksScreen() {
             );
           })}
         </View>
+
+        {/* Past searches — completed/abandoned quests, most recent
+            first. Only renders the card when there's something to
+            show so a brand-new account doesn't see an empty rail. */}
+        {history.length > 0 ? (
+          <View style={styles.card}>
+            <Text style={styles.cardTitle}>past searches</Text>
+            {history.map((q, i) => (
+              <View key={q.id} style={[styles.historyRow, i > 0 && styles.taskDivider]}>
+                <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
+                <View style={styles.historyBody}>
+                  <Text style={styles.historyName} numberOfLines={1}>
+                    {q.dogName ?? 'unknown pet'}
+                  </Text>
+                  <Text style={styles.historyMeta}>
+                    {q.status === 'completed' ? 'finished' : 'abandoned'} ·{' '}
+                    {relativeWhen(q.endedAt)}
+                    {q.status === 'completed' ? ` · +${q.rewardPoints}pts` : ''}
+                  </Text>
+                </View>
+                {q.status === 'completed' ? (
+                  <Text style={styles.historyTickDone}>✓</Text>
+                ) : (
+                  <Text style={styles.historyTickAbandon}>×</Text>
+                )}
+              </View>
+            ))}
+          </View>
+        ) : null}
 
         <Text style={styles.footer}>
           resets at midnight · progress saved on this device
@@ -196,6 +275,33 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   barFill: { height: '100%', borderRadius: 3 },
+  historyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+    paddingVertical: 12,
+  },
+  historyBody: { flex: 1, minWidth: 0 },
+  historyName: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: colors.black,
+  },
+  historyMeta: {
+    fontSize: 12,
+    color: '#777',
+    marginTop: 2,
+  },
+  historyTickDone: {
+    fontSize: 16,
+    color: 'rgba(0,60,255,0.85)',
+    fontWeight: '700',
+  },
+  historyTickAbandon: {
+    fontSize: 18,
+    color: '#bbb',
+    fontWeight: '700',
+  },
   footer: {
     fontSize: 11,
     color: '#999',

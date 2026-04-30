@@ -181,6 +181,21 @@ export const api = {
   getActiveQuest: () =>
     req<{ quest: (Quest & { status: string }) | null }>('/quests/active'),
 
+  // Recent completed/abandoned quests for the tasks tab history card.
+  getQuestHistory: () =>
+    req<{
+      quests: Array<{
+        id: string;
+        dogId: string | null;
+        dogName: string | null;
+        dogEmoji: string | null;
+        status: 'completed' | 'abandoned';
+        startedAt: string;
+        endedAt: string;
+        rewardPoints: number;
+      }>;
+    }>('/quests/history'),
+
   // Set `force: true` to skip the server's distance check — used for
   // the tap-to-complete affordance on active waypoint pins during
   // testing. Without force, server rejects with 403 outside 60m.

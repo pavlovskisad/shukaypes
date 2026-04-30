@@ -24,16 +24,31 @@ import {
 const UA = 'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122 Safari/537.36';
 const SOURCE = 'olx';
 
-// URLs to poll each tick. Start narrow; broaden as we see real volume.
-// byuro-nahodok (bureau of found-and-lost) is the obvious category and
-// already mixes dogs + cats + other pets; site-wide searches catch posts
-// mis-categorized into generic "dogs" / "cats".
+// URLs to poll each tick. Mix: the dedicated lost-and-found category,
+// site-wide searches in both Ukrainian and Russian for posts that get
+// mis-categorized into generic "dogs"/"cats", and the wider "тварини
+// загубилися" (animals went missing) bucket. Дupes get filtered by the
+// `source_external_id` upsert so the same listing surfaced via two
+// queries doesn't insert twice. city_id=8 = Kyiv.
 const LISTING_URLS = [
+  // bureau of lost-and-found (mixed species)
   'https://www.olx.ua/uk/zhivotnye/byuro-nahodok/kiev/',
+  // ukrainian — dogs lost / found
   'https://www.olx.ua/uk/list/q-пропав-собака/?search%5Bcity_id%5D=8',
   'https://www.olx.ua/uk/list/q-знайшли-собаку/?search%5Bcity_id%5D=8',
+  'https://www.olx.ua/uk/list/q-загубився-пес/?search%5Bcity_id%5D=8',
+  // ukrainian — cats lost / found
   'https://www.olx.ua/uk/list/q-пропав-кіт/?search%5Bcity_id%5D=8',
   'https://www.olx.ua/uk/list/q-знайшли-кота/?search%5Bcity_id%5D=8',
+  'https://www.olx.ua/uk/list/q-загубилася-кішка/?search%5Bcity_id%5D=8',
+  // russian — many Kyiv posters still write russian
+  'https://www.olx.ua/uk/list/q-потерялась-собака/?search%5Bcity_id%5D=8',
+  'https://www.olx.ua/uk/list/q-нашли-собаку/?search%5Bcity_id%5D=8',
+  'https://www.olx.ua/uk/list/q-потерялся-кот/?search%5Bcity_id%5D=8',
+  'https://www.olx.ua/uk/list/q-нашли-кошку/?search%5Bcity_id%5D=8',
+  // generic "lost / found" lands posts that didn't pick a species term
+  'https://www.olx.ua/uk/list/q-загубився/?search%5Bcity_id%5D=8',
+  'https://www.olx.ua/uk/list/q-загубилася/?search%5Bcity_id%5D=8',
 ];
 
 // Title-level filter + rehoming guard live in pipeline/keywords so
