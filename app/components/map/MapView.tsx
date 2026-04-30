@@ -385,18 +385,20 @@ export default function MapViewWeb() {
   return (
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
       {/* TEMP — current zoom readout. Used to pick the right
-          mapZoomMin lock; remove once the value is decided. */}
+          mapZoomMin lock; remove once the value is decided. Pinned
+          bottom-right above the dashboard so it doesn't hide behind
+          the HUD pills at the top. */}
       <div
         style={{
           position: 'absolute',
-          top: 8,
+          bottom: 80,
           right: 8,
           zIndex: 30,
           background: 'rgba(0,0,0,0.7)',
           color: '#fff',
           fontFamily: 'monospace',
-          fontSize: 12,
-          padding: '4px 8px',
+          fontSize: 14,
+          padding: '6px 10px',
           borderRadius: 6,
           pointerEvents: 'none',
         }}
