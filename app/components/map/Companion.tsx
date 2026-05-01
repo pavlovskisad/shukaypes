@@ -382,10 +382,10 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             WebkitBackdropFilter: 'blur(7px)',
             // Box-shadow animation cycles which side of the disc the
             // red and cyan dispersion sit on, plus rotates the wider
-            // pink/cyan glow direction. Subtle 9s loop so the chromatic
-            // effect reads as "lens shifting in light" rather than
-            // a discrete cycle.
-            animation: 'companion-chromatic 9s ease-in-out infinite',
+            // pink/cyan glow direction. 6s loop with bigger offsets +
+            // stronger alphas so the chromatic shift reads at a glance,
+            // not just on close inspection.
+            animation: 'companion-chromatic 6s ease-in-out infinite',
             pointerEvents: 'none',
           }}
         >
@@ -396,11 +396,12 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
               inset: 0,
               borderRadius: '50%',
               background:
-                'linear-gradient(135deg, rgba(255,170,255,0.14), rgba(140,230,255,0.14))',
+                'linear-gradient(135deg, rgba(255,170,255,0.22), rgba(140,230,255,0.22))',
               mixBlendMode: 'screen',
-              // Hue-rotate slowly cycles the fill through the spectrum
-              // so the prismatic sheen is never a fixed pink/cyan.
-              animation: 'companion-chromatic-hue 14s linear infinite',
+              // Hue-rotate cycles the fill through the spectrum so the
+              // prismatic sheen is never a fixed pink/cyan. 8s feels
+              // alive without being a strobe.
+              animation: 'companion-chromatic-hue 8s linear infinite',
               pointerEvents: 'none',
             }}
           />
@@ -409,26 +410,26 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           @keyframes companion-chromatic {
             0%, 100% {
               box-shadow:
-                -1px 0 2px rgba(255,80,80,0.22),
-                1px 0 2px rgba(80,180,255,0.26),
-                -4px 3px 14px rgba(255,140,210,0.25),
-                4px 3px 14px rgba(140,210,255,0.25),
+                -2px 0 3px rgba(255,80,80,0.42),
+                2px 0 3px rgba(80,180,255,0.46),
+                -7px 4px 18px rgba(255,140,210,0.42),
+                7px 4px 18px rgba(140,210,255,0.42),
                 0 2px 6px rgba(0,0,0,0.06);
             }
             33% {
               box-shadow:
-                0 -1px 2px rgba(255,80,80,0.22),
-                0 1px 2px rgba(80,180,255,0.26),
-                3px -4px 14px rgba(255,140,210,0.25),
-                -3px 4px 14px rgba(140,210,255,0.25),
+                0 -2px 3px rgba(255,80,80,0.42),
+                0 2px 3px rgba(80,180,255,0.46),
+                5px -6px 18px rgba(255,140,210,0.42),
+                -5px 6px 18px rgba(140,210,255,0.42),
                 0 2px 6px rgba(0,0,0,0.06);
             }
             66% {
               box-shadow:
-                1px 0 2px rgba(255,80,80,0.22),
-                -1px 0 2px rgba(80,180,255,0.26),
-                4px 3px 14px rgba(255,140,210,0.25),
-                -4px 3px 14px rgba(140,210,255,0.25),
+                2px 0 3px rgba(255,80,80,0.42),
+                -2px 0 3px rgba(80,180,255,0.46),
+                7px 4px 18px rgba(255,140,210,0.42),
+                -7px 4px 18px rgba(140,210,255,0.42),
                 0 2px 6px rgba(0,0,0,0.06);
             }
           }
