@@ -9,6 +9,22 @@ import { nanoid } from 'nanoid';
 interface NearbyQuery {
   lat: string;
   lng: string;
+  // Same pipe-delimited shape as /food/nearby. When present,
+  // ensureTokensForUser seeds an extra paw ring around each park
+  // so a walk toward one reads as following a trail.
+  parks?: string;
+}
+
+function parseParks(raw?: string): LatLng[] {
+  if (!raw) return [];
+  const out: LatLng[] = [];
+  for (const chunk of raw.split('|')) {
+    const [latStr, lngStr] = chunk.split(',');
+    const lat = Number(latStr);
+    const lng = Number(lngStr);
+    if (Number.isFinite(lat) && Number.isFinite(lng)) out.push({ lat, lng });
+  }
+  return out;
 }
 
 interface CollectBody {
@@ -38,7 +54,8 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { error: 'invalid lat/lng' };
     }
 
-    await ensureTokensForUser(req.userId, { lat, lng });
+    const parks = parseParks(req.query.parks);
+    await ensureTokensForUser(req.userId, { lat, lng }, parks);
 
     const rows = await db
       .select({

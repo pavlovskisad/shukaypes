@@ -30,6 +30,12 @@ export const balance = {
   // still. Sized comfortably above autoCollectToken (90m).
   userAreaInnerRadiusM: 130,
   tokensPerDogArea: 18,
+  // Per-park pool — when the client passes nearby parks (already
+  // fetched for bone scattering), top up a small ring of paws around
+  // each. Parks are obvious dog-walking destinations, so a paw trail
+  // pointing at one feels natural. 4 paws in a 70m ring per park.
+  tokensPerPark: 4,
+  parkPawRadiusM: 70,
   // Walking-radius scoping: 20-30min reach rather than 1-2hr. Previously
   // seeded paws in zones up to 4km away; combined with lots of active
   // pets that'd load 50+ pins the walker will never reach. 1500m keeps

@@ -95,8 +95,19 @@ export const api = {
       };
     }>('/profile/me'),
 
-  getTokensNearby: (pos: LatLng) =>
-    req<{ tokens: Token[] }>(`/tokens/nearby?lat=${pos.lat}&lng=${pos.lng}`),
+  getTokensNearby: (pos: LatLng, parks?: LatLng[]) => {
+    const params = new URLSearchParams({
+      lat: String(pos.lat),
+      lng: String(pos.lng),
+    });
+    // Same pipe-delimited shape as /food/nearby. When the client has
+    // already loaded nearby parks (after the first food sync), pass
+    // them along so the server can seed paw trails around each.
+    if (parks && parks.length) {
+      params.set('parks', parks.map((p) => `${p.lat},${p.lng}`).join('|'));
+    }
+    return req<{ tokens: Token[] }>(`/tokens/nearby?${params.toString()}`);
+  },
 
   getFoodNearby: (pos: LatLng, parks?: LatLng[]) => {
     const params = new URLSearchParams({
