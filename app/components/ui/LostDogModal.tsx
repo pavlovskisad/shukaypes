@@ -93,6 +93,7 @@ export function LostDogModal({
   const badgeText = urgent ? '🚨 URGENT' : '⚠️ searching';
   const badgeBg = urgent ? '#fde8e8' : '#fdf3e0';
   const badgeFg = urgent ? '#e84040' : '#d9a030';
+  const [photoOpen, setPhotoOpen] = useState(false);
 
   return (
     <div
@@ -224,12 +225,17 @@ export function LostDogModal({
             <img
               src={renderDog.photoUrl}
               alt={renderDog.name}
+              onClick={(e) => {
+                e.stopPropagation();
+                setPhotoOpen(true);
+              }}
               style={{
                 width: 68,
                 height: 68,
                 borderRadius: '50%',
                 objectFit: 'cover',
                 flexShrink: 0,
+                cursor: 'zoom-in',
               }}
             />
           ) : (
@@ -331,6 +337,42 @@ export function LostDogModal({
           }
         `}</style>
       </div>
+
+      {/* Photo lightbox — full-screen image viewer triggered by tapping
+          the round avatar. Sits on top of the bottom sheet (zIndex 60
+          vs the sheet's 50) and dismisses on any tap. stopPropagation
+          on the close prevents the underlying sheet's onClose from
+          firing too. */}
+      {photoOpen && renderDog.photoUrl ? (
+        <div
+          onClick={(e) => {
+            e.stopPropagation();
+            setPhotoOpen(false);
+          }}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            background: 'rgba(0,0,0,0.92)',
+            zIndex: 60,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 24,
+            cursor: 'zoom-out',
+          }}
+        >
+          <img
+            src={renderDog.photoUrl}
+            alt={renderDog.name}
+            style={{
+              maxWidth: '100%',
+              maxHeight: '100%',
+              borderRadius: 12,
+              boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
+            }}
+          />
+        </div>
+      ) : null}
     </div>
   );
 }

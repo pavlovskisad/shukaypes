@@ -7,6 +7,7 @@ import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { api, type NearbyLostDog } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
+import { LostDogModal } from '../../components/ui/LostDogModal';
 import type { LatLng } from '@shukajpes/shared';
 
 interface QuestHistoryRow {
@@ -82,8 +83,9 @@ export default function TasksScreen() {
   const startQuest = useGameStore((s) => s.startQuest);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
-  const [expandedDogId, setExpandedDogId] = useState<string | null>(null);
-  const [petsListOpen, setPetsListOpen] = useState(false);
+  const [historyOpen, setHistoryOpen] = useState(false);
+  const [showAllPets, setShowAllPets] = useState(false);
+  const [modalDogId, setModalDogId] = useState<string | null>(null);
   const [startingDogId, setStartingDogId] = useState<string | null>(null);
 
   // Sort by distance-to-zone-edge so the closest pet (most walkable
@@ -94,6 +96,26 @@ export default function TasksScreen() {
         (a, b) => distanceToZoneEdge(userPos, a) - distanceToZoneEdge(userPos, b),
       ),
     [lostDogs, userPos?.lat, userPos?.lng],
+  );
+
+  // Default-visible slice — pets already inside their search zone (the
+  // walker is in the area), or the 3 closest if none are in zone. The
+  // rest collapse behind a "+ N more" row to keep the card compact
+  // while still surfacing the most relevant work up-front.
+  const { defaultDogs, restDogs } = useMemo(() => {
+    const inZone = sortedDogs.filter((d) => distanceToZoneEdge(userPos, d) === 0);
+    const outOfZone = sortedDogs.filter((d) => distanceToZoneEdge(userPos, d) > 0);
+    if (inZone.length > 0) {
+      return { defaultDogs: inZone, restDogs: outOfZone };
+    }
+    return { defaultDogs: outOfZone.slice(0, 3), restDogs: outOfZone.slice(3) };
+  }, [sortedDogs, userPos?.lat, userPos?.lng]);
+
+  const visibleDogs = showAllPets ? sortedDogs : defaultDogs;
+  const hiddenCount = showAllPets ? 0 : restDogs.length;
+  const modalDog = useMemo(
+    () => sortedDogs.find((d) => d.id === modalDogId) ?? null,
+    [sortedDogs, modalDogId],
   );
 
   const handleStartSearch = useCallback(
@@ -215,112 +237,85 @@ export default function TasksScreen() {
           })}
         </View>
 
-        {/* Lost pets in your area — sorted by distance to the
-            search-zone edge, so the closest walkable search sits at
-            the top. The whole card collapses by default so a long
-            list doesn't push past searches off-screen. Tap the
-            header row to toggle; tap an individual pet to reveal
-            its details + "start search" CTA inline. */}
+        {/* Lost pets nearby — promoted card, default-visible so the
+            quests tab feels alive even before tapping anything. Top
+            slice = pets in your search zone (or 3 closest if none),
+            "+ N more" reveals the rest. Each row is a clean tap
+            target → opens the full LostDogModal in place. No
+            inline expansion / chevrons; the modal is the detail
+            view. */}
         {sortedDogs.length > 0 ? (
           <View style={styles.card}>
-            <Pressable
-              onPress={() => setPetsListOpen((v) => !v)}
-              style={({ pressed }) => [
-                styles.cardHeaderRow,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={styles.cardTitle}>lost pets nearby</Text>
-              <View style={styles.cardHeaderRight}>
-                <Text style={styles.cardHeaderCount}>{sortedDogs.length}</Text>
-                <Text style={styles.expandChevron}>
-                  {petsListOpen ? '−' : '+'}
-                </Text>
-              </View>
-            </Pressable>
-            {petsListOpen
-              ? sortedDogs.map((d, i) => {
-              const expanded = expandedDogId === d.id;
-              const isActive = !!activeQuest && activeQuest.dogId === d.id;
+            <Text style={styles.cardTitle}>lost pets nearby</Text>
+            {visibleDogs.map((d, i) => {
               const distLabel = formatDistanceToZone(userPos, d);
               const urgent = d.urgency === 'urgent';
               return (
-                <View key={d.id} style={[i > 0 && styles.taskDivider]}>
-                  <Pressable
-                    onPress={() =>
-                      setExpandedDogId((prev) => (prev === d.id ? null : d.id))
-                    }
-                    style={({ pressed }) => [
-                      styles.petRow,
-                      pressed && { opacity: 0.6 },
-                    ]}
-                  >
-                    <View style={styles.petAvatar}>
-                      <Text style={styles.petAvatarEmoji}>{d.emoji ?? '🐶'}</Text>
-                      {d.photoUrl ? (
-                        <Image
-                          source={{ uri: d.photoUrl }}
-                          style={styles.petAvatarImg}
-                          resizeMode="cover"
-                        />
-                      ) : null}
-                    </View>
-                    <View style={styles.petBody}>
-                      <View style={styles.petTopRow}>
-                        <Text style={styles.petName} numberOfLines={1}>
-                          {d.name}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.urgencyTag,
-                            urgent ? styles.urgencyUrgent : styles.urgencyMedium,
-                          ]}
-                        >
-                          {urgent ? 'urgent' : 'searching'}
-                        </Text>
-                      </View>
-                      <Text style={styles.petMeta}>
-                        {distLabel}
-                        {d.breed ? ` · ${d.breed}` : ''}
+                <Pressable
+                  key={d.id}
+                  onPress={() => setModalDogId(d.id)}
+                  style={({ pressed }) => [
+                    styles.petRow,
+                    i > 0 && styles.taskDivider,
+                    pressed && { opacity: 0.6 },
+                  ]}
+                >
+                  <View style={styles.petAvatar}>
+                    <Text style={styles.petAvatarEmoji}>{d.emoji ?? '🐶'}</Text>
+                    {d.photoUrl ? (
+                      <Image
+                        source={{ uri: d.photoUrl }}
+                        style={styles.petAvatarImg}
+                        resizeMode="cover"
+                      />
+                    ) : null}
+                  </View>
+                  <View style={styles.petBody}>
+                    <View style={styles.petTopRow}>
+                      <Text style={styles.petName} numberOfLines={1}>
+                        {d.name}
                       </Text>
-                    </View>
-                    <Text style={styles.expandChevron}>{expanded ? '−' : '+'}</Text>
-                  </Pressable>
-                  {expanded ? (
-                    <View style={styles.petExpanded}>
-                      <Text style={styles.petExpandedMeta}>
-                        last seen {relativeWhen(d.lastSeen.at)} · search zone
-                        {' '}
-                        {Math.round(d.searchZoneRadiusM)}m
-                      </Text>
-                      <Pressable
-                        onPress={() => handleStartSearch(d)}
-                        disabled={isActive || startingDogId === d.id}
-                        style={({ pressed }) => [
-                          styles.startBtn,
-                          isActive && styles.startBtnMuted,
-                          pressed && !isActive && { opacity: 0.7 },
+                      <Text
+                        style={[
+                          styles.urgencyTag,
+                          urgent ? styles.urgencyUrgent : styles.urgencyMedium,
                         ]}
                       >
-                        {startingDogId === d.id ? (
-                          <ActivityIndicator color="#fff" size="small" />
-                        ) : (
-                          <Text
-                            style={[
-                              styles.startBtnText,
-                              isActive && styles.startBtnTextMuted,
-                            ]}
-                          >
-                            {isActive ? '🔍 search in progress' : '🔍 start search'}
-                          </Text>
-                        )}
-                      </Pressable>
+                        {urgent ? 'urgent' : 'searching'}
+                      </Text>
                     </View>
-                  ) : null}
-                </View>
+                    <Text style={styles.petMeta}>
+                      {distLabel}
+                      {d.breed ? ` · ${d.breed}` : ''}
+                    </Text>
+                  </View>
+                </Pressable>
               );
-                })
-              : null}
+            })}
+            {hiddenCount > 0 ? (
+              <Pressable
+                onPress={() => setShowAllPets(true)}
+                style={({ pressed }) => [
+                  styles.moreRow,
+                  styles.taskDivider,
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={styles.moreLabel}>+ {hiddenCount} more</Text>
+              </Pressable>
+            ) : null}
+            {showAllPets && restDogs.length > 0 ? (
+              <Pressable
+                onPress={() => setShowAllPets(false)}
+                style={({ pressed }) => [
+                  styles.moreRow,
+                  styles.taskDivider,
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={styles.moreLabel}>show fewer</Text>
+              </Pressable>
+            ) : null}
           </View>
         ) : null}
 
@@ -329,27 +324,46 @@ export default function TasksScreen() {
             show so a brand-new account doesn't see an empty rail. */}
         {history.length > 0 ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>past searches</Text>
-            {history.map((q, i) => (
-              <View key={q.id} style={[styles.historyRow, i > 0 && styles.taskDivider]}>
-                <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
-                <View style={styles.historyBody}>
-                  <Text style={styles.historyName} numberOfLines={1}>
-                    {q.dogName ?? 'unknown pet'}
-                  </Text>
-                  <Text style={styles.historyMeta}>
-                    {q.status === 'completed' ? 'finished' : 'abandoned'} ·{' '}
-                    {relativeWhen(q.endedAt)}
-                    {q.status === 'completed' ? ` · +${q.rewardPoints}pts` : ''}
-                  </Text>
-                </View>
-                {q.status === 'completed' ? (
-                  <Text style={styles.historyTickDone}>✓</Text>
-                ) : (
-                  <Text style={styles.historyTickAbandon}>×</Text>
-                )}
+            <Pressable
+              onPress={() => setHistoryOpen((v) => !v)}
+              style={({ pressed }) => [
+                styles.cardHeaderRow,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.cardTitle}>past searches</Text>
+              <View style={styles.cardHeaderRight}>
+                <Text style={styles.cardHeaderCount}>{history.length}</Text>
+                <Text style={styles.cardHeaderChevron}>
+                  {historyOpen ? '−' : '+'}
+                </Text>
               </View>
-            ))}
+            </Pressable>
+            {historyOpen
+              ? history.map((q, i) => (
+                  <View
+                    key={q.id}
+                    style={[styles.historyRow, i > 0 && styles.taskDivider]}
+                  >
+                    <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
+                    <View style={styles.historyBody}>
+                      <Text style={styles.historyName} numberOfLines={1}>
+                        {q.dogName ?? 'unknown pet'}
+                      </Text>
+                      <Text style={styles.historyMeta}>
+                        {q.status === 'completed' ? 'finished' : 'abandoned'} ·{' '}
+                        {relativeWhen(q.endedAt)}
+                        {q.status === 'completed' ? ` · +${q.rewardPoints}pts` : ''}
+                      </Text>
+                    </View>
+                    {q.status === 'completed' ? (
+                      <Text style={styles.historyTickDone}>✓</Text>
+                    ) : (
+                      <Text style={styles.historyTickAbandon}>×</Text>
+                    )}
+                  </View>
+                ))
+              : null}
           </View>
         ) : null}
 
@@ -357,6 +371,18 @@ export default function TasksScreen() {
           resets at midnight · progress saved on this device
         </Text>
       </ScrollView>
+
+      {/* Same LostDogModal as the map. modalDog comes from local
+          state so it doesn't fight with the map's selection (which
+          drives the search-zone circle there). onStartSearch routes
+          to the map after the quest commits — the user lands on
+          the active quest's polyline. */}
+      <LostDogModal
+        dog={modalDog}
+        onClose={() => setModalDogId(null)}
+        searchActive={!!activeQuest && activeQuest.dogId === modalDogId}
+        onStartSearch={(d) => handleStartSearch(d)}
+      />
     </SafeAreaView>
   );
 }
@@ -455,6 +481,22 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#999',
   },
+  cardHeaderChevron: {
+    fontSize: 18,
+    color: '#aaa',
+    fontWeight: '500',
+    paddingHorizontal: 4,
+  },
+  moreRow: {
+    paddingVertical: 12,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  moreLabel: {
+    fontSize: 13,
+    fontWeight: '700',
+    color: 'rgba(0,60,255,0.85)',
+  },
   petRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -493,30 +535,6 @@ const styles = StyleSheet.create({
   urgencyUrgent: { backgroundColor: '#fde8e8', color: '#e84040' },
   urgencyMedium: { backgroundColor: '#fdf3e0', color: '#d9a030' },
   petMeta: { fontSize: 12, color: '#777', marginTop: 2 },
-  expandChevron: {
-    fontSize: 18,
-    color: '#aaa',
-    fontWeight: '500',
-    paddingHorizontal: 4,
-  },
-  petExpanded: {
-    paddingBottom: 12,
-    paddingLeft: 30, // align past the emoji column
-    gap: 10,
-  },
-  petExpandedMeta: { fontSize: 12, color: '#777' },
-  startBtn: {
-    backgroundColor: 'rgba(0,60,255,0.85)',
-    borderRadius: 14,
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    alignItems: 'center',
-    justifyContent: 'center',
-    flexDirection: 'row',
-  },
-  startBtnMuted: { backgroundColor: '#e8e8f2' },
-  startBtnText: { color: '#fff', fontSize: 14, fontWeight: '700' },
-  startBtnTextMuted: { color: '#777' },
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
