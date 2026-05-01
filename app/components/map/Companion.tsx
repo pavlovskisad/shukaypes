@@ -380,15 +380,51 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             background: 'rgba(255,255,255,0.03)',
             backdropFilter: 'blur(7px)',
             WebkitBackdropFilter: 'blur(7px)',
-            // Full 360° chromatic rotation around the disc. Pink and
-            // cyan are concentrated blobs on opposite sides (offset
-            // 14px with tight 8px blur — soft but not uniform). 4.5s
-            // linear so they orbit continuously and the motion is
-            // unmistakable.
-            animation: 'companion-chromatic 4.5s linear infinite',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
             pointerEvents: 'none',
           }}
         >
+          {/* Orbit container — two filled blobs at opposite edges of
+              the disc, the wrapper itself rotates so the blobs
+              physically travel around the centre. Way more legible
+              than animating box-shadow keyframes (which Safari blurs
+              into a static-looking haze). */}
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              inset: 0,
+              animation: 'companion-orbit 4s linear infinite',
+              pointerEvents: 'none',
+            }}
+          >
+            <div
+              style={{
+                position: 'absolute',
+                left: -10,
+                top: '50%',
+                width: 22,
+                height: 22,
+                borderRadius: '50%',
+                background: 'rgba(255,120,200,0.55)',
+                filter: 'blur(4px)',
+                transform: 'translateY(-50%)',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                right: -10,
+                top: '50%',
+                width: 22,
+                height: 22,
+                borderRadius: '50%',
+                background: 'rgba(120,200,255,0.55)',
+                filter: 'blur(4px)',
+                transform: 'translateY(-50%)',
+              }}
+            />
+          </div>
           <div
             aria-hidden
             style={{
@@ -398,9 +434,6 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
               background:
                 'conic-gradient(from 0deg, rgba(255,170,255,0.18), rgba(180,210,255,0.18), rgba(140,230,255,0.18), rgba(220,180,255,0.18), rgba(255,170,255,0.18))',
               mixBlendMode: 'screen',
-              // Spin the conic gradient itself + a slow hue cycle on
-              // top → the surface visibly swirls instead of being a
-              // static prismatic wash.
               animation:
                 'companion-chromatic-spin 5s linear infinite, companion-chromatic-hue 8s linear infinite',
               pointerEvents: 'none',
@@ -408,61 +441,9 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           />
         </div>
         <style>{`
-          @keyframes companion-chromatic {
-            0% {
-              box-shadow:
-                -14px 0 8px rgba(255,140,210,0.3),
-                14px 0 8px rgba(140,210,255,0.3),
-                0 2px 6px rgba(0,0,0,0.06);
-            }
-            12.5% {
-              box-shadow:
-                -10px -10px 8px rgba(255,140,210,0.3),
-                10px 10px 8px rgba(140,210,255,0.3),
-                0 2px 6px rgba(0,0,0,0.06);
-            }
-            25% {
-              box-shadow:
-                0 -14px 8px rgba(255,140,210,0.3),
-                0 14px 8px rgba(140,210,255,0.3),
-                0 2px 6px rgba(0,0,0,0.06);
-            }
-            37.5% {
-              box-shadow:
-                10px -10px 8px rgba(255,140,210,0.3),
-                -10px 10px 8px rgba(140,210,255,0.3),
-                0 2px 6px rgba(0,0,0,0.06);
-            }
-            50% {
-              box-shadow:
-                14px 0 8px rgba(255,140,210,0.3),
-                -14px 0 8px rgba(140,210,255,0.3),
-                0 2px 6px rgba(0,0,0,0.06);
-            }
-            62.5% {
-              box-shadow:
-                10px 10px 8px rgba(255,140,210,0.3),
-                -10px -10px 8px rgba(140,210,255,0.3),
-                0 2px 6px rgba(0,0,0,0.06);
-            }
-            75% {
-              box-shadow:
-                0 14px 8px rgba(255,140,210,0.3),
-                0 -14px 8px rgba(140,210,255,0.3),
-                0 2px 6px rgba(0,0,0,0.06);
-            }
-            87.5% {
-              box-shadow:
-                -10px 10px 8px rgba(255,140,210,0.3),
-                10px -10px 8px rgba(140,210,255,0.3),
-                0 2px 6px rgba(0,0,0,0.06);
-            }
-            100% {
-              box-shadow:
-                -14px 0 8px rgba(255,140,210,0.3),
-                14px 0 8px rgba(140,210,255,0.3),
-                0 2px 6px rgba(0,0,0,0.06);
-            }
+          @keyframes companion-orbit {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
           }
           @keyframes companion-chromatic-hue {
             from { filter: hue-rotate(0deg); }
