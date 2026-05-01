@@ -380,16 +380,13 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             background: 'rgba(255,255,255,0.03)',
             backdropFilter: 'blur(7px)',
             WebkitBackdropFilter: 'blur(7px)',
-            boxShadow: '0 2px 6px rgba(0,0,0,0.06)',
+            // Static chromatic — close 1px red/cyan dispersion rim,
+            // wider 4px pink/cyan glow, soft black drop shadow.
+            boxShadow:
+              '-1px 0 2px rgba(255,80,80,0.22), 1px 0 2px rgba(80,180,255,0.26), -4px 3px 14px rgba(255,140,210,0.25), 4px 3px 14px rgba(140,210,255,0.25), 0 1px 4px rgba(0,0,0,0.06)',
             pointerEvents: 'none',
           }}
         >
-          {/* Orbit container — explicit width/height + top/left/right/
-              bottom (no `inset` shorthand: RN Web's CSS translation
-              can leave the box collapsed on iOS, killing the rotation
-              radius). transform-origin pins the pivot to the disc
-              centre. Two filled blobs sit at the left/right edges; the
-              wrapper rotates so they physically travel around. */}
           <div
             aria-hidden
             style={{
@@ -400,65 +397,14 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
               bottom: 0,
               width: '100%',
               height: '100%',
-              transformOrigin: '50% 50%',
-              animation: 'companion-orbit 4s linear infinite',
-              pointerEvents: 'none',
-            }}
-          >
-            <div
-              style={{
-                position: 'absolute',
-                left: -10,
-                top: 22,
-                width: 22,
-                height: 22,
-                borderRadius: '50%',
-                background: 'rgba(255,120,200,0.55)',
-                filter: 'blur(4px)',
-              }}
-            />
-            <div
-              style={{
-                position: 'absolute',
-                left: 54,
-                top: 22,
-                width: 22,
-                height: 22,
-                borderRadius: '50%',
-                background: 'rgba(120,200,255,0.55)',
-                filter: 'blur(4px)',
-              }}
-            />
-          </div>
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              inset: 0,
               borderRadius: '50%',
               background:
-                'conic-gradient(from 0deg, rgba(255,170,255,0.18), rgba(180,210,255,0.18), rgba(140,230,255,0.18), rgba(220,180,255,0.18), rgba(255,170,255,0.18))',
+                'linear-gradient(135deg, rgba(255,170,255,0.14), rgba(140,230,255,0.14))',
               mixBlendMode: 'screen',
-              animation:
-                'companion-chromatic-spin 5s linear infinite, companion-chromatic-hue 8s linear infinite',
               pointerEvents: 'none',
             }}
           />
         </div>
-        <style>{`
-          @keyframes companion-orbit {
-            from { transform: rotate(0deg); }
-            to   { transform: rotate(360deg); }
-          }
-          @keyframes companion-chromatic-hue {
-            from { filter: hue-rotate(0deg); }
-            to   { filter: hue-rotate(360deg); }
-          }
-          @keyframes companion-chromatic-spin {
-            from { transform: rotate(0deg); }
-            to   { transform: rotate(360deg); }
-          }
-        `}</style>
 
         {/* Companion body — 55×55 nose glyph with layered white halo,
             centered in the larger tap container. pointer-events:none so
