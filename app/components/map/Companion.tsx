@@ -384,16 +384,23 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             pointerEvents: 'none',
           }}
         >
-          {/* Orbit container — two filled blobs at opposite edges of
-              the disc, the wrapper itself rotates so the blobs
-              physically travel around the centre. Way more legible
-              than animating box-shadow keyframes (which Safari blurs
-              into a static-looking haze). */}
+          {/* Orbit container — explicit width/height + top/left/right/
+              bottom (no `inset` shorthand: RN Web's CSS translation
+              can leave the box collapsed on iOS, killing the rotation
+              radius). transform-origin pins the pivot to the disc
+              centre. Two filled blobs sit at the left/right edges; the
+              wrapper rotates so they physically travel around. */}
           <div
             aria-hidden
             style={{
               position: 'absolute',
-              inset: 0,
+              top: 0,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              width: '100%',
+              height: '100%',
+              transformOrigin: '50% 50%',
               animation: 'companion-orbit 4s linear infinite',
               pointerEvents: 'none',
             }}
@@ -402,26 +409,24 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
               style={{
                 position: 'absolute',
                 left: -10,
-                top: '50%',
+                top: 22,
                 width: 22,
                 height: 22,
                 borderRadius: '50%',
                 background: 'rgba(255,120,200,0.55)',
                 filter: 'blur(4px)',
-                transform: 'translateY(-50%)',
               }}
             />
             <div
               style={{
                 position: 'absolute',
-                right: -10,
-                top: '50%',
+                left: 54,
+                top: 22,
                 width: 22,
                 height: 22,
                 borderRadius: '50%',
                 background: 'rgba(120,200,255,0.55)',
                 filter: 'blur(4px)',
-                transform: 'translateY(-50%)',
               }}
             />
           </div>
