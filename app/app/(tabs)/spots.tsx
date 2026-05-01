@@ -30,15 +30,17 @@ interface FilterOption {
   icon: string;
 }
 
-// Order matches the radial menu's visit submenu so the user sees the
-// same category vocabulary in both surfaces.
+// Order + emojis match VISIT_CATEGORY_ACTIONS / CATEGORY_EMOJI in
+// services/places.ts so the filter chip, the map marker, and the
+// radial menu all use the same glyph for each category. "all" is the
+// only synthetic chip and gets a neutral sparkle.
 const FILTERS: FilterOption[] = [
   { value: 'all', label: 'all', icon: '✨' },
   { value: 'cafe', label: 'cafe', icon: '☕' },
-  { value: 'restaurant', label: 'eat', icon: '🍽' },
-  { value: 'bar', label: 'drink', icon: '🍻' },
+  { value: 'restaurant', label: 'eat', icon: '🍜' },
+  { value: 'bar', label: 'drink', icon: '🍹' },
   { value: 'pet_store', label: 'pet shop', icon: '🐶' },
-  { value: 'veterinary_care', label: 'vet', icon: '🩺' },
+  { value: 'veterinary_care', label: 'vet', icon: '⛑️' },
 ];
 
 export default function SpotsScreen() {
