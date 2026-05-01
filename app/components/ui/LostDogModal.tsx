@@ -52,6 +52,10 @@ export function LostDogModal({
   const touchStartXRef = useRef<number | null>(null);
   const [renderDog, setRenderDog] = useState<NearbyLostDog | null>(dog);
   const [closing, setClosing] = useState(false);
+  // Photo lightbox toggle. Lives at the top of the hook list (before
+  // the `if (!renderDog) return null` below) so React's hook order
+  // stays stable across mount-with-no-dog → mount-with-dog renders.
+  const [photoOpen, setPhotoOpen] = useState(false);
 
   // Three transitions matter:
   //   prop dog: A   →  prop dog: B    (swap content, no animation)
