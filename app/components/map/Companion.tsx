@@ -380,12 +380,12 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             background: 'rgba(255,255,255,0.03)',
             backdropFilter: 'blur(7px)',
             WebkitBackdropFilter: 'blur(7px)',
-            // Box-shadow animation cycles which side of the disc the
-            // red and cyan dispersion sit on, plus rotates the wider
-            // pink/cyan glow direction. 6s loop with bigger offsets +
-            // stronger alphas so the chromatic shift reads at a glance,
-            // not just on close inspection.
-            animation: 'companion-chromatic 6s ease-in-out infinite',
+            // Full 360° chromatic rotation around the disc. Pink and
+            // cyan are concentrated blobs on opposite sides (offset
+            // 14px with tight 8px blur — soft but not uniform). 4.5s
+            // linear so they orbit continuously and the motion is
+            // unmistakable.
+            animation: 'companion-chromatic 4.5s linear infinite',
             pointerEvents: 'none',
           }}
         >
@@ -396,46 +396,81 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
               inset: 0,
               borderRadius: '50%',
               background:
-                'linear-gradient(135deg, rgba(255,170,255,0.22), rgba(140,230,255,0.22))',
+                'conic-gradient(from 0deg, rgba(255,170,255,0.18), rgba(180,210,255,0.18), rgba(140,230,255,0.18), rgba(220,180,255,0.18), rgba(255,170,255,0.18))',
               mixBlendMode: 'screen',
-              // Hue-rotate cycles the fill through the spectrum so the
-              // prismatic sheen is never a fixed pink/cyan. 8s feels
-              // alive without being a strobe.
-              animation: 'companion-chromatic-hue 8s linear infinite',
+              // Spin the conic gradient itself + a slow hue cycle on
+              // top → the surface visibly swirls instead of being a
+              // static prismatic wash.
+              animation:
+                'companion-chromatic-spin 5s linear infinite, companion-chromatic-hue 8s linear infinite',
               pointerEvents: 'none',
             }}
           />
         </div>
         <style>{`
           @keyframes companion-chromatic {
-            0%, 100% {
+            0% {
               box-shadow:
-                -2px 0 3px rgba(255,80,80,0.42),
-                2px 0 3px rgba(80,180,255,0.46),
-                -7px 4px 18px rgba(255,140,210,0.42),
-                7px 4px 18px rgba(140,210,255,0.42),
+                -14px 0 8px rgba(255,140,210,0.3),
+                14px 0 8px rgba(140,210,255,0.3),
                 0 2px 6px rgba(0,0,0,0.06);
             }
-            33% {
+            12.5% {
               box-shadow:
-                0 -2px 3px rgba(255,80,80,0.42),
-                0 2px 3px rgba(80,180,255,0.46),
-                5px -6px 18px rgba(255,140,210,0.42),
-                -5px 6px 18px rgba(140,210,255,0.42),
+                -10px -10px 8px rgba(255,140,210,0.3),
+                10px 10px 8px rgba(140,210,255,0.3),
                 0 2px 6px rgba(0,0,0,0.06);
             }
-            66% {
+            25% {
               box-shadow:
-                2px 0 3px rgba(255,80,80,0.42),
-                -2px 0 3px rgba(80,180,255,0.46),
-                7px 4px 18px rgba(255,140,210,0.42),
-                -7px 4px 18px rgba(140,210,255,0.42),
+                0 -14px 8px rgba(255,140,210,0.3),
+                0 14px 8px rgba(140,210,255,0.3),
+                0 2px 6px rgba(0,0,0,0.06);
+            }
+            37.5% {
+              box-shadow:
+                10px -10px 8px rgba(255,140,210,0.3),
+                -10px 10px 8px rgba(140,210,255,0.3),
+                0 2px 6px rgba(0,0,0,0.06);
+            }
+            50% {
+              box-shadow:
+                14px 0 8px rgba(255,140,210,0.3),
+                -14px 0 8px rgba(140,210,255,0.3),
+                0 2px 6px rgba(0,0,0,0.06);
+            }
+            62.5% {
+              box-shadow:
+                10px 10px 8px rgba(255,140,210,0.3),
+                -10px -10px 8px rgba(140,210,255,0.3),
+                0 2px 6px rgba(0,0,0,0.06);
+            }
+            75% {
+              box-shadow:
+                0 14px 8px rgba(255,140,210,0.3),
+                0 -14px 8px rgba(140,210,255,0.3),
+                0 2px 6px rgba(0,0,0,0.06);
+            }
+            87.5% {
+              box-shadow:
+                -10px 10px 8px rgba(255,140,210,0.3),
+                10px -10px 8px rgba(140,210,255,0.3),
+                0 2px 6px rgba(0,0,0,0.06);
+            }
+            100% {
+              box-shadow:
+                -14px 0 8px rgba(255,140,210,0.3),
+                14px 0 8px rgba(140,210,255,0.3),
                 0 2px 6px rgba(0,0,0,0.06);
             }
           }
           @keyframes companion-chromatic-hue {
             from { filter: hue-rotate(0deg); }
             to   { filter: hue-rotate(360deg); }
+          }
+          @keyframes companion-chromatic-spin {
+            from { transform: rotate(0deg); }
+            to   { transform: rotate(360deg); }
           }
         `}</style>
 
