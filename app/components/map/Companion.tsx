@@ -380,8 +380,12 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             background: 'rgba(255,255,255,0.03)',
             backdropFilter: 'blur(7px)',
             WebkitBackdropFilter: 'blur(7px)',
-            boxShadow:
-              '-1px 0 2px rgba(255,80,80,0.22), 1px 0 2px rgba(80,180,255,0.26), -4px 3px 14px rgba(255,140,210,0.25), 4px 3px 14px rgba(140,210,255,0.25), 0 2px 6px rgba(0,0,0,0.06)',
+            // Box-shadow animation cycles which side of the disc the
+            // red and cyan dispersion sit on, plus rotates the wider
+            // pink/cyan glow direction. Subtle 9s loop so the chromatic
+            // effect reads as "lens shifting in light" rather than
+            // a discrete cycle.
+            animation: 'companion-chromatic 9s ease-in-out infinite',
             pointerEvents: 'none',
           }}
         >
@@ -394,10 +398,45 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
               background:
                 'linear-gradient(135deg, rgba(255,170,255,0.14), rgba(140,230,255,0.14))',
               mixBlendMode: 'screen',
+              // Hue-rotate slowly cycles the fill through the spectrum
+              // so the prismatic sheen is never a fixed pink/cyan.
+              animation: 'companion-chromatic-hue 14s linear infinite',
               pointerEvents: 'none',
             }}
           />
         </div>
+        <style>{`
+          @keyframes companion-chromatic {
+            0%, 100% {
+              box-shadow:
+                -1px 0 2px rgba(255,80,80,0.22),
+                1px 0 2px rgba(80,180,255,0.26),
+                -4px 3px 14px rgba(255,140,210,0.25),
+                4px 3px 14px rgba(140,210,255,0.25),
+                0 2px 6px rgba(0,0,0,0.06);
+            }
+            33% {
+              box-shadow:
+                0 -1px 2px rgba(255,80,80,0.22),
+                0 1px 2px rgba(80,180,255,0.26),
+                3px -4px 14px rgba(255,140,210,0.25),
+                -3px 4px 14px rgba(140,210,255,0.25),
+                0 2px 6px rgba(0,0,0,0.06);
+            }
+            66% {
+              box-shadow:
+                1px 0 2px rgba(255,80,80,0.22),
+                -1px 0 2px rgba(80,180,255,0.26),
+                4px 3px 14px rgba(255,140,210,0.25),
+                -4px 3px 14px rgba(140,210,255,0.25),
+                0 2px 6px rgba(0,0,0,0.06);
+            }
+          }
+          @keyframes companion-chromatic-hue {
+            from { filter: hue-rotate(0deg); }
+            to   { filter: hue-rotate(360deg); }
+          }
+        `}</style>
 
         {/* Companion body — 55×55 nose glyph with layered white halo,
             centered in the larger tap container. pointer-events:none so
