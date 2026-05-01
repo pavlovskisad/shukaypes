@@ -97,7 +97,6 @@ export function LostDogModal({
   const badgeText = urgent ? '🚨 URGENT' : '⚠️ searching';
   const badgeBg = urgent ? '#fde8e8' : '#fdf3e0';
   const badgeFg = urgent ? '#e84040' : '#d9a030';
-  const [photoOpen, setPhotoOpen] = useState(false);
 
   return (
     <div
