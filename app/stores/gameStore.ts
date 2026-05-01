@@ -427,7 +427,11 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   syncTokens: async (pos) => {
     try {
-      const { tokens } = await api.getTokensNearby(pos);
+      // Pass the cached parks along so the server can seed paws around
+      // them too. First sync (before parks load) just sends none — the
+      // user-area + dog-zone pools still cover the screen.
+      const parks = get().parks;
+      const { tokens } = await api.getTokensNearby(pos, parks.length ? parks : undefined);
       const collected = get().recentlyCollectedIds;
       // Drop anything we've already collected locally — otherwise a poll
       // that races ahead of the server commit re-injects the token and

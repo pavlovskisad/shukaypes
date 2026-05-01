@@ -15,11 +15,14 @@ export const balance = {
   // Walking the route is the main "we did it together" signal in v1.
   quest: { happinessPerWaypoint: 8, happinessOnComplete: 25 },
   // Token spawning is location-driven: a base pool around the walker
-  // (always something underfoot) plus extra pools inside each nearby
-  // active lost-pet search zone, so following a pet's zone earns more
-  // pickups than walking random streets.
-  tokensInUserArea: 10,
-  userAreaRadiusM: 800,
+  // (always something underfoot, regardless of nearby lost pets) plus
+  // extra pools inside each nearby active lost-pet search zone, so
+  // following a pet's zone earns more pickups than walking random
+  // streets. The user-area pool is sized so even a quiet block has
+  // paws to find — 25 in a 1200m disk = ~5 per km², a paw every
+  // ~150m on a typical walk.
+  tokensInUserArea: 25,
+  userAreaRadiusM: 1200,
   // Inner exclusion radius for the user-area pool — paws never spawn
   // inside this disk. Without it, the 15s topup keeps dropping new
   // paws inside the 90m auto-collect radius and they get vacuumed
@@ -27,6 +30,12 @@ export const balance = {
   // still. Sized comfortably above autoCollectToken (90m).
   userAreaInnerRadiusM: 130,
   tokensPerDogArea: 18,
+  // Per-park pool — when the client passes nearby parks (already
+  // fetched for bone scattering), top up a small ring of paws around
+  // each. Parks are obvious dog-walking destinations, so a paw trail
+  // pointing at one feels natural. 4 paws in a 70m ring per park.
+  tokensPerPark: 4,
+  parkPawRadiusM: 70,
   // Walking-radius scoping: 20-30min reach rather than 1-2hr. Previously
   // seeded paws in zones up to 4km away; combined with lots of active
   // pets that'd load 50+ pins the walker will never reach. 1500m keeps

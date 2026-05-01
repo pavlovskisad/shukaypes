@@ -33,7 +33,11 @@ function buildTokenRows(userId: string, positions: LatLng[]) {
   }));
 }
 
-export async function ensureTokensForUser(userId: string, center: LatLng) {
+export async function ensureTokensForUser(
+  userId: string,
+  center: LatLng,
+  parks: LatLng[] = [],
+) {
   // 1. Age out uncollected tokens older than `tokenExpireMinutes`. The
   // previous distance-based cull didn't fit the new pool model — a paw
   // seeded inside a dog's zone 3km from the walker is legitimate even
@@ -122,6 +126,31 @@ export async function ensureTokensForUser(userId: string, center: LatLng) {
     if (zoneLive >= balance.tokensPerDogArea) continue;
     const missing = balance.tokensPerDogArea - zoneLive;
     const positions = scatterInRadius(dogPos, missing, d.zoneRadiusM);
+    const rows = buildTokenRows(userId, positions);
+    if (rows.length) await db.insert(schema.tokens).values(rows);
+  }
+
+  // 4. Per-park pool — paws cluster around nearby parks so a walk
+  // toward one reads as following a trail. Same shape as the
+  // dog-zone seeding: count what's already inside the ring, top up
+  // the gap. Skipped if the client hasn't passed parks yet (first
+  // sync before Places loads).
+  for (const park of parks) {
+    const parkDistExpr = haversineSql(park, schema.tokens.lat, schema.tokens.lng);
+    const parkRows = await db
+      .select({ live: sql<number>`count(*)::int` })
+      .from(schema.tokens)
+      .where(
+        and(
+          eq(schema.tokens.ownerId, userId),
+          isNull(schema.tokens.collectedAt),
+          sql`${parkDistExpr} <= ${balance.parkPawRadiusM}`,
+        ),
+      );
+    const parkLive = parkRows[0]?.live ?? 0;
+    if (parkLive >= balance.tokensPerPark) continue;
+    const missing = balance.tokensPerPark - parkLive;
+    const positions = scatterInRadius(park, missing, balance.parkPawRadiusM);
     const rows = buildTokenRows(userId, positions);
     if (rows.length) await db.insert(schema.tokens).values(rows);
   }
