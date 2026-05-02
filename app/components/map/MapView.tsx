@@ -80,6 +80,7 @@ export default function MapViewWeb() {
   const selectedDogId = useGameStore((s) => s.selectedDogId);
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
+  const spotsCategoryFilter = useGameStore((s) => s.spotsCategoryFilter);
   const selectedSpotId = useGameStore((s) => s.selectedSpotId);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   const collectToken = useGameStore((s) => s.collectToken);
@@ -577,21 +578,27 @@ export default function MapViewWeb() {
           <FoodMarker key={f.id} position={f.position} onTap={foodTapHandlers.get(f.id)!} />
         ))}
 
-        {/* Spots layer. Toggle off hides the field, but two spots are
-            still rendered when relevant: the user's current selection
-            (so the modal's pin still shows) and the walk-route
-            destination (so the polyline always points to a visible
-            marker). Both stay visible even when the layer is "off"
-            because they're the user's current focus, not ambient
-            decoration. */}
+        {/* Spots layer. Toggle off hides the ambient field; the
+            spots-tab category filter further restricts which markers
+            show when the layer IS on. Two spots always render
+            regardless of toggle/filter — the current selection (so
+            the modal's pin shows) and the walk-route destination (so
+            the polyline always points at a visible marker) — they're
+            the user's explicit focus. */}
         {(() => {
           const renderSet = new Set<string>();
           if (spotsVisible) {
-            for (const s of spots) renderSet.add(s.id);
-          } else {
-            if (selectedSpotId) renderSet.add(selectedSpotId);
-            if (walkRouteMeta?.spotId) renderSet.add(walkRouteMeta.spotId);
+            for (const s of spots) {
+              if (
+                spotsCategoryFilter === 'all' ||
+                s.category === spotsCategoryFilter
+              ) {
+                renderSet.add(s.id);
+              }
+            }
           }
+          if (selectedSpotId) renderSet.add(selectedSpotId);
+          if (walkRouteMeta?.spotId) renderSet.add(walkRouteMeta.spotId);
           return spots
             .filter((s) => renderSet.has(s.id))
             .map((s) => (

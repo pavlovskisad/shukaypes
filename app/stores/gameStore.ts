@@ -2,7 +2,12 @@ import { create } from 'zustand';
 import { balance } from '../constants/balance';
 import type { FoodItem, LatLng, Quest, Token } from '@shukajpes/shared';
 import { api, type NearbyLostDog } from '../services/api';
-import { fetchNearbySpots, fetchNearbyParks, type Spot } from '../services/places';
+import {
+  fetchNearbySpots,
+  fetchNearbyParks,
+  type Spot,
+  type SpotCategory,
+} from '../services/places';
 
 // Daily tasks — client-side for pilot; promote to server when we add
 // server-auth'd quests. Each field is a monotonic counter for today;
@@ -108,6 +113,11 @@ interface GameState {
   // whether spots are loaded into the array — the user can declutter
   // the map without losing the cached Places fetch.
   spotsVisible: boolean;
+  // Active category filter for the spots tab + map. 'all' shows
+  // everything; any specific category restricts the spots layer to
+  // just that category. Lives in the store so the spots tab and the
+  // map agree on what's currently surfaced.
+  spotsCategoryFilter: 'all' | SpotCategory;
   // Pre-computed walking route from companion's "walk" radial leaf.
   // Polyline is fetched once via the Directions API and stored here so
   // the map can render it without re-quotaing on every tick. shape
@@ -142,6 +152,7 @@ interface GameState {
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
+  setSpotsCategoryFilter: (filter: 'all' | SpotCategory) => void;
   setWalkRoute: (
     route: LatLng[] | null,
     meta: { shape: 'roundtrip' | 'oneway'; spotId: string } | null,
@@ -201,6 +212,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   // the layer via the HUD toggle. Avoids cluttering the map at first
   // load with every nearby cafe and pet store.
   spotsVisible: false,
+  spotsCategoryFilter: 'all',
   walkRoute: null,
   walkRouteMeta: null,
   dailyTasks: loadTasks(),
@@ -503,6 +515,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
+  setSpotsCategoryFilter: (spotsCategoryFilter) =>
+    set((s) => ({
+      spotsCategoryFilter,
+      // Picking a specific category implies "show me cafes on the
+      // map" — flip the layer on automatically. Switching back to
+      // 'all' leaves whatever visibility state the user had.
+      spotsVisible:
+        spotsCategoryFilter !== 'all' ? true : s.spotsVisible,
+    })),
 
   setWalkRoute: (walkRoute, walkRouteMeta) => set({ walkRoute, walkRouteMeta }),
 
