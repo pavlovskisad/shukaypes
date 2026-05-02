@@ -1,0 +1,59 @@
+<!DOCTYPE html>
+<html lang="%LANG_ISO_CODE%">
+  <head>
+    <meta charset="utf-8" />
+    <meta httpEquiv="X-UA-Compatible" content="IE=edge" />
+    <!-- viewport-fit=cover so the standalone PWA flows under the
+         iPhone notch / home indicator instead of leaving black bars. -->
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, shrink-to-fit=no, viewport-fit=cover"
+    />
+
+    <title>%WEB_TITLE%</title>
+    <meta
+      name="description"
+      content="find lost pets in kyiv. real walks, real dogs."
+    />
+
+    <!-- PWA manifest + icon. Files in /public are copied verbatim
+         into dist by expo-router. -->
+    <link rel="icon" href="/icon.png" type="image/png" />
+    <link rel="manifest" href="/manifest.webmanifest" />
+    <meta name="theme-color" content="#ffffff" />
+
+    <!-- iOS PWA: apple-touch-icon is what shows on the home screen,
+         the apple-mobile-web-app meta block makes the launched site
+         behave like a standalone app (no browser chrome). -->
+    <link rel="apple-touch-icon" href="/icon.png" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <meta name="apple-mobile-web-app-title" content="шукайпес" />
+
+    <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
+    <style id="expo-reset">
+      /* These styles make the body full-height */
+      html,
+      body {
+        height: 100%;
+      }
+      /* These styles disable body scrolling if you are using <ScrollView> */
+      body {
+        overflow: hidden;
+      }
+      /* These styles make the root element full-height */
+      #root {
+        display: flex;
+        height: 100%;
+        flex: 1;
+      }
+    </style>
+  </head>
+
+  <body>
+    <noscript>
+      You need to enable JavaScript to run this app.
+    </noscript>
+    <div id="root"></div>
+  </body>
+</html>
