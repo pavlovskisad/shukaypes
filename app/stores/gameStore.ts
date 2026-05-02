@@ -178,6 +178,12 @@ interface GameState {
   syncTokens: (pos: LatLng) => Promise<void>;
   syncFood: (pos: LatLng) => Promise<void>;
   syncLostDogs: (pos: LatLng) => Promise<void>;
+  // Bulk equivalent of syncTokens + syncFood + syncLostDogs +
+  // syncState in a single round-trip. MapView calls this on focus +
+  // every 15s; the per-resource actions stay around for callers that
+  // only need one slice (Quests tab refreshing the lost-pet list,
+  // etc).
+  syncMap: (pos: LatLng) => Promise<void>;
   setSelectedDog: (id: string | null) => void;
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
@@ -541,6 +547,57 @@ export const useGameStore = create<GameState>((set, get) => ({
     try {
       const { dogs } = await api.getLostDogsNearby(pos);
       set({ lostDogs: dogs });
+    } catch (err) {
+      set({ lastSyncError: (err as Error).message });
+    }
+  },
+
+  syncMap: async (pos) => {
+    // Lazy-fetch / refresh parks first so the bulk sync can pass them
+    // along — same logic syncFood used to own. Places returns parks
+    // within ~800m of the original anchor, so a long walk requires
+    // a re-fetch past PLACES_REFRESH_THRESHOLD_M.
+    let parks = get().parks;
+    const lastAt = get().lastParksFetchPos;
+    const movedFar = lastAt
+      ? distanceMeters(lastAt, pos) > PLACES_REFRESH_THRESHOLD_M
+      : false;
+    if (!parks.length || movedFar) {
+      try {
+        const fetched = await fetchNearbyParks(pos);
+        if (fetched.length) {
+          parks = fetched;
+          set({ parks, lastParksFetchPos: pos });
+        }
+      } catch {
+        // Places transient — keep going with stale parks; server's
+        // user-area + dog-zone pools still seed the map.
+      }
+    }
+
+    try {
+      const parkPositions = parks.map((p) => p.position);
+      const res = await api.syncMap(pos, {
+        parks: parkPositions.length ? parkPositions : undefined,
+      });
+      const collected = get().recentlyCollectedIds;
+      const filteredTokens = collected.size
+        ? res.tokens.filter((t) => !collected.has(t.id))
+        : res.tokens;
+      // Single set() so all four pieces of state land in one render
+      // pass. Previously the four parallel sync* calls each fired
+      // their own set, producing up to four re-renders per tick.
+      set((prev) => ({
+        tokens: filteredTokens,
+        foodItems: res.food,
+        lostDogs: res.dogs,
+        points: res.state.user.points,
+        tokensCollected: Math.max(prev.tokensCollected, res.state.user.totalTokens),
+        hunger: res.state.companion.hunger,
+        happiness: res.state.companion.happiness,
+        companionName: res.state.companion.name,
+        lastSyncError: null,
+      }));
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
     }

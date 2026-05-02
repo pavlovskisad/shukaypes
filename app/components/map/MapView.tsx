@@ -95,10 +95,8 @@ export default function MapViewWeb() {
   const collectToken = useGameStore((s) => s.collectToken);
   const eatFood = useGameStore((s) => s.eatFood);
   const setUserPosition = useGameStore((s) => s.setUserPosition);
-  const syncTokens = useGameStore((s) => s.syncTokens);
-  const syncFood = useGameStore((s) => s.syncFood);
+  const syncMap = useGameStore((s) => s.syncMap);
   const syncSpots = useGameStore((s) => s.syncSpots);
-  const syncLostDogs = useGameStore((s) => s.syncLostDogs);
   const collectPath = useGameStore((s) => s.collectPath);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const activeQuest = useGameStore((s) => s.activeQuest);
@@ -174,43 +172,28 @@ export default function MapViewWeb() {
     if (userPos) setUserPosition(userPos);
   }, [userPos?.lat, userPos?.lng, setUserPosition]);
 
-  // Fetch server state tied to position: spawned tokens + food + nearby lost
-  // dogs. All three refresh on the same interval. collectPath fires
-  // first so any token / bone the user walked past while the tab was
-  // suspended (Safari pauses JS) gets credited *before* the nearby
-  // GETs would otherwise filter them out as still-uncollected.
+  // Fetch server state tied to position: spawned tokens + food + nearby
+  // lost dogs + user/companion state, all in one /sync/map round-trip
+  // (PR #160's bulk endpoint). collectPath fires first so any token /
+  // bone the user walked past while the tab was suspended (Safari
+  // pauses JS) gets credited *before* the bulk sync filters them out
+  // as collected. Spots stay separate — they're driven by Google
+  // Places, not our backend, and the action is movement-gated so most
+  // ticks are no-ops anyway.
   useEffect(() => {
     if (!userPos) return;
     void collectPath(userPos);
-    syncTokens(userPos);
-    syncFood(userPos);
-    syncLostDogs(userPos);
-    // Spots are fetched lazily on the spots tab + the visit radial
-    // submenu, but on long walks the cached set drifts stale and the
-    // map's spots layer keeps showing the original neighbourhood. Hit
-    // syncSpots here too — the action is movement-gated internally so
-    // most ticks are no-ops, only paying a Places round-trip when the
-    // user has crossed the threshold.
+    void syncMap(userPos);
     syncSpots(userPos);
     const id = setInterval(() => {
       const pos = useGameStore.getState().userPosition;
       if (!pos) return;
       void collectPath(pos);
-      syncTokens(pos);
-      syncFood(pos);
-      syncLostDogs(pos);
+      void syncMap(pos);
       syncSpots(pos);
     }, TOKEN_REFRESH_MS);
     return () => clearInterval(id);
-  }, [
-    userPos?.lat,
-    userPos?.lng,
-    collectPath,
-    syncTokens,
-    syncFood,
-    syncLostDogs,
-    syncSpots,
-  ]);
+  }, [userPos?.lat, userPos?.lng, collectPath, syncMap, syncSpots]);
 
   // Pull the active quest (if any) on mount so a refreshed tab sees the
   // quest the user started earlier. No polling — quest state only changes
