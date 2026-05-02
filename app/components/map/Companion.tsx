@@ -102,20 +102,21 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
   // prop). The sheets are right-facing only, so a leftward dlng flips
   // via scaleX(-1) rather than a separate mirrored asset.
   //
-  // Three motion levels with thresholds tuned to the lerp speeds in
-  // useCompanion (HUNT_STEP_M=1.5/tick, IDLE_STEP_M=0.8/tick, lerp tail
-  // decelerates the last few metres of any approach):
-  //   - movedM > RUN_THRESHOLD: running sprite. Hits during hunt
-  //     pursuit + return-to-orbit while still > 7m from target.
-  //   - RUN_THRESHOLD ≥ movedM > WALK_THRESHOLD: walking sprite. Hits
-  //     during the lerp tail (approaching prey or orbit) and while
-  //     keeping pace with a walking user.
-  //   - movedM ≤ WALK_THRESHOLD: sitting sprite, after a debounce so
-  //     a single quiet tick mid-walk doesn't blink to sit.
-  // The walking sprite naturally appears in the last ~2-3m of every
-  // hunt approach (the dog "trots in to sniff") instead of running at
-  // full speed right up to the prey.
-  const RUN_THRESHOLD_M = 0.4;
+  // Three motion levels, with thresholds tuned to the lerp speeds in
+  // useCompanion (HUNT_STEP_M=3.0/tick, IDLE_STEP_M=0.8/tick, lerp
+  // tail decelerates the last few metres of any approach):
+  //   - movedM > RUN_THRESHOLD_M: running sprite. With HUNT_STEP_M=3.0
+  //     and tail starting at D=15m, running fires only while the dog
+  //     is still >12m from its target — the actual sprint phase. Once
+  //     the lerp tail kicks in (D<12), step drops below threshold and
+  //     the sprite reads as walking. Net: running shows up for short
+  //     bursts (1-2s on a far hunt) instead of the entire approach.
+  //   - RUN_THRESHOLD_M ≥ movedM > WALK_THRESHOLD_M: walking sprite.
+  //     Covers the lerp tail of any approach AND keeping pace with a
+  //     walking user.
+  //   - movedM ≤ WALK_THRESHOLD_M: sitting sprite, after a debounce
+  //     so a single quiet tick mid-walk doesn't blink to sit.
+  const RUN_THRESHOLD_M = 2.4;
   const WALK_THRESHOLD_M = 0.04;
   const STILL_DEBOUNCE_MS = 400;
   const [motion, setMotion] = useState<'still' | 'walking' | 'running'>('still');
