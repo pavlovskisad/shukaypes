@@ -8,6 +8,15 @@ import {
   type Spot,
   type SpotCategory,
 } from '../services/places';
+import { distanceMeters } from '../utils/geo';
+
+// Re-fetch the cached Places lists (parks for bone seeding +
+// per-park paw rings, spots for the visit menu) when the user has
+// walked further than this from the last fetch anchor. ~half the
+// userAreaRadiusM so paws + bones still spawn before the cache
+// goes meaningfully stale, but cheap enough to skip a Places call
+// on every 15s tick.
+const PLACES_REFRESH_THRESHOLD_M = 600;
 
 // Daily tasks — client-side for pilot; promote to server when we add
 // server-auth'd quests. Each field is a monotonic counter for today;
@@ -100,13 +109,21 @@ interface GameState {
   // its catch re-adds the bone to the list = "ghost" reappear after
   // tap.
   recentlyConsumedIds: Set<string>;
-  // Nearby park coords fetched once via Google Places; server seeds
-  // bones at these positions. Cached across food syncs — parks don't
-  // move and we don't want a Places round-trip on every 15s tick.
+  // Nearby park coords fetched via Google Places; server seeds bones
+  // + the per-park paw rings at these positions. Cached across food
+  // syncs so we don't pay a Places round-trip on every 15s tick — but
+  // we DO re-fetch when the user has walked past lastParksFetchPos by
+  // more than PARKS_REFRESH_THRESHOLD_M (services/places.ts only
+  // returned the parks within 800m of the original anchor).
   parks: LatLng[];
+  lastParksFetchPos: LatLng | null;
   lostDogs: NearbyLostDog[];
   selectedDogId: string | null;
   spots: Spot[];
+  // Same logic as lastParksFetchPos — Google Places returns spots
+  // within ~800m of the centre, so a long walk drifts off the cached
+  // window. Re-fetched on the same threshold.
+  lastSpotsFetchPos: LatLng | null;
   spotsLoading: boolean;
   selectedSpotId: string | null;
   // Map-overlay visibility toggle for the spots layer. Independent of
@@ -203,9 +220,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   recentlyConsumedIds: new Set<string>(),
   foodItems: [],
   parks: [],
+  lastParksFetchPos: null,
   lostDogs: [],
   selectedDogId: null,
   spots: [],
+  lastSpotsFetchPos: null,
   spotsLoading: false,
   selectedSpotId: null,
   // Default off — POIs only render once the user explicitly enables
@@ -459,16 +478,26 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   syncFood: async (pos) => {
     try {
-      // Lazy-load parks on the first food sync — they're static, so
-      // once cached we keep reusing them. If Places hasn't loaded yet
-      // the fetch returns []; we just skip the parks arg, server
-      // falls back to uniform scatter, next sync tries again.
+      // Lazy-load parks on the first food sync, AND re-fetch when the
+      // user has walked past the last fetch point by more than the
+      // refresh threshold — Google Places returned the parks within
+      // ~800m of the original anchor, so a long walk would otherwise
+      // keep seeding bones in the wrong neighbourhood. The fetch is
+      // ~one Places call per refresh; the threshold (600m) keeps the
+      // round-trip count low.
       let parks = get().parks;
-      if (!parks.length) {
+      const lastAt = get().lastParksFetchPos;
+      const movedFar = lastAt
+        ? distanceMeters(lastAt, pos) > PLACES_REFRESH_THRESHOLD_M
+        : false;
+      if (!parks.length || movedFar) {
         const fetched = await fetchNearbyParks(pos);
         if (fetched.length) {
           parks = fetched;
-          set({ parks });
+          set({ parks, lastParksFetchPos: pos });
+        } else if (!parks.length) {
+          // First-fetch failure (Places not loaded, fetch returned 0).
+          // Don't update lastParksFetchPos so we retry next call.
         }
       }
       const { food } = await api.getFoodNearby(pos, parks.length ? parks : undefined);
@@ -500,10 +529,19 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   syncSpots: async (pos) => {
+    // Skip the round-trip when the cache is fresh enough — Places is
+    // pricey, and the spots tab calls this on every focus. Re-fetch
+    // when the user has moved past the threshold OR we have nothing
+    // cached at all.
+    const lastAt = get().lastSpotsFetchPos;
+    const movedFar = lastAt
+      ? distanceMeters(lastAt, pos) > PLACES_REFRESH_THRESHOLD_M
+      : false;
+    if (get().spots.length > 0 && !movedFar) return;
     set({ spotsLoading: true });
     try {
       const spots = await fetchNearbySpots(pos);
-      set({ spots, spotsLoading: false });
+      set({ spots, lastSpotsFetchPos: pos, spotsLoading: false });
     } catch (err) {
       set({ spotsLoading: false, lastSyncError: (err as Error).message });
     }

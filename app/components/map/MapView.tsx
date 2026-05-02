@@ -88,6 +88,7 @@ export default function MapViewWeb() {
   const setUserPosition = useGameStore((s) => s.setUserPosition);
   const syncTokens = useGameStore((s) => s.syncTokens);
   const syncFood = useGameStore((s) => s.syncFood);
+  const syncSpots = useGameStore((s) => s.syncSpots);
   const syncLostDogs = useGameStore((s) => s.syncLostDogs);
   const collectPath = useGameStore((s) => s.collectPath);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
@@ -175,6 +176,13 @@ export default function MapViewWeb() {
     syncTokens(userPos);
     syncFood(userPos);
     syncLostDogs(userPos);
+    // Spots are fetched lazily on the spots tab + the visit radial
+    // submenu, but on long walks the cached set drifts stale and the
+    // map's spots layer keeps showing the original neighbourhood. Hit
+    // syncSpots here too — the action is movement-gated internally so
+    // most ticks are no-ops, only paying a Places round-trip when the
+    // user has crossed the threshold.
+    syncSpots(userPos);
     const id = setInterval(() => {
       const pos = useGameStore.getState().userPosition;
       if (!pos) return;
@@ -182,9 +190,18 @@ export default function MapViewWeb() {
       syncTokens(pos);
       syncFood(pos);
       syncLostDogs(pos);
+      syncSpots(pos);
     }, TOKEN_REFRESH_MS);
     return () => clearInterval(id);
-  }, [userPos?.lat, userPos?.lng, collectPath, syncTokens, syncFood, syncLostDogs]);
+  }, [
+    userPos?.lat,
+    userPos?.lng,
+    collectPath,
+    syncTokens,
+    syncFood,
+    syncLostDogs,
+    syncSpots,
+  ]);
 
   // Pull the active quest (if any) on mount so a refreshed tab sees the
   // quest the user started earlier. No polling — quest state only changes
