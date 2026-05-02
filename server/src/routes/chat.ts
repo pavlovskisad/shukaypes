@@ -119,6 +119,12 @@ const plugin: FastifyPluginAsync = async (app) => {
           max_tokens: 400,
           system,
           messages,
+          // Hard guarantee against the model fabricating a fake user
+          // turn at the tail of its own reply (seen in PWA sessions
+          // where the stored memory note had transcript-style "user:"
+          // / "assistant:" prefixes that primed continuation). Stops
+          // generation the moment the model tries to emit one.
+          stop_sequences: ['\nUser:', '\nuser:', '\nHuman:', '\nhuman:'],
         });
         const final = await stream.finalMessage();
         const text = (final.content.filter((b) => b.type === 'text') as Anthropic.TextBlock[])
@@ -193,6 +199,8 @@ const plugin: FastifyPluginAsync = async (app) => {
                 '*ambient beat — you see or smell something on the walk right now. say one short thing to the human. max 6 words, lowercase, like a bubble on the map.*',
             },
           ],
+          // Same belt-and-braces fake-turn guard as the active chat.
+          stop_sequences: ['\nUser:', '\nuser:', '\nHuman:', '\nhuman:'],
         });
         const final = await stream.finalMessage();
         const text = (final.content.filter((b) => b.type === 'text') as Anthropic.TextBlock[])

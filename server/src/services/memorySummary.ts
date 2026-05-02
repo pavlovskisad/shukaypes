@@ -107,11 +107,23 @@ Write the updated memory now.`;
     });
     const block = resp.content.find((c) => c.type === 'text');
     if (!block || block.type !== 'text') return;
-    const next = block.text.trim().slice(0, MAX_NOTE_CHARS);
-    if (!next) return;
+    // Strip transcript-style prefixes Haiku occasionally echoes from
+    // the input format ("user: ...", "assistant: ..."). Without this,
+    // a stored note can contain those prefixes, get loaded into the
+    // active chat's system prompt, and prime Sonnet to fabricate fake
+    // "User: ..." continuations at the tail of its own reply (PWA bug
+    // observed 2026-05-02). Active chat also has stop_sequences as a
+    // belt-and-braces guard.
+    const cleaned = block.text
+      .split('\n')
+      .filter((line) => !/^\s*(user|assistant|human|ai)\s*:/i.test(line))
+      .join('\n')
+      .trim()
+      .slice(0, MAX_NOTE_CHARS);
+    if (!cleaned) return;
     await db
       .update(schema.companionState)
-      .set({ memoryNotes: next })
+      .set({ memoryNotes: cleaned })
       .where(eq(schema.companionState.userId, userId));
   } catch {
     // Memory update is best-effort; don't surface failures.
