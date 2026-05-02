@@ -67,7 +67,7 @@ export default function MapViewWeb() {
   const [expandedClusterKey, setExpandedClusterKey] = useState<string | null>(null);
   const userPos = location.position;
 
-  const { pos: companionPos, mode: companionMode } = useCompanion(userPos);
+  const companionPos = useCompanion(userPos);
   // Tracks the map's visible bounds so we can detect when the
   // companion has wandered (or been panned) off-screen and surface a
   // tap-to-recenter indicator at the screen edge.
@@ -726,7 +726,6 @@ export default function MapViewWeb() {
         {companionPos ? (
           <Companion
             position={companionPos}
-            mode={companionMode}
             bubble={bubble}
             onTap={() => {
               companionTappedAtRef.current = Date.now();
