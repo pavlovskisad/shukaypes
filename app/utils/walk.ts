@@ -28,12 +28,17 @@ export const WALK_FAR_M = 3000;
 // ~3-8 candidates for "close" walks and lets the score break ties.
 const SPOT_BUCKET_M = 500;
 
-// Perpendicular nudge for the roundtrip return leg. Larger offset =
-// more pronounced loop (less overlap with outbound) but adds distance
-// to the total walk. We use min(MAX, legDist × FRACTION) so short
-// walks get a small nudge and long walks get a sensible cap.
-const RETURN_NUDGE_FRACTION = 0.3;
-const RETURN_NUDGE_MAX_M = 400;
+// Perpendicular nudge for the roundtrip return leg. The via-point is
+// pushed offsetM perpendicular to the origin→dest midpoint; Google
+// Directions then has to route via different streets to reach it. The
+// previous 0.3 / 400m bounds were too gentle — on a 500m leg the
+// nudge was only 150m, well within one Kyiv block, so Google often
+// picked the same streets back. Bumped to 0.5 / 800m so the loop is
+// visibly distinct: a 500m leg now nudges 250m (most of a block over),
+// and a 1500m leg nudges the full 750m. Adds ~25-30% to total walk
+// distance vs straight out-and-back, but the user gets a real loop.
+const RETURN_NUDGE_FRACTION = 0.5;
+const RETURN_NUDGE_MAX_M = 800;
 
 // Walk-friendliness bias per category. Lower = more preferred. Park
 // is strongly preferred (negative) so it'll outrank an equidistant

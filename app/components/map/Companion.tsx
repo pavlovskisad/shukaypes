@@ -212,9 +212,24 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
         // destinations get null here; the polyline endpoint speaks for
         // itself.
         const spotId = plan.primary.isSpot ? plan.primary.id : null;
-        void fetchWalkingRoute(ctxPos, plan.waypoints).then((route) => {
+        void fetchWalkingRoute(ctxPos, plan.waypoints).then(async (route) => {
           if (route) {
             useGameStore.getState().setWalkRoute(route, { shape, spotId });
+            return;
+          }
+          // Fallback for roundtrips: the perpendicular via-point may
+          // have landed somewhere Google can't walk to (river, gated
+          // park, etc) and the whole call returned null. Retry with
+          // the via-point stripped — at least the user gets out-and-
+          // back instead of a missing polyline. One-way and degenerate
+          // (no-detour) plans don't have a via-point to drop, so just
+          // accept the null.
+          if (plan.hasReturnDetour && plan.waypoints.length === 3) {
+            const fallback = [plan.waypoints[0]!, plan.waypoints[2]!]; // [dest, origin]
+            const route2 = await fetchWalkingRoute(ctxPos, fallback);
+            if (route2) {
+              useGameStore.getState().setWalkRoute(route2, { shape, spotId });
+            }
           }
         });
         return;

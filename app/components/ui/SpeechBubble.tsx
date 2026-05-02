@@ -7,9 +7,10 @@ interface SpeechBubbleProps {
 // places the bubble's bottom edge ~14px above the nose so it hugs the
 // companion instead of floating up into the top radial-menu button.
 //
-// maxWidth uses `min(280px, calc(100vw - 32px))` so a long Haiku-
-// generated narration wraps inside the viewport instead of running
-// off-screen when the companion is near a map edge. whiteSpace stays
+// maxWidth is `min(60vw, 320px)` — roughly half the screen on most
+// phones, capped so it doesn't get unwieldy on tablets. The previous
+// 280px cap was wrapping common bubbles ("long roundtrip to St.
+// Andrew's Church 🚶") into 8-line strips. whiteSpace stays
 // `pre-line` so explicit \n breaks (e.g. *sniff sniff*\n…) render as
 // real lines.
 export function SpeechBubble({ text }: SpeechBubbleProps) {
@@ -30,7 +31,7 @@ export function SpeechBubble({ text }: SpeechBubbleProps) {
         fontFamily: 'system-ui, -apple-system, sans-serif',
         whiteSpace: 'pre-line',
         wordBreak: 'break-word',
-        maxWidth: 'min(280px, calc(100vw - 32px))',
+        maxWidth: 'min(60vw, 320px)',
         textAlign: 'center',
         boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
         pointerEvents: 'none',
