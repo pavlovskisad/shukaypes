@@ -1,0 +1,20 @@
+{
+  "name": "шукайпес",
+  "short_name": "шукайпес",
+  "description": "find lost pets in kyiv. real walks, real dogs.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#f5f5f5",
+  "theme_color": "#ffffff",
+  "lang": "uk",
+  "icons": [
+    {
+      "src": "/icon.png",
+      "sizes": "192x192 512x512 any",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ]
+}
