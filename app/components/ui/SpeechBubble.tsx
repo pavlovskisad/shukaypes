@@ -7,12 +7,15 @@ interface SpeechBubbleProps {
 // places the bubble's bottom edge ~14px above the nose so it hugs the
 // companion instead of floating up into the top radial-menu button.
 //
-// maxWidth is `min(60vw, 320px)` — roughly half the screen on most
-// phones, capped so it doesn't get unwieldy on tablets. The previous
-// 280px cap was wrapping common bubbles ("long roundtrip to St.
-// Andrew's Church 🚶") into 8-line strips. whiteSpace stays
-// `pre-line` so explicit \n breaks (e.g. *sniff sniff*\n…) render as
-// real lines.
+// `width: max-content` is the key — without it the bubble inherits a
+// shrink-to-fit constraint from the companion's `display: flex; width:
+// 140` parent and ends up wrapping every word onto its own line. With
+// max-content, the bubble takes its preferred natural width (full
+// single-line text) and only wraps when that exceeds maxWidth.
+// maxWidth caps at half the screen on phones with a sensible upper
+// bound for tablets. whiteSpace stays `pre-line` for explicit \n
+// breaks; wordBreak dropped because the maxWidth alone now handles
+// long Haiku narrations without forcing per-character splits.
 export function SpeechBubble({ text }: SpeechBubbleProps) {
   if (!text) return null;
   return (
@@ -30,8 +33,8 @@ export function SpeechBubble({ text }: SpeechBubbleProps) {
         lineHeight: 1.35,
         fontFamily: 'system-ui, -apple-system, sans-serif',
         whiteSpace: 'pre-line',
-        wordBreak: 'break-word',
-        maxWidth: 'min(60vw, 320px)',
+        width: 'max-content',
+        maxWidth: 'min(70vw, 340px)',
         textAlign: 'center',
         boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
         pointerEvents: 'none',
