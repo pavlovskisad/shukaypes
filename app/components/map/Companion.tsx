@@ -22,7 +22,6 @@ import {
   type WalkShape,
 } from '../../utils/walk';
 import { DogSprite, type DogAnim } from './DogSprite';
-import type { CompanionMode } from '../../hooks/useCompanion';
 
 const VISIT_LEAVES_PER_CATEGORY = 3;
 
@@ -67,10 +66,6 @@ function getCurrentActions(
 
 interface CompanionProps {
   position: LatLng;
-  // Hook-derived state: 'hunt' = chasing prey, 'return' = lerping back
-  // to orbit pos after a hunt, 'idle' = at orbit pos. Drives sprite
-  // anim swap (running vs walking/sitting).
-  mode: CompanionMode;
   bubble: string | null;
   onTapCompanion?: () => void;
   // Fires on EVERY tap (open and close), before the menu state changes.
@@ -84,7 +79,7 @@ interface CompanionProps {
 // (bubble, menu) live inside this OverlayView div so they move with the map
 // (demo's floatPane pattern). The expanding aura rings were a bit much —
 // we'll revisit that animation later when we have the right sensor metaphor.
-export function Companion({ position, mode, bubble, onTapCompanion, onTap }: CompanionProps) {
+export function Companion({ position, bubble, onTapCompanion, onTap }: CompanionProps) {
   const router = useRouter();
   const menuOpen = useGameStore((s) => s.menuOpen);
   const setMenuOpen = useGameStore((s) => s.setMenuOpen);
@@ -102,14 +97,29 @@ export function Companion({ position, mode, bubble, onTapCompanion, onTap }: Com
   // accumulate dangling timers — each new tap cancels the previous one.
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Sprite facing — derived from horizontal position deltas. The
-  // sheets are right-facing only, so a leftward dlng flips via
-  // scaleX(-1) rather than a separate mirrored asset.
+  // Sprite facing + motion state, both derived from per-tick position
+  // deltas (the hook ticks every 100ms and pushes a fresh `position`
+  // prop). The sheets are right-facing only, so a leftward dlng flips
+  // via scaleX(-1) rather than a separate mirrored asset.
+  //
+  // Three motion levels with thresholds tuned to the lerp speeds in
+  // useCompanion (HUNT_STEP_M=1.5/tick, IDLE_STEP_M=0.8/tick, lerp tail
+  // decelerates the last few metres of any approach):
+  //   - movedM > RUN_THRESHOLD: running sprite. Hits during hunt
+  //     pursuit + return-to-orbit while still > 7m from target.
+  //   - RUN_THRESHOLD ≥ movedM > WALK_THRESHOLD: walking sprite. Hits
+  //     during the lerp tail (approaching prey or orbit) and while
+  //     keeping pace with a walking user.
+  //   - movedM ≤ WALK_THRESHOLD: sitting sprite, after a debounce so
+  //     a single quiet tick mid-walk doesn't blink to sit.
+  // The walking sprite naturally appears in the last ~2-3m of every
+  // hunt approach (the dog "trots in to sniff") instead of running at
+  // full speed right up to the prey.
+  const RUN_THRESHOLD_M = 0.4;
+  const WALK_THRESHOLD_M = 0.04;
+  const STILL_DEBOUNCE_MS = 400;
+  const [motion, setMotion] = useState<'still' | 'walking' | 'running'>('still');
   const [facingLeft, setFacingLeft] = useState(false);
-  // Whether the companion's apparent position has changed enough this
-  // tick to count as motion. Mode='idle' + isMoving=true is "walking
-  // alongside the user"; mode='idle' + isMoving=false is "sitting".
-  const [isMoving, setIsMoving] = useState(false);
   const lastPosRef = useRef<LatLng | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => {
@@ -117,19 +127,34 @@ export function Companion({ position, mode, bubble, onTapCompanion, onTap }: Com
     lastPosRef.current = position;
     if (!last) return;
     const movedM = distanceMeters(last, position);
-    const MOTION_THRESHOLD_M = 0.3;
-    if (movedM < MOTION_THRESHOLD_M) return;
-    setIsMoving(true);
-    const dLng = position.lng - last.lng;
-    if (Math.abs(dLng) > 1e-7) setFacingLeft(dLng < 0);
-    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
-    idleTimerRef.current = setTimeout(() => setIsMoving(false), 400);
+    if (movedM > RUN_THRESHOLD_M) setMotion('running');
+    else if (movedM > WALK_THRESHOLD_M) setMotion('walking');
+    if (movedM > WALK_THRESHOLD_M) {
+      const dLng = position.lng - last.lng;
+      if (Math.abs(dLng) > 1e-7) setFacingLeft(dLng < 0);
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = setTimeout(() => setMotion('still'), STILL_DEBOUNCE_MS);
+    }
   }, [position]);
   useEffect(() => {
     return () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
     };
   }, []);
+
+  // Tapping the dog opens the radial menu and freezes the lerp (the
+  // hook bails early while menuOpen). Without this the sprite would
+  // keep cycling its last running/walking frames "glued in place" for
+  // up to STILL_DEBOUNCE_MS — reads as a bug. Force-sit immediately so
+  // the dog visibly stops to acknowledge the interaction.
+  useEffect(() => {
+    if (!menuOpen) return;
+    if (idleTimerRef.current) {
+      clearTimeout(idleTimerRef.current);
+      idleTimerRef.current = null;
+    }
+    setMotion('still');
+  }, [menuOpen]);
 
   // Sniff override — bumped by gameStore.collectPulse on every paw or
   // bone collect (auto OR forced). When it ticks, show the sniffing
@@ -153,13 +178,13 @@ export function Companion({ position, mode, bubble, onTapCompanion, onTap }: Com
   }, []);
 
   // Anim priority: sniffing (transient collect beat) wins over
-  // everything; otherwise hunt/return mean the dog is sprinting (running
-  // sprite); otherwise we fall back to walking-when-moving / sitting.
+  // everything; otherwise straight mapping from observed motion level
+  // to the matching sprite cycle.
   const anim: DogAnim = sniffing
     ? 'sniffing'
-    : mode === 'hunt' || mode === 'return'
+    : motion === 'running'
       ? 'running'
-      : isMoving
+      : motion === 'walking'
         ? 'walking'
         : 'sitting';
 

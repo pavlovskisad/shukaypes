@@ -10,30 +10,25 @@ import type { LatLng, FoodItem, Token } from '@shukajpes/shared';
 // Sized so it covers a comfortable two blocks around the walker.
 const HUNT_RADIUS_M = 200;
 
-// Pursuit speed cap. Movement per 100ms tick is min(MAX_STEP_M,
-// remaining * LERP_TAIL). Lerp shape gives smooth deceleration as
-// the companion arrives; the cap prevents the "flash" effect on far
-// targets where lerping a percentage of a 100m gap covers tens of
-// meters in a single frame.
-//   MAX_STEP_M = 0.8 → 8 m/s, decisive dog run, fast enough to close
-//                      on items as the walker keeps moving but well
-//                      shy of a teleport.
-//   LERP_TAIL  = 0.2 → only ever active in the last ~4m, soft stop.
-const MAX_STEP_M = 0.8;
+// Two speed caps. Lerp shape (distance * LERP_TAIL) softens the
+// approach for both, but the cap dominates while the dog is far.
+//   HUNT_STEP_M = 1.5 → 15 m/s, real-dog sprint. Used for chasing prey
+//                       AND running back from a finished hunt — both
+//                       are "I am closing distance fast" moments.
+//   IDLE_STEP_M = 0.8 → 8 m/s, decisive trot. Used for keeping pace
+//                       with a walking user from the orbit ring; gentle
+//                       feel rather than a sprint.
+// LERP_TAIL = 0.2 only kicks in inside the last ~7m for HUNT and ~4m
+// for IDLE; produces a natural deceleration that the sprite picks up
+// as a swap from running to walking.
+const HUNT_STEP_M = 1.5;
+const IDLE_STEP_M = 0.8;
 const LERP_TAIL = 0.2;
 
-// Distance from the orbit "follow position" below which we consider
-// the companion settled into idle. Above this, we're still lerping
-// back from a hunt — exposed as mode 'return' so the sprite can show
-// the running cycle instead of walking.
+// Distance from the orbit "follow position" below which we stop
+// sprinting and just keep pace with the user. Above this we treat the
+// situation as "we got separated" and sprint home at HUNT_STEP_M.
 const ORBIT_SETTLE_M = 3;
-
-export type CompanionMode = 'idle' | 'hunt' | 'return';
-
-export interface CompanionState {
-  pos: LatLng | null;
-  mode: CompanionMode;
-}
 
 function findNearestTarget(
   userPos: LatLng,
@@ -55,10 +50,10 @@ function findNearestTarget(
   return best?.pos ?? null;
 }
 
-function lerpStep(from: LatLng, to: LatLng): LatLng {
+function lerpStep(from: LatLng, to: LatLng, maxStepM: number): LatLng {
   const distM = distanceMeters(from, to);
   if (distM < 0.5) return to;
-  const stepM = Math.min(MAX_STEP_M, distM * LERP_TAIL);
+  const stepM = Math.min(maxStepM, distM * LERP_TAIL);
   const ratio = stepM / distM;
   return {
     lat: from.lat + (to.lat - from.lat) * ratio,
@@ -66,23 +61,24 @@ function lerpStep(from: LatLng, to: LatLng): LatLng {
   };
 }
 
-// Companion has three modes:
-//   - hunt:   a paw or bone is inside HUNT_RADIUS_M of the walker;
-//             slide toward it. Auto-collect (uses min(user, companion)
-//             distance) eats it on arrival.
-//   - return: no prey, but companion is still far from orbit pos —
-//             lerp back toward the user's wake. Shows up after a hunt
-//             completes far from the user.
-//   - idle:   at orbit pos. Original sin-wobble around balance.roamRadius.
+// Companion has three contexts internally:
+//   - hunt:   a paw or bone is inside HUNT_RADIUS_M of the walker.
+//             Sprint at HUNT_STEP_M toward it. Auto-collect (uses
+//             min(user, companion) distance) eats it on arrival.
+//   - return: no prey, but companion is still > ORBIT_SETTLE_M from
+//             orbit pos — sprint back at HUNT_STEP_M.
+//   - idle:   close to orbit pos. Trot at IDLE_STEP_M to keep pace
+//             with a walking user.
 //
-// Both hunt and return use the same lerp shape; only the target
-// differs. The previous version JUMPED to orbit pos when prey left the
-// hunt radius, which read as a teleport — now we lerp.
+// We don't expose this distinction to the consumer — the sprite
+// machinery in Companion.tsx derives running vs walking vs sitting
+// purely from the observed velocity, so the lerp tail's natural
+// deceleration as the dog approaches its target produces the running
+// → walking sprite swap automatically.
 //
 // Pauses entirely while the radial menu is open so taps land cleanly.
-export function useCompanion(userPos: LatLng | null): CompanionState {
+export function useCompanion(userPos: LatLng | null): LatLng | null {
   const [pos, setPos] = useState<LatLng | null>(null);
-  const [mode, setMode] = useState<CompanionMode>('idle');
   const angleRef = useRef(Math.random() * Math.PI * 2);
   const targetRef = useRef(angleRef.current);
 
@@ -114,22 +110,23 @@ export function useCompanion(userPos: LatLng | null): CompanionState {
       };
 
       if (hunt) {
-        setMode('hunt');
-        setPos((prev) => lerpStep(prev ?? userPos, hunt));
+        setPos((prev) => lerpStep(prev ?? userPos, hunt, HUNT_STEP_M));
         return;
       }
 
-      // No prey — head back to (or stay at) orbit pos.
+      // No prey — head back to (or stay at) orbit pos. Sprint while
+      // we're far from where the user wants us; gentle trot once
+      // we're close enough to be just "following alongside".
       setPos((prev) => {
         const from = prev ?? userPos;
         const distToOrbitM = distanceMeters(from, orbitPos);
-        setMode(distToOrbitM > ORBIT_SETTLE_M ? 'return' : 'idle');
-        return lerpStep(from, orbitPos);
+        const stepCap = distToOrbitM > ORBIT_SETTLE_M ? HUNT_STEP_M : IDLE_STEP_M;
+        return lerpStep(from, orbitPos, stepCap);
       });
     }, balance.roamTick);
 
     return () => clearInterval(id);
   }, [userPos?.lat, userPos?.lng]);
 
-  return { pos, mode };
+  return pos;
 }
