@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import {
   View,
@@ -50,7 +50,8 @@ export default function SpotsScreen() {
   const loading = useGameStore((s) => s.spotsLoading);
   const syncSpots = useGameStore((s) => s.syncSpots);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
-  const [filter, setFilter] = useState<FilterValue>('all');
+  const filter = useGameStore((s) => s.spotsCategoryFilter);
+  const setFilter = useGameStore((s) => s.setSpotsCategoryFilter);
 
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('spots');
