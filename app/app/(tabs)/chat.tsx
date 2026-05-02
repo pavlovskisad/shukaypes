@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import {
   View,
   Text,
@@ -16,7 +16,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
-import { api } from '../../services/api';
+import { api, type CompanionAction } from '../../services/api';
 import type { ChatMessage } from '@shukajpes/shared';
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
@@ -37,8 +37,11 @@ function linkify(text: string): Array<{ kind: 'text' | 'link'; value: string }> 
 }
 
 export default function ChatScreen() {
+  const router = useRouter();
   const userPosition = useGameStore((s) => s.userPosition);
   const companionName = useGameStore((s) => s.companionName);
+  const startQuest = useGameStore((s) => s.startQuest);
+  const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
@@ -46,6 +49,33 @@ export default function ChatScreen() {
   const [bootError, setBootError] = useState<string | null>(null);
   const scrollRef = useRef<ScrollView>(null);
   const bootedRef = useRef(false);
+
+  // Dispatch a structured action attached to the assistant's reply.
+  // Each branch calls the same gameStore action the radial menu /
+  // lost-pet modal would, then routes to the map so the user actually
+  // sees the result. Errors are swallowed — the assistant's text
+  // already landed; an action failure shouldn't poison the chat.
+  const dispatchAction = useCallback(
+    async (action: CompanionAction): Promise<string | null> => {
+      try {
+        switch (action.name) {
+          case 'start_quest':
+            await startQuest(action.args.dogId);
+            router.push('/');
+            return '🔍 starting search…';
+          case 'highlight_spot':
+            setSelectedSpot(action.args.spotId);
+            router.push('/');
+            return '📍 showing spot…';
+          default:
+            return null;
+        }
+      } catch {
+        return null;
+      }
+    },
+    [startQuest, setSelectedSpot, router],
+  );
 
   useFocusEffect(
     useCallback(() => {
@@ -117,6 +147,25 @@ export default function ChatScreen() {
           createdAt: new Date().toISOString(),
         },
       ]);
+      // If the companion attached an action, dispatch it. The
+      // gameStore mutation + router.push happen first; then we
+      // surface a tiny system bubble so the user knows something
+      // happened (the action's effect is on a different tab).
+      if (res.action) {
+        const note = await dispatchAction(res.action);
+        if (note) {
+          setMessages((m) => [
+            ...m,
+            {
+              id: `act-${Date.now()}`,
+              role: 'assistant',
+              content: note,
+              mode: 'active',
+              createdAt: new Date().toISOString(),
+            },
+          ]);
+        }
+      }
     } catch (err) {
       setMessages((m) => [
         ...m,
@@ -132,7 +181,7 @@ export default function ChatScreen() {
       setSending(false);
       setTyping(false);
     }
-  }, [draft, sending, userPosition]);
+  }, [draft, sending, userPosition, dispatchAction]);
 
   const header = useMemo(() => companionName || 'шукайпес', [companionName]);
 

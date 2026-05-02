@@ -10,6 +10,14 @@ import { getDeviceId } from './deviceId';
 // and modal — tracked as a v2 cleanup.
 export type PetSpecies = 'dog' | 'cat';
 
+// Mirror of server/src/services/actionParser.ts CompanionAction.
+// Kept narrow here — the chat dispatcher only acts on names it knows;
+// any new server-side action lands as a TypeScript error here first
+// to remind us to wire the client handler.
+export type CompanionAction =
+  | { name: 'start_quest'; args: { dogId: string } }
+  | { name: 'highlight_spot'; args: { spotId: string } };
+
 export interface NearbyLostDog {
   id: string;
   name: string;
@@ -157,7 +165,14 @@ export const api = {
   getChatHistory: () => req<{ messages: ChatMessage[] }>('/chat/history'),
 
   sendChat: (text: string, pos: LatLng | null, greet = false) =>
-    req<{ id: string; text: string; action: string | null }>('/chat', {
+    req<{
+      id: string;
+      text: string;
+      // Server-parsed structured action the companion attached to the
+      // reply. Currently only `start_quest` is wired end-to-end; new
+      // names land as the parser + client dispatch grow.
+      action: CompanionAction | null;
+    }>('/chat', {
       method: 'POST',
       body: JSON.stringify({ text, greet, lat: pos?.lat, lng: pos?.lng }),
     }),

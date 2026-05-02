@@ -8,21 +8,13 @@ import { CORE_SYSTEM } from '../prompts/core.js';
 import { ACTIONS_SYSTEM } from '../prompts/actions.js';
 import { loadMemoryBlock } from '../prompts/memory.js';
 import { buildContextBlock } from '../prompts/context.js';
+import { parseActionTag, type CompanionAction } from '../services/actionParser.js';
+import { scheduleMemoryUpdate } from '../services/memorySummary.js';
 
 const HISTORY_LIMIT = 10;
 const MAX_INPUT_CHARS = 2000;
 
 interface Pos { lat?: number; lng?: number }
-
-function sanitizeText(raw: string): { visible: string; rawAction: string | null } {
-  // Strip the machine-only <<act:...>> suffix from user-visible text.
-  const m = raw.match(/<<act:[^:]+:[\s\S]*?>>\s*$/);
-  if (!m) return { visible: raw.trim(), rawAction: null };
-  return {
-    visible: raw.slice(0, m.index).trim(),
-    rawAction: m[0],
-  };
-}
 
 async function assembleSystem(userId: string, pos: Pos): Promise<Anthropic.TextBlockParam[]> {
   // Render order is tools → system → messages. Keep stable blocks first
@@ -133,7 +125,7 @@ const plugin: FastifyPluginAsync = async (app) => {
           .map((b) => b.text)
           .join(' ')
           .trim() || 'woof...';
-        const { visible, rawAction } = sanitizeText(text);
+        const { visible, action } = parseActionTag(text);
         const usage = final.usage;
 
         const assistantId = nanoid();
@@ -150,6 +142,10 @@ const plugin: FastifyPluginAsync = async (app) => {
           cacheWriteTokens: usage.cache_creation_input_tokens ?? 0,
         });
 
+        // Fire-and-forget memory summarisation — only actually calls
+        // the model every Nth turn, see services/memorySummary.ts.
+        scheduleMemoryUpdate(req.userId);
+
         req.log.info(
           {
             kind: 'chat_cost',
@@ -159,12 +155,16 @@ const plugin: FastifyPluginAsync = async (app) => {
             out: usage.output_tokens,
             cacheRead: usage.cache_read_input_tokens ?? 0,
             cacheWrite: usage.cache_creation_input_tokens ?? 0,
-            action: rawAction ? 'present' : 'none',
+            action: action?.name ?? 'none',
           },
           'chat active turn',
         );
 
-        return { id: assistantId, text: visible, action: rawAction };
+        return {
+          id: assistantId,
+          text: visible,
+          action: action satisfies CompanionAction | null,
+        };
       } catch (err) {
         req.log.error({ err }, 'chat active failed');
         reply.code(502);
@@ -199,7 +199,9 @@ const plugin: FastifyPluginAsync = async (app) => {
           .map((b) => b.text)
           .join(' ')
           .trim() || '*sniff sniff*';
-        const { visible } = sanitizeText(text);
+        // Ambient bubbles are short — strip any stray action tag the
+        // model might have appended; we don't dispatch from ambient.
+        const { visible } = parseActionTag(text);
         const usage = final.usage;
 
         await db.insert(schema.messages).values({
