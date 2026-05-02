@@ -53,6 +53,131 @@ const WALK_CATEGORY_BIAS: Record<string, number> = {
   veterinary_care: 2.5,
 };
 
+// Variety knobs — combat "tap walk → same destination every time".
+//   - We track the last RECENT_LIMIT destinations in localStorage and
+//     add a score penalty so they sink in the rank. After RECENT_LIMIT
+//     different walks the oldest cycles back in.
+//   - "Quality band" sampling: any candidate within QUALITY_BAND
+//     score of the best is treated as comparable and picked
+//     uniformly. "Best" is subjective when there are several decent
+//     parks / cafés in range, so a fixed top-1 weighting always
+//     pinned the same destination; uniform-within-band lets the user
+//     discover the city instead of relived loop.
+const RECENT_LIMIT = 3;
+const RECENT_PENALTY_PER_RANK = 2.0;
+const TOP_K = 6;
+const QUALITY_BAND = 1.5;
+const RECENT_STORAGE_KEY = 'shukajpes.walks.recent.v1';
+
+function loadRecentIds(): string[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(0, RECENT_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+
+// Drop the existing entry for this id (so re-picking it pushes it to
+// the top instead of accumulating duplicates), prepend, truncate.
+export function recordRecentDestination(id: string): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const prev = loadRecentIds().filter((x) => x !== id);
+    const next = [id, ...prev].slice(0, RECENT_LIMIT);
+    window.localStorage.setItem(RECENT_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // storage full / disabled — variety still works for this session
+    // via the in-process pickFromTopK; just no cross-tap memory.
+  }
+}
+
+// Same recent-penalty mechanism applied to the radial visit submenu —
+// "Companion → visit → cafe → 3 closest" used to surface the same 3
+// names every time. With this, the picker scores spots by distance +
+// recent-visit penalty and random-samples 3 from the top of the
+// score-sorted list, so consecutive visits to the same category cycle
+// through different names.
+const RECENT_VISIT_LIMIT = 4;
+const RECENT_VISIT_PENALTY_PER_RANK_M = 400;
+const VISIT_TOP_K = 8;
+const RECENT_VISIT_STORAGE_KEY = 'shukajpes.visits.recent.v1';
+
+function loadRecentVisitIds(): string[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_VISIT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(0, RECENT_VISIT_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function recordRecentVisit(id: string): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const prev = loadRecentVisitIds().filter((x) => x !== id);
+    const next = [id, ...prev].slice(0, RECENT_VISIT_LIMIT);
+    window.localStorage.setItem(RECENT_VISIT_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // storage off — in-session variety via the random sample still works.
+  }
+}
+
+interface VisitCandidate {
+  id: string;
+  position: LatLng;
+}
+
+// Distance (meters) + per-rank recent penalty. Closer = better; recent
+// picks get pushed by RECENT_VISIT_PENALTY_PER_RANK_M per rank so a
+// 200m-away spot you visited yesterday sinks below a 500m-away one
+// you've never been to.
+function visitScore<T extends VisitCandidate>(
+  c: T,
+  origin: LatLng,
+  recentIds: string[],
+): number {
+  const distM = distanceMeters(origin, c.position);
+  const recentIdx = recentIds.indexOf(c.id);
+  const penalty =
+    recentIdx >= 0
+      ? (RECENT_VISIT_LIMIT - recentIdx) * RECENT_VISIT_PENALTY_PER_RANK_M
+      : 0;
+  return distM + penalty;
+}
+
+// Score the candidate pool, take the top VISIT_TOP_K, randomly sample
+// `count` of them without replacement. Stable per call — caller should
+// memoise with appropriate deps so the sample doesn't re-roll on every
+// parent render.
+export function pickVisitCandidates<T extends VisitCandidate>(
+  candidates: T[],
+  origin: LatLng,
+  count: number,
+): T[] {
+  if (candidates.length === 0) return [];
+  const recentIds = loadRecentVisitIds();
+  const scored = candidates
+    .map((c) => ({ c, s: visitScore(c, origin, recentIds) }))
+    .sort((a, b) => a.s - b.s)
+    .slice(0, VISIT_TOP_K);
+  // Fisher-Yates shuffle of the top-K then slice — uniform random
+  // sample without replacement, no recency bias inside the sample.
+  for (let i = scored.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = scored[i]!;
+    scored[i] = scored[j]!;
+    scored[j] = tmp;
+  }
+  return scored.slice(0, count).map((x) => x.c);
+}
+
 export interface WalkCandidate {
   id: string;
   name: string;
@@ -97,12 +222,42 @@ export function buildCandidates(spots: Spot[], parks: Park[]): WalkCandidate[] {
   return [...fromSpots, ...fromParks];
 }
 
-function score(candidate: WalkCandidate, distM: number, targetM: number): number {
+function score(
+  candidate: WalkCandidate,
+  distM: number,
+  targetM: number,
+  recentIds: string[],
+): number {
   const distErr = Math.abs(distM - targetM) / targetM; // 0 perfect, 1 100% off
   const distScore = distErr * distErr * 10;
   const ratingScore = -(candidate.rating ?? 3) * 0.4;
   const catBias = WALK_CATEGORY_BIAS[candidate.category] ?? 1;
-  return distScore + ratingScore + catBias;
+  // Recent picks sink. recentIdx 0 = most recent (heaviest penalty);
+  // entries past RECENT_LIMIT are absent. The penalty is large enough
+  // to push a recent #1 out of TOP_K when other candidates are within
+  // ~RECENT_PENALTY_PER_RANK score of it.
+  const recentIdx = recentIds.indexOf(candidate.id);
+  const recentPenalty =
+    recentIdx >= 0 ? (RECENT_LIMIT - recentIdx) * RECENT_PENALTY_PER_RANK : 0;
+  return distScore + ratingScore + catBias + recentPenalty;
+}
+
+function pickFromQualityBand(
+  scored: { c: WalkCandidate; s: number }[],
+): WalkCandidate | null {
+  if (scored.length === 0) return null;
+  // "Best" is subjective when several parks/cafés are roughly
+  // comparable. Take everyone within QUALITY_BAND of the leader,
+  // capped at TOP_K so a flat city block doesn't put every nearby
+  // spot on the ballot. Then pick uniformly — democratic, no
+  // ranked-bias toward whichever scored a hair higher.
+  const best = scored[0]!.s;
+  const band = scored
+    .filter((x) => x.s - best <= QUALITY_BAND)
+    .slice(0, TOP_K);
+  if (band.length === 1) return band[0]!.c;
+  const idx = Math.floor(Math.random() * band.length);
+  return band[idx]!.c;
 }
 
 function pickBest(
@@ -111,14 +266,15 @@ function pickBest(
   targetM: number,
 ): WalkCandidate | null {
   if (candidates.length === 0) return null;
+  const recentIds = loadRecentIds();
   const scored = candidates
     .map((c) => ({ c, d: distanceMeters(origin, c.position) }))
-    .map((x) => ({ ...x, s: score(x.c, x.d, targetM) }));
+    .map((x) => ({ ...x, s: score(x.c, x.d, targetM, recentIds) }));
   // Prefer the band; widen if empty.
   const band = scored.filter(({ d }) => Math.abs(d - targetM) <= SPOT_BUCKET_M);
   const pool = band.length ? band : scored;
   pool.sort((a, b) => a.s - b.s);
-  return pool[0]?.c ?? null;
+  return pickFromQualityBand(pool);
 }
 
 // Compute a synthetic via-point offset perpendicular to the

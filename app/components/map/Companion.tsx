@@ -17,7 +17,10 @@ import type { SpotCategory, Spot } from '../../services/places';
 import { fetchWalkingRoute } from '../../services/directions';
 import {
   buildCandidates,
+  pickVisitCandidates,
   planWalk,
+  recordRecentDestination,
+  recordRecentVisit,
   type WalkDistance,
   type WalkShape,
 } from '../../utils/walk';
@@ -49,16 +52,17 @@ function getCurrentActions(
     if (path.length === 1) return VISIT_CATEGORY_ACTIONS;
     if (!userPos) return [];
     const category = path[1]!.replace('visit:', '') as SpotCategory;
-    return spots
-      .filter((s) => s.category === category)
-      .map((s) => ({ s, d: distanceMeters(userPos, s.position) }))
-      .sort((a, b) => a.d - b.d)
-      .slice(0, VISIT_LEAVES_PER_CATEGORY)
-      .map(({ s }) => ({
-        id: `visit:spot:${s.id}`,
-        icon: s.icon ?? '📍',
-        label: s.name.slice(0, 16),
-      }));
+    const inCategory = spots.filter((s) => s.category === category);
+    // Democratic pick — score by distance + recent-visit penalty, take
+    // top-8, randomly sample VISIT_LEAVES_PER_CATEGORY of them. Same
+    // family as the walk planner's recent-destination logic; consecutive
+    // taps into the same category surface different names.
+    const sampled = pickVisitCandidates(inCategory, userPos, VISIT_LEAVES_PER_CATEGORY);
+    return sampled.map((s) => ({
+      id: `visit:spot:${s.id}`,
+      icon: s.icon ?? '📍',
+      label: s.name.slice(0, 16),
+    }));
   }
   return PRIMARY_ACTIONS;
 }
@@ -306,6 +310,10 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
         void fetchWalkingRoute(ctxPos, plan.waypoints).then(async (route) => {
           if (route) {
             useGameStore.getState().setWalkRoute(route, { shape, spotId });
+            // Only record successful walks — if Google couldn't route
+            // to this destination, we don't want to penalize it on the
+            // next tap (the user never actually got that walk).
+            recordRecentDestination(plan.primary.id);
             return;
           }
           // Fallback for roundtrips: the perpendicular via-point may
@@ -320,6 +328,7 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             const route2 = await fetchWalkingRoute(ctxPos, fallback);
             if (route2) {
               useGameStore.getState().setWalkRoute(route2, { shape, spotId });
+              recordRecentDestination(plan.primary.id);
             }
           }
         });
@@ -334,6 +343,10 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           flash("can't find that one anymore");
           return;
         }
+        // Feed the recent-visit list so next time the user opens the
+        // visit submenu in this category, this spot sinks in the
+        // ranking and other names surface.
+        recordRecentVisit(spot.id);
         setSelectedSpot(spot.id);
         flash(`let's check out ${spot.name} ${spot.icon ?? '📍'}`);
         return;
