@@ -73,4 +73,17 @@ export const balance = {
   collectMaxDistanceM: 150,
   // Rate limit (hits) per 1min window on /collect.
   collectRateLimitPerMin: 120,
+  // Search-zone slow-grow. Active lost pets get a wider walking
+  // circle as days-since-last-seen grows — the post is older, the
+  // pet has had more time to drift. Computed against last_seen_at,
+  // capped at maxRadiusM so we don't blow up the map. The cron
+  // bumps every row to LEAST(maxRadiusM, GREATEST(current, base +
+  // days * growthPerDayM)) so a row that was reduced by hand never
+  // shrinks back. Hourly tick is plenty — the curve moves slowly.
+  zoneExpansion: {
+    baseRadiusM: 500,
+    growthPerDayM: 150,
+    maxRadiusM: 2500,
+    intervalMs: 60 * 60 * 1000,
+  },
 } as const;

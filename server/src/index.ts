@@ -15,6 +15,7 @@ import statsRoute from './routes/stats.js';
 import profileRoute from './routes/profile.js';
 import pathRoute from './routes/path.js';
 import { startDecayCron } from './services/decay.js';
+import { startZoneExpansionCron } from './services/searchZoneExpansion.js';
 import { startScrapeCron } from './services/scrape.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
@@ -84,18 +85,21 @@ async function main() {
   // The seedLostDogs() CLI in db/seed-dogs.ts still works for local dev.
   const stopDecay = startDecayCron();
   const stopScrape = startScrapeCron(app.log);
+  const stopZoneExpansion = startZoneExpansionCron();
   try {
     await app.listen({ port: PORT, host: HOST });
   } catch (err) {
     app.log.error(err);
     stopDecay();
     stopScrape();
+    stopZoneExpansion();
     process.exit(1);
   }
 
   const shutdown = async () => {
     stopDecay();
     stopScrape();
+    stopZoneExpansion();
     await app.close();
     process.exit(0);
   };
