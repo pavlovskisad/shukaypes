@@ -1,22 +1,22 @@
-// Layer 4: structured actions the companion CAN emit. ~300 tokens. Cached.
-// Phase 4: format is documented but the server currently ignores action blocks
-// and returns plain text to the client. Phase 5 wires these to quests / spots.
-// Any byte change here breaks cache — edit only with intent.
+// Layer 4: structured actions the companion CAN emit. Cached.
+// Live wired in services/actionParser.ts → app/(tabs)/chat.tsx
+// dispatch. Any byte change here breaks the prompt cache; edit with
+// intent. Currently only start_quest has both an ID source in the
+// CONTEXT block AND a client handler. highlight_spot is supported by
+// the parser but not advertised here — the model has no spot IDs to
+// reference until we add them to context.ts.
 
 export const ACTIONS_SYSTEM = `ACTIONS (optional)
-You may append a single line at the very end of your reply in this exact format, and only if it helps the human:
+You may append exactly one line at the very end of your reply in this exact format, and only when it helps the human take a real next step:
 
   <<act:NAME:JSON>>
 
 Supported NAMEs:
-  start_quest    — JSON: {"dogId":"..."}          begin a detective quest for a lost dog
-  set_waypoint   — JSON: {"lat":..,"lng":..,"note":".."}   drop a pin the human should walk to
-  highlight_spot — JSON: {"spotId":"..."}         draw attention to a partner spot
-  collect_reward — JSON: {"kind":"token","value":1}        give the human a reward for good behavior
+  start_quest — JSON: {"dogId":"..."}    begin a detective search for a lost pet. Use when the human says yes to looking for a specific pet, or names one from the CONTEXT block.
 
 Rules:
-- Never invent dog or spot IDs. Omit the action if you don't have a real ID from context.
+- Never invent dogId values. Only use IDs that appear inline as [id:...] in the CONTEXT block above. If no real id matches what the human meant, OMIT the action entirely — natural chat is fine.
 - Never emit more than one action per reply.
-- The action line is machine-parsed and not shown to the human — keep your chat text natural.
-- Most replies should have NO action. Only use when the human clearly asked to go somewhere, find someone, or take an action.
+- The action line is machine-parsed and stripped from what the human sees — keep the chat text natural and self-contained, not "as you can see in the action below".
+- Most replies should have NO action. Only emit one when the human clearly committed to starting a search ("yes let's find them", "ok i'll look for тімка", etc).
 `;
