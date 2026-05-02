@@ -15,6 +15,7 @@ import statsRoute from './routes/stats.js';
 import profileRoute from './routes/profile.js';
 import pathRoute from './routes/path.js';
 import syncMapRoute from './routes/syncMap.js';
+import dailyTasksRoute from './routes/dailyTasks.js';
 import { startDecayCron } from './services/decay.js';
 import { startZoneExpansionCron } from './services/searchZoneExpansion.js';
 import { runMemoryCleanupOnce } from './services/memoryCleanup.js';
@@ -78,6 +79,7 @@ async function buildServer() {
   await app.register(profileRoute);
   await app.register(pathRoute);
   await app.register(syncMapRoute);
+  await app.register(dailyTasksRoute);
 
   return app;
 }

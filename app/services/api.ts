@@ -261,4 +261,27 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ questId }),
     }),
+
+  // Daily-task progress — server-backed since PR #161.
+  getDailyTasks: (date: string) =>
+    req<{
+      tasks: {
+        date: string;
+        tokens: number;
+        bones: number;
+        lostPetChecks: number;
+        spotVisits: number;
+        sightings: number;
+      };
+    }>(`/tasks/today?date=${encodeURIComponent(date)}`),
+
+  tickDailyTask: (
+    date: string,
+    key: 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings',
+    amount = 1,
+  ) =>
+    req<{ ok: true }>('/tasks/tick', {
+      method: 'POST',
+      body: JSON.stringify({ date, key, amount }),
+    }),
 };

@@ -76,7 +76,7 @@ const TASKS: TaskRow[] = [
 export default function TasksScreen() {
   const router = useRouter();
   const dailyTasks = useGameStore((s) => s.dailyTasks);
-  const refresh = useGameStore((s) => s.refreshDailyTasksIfStale);
+  const refresh = useGameStore((s) => s.refreshDailyTasks);
   const lostDogs = useGameStore((s) => s.lostDogs);
   const userPos = useGameStore((s) => s.userPosition);
   const activeQuest = useGameStore((s) => s.activeQuest);
