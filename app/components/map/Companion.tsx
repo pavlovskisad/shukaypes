@@ -98,7 +98,7 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
   // accumulate dangling timers — each new tap cancels the previous one.
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const flash = useCallback((msg: string, ms = 2500) => {
+  const flash = useCallback((msg: string, ms = 4500) => {
     setLocalBubble(msg);
     if (bubbleTimeoutRef.current) clearTimeout(bubbleTimeoutRef.current);
     bubbleTimeoutRef.current = setTimeout(() => setLocalBubble(null), ms);
@@ -172,11 +172,12 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
       // Walk leaves: walk:<shape>:<distance>. Pulls candidates from
       // both the spots layer (cafés, restaurants, bars, pet shops,
       // vets) AND the parks list, scores them by walk-friendliness +
-      // distance-fit, then routes. Roundtrips try a real triangular
-      // loop (origin → A → B → origin) when two well-spaced
-      // candidates exist, and fall back to out-and-back via A
-      // otherwise. We deliberately don't setSelectedSpot — that's the
-      // "open details modal" channel and a walk shouldn't pop a modal.
+      // distance-fit, then routes. Roundtrips go to a single
+      // destination but return via a perpendicular nudge point so the
+      // back leg uses different streets — the user gets a unique loop
+      // home from one tap. We deliberately don't setSelectedSpot —
+      // that's the "open details modal" channel and a walk shouldn't
+      // pop a modal.
       if (id.startsWith('walk:')) {
         const parts = id.split(':'); // ['walk', shape, distance]
         const shape = (parts[1] ?? 'roundtrip') as WalkShape;
@@ -204,13 +205,8 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
         // Clear any open spot-detail modal — the user shifted intent.
         setSelectedSpot(null);
         const distLabel = distance === 'far' ? 'long' : 'short';
-        const label =
-          shape === 'roundtrip' && plan.isLoop && plan.secondary
-            ? `${distLabel} loop via ${plan.primary.name} & ${plan.secondary.name} 🚶`
-            : shape === 'roundtrip'
-              ? `${distLabel} roundtrip to ${plan.primary.name} 🚶`
-              : `${distLabel} one-way to ${plan.primary.name} 🚶`;
-        flash(label);
+        const shapeLabel = shape === 'roundtrip' ? 'roundtrip' : 'one-way';
+        flash(`${distLabel} ${shapeLabel} to ${plan.primary.name} 🚶`);
         // walkRouteMeta.spotId only makes sense when destination IS a
         // spot — keeps its marker visible regardless of toggle. Park
         // destinations get null here; the polyline endpoint speaks for

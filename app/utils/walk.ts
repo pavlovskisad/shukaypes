@@ -1,13 +1,14 @@
-// Walk planner — picks 1 or 2 destinations from the spots + parks
-// pools and produces the polyline waypoints + a nice human label.
+// Walk planner — picks ONE destination from the spots + parks pools
+// and produces the polyline waypoints + a nice human label.
 //
 // Design goals:
 // - One-way walks should land somewhere "nice for a walk", with parks
 //   strongly preferred over errand-y categories (vet, pet shop).
-// - Roundtrips should be REAL loops (origin → A → B → origin) when
-//   we have two well-spaced candidates, instead of out-and-back along
-//   the same street. Falls back to out-and-back when no second leg
-//   is reasonable (small candidate pool, dense category, etc).
+// - Roundtrips go to a single destination but return via a different
+//   street, not retracing. We accomplish this by inserting a synthetic
+//   via-point offset perpendicular to the outbound bearing midpoint —
+//   Google Directions then routes the second leg via different streets
+//   to hit that nudge point. User gets one tap → unique loop home.
 
 import type { LatLng } from '@shukajpes/shared';
 import { distanceMeters } from './geo';
@@ -16,9 +17,8 @@ import type { Spot, Park } from '../services/places';
 export type WalkShape = 'oneway' | 'roundtrip';
 export type WalkDistance = 'close' | 'far';
 
-// Total leg-distance budgets (one-way) / total-loop budgets
-// (roundtrip). For roundtrip, each leg targets half this so the total
-// matches what the user picked.
+// Total walk distance budgets. For one-way that's the trip length;
+// for roundtrip it's out + back combined, so each leg targets half.
 export const WALK_CLOSE_M = 1000;
 export const WALK_FAR_M = 3000;
 
@@ -28,11 +28,12 @@ export const WALK_FAR_M = 3000;
 // ~3-8 candidates for "close" walks and lets the score break ties.
 const SPOT_BUCKET_M = 500;
 
-// Two candidates are "well-spaced" for a real loop when their bearings
-// from the origin differ by at least this many degrees. 80° is a soft
-// triangle — anything tighter and the two waypoints are close to
-// collinear with origin, so the loop visually folds in on itself.
-const MIN_LOOP_BEARING_DEG = 80;
+// Perpendicular nudge for the roundtrip return leg. Larger offset =
+// more pronounced loop (less overlap with outbound) but adds distance
+// to the total walk. We use min(MAX, legDist × FRACTION) so short
+// walks get a small nudge and long walks get a sensible cap.
+const RETURN_NUDGE_FRACTION = 0.3;
+const RETURN_NUDGE_MAX_M = 400;
 
 // Walk-friendliness bias per category. Lower = more preferred. Park
 // is strongly preferred (negative) so it'll outrank an equidistant
@@ -61,16 +62,15 @@ export interface WalkCandidate {
 
 export interface WalkPlan {
   // Waypoints in fetchWalkingRoute(origin, waypoints) order. For
-  // one-way that's just [destination]; for roundtrip-loop it's
-  // [A, B, origin]; for roundtrip-out-and-back it's [destination,
-  // origin].
+  // one-way: [destination]. For roundtrip: [destination, via, origin]
+  // where `via` is a synthetic perpendicular nudge that pushes the
+  // return leg onto different streets.
   waypoints: LatLng[];
   primary: WalkCandidate;
-  // Set only for real loops — the via-point on the way back.
-  secondary: WalkCandidate | null;
-  // True when we built a real triangular loop, false for out-and-back
-  // fallbacks. Consumed by the bubble label.
-  isLoop: boolean;
+  // True when we managed to inject a perpendicular nudge — the
+  // typical case for roundtrips. False on degenerate routes (zero-
+  // length outbound, etc), which fall back to plain out-and-back.
+  hasReturnDetour: boolean;
 }
 
 export function buildCandidates(spots: Spot[], parks: Park[]): WalkCandidate[] {
@@ -116,16 +116,28 @@ function pickBest(
   return pool[0]?.c ?? null;
 }
 
-function bearingDeg(from: LatLng, to: LatLng): number {
-  const dy = to.lat - from.lat;
-  const dx = to.lng - from.lng;
-  return (Math.atan2(dy, dx) * 180) / Math.PI;
-}
-
-function angularDiff(a: number, b: number): number {
-  let d = Math.abs(a - b) % 360;
-  if (d > 180) d = 360 - d;
-  return d;
+// Compute a synthetic via-point offset perpendicular to the
+// origin→dest line, at `offsetM` from the midpoint. Picking the
+// "right-hand" side of the outbound bearing is arbitrary but
+// deterministic — Google Directions then has to route via different
+// streets to hit it, so the return leg differs from the outbound.
+// Flat-earth math is fine here (walks are <5km).
+function perpendicularVia(origin: LatLng, dest: LatLng, offsetM: number): LatLng {
+  const midLat = (origin.lat + dest.lat) / 2;
+  const midLng = (origin.lng + dest.lng) / 2;
+  const latMPerDeg = 111_000;
+  const lngMPerDeg = 111_000 * Math.cos((midLat * Math.PI) / 180);
+  const dxM = (dest.lng - origin.lng) * lngMPerDeg;
+  const dyM = (dest.lat - origin.lat) * latMPerDeg;
+  const length = Math.sqrt(dxM * dxM + dyM * dyM);
+  if (length === 0) return { lat: midLat, lng: midLng };
+  // Unit perpendicular, rotated 90° clockwise (x, y) → (y, -x).
+  const px = dyM / length;
+  const py = -dxM / length;
+  return {
+    lat: midLat + (py * offsetM) / latMPerDeg,
+    lng: midLng + (px * offsetM) / lngMPerDeg,
+  };
 }
 
 export function planWalk(args: {
@@ -141,33 +153,25 @@ export function planWalk(args: {
   if (shape === 'oneway') {
     const pick = pickBest(candidates, origin, totalTargetM);
     if (!pick) return null;
-    return { waypoints: [pick.position], primary: pick, secondary: null, isLoop: false };
+    return { waypoints: [pick.position], primary: pick, hasReturnDetour: false };
   }
 
-  // Roundtrip — try a real loop first.
+  // Roundtrip — pick a destination at half the total budget so out +
+  // back ≈ totalTargetM, then push the return through a perpendicular
+  // via-point so Google Directions takes different streets back.
   const legM = totalTargetM / 2;
-  const A = pickBest(candidates, origin, legM);
-  if (!A) return null;
-  const bearA = bearingDeg(origin, A.position);
-  const others = candidates.filter((c) => c.id !== A.id);
-  const wellSpaced = others.filter(
-    (c) => angularDiff(bearingDeg(origin, c.position), bearA) >= MIN_LOOP_BEARING_DEG,
-  );
-  const B = pickBest(wellSpaced, origin, legM);
-
-  if (B) {
-    return {
-      waypoints: [A.position, B.position, origin],
-      primary: A,
-      secondary: B,
-      isLoop: true,
-    };
+  const dest = pickBest(candidates, origin, legM);
+  if (!dest) return null;
+  const legDist = distanceMeters(origin, dest.position);
+  if (legDist === 0) {
+    return { waypoints: [dest.position, origin], primary: dest, hasReturnDetour: false };
   }
-  // No good second leg — out-and-back via A.
+  const offsetM = Math.min(RETURN_NUDGE_MAX_M, legDist * RETURN_NUDGE_FRACTION);
+  const via = perpendicularVia(origin, dest.position, offsetM);
   return {
-    waypoints: [A.position, origin],
-    primary: A,
-    secondary: null,
-    isLoop: false,
+    waypoints: [dest.position, via, origin],
+    primary: dest,
+    hasReturnDetour: true,
   };
 }
+
