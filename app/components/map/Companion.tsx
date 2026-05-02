@@ -28,42 +28,41 @@ import { DogSprite, type DogAnim } from './DogSprite';
 
 const VISIT_LEAVES_PER_CATEGORY = 3;
 
-// Resolves the actions for the current menu level. Path is a stack of
-// branch ids ('walk', 'walk:roundtrip', etc). Empty = root.
-function getCurrentActions(
-  path: string[],
+// Builds the visit-leaf actions for the current category. Pulled out
+// so it can be memoised + cached separately from the rest of the menu
+// (the `spots` reference flips on every /sync/map tick — without
+// caching, the radial menu's 3 names would shuffle every 15s while
+// the user is reading them).
+function buildVisitLeaves(
+  category: SpotCategory,
   spots: Spot[],
-  userPos: LatLng | null,
+  userPos: LatLng,
 ): RadialAction[] {
+  const inCategory = spots.filter((s) => s.category === category);
+  const sampled = pickVisitCandidates(inCategory, userPos, VISIT_LEAVES_PER_CATEGORY);
+  return sampled.map((s) => ({
+    id: `visit:spot:${s.id}`,
+    icon: s.icon ?? '📍',
+    label: s.name.slice(0, 16),
+  }));
+}
+
+// Resolves the actions for the non-leaf menu levels. Visit leaves are
+// computed separately in the component so they can be ref-cached.
+function getNonVisitActions(path: string[]): RadialAction[] | null {
   const head = path[0];
   if (!head) return PRIMARY_ACTIONS;
   if (head === 'walk') {
     if (path.length === 1) return WALK_SHAPE_ACTIONS;
-    // path[1] is 'walk:roundtrip' or 'walk:oneway'; rewrite the leaf
-    // ids to encode the full shape:distance combo so the handler can
-    // dispatch on a single string.
     const shape = path[1]!.replace('walk:', ''); // 'roundtrip' | 'oneway'
     return WALK_DISTANCE_ACTIONS.map((a) => ({
       ...a,
       id: `walk:${shape}${a.id}`, // a.id starts with ':', e.g. ':close'
     }));
   }
-  if (head === 'visit') {
-    if (path.length === 1) return VISIT_CATEGORY_ACTIONS;
-    if (!userPos) return [];
-    const category = path[1]!.replace('visit:', '') as SpotCategory;
-    const inCategory = spots.filter((s) => s.category === category);
-    // Democratic pick — score by distance + recent-visit penalty, take
-    // top-8, randomly sample VISIT_LEAVES_PER_CATEGORY of them. Same
-    // family as the walk planner's recent-destination logic; consecutive
-    // taps into the same category surface different names.
-    const sampled = pickVisitCandidates(inCategory, userPos, VISIT_LEAVES_PER_CATEGORY);
-    return sampled.map((s) => ({
-      id: `visit:spot:${s.id}`,
-      icon: s.icon ?? '📍',
-      label: s.name.slice(0, 16),
-    }));
-  }
+  if (head === 'visit' && path.length === 1) return VISIT_CATEGORY_ACTIONS;
+  // null = caller falls through to visit-leaf logic
+  if (head === 'visit') return null;
   return PRIMARY_ACTIONS;
 }
 
@@ -393,10 +392,31 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
     [menuPath, fireLeafAction, setMenuOpen]
   );
 
-  const currentActions = useMemo(
-    () => getCurrentActions(menuPath, spots, userPosition),
-    [menuPath, spots, userPosition]
-  );
+  // Visit-leaf cache — keyed by the category drill (path[1] like
+  // 'visit:cafe'). pickVisitCandidates uses Math.random, so without
+  // this cache, every /sync/map tick (which changes the `spots`
+  // reference) would re-shuffle the names while the user is reading
+  // them. Cleared whenever the menu closes so the next open gets a
+  // fresh sample.
+  const visitLeavesCacheRef = useRef<{ key: string; leaves: RadialAction[] } | null>(null);
+  useEffect(() => {
+    if (!menuOpen) visitLeavesCacheRef.current = null;
+  }, [menuOpen]);
+
+  const currentActions = useMemo(() => {
+    const nonVisit = getNonVisitActions(menuPath);
+    if (nonVisit) return nonVisit;
+    // We're at visit:<category>. Use the cached picks if the category
+    // hasn't changed; otherwise compute + cache.
+    if (!userPosition) return [];
+    const visitKey = menuPath[1]!;
+    const cached = visitLeavesCacheRef.current;
+    if (cached && cached.key === visitKey) return cached.leaves;
+    const category = visitKey.replace('visit:', '') as SpotCategory;
+    const leaves = buildVisitLeaves(category, spots, userPosition);
+    visitLeavesCacheRef.current = { key: visitKey, leaves };
+    return leaves;
+  }, [menuPath, spots, userPosition]);
 
   // Hide bubbles while the radial menu is open — otherwise the bubble
   // (above the companion) and the top "search" button fight for the

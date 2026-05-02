@@ -28,16 +28,36 @@ export const WALK_FAR_M = 3000;
 // ~3-8 candidates for "close" walks and lets the score break ties.
 const SPOT_BUCKET_M = 500;
 
+// Minimum pool size before we'd give up and pick "the only candidate
+// in band" — at low candidate density the band can hold 1-2 and the
+// recent-penalty / sampling becomes a no-op. When the band is too
+// thin, fall back to the top scorers from the FULL list. Long-distance
+// walks (1500m+ legs) are the typical sparse case in Kyiv.
+const MIN_POOL_SIZE = 4;
+
+// Distance floor as a fraction of target. Without this, a strongly-
+// scoring 200m park would beat a 1000m target and the user gets a
+// "close walk" that's barely a stroll. 0.6 means "close" walks are at
+// least 600m, "far" at least 1800m — still leaves room for distance
+// scoring to prefer something near the target.
+const MIN_DISTANCE_FRACTION = 0.6;
+
 // Perpendicular nudge for the roundtrip return leg. The via-point is
 // pushed offsetM perpendicular to the origin→dest midpoint; Google
-// Directions then has to route via different streets to reach it. The
-// previous 0.3 / 400m bounds were too gentle — on a 500m leg the
-// nudge was only 150m, well within one Kyiv block, so Google often
-// picked the same streets back. Bumped to 0.5 / 800m so the loop is
-// visibly distinct: a 500m leg now nudges 250m (most of a block over),
-// and a 1500m leg nudges the full 750m. Adds ~25-30% to total walk
-// distance vs straight out-and-back, but the user gets a real loop.
-const RETURN_NUDGE_FRACTION = 0.5;
+// Directions then has to route via different streets to reach it.
+//   FRACTION_SHORT applies to legs shorter than NUDGE_FRACTION_BREAK_M
+//   (~600m) — the harder push is needed because short urban legs
+//   often have only one walkable arterial back. Above the break we
+//   use the gentler FRACTION_LONG so long legs aren't stretched
+//   unrealistically.
+//   MAX caps the absolute nudge so a 5km leg doesn't push the via-
+//   point a full kilometre off-route.
+//   The SIGN is randomized per call (left or right) so consecutive
+//   short roundtrips to the same destination route via different
+//   street networks instead of always picking the same loop.
+const RETURN_NUDGE_FRACTION_SHORT = 0.8;
+const RETURN_NUDGE_FRACTION_LONG = 0.5;
+const RETURN_NUDGE_BREAK_M = 600;
 const RETURN_NUDGE_MAX_M = 800;
 
 // Walk-friendliness bias per category. Lower = more preferred. Park
@@ -267,23 +287,45 @@ function pickBest(
 ): WalkCandidate | null {
   if (candidates.length === 0) return null;
   const recentIds = loadRecentIds();
-  const scored = candidates
+  // Distance floor — exclude "too close to count as that walk distance"
+  // candidates BEFORE scoring so they can't sneak in via the quality
+  // band. A 200m park scoring great on rating + park-bias would
+  // otherwise beat a 950m target on a "close" walk.
+  const minDistM = targetM * MIN_DISTANCE_FRACTION;
+  const eligible = candidates.filter(
+    (c) => distanceMeters(origin, c.position) >= minDistM,
+  );
+  // If the floor wipes out everything (sparse area, all candidates
+  // closer than minDistM), fall back to the full set so the user
+  // gets *something* rather than a "no spot" error.
+  const baseList = eligible.length ? eligible : candidates;
+  const scored = baseList
     .map((c) => ({ c, d: distanceMeters(origin, c.position) }))
-    .map((x) => ({ ...x, s: score(x.c, x.d, targetM, recentIds) }));
-  // Prefer the band; widen if empty.
+    .map((x) => ({ ...x, s: score(x.c, x.d, targetM, recentIds) }))
+    .sort((a, b) => a.s - b.s);
+  // Prefer the band; if it's too thin (sparse city block / long-leg
+  // walks where the band is wide and empty), widen to top scorers
+  // from the full eligible list. MIN_POOL_SIZE ensures the variety
+  // sampling has at least 4 options to choose from.
   const band = scored.filter(({ d }) => Math.abs(d - targetM) <= SPOT_BUCKET_M);
-  const pool = band.length ? band : scored;
-  pool.sort((a, b) => a.s - b.s);
+  const pool =
+    band.length >= MIN_POOL_SIZE ? band : scored.slice(0, MIN_POOL_SIZE);
   return pickFromQualityBand(pool);
 }
 
 // Compute a synthetic via-point offset perpendicular to the
-// origin→dest line, at `offsetM` from the midpoint. Picking the
-// "right-hand" side of the outbound bearing is arbitrary but
-// deterministic — Google Directions then has to route via different
-// streets to hit it, so the return leg differs from the outbound.
+// origin→dest line, at `offsetM * sign` from the midpoint. `sign` of
+// +1 picks the right-hand side of the outbound bearing (90° CW), -1
+// picks the left. Caller randomises sign per call so consecutive
+// roundtrips to the same destination route via different street
+// networks instead of always picking the same loop.
 // Flat-earth math is fine here (walks are <5km).
-function perpendicularVia(origin: LatLng, dest: LatLng, offsetM: number): LatLng {
+function perpendicularVia(
+  origin: LatLng,
+  dest: LatLng,
+  offsetM: number,
+  sign: 1 | -1,
+): LatLng {
   const midLat = (origin.lat + dest.lat) / 2;
   const midLng = (origin.lng + dest.lng) / 2;
   const latMPerDeg = 111_000;
@@ -293,8 +335,8 @@ function perpendicularVia(origin: LatLng, dest: LatLng, offsetM: number): LatLng
   const length = Math.sqrt(dxM * dxM + dyM * dyM);
   if (length === 0) return { lat: midLat, lng: midLng };
   // Unit perpendicular, rotated 90° clockwise (x, y) → (y, -x).
-  const px = dyM / length;
-  const py = -dxM / length;
+  const px = (dyM / length) * sign;
+  const py = (-dxM / length) * sign;
   return {
     lat: midLat + (py * offsetM) / latMPerDeg,
     lng: midLng + (px * offsetM) / lngMPerDeg,
@@ -327,8 +369,21 @@ export function planWalk(args: {
   if (legDist === 0) {
     return { waypoints: [dest.position, origin], primary: dest, hasReturnDetour: false };
   }
-  const offsetM = Math.min(RETURN_NUDGE_MAX_M, legDist * RETURN_NUDGE_FRACTION);
-  const via = perpendicularVia(origin, dest.position, offsetM);
+  // Short legs (urban arterial back) get a stronger relative nudge —
+  // Kyiv side streets are sparse, so a gentle 0.5x perpendicular
+  // wasn't enough to push Google off the same road. Long legs use
+  // the lighter 0.5x to avoid an unrealistically stretched loop.
+  const fraction =
+    legDist < RETURN_NUDGE_BREAK_M
+      ? RETURN_NUDGE_FRACTION_SHORT
+      : RETURN_NUDGE_FRACTION_LONG;
+  const offsetM = Math.min(RETURN_NUDGE_MAX_M, legDist * fraction);
+  // Random left-vs-right per call. Same destination tapped twice now
+  // routes via different street networks ~50% of the time, plus the
+  // recent-destination penalty pushes it to a different destination
+  // most of the rest. Combined → real visual variety on roundtrips.
+  const sign: 1 | -1 = Math.random() < 0.5 ? 1 : -1;
+  const via = perpendicularVia(origin, dest.position, offsetM, sign);
   return {
     waypoints: [dest.position, via, origin],
     primary: dest,
