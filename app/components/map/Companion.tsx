@@ -18,6 +18,7 @@ import { fetchWalkingRoute } from '../../services/directions';
 import {
   buildCandidates,
   planWalk,
+  recordRecentDestination,
   type WalkDistance,
   type WalkShape,
 } from '../../utils/walk';
@@ -306,6 +307,10 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
         void fetchWalkingRoute(ctxPos, plan.waypoints).then(async (route) => {
           if (route) {
             useGameStore.getState().setWalkRoute(route, { shape, spotId });
+            // Only record successful walks — if Google couldn't route
+            // to this destination, we don't want to penalize it on the
+            // next tap (the user never actually got that walk).
+            recordRecentDestination(plan.primary.id);
             return;
           }
           // Fallback for roundtrips: the perpendicular via-point may
@@ -320,6 +325,7 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
             const route2 = await fetchWalkingRoute(ctxPos, fallback);
             if (route2) {
               useGameStore.getState().setWalkRoute(route2, { shape, spotId });
+              recordRecentDestination(plan.primary.id);
             }
           }
         });
