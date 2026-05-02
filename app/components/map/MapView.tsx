@@ -331,14 +331,33 @@ export default function MapViewWeb() {
   // are grouped regardless of display jitter. The cluster badge sits at the
   // true centroid; individual pets (singletons + members of small clusters)
   // render at their jittered positions from displayPositions.
-  const clusters = useMemo(
-    () =>
-      clusterByDistance(
-        visibleLostDogs.map((d) => ({ id: d.id, position: d.lastSeen.position, dog: d })),
-        PIN_CLUSTER_RADIUS_M,
-      ),
-    [visibleLostDogs],
-  );
+  //
+  // Each cluster also carries its derived render data (key, dogs[],
+  // dominantUrgency, emojiHint) so the JSX call site doesn't have to
+  // re-compute a fresh array / object every parent render. With these
+  // stable, LostDogCluster's React.memo can actually skip identical-
+  // prop renders during companion-lerp ticks (which fire MapView
+  // re-renders ~10×/s).
+  const clusters = useMemo(() => {
+    const raw = clusterByDistance(
+      visibleLostDogs.map((d) => ({ id: d.id, position: d.lastSeen.position, dog: d })),
+      PIN_CLUSTER_RADIUS_M,
+    );
+    return raw.map((c) => {
+      const key = c.items.map((i) => i.id).sort().join('|');
+      const dogs = c.items.map((i) => i.dog);
+      const dominantUrgency = dogs
+        .map((d) => d.urgency)
+        .reduce<UrgencyLevel>(
+          (best, u) => (URGENCY_RANK[u] > URGENCY_RANK[best] ? u : best),
+          'resolved',
+        );
+      const emojiHint = Array.from(new Set(dogs.map((d) => d.emoji)))
+        .slice(0, 2)
+        .join('');
+      return { ...c, key, dogs, dominantUrgency, emojiHint };
+    });
+  }, [visibleLostDogs]);
 
   // Each pet gets a deterministic display offset inside its own
   // searchZoneRadiusM. Posted location is landmark-level and the zone
@@ -385,20 +404,31 @@ export default function MapViewWeb() {
     return m;
   }, [foodItems, eatFood]);
 
-  // Keys cluster identity on the sorted ids of its members so taps remain
-  // stable across re-renders even if the center drifts slightly.
-  const clusterKey = useCallback(
-    (items: { id: string }[]) => items.map((i) => i.id).sort().join('|'),
-    [],
-  );
-
-  const handleClusterTap = useCallback(
-    (items: { id: string }[]) => {
-      const key = clusterKey(items);
-      setExpandedClusterKey((prev) => (prev === key ? null : key));
-    },
-    [clusterKey],
-  );
+  // Per-cluster stable callback maps. Inline `() => handleClusterTap(c.items)`
+  // / `(id) => setSelectedDog(id)` would be a fresh function on every parent
+  // render, defeating LostDogCluster's React.memo. By keying by cluster.key
+  // (which is itself stable per the cluster-construction memo above), each
+  // callback is a const reference until the underlying cluster set changes.
+  const clusterToggleHandlers = useMemo(() => {
+    const m = new Map<string, () => void>();
+    for (const c of clusters) {
+      const key = c.key;
+      m.set(key, () =>
+        setExpandedClusterKey((prev) => (prev === key ? null : key)),
+      );
+    }
+    return m;
+  }, [clusters]);
+  const clusterSelectHandlers = useMemo(() => {
+    const m = new Map<string, (id: string) => void>();
+    for (const c of clusters) {
+      m.set(c.key, (id: string) => {
+        setExpandedClusterKey(null);
+        setSelectedDog(id);
+      });
+    }
+    return m;
+  }, [clusters, setSelectedDog]);
 
   // When the Spots tab routes the user here with a selection, pan + zoom
   // to that spot once per selection change.
@@ -584,32 +614,20 @@ export default function MapViewWeb() {
               );
             });
           }
-          const key = clusterKey(c.items);
-          const expanded = expandedClusterKey === key;
-          const dominantUrgency = c.items
-            .map((i) => i.dog.urgency)
-            .reduce<UrgencyLevel>(
-              (best, u) => (URGENCY_RANK[u] > URGENCY_RANK[best] ? u : best),
-              'resolved',
-            );
-          // Up to two distinct emojis, in the order they appear, so the
-          // badge hints "dog + cat" vs "two dogs" without clutter.
-          const emojiHint = Array.from(new Set(c.items.map((i) => i.dog.emoji)))
-            .slice(0, 2)
-            .join('');
+          // Stable derived data + callback refs from the cluster
+          // construction memo + handler maps above; React.memo on
+          // LostDogCluster now actually skips noop renders.
+          const expanded = expandedClusterKey === c.key;
           return [
             <LostDogCluster
-              key={`cluster-${key}`}
+              key={`cluster-${c.key}`}
               position={c.center}
-              items={c.items.map((i) => i.dog)}
-              dominantUrgency={dominantUrgency}
-              emojiHint={emojiHint}
+              items={c.dogs}
+              dominantUrgency={c.dominantUrgency}
+              emojiHint={c.emojiHint}
               expanded={expanded}
-              onToggle={() => handleClusterTap(c.items)}
-              onSelectItem={(id) => {
-                setExpandedClusterKey(null);
-                setSelectedDog(id);
-              }}
+              onToggle={clusterToggleHandlers.get(c.key)!}
+              onSelectItem={clusterSelectHandlers.get(c.key)!}
             />,
           ];
         })}

@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import type { NearbyLostDog } from '../../services/api';
@@ -46,11 +47,12 @@ interface LostDogClusterProps {
 // animation pattern as the companion radial menu). Tap the badge again or
 // tap a member pin to collapse.
 //
-// Not memoized yet — items prop is `c.items.map(i => i.dog)` (new array
-// every render) and onToggle/onSelectItem are inline. Memoization
-// requires stabilising at the call site (pre-extracted `dogs` on each
-// cluster + per-id callback maps); deferred to a focused perf pass.
-export function LostDogCluster({
+// Memoized — MapView re-renders ~10×/s during the companion lerp, but
+// the cluster's props are stable across most of those ticks (cluster
+// construction memo holds `dogs`/`dominantUrgency`/`emojiHint`; per-key
+// callback maps hold `onToggle`/`onSelectItem`), so memo cuts the
+// expensive cluster render down to "real changes only".
+function LostDogClusterImpl({
   position,
   items,
   dominantUrgency,
@@ -184,5 +186,7 @@ export function LostDogCluster({
     </OverlayViewF>
   );
 }
+
+export const LostDogCluster = memo(LostDogClusterImpl);
 
 export { URGENCY_RANK };
