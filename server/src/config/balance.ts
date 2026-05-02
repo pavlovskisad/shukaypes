@@ -19,9 +19,10 @@ export const balance = {
   // extra pools inside each nearby active lost-pet search zone, so
   // following a pet's zone earns more pickups than walking random
   // streets. The user-area pool is sized so even a quiet block has
-  // paws to find — 25 in a 1200m disk = ~5 per km², a paw every
-  // ~150m on a typical walk.
-  tokensInUserArea: 25,
+  // paws to find — 35 in a 1200m disk = ~7 per km², a paw every
+  // ~120m on a typical walk. Bumped from 25 after parks ended up
+  // hoarding most of the visible density.
+  tokensInUserArea: 35,
   userAreaRadiusM: 1200,
   // Inner exclusion radius for the user-area pool — paws never spawn
   // inside this disk. Without it, the 15s topup keeps dropping new
@@ -30,11 +31,12 @@ export const balance = {
   // still. Sized comfortably above autoCollectToken (90m).
   userAreaInnerRadiusM: 130,
   tokensPerDogArea: 18,
-  // Per-park pool — when the client passes nearby parks (already
-  // fetched for bone scattering), top up a small ring of paws around
-  // each. Parks are obvious dog-walking destinations, so a paw trail
-  // pointing at one feels natural. 4 paws in a 70m ring per park.
-  tokensPerPark: 4,
+  // Per-park pool — paws cluster around parks as a soft "trail to a
+  // walking destination". Tuned down from 4 → 2 because 4 piled up
+  // visibly when Google's dedupe still left near-overlapping park
+  // entries; the neighbourhood pool was getting drowned out. 2 paws
+  // in a 70m ring still reads as a hint without being a carpet.
+  tokensPerPark: 2,
   parkPawRadiusM: 70,
   // Walking-radius scoping: 20-30min reach rather than 1-2hr. Previously
   // seeded paws in zones up to 4km away; combined with lots of active
