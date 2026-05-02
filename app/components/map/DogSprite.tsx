@@ -20,12 +20,14 @@ import { useEffect, useState } from 'react';
 // trying to fake one with a rotation looks worse than letting the dog
 // slide while still facing east/west.
 
-export type DogAnim = 'walking' | 'sitting';
+export type DogAnim = 'walking' | 'sitting' | 'running' | 'sniffing';
 
 interface Sheet {
   url: string;
   frameCount: number;
-  // ms per frame. Walking is faster than the slower idle breathing.
+  // ms per frame. Walking is moderate, running is faster (3-frame
+  // cycle blurs by quickly), sniffing is slower (the dog is busy with
+  // its nose), sitting is the slowest (idle breathing).
   frameMs: number;
 }
 
@@ -34,6 +36,11 @@ const FRAME_PX = 64;
 const SHEETS: Record<DogAnim, Sheet> = {
   walking: { url: '/dog/walking.png', frameCount: 7, frameMs: 110 },
   sitting: { url: '/dog/sitting.png', frameCount: 5, frameMs: 220 },
+  running: { url: '/dog/running.png', frameCount: 3, frameMs: 80 },
+  // The original Sniffing.png is 512×55 (top whitespace trimmed).
+  // We pre-pad it to 512×64 with a transparent 9px top strip so the
+  // frame grid stays uniform — see scripts in the PR description.
+  sniffing: { url: '/dog/sniffing.png', frameCount: 8, frameMs: 140 },
 };
 
 interface DogSpriteProps {

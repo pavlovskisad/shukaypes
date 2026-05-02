@@ -151,6 +151,13 @@ interface GameState {
   dailyTasks: DailyTasks;
   syncing: boolean;
   lastSyncError: string | null;
+  // Bumped every time a paw or bone gets collected (auto OR forced).
+  // The companion overlay watches this to trigger a brief Sniffing
+  // sprite animation wherever it currently is, regardless of whether
+  // the user or the companion was the one in range. Plain counter
+  // instead of timestamp so subscribers compare with === rather than
+  // worrying about stale-time math; no semantic meaning to the value.
+  collectPulse: number;
 
   setUserPosition: (pos: LatLng) => void;
   setHomePosition: (pos: LatLng) => void;
@@ -243,6 +250,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   dailyTasks: loadTasks(),
   syncing: false,
   lastSyncError: null,
+  collectPulse: 0,
 
   setUserPosition: (pos) =>
     set((s) => ({
@@ -271,6 +279,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         ),
         tokensCollected: s.tokensCollected + 1,
         points: s.points + tok.value,
+        collectPulse: s.collectPulse + 1,
       };
     });
     try {
@@ -313,6 +322,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       return {
         recentlyConsumedIds: next,
         foodItems: s.foodItems.filter((x) => x.id !== id),
+        collectPulse: s.collectPulse + 1,
       };
     });
     try {
