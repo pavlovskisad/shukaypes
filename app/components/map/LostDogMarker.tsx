@@ -111,7 +111,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -18, y: -46 })}
+      getPixelPositionOffset={() => ({ x: -27, y: -68 })}
     >
       <div
         role="button"
@@ -137,9 +137,9 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
               position: 'absolute',
               top: 0,
               left: '50%',
-              width: 36,
-              height: 36,
-              marginLeft: -18,
+              width: 54,
+              height: 54,
+              marginLeft: -27,
               borderRadius: '50%',
               border: `2px solid ${halo.ring}`,
               animation: `sos-beep ${BEEP_DURATION_MS}ms ease-out forwards`,
@@ -151,18 +151,21 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
             otherwise. White ring + urgency glow are unchanged so the pet's
             urgency still reads at a glance whichever way it renders. The
             emoji always renders behind the img so a failed/loading image
-            naturally falls back to the emoji without extra state. */}
+            naturally falls back to the emoji without extra state.
+            Bumped 1.5× from the original 36px so the pin reads at a
+            glance on a busy map; auto-tracking the user's request to
+            make pets more present. */}
         <div
           style={{
             position: 'relative',
-            width: 36,
-            height: 36,
+            width: 54,
+            height: 54,
             borderRadius: '50%',
             background: '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 18,
+            fontSize: 27,
             overflow: 'hidden',
             boxShadow: halo.glow,
           }}
@@ -196,7 +199,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
         <div
           style={{
             fontFamily: SYSTEM_FONT,
-            fontSize: 13,
+            fontSize: 16,
             fontWeight: 700,
             color: '#1a1a1a',
             textShadow: '0 1px 4px rgba(255,255,255,0.95)',

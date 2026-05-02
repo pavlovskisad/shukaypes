@@ -14,8 +14,10 @@ import questsRoute from './routes/quests.js';
 import statsRoute from './routes/stats.js';
 import profileRoute from './routes/profile.js';
 import pathRoute from './routes/path.js';
+import syncMapRoute from './routes/syncMap.js';
 import { startDecayCron } from './services/decay.js';
 import { startZoneExpansionCron } from './services/searchZoneExpansion.js';
+import { runMemoryCleanupOnce } from './services/memoryCleanup.js';
 import { startScrapeCron } from './services/scrape.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
@@ -75,6 +77,7 @@ async function buildServer() {
   await app.register(statsRoute);
   await app.register(profileRoute);
   await app.register(pathRoute);
+  await app.register(syncMapRoute);
 
   return app;
 }
@@ -83,9 +86,13 @@ async function main() {
   const app = await buildServer();
   // Boot-seed dropped — pilot now runs on real scraped pets only.
   // The seedLostDogs() CLI in db/seed-dogs.ts still works for local dev.
-  const stopDecay = startDecayCron();
+  const stopDecay = startDecayCron(app.log);
   const stopScrape = startScrapeCron(app.log);
-  const stopZoneExpansion = startZoneExpansionCron();
+  const stopZoneExpansion = startZoneExpansionCron(app.log);
+  // One-shot retrofit: strip transcript prefixes from any existing
+  // memory notes written before PR #158 added the filter to new
+  // writes. Fire-and-forget so it doesn't delay listen().
+  void runMemoryCleanupOnce(app.log);
   try {
     await app.listen({ port: PORT, host: HOST });
   } catch (err) {

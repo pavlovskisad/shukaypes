@@ -1,6 +1,8 @@
+import type { FastifyBaseLogger } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
+import { runCronTick } from './cronUtils.js';
 
 // Run every tickMs; applies decay proportional to elapsed time since last_decay_at.
 // Clamped so idle users don't go to 0 instantly on first tick after deploy.
@@ -27,9 +29,12 @@ export async function runDecayTick() {
   `);
 }
 
-export function startDecayCron(intervalMs: number = balance.hunger.intervalMs) {
+export function startDecayCron(
+  log: FastifyBaseLogger,
+  intervalMs: number = balance.hunger.intervalMs,
+) {
   const id = setInterval(() => {
-    runDecayTick().catch((err) => console.error('[decay]', err));
+    void runCronTick('decay', runDecayTick, log);
   }, intervalMs);
   id.unref?.();
   return () => clearInterval(id);

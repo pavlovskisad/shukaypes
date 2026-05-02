@@ -45,6 +45,11 @@ interface LostDogClusterProps {
 // When tapped, the member pets float out in a ring around the badge (same
 // animation pattern as the companion radial menu). Tap the badge again or
 // tap a member pin to collapse.
+//
+// Not memoized yet — items prop is `c.items.map(i => i.dog)` (new array
+// every render) and onToggle/onSelectItem are inline. Memoization
+// requires stabilising at the call site (pre-extracted `dogs` on each
+// cluster + per-id callback maps); deferred to a focused perf pass.
 export function LostDogCluster({
   position,
   items,

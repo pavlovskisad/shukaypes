@@ -135,6 +135,27 @@ export const api = {
       `/dogs/nearby?lat=${pos.lat}&lng=${pos.lng}&radius=${radiusM}`,
     ),
 
+  // Bulk variant of the four /tokens/nearby + /food/nearby +
+  // /dogs/nearby + /state calls. One round-trip instead of four; the
+  // client store can also collapse the resulting state into a single
+  // set() so subscribers re-render once instead of four times.
+  syncMap: (pos: LatLng, opts?: { parks?: LatLng[]; radiusM?: number }) => {
+    const params = new URLSearchParams({
+      lat: String(pos.lat),
+      lng: String(pos.lng),
+    });
+    if (opts?.parks && opts.parks.length) {
+      params.set('parks', opts.parks.map((p) => `${p.lat},${p.lng}`).join('|'));
+    }
+    if (opts?.radiusM != null) params.set('radius', String(opts.radiusM));
+    return req<{
+      tokens: Token[];
+      food: FoodItem[];
+      dogs: NearbyLostDog[];
+      state: StateResponse;
+    }>(`/sync/map?${params.toString()}`);
+  },
+
   collectToken: (tokenId: string, pos: LatLng, force = false) =>
     req<{ ok: true; value: number }>('/collect/token', {
       method: 'POST',

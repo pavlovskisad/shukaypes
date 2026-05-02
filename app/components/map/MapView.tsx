@@ -42,6 +42,15 @@ const PIN_CLUSTER_RADIUS_M = 250;
 // around the cluster center so the user sees them at a glance.
 const CLUSTER_BADGE_THRESHOLD = 6;
 
+// Distance from the user beyond which lost-pet pins, paws and bones
+// are not rendered on the map. The full lists stay in the store
+// (Quests tab keeps the city-wide view; auto-collect runs against the
+// store data, not the DOM); we just don't pay the layout cost for
+// pins the user can't act on without walking. ~2km covers a comfortable
+// walking horizon at our zoom levels — anything further is a planning
+// concern, not a "is it nearby" concern.
+const MAP_RENDER_RADIUS_M = 2000;
+
 export default function MapViewWeb() {
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: env.googleMapsApiKey,
@@ -86,10 +95,8 @@ export default function MapViewWeb() {
   const collectToken = useGameStore((s) => s.collectToken);
   const eatFood = useGameStore((s) => s.eatFood);
   const setUserPosition = useGameStore((s) => s.setUserPosition);
-  const syncTokens = useGameStore((s) => s.syncTokens);
-  const syncFood = useGameStore((s) => s.syncFood);
+  const syncMap = useGameStore((s) => s.syncMap);
   const syncSpots = useGameStore((s) => s.syncSpots);
-  const syncLostDogs = useGameStore((s) => s.syncLostDogs);
   const collectPath = useGameStore((s) => s.collectPath);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const activeQuest = useGameStore((s) => s.activeQuest);
@@ -165,43 +172,28 @@ export default function MapViewWeb() {
     if (userPos) setUserPosition(userPos);
   }, [userPos?.lat, userPos?.lng, setUserPosition]);
 
-  // Fetch server state tied to position: spawned tokens + food + nearby lost
-  // dogs. All three refresh on the same interval. collectPath fires
-  // first so any token / bone the user walked past while the tab was
-  // suspended (Safari pauses JS) gets credited *before* the nearby
-  // GETs would otherwise filter them out as still-uncollected.
+  // Fetch server state tied to position: spawned tokens + food + nearby
+  // lost dogs + user/companion state, all in one /sync/map round-trip
+  // (PR #160's bulk endpoint). collectPath fires first so any token /
+  // bone the user walked past while the tab was suspended (Safari
+  // pauses JS) gets credited *before* the bulk sync filters them out
+  // as collected. Spots stay separate — they're driven by Google
+  // Places, not our backend, and the action is movement-gated so most
+  // ticks are no-ops anyway.
   useEffect(() => {
     if (!userPos) return;
     void collectPath(userPos);
-    syncTokens(userPos);
-    syncFood(userPos);
-    syncLostDogs(userPos);
-    // Spots are fetched lazily on the spots tab + the visit radial
-    // submenu, but on long walks the cached set drifts stale and the
-    // map's spots layer keeps showing the original neighbourhood. Hit
-    // syncSpots here too — the action is movement-gated internally so
-    // most ticks are no-ops, only paying a Places round-trip when the
-    // user has crossed the threshold.
+    void syncMap(userPos);
     syncSpots(userPos);
     const id = setInterval(() => {
       const pos = useGameStore.getState().userPosition;
       if (!pos) return;
       void collectPath(pos);
-      syncTokens(pos);
-      syncFood(pos);
-      syncLostDogs(pos);
+      void syncMap(pos);
       syncSpots(pos);
     }, TOKEN_REFRESH_MS);
     return () => clearInterval(id);
-  }, [
-    userPos?.lat,
-    userPos?.lng,
-    collectPath,
-    syncTokens,
-    syncFood,
-    syncLostDogs,
-    syncSpots,
-  ]);
+  }, [userPos?.lat, userPos?.lng, collectPath, syncMap, syncSpots]);
 
   // Pull the active quest (if any) on mount so a refreshed tab sees the
   // quest the user started earlier. No polling — quest state only changes
@@ -294,6 +286,33 @@ export default function MapViewWeb() {
     [],
   );
 
+  // Map-only distance cull. Full lists live in the store (Quests tab,
+  // auto-collect loops, sync diff math); only the rendered DOM is
+  // bounded by MAP_RENDER_RADIUS_M. This is the perf sliding-door —
+  // at city density we can have 100+ active pets and hundreds of
+  // paws/bones, but the user can only act on what's within ~2km of
+  // them. Without the cull every pan re-runs every overlay's wander +
+  // SOS-beep timers.
+  const visibleLostDogs = useMemo(() => {
+    if (!userPos) return lostDogs;
+    return lostDogs.filter(
+      (d) => distanceMeters(userPos, d.lastSeen.position) <= MAP_RENDER_RADIUS_M,
+    );
+  }, [lostDogs, userPos?.lat, userPos?.lng]);
+  const visibleTokens = useMemo(() => {
+    const uncollected = tokens.filter((t) => !t.collectedAt);
+    if (!userPos) return uncollected;
+    return uncollected.filter(
+      (t) => distanceMeters(userPos, t.position) <= MAP_RENDER_RADIUS_M,
+    );
+  }, [tokens, userPos?.lat, userPos?.lng]);
+  const visibleFood = useMemo(() => {
+    if (!userPos) return foodItems;
+    return foodItems.filter(
+      (f) => distanceMeters(userPos, f.position) <= MAP_RENDER_RADIUS_M,
+    );
+  }, [foodItems, userPos?.lat, userPos?.lng]);
+
   // Clustering runs against TRUE positions so "genuinely close reports"
   // are grouped regardless of display jitter. The cluster badge sits at the
   // true centroid; individual pets (singletons + members of small clusters)
@@ -301,10 +320,10 @@ export default function MapViewWeb() {
   const clusters = useMemo(
     () =>
       clusterByDistance(
-        lostDogs.map((d) => ({ id: d.id, position: d.lastSeen.position, dog: d })),
+        visibleLostDogs.map((d) => ({ id: d.id, position: d.lastSeen.position, dog: d })),
         PIN_CLUSTER_RADIUS_M,
       ),
-    [lostDogs],
+    [visibleLostDogs],
   );
 
   // Each pet gets a deterministic display offset inside its own
@@ -581,17 +600,15 @@ export default function MapViewWeb() {
           ];
         })}
 
-        {tokens
-          .filter((t) => !t.collectedAt)
-          .map((t) => (
-            <TokenMarker
-              key={t.id}
-              position={t.position}
-              onTap={tokenTapHandlers.get(t.id)!}
-            />
-          ))}
+        {visibleTokens.map((t) => (
+          <TokenMarker
+            key={t.id}
+            position={t.position}
+            onTap={tokenTapHandlers.get(t.id)!}
+          />
+        ))}
 
-        {foodItems.map((f) => (
+        {visibleFood.map((f) => (
           <FoodMarker key={f.id} position={f.position} onTap={foodTapHandlers.get(f.id)!} />
         ))}
 
