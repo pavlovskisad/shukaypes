@@ -368,7 +368,7 @@ export default function TasksScreen() {
         ) : null}
 
         <Text style={styles.footer}>
-          resets at midnight · progress saved on this device
+          resets at midnight · progress synced to your account
         </Text>
       </ScrollView>
 
