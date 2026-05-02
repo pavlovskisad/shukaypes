@@ -95,6 +95,89 @@ export function recordRecentDestination(id: string): void {
   }
 }
 
+// Same recent-penalty mechanism applied to the radial visit submenu —
+// "Companion → visit → cafe → 3 closest" used to surface the same 3
+// names every time. With this, the picker scores spots by distance +
+// recent-visit penalty and random-samples 3 from the top of the
+// score-sorted list, so consecutive visits to the same category cycle
+// through different names.
+const RECENT_VISIT_LIMIT = 4;
+const RECENT_VISIT_PENALTY_PER_RANK_M = 400;
+const VISIT_TOP_K = 8;
+const RECENT_VISIT_STORAGE_KEY = 'shukajpes.visits.recent.v1';
+
+function loadRecentVisitIds(): string[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_VISIT_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed.slice(0, RECENT_VISIT_LIMIT) : [];
+  } catch {
+    return [];
+  }
+}
+
+export function recordRecentVisit(id: string): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  try {
+    const prev = loadRecentVisitIds().filter((x) => x !== id);
+    const next = [id, ...prev].slice(0, RECENT_VISIT_LIMIT);
+    window.localStorage.setItem(RECENT_VISIT_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // storage off — in-session variety via the random sample still works.
+  }
+}
+
+interface VisitCandidate {
+  id: string;
+  position: LatLng;
+}
+
+// Distance (meters) + per-rank recent penalty. Closer = better; recent
+// picks get pushed by RECENT_VISIT_PENALTY_PER_RANK_M per rank so a
+// 200m-away spot you visited yesterday sinks below a 500m-away one
+// you've never been to.
+function visitScore<T extends VisitCandidate>(
+  c: T,
+  origin: LatLng,
+  recentIds: string[],
+): number {
+  const distM = distanceMeters(origin, c.position);
+  const recentIdx = recentIds.indexOf(c.id);
+  const penalty =
+    recentIdx >= 0
+      ? (RECENT_VISIT_LIMIT - recentIdx) * RECENT_VISIT_PENALTY_PER_RANK_M
+      : 0;
+  return distM + penalty;
+}
+
+// Score the candidate pool, take the top VISIT_TOP_K, randomly sample
+// `count` of them without replacement. Stable per call — caller should
+// memoise with appropriate deps so the sample doesn't re-roll on every
+// parent render.
+export function pickVisitCandidates<T extends VisitCandidate>(
+  candidates: T[],
+  origin: LatLng,
+  count: number,
+): T[] {
+  if (candidates.length === 0) return [];
+  const recentIds = loadRecentVisitIds();
+  const scored = candidates
+    .map((c) => ({ c, s: visitScore(c, origin, recentIds) }))
+    .sort((a, b) => a.s - b.s)
+    .slice(0, VISIT_TOP_K);
+  // Fisher-Yates shuffle of the top-K then slice — uniform random
+  // sample without replacement, no recency bias inside the sample.
+  for (let i = scored.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = scored[i]!;
+    scored[i] = scored[j]!;
+    scored[j] = tmp;
+  }
+  return scored.slice(0, count).map((x) => x.c);
+}
+
 export interface WalkCandidate {
   id: string;
   name: string;
