@@ -16,14 +16,14 @@ import type { LatLng } from '@shukajpes/shared';
 import { distanceMeters } from '../../utils/geo';
 import type { SpotCategory, Spot } from '../../services/places';
 import { fetchWalkingRoute } from '../../services/directions';
+import {
+  buildCandidates,
+  planWalk,
+  type WalkDistance,
+  type WalkShape,
+} from '../../utils/walk';
 import logoNose from '../../assets/logo-nose.png';
 
-// Walk distance budgets — close ≈ 1km radius, far ≈ 3km. Both used for
-// roundtrip and one-way; the leaf handler picks a destination from the
-// loaded spots that matches.
-const WALK_CLOSE_M = 1000;
-const WALK_FAR_M = 3000;
-const SPOT_BUCKET_M = 500; // tolerance band around the target distance
 const VISIT_LEAVES_PER_CATEGORY = 3;
 
 // Resolves the actions for the current menu level. Path is a stack of
@@ -64,53 +64,6 @@ function getCurrentActions(
   return PRIMARY_ACTIONS;
 }
 
-// Walk-friendliness: certain categories are nicer destinations for an
-// idle stroll. Cafe/restaurant/bar are "ok let's go sit somewhere"
-// energy; pet store and vet are errands, less inviting. Lower number
-// = more preferred.
-const WALK_CATEGORY_BIAS: Record<string, number> = {
-  cafe: 0,
-  restaurant: 0,
-  bar: 0.5,
-  pet_store: 1.5,
-  veterinary_care: 2.5,
-};
-
-// Pick a destination spot near the target distance, biased toward
-// higher-rated and walk-friendly categories. Score formula combines:
-//   distance fit  — squared error vs target (low is good, dominant)
-//   rating        — 5★ subtracted (negative, lower is better)
-//   category bias — pet_store/vet penalty (higher is worse)
-// First search inside a ±SPOT_BUCKET_M band; if empty, widen to all.
-function pickWalkSpot(
-  spots: Spot[],
-  userPos: LatLng,
-  targetM: number,
-): Spot | null {
-  if (spots.length === 0) return null;
-  const score = (s: Spot, d: number): number => {
-    const distErr = Math.abs(d - targetM) / targetM; // 0 at perfect, 1 at 100% off
-    const distScore = distErr * distErr * 10; // squared, weighted heavily
-    const ratingScore = -(s.rating ?? 3) * 0.4; // 5★ ≈ −2, 1★ ≈ −0.4
-    const catBias = WALK_CATEGORY_BIAS[s.category] ?? 1;
-    return distScore + ratingScore + catBias;
-  };
-  const ranked = spots
-    .map((s) => ({ s, d: distanceMeters(userPos, s.position) }))
-    .map((x) => ({ ...x, score: score(x.s, x.d) }))
-    // Prefer the band but allow fallback if empty.
-    .filter(({ d }) => Math.abs(d - targetM) <= SPOT_BUCKET_M);
-  if (ranked.length > 0) {
-    ranked.sort((a, b) => a.score - b.score);
-    return ranked[0]!.s;
-  }
-  // Fallback: best-scoring overall.
-  const all = spots
-    .map((s) => ({ s, d: distanceMeters(userPos, s.position) }))
-    .map((x) => ({ ...x, score: score(x.s, x.d) }))
-    .sort((a, b) => a.score - b.score);
-  return all[0]?.s ?? null;
-}
 
 interface CompanionProps {
   position: LatLng;
@@ -216,49 +169,56 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
         }
       }
 
-      // Walk leaves: walk:<shape>:<distance>. Pick a scored destination
-      // for this distance bucket, fetch the polyline, render it. We
-      // deliberately don't setSelectedSpot — that's the "open details
-      // modal" channel and a walk shouldn't pop a modal. Instead the
-      // destination spot is communicated via the bubble + the polyline
-      // ending at it.
+      // Walk leaves: walk:<shape>:<distance>. Pulls candidates from
+      // both the spots layer (cafés, restaurants, bars, pet shops,
+      // vets) AND the parks list, scores them by walk-friendliness +
+      // distance-fit, then routes. Roundtrips try a real triangular
+      // loop (origin → A → B → origin) when two well-spaced
+      // candidates exist, and fall back to out-and-back via A
+      // otherwise. We deliberately don't setSelectedSpot — that's the
+      // "open details modal" channel and a walk shouldn't pop a modal.
       if (id.startsWith('walk:')) {
         const parts = id.split(':'); // ['walk', shape, distance]
-        const shape = (parts[1] ?? 'roundtrip') as 'roundtrip' | 'oneway';
-        const distance = parts[2] ?? 'close';
+        const shape = (parts[1] ?? 'roundtrip') as WalkShape;
+        const distance = (parts[2] ?? 'close') as WalkDistance;
         if (!ctxPos) {
           flash("can't walk without knowing where we are");
           return;
         }
-        if (ctxSpots.length === 0) {
+        const ctxParks = useGameStore.getState().parks;
+        const candidates = buildCandidates(ctxSpots, ctxParks);
+        if (candidates.length === 0) {
           // Lazy-fetch — leaves were probably hit immediately after
-          // tapping "walk" before the categories prefetch landed. Kick
-          // it again and ask the user to retry in a moment.
+          // tapping "walk" before Places had loaded. Kick it again
+          // and ask the user to retry in a moment.
           const { syncSpots: doSync } = useGameStore.getState();
           void doSync(ctxPos);
           flash("sniffing out spots… try again in a sec");
           return;
         }
-        const targetM = distance === 'far' ? WALK_FAR_M : WALK_CLOSE_M;
-        const pick = pickWalkSpot(ctxSpots, ctxPos, targetM);
-        if (!pick) {
+        const plan = planWalk({ candidates, origin: ctxPos, shape, distance });
+        if (!plan) {
           flash('no spot at that distance — try the other one');
           return;
         }
         // Clear any open spot-detail modal — the user shifted intent.
         setSelectedSpot(null);
-        const shapeLabel = shape === 'roundtrip' ? 'roundtrip' : 'one-way';
         const distLabel = distance === 'far' ? 'long' : 'short';
-        flash(`${distLabel} ${shapeLabel} to ${pick.name} 🚶`);
-        const waypoints =
-          shape === 'roundtrip'
-            ? [pick.position, ctxPos]
-            : [pick.position];
-        void fetchWalkingRoute(ctxPos, waypoints).then((route) => {
+        const label =
+          shape === 'roundtrip' && plan.isLoop && plan.secondary
+            ? `${distLabel} loop via ${plan.primary.name} & ${plan.secondary.name} 🚶`
+            : shape === 'roundtrip'
+              ? `${distLabel} roundtrip to ${plan.primary.name} 🚶`
+              : `${distLabel} one-way to ${plan.primary.name} 🚶`;
+        flash(label);
+        // walkRouteMeta.spotId only makes sense when destination IS a
+        // spot — keeps its marker visible regardless of toggle. Park
+        // destinations get null here; the polyline endpoint speaks for
+        // itself.
+        const spotId = plan.primary.isSpot ? plan.primary.id : null;
+        void fetchWalkingRoute(ctxPos, plan.waypoints).then((route) => {
           if (route) {
-            useGameStore
-              .getState()
-              .setWalkRoute(route, { shape, spotId: pick.id });
+            useGameStore.getState().setWalkRoute(route, { shape, spotId });
           }
         });
         return;

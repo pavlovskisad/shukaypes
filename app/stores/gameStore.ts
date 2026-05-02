@@ -7,6 +7,7 @@ import {
   fetchNearbyParks,
   type Spot,
   type SpotCategory,
+  type Park,
 } from '../services/places';
 import { distanceMeters } from '../utils/geo';
 
@@ -109,13 +110,12 @@ interface GameState {
   // its catch re-adds the bone to the list = "ghost" reappear after
   // tap.
   recentlyConsumedIds: Set<string>;
-  // Nearby park coords fetched via Google Places; server seeds bones
-  // + the per-park paw rings at these positions. Cached across food
-  // syncs so we don't pay a Places round-trip on every 15s tick — but
-  // we DO re-fetch when the user has walked past lastParksFetchPos by
-  // more than PARKS_REFRESH_THRESHOLD_M (services/places.ts only
-  // returned the parks within 800m of the original anchor).
-  parks: LatLng[];
+  // Nearby parks fetched via Google Places. Each carries a name +
+  // place_id alongside the position so the walk leaf can label routes
+  // and the bones/paw-ring spawning can dedupe by id. Cached across
+  // food syncs so we don't pay a Places round-trip on every 15s tick;
+  // re-fetched when the user walks past PLACES_REFRESH_THRESHOLD_M.
+  parks: Park[];
   lastParksFetchPos: LatLng | null;
   lostDogs: NearbyLostDog[];
   selectedDogId: string | null;
@@ -141,7 +141,11 @@ interface GameState {
   // distinguishes roundtrip (origin → dest → origin) from one-way
   // (origin → dest) so MapView can label or style differently.
   walkRoute: LatLng[] | null;
-  walkRouteMeta: { shape: 'roundtrip' | 'oneway'; spotId: string } | null;
+  // spotId is null when the destination is a park (no spot marker to
+  // keep alive) — see utils/walk.ts. The map renders the polyline
+  // either way; spotId only governs whether the destination spot's
+  // pin overrides the spots-toggle visibility.
+  walkRouteMeta: { shape: 'roundtrip' | 'oneway'; spotId: string | null } | null;
   dailyTasks: DailyTasks;
   syncing: boolean;
   lastSyncError: string | null;
@@ -172,7 +176,7 @@ interface GameState {
   setSpotsCategoryFilter: (filter: 'all' | SpotCategory) => void;
   setWalkRoute: (
     route: LatLng[] | null,
-    meta: { shape: 'roundtrip' | 'oneway'; spotId: string } | null,
+    meta: { shape: 'roundtrip' | 'oneway'; spotId: string | null } | null,
   ) => void;
   reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean } | void>;
   // Detective quests. Start flips any existing active quest to abandoned
@@ -462,7 +466,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       // them too. First sync (before parks load) just sends none — the
       // user-area + dog-zone pools still cover the screen.
       const parks = get().parks;
-      const { tokens } = await api.getTokensNearby(pos, parks.length ? parks : undefined);
+      const parkPositions = parks.map((p) => p.position);
+      const { tokens } = await api.getTokensNearby(
+        pos,
+        parkPositions.length ? parkPositions : undefined,
+      );
       const collected = get().recentlyCollectedIds;
       // Drop anything we've already collected locally — otherwise a poll
       // that races ahead of the server commit re-injects the token and
@@ -500,7 +508,10 @@ export const useGameStore = create<GameState>((set, get) => ({
           // Don't update lastParksFetchPos so we retry next call.
         }
       }
-      const { food } = await api.getFoodNearby(pos, parks.length ? parks : undefined);
+      const { food } = await api.getFoodNearby(
+        pos,
+        parks.length ? parks.map((p) => p.position) : undefined,
+      );
       // Same defense as syncTokens: drop server rows we've already
       // consumed locally so a poll racing ahead of /feed commit can't
       // re-inject a ghost bone.

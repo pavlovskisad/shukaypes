@@ -107,13 +107,20 @@ export async function fetchNearbySpots(
   return sorted;
 }
 
-// Nearby parks for the bones pool. Separate from fetchNearbySpots because
-// bones live purely on park coords — we don't care about names or icons,
-// just positions the server can seed food at. 1200m covers the ~15min
-// walking neighborhood; parks farther than that are next-door's problem.
+// Nearby parks for the bones pool + walk candidates. Returns name +
+// place_id alongside position so the walk leaf can label routes
+// ("loop via Маріїнський парк") and dedupe by stable id. Bones spawn
+// only off `position`. 1200m covers the ~15min walking neighborhood;
+// parks farther than that are next-door's problem.
 const PARK_RADIUS_M = 1200;
 
-export async function fetchNearbyParks(center: LatLng): Promise<LatLng[]> {
+export interface Park {
+  id: string;
+  name: string;
+  position: LatLng;
+}
+
+export async function fetchNearbyParks(center: LatLng): Promise<Park[]> {
   if (typeof google === 'undefined' || !google.maps?.places) return [];
   const attrContainer = document.createElement('div');
   const svc = new google.maps.places.PlacesService(attrContainer);
@@ -128,12 +135,18 @@ export async function fetchNearbyParks(center: LatLng): Promise<LatLng[]> {
   // bones within 100m. Collapse anything within 120m of an already-
   // accepted park.
   const DEDUPE_RADIUS_M = 120;
-  const out: LatLng[] = [];
+  const out: Park[] = [];
   for (const r of results) {
-    if (!r.geometry?.location) continue;
+    if (!r.geometry?.location || !r.place_id) continue;
     const pos = { lat: r.geometry.location.lat(), lng: r.geometry.location.lng() };
-    const dup = out.some((p) => haversineM(p, pos) < DEDUPE_RADIUS_M);
-    if (!dup) out.push(pos);
+    const dup = out.some((p) => haversineM(p.position, pos) < DEDUPE_RADIUS_M);
+    if (!dup) {
+      out.push({
+        id: r.place_id,
+        name: r.name ?? 'park',
+        position: pos,
+      });
+    }
   }
   return out;
 }
