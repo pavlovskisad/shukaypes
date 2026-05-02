@@ -7,6 +7,7 @@ import {
   boolean,
   jsonb,
   index,
+  primaryKey,
 } from 'drizzle-orm/pg-core';
 
 // Users — identified by device_id until Firebase auth lands.
@@ -214,5 +215,29 @@ export const scrapeLog = pgTable(
   },
   (t) => ({
     sourceIdx: index('scrape_log_source_idx').on(t.source, t.firstSeenAt),
+  }),
+);
+
+// Daily-task progress per user per local date (YYYY-MM-DD). Promoted
+// from localStorage so progress survives a cache wipe and syncs across
+// devices on the same userId. Date is the user's local calendar day —
+// the client computes it and sends it on every tick + fetch so we
+// don't have to track timezones server-side. (If the user crosses
+// midnight while tabbed away, the next interaction lands on the new
+// date row; "yesterday" is implicitly closed-out.)
+export const dailyTasks = pgTable(
+  'daily_tasks',
+  {
+    userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
+    date: text('date').notNull(),
+    tokens: integer('tokens').notNull().default(0),
+    bones: integer('bones').notNull().default(0),
+    lostPetChecks: integer('lost_pet_checks').notNull().default(0),
+    spotVisits: integer('spot_visits').notNull().default(0),
+    sightings: integer('sightings').notNull().default(0),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.date] }),
   }),
 );

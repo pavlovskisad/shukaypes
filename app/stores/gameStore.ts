@@ -22,8 +22,12 @@ const PLACES_REFRESH_THRESHOLD_M = 600;
 // Daily tasks — client-side for pilot; promote to server when we add
 // server-auth'd quests. Each field is a monotonic counter for today;
 // progress = min(counter, target). Reset when `date` flips vs local
-// today. Persisted via localStorage on web; on native we'd wire
-// AsyncStorage but native map is stubbed anyway, so ignoring for now.
+// Mirrors the server's daily_tasks table (PR #161). Initial state is
+// blanks for today's local date; refreshDailyTasks() pulls authoritative
+// counts from /tasks/today on map focus + on store hydration. Each
+// tickDailyTask() applies the optimistic +N locally and POSTs to
+// /tasks/tick — server is source of truth, but the UI updates without
+// waiting for the round-trip.
 export interface DailyTasks {
   date: string; // YYYY-MM-DD local
   tokens: number;
@@ -49,10 +53,8 @@ function todayLocal(): string {
   return `${y}-${m}-${day}`;
 }
 
-const TASKS_STORAGE_KEY = 'shukajpes.dailyTasks.v1';
-
-function loadTasks(): DailyTasks {
-  const blank: DailyTasks = {
+function blankTasks(): DailyTasks {
+  return {
     date: todayLocal(),
     tokens: 0,
     bones: 0,
@@ -60,24 +62,18 @@ function loadTasks(): DailyTasks {
     spotVisits: 0,
     sightings: 0,
   };
-  if (typeof window === 'undefined' || !window.localStorage) return blank;
-  try {
-    const raw = window.localStorage.getItem(TASKS_STORAGE_KEY);
-    if (!raw) return blank;
-    const parsed = JSON.parse(raw) as DailyTasks;
-    if (parsed.date !== todayLocal()) return blank;
-    return parsed;
-  } catch {
-    return blank;
-  }
 }
 
-function saveTasks(t: DailyTasks): void {
+// Best-effort cleanup of the previous localStorage cache. Old keys
+// hung around after PR #161 promoted state to the server; nuke once
+// per session so the storage doesn't grow stale.
+const LEGACY_STORAGE_KEY = 'shukajpes.dailyTasks.v1';
+function dropLegacyStorage(): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    window.localStorage.setItem(TASKS_STORAGE_KEY, JSON.stringify(t));
+    window.localStorage.removeItem(LEGACY_STORAGE_KEY);
   } catch {
-    // storage full / disabled — silently skip
+    // storage disabled — fine, nothing to clean.
   }
 }
 
@@ -219,8 +215,13 @@ interface GameState {
     narration: string | null;
   }>;
   abandonActiveQuest: () => Promise<void>;
+  // Optimistic local +N, then fire-and-forget POST /tasks/tick.
   tickDailyTask: (key: keyof Omit<DailyTasks, 'date'>, amount?: number) => void;
-  refreshDailyTasksIfStale: () => void;
+  // Authoritative pull from /tasks/today. Fired on first app load
+  // and again when the map tab refocuses (catches midnight rollover
+  // + cross-device updates). Replaces the previous client-side
+  // refreshDailyTasksIfStale that only handled date staleness.
+  refreshDailyTasks: () => Promise<void>;
 }
 
 export const useGameStore = create<GameState>((set, get) => ({
@@ -253,7 +254,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   spotsCategoryFilter: 'all',
   walkRoute: null,
   walkRouteMeta: null,
-  dailyTasks: loadTasks(),
+  // Initial state is empty for today's date; refreshDailyTasks() pulls
+  // from the server on first app load and again on map-tab refocus.
+  dailyTasks: blankTasks(),
   syncing: false,
   lastSyncError: null,
   collectPulse: 0,
@@ -665,25 +668,31 @@ export const useGameStore = create<GameState>((set, get) => ({
   tickDailyTask: (key, amount = 1) => {
     const prev = get().dailyTasks;
     const today = todayLocal();
+    // If we crossed midnight since the last tick, snap to a fresh
+    // row before applying the increment. Server upsert will create
+    // its own row at this date too.
     const base: DailyTasks =
-      prev.date === today ? prev : { date: today, tokens: 0, bones: 0, lostPetChecks: 0, spotVisits: 0, sightings: 0 };
+      prev.date === today
+        ? prev
+        : { ...blankTasks(), date: today };
     const next: DailyTasks = { ...base, [key]: base[key] + amount };
     set({ dailyTasks: next });
-    saveTasks(next);
+    // Fire-and-forget — server is authoritative but we don't block
+    // the UI on the round-trip. Failures show up only if the
+    // refresh-on-focus pulls a different value back.
+    void api.tickDailyTask(today, key, amount).catch(() => {});
   },
 
-  refreshDailyTasksIfStale: () => {
-    const prev = get().dailyTasks;
-    if (prev.date === todayLocal()) return;
-    const fresh: DailyTasks = {
-      date: todayLocal(),
-      tokens: 0,
-      bones: 0,
-      lostPetChecks: 0,
-      spotVisits: 0,
-      sightings: 0,
-    };
-    set({ dailyTasks: fresh });
-    saveTasks(fresh);
+  refreshDailyTasks: async () => {
+    const today = todayLocal();
+    try {
+      const { tasks } = await api.getDailyTasks(today);
+      set({ dailyTasks: tasks });
+    } catch {
+      // Network blip — keep the local optimistic counts. The next
+      // refresh-on-focus reconciles.
+    }
+    // One-time legacy localStorage cleanup. Cheap, idempotent.
+    dropLegacyStorage();
   },
 }));
