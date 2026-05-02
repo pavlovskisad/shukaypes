@@ -3,9 +3,11 @@
 // further the pet has likely wandered. Same cron shape as decay.ts.
 // SQL-only update so we don't pay round-trips per row.
 
+import type { FastifyBaseLogger } from 'fastify';
 import { sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
+import { runCronTick } from './cronUtils.js';
 
 export async function runZoneExpansionTick(): Promise<void> {
   const { baseRadiusM, growthPerDayM, maxRadiusM } = balance.zoneExpansion;
@@ -26,13 +28,14 @@ export async function runZoneExpansionTick(): Promise<void> {
 }
 
 export function startZoneExpansionCron(
+  log: FastifyBaseLogger,
   intervalMs: number = balance.zoneExpansion.intervalMs,
 ): () => void {
   // Run once on boot so a cold start gets caught up immediately,
   // then on the interval. Mirrors the decay cron pattern.
-  runZoneExpansionTick().catch((err) => console.error('[zone-expansion]', err));
+  void runCronTick('zone-expansion', runZoneExpansionTick, log);
   const id = setInterval(() => {
-    runZoneExpansionTick().catch((err) => console.error('[zone-expansion]', err));
+    void runCronTick('zone-expansion', runZoneExpansionTick, log);
   }, intervalMs);
   id.unref?.();
   return () => clearInterval(id);
