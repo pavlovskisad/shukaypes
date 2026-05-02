@@ -157,7 +157,7 @@ export default function MapViewWeb() {
         '*mlem*',
       ];
       const pick = woofs[Math.floor(Math.random() * woofs.length)] ?? 'woof 🐾';
-      showBubble(pick, 2000);
+      showBubble(pick, 4000);
     }, [showBubble]),
   );
 
@@ -222,9 +222,9 @@ export default function MapViewWeb() {
       if (!pos) return;
       const { advanced, completed, narration } = await advanceQuestIfNear(pos);
       if (completed) {
-        showBubble(narration ?? `found something! quest complete 🎉`, 4000);
+        showBubble(narration ?? `found something! quest complete 🎉`, 6000);
       } else if (advanced) {
-        showBubble(narration ?? `paw print here — let's keep going 🐾`, 3000);
+        showBubble(narration ?? `paw print here — let's keep going 🐾`, 5000);
       }
     }, balance.roamTick);
     return () => clearInterval(id);
@@ -688,12 +688,12 @@ export default function MapViewWeb() {
                           if (completed) {
                             showBubble(
                               narration ?? `found something! quest complete 🎉`,
-                              4000,
+                              6000,
                             );
                           } else if (advanced) {
                             showBubble(
                               narration ?? `paw print here — let's keep going 🐾`,
-                              3000,
+                              5000,
                             );
                           }
                         }
@@ -730,7 +730,7 @@ export default function MapViewWeb() {
             onTap={() => {
               companionTappedAtRef.current = Date.now();
             }}
-            onTapCompanion={() => showBubble('woof 🐾', 2000)}
+            onTapCompanion={() => showBubble('woof 🐾', 4000)}
           />
         ) : null}
       </GoogleMap>
@@ -805,11 +805,11 @@ export default function MapViewWeb() {
           setSelectedDog(null);
           const res = await useGameStore.getState().reportSighting(d.id);
           if (res?.ok && res.trusted) {
-            showBubble(`thanks — moved ${d.name}'s pin 📍`, 3000);
+            showBubble(`thanks — moved ${d.name}'s pin 📍`, 5000);
           } else if (res?.ok) {
-            showBubble(`thanks — sighting logged 👀`, 3000);
+            showBubble(`thanks — sighting logged 👀`, 5000);
           } else {
-            showBubble(`couldn't report that one — try again`, 3000);
+            showBubble(`couldn't report that one — try again`, 5000);
           }
         }}
         onStartSearch={async (d) => {
@@ -821,10 +821,10 @@ export default function MapViewWeb() {
             showBubble(
               narration ??
                 `on it — ${quest.waypoints.length} spots to check for ${d.name} 🔍`,
-              4000,
+              6000,
             );
           } else {
-            showBubble("couldn't start the search — try again", 3000);
+            showBubble("couldn't start the search — try again", 5000);
           }
         }}
       />
@@ -834,7 +834,7 @@ export default function MapViewWeb() {
         onClose={() => setSelectedSpot(null)}
         onWalkHere={async (spot, shape) => {
           if (!userPos) {
-            showBubble("can't walk without knowing where we are", 3000);
+            showBubble("can't walk without knowing where we are", 5000);
             return;
           }
           // Generate the walking polyline first, then close the modal
