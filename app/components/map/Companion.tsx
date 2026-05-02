@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Image } from 'react-native';
 import { useRouter } from 'expo-router';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import { useGameStore } from '../../stores/gameStore';
@@ -22,7 +21,7 @@ import {
   type WalkDistance,
   type WalkShape,
 } from '../../utils/walk';
-import logoNose from '../../assets/logo-nose.png';
+import { DogSprite, type DogAnim } from './DogSprite';
 
 const VISIT_LEAVES_PER_CATEGORY = 3;
 
@@ -97,6 +96,40 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
   // Track the "coming soon" bubble timeout so rapid menu taps don't
   // accumulate dangling timers — each new tap cancels the previous one.
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Sprite anim + direction. Driven by the `position` prop deltas: any
+  // move beyond MOTION_THRESHOLD_M flips us into 'walking' and updates
+  // facingLeft from the sign of dlng; staying still for IDLE_DELAY_MS
+  // drops back to 'sitting'. The sprite sheet is right-facing only, so
+  // facingLeft is a CSS scaleX(-1) flip rather than a different sheet.
+  const [anim, setAnim] = useState<DogAnim>('sitting');
+  const [facingLeft, setFacingLeft] = useState(false);
+  const lastPosRef = useRef<LatLng | null>(null);
+  const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    const last = lastPosRef.current;
+    lastPosRef.current = position;
+    if (!last) return;
+    // Companion lerp ticks every 100ms with up to 0.8m/tick (8 m/s).
+    // ~0.3m of motion per tick is the noise floor for the lerp tail
+    // settling — anything above is real movement worth animating.
+    const movedM = distanceMeters(last, position);
+    const MOTION_THRESHOLD_M = 0.3;
+    if (movedM < MOTION_THRESHOLD_M) return;
+    setAnim('walking');
+    const dLng = position.lng - last.lng;
+    if (Math.abs(dLng) > 1e-7) setFacingLeft(dLng < 0);
+    if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    // 400ms of no significant motion → idle. Long enough to ride
+    // through the lerp tail's per-tick noise; short enough that the
+    // dog visibly sits when the user actually stops walking.
+    idleTimerRef.current = setTimeout(() => setAnim('sitting'), 400);
+  }, [position]);
+  useEffect(() => {
+    return () => {
+      if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
+    };
+  }, []);
 
   const flash = useCallback((msg: string, ms = 4500) => {
     setLocalBubble(msg);
@@ -331,78 +364,12 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           zIndex: 2,
         }}
       >
-        {/* Frosted-glass halo — original recipe (3% white + 7px blur,
-            paws behind read almost sharp), now with a subtle chromatic
-            touch:
-              · edges: red offset −1px, cyan offset +1px give a faint
-                dispersion rim — chromatic-aberration style — without
-                dominating the soft glass feel.
-              · fill: a near-transparent magenta→cyan gradient laid on
-                top with mix-blend-mode: screen, so it only adds a
-                tint to the existing frosted pixels instead of
-                muddying them. */}
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            width: 66,
-            height: 66,
-            borderRadius: '50%',
-            background: 'rgba(255,255,255,0.03)',
-            backdropFilter: 'blur(7px)',
-            WebkitBackdropFilter: 'blur(7px)',
-            // Static chromatic — close 1px red/cyan dispersion rim,
-            // wider 4px pink/cyan glow, soft black drop shadow.
-            boxShadow:
-              '-1px 0 2px rgba(255,80,80,0.22), 1px 0 2px rgba(80,180,255,0.26), -4px 3px 14px rgba(255,140,210,0.25), 4px 3px 14px rgba(140,210,255,0.25), 0 1px 4px rgba(0,0,0,0.06)',
-            pointerEvents: 'none',
-          }}
-        >
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              width: '100%',
-              height: '100%',
-              borderRadius: '50%',
-              background:
-                'linear-gradient(135deg, rgba(255,170,255,0.14), rgba(140,230,255,0.14))',
-              mixBlendMode: 'screen',
-              pointerEvents: 'none',
-            }}
-          />
-        </div>
-
-        {/* Companion body — 55×55 nose glyph with layered white halo,
-            centered in the larger tap container. pointer-events:none so
-            the tap is captured by the outer container and not swallowed
-            by the glyph's filter hitmap. */}
-        <div
-          aria-hidden
-          style={{
-            position: 'relative',
-            width: 55,
-            height: 55,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            animation: 'co-float 2.4s ease-in-out infinite',
-            filter:
-              'drop-shadow(0 0 10px rgba(255,255,255,1)) drop-shadow(0 0 22px rgba(255,255,255,1)) drop-shadow(0 0 44px rgba(255,255,255,0.7))',
-            pointerEvents: 'none',
-          }}
-        >
-          <Image
-            source={logoNose}
-            resizeMode="contain"
-            style={{ width: '100%', height: '100%' }}
-            accessibilityLabel="шукайпес"
-          />
-        </div>
+        {/* Pixel-art companion — 64×64 sprite scaled 2× = 128px on
+            screen. Side-profile only (sheet has no top-down rotation),
+            so we flip horizontally based on movement direction.
+            pointer-events:none so the tap lands on the outer container
+            instead of the sprite div. */}
+        <DogSprite anim={anim} facingLeft={facingLeft} />
 
         <SpeechBubble text={activeBubble} />
         <RadialMenu
@@ -414,13 +381,6 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           // each ring item would clutter the cardinal slots.
           showLabels={menuPath.length === 2 && menuPath[0] === 'visit'}
         />
-
-        <style>{`
-          @keyframes co-float {
-            0%, 100% { transform: translateY(0); }
-            50% { transform: translateY(-3px); }
-          }
-        `}</style>
       </div>
     </OverlayViewF>
   );
