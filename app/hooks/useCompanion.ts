@@ -89,7 +89,12 @@ function lerpStep(from: LatLng, to: LatLng, maxStepM: number): LatLng {
 // → walking sprite swap automatically.
 //
 // Pauses entirely while the radial menu is open so taps land cleanly.
-export function useCompanion(userPos: LatLng | null): LatLng | null {
+// The `enabled` flag (driven by useIsFocused in MapView) pauses the
+// lerp tick while the map tab isn't focused — burning CPU on
+// off-screen movement is wasteful, and the dog visibly resumes from
+// its last position on refocus because pos state lives across the
+// pause.
+export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | null {
   const [pos, setPos] = useState<LatLng | null>(null);
   const angleRef = useRef(Math.random() * Math.PI * 2);
   const targetRef = useRef(angleRef.current);
@@ -101,7 +106,7 @@ export function useCompanion(userPos: LatLng | null): LatLng | null {
   const cooldownUntilRef = useRef<number>(0);
 
   useEffect(() => {
-    if (!userPos) return;
+    if (!userPos || !enabled) return;
 
     const id = setInterval(() => {
       const { menuOpen, tokens, foodItems, collectPulse } = useGameStore.getState();
@@ -160,7 +165,7 @@ export function useCompanion(userPos: LatLng | null): LatLng | null {
     }, balance.roamTick);
 
     return () => clearInterval(id);
-  }, [userPos?.lat, userPos?.lng]);
+  }, [userPos?.lat, userPos?.lng, enabled]);
 
   return pos;
 }

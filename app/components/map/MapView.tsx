@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { GoogleMap, PolylineF, useJsApiLoader } from '@react-google-maps/api';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
@@ -75,8 +76,14 @@ export default function MapViewWeb() {
   // the app cares about this transient view-state.
   const [expandedClusterKey, setExpandedClusterKey] = useState<string | null>(null);
   const userPos = location.position;
+  // Map intervals (companion lerp, auto-collect, /sync/map poll) all
+  // gate on this — when the user is on Profile/Chat/Quests we stop
+  // burning CPU on work the user can't see. The /collect/path sweep
+  // on refocus catches up any paws or bones the user walked past
+  // while the loops were paused.
+  const isFocused = useIsFocused();
 
-  const companionPos = useCompanion(userPos);
+  const companionPos = useCompanion(userPos, isFocused);
   // Tracks the map's visible bounds so we can detect when the
   // companion has wandered (or been panned) off-screen and surface a
   // tap-to-recenter indicator at the screen edge.
@@ -181,7 +188,7 @@ export default function MapViewWeb() {
   // Places, not our backend, and the action is movement-gated so most
   // ticks are no-ops anyway.
   useEffect(() => {
-    if (!userPos) return;
+    if (!userPos || !isFocused) return;
     void collectPath(userPos);
     void syncMap(userPos);
     syncSpots(userPos);
@@ -193,7 +200,7 @@ export default function MapViewWeb() {
       syncSpots(pos);
     }, TOKEN_REFRESH_MS);
     return () => clearInterval(id);
-  }, [userPos?.lat, userPos?.lng, collectPath, syncMap, syncSpots]);
+  }, [userPos?.lat, userPos?.lng, isFocused, collectPath, syncMap, syncSpots]);
 
   // Pull the active quest (if any) on mount so a refreshed tab sees the
   // quest the user started earlier. No polling — quest state only changes
@@ -226,7 +233,11 @@ export default function MapViewWeb() {
   // companion orbits the walker at ~110m, so paws right at the user's
   // feet would otherwise sit just outside the companion's 90m disk
   // (donut-of-detection bug). Either being in range is enough.
+  // Gated on isFocused — when the map tab isn't visible, the
+  // /collect/path sweep on refocus catches anything the user walked
+  // past while paused (server tracks their last anchor in Redis).
   useEffect(() => {
+    if (!isFocused) return;
     const id = setInterval(() => {
       const { tokens: ts, userPosition: u } = useGameStore.getState();
       if (!u && !companionPos) return;
@@ -240,10 +251,13 @@ export default function MapViewWeb() {
       });
     }, balance.roamTick);
     return () => clearInterval(id);
-  }, [companionPos?.lat, companionPos?.lng, collectToken]);
+  }, [companionPos?.lat, companionPos?.lng, isFocused, collectToken]);
 
-  // Auto-eat food. Same min(user, companion) trick as paws.
+  // Auto-eat food. Same min(user, companion) trick as paws. Same
+  // refocus-catchup story — the path-collect sweep credits any bone
+  // the user walked past while not focused.
   useEffect(() => {
+    if (!isFocused) return;
     const id = setInterval(() => {
       const { foodItems: fs, userPosition: u } = useGameStore.getState();
       if (!u && !companionPos) return;
@@ -256,7 +270,7 @@ export default function MapViewWeb() {
       });
     }, balance.foodCheckInterval);
     return () => clearInterval(id);
-  }, [companionPos?.lat, companionPos?.lng, eatFood]);
+  }, [companionPos?.lat, companionPos?.lng, isFocused, eatFood]);
 
   const mapOptions = useMemo(
     () => ({
