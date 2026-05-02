@@ -112,9 +112,11 @@ interface GameState {
   recentlyConsumedIds: Set<string>;
   // Nearby parks fetched via Google Places. Each carries a name +
   // place_id alongside the position so the walk leaf can label routes
-  // and the bones/paw-ring spawning can dedupe by id. Cached across
-  // food syncs so we don't pay a Places round-trip on every 15s tick;
-  // re-fetched when the user walks past PLACES_REFRESH_THRESHOLD_M.
+  // ("loop via Маріїнський парк") and the bones/paw-ring spawning can
+  // dedupe by stable id. Cached across food syncs so we don't pay a
+  // Places round-trip on every 15s tick; re-fetched when the user
+  // walks past PLACES_REFRESH_THRESHOLD_M (Places only returns parks
+  // within ~800m of the original anchor).
   parks: Park[];
   lastParksFetchPos: LatLng | null;
   lostDogs: NearbyLostDog[];
