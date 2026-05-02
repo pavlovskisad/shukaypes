@@ -192,7 +192,10 @@ export default function ChatScreen() {
   // frosted overlays). Numbers approximate the cards' on-screen
   // heights — generous so multi-line names/inputs don't overlap.
   const topPad = insets.top + HEADER_BAND_HEIGHT + 8;
-  const bottomPad = TAB_BAR_HEIGHT + INPUT_BAND_HEIGHT + 8;
+  // insets.bottom covers iOS PWA standalone — the tab bar grows to
+  // include the home-indicator safe-area, so the last bubble must sit
+  // above (TAB_BAR_HEIGHT + safe-area + input band) to scroll free.
+  const bottomPad = TAB_BAR_HEIGHT + insets.bottom + INPUT_BAND_HEIGHT + 8;
 
   return (
     <View style={styles.root}>
@@ -229,10 +232,14 @@ export default function ChatScreen() {
 
       {/* Bottom frosted band — sits just above the dashboard tab bar.
           KAV pushes it up when the keyboard appears on iOS native;
-          on web Safari handles its own viewport adjustment. */}
+          on web Safari handles its own viewport adjustment. The
+          insets.bottom term covers iOS PWA standalone, where the tab
+          bar's visible height = TAB_BAR_HEIGHT + safe-area-inset to
+          clear the home indicator. Without it, the input slides under
+          the dashboard. */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={styles.bottomBandWrap}
+        style={[styles.bottomBandWrap, { bottom: TAB_BAR_HEIGHT + insets.bottom }]}
         pointerEvents="box-none"
       >
         <View style={styles.bottomBand} pointerEvents="box-none">
