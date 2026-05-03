@@ -1,0 +1,147 @@
+import { useEffect, useRef, useState } from 'react';
+import { DogSprite, type DogAnim } from '../map/DogSprite';
+
+// Ambient dog scene for the profile hero — replaces the 🐶 emoji
+// with the live pixel-art companion. Runs a small state machine that
+// cycles through sitting / lying / walking / sniffing / running with
+// weighted probability and slides the sprite across the card during
+// the moving anims. Stationary anims freeze in place. Reads as "the
+// dog is just hanging out next to you" instead of a flat icon.
+
+interface SceneEntry {
+  anim: DogAnim;
+  weight: number;
+  durMs: [number, number]; // [min, max]
+  moves: boolean;
+}
+
+const SCENE: SceneEntry[] = [
+  { anim: 'sitting', weight: 3, durMs: [3000, 6000], moves: false },
+  { anim: 'lying', weight: 3, durMs: [5000, 9000], moves: false },
+  { anim: 'sniffing', weight: 2, durMs: [2500, 5000], moves: false },
+  { anim: 'walking', weight: 3, durMs: [4500, 8000], moves: true },
+  { anim: 'running', weight: 1, durMs: [2200, 3500], moves: true },
+];
+
+const SPRITE_SCALE = 2.5; // 64 × 2.5 = 160 px on screen
+const SPRITE_PX = 64 * SPRITE_SCALE;
+const HEIGHT_PX = SPRITE_PX + 8;
+
+function pickEntry(): SceneEntry {
+  const total = SCENE.reduce((sum, e) => sum + e.weight, 0);
+  let r = Math.random() * total;
+  for (const e of SCENE) {
+    r -= e.weight;
+    if (r <= 0) return e;
+  }
+  return SCENE[0]!;
+}
+
+function randomBetween([lo, hi]: [number, number]): number {
+  return lo + Math.random() * (hi - lo);
+}
+
+export function ProfileDogScene() {
+  const [anim, setAnim] = useState<DogAnim>('sitting');
+  const [facingLeft, setFacingLeft] = useState(false);
+  // Measured container width — drives how far the sprite can slide
+  // before clipping. ResizeObserver covers the orientation-flip case
+  // on phones; SSR initial render uses 0 (hidden until measured).
+  const containerRef = useRef<HTMLDivElement | null>(null);
+  const [width, setWidth] = useState(0);
+  const [x, setX] = useState(0);
+  const [transitionMs, setTransitionMs] = useState(0);
+  const xRef = useRef(0);
+  xRef.current = x;
+
+  useEffect(() => {
+    const el = containerRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') {
+      // Fallback for environments without ResizeObserver — read once
+      // and don't react to resizes. Still better than zero width.
+      if (el) setWidth(el.clientWidth);
+      return;
+    }
+    const ro = new ResizeObserver((entries) => {
+      const w = entries[0]?.contentRect.width ?? el.clientWidth;
+      setWidth(w);
+    });
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
+
+  // Center the dog on first measurement so it doesn't pop in at the
+  // left edge.
+  useEffect(() => {
+    if (width > 0 && xRef.current === 0) {
+      const center = Math.max(0, (width - SPRITE_PX) / 2);
+      setX(center);
+    }
+  }, [width]);
+
+  // State-machine tick — picks a new entry, sets the anim, and (if
+  // moving) starts a CSS transition toward a new x. Each tick
+  // schedules the next via setTimeout; cleanup on unmount cancels
+  // the pending one.
+  useEffect(() => {
+    if (width === 0) return;
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const step = () => {
+      const entry = pickEntry();
+      const dur = randomBetween(entry.durMs);
+      setAnim(entry.anim);
+      if (entry.moves && width > SPRITE_PX) {
+        const maxX = width - SPRITE_PX;
+        // Pick a new x that's at least 80px from current — avoids
+        // tiny "twitch" moves that look glitchy. Bias toward the
+        // farther side of the container so the dog actually crosses
+        // the card.
+        const minDelta = 80;
+        let target = Math.random() * maxX;
+        if (Math.abs(target - xRef.current) < minDelta) {
+          target = xRef.current < maxX / 2 ? xRef.current + minDelta : xRef.current - minDelta;
+          target = Math.max(0, Math.min(maxX, target));
+        }
+        setFacingLeft(target < xRef.current);
+        setTransitionMs(dur);
+        setX(target);
+      } else {
+        setTransitionMs(0); // no slide on stationary
+      }
+      timer = setTimeout(step, dur);
+    };
+    step();
+    return () => {
+      if (timer) clearTimeout(timer);
+    };
+  }, [width]);
+
+  return (
+    <div
+      ref={containerRef}
+      style={{
+        position: 'relative',
+        width: '100%',
+        height: HEIGHT_PX,
+        marginBottom: 8,
+        // Hide overflow so a slide that overshoots doesn't leak past
+        // the card edge mid-resize.
+        overflow: 'hidden',
+        pointerEvents: 'none',
+      }}
+    >
+      <div
+        style={{
+          position: 'absolute',
+          left: 0,
+          bottom: 0,
+          transform: `translateX(${x}px)`,
+          transition:
+            transitionMs > 0 ? `transform ${transitionMs}ms linear` : 'none',
+        }}
+      >
+        <DogSprite anim={anim} facingLeft={facingLeft} scale={SPRITE_SCALE} />
+      </div>
+    </div>
+  );
+}

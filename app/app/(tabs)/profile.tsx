@@ -6,6 +6,7 @@ import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
 import { api } from '../../services/api';
+import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
 // aggregate counts from /profile/me on focus, with the live game
@@ -91,7 +92,10 @@ export default function ProfileScreen() {
       <ScrollView contentContainerStyle={styles.content}>
         {/* Companion card — name, level, mood. */}
         <View style={styles.card}>
-          <Text style={styles.companionEmoji}>🐶</Text>
+          {/* Live pixel-art companion in place of the 🐶 emoji.
+              Cycles sitting / lying / walking / sniffing / running
+              and slides across the card during moving anims. */}
+          <ProfileDogScene />
           <Text style={styles.companionName}>{data?.companion.name ?? companionName}</Text>
           <Text style={styles.companionMeta}>
             level {data?.companion.level ?? 1}
@@ -199,10 +203,6 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textTransform: 'lowercase',
     letterSpacing: 0.3,
-  },
-  companionEmoji: {
-    fontSize: 44,
-    textAlign: 'center',
   },
   companionName: {
     fontFamily: SYSTEM_FONT,
