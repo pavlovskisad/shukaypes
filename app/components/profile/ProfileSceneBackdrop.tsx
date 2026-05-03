@@ -34,8 +34,6 @@ const VIEW_H = 200;
 // so the dog (paws at container y≈190) walks visibly BELOW this
 // line.
 const GROUND_Y = 110;
-// Where the dog walks. Used for the lamp light cone's bottom edge.
-const FRONT_Y = 190;
 
 // Per-mode colour palettes.
 const PALETTE = {
@@ -73,12 +71,16 @@ interface CloudProps {
   scale?: number;
   fill: string;
   shadow: string;
+  // Optional CSS animation shorthand (e.g. 'cloud-a 34s ease-in-out
+  // infinite'). Drives a slow back-and-forth drift in viewBox units
+  // so the sky reads as alive even while the dog is stationary.
+  animation?: string;
 }
 
-function Cloud({ x, y, scale = 1, fill, shadow }: CloudProps) {
+function Cloud({ x, y, scale = 1, fill, shadow, animation }: CloudProps) {
   const u = 2 * scale;
   return (
-    <g>
+    <g style={animation ? { animation } : undefined}>
       <rect x={x + 4 * u} y={y} width={6 * u} height={u} fill={fill} />
       <rect x={x + u} y={y + u} width={12 * u} height={2 * u} fill={fill} />
       <rect x={x + 2 * u} y={y + 3 * u} width={10 * u} height={u} fill={shadow} />
@@ -107,47 +109,6 @@ function Tree({ x, scale = 1, foliage, highlight, trunk }: TreeProps) {
       <rect x={x + u} y={trunkY - u * 8} width={u * 7} height={u * 3} fill={foliage} />
       <rect x={x + u * 2} y={trunkY - u * 10} width={u * 5} height={u * 2} fill={foliage} />
       <rect x={x + u} y={trunkY - u * 4} width={u * 2} height={u * 2} fill={highlight} />
-    </g>
-  );
-}
-
-interface ForegroundTreeProps {
-  // Trunk root x (left edge of trunk in viewBox px).
-  x: number;
-  // y where the trunk meets the ground — usually FRONT_Y so the tree
-  // stands on the dog's ground line, not the upper tree-line.
-  baseY: number;
-  foliage: string;
-  highlight: string;
-  trunk: string;
-  // Flip the foliage-mass offset so a left-edge tree leans right and
-  // a right-edge tree leans left.
-  flip?: boolean;
-}
-
-// Big foreground tree — wider trunk, taller foliage cluster, partially
-// out-of-frame at the top so the eye reads it as "right next to us".
-// The Tree component is sized for the mid-layer skyline, but a near-
-// layer tree needs more presence and a different vertical range.
-function ForegroundTree({ x, baseY, foliage, highlight, trunk, flip }: ForegroundTreeProps) {
-  const u = 4; // 2x of a mid-layer tree's base unit
-  const trunkW = u;
-  const trunkH = u * 8;
-  const trunkX = x;
-  const trunkY = baseY - trunkH;
-  // Foliage mass is offset to one side of the trunk so most of it is
-  // visible inside the frame instead of clipped at the edge.
-  const fOffset = flip ? -u * 7 : -u * 1;
-  return (
-    <g>
-      <rect x={trunkX} y={trunkY} width={trunkW} height={trunkH} fill={trunk} />
-      <rect x={x + fOffset} y={trunkY - u * 6} width={u * 9} height={u * 6} fill={foliage} />
-      <rect x={x + fOffset + u} y={trunkY - u * 9} width={u * 7} height={u * 3} fill={foliage} />
-      <rect x={x + fOffset + u * 2} y={trunkY - u * 11} width={u * 5} height={u * 2} fill={foliage} />
-      <rect x={x + fOffset + u * 3} y={trunkY - u * 13} width={u * 3} height={u * 2} fill={foliage} />
-      {/* Two highlight pixels for some texture */}
-      <rect x={x + fOffset + u * 2} y={trunkY - u * 4} width={u} height={u} fill={highlight} />
-      <rect x={x + fOffset + u * 5} y={trunkY - u * 7} width={u} height={u} fill={highlight} />
     </g>
   );
 }
@@ -264,12 +225,51 @@ export function ProfileSceneBackdrop({
         style={layerStyle(dogCenterX, cardWidth, 0.06, transitionMs)}
         aria-hidden
       >
+        {/* Cloud drift keyframes — each cloud picks a different
+            period and direction so the sky doesn't slide uniformly.
+            Translates are in viewBox units (the SVG stretches with
+            preserveAspectRatio="none", so they read as fractions of
+            the sky width on screen). */}
+        <style>{`
+          @keyframes cloud-a { 0%,100% { transform: translateX(0); } 50% { transform: translateX(20px); } }
+          @keyframes cloud-b { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-16px); } }
+          @keyframes cloud-c { 0%,100% { transform: translateX(0); } 50% { transform: translateX(24px); } }
+          @keyframes cloud-d { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-22px); } }
+        `}</style>
         {mode === 'night' ? <Stars /> : null}
         {mode === 'day' ? <Sun cx={290} cy={28} /> : <Moon cx={290} cy={28} />}
-        <Cloud x={20} y={18} scale={1.2} fill={p.cloud} shadow={p.cloudShadow} />
-        <Cloud x={108} y={8} scale={1} fill={p.cloud} shadow={p.cloudShadow} />
-        <Cloud x={172} y={28} scale={0.85} fill={p.cloud} shadow={p.cloudShadow} />
-        <Cloud x={236} y={14} scale={1.15} fill={p.cloud} shadow={p.cloudShadow} />
+        <Cloud
+          x={20}
+          y={18}
+          scale={1.2}
+          fill={p.cloud}
+          shadow={p.cloudShadow}
+          animation="cloud-a 34s ease-in-out infinite"
+        />
+        <Cloud
+          x={108}
+          y={8}
+          scale={1}
+          fill={p.cloud}
+          shadow={p.cloudShadow}
+          animation="cloud-b 28s ease-in-out infinite"
+        />
+        <Cloud
+          x={172}
+          y={28}
+          scale={0.85}
+          fill={p.cloud}
+          shadow={p.cloudShadow}
+          animation="cloud-c 42s ease-in-out infinite"
+        />
+        <Cloud
+          x={236}
+          y={14}
+          scale={1.15}
+          fill={p.cloud}
+          shadow={p.cloudShadow}
+          animation="cloud-d 38s ease-in-out infinite"
+        />
       </svg>
 
       {/* Mid layer — trees + lamppost. Lamp light cone added at
@@ -283,25 +283,19 @@ export function ProfileSceneBackdrop({
       >
         {mode === 'night' ? (
           <>
-            {/* Light cone: trapezoid from bulb (narrow top) to
-                ground (wide bottom), warm yellow with low alpha so
-                trees and ground show through. */}
+            {/* Light cone: short trapezoid from bulb (narrow top) to
+                just below the bench (wide bottom), warm yellow with
+                low alpha so the post + bench still read through. The
+                cone alone sells the "lamp is lit" — a separate pool
+                ellipse on the ground reads as a horizontal stripe. */}
             <polygon
-              points={`155,${GROUND_Y - 56} 165,${GROUND_Y - 56} 188,${FRONT_Y} 132,${FRONT_Y}`}
-              fill="rgba(255, 215, 130, 0.18)"
+              points={`155,${GROUND_Y - 56} 165,${GROUND_Y - 56} 174,${GROUND_Y + 5} 146,${GROUND_Y + 5}`}
+              fill="rgba(255, 215, 130, 0.2)"
             />
             {/* Brighter inner cone for a hot-spot look */}
             <polygon
-              points={`158,${GROUND_Y - 56} 162,${GROUND_Y - 56} 175,${FRONT_Y} 145,${FRONT_Y}`}
-              fill="rgba(255, 230, 160, 0.22)"
-            />
-            {/* Pool of light on the ground directly under the lamp */}
-            <ellipse
-              cx={160}
-              cy={FRONT_Y - 1}
-              rx={26}
-              ry={3}
-              fill="rgba(255, 220, 130, 0.35)"
+              points={`158,${GROUND_Y - 56} 162,${GROUND_Y - 56} 167,${GROUND_Y + 5} 153,${GROUND_Y + 5}`}
+              fill="rgba(255, 230, 160, 0.25)"
             />
           </>
         ) : null}
@@ -323,33 +317,13 @@ export function ProfileSceneBackdrop({
         </g>
       </svg>
 
-      {/* Near layer — bench + grass tufts + a couple of close-up
-          trees that anchor the foreground. They sit on FRONT_Y (the
-          dog's walking ground) and are deliberately tall so their
-          tops are clipped by the scene top — reads as "we're standing
-          right next to them". Placed at the extreme edges so they
-          flank the action without sitting on top of the dog. */}
+      {/* Near layer — bench + grass tufts. Fastest parallax. */}
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         preserveAspectRatio="none"
         style={layerStyle(dogCenterX, cardWidth, 0.32, transitionMs)}
         aria-hidden
       >
-        <ForegroundTree
-          x={-12}
-          baseY={FRONT_Y}
-          foliage={p.foliage}
-          highlight={p.foliageHighlight}
-          trunk={p.trunk}
-        />
-        <ForegroundTree
-          x={336}
-          baseY={FRONT_Y}
-          foliage={p.foliage}
-          highlight={p.foliageHighlight}
-          trunk={p.trunk}
-          flip
-        />
         <g fill={p.bench}>
           <rect x={180} y={GROUND_Y - 9} width={36} height={3} />
           <rect x={180} y={GROUND_Y - 15} width={36} height={2} />
