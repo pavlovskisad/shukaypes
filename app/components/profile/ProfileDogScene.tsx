@@ -30,13 +30,14 @@ const SCENE: SceneEntry[] = [
 
 // Per-anim downward offset — pushes the sprite down inside the
 // container so the dog's BODY (not its sprite frame) sits flush
-// with the bottom. sitting/lying have empty pixels below the body
-// in the sprite frame; walking/running/sniffing have paws at the
-// frame edge so they're flush at offset 0.
+// with the ground line. Different poses have different amounts of
+// empty pixels below the dog's paws/butt in their source frames,
+// so the offsets vary. Tuned by eye against the SVG ground line at
+// container y=115.
 const ANIM_BOTTOM_OFFSET: Record<DogAnim, number> = {
-  walking: 0,
-  running: 0,
-  sniffing: 0,
+  walking: -22,
+  running: -22,
+  sniffing: -2,
   sitting: -22,
   lying: -8,
 };
