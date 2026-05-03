@@ -2,23 +2,21 @@
 // All shapes are rectangles on a 2-px pixel grid to match the 8-bit
 // dog sprite aesthetic — no anti-aliased curves, no gradients.
 //
-// Two-ground-line layout:
-//   BACK_GROUND_Y  ↦ trees + lamppost stand on this. Higher up in the
-//                    viewBox so they read as "the line in the
-//                    distance" — clouds sit above, the dog walks
-//                    below.
-//   FRONT_GROUND_Y ↦ dog paws + bench rest on this. At the bottom
-//                    of the viewBox so the dog walks in the
-//                    foreground, with the back ground visibly
-//                    above its paws.
-// Net effect: dog walks IN FRONT OF the tree row, not on the same
-// line, which kills the "dog floating in mid-air" feel.
+// Three parallax layers:
+//   far  — clouds drifting in the sky (factor ~0.06)
+//   mid  — trees of varied sizes + lamppost (factor ~0.18)
+//   near — bench + ground tufts (factor ~0.32)
+// Plus a ground stripe that stays locked as the reference plane.
 //
-// Three parallax layers (factor opposite to dog motion):
-//   far  — clouds (factor ~0.06)
-//   mid  — trees + lamppost on BACK_GROUND_Y (factor ~0.18)
-//   near — bench + grass tufts on FRONT_GROUND_Y (factor ~0.32)
-// Plus the front ground stripe locked as the reference plane.
+// Each layer is its own <svg> with the same 360×130 viewBox so the
+// elements line up vertically. Layers translate horizontally by
+// `(dogCenter - cardCenter) * -factor` — when the dog moves right
+// of centre, the layers slide left; when the dog moves left, they
+// slide right. Factor 0 for the ground, increasing toward the
+// foreground for that classic platformer parallax depth feel.
+//
+// Transition matches the dog's slide duration so layers lerp in
+// sync with the dog's motion.
 
 interface BackdropProps {
   // Dog's current center x in container pixels. Drives parallax.
@@ -33,57 +31,53 @@ interface BackdropProps {
 const VIEW_W = 360;
 const VIEW_H = 130;
 
-// Where the TREE-row stands. Trees, lamppost, and any "background"
-// objects share this baseline. Sits in the upper-middle of the
-// viewBox so the dog walks visibly below.
-const BACK_GROUND_Y = 95;
-// Where the DOG walks and the bench rests. Container's bottom strip.
-// The dog's per-anim bottomOffset (in ProfileDogScene) lands paws on
-// this line.
-const FRONT_GROUND_Y = 122;
+// Ground line y in viewBox units. Trees, lamppost, bench and grass
+// tufts all stand on this; the dog's per-anim bottomOffset aligns
+// its paws here too. Bumped from 115 → 122 so the dog's actual
+// pixel paws (which sit ~5 px above the sprite frame's bottom in
+// most poses) land squarely on the line instead of floating above.
+const GROUND_Y = 122;
 
 interface CloudProps {
   x: number;
   y: number;
-  scale?: number;
+  scale?: number; // multiplier on the cloud size (1 = base ~24px wide)
 }
 
-// Fluffy pixel cloud — 6 rows of bumpy rectangles forming a
-// rounded silhouette. The two top "bumps" + tapered bottom gives
-// a real volume read instead of looking like flat lines. White fill
-// with a faint shadow on the bottom row.
+// Pixel cloud — 3 stacked rows of rectangles forming a puffy shape.
+// Built around base unit `u` so we can scale without breaking the
+// pixel grid. White-ish fill with a slightly darker bottom shadow
+// row for a hint of volume.
 function Cloud({ x, y, scale = 1 }: CloudProps) {
   const u = 2 * scale;
   return (
     <g>
-      {/* Top bumps */}
-      <rect x={x + 4 * u} y={y} width={2 * u} height={u} fill="#ffffff" />
-      <rect x={x + 8 * u} y={y} width={4 * u} height={u} fill="#ffffff" />
-      {/* Upper body */}
-      <rect x={x + 2 * u} y={y + u} width={4 * u} height={u} fill="#ffffff" />
-      <rect x={x + 7 * u} y={y + u} width={6 * u} height={u} fill="#ffffff" />
-      {/* Mid body — full width */}
-      <rect x={x + u} y={y + 2 * u} width={14 * u} height={2 * u} fill="#ffffff" />
-      {/* Lower body — slightly narrower */}
-      <rect x={x + 2 * u} y={y + 4 * u} width={12 * u} height={u} fill="#ffffff" />
-      {/* Bottom shadow row */}
-      <rect x={x + 3 * u} y={y + 5 * u} width={10 * u} height={u} fill="#eef2f5" />
+      {/* Top row — narrow */}
+      <rect x={x + 4 * u} y={y} width={6 * u} height={u} fill="#ffffff" />
+      {/* Mid row — wide body */}
+      <rect x={x + u} y={y + u} width={12 * u} height={2 * u} fill="#ffffff" />
+      {/* Bottom row — slightly narrower with shadow row */}
+      <rect x={x + 2 * u} y={y + 3 * u} width={10 * u} height={u} fill="#f0f3f6" />
     </g>
   );
 }
 
 interface TreeProps {
   x: number;
-  scale?: number;
+  scale?: number; // 1 = base size; trunk + foliage scale together
 }
 
-// Pixel tree on the BACK_GROUND_Y baseline.
+// Pixel tree — stepped square foliage on a small trunk. Sits on
+// GROUND_Y. Scale multiplier lets the same component render small
+// shrubs and big mature trees from one helper.
 function Tree({ x, scale = 1 }: TreeProps) {
   const u = 2 * scale;
+  // Trunk
   const trunkW = u;
   const trunkH = u * 4;
-  const trunkX = x + u * 4 - trunkW / 2;
-  const trunkY = BACK_GROUND_Y - trunkH;
+  const trunkX = x + u * 4 - trunkW / 2; // centered under foliage
+  const trunkY = GROUND_Y - trunkH;
+  // Foliage — three stacked tiers narrowing upward
   const foliage = '#88a878';
   const highlight = '#a3c195';
   return (
@@ -130,22 +124,25 @@ export function ProfileSceneBackdrop({
 }: BackdropProps) {
   return (
     <>
-      {/* Far layer — fluffy clouds drifting in the upper sky.
-          Slowest parallax. */}
+      {/* Far layer — clouds drifting in the sky. Slowest parallax,
+          so they barely move as the dog walks (sells "distant"). */}
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         preserveAspectRatio="none"
         style={layerStyle(dogCenterX, cardWidth, 0.06, transitionMs)}
         aria-hidden
       >
-        <Cloud x={20} y={6} scale={1.2} />
-        <Cloud x={120} y={2} scale={0.95} />
-        <Cloud x={196} y={14} scale={0.85} />
-        <Cloud x={262} y={6} scale={1.1} />
+        <Cloud x={20} y={18} scale={1.2} />
+        <Cloud x={108} y={8} scale={1} />
+        <Cloud x={172} y={28} scale={0.85} />
+        <Cloud x={236} y={14} scale={1.15} />
+        <Cloud x={306} y={24} scale={0.9} />
       </svg>
 
-      {/* Mid layer — varied trees + lamppost, all standing on
-          BACK_GROUND_Y. The dog walks in front of this row. */}
+      {/* Mid layer — varied trees. Six trees of different sizes
+          spread across the row, with the lamppost in the middle
+          for a focal point. Sizes range from small shrub to big
+          mature so the row reads as a real park edge. */}
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         preserveAspectRatio="none"
@@ -158,70 +155,45 @@ export function ProfileSceneBackdrop({
         <Tree x={210} scale={1.15} />
         <Tree x={262} scale={0.95} />
         <Tree x={316} scale={1.3} />
-        {/* Lamppost — pole reaches down to BACK_GROUND_Y */}
+        {/* Lamppost — sits between two of the trees */}
         <g>
-          <rect
-            x={158}
-            y={BACK_GROUND_Y - 50}
-            width={2}
-            height={50}
-            fill="#4a4a4a"
-          />
-          <rect
-            x={154}
-            y={BACK_GROUND_Y - 52}
-            width={10}
-            height={4}
-            fill="#4a4a4a"
-          />
-          <rect
-            x={158}
-            y={BACK_GROUND_Y - 56}
-            width={2}
-            height={4}
-            fill="#4a4a4a"
-          />
+          <rect x="158" y={GROUND_Y - 56} width="2" height="56" fill="#4a4a4a" />
+          <rect x="154" y={GROUND_Y - 58} width="10" height="4" fill="#4a4a4a" />
+          <rect x="158" y={GROUND_Y - 62} width="2" height="4" fill="#4a4a4a" />
           {/* Warm bulb glow */}
-          <rect
-            x={154}
-            y={BACK_GROUND_Y - 50}
-            width={10}
-            height={2}
-            fill="#f5d68a"
-          />
+          <rect x="154" y={GROUND_Y - 56} width="10" height="2" fill="#f5d68a" />
         </g>
       </svg>
 
-      {/* Near layer — bench + grass tufts in the foreground, on
-          FRONT_GROUND_Y where the dog walks. Fastest parallax. */}
+      {/* Near layer — bench + ground tufts. Fastest parallax. */}
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         preserveAspectRatio="none"
         style={layerStyle(dogCenterX, cardWidth, 0.32, transitionMs)}
         aria-hidden
       >
-        {/* Bench — sits on FRONT_GROUND_Y, dog can walk past it */}
+        {/* Bench */}
         <g fill="#735940">
-          <rect x={172} y={FRONT_GROUND_Y - 9} width={36} height={3} />
-          <rect x={172} y={FRONT_GROUND_Y - 15} width={36} height={2} />
-          <rect x={176} y={FRONT_GROUND_Y - 13} width={2} height={4} />
-          <rect x={204} y={FRONT_GROUND_Y - 13} width={2} height={4} />
-          <rect x={176} y={FRONT_GROUND_Y - 6} width={2} height={6} />
-          <rect x={204} y={FRONT_GROUND_Y - 6} width={2} height={6} />
+          <rect x="180" y={GROUND_Y - 9} width="36" height="3" />
+          <rect x="180" y={GROUND_Y - 15} width="36" height="2" />
+          <rect x="184" y={GROUND_Y - 13} width="2" height="4" />
+          <rect x="212" y={GROUND_Y - 13} width="2" height="4" />
+          <rect x="184" y={GROUND_Y - 6} width="2" height="6" />
+          <rect x="212" y={GROUND_Y - 6} width="2" height="6" />
         </g>
-        {/* Grass tufts on the front ground line */}
+        {/* Grass tufts on the ground line */}
         <g fill="#8aa078">
-          <rect x={44} y={FRONT_GROUND_Y - 3} width={2} height={3} />
-          <rect x={92} y={FRONT_GROUND_Y - 3} width={2} height={3} />
-          <rect x={138} y={FRONT_GROUND_Y - 3} width={2} height={3} />
-          <rect x={248} y={FRONT_GROUND_Y - 3} width={2} height={3} />
-          <rect x={296} y={FRONT_GROUND_Y - 3} width={2} height={3} />
-          <rect x={334} y={FRONT_GROUND_Y - 3} width={2} height={3} />
+          <rect x="44" y={GROUND_Y - 3} width="2" height="3" />
+          <rect x="92" y={GROUND_Y - 3} width="2" height="3" />
+          <rect x="138" y={GROUND_Y - 3} width="2" height="3" />
+          <rect x="248" y={GROUND_Y - 3} width="2" height="3" />
+          <rect x="296" y={GROUND_Y - 3} width="2" height="3" />
+          <rect x="334" y={GROUND_Y - 3} width="2" height="3" />
         </g>
       </svg>
 
-      {/* Front ground stripe — locked, no parallax. The reference
-          plane the dog's paws meet. */}
+      {/* Ground stripe — locked, no parallax. The reference plane
+          everything else stands on. */}
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         preserveAspectRatio="none"
@@ -236,22 +208,7 @@ export function ProfileSceneBackdrop({
         }}
         aria-hidden
       >
-        <rect
-          x={0}
-          y={FRONT_GROUND_Y}
-          width={VIEW_W}
-          height={3}
-          fill="#c5c8b5"
-        />
-        {/* Faint line at the BACK_GROUND_Y — gives a "horizon"
-            hint without being visually heavy. Same color but thin. */}
-        <rect
-          x={0}
-          y={BACK_GROUND_Y}
-          width={VIEW_W}
-          height={1}
-          fill="#dde1d3"
-        />
+        <rect x="0" y={GROUND_Y} width={VIEW_W} height="3" fill="#c5c8b5" />
       </svg>
     </>
   );
