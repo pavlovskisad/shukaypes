@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { DogSprite, type DogAnim } from '../map/DogSprite';
+import { SpeechBubble } from '../ui/SpeechBubble';
 import { ProfileSceneBackdrop, type SceneMode } from './ProfileSceneBackdrop';
 import { ProfileSceneBirds } from './ProfileSceneBirds';
 
@@ -38,8 +39,9 @@ const SCENE: SceneEntry[] = [
   { anim: 'running', weight: 1, durMs: [2000, 3200], moves: true },
 ];
 
-// Bark variants — pixel speech-bubble text shown when the user taps
-// the scene. Mix of literal woofs and *action* notes.
+// Bark variants shown in the SpeechBubble when the user taps the dog.
+// Mix of literal woofs and *action* notes. Same shared SpeechBubble
+// component as the map companion, so the visual treatment matches.
 const BARKS = [
   'woof!',
   'bork!',
@@ -61,12 +63,10 @@ const BARKS = [
   '*sploot*',
 ];
 
-interface BarkBubble {
-  id: number;
-  text: string;
-  // Horizontal jitter so consecutive taps don't stack identically.
-  dx: number;
-}
+// ms — bark stays on screen this long before vanishing. Matches the
+// Companion's localBubble default so on-tap feedback feels the same
+// across the app.
+const BARK_DURATION_MS = 4500;
 
 // Per-anim downward offset — pushes the sprite down inside the
 // container so the dog's BODY (not its sprite frame) lands on the
@@ -130,8 +130,8 @@ export function ProfileDogScene() {
   );
   const [manualMode, setManualMode] = useState<SceneMode | null>(null);
   const mode: SceneMode = manualMode ?? autoMode;
-  const [barks, setBarks] = useState<BarkBubble[]>([]);
-  const barkSeqRef = useRef(0);
+  const [bark, setBark] = useState<string | null>(null);
+  const barkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Measured container width — drives how far the sprite can slide
   // before clipping. ResizeObserver covers the orientation-flip case
   // on phones; SSR initial render uses 0 (hidden until measured).
@@ -177,20 +177,25 @@ export function ProfileDogScene() {
     return () => clearInterval(id);
   }, []);
 
-  // Tap on dog → bark bubble. Multiple bubbles can stack if the user
-  // spams taps; each is removed after its float-up animation finishes.
-  // stopPropagation keeps the tap from also firing the
+  // Tap on dog → SpeechBubble pops above the head with a random
+  // bark. Re-tapping resets the timer + picks a new word so it
+  // replaces the existing bubble (mirrors the map's single-bubble
+  // behaviour). stopPropagation keeps the tap from also firing the
   // background-toggle on the scene container.
-  const bark = useCallback((e: React.MouseEvent) => {
+  const handleBark = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     const text = BARKS[Math.floor(Math.random() * BARKS.length)]!;
-    const id = ++barkSeqRef.current;
-    const dx = (Math.random() - 0.5) * 28;
-    setBarks((prev) => [...prev, { id, text, dx }]);
-    setTimeout(() => {
-      setBarks((prev) => prev.filter((b) => b.id !== id));
-    }, 1500);
+    setBark(text);
+    if (barkTimerRef.current) clearTimeout(barkTimerRef.current);
+    barkTimerRef.current = setTimeout(() => setBark(null), BARK_DURATION_MS);
   }, []);
+
+  useEffect(
+    () => () => {
+      if (barkTimerRef.current) clearTimeout(barkTimerRef.current);
+    },
+    [],
+  );
 
   // Tap on background → flip day/night. Manual override sticks; a
   // second tap returns the scene to the opposite mode.
@@ -297,7 +302,7 @@ export function ProfileDogScene() {
           backdrop so it parallaxes naturally with the far layer. */}
       <ProfileSceneBirds cardWidth={width} mode={mode} />
       <div
-        onClick={bark}
+        onClick={handleBark}
         style={{
           position: 'absolute',
           left: 0,
@@ -324,88 +329,10 @@ export function ProfileDogScene() {
         }}
       >
         <DogSprite anim={anim} facingLeft={facingLeft} scale={SPRITE_SCALE} />
-        {/* Bark bubbles — float up from above the dog's head and
-            fade out. Multiple stack if the user taps fast. Inside
-            the dog wrapper so they ride along with the slide. */}
-        {barks.map((b) => (
-          <BarkBubbleEl key={b.id} text={b.text} dx={b.dx} />
-        ))}
-      </div>
-    </div>
-  );
-}
-
-// Pixel-style speech bubble — white card, dark border, tail toward
-// the dog's head. Floats up and fades out via CSS keyframes; the
-// parent strips it from state when the animation finishes.
-function BarkBubbleEl({ text, dx }: { text: string; dx: number }) {
-  return (
-    <div
-      style={{
-        position: 'absolute',
-        left: SPRITE_PX / 2,
-        // Roughly aligned with the dog's head — top quarter of the
-        // sprite frame. Float-up animation lifts it from there.
-        top: 24,
-        transform: `translateX(calc(-50% + ${dx}px))`,
-        pointerEvents: 'none',
-      }}
-    >
-      <style>{`
-        @keyframes bark-float {
-          0%   { opacity: 0; transform: translateY(8px) scale(0.85); }
-          15%  { opacity: 1; transform: translateY(0) scale(1); }
-          100% { opacity: 0; transform: translateY(-32px) scale(1); }
-        }
-      `}</style>
-      <div
-        style={{
-          animation: 'bark-float 1500ms ease-out forwards',
-          position: 'relative',
-        }}
-      >
-        <div
-          style={{
-            background: '#ffffff',
-            border: '2px solid #34344a',
-            borderRadius: 8,
-            padding: '3px 9px',
-            fontSize: 12,
-            fontWeight: 700,
-            color: '#34344a',
-            whiteSpace: 'nowrap',
-            boxShadow: '0 2px 4px rgba(0,0,0,0.12)',
-          }}
-        >
-          {text}
-        </div>
-        {/* Tail pointing down toward the dog */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: -6,
-            left: '50%',
-            marginLeft: -4,
-            width: 0,
-            height: 0,
-            borderLeft: '4px solid transparent',
-            borderRight: '4px solid transparent',
-            borderTop: '6px solid #34344a',
-          }}
-        />
-        <div
-          style={{
-            position: 'absolute',
-            bottom: -3,
-            left: '50%',
-            marginLeft: -3,
-            width: 0,
-            height: 0,
-            borderLeft: '3px solid transparent',
-            borderRight: '3px solid transparent',
-            borderTop: '4px solid #ffffff',
-          }}
-        />
+        {/* Same SpeechBubble component as the map companion — dark
+            pill above the dog's head. Single bubble at a time;
+            re-tap replaces the text and resets the timer. */}
+        <SpeechBubble text={bark} />
       </div>
     </div>
   );
