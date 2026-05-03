@@ -148,11 +148,18 @@ export function ProfileDogScene() {
   const mode: SceneMode = manualMode ?? autoMode;
   const [bark, setBark] = useState<string | null>(null);
   const barkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Override anim on tap so the dog visibly reacts (jump / crouch /
-  // sit). null while the regular state machine is in control.
-  const [reactAnim, setReactAnim] = useState<DogAnim | null>(null);
-  const reactTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const displayedAnim: DogAnim = reactAnim ?? anim;
+  // State-machine timer + last-anim need to be refs so the on-tap
+  // handler can pause the machine and schedule a fresh step after
+  // the reaction finishes — otherwise the state machine ticks
+  // underneath the reaction and the dog "snaps" to whatever it
+  // picked (a walking / running pose) the moment the reaction
+  // window closes.
+  const stateTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastSchedAnimRef = useRef<DogAnim | null>(null);
+  // The state-machine step itself lives in a ref so handleBark can
+  // re-invoke it after a reaction without needing the useEffect to
+  // re-run.
+  const stepFnRef = useRef<(() => void) | null>(null);
   // Measured container width — drives how far the sprite can slide
   // before clipping. ResizeObserver covers the orientation-flip case
   // on phones; SSR initial render uses 0 (hidden until measured).
@@ -162,6 +169,8 @@ export function ProfileDogScene() {
   const [transitionMs, setTransitionMs] = useState(0);
   const xRef = useRef(0);
   xRef.current = x;
+  const widthRef = useRef(0);
+  widthRef.current = width;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -199,10 +208,12 @@ export function ProfileDogScene() {
   }, []);
 
   // Tap on dog → SpeechBubble + a random reaction pose (jump /
-  // crouch / sit). Re-tapping resets both timers + picks new text +
-  // pose, mirroring the map's single-bubble behaviour.
-  // stopPropagation keeps the tap from also firing the
-  // background-toggle on the scene container.
+  // crouch / sit). The state machine is paused for the reaction's
+  // duration and resumes with a fresh step right after — without
+  // the pause, the still-ticking machine would pick a new anim
+  // mid-reaction and the dog would snap to it (walking / running)
+  // the moment the reaction cleared. stopPropagation keeps the tap
+  // from also firing the background-toggle on the scene container.
   const handleBark = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     const text = BARKS[Math.floor(Math.random() * BARKS.length)]!;
@@ -211,15 +222,16 @@ export function ProfileDogScene() {
     barkTimerRef.current = setTimeout(() => setBark(null), BARK_DURATION_MS);
 
     const reaction = TAP_REACTIONS[Math.floor(Math.random() * TAP_REACTIONS.length)]!;
-    setReactAnim(reaction.anim);
-    if (reactTimerRef.current) clearTimeout(reactTimerRef.current);
-    reactTimerRef.current = setTimeout(() => setReactAnim(null), reaction.durMs);
+    setAnim(reaction.anim);
+    setTransitionMs(0);
+    lastSchedAnimRef.current = reaction.anim;
+    if (stateTimerRef.current) clearTimeout(stateTimerRef.current);
+    stateTimerRef.current = setTimeout(() => stepFnRef.current?.(), reaction.durMs);
   }, []);
 
   useEffect(
     () => () => {
       if (barkTimerRef.current) clearTimeout(barkTimerRef.current);
-      if (reactTimerRef.current) clearTimeout(reactTimerRef.current);
     },
     [],
   );
@@ -235,50 +247,54 @@ export function ProfileDogScene() {
 
   // State-machine tick — picks a new entry, sets the anim, and (if
   // moving) starts a CSS transition toward a new x. Each tick
-  // schedules the next via setTimeout; cleanup on unmount cancels
-  // the pending one.
+  // schedules the next via setTimeout. The step function is held in
+  // stepFnRef so the on-tap reaction can re-invoke it after a pause.
+  // Reads width via widthRef so the function body stays stable
+  // across renders without depending on width state.
+  stepFnRef.current = () => {
+    const w = widthRef.current;
+    if (w === 0) return;
+    const entry = pickEntry(lastSchedAnimRef.current);
+    lastSchedAnimRef.current = entry.anim;
+    const dur = randomBetween(entry.durMs);
+    setAnim(entry.anim);
+    if (entry.moves && w > SPRITE_PX) {
+      const maxX = w - SPRITE_PX;
+      let target: number;
+      if (entry.movePx) {
+        // Constrained move — small step in a random direction. If
+        // the chosen direction would clip a wall, flip it. Used by
+        // sniffing so the dog tracks a scent instead of dashing.
+        const delta = randomBetween(entry.movePx);
+        const dir = Math.random() < 0.5 ? -1 : 1;
+        target = xRef.current + dir * delta;
+        if (target < 0 || target > maxX) target = xRef.current - dir * delta;
+        target = Math.max(0, Math.min(maxX, target));
+      } else {
+        // Wide pick — random target across the container with an
+        // 80px minimum delta so we don't twitch in place.
+        const minDelta = 80;
+        target = Math.random() * maxX;
+        if (Math.abs(target - xRef.current) < minDelta) {
+          target = xRef.current < maxX / 2 ? xRef.current + minDelta : xRef.current - minDelta;
+          target = Math.max(0, Math.min(maxX, target));
+        }
+      }
+      setFacingLeft(target < xRef.current);
+      setTransitionMs(dur);
+      setX(target);
+    } else {
+      setTransitionMs(0); // no slide on stationary
+    }
+    stateTimerRef.current = setTimeout(() => stepFnRef.current?.(), dur);
+  };
+
+  // Kick off the state machine once we have a measured width.
   useEffect(() => {
     if (width === 0) return;
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let lastAnim: DogAnim | null = null;
-    const step = () => {
-      const entry = pickEntry(lastAnim);
-      lastAnim = entry.anim;
-      const dur = randomBetween(entry.durMs);
-      setAnim(entry.anim);
-      if (entry.moves && width > SPRITE_PX) {
-        const maxX = width - SPRITE_PX;
-        let target: number;
-        if (entry.movePx) {
-          // Constrained move — small step in a random direction. If
-          // the chosen direction would clip a wall, flip it. Used by
-          // sniffing so the dog tracks a scent instead of dashing.
-          const delta = randomBetween(entry.movePx);
-          const dir = Math.random() < 0.5 ? -1 : 1;
-          target = xRef.current + dir * delta;
-          if (target < 0 || target > maxX) target = xRef.current - dir * delta;
-          target = Math.max(0, Math.min(maxX, target));
-        } else {
-          // Wide pick — random target across the container with an
-          // 80px minimum delta so we don't twitch in place.
-          const minDelta = 80;
-          target = Math.random() * maxX;
-          if (Math.abs(target - xRef.current) < minDelta) {
-            target = xRef.current < maxX / 2 ? xRef.current + minDelta : xRef.current - minDelta;
-            target = Math.max(0, Math.min(maxX, target));
-          }
-        }
-        setFacingLeft(target < xRef.current);
-        setTransitionMs(dur);
-        setX(target);
-      } else {
-        setTransitionMs(0); // no slide on stationary
-      }
-      timer = setTimeout(step, dur);
-    };
-    step();
+    stepFnRef.current?.();
     return () => {
-      if (timer) clearTimeout(timer);
+      if (stateTimerRef.current) clearTimeout(stateTimerRef.current);
     };
   }, [width]);
 
@@ -336,9 +352,7 @@ export function ProfileDogScene() {
           // Per-anim downward offset — sitting/lying push the sprite
           // down so empty pixels below the dog body in the sprite
           // frame don't show up as bottom padding inside the card.
-          // displayedAnim folds the on-tap reaction (jump/crouch/sit)
-          // over the state-machine anim while it's active.
-          bottom: ANIM_BOTTOM_OFFSET[displayedAnim],
+          bottom: ANIM_BOTTOM_OFFSET[anim],
           transform: `translateX(${x}px)`,
           width: SPRITE_PX,
           height: SPRITE_PX,
@@ -357,7 +371,7 @@ export function ProfileDogScene() {
           cursor: 'pointer',
         }}
       >
-        <DogSprite anim={displayedAnim} facingLeft={facingLeft} scale={SPRITE_SCALE} />
+        <DogSprite anim={anim} facingLeft={facingLeft} scale={SPRITE_SCALE} />
         {/* Same SpeechBubble component as the map companion — dark
             pill above the dog's head. Single bubble at a time;
             re-tap replaces the text and resets the timer. */}
