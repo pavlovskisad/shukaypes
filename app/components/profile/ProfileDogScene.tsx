@@ -73,8 +73,13 @@ const BARK_DURATION_MS = 4500;
 // Each reaction picks a duration that gives the pose enough time to
 // register (jumping = one full hop cycle; crouched/sitting hold
 // briefly before the state machine takes back over).
-const TAP_REACTIONS: { anim: DogAnim; durMs: number }[] = [
-  { anim: 'jumping', durMs: 720 },
+//
+// movePx (optional) — px the dog actually slides during the reaction.
+// Only set on jumping so it reads as a real hop forward, not pose
+// cycling in place. Crouched / sitting stay frozen exactly where the
+// dog was when tapped.
+const TAP_REACTIONS: { anim: DogAnim; durMs: number; movePx?: number }[] = [
+  { anim: 'jumping', durMs: 720, movePx: 30 },
   { anim: 'crouched', durMs: 1200 },
   { anim: 'sitting', durMs: 1200 },
 ];
@@ -226,21 +231,42 @@ export function ProfileDogScene() {
     barkTimerRef.current = setTimeout(() => setBark(null), BARK_DURATION_MS);
 
     const reaction = TAP_REACTIONS[Math.floor(Math.random() * TAP_REACTIONS.length)]!;
-    // Freeze the dog at its current visual position before clearing
-    // the slide transition. Without this, x state still holds the
-    // slide's TARGET while the dog is visually somewhere along the
-    // way — disabling the transition would teleport the dog to the
-    // target. Reading the live transform via getComputedStyle is
-    // accurate even mid-slide.
+    // Read current visual X first — for any reaction we need this
+    // either as the freeze position (crouch/sit) or as the start of
+    // the jump's slide. xRef.current holds the slide TARGET, not
+    // the in-flight position, so we go to getComputedStyle.
     const el = dogWrapperRef.current;
+    let visualX = xRef.current;
     if (el && typeof window !== 'undefined') {
       const matrix = new DOMMatrix(getComputedStyle(el).transform);
-      const visualX = matrix.m41;
+      visualX = matrix.m41;
+    }
+    if (reaction.movePx) {
+      // Hop reaction — slide visibly during the reaction's duration
+      // in a random direction (clamped to bounds). Re-targeting an
+      // in-flight transition is smooth in CSS — the browser
+      // interpolates from the live value to the new target without
+      // teleporting.
+      const w = widthRef.current;
+      const maxX = Math.max(0, w - SPRITE_PX);
+      const dir = Math.random() < 0.5 ? -1 : 1;
+      let target = visualX + dir * reaction.movePx;
+      if (target < 0 || target > maxX) target = visualX - dir * reaction.movePx;
+      target = Math.max(0, Math.min(maxX, target));
+      setFacingLeft(target < visualX);
+      setX(target);
+      setTransitionMs(reaction.durMs);
+      xRef.current = target;
+    } else {
+      // Stationary reaction — freeze the dog exactly where it was
+      // when tapped. setTransitionMs(0) yanks the slide; setX(visualX)
+      // pins the transform so the yank doesn't teleport to the old
+      // slide target.
       setX(visualX);
+      setTransitionMs(0);
       xRef.current = visualX;
     }
     setAnim(reaction.anim);
-    setTransitionMs(0);
     lastSchedAnimRef.current = reaction.anim;
     if (stateTimerRef.current) clearTimeout(stateTimerRef.current);
     stateTimerRef.current = setTimeout(() => stepFnRef.current?.(), reaction.durMs);
