@@ -15,14 +15,13 @@ interface SceneEntry {
   moves: boolean;
 }
 
-// Tuned to read like a real dog hanging out — short, deliberate beats
-// chained together rather than long single sessions. User wants:
-// "lie down a few sec, walk a few sec, sniff once or twice, run a
-// bit, sit ~5s, etc". sniffing duration sized to ~1-2 frame cycles
-// (8 frames × 140 ms ≈ 1.1s/cycle).
+// Sitting is the default idle, lying is rare. Combined with the no-
+// repeat guard from bf99b37, lying surfaces ~once every 5-7 beats —
+// reads as "the dog occasionally settles for a nap" instead of "lies
+// down constantly". User-tuned weights.
 const SCENE: SceneEntry[] = [
-  { anim: 'sitting', weight: 3, durMs: [4000, 6500], moves: false },
-  { anim: 'lying', weight: 2, durMs: [3500, 6000], moves: false },
+  { anim: 'sitting', weight: 6, durMs: [4000, 7500], moves: false },
+  { anim: 'lying', weight: 1, durMs: [4000, 7000], moves: false },
   { anim: 'sniffing', weight: 2, durMs: [1500, 2800], moves: false },
   { anim: 'walking', weight: 3, durMs: [3000, 5500], moves: true },
   { anim: 'running', weight: 1, durMs: [2000, 3200], moves: true },
@@ -150,7 +149,15 @@ export function ProfileDogScene() {
       ref={containerRef}
       style={{
         position: 'relative',
-        width: '100%',
+        // Break out of the card's 18px horizontal padding so the dog
+        // can use the full card width — the natural padding around
+        // the card content was clamping the slide range to ~150 px
+        // on phones, which read as "the dog only moves in a tiny
+        // strip in the middle". Negative margins keep the container
+        // inside the card's white bg + rounded corners (overflow
+        // clips at the corners) but let the dog reach card edges.
+        width: 'calc(100% + 36px)' as unknown as number,
+        marginLeft: -18,
         height: HEIGHT_PX,
         // No marginBottom — the dog's "feet" sit flush against the
         // companion-name line below for a tighter hero card. The
@@ -173,13 +180,13 @@ export function ProfileDogScene() {
           // frame don't show up as bottom padding inside the card.
           bottom: ANIM_BOTTOM_OFFSET[anim],
           transform: `translateX(${x}px)`,
-          // Transition both the slide AND the bottom offset so anim
-          // swaps soften the y-jump from "walking flush" to
-          // "sitting pushed down".
+          // Transition the slide on its real duration; the bottom
+          // offset transitions much faster (80ms) so the per-anim
+          // "drop" doesn't read as a separate motion event.
           transition:
             transitionMs > 0
-              ? `transform ${transitionMs}ms linear, bottom 250ms ease-out`
-              : 'bottom 250ms ease-out',
+              ? `transform ${transitionMs}ms linear, bottom 80ms ease-out`
+              : 'bottom 80ms ease-out',
         }}
       >
         <DogSprite anim={anim} facingLeft={facingLeft} scale={SPRITE_SCALE} />
