@@ -29,17 +29,17 @@ const SCENE: SceneEntry[] = [
 ];
 
 // Per-anim downward offset — pushes the sprite down inside the
-// container so the dog's BODY (not its sprite frame) sits flush
-// with the ground line. Different poses have different amounts of
-// empty pixels below the dog's paws/butt in their source frames,
-// so the offsets vary. Tuned by eye against the SVG ground line at
-// container y=115.
+// container so the dog's BODY (not its sprite frame) lands on the
+// scene's FRONT_GROUND_Y line. Tuned by eye against each pose's
+// actual paw row in its sprite frame; running's mid-leap frames
+// will still appear airborne (that's correct for "running"), but
+// the on-ground frames sit on the line.
 const ANIM_BOTTOM_OFFSET: Record<DogAnim, number> = {
-  walking: -22,
-  running: -22,
-  sniffing: -2,
-  sitting: -22,
-  lying: -8,
+  walking: -27,
+  running: -27,
+  sniffing: -8,
+  sitting: -27,
+  lying: -14,
 };
 
 const SPRITE_SCALE = 2.5; // 64 × 2.5 = 160 px on screen
