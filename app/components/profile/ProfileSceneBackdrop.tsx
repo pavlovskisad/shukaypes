@@ -49,7 +49,6 @@ const PALETTE = {
     trunk: '#735940',
     bench: '#735940',
     grass: '#7ea850',
-    horizon: '#a8c578',
     cloud: '#ffffff',
     cloudShadow: '#f0f3f6',
     lamppost: '#4a4a4a',
@@ -63,7 +62,6 @@ const PALETTE = {
     trunk: '#3a2c1f',
     bench: '#3a2c1f',
     grass: '#3e5236',
-    horizon: '#1e2c3a',
     cloud: '#465972',
     cloudShadow: '#3a4c63',
     lamppost: '#222222',
@@ -221,7 +219,6 @@ export function ProfileSceneBackdrop({
           height={VIEW_H - GROUND_Y}
           fill={p.foreground}
         />
-        <rect x={0} y={GROUND_Y} width={VIEW_W} height={3} fill={p.horizon} />
       </svg>
 
       {/* Far layer — sun-or-moon, stars at night, clouds. */}
