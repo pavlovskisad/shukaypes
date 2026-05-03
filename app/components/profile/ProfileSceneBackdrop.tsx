@@ -71,12 +71,16 @@ interface CloudProps {
   scale?: number;
   fill: string;
   shadow: string;
+  // Optional CSS animation shorthand (e.g. 'cloud-a 34s ease-in-out
+  // infinite'). Drives a slow back-and-forth drift in viewBox units
+  // so the sky reads as alive even while the dog is stationary.
+  animation?: string;
 }
 
-function Cloud({ x, y, scale = 1, fill, shadow }: CloudProps) {
+function Cloud({ x, y, scale = 1, fill, shadow, animation }: CloudProps) {
   const u = 2 * scale;
   return (
-    <g>
+    <g style={animation ? { animation } : undefined}>
       <rect x={x + 4 * u} y={y} width={6 * u} height={u} fill={fill} />
       <rect x={x + u} y={y + u} width={12 * u} height={2 * u} fill={fill} />
       <rect x={x + 2 * u} y={y + 3 * u} width={10 * u} height={u} fill={shadow} />
@@ -221,12 +225,51 @@ export function ProfileSceneBackdrop({
         style={layerStyle(dogCenterX, cardWidth, 0.06, transitionMs)}
         aria-hidden
       >
+        {/* Cloud drift keyframes — each cloud picks a different
+            period and direction so the sky doesn't slide uniformly.
+            Translates are in viewBox units (the SVG stretches with
+            preserveAspectRatio="none", so they read as fractions of
+            the sky width on screen). */}
+        <style>{`
+          @keyframes cloud-a { 0%,100% { transform: translateX(0); } 50% { transform: translateX(20px); } }
+          @keyframes cloud-b { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-16px); } }
+          @keyframes cloud-c { 0%,100% { transform: translateX(0); } 50% { transform: translateX(24px); } }
+          @keyframes cloud-d { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-22px); } }
+        `}</style>
         {mode === 'night' ? <Stars /> : null}
         {mode === 'day' ? <Sun cx={290} cy={28} /> : <Moon cx={290} cy={28} />}
-        <Cloud x={20} y={18} scale={1.2} fill={p.cloud} shadow={p.cloudShadow} />
-        <Cloud x={108} y={8} scale={1} fill={p.cloud} shadow={p.cloudShadow} />
-        <Cloud x={172} y={28} scale={0.85} fill={p.cloud} shadow={p.cloudShadow} />
-        <Cloud x={236} y={14} scale={1.15} fill={p.cloud} shadow={p.cloudShadow} />
+        <Cloud
+          x={20}
+          y={18}
+          scale={1.2}
+          fill={p.cloud}
+          shadow={p.cloudShadow}
+          animation="cloud-a 34s ease-in-out infinite"
+        />
+        <Cloud
+          x={108}
+          y={8}
+          scale={1}
+          fill={p.cloud}
+          shadow={p.cloudShadow}
+          animation="cloud-b 28s ease-in-out infinite"
+        />
+        <Cloud
+          x={172}
+          y={28}
+          scale={0.85}
+          fill={p.cloud}
+          shadow={p.cloudShadow}
+          animation="cloud-c 42s ease-in-out infinite"
+        />
+        <Cloud
+          x={236}
+          y={14}
+          scale={1.15}
+          fill={p.cloud}
+          shadow={p.cloudShadow}
+          animation="cloud-d 38s ease-in-out infinite"
+        />
       </svg>
 
       {/* Mid layer — trees + lamppost. Lamp light cone added at
@@ -242,7 +285,9 @@ export function ProfileSceneBackdrop({
           <>
             {/* Light cone: short trapezoid from bulb (narrow top) to
                 just below the bench (wide bottom), warm yellow with
-                low alpha so the post + bench still read through. */}
+                low alpha so the post + bench still read through. The
+                cone alone sells the "lamp is lit" — a separate pool
+                ellipse on the ground reads as a horizontal stripe. */}
             <polygon
               points={`155,${GROUND_Y - 56} 165,${GROUND_Y - 56} 174,${GROUND_Y + 5} 146,${GROUND_Y + 5}`}
               fill="rgba(255, 215, 130, 0.2)"
@@ -251,14 +296,6 @@ export function ProfileSceneBackdrop({
             <polygon
               points={`158,${GROUND_Y - 56} 162,${GROUND_Y - 56} 167,${GROUND_Y + 5} 153,${GROUND_Y + 5}`}
               fill="rgba(255, 230, 160, 0.25)"
-            />
-            {/* Pool of light on the ground directly under the lamp */}
-            <ellipse
-              cx={160}
-              cy={GROUND_Y + 4}
-              rx={14}
-              ry={2}
-              fill="rgba(255, 220, 130, 0.4)"
             />
           </>
         ) : null}
