@@ -160,6 +160,10 @@ export function ProfileDogScene() {
   // re-invoke it after a reaction without needing the useEffect to
   // re-run.
   const stepFnRef = useRef<(() => void) | null>(null);
+  // Ref to the dog wrapper so handleBark can read the actual visual
+  // translateX mid-slide (state holds the slide TARGET, not the
+  // current visual position).
+  const dogWrapperRef = useRef<HTMLDivElement | null>(null);
   // Measured container width — drives how far the sprite can slide
   // before clipping. ResizeObserver covers the orientation-flip case
   // on phones; SSR initial render uses 0 (hidden until measured).
@@ -222,6 +226,19 @@ export function ProfileDogScene() {
     barkTimerRef.current = setTimeout(() => setBark(null), BARK_DURATION_MS);
 
     const reaction = TAP_REACTIONS[Math.floor(Math.random() * TAP_REACTIONS.length)]!;
+    // Freeze the dog at its current visual position before clearing
+    // the slide transition. Without this, x state still holds the
+    // slide's TARGET while the dog is visually somewhere along the
+    // way — disabling the transition would teleport the dog to the
+    // target. Reading the live transform via getComputedStyle is
+    // accurate even mid-slide.
+    const el = dogWrapperRef.current;
+    if (el && typeof window !== 'undefined') {
+      const matrix = new DOMMatrix(getComputedStyle(el).transform);
+      const visualX = matrix.m41;
+      setX(visualX);
+      xRef.current = visualX;
+    }
     setAnim(reaction.anim);
     setTransitionMs(0);
     lastSchedAnimRef.current = reaction.anim;
@@ -345,6 +362,7 @@ export function ProfileDogScene() {
           backdrop so it parallaxes naturally with the far layer. */}
       <ProfileSceneBirds cardWidth={width} mode={mode} />
       <div
+        ref={dogWrapperRef}
         onClick={handleBark}
         style={{
           position: 'absolute',
