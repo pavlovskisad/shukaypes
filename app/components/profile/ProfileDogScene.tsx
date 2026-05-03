@@ -119,11 +119,17 @@ function isDayHour(): boolean {
 export function ProfileDogScene() {
   const [anim, setAnim] = useState<DogAnim>('sitting');
   const [facingLeft, setFacingLeft] = useState(false);
-  // Mode follows real wall-clock time — see isDayHour. The manual
-  // tap-to-toggle was test-only and got replaced by tap-to-bark.
-  const [mode, setMode] = useState<SceneMode>(() =>
+  // Mode auto-derives from wall-clock time. Manual override takes
+  // precedence when set — wired to a tap on the BACKGROUND of the
+  // scene (sky / trees / bench), while a tap on the dog itself fires
+  // a bark instead. So:
+  //   tap dog        → bark
+  //   tap elsewhere  → flip day ↔ night
+  const [autoMode, setAutoMode] = useState<SceneMode>(() =>
     isDayHour() ? 'day' : 'night',
   );
+  const [manualMode, setManualMode] = useState<SceneMode | null>(null);
+  const mode: SceneMode = manualMode ?? autoMode;
   const [barks, setBarks] = useState<BarkBubble[]>([]);
   const barkSeqRef = useRef(0);
   // Measured container width — drives how far the sprite can slide
@@ -166,16 +172,17 @@ export function ProfileDogScene() {
   // re-render anything if the mode hasn't changed.
   useEffect(() => {
     const id = setInterval(() => {
-      setMode(isDayHour() ? 'day' : 'night');
+      setAutoMode(isDayHour() ? 'day' : 'night');
     }, 60_000);
     return () => clearInterval(id);
   }, []);
 
-  // Tap → bark bubble. Multiple bubbles can stack if the user spams
-  // taps; each is removed after its float-up animation finishes. The
-  // tap is registered on the scene container so users don't have to
-  // hit the moving sprite directly.
-  const bark = useCallback(() => {
+  // Tap on dog → bark bubble. Multiple bubbles can stack if the user
+  // spams taps; each is removed after its float-up animation finishes.
+  // stopPropagation keeps the tap from also firing the
+  // background-toggle on the scene container.
+  const bark = useCallback((e: React.MouseEvent) => {
+    e.stopPropagation();
     const text = BARKS[Math.floor(Math.random() * BARKS.length)]!;
     const id = ++barkSeqRef.current;
     const dx = (Math.random() - 0.5) * 28;
@@ -183,6 +190,15 @@ export function ProfileDogScene() {
     setTimeout(() => {
       setBarks((prev) => prev.filter((b) => b.id !== id));
     }, 1500);
+  }, []);
+
+  // Tap on background → flip day/night. Manual override sticks; a
+  // second tap returns the scene to the opposite mode.
+  const toggleMode = useCallback(() => {
+    setManualMode((prev) => {
+      const current = prev ?? (isDayHour() ? 'day' : 'night');
+      return current === 'day' ? 'night' : 'day';
+    });
   }, []);
 
   // State-machine tick — picks a new entry, sets the anim, and (if
@@ -237,9 +253,9 @@ export function ProfileDogScene() {
   return (
     <div
       ref={containerRef}
-      onClick={bark}
+      onClick={toggleMode}
       role="button"
-      aria-label="Tap to make the dog bark"
+      aria-label={`Scene mode: ${mode}. Tap background to toggle, tap dog to bark.`}
       style={{
         position: 'relative',
         // Break out of the card's 18px horizontal padding so the dog
@@ -281,6 +297,7 @@ export function ProfileDogScene() {
           backdrop so it parallaxes naturally with the far layer. */}
       <ProfileSceneBirds cardWidth={width} mode={mode} />
       <div
+        onClick={bark}
         style={{
           position: 'absolute',
           left: 0,
@@ -300,7 +317,10 @@ export function ProfileDogScene() {
             transitionMs > 0
               ? `transform ${transitionMs}ms linear, bottom 80ms ease-out`
               : 'bottom 80ms ease-out',
-          pointerEvents: 'none',
+          // pointerEvents:auto so the dog itself catches the tap
+          // (bark) before the scene container's tap handler (toggle).
+          pointerEvents: 'auto',
+          cursor: 'pointer',
         }}
       >
         <DogSprite anim={anim} facingLeft={facingLeft} scale={SPRITE_SCALE} />

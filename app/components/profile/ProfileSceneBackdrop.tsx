@@ -34,8 +34,6 @@ const VIEW_H = 200;
 // so the dog (paws at container y≈190) walks visibly BELOW this
 // line.
 const GROUND_Y = 110;
-// Where the dog walks. Used for the lamp light cone's bottom edge.
-const FRONT_Y = 190;
 
 // Per-mode colour palettes.
 const PALETTE = {
@@ -242,25 +240,25 @@ export function ProfileSceneBackdrop({
       >
         {mode === 'night' ? (
           <>
-            {/* Light cone: trapezoid from bulb (narrow top) to
-                ground (wide bottom), warm yellow with low alpha so
-                trees and ground show through. */}
+            {/* Light cone: short trapezoid from bulb (narrow top) to
+                just below the bench (wide bottom), warm yellow with
+                low alpha so the post + bench still read through. */}
             <polygon
-              points={`155,${GROUND_Y - 56} 165,${GROUND_Y - 56} 188,${FRONT_Y} 132,${FRONT_Y}`}
-              fill="rgba(255, 215, 130, 0.18)"
+              points={`155,${GROUND_Y - 56} 165,${GROUND_Y - 56} 174,${GROUND_Y + 5} 146,${GROUND_Y + 5}`}
+              fill="rgba(255, 215, 130, 0.2)"
             />
             {/* Brighter inner cone for a hot-spot look */}
             <polygon
-              points={`158,${GROUND_Y - 56} 162,${GROUND_Y - 56} 175,${FRONT_Y} 145,${FRONT_Y}`}
-              fill="rgba(255, 230, 160, 0.22)"
+              points={`158,${GROUND_Y - 56} 162,${GROUND_Y - 56} 167,${GROUND_Y + 5} 153,${GROUND_Y + 5}`}
+              fill="rgba(255, 230, 160, 0.25)"
             />
             {/* Pool of light on the ground directly under the lamp */}
             <ellipse
               cx={160}
-              cy={FRONT_Y - 1}
-              rx={26}
-              ry={3}
-              fill="rgba(255, 220, 130, 0.35)"
+              cy={GROUND_Y + 4}
+              rx={14}
+              ry={2}
+              fill="rgba(255, 220, 130, 0.4)"
             />
           </>
         ) : null}
@@ -272,12 +270,9 @@ export function ProfileSceneBackdrop({
         <Tree x={262} scale={0.95} foliage={p.foliage} highlight={p.foliageHighlight} trunk={p.trunk} />
         <Tree x={316} scale={1.3} foliage={p.foliage} highlight={p.foliageHighlight} trunk={p.trunk} />
 
-        {/* Lamppost — pole ends ~5px below the GROUND_Y line so its
-            base sits just lower than the bench legs (which end at
-            GROUND_Y). Reads as "the lamp is planted in the ground in
-            front of the bench" instead of floating at the same level. */}
+        {/* Lamppost */}
         <g>
-          <rect x={158} y={GROUND_Y - 56} width={2} height={61} fill={p.lamppost} />
+          <rect x={158} y={GROUND_Y - 56} width={2} height={56} fill={p.lamppost} />
           <rect x={154} y={GROUND_Y - 58} width={10} height={4} fill={p.lamppost} />
           <rect x={158} y={GROUND_Y - 62} width={2} height={4} fill={p.lamppost} />
           {/* Bulb — brighter at night */}
