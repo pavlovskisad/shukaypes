@@ -68,6 +68,17 @@ const SHEETS: Record<DogAnim, Sheet> = {
   crouched: { url: '/dog/crouched.png', frameCount: 6, frameMs: 140, staticFrame: 5 },
 };
 
+// Warm the browser cache for every sheet on module import. Without
+// this, the FIRST render of a given anim has to fetch its PNG
+// (cold), which paints as a blank flash before the image arrives.
+// Cheap one-shot — none of these sheets exceed a few KB.
+if (typeof window !== 'undefined') {
+  for (const sheet of Object.values(SHEETS)) {
+    const img = new Image();
+    img.src = sheet.url;
+  }
+}
+
 interface DogSpriteProps {
   anim: DogAnim;
   // True when the dog should face left. The sheet is inherently
@@ -81,19 +92,24 @@ interface DogSpriteProps {
 
 export function DogSprite({ anim, facingLeft, scale = 2 }: DogSpriteProps) {
   const sheet = SHEETS[anim];
-  const [frameIdx, setFrameIdx] = useState(0);
+  const [frameIdx, setFrameIdx] = useState(() => sheet.staticFrame ?? 0);
+  // Track which anim the current frameIdx is for. When anim changes
+  // we reset frameIdx during render (React's "adjusting state during
+  // rendering" pattern) so the OLD frameIdx is never paired with the
+  // NEW sheet's url — that mismatch is what made the dog "blink"
+  // (one paint of frame N from sheet A while the div already has
+  // sheet B's url, bleeding through past sheet B's frame range).
+  const [animKey, setAnimKey] = useState(anim);
+  if (animKey !== anim) {
+    setAnimKey(anim);
+    setFrameIdx(sheet.staticFrame ?? 0);
+  }
 
-  // Restart the frame counter on anim swap so we don't blink mid-cycle
-  // showing a "walking" frame from the wrong sheet. staticFrame skips
-  // the interval entirely so the sheet renders a single held pose
-  // (used for lying — its source sheet is a transition into the
-  // pose, not an idle loop).
+  // Cycle the frame for non-static anims. The frameIdx reset itself
+  // happens in the render-time guard above; this effect just owns
+  // the interval for the currently-active anim.
   useEffect(() => {
-    if (sheet.staticFrame != null) {
-      setFrameIdx(sheet.staticFrame);
-      return;
-    }
-    setFrameIdx(0);
+    if (sheet.staticFrame != null) return;
     const id = setInterval(() => {
       setFrameIdx((i) => (i + 1) % sheet.frameCount);
     }, sheet.frameMs);
@@ -101,6 +117,11 @@ export function DogSprite({ anim, facingLeft, scale = 2 }: DogSpriteProps) {
   }, [anim, sheet.frameCount, sheet.frameMs, sheet.staticFrame]);
 
   const size = FRAME_PX * scale;
+  // Defensive clamp — if frameIdx ever exceeds the new sheet's count
+  // (eg. switching from sniffing's 8 frames to running's 3), render
+  // the last valid frame instead of background-positioning past the
+  // sheet's edge into transparent space.
+  const safeFrameIdx = Math.min(frameIdx, sheet.frameCount - 1);
 
   return (
     <div
@@ -113,7 +134,7 @@ export function DogSprite({ anim, facingLeft, scale = 2 }: DogSpriteProps) {
         // Each frame is FRAME_PX wide; we shift left by frame*FRAME_PX
         // (in source pixels) and let backgroundSize scale the whole
         // strip up by `scale` so positioning math stays in source-px.
-        backgroundPosition: `-${frameIdx * FRAME_PX * scale}px 0`,
+        backgroundPosition: `-${safeFrameIdx * FRAME_PX * scale}px 0`,
         backgroundSize: `${sheet.frameCount * size}px ${size}px`,
         // imageRendering: pixelated keeps the 8-bit edges crisp at 2×.
         // Without this, browsers smooth-scale and the dog turns into a
