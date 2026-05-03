@@ -15,6 +15,12 @@ interface SceneEntry {
   weight: number;
   durMs: [number, number]; // [min, max]
   moves: boolean;
+  // Optional override for slide distance from current position. With
+  // no override the step picks a random target across the container
+  // (with 80px minimum delta — biased to "cross the card"). Sniffing
+  // uses a tight [30, 90] so the dog tracks a scent in a small area
+  // instead of running across the card every time.
+  movePx?: [number, number];
 }
 
 // Sitting is the default idle, lying is rare. Combined with the no-
@@ -24,10 +30,43 @@ interface SceneEntry {
 const SCENE: SceneEntry[] = [
   { anim: 'sitting', weight: 6, durMs: [4000, 7500], moves: false },
   { anim: 'lying', weight: 1, durMs: [4000, 7000], moves: false },
-  { anim: 'sniffing', weight: 2, durMs: [1500, 2800], moves: false },
+  // Sniffing now ambles a few px in a random direction so the dog
+  // appears to follow a scent on the ground instead of stationary
+  // pose-sniffing.
+  { anim: 'sniffing', weight: 2, durMs: [2200, 3800], moves: true, movePx: [30, 90] },
   { anim: 'walking', weight: 3, durMs: [3000, 5500], moves: true },
   { anim: 'running', weight: 1, durMs: [2000, 3200], moves: true },
 ];
+
+// Bark variants — pixel speech-bubble text shown when the user taps
+// the scene. Mix of literal woofs and *action* notes.
+const BARKS = [
+  'woof!',
+  'bork!',
+  'arf!',
+  'ruff!',
+  'yip!',
+  'woof woof!',
+  'awoo!',
+  'bark!',
+  'arf arf!',
+  'borf!',
+  'henlo',
+  'mlem',
+  'boop?',
+  '*sniff sniff*',
+  '*tail wag*',
+  '*tilts head*',
+  '*zoomies*',
+  '*sploot*',
+];
+
+interface BarkBubble {
+  id: number;
+  text: string;
+  // Horizontal jitter so consecutive taps don't stack identically.
+  dx: number;
+}
 
 // Per-anim downward offset — pushes the sprite down inside the
 // container so the dog's BODY (not its sprite frame) lands on the
@@ -80,14 +119,13 @@ function isDayHour(): boolean {
 export function ProfileDogScene() {
   const [anim, setAnim] = useState<DogAnim>('sitting');
   const [facingLeft, setFacingLeft] = useState(false);
-  // Auto-derived mode follows real wall-clock time. Manual override
-  // takes precedence when set — used by the tap-to-toggle for testing
-  // and so users can pin a mode they like.
-  const [autoMode, setAutoMode] = useState<SceneMode>(() =>
+  // Mode follows real wall-clock time — see isDayHour. The manual
+  // tap-to-toggle was test-only and got replaced by tap-to-bark.
+  const [mode, setMode] = useState<SceneMode>(() =>
     isDayHour() ? 'day' : 'night',
   );
-  const [manualMode, setManualMode] = useState<SceneMode | null>(null);
-  const mode: SceneMode = manualMode ?? autoMode;
+  const [barks, setBarks] = useState<BarkBubble[]>([]);
+  const barkSeqRef = useRef(0);
   // Measured container width — drives how far the sprite can slide
   // before clipping. ResizeObserver covers the orientation-flip case
   // on phones; SSR initial render uses 0 (hidden until measured).
@@ -128,16 +166,23 @@ export function ProfileDogScene() {
   // re-render anything if the mode hasn't changed.
   useEffect(() => {
     const id = setInterval(() => {
-      setAutoMode(isDayHour() ? 'day' : 'night');
+      setMode(isDayHour() ? 'day' : 'night');
     }, 60_000);
     return () => clearInterval(id);
   }, []);
 
-  const toggleMode = useCallback(() => {
-    setManualMode((prev) => {
-      const current = prev ?? (isDayHour() ? 'day' : 'night');
-      return current === 'day' ? 'night' : 'day';
-    });
+  // Tap → bark bubble. Multiple bubbles can stack if the user spams
+  // taps; each is removed after its float-up animation finishes. The
+  // tap is registered on the scene container so users don't have to
+  // hit the moving sprite directly.
+  const bark = useCallback(() => {
+    const text = BARKS[Math.floor(Math.random() * BARKS.length)]!;
+    const id = ++barkSeqRef.current;
+    const dx = (Math.random() - 0.5) * 28;
+    setBarks((prev) => [...prev, { id, text, dx }]);
+    setTimeout(() => {
+      setBarks((prev) => prev.filter((b) => b.id !== id));
+    }, 1500);
   }, []);
 
   // State-machine tick — picks a new entry, sets the anim, and (if
@@ -155,15 +200,25 @@ export function ProfileDogScene() {
       setAnim(entry.anim);
       if (entry.moves && width > SPRITE_PX) {
         const maxX = width - SPRITE_PX;
-        // Pick a new x that's at least 80px from current — avoids
-        // tiny "twitch" moves that look glitchy. Bias toward the
-        // farther side of the container so the dog actually crosses
-        // the card.
-        const minDelta = 80;
-        let target = Math.random() * maxX;
-        if (Math.abs(target - xRef.current) < minDelta) {
-          target = xRef.current < maxX / 2 ? xRef.current + minDelta : xRef.current - minDelta;
+        let target: number;
+        if (entry.movePx) {
+          // Constrained move — small step in a random direction. If
+          // the chosen direction would clip a wall, flip it. Used by
+          // sniffing so the dog tracks a scent instead of dashing.
+          const delta = randomBetween(entry.movePx);
+          const dir = Math.random() < 0.5 ? -1 : 1;
+          target = xRef.current + dir * delta;
+          if (target < 0 || target > maxX) target = xRef.current - dir * delta;
           target = Math.max(0, Math.min(maxX, target));
+        } else {
+          // Wide pick — random target across the container with an
+          // 80px minimum delta so we don't twitch in place.
+          const minDelta = 80;
+          target = Math.random() * maxX;
+          if (Math.abs(target - xRef.current) < minDelta) {
+            target = xRef.current < maxX / 2 ? xRef.current + minDelta : xRef.current - minDelta;
+            target = Math.max(0, Math.min(maxX, target));
+          }
         }
         setFacingLeft(target < xRef.current);
         setTransitionMs(dur);
@@ -182,9 +237,9 @@ export function ProfileDogScene() {
   return (
     <div
       ref={containerRef}
-      onClick={toggleMode}
+      onClick={bark}
       role="button"
-      aria-label={`Scene mode: ${mode}. Tap to toggle.`}
+      aria-label="Tap to make the dog bark"
       style={{
         position: 'relative',
         // Break out of the card's 18px horizontal padding so the dog
@@ -234,6 +289,8 @@ export function ProfileDogScene() {
           // frame don't show up as bottom padding inside the card.
           bottom: ANIM_BOTTOM_OFFSET[anim],
           transform: `translateX(${x}px)`,
+          width: SPRITE_PX,
+          height: SPRITE_PX,
           // Sprite stays above the SVG backdrop.
           zIndex: 1,
           // Transition the slide on its real duration; the bottom
@@ -247,6 +304,88 @@ export function ProfileDogScene() {
         }}
       >
         <DogSprite anim={anim} facingLeft={facingLeft} scale={SPRITE_SCALE} />
+        {/* Bark bubbles — float up from above the dog's head and
+            fade out. Multiple stack if the user taps fast. Inside
+            the dog wrapper so they ride along with the slide. */}
+        {barks.map((b) => (
+          <BarkBubbleEl key={b.id} text={b.text} dx={b.dx} />
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// Pixel-style speech bubble — white card, dark border, tail toward
+// the dog's head. Floats up and fades out via CSS keyframes; the
+// parent strips it from state when the animation finishes.
+function BarkBubbleEl({ text, dx }: { text: string; dx: number }) {
+  return (
+    <div
+      style={{
+        position: 'absolute',
+        left: SPRITE_PX / 2,
+        // Roughly aligned with the dog's head — top quarter of the
+        // sprite frame. Float-up animation lifts it from there.
+        top: 24,
+        transform: `translateX(calc(-50% + ${dx}px))`,
+        pointerEvents: 'none',
+      }}
+    >
+      <style>{`
+        @keyframes bark-float {
+          0%   { opacity: 0; transform: translateY(8px) scale(0.85); }
+          15%  { opacity: 1; transform: translateY(0) scale(1); }
+          100% { opacity: 0; transform: translateY(-32px) scale(1); }
+        }
+      `}</style>
+      <div
+        style={{
+          animation: 'bark-float 1500ms ease-out forwards',
+          position: 'relative',
+        }}
+      >
+        <div
+          style={{
+            background: '#ffffff',
+            border: '2px solid #34344a',
+            borderRadius: 8,
+            padding: '3px 9px',
+            fontSize: 12,
+            fontWeight: 700,
+            color: '#34344a',
+            whiteSpace: 'nowrap',
+            boxShadow: '0 2px 4px rgba(0,0,0,0.12)',
+          }}
+        >
+          {text}
+        </div>
+        {/* Tail pointing down toward the dog */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: -6,
+            left: '50%',
+            marginLeft: -4,
+            width: 0,
+            height: 0,
+            borderLeft: '4px solid transparent',
+            borderRight: '4px solid transparent',
+            borderTop: '6px solid #34344a',
+          }}
+        />
+        <div
+          style={{
+            position: 'absolute',
+            bottom: -3,
+            left: '50%',
+            marginLeft: -3,
+            width: 0,
+            height: 0,
+            borderLeft: '3px solid transparent',
+            borderRight: '3px solid transparent',
+            borderTop: '4px solid #ffffff',
+          }}
+        />
       </div>
     </div>
   );
