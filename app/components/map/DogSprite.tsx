@@ -29,6 +29,12 @@ interface Sheet {
   // cycle blurs by quickly), sniffing is slower (the dog is busy with
   // its nose), sitting is the slowest (idle breathing).
   frameMs: number;
+  // Optional fixed frame index. When set, the sprite renders that
+  // single frame without cycling. Used for animations where the
+  // source sheet is a *transition* into a pose (lying.png is
+  // "stand → lay-down" frames; cycling reads as the dog repeatedly
+  // standing back up).
+  staticFrame?: number;
 }
 
 const FRAME_PX = 64;
@@ -41,11 +47,11 @@ const SHEETS: Record<DogAnim, Sheet> = {
   // We pre-pad it to 512×64 with a transparent 9px top strip so the
   // frame grid stays uniform — see scripts in the PR description.
   sniffing: { url: '/dog/sniffing.png', frameCount: 8, frameMs: 140 },
-  // Deep idle — the dog has been sitting long enough that it
-  // settles down. Slowest cycle so it reads as "asleep" not "I'm
-  // watching every leaf move". Companion swaps to this after
-  // LYING_DELAY_MS of continuous sitting.
-  lying: { url: '/dog/lying.png', frameCount: 4, frameMs: 320 },
+  // Hold the final "fully down" frame instead of cycling — the
+  // 4-frame sheet is a transition (stand → lower → mostly-down →
+  // fully-down) and looping it reads as the dog popping back up
+  // every cycle. Static frame keeps the dog peacefully laid out.
+  lying: { url: '/dog/lying.png', frameCount: 4, frameMs: 320, staticFrame: 3 },
 };
 
 interface DogSpriteProps {
@@ -64,14 +70,21 @@ export function DogSprite({ anim, facingLeft, scale = 2 }: DogSpriteProps) {
   const [frameIdx, setFrameIdx] = useState(0);
 
   // Restart the frame counter on anim swap so we don't blink mid-cycle
-  // showing a "walking" frame from the wrong sheet.
+  // showing a "walking" frame from the wrong sheet. staticFrame skips
+  // the interval entirely so the sheet renders a single held pose
+  // (used for lying — its source sheet is a transition into the
+  // pose, not an idle loop).
   useEffect(() => {
+    if (sheet.staticFrame != null) {
+      setFrameIdx(sheet.staticFrame);
+      return;
+    }
     setFrameIdx(0);
     const id = setInterval(() => {
       setFrameIdx((i) => (i + 1) % sheet.frameCount);
     }, sheet.frameMs);
     return () => clearInterval(id);
-  }, [anim, sheet.frameCount, sheet.frameMs]);
+  }, [anim, sheet.frameCount, sheet.frameMs, sheet.staticFrame]);
 
   const size = FRAME_PX * scale;
 

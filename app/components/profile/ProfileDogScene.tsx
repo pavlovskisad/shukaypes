@@ -15,17 +15,31 @@ interface SceneEntry {
   moves: boolean;
 }
 
-// Stationary durations are deliberately wide — when the dog decides
-// to lie down, it should commit (8-20s reads as a real nap), not just
-// glance at the floor for 5s. Walking/running stay shorter because
-// they're traversal beats, not "settle in" moments.
+// Tuned to read like a real dog hanging out — short, deliberate beats
+// chained together rather than long single sessions. User wants:
+// "lie down a few sec, walk a few sec, sniff once or twice, run a
+// bit, sit ~5s, etc". sniffing duration sized to ~1-2 frame cycles
+// (8 frames × 140 ms ≈ 1.1s/cycle).
 const SCENE: SceneEntry[] = [
-  { anim: 'sitting', weight: 3, durMs: [4000, 12000], moves: false },
-  { anim: 'lying', weight: 3, durMs: [8000, 20000], moves: false },
-  { anim: 'sniffing', weight: 2, durMs: [3000, 7000], moves: false },
-  { anim: 'walking', weight: 3, durMs: [4500, 8000], moves: true },
-  { anim: 'running', weight: 1, durMs: [2200, 3500], moves: true },
+  { anim: 'sitting', weight: 3, durMs: [4000, 6500], moves: false },
+  { anim: 'lying', weight: 2, durMs: [3500, 6000], moves: false },
+  { anim: 'sniffing', weight: 2, durMs: [1500, 2800], moves: false },
+  { anim: 'walking', weight: 3, durMs: [3000, 5500], moves: true },
+  { anim: 'running', weight: 1, durMs: [2000, 3200], moves: true },
 ];
+
+// Per-anim downward offset — pushes the sprite down inside the
+// container so the dog's BODY (not its sprite frame) sits flush
+// with the bottom. sitting/lying have empty pixels below the body
+// in the sprite frame; walking/running/sniffing have paws at the
+// frame edge so they're flush at offset 0.
+const ANIM_BOTTOM_OFFSET: Record<DogAnim, number> = {
+  walking: 0,
+  running: 0,
+  sniffing: 0,
+  sitting: -22,
+  lying: -8,
+};
 
 const SPRITE_SCALE = 2.5; // 64 × 2.5 = 160 px on screen
 const SPRITE_PX = 64 * SPRITE_SCALE;
@@ -154,10 +168,18 @@ export function ProfileDogScene() {
         style={{
           position: 'absolute',
           left: 0,
-          bottom: 0,
+          // Per-anim downward offset — sitting/lying push the sprite
+          // down so empty pixels below the dog body in the sprite
+          // frame don't show up as bottom padding inside the card.
+          bottom: ANIM_BOTTOM_OFFSET[anim],
           transform: `translateX(${x}px)`,
+          // Transition both the slide AND the bottom offset so anim
+          // swaps soften the y-jump from "walking flush" to
+          // "sitting pushed down".
           transition:
-            transitionMs > 0 ? `transform ${transitionMs}ms linear` : 'none',
+            transitionMs > 0
+              ? `transform ${transitionMs}ms linear, bottom 250ms ease-out`
+              : 'bottom 250ms ease-out',
         }}
       >
         <DogSprite anim={anim} facingLeft={facingLeft} scale={SPRITE_SCALE} />
