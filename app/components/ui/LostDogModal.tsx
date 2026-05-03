@@ -24,6 +24,12 @@ interface LostDogModalProps {
 const SWIPE_THRESHOLD_PX = 60;
 
 const SHEET_ANIM_MS = 280;
+// Big-photo height. Tall enough that the dog is recognisable at a
+// glance (no extra tap-to-zoom step), short enough that the modal
+// still leaves room for name + reward + two action buttons above
+// the bottom dashboard. Reads as ~60-70% of the lightbox view we
+// used to gate behind the small round avatar.
+const PHOTO_HEIGHT_PX = 280;
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -52,10 +58,6 @@ export function LostDogModal({
   const touchStartXRef = useRef<number | null>(null);
   const [renderDog, setRenderDog] = useState<NearbyLostDog | null>(dog);
   const [closing, setClosing] = useState(false);
-  // Photo lightbox toggle. Lives at the top of the hook list (before
-  // the `if (!renderDog) return null` below) so React's hook order
-  // stays stable across mount-with-no-dog → mount-with-dog renders.
-  const [photoOpen, setPhotoOpen] = useState(false);
 
   // Three transitions matter:
   //   prop dog: A   →  prop dog: B    (swap content, no animation)
@@ -126,17 +128,185 @@ export function LostDogModal({
         style={{
           background: '#ffffff',
           borderRadius: 24,
-          padding: '22px 20px 22px',
+          // Photo bleeds to the modal edges (no horizontal padding on
+          // the top), so we control padding per-section below.
+          padding: 0,
           width: '100%',
-          maxWidth: 430,
+          maxWidth: 480,
           position: 'relative',
           animation: `sheet-${closing ? 'down' : 'up'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
           boxShadow: '0 -10px 30px rgba(0,0,0,0.12)',
+          overflow: 'hidden',
         }}
       >
+        {/* Big photo banner — fills the top of the modal so the dog is
+            recognisable at a glance. Falls back to a coloured panel
+            with the emoji centred when no photo is available.
+            Badge + close button float over the photo for compactness. */}
+        <div
+          style={{
+            position: 'relative',
+            width: '100%',
+            height: PHOTO_HEIGHT_PX,
+            background: '#f0f0f0',
+            overflow: 'hidden',
+          }}
+        >
+          {renderDog.photoUrl ? (
+            <img
+              src={renderDog.photoUrl}
+              alt={renderDog.name}
+              style={{
+                width: '100%',
+                height: '100%',
+                objectFit: 'cover',
+                display: 'block',
+              }}
+            />
+          ) : (
+            <div
+              style={{
+                width: '100%',
+                height: '100%',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 96,
+              }}
+            >
+              {renderDog.emoji}
+            </div>
+          )}
+          {/* Subtle bottom gradient so the white modal body never feels
+              like a hard edge against a dark photo. */}
+          <div
+            style={{
+              position: 'absolute',
+              bottom: 0,
+              left: 0,
+              right: 0,
+              height: 48,
+              background:
+                'linear-gradient(180deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.95) 100%)',
+              pointerEvents: 'none',
+            }}
+          />
+          <span
+            style={{
+              position: 'absolute',
+              top: 14,
+              left: 14,
+              background: badgeBg,
+              color: badgeFg,
+              borderRadius: 12,
+              padding: '5px 11px',
+              fontSize: 12,
+              fontWeight: 700,
+              letterSpacing: 0.5,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+            }}
+          >
+            {badgeText}
+          </span>
+          <button
+            onClick={onClose}
+            aria-label="close"
+            style={{
+              position: 'absolute',
+              top: 10,
+              right: 10,
+              width: 32,
+              height: 32,
+              borderRadius: 16,
+              border: 'none',
+              background: 'rgba(0,0,0,0.55)',
+              color: '#ffffff',
+              fontSize: 22,
+              lineHeight: '32px',
+              cursor: 'pointer',
+              padding: 0,
+            }}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Body — name + meta, reward pill, primary actions. */}
+        <div style={{ padding: '14px 22px 22px' }}>
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ fontFamily: SYSTEM_FONT, fontSize: 26, fontWeight: 700, lineHeight: 1.15 }}>
+              {renderDog.name}
+            </div>
+            <div style={{ fontSize: 14, color: '#777', marginTop: 3 }}>{renderDog.breed}</div>
+            <div style={{ fontSize: 12, color: '#777', marginTop: 3 }}>
+              last seen {relativeTime(renderDog.lastSeen.at)}
+            </div>
+          </div>
+
+          <div
+            style={{
+              background: '#f0f0f0',
+              borderRadius: 14,
+              padding: '12px 14px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 10,
+              marginBottom: 14,
+            }}
+          >
+            <span style={{ fontSize: 22 }}>🐾</span>
+            <div>
+              <div style={{ fontFamily: SYSTEM_FONT, fontSize: 17, fontWeight: 700 }}>
+                {renderDog.rewardPoints} pts reward
+              </div>
+              <div style={{ fontSize: 11, color: '#777' }}>bonus tokens near search zone</div>
+            </div>
+          </div>
+
+          <button
+            onClick={() => onReportSighting?.(renderDog)}
+            style={{
+              width: '100%',
+              background: '#1a1a1a',
+              color: '#ffffff',
+              border: 'none',
+              borderRadius: 16,
+              padding: '14px 18px',
+              fontFamily: SYSTEM_FONT,
+              fontSize: 20,
+              fontWeight: 700,
+              cursor: 'pointer',
+            }}
+          >
+            👀 i've seen them
+          </button>
+
+          <button
+            onClick={() => onStartSearch?.(renderDog)}
+            disabled={searchActive}
+            style={{
+              width: '100%',
+              background: searchActive ? '#e8e8f2' : 'rgba(0,0,255,0.06)',
+              color: searchActive ? '#777' : 'rgba(0,0,255,0.85)',
+              border: searchActive
+                ? '1px solid #d4d4dc'
+                : '1px solid rgba(0,0,255,0.3)',
+              borderRadius: 16,
+              padding: '12px 18px',
+              marginTop: 10,
+              fontFamily: SYSTEM_FONT,
+              fontSize: 17,
+              fontWeight: 700,
+              cursor: searchActive ? 'default' : 'pointer',
+            }}
+          >
+            {searchActive ? '🔍 search in progress…' : '🔍 start search'}
+          </button>
+        </div>
+
         {/* Prev/next chevrons — only rendered when the parent supplies
-            cycle handlers. Positioned absolute so they sit in the
-            sheet's side margins without reflowing the card content. */}
+            cycle handlers. Vertically centred on the body (below the
+            photo) so they don't sit on top of the photo content. */}
         {onPrev ? (
           <button
             onClick={(e) => {
@@ -147,8 +317,7 @@ export function LostDogModal({
             style={{
               position: 'absolute',
               left: 6,
-              top: '50%',
-              transform: 'translateY(-50%)',
+              bottom: 110,
               width: 36,
               height: 36,
               borderRadius: 18,
@@ -173,8 +342,7 @@ export function LostDogModal({
             style={{
               position: 'absolute',
               right: 6,
-              top: '50%',
-              transform: 'translateY(-50%)',
+              bottom: 110,
               width: 36,
               height: 36,
               borderRadius: 18,
@@ -189,148 +357,6 @@ export function LostDogModal({
             ›
           </button>
         ) : null}
-        <div
-          style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 14,
-          }}
-        >
-          <span
-            style={{
-              background: badgeBg,
-              color: badgeFg,
-              borderRadius: 12,
-              padding: '4px 10px',
-              fontSize: 12,
-              fontWeight: 700,
-              letterSpacing: 0.5,
-            }}
-          >
-            {badgeText}
-          </span>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: 24,
-              cursor: 'pointer',
-              color: '#777',
-              lineHeight: 1,
-            }}
-            aria-label="close"
-          >
-            ×
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', gap: 14, marginBottom: 18, alignItems: 'center' }}>
-          {renderDog.photoUrl ? (
-            <img
-              src={renderDog.photoUrl}
-              alt={renderDog.name}
-              onClick={(e) => {
-                e.stopPropagation();
-                setPhotoOpen(true);
-              }}
-              style={{
-                width: 68,
-                height: 68,
-                borderRadius: '50%',
-                objectFit: 'cover',
-                flexShrink: 0,
-                cursor: 'zoom-in',
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: 68,
-                height: 68,
-                borderRadius: '50%',
-                background: '#f0f0f0',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 30,
-                flexShrink: 0,
-              }}
-            >
-              {renderDog.emoji}
-            </div>
-          )}
-          <div>
-            <div style={{ fontFamily: SYSTEM_FONT, fontSize: 24, fontWeight: 700 }}>
-              {renderDog.name}
-            </div>
-            <div style={{ fontSize: 13, color: '#777', marginTop: 2 }}>{renderDog.breed}</div>
-            <div style={{ fontSize: 12, color: '#777', marginTop: 3 }}>
-              last seen {relativeTime(renderDog.lastSeen.at)}
-            </div>
-          </div>
-        </div>
-
-        <div
-          style={{
-            background: '#f0f0f0',
-            borderRadius: 14,
-            padding: '12px 14px',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            marginBottom: 14,
-          }}
-        >
-          <span style={{ fontSize: 22 }}>🐾</span>
-          <div>
-            <div style={{ fontFamily: SYSTEM_FONT, fontSize: 17, fontWeight: 700 }}>
-              {renderDog.rewardPoints} pts reward
-            </div>
-            <div style={{ fontSize: 11, color: '#777' }}>bonus tokens near search zone</div>
-          </div>
-        </div>
-
-        <button
-          onClick={() => onReportSighting?.(renderDog)}
-          style={{
-            width: '100%',
-            background: '#1a1a1a',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: 16,
-            padding: '14px 18px',
-            fontFamily: SYSTEM_FONT,
-            fontSize: 20,
-            fontWeight: 700,
-            cursor: 'pointer',
-          }}
-        >
-          👀 i've seen them
-        </button>
-
-        <button
-          onClick={() => onStartSearch?.(renderDog)}
-          disabled={searchActive}
-          style={{
-            width: '100%',
-            background: searchActive ? '#e8e8f2' : 'rgba(0,0,255,0.06)',
-            color: searchActive ? '#777' : 'rgba(0,0,255,0.85)',
-            border: searchActive
-              ? '1px solid #d4d4dc'
-              : '1px solid rgba(0,0,255,0.3)',
-            borderRadius: 16,
-            padding: '12px 18px',
-            marginTop: 10,
-            fontFamily: SYSTEM_FONT,
-            fontSize: 17,
-            fontWeight: 700,
-            cursor: searchActive ? 'default' : 'pointer',
-          }}
-        >
-          {searchActive ? '🔍 search in progress…' : '🔍 start search'}
-        </button>
 
         <style>{`
           @keyframes sheet-up {
@@ -343,42 +369,6 @@ export function LostDogModal({
           }
         `}</style>
       </div>
-
-      {/* Photo lightbox — full-screen image viewer triggered by tapping
-          the round avatar. Sits on top of the bottom sheet (zIndex 60
-          vs the sheet's 50) and dismisses on any tap. stopPropagation
-          on the close prevents the underlying sheet's onClose from
-          firing too. */}
-      {photoOpen && renderDog.photoUrl ? (
-        <div
-          onClick={(e) => {
-            e.stopPropagation();
-            setPhotoOpen(false);
-          }}
-          style={{
-            position: 'absolute',
-            inset: 0,
-            background: 'rgba(0,0,0,0.92)',
-            zIndex: 60,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            padding: 24,
-            cursor: 'zoom-out',
-          }}
-        >
-          <img
-            src={renderDog.photoUrl}
-            alt={renderDog.name}
-            style={{
-              maxWidth: '100%',
-              maxHeight: '100%',
-              borderRadius: 12,
-              boxShadow: '0 12px 40px rgba(0,0,0,0.5)',
-            }}
-          />
-        </div>
-      ) : null}
     </div>
   );
 }
