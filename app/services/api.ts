@@ -16,7 +16,11 @@ export type PetSpecies = 'dog' | 'cat';
 // to remind us to wire the client handler.
 export type CompanionAction =
   | { name: 'start_quest'; args: { dogId: string } }
-  | { name: 'highlight_spot'; args: { spotId: string } };
+  | { name: 'highlight_spot'; args: { spotId: string } }
+  | {
+      name: 'walk';
+      args: { shape: 'roundtrip' | 'oneway'; distance: 'close' | 'far' };
+    };
 
 export interface NearbyLostDog {
   id: string;

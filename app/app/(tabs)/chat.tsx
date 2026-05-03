@@ -16,6 +16,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
+import {
+  buildCandidates,
+  planWalk,
+  recordRecentDestination,
+} from '../../utils/walk';
+import { fetchWalkingRoute } from '../../services/directions';
 import { api, type CompanionAction } from '../../services/api';
 import type { ChatMessage } from '@shukajpes/shared';
 
@@ -67,6 +73,47 @@ export default function ChatScreen() {
             setSelectedSpot(action.args.spotId);
             router.push('/');
             return '📍 showing spot…';
+          case 'walk': {
+            // Same flow the radial menu's walk leaf runs — pick a
+            // destination from spots+parks via planWalk, fetch a
+            // walking polyline, set it on the store. Routes the user
+            // to the map so the polyline is visible.
+            const { userPosition: pos, spots: ctxSpots, parks: ctxParks } =
+              useGameStore.getState();
+            if (!pos) return '🚶 need your location first';
+            const candidates = buildCandidates(ctxSpots, ctxParks);
+            if (candidates.length === 0) return '🚶 no nearby spots yet';
+            const plan = planWalk({
+              candidates,
+              origin: pos,
+              shape: action.args.shape,
+              distance: action.args.distance,
+            });
+            if (!plan) return '🚶 nothing at that distance';
+            const spotId = plan.primary.isSpot ? plan.primary.id : null;
+            const route = await fetchWalkingRoute(pos, plan.waypoints);
+            if (!route && plan.hasReturnDetour && plan.waypoints.length === 3) {
+              const fallback = [plan.waypoints[0]!, plan.waypoints[2]!];
+              const route2 = await fetchWalkingRoute(pos, fallback);
+              if (route2) {
+                useGameStore.getState().setWalkRoute(route2, {
+                  shape: action.args.shape,
+                  spotId,
+                });
+                recordRecentDestination(plan.primary.id);
+              }
+            } else if (route) {
+              useGameStore.getState().setWalkRoute(route, {
+                shape: action.args.shape,
+                spotId,
+              });
+              recordRecentDestination(plan.primary.id);
+            } else {
+              return '🚶 couldn\'t plot that route';
+            }
+            router.push('/');
+            return `🚶 walking to ${plan.primary.name}`;
+          }
           default:
             return null;
         }

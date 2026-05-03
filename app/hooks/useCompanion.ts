@@ -40,7 +40,15 @@ const ORBIT_SETTLE_M = 3;
 // chases the next. The cooldown forces a beat between hunts so the
 // dog visibly returns and settles. Doesn't apply to the very first
 // hunt at session start (cooldownUntilRef defaults to 0).
-const HUNT_COOLDOWN_MS = 5000;
+//
+// Plus a randomised "long rest" — every Nth cooldown gets stretched
+// to LONG_REST_MS so the dog occasionally takes a real break instead
+// of sprinting again the moment the timer runs out. Reads as the
+// dog being content to sit with you sometimes, not always
+// hyper-focused on the next paw.
+const HUNT_COOLDOWN_MS = 8000;
+const LONG_REST_MS = 25000;
+const LONG_REST_PROBABILITY = 0.4;
 
 function findNearestTarget(
   userPos: LatLng,
@@ -124,7 +132,13 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
         lastCollectPulseRef.current = collectPulse;
       } else if (collectPulse !== lastCollectPulseRef.current) {
         lastCollectPulseRef.current = collectPulse;
-        cooldownUntilRef.current = now + HUNT_COOLDOWN_MS;
+        // Roll for a long rest — most cooldowns are the standard
+        // HUNT_COOLDOWN_MS; LONG_REST_PROBABILITY of them stretch out
+        // so the dog occasionally takes a real breather instead of
+        // sprinting again the second the cooldown ends.
+        const restMs =
+          Math.random() < LONG_REST_PROBABILITY ? LONG_REST_MS : HUNT_COOLDOWN_MS;
+        cooldownUntilRef.current = now + restMs;
       }
 
       const hunt = now < cooldownUntilRef.current
