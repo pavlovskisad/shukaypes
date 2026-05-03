@@ -62,11 +62,10 @@ const SHEETS: Record<DogAnim, Sheet> = {
   // 6-frame hop cycle. ~110ms/frame matches walking, full cycle ≈
   // 660ms which is about right for one tap-reaction beat.
   jumping: { url: '/dog/jumping.png', frameCount: 6, frameMs: 110 },
-  // Source sheet ships 448×55; we pre-pad to 448×64 (9px transparent
-  // top strip) so the frame grid stays uniform — see the same trick
-  // for sniffing. Treated as a transition into the held crouch and
-  // pinned to the last frame, similar to lying.
-  crouched: { url: '/dog/crouched.png', frameCount: 7, frameMs: 140, staticFrame: 6 },
+  // 6-frame stand → crouch transition. Pinned to the last frame
+  // (similar to lying) so the dog settles into the crouch instead
+  // of popping back up every cycle.
+  crouched: { url: '/dog/crouched.png', frameCount: 6, frameMs: 140, staticFrame: 5 },
 };
 
 interface DogSpriteProps {
