@@ -111,47 +111,6 @@ function Tree({ x, scale = 1, foliage, highlight, trunk }: TreeProps) {
   );
 }
 
-interface ForegroundTreeProps {
-  // Trunk root x (left edge of trunk in viewBox px).
-  x: number;
-  // y where the trunk meets the ground — usually FRONT_Y so the tree
-  // stands on the dog's ground line, not the upper tree-line.
-  baseY: number;
-  foliage: string;
-  highlight: string;
-  trunk: string;
-  // Flip the foliage-mass offset so a left-edge tree leans right and
-  // a right-edge tree leans left.
-  flip?: boolean;
-}
-
-// Big foreground tree — wider trunk, taller foliage cluster, partially
-// out-of-frame at the top so the eye reads it as "right next to us".
-// The Tree component is sized for the mid-layer skyline, but a near-
-// layer tree needs more presence and a different vertical range.
-function ForegroundTree({ x, baseY, foliage, highlight, trunk, flip }: ForegroundTreeProps) {
-  const u = 4; // 2x of a mid-layer tree's base unit
-  const trunkW = u;
-  const trunkH = u * 8;
-  const trunkX = x;
-  const trunkY = baseY - trunkH;
-  // Foliage mass is offset to one side of the trunk so most of it is
-  // visible inside the frame instead of clipped at the edge.
-  const fOffset = flip ? -u * 7 : -u * 1;
-  return (
-    <g>
-      <rect x={trunkX} y={trunkY} width={trunkW} height={trunkH} fill={trunk} />
-      <rect x={x + fOffset} y={trunkY - u * 6} width={u * 9} height={u * 6} fill={foliage} />
-      <rect x={x + fOffset + u} y={trunkY - u * 9} width={u * 7} height={u * 3} fill={foliage} />
-      <rect x={x + fOffset + u * 2} y={trunkY - u * 11} width={u * 5} height={u * 2} fill={foliage} />
-      <rect x={x + fOffset + u * 3} y={trunkY - u * 13} width={u * 3} height={u * 2} fill={foliage} />
-      {/* Two highlight pixels for some texture */}
-      <rect x={x + fOffset + u * 2} y={trunkY - u * 4} width={u} height={u} fill={highlight} />
-      <rect x={x + fOffset + u * 5} y={trunkY - u * 7} width={u} height={u} fill={highlight} />
-    </g>
-  );
-}
-
 // Sun — gold square cluster at the upper-right of the sky. Stepped
 // edges read as a pixel disc rather than a hard square.
 function Sun({ cx, cy }: { cx: number; cy: number }) {
@@ -313,9 +272,12 @@ export function ProfileSceneBackdrop({
         <Tree x={262} scale={0.95} foliage={p.foliage} highlight={p.foliageHighlight} trunk={p.trunk} />
         <Tree x={316} scale={1.3} foliage={p.foliage} highlight={p.foliageHighlight} trunk={p.trunk} />
 
-        {/* Lamppost */}
+        {/* Lamppost — pole ends ~5px below the GROUND_Y line so its
+            base sits just lower than the bench legs (which end at
+            GROUND_Y). Reads as "the lamp is planted in the ground in
+            front of the bench" instead of floating at the same level. */}
         <g>
-          <rect x={158} y={GROUND_Y - 56} width={2} height={56} fill={p.lamppost} />
+          <rect x={158} y={GROUND_Y - 56} width={2} height={61} fill={p.lamppost} />
           <rect x={154} y={GROUND_Y - 58} width={10} height={4} fill={p.lamppost} />
           <rect x={158} y={GROUND_Y - 62} width={2} height={4} fill={p.lamppost} />
           {/* Bulb — brighter at night */}
@@ -323,33 +285,13 @@ export function ProfileSceneBackdrop({
         </g>
       </svg>
 
-      {/* Near layer — bench + grass tufts + a couple of close-up
-          trees that anchor the foreground. They sit on FRONT_Y (the
-          dog's walking ground) and are deliberately tall so their
-          tops are clipped by the scene top — reads as "we're standing
-          right next to them". Placed at the extreme edges so they
-          flank the action without sitting on top of the dog. */}
+      {/* Near layer — bench + grass tufts. Fastest parallax. */}
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         preserveAspectRatio="none"
         style={layerStyle(dogCenterX, cardWidth, 0.32, transitionMs)}
         aria-hidden
       >
-        <ForegroundTree
-          x={-12}
-          baseY={FRONT_Y}
-          foliage={p.foliage}
-          highlight={p.foliageHighlight}
-          trunk={p.trunk}
-        />
-        <ForegroundTree
-          x={336}
-          baseY={FRONT_Y}
-          foliage={p.foliage}
-          highlight={p.foliageHighlight}
-          trunk={p.trunk}
-          flip
-        />
         <g fill={p.bench}>
           <rect x={180} y={GROUND_Y - 9} width={36} height={3} />
           <rect x={180} y={GROUND_Y - 15} width={36} height={2} />

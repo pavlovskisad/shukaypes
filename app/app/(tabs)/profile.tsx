@@ -195,6 +195,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 2,
+    // Clip the profile scene's full-bleed sky to the rounded
+    // corners — otherwise the sky bleeds past the rounded top edges.
+    overflow: 'hidden',
   },
   cardTitle: {
     fontFamily: SYSTEM_FONT,

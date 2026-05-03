@@ -196,6 +196,9 @@ export function ProfileDogScene() {
         // clips at the corners) but let the dog reach card edges.
         width: 'calc(100% + 36px)' as unknown as number,
         marginLeft: -18,
+        // Reach the top of the card too — the card's 18px padding
+        // would otherwise show as a white strip above the sky.
+        marginTop: -18,
         height: HEIGHT_PX,
         // Small negative marginBottom — companion-name follows the
         // scene closely below, no big air gap.
