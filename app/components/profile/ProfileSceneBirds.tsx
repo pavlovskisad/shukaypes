@@ -45,7 +45,7 @@ interface ActiveEvent {
 // flyover duration in ms.
 const EVENT_POOL: Record<SceneMode, { kind: EventKind; weight: number; durMs: [number, number] }[]> = {
   day: [
-    { kind: 'birdFlock', weight: 5, durMs: [4500, 7000] },
+    { kind: 'birdFlock', weight: 5, durMs: [6500, 9500] },
     { kind: 'butterfly', weight: 2, durMs: [5500, 8000] },
     { kind: 'leaf', weight: 2, durMs: [4000, 6500] },
   ],
@@ -145,9 +145,19 @@ function EventSprite({ event, cardWidth }: { event: ActiveEvent; cardWidth: numb
   }
 }
 
-// Tiny "v" silhouette in pure pixel rectangles. Two colours so it
-// reads at distance even against a sky tint.
-function BirdGlyph({ size = 1, color = '#34344a' }: { size?: number; color?: string }) {
+// Tiny "v" silhouette in pure pixel rectangles. Body row stays put;
+// the wing tips + tail tip animate between an "up" and "down" frame
+// to flap. Per-bird flapDelayMs offsets the cycle so a flock doesn't
+// flap in lockstep.
+function BirdGlyph({
+  size = 1,
+  color = '#34344a',
+  flapDelayMs = 0,
+}: {
+  size?: number;
+  color?: string;
+  flapDelayMs?: number;
+}) {
   const u = 2 * size;
   return (
     <div
@@ -158,13 +168,35 @@ function BirdGlyph({ size = 1, color = '#34344a' }: { size?: number; color?: str
         imageRendering: 'pixelated' as const,
       }}
     >
+      {/* Body — middle row, always visible. */}
       <div style={{ position: 'absolute', left: 0, top: u, width: u, height: u, background: color }} />
-      <div style={{ position: 'absolute', left: u, top: 0, width: u, height: u, background: color }} />
       <div style={{ position: 'absolute', left: 2 * u, top: u, width: u, height: u, background: color }} />
-      <div style={{ position: 'absolute', left: 3 * u, top: 2 * u, width: u, height: u, background: color }} />
       <div style={{ position: 'absolute', left: 4 * u, top: u, width: u, height: u, background: color }} />
-      <div style={{ position: 'absolute', left: 5 * u, top: 0, width: u, height: u, background: color }} />
       <div style={{ position: 'absolute', left: 6 * u, top: u, width: u, height: u, background: color }} />
+      {/* Wings UP frame — top corners + bottom tail tip. */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          animation: `bird-flap-up 320ms steps(1) ${flapDelayMs}ms infinite`,
+        }}
+      >
+        <div style={{ position: 'absolute', left: u, top: 0, width: u, height: u, background: color }} />
+        <div style={{ position: 'absolute', left: 5 * u, top: 0, width: u, height: u, background: color }} />
+        <div style={{ position: 'absolute', left: 3 * u, top: 2 * u, width: u, height: u, background: color }} />
+      </div>
+      {/* Wings DOWN frame — top tail tip + bottom corners. */}
+      <div
+        style={{
+          position: 'absolute',
+          inset: 0,
+          animation: `bird-flap-down 320ms steps(1) ${flapDelayMs}ms infinite`,
+        }}
+      >
+        <div style={{ position: 'absolute', left: 3 * u, top: 0, width: u, height: u, background: color }} />
+        <div style={{ position: 'absolute', left: u, top: 2 * u, width: u, height: u, background: color }} />
+        <div style={{ position: 'absolute', left: 5 * u, top: 2 * u, width: u, height: u, background: color }} />
+      </div>
     </div>
   );
 }
@@ -178,7 +210,11 @@ function BirdFlock({ event, cardWidth }: { event: ActiveEvent; cardWidth: number
   const animName = `birds-${event.id.toString().slice(2, 8)}`;
   return (
     <>
-      <style>{`@keyframes ${animName} { from { transform: translateX(${startX}px); } to { transform: translateX(${endX}px); } }`}</style>
+      <style>{`
+        @keyframes ${animName} { from { transform: translateX(${startX}px); } to { transform: translateX(${endX}px); } }
+        @keyframes bird-flap-up   { 0%, 49.99% { opacity: 1; } 50%, 100% { opacity: 0; } }
+        @keyframes bird-flap-down { 0%, 49.99% { opacity: 0; } 50%, 100% { opacity: 1; } }
+      `}</style>
       <div
         style={{
           position: 'absolute',
@@ -190,12 +226,16 @@ function BirdFlock({ event, cardWidth }: { event: ActiveEvent; cardWidth: number
         {Array.from({ length: count }).map((_, i) => {
           const dy = (i % 2 === 0 ? 1 : -1) * (3 + (i * 5) % 11);
           const dx = i * 14 + (i % 2) * 6;
+          // Stagger each bird's flap so the flock doesn't beat in
+          // perfect unison (looks mechanical). Negative delay starts
+          // each bird at a different point in the cycle.
+          const flapDelayMs = -i * 90;
           return (
             <div
               key={i}
               style={{ position: 'absolute', left: dx, top: dy }}
             >
-              <BirdGlyph size={1} />
+              <BirdGlyph size={1} flapDelayMs={flapDelayMs} />
             </div>
           );
         })}
