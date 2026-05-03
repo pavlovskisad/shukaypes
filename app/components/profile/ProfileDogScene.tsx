@@ -161,11 +161,12 @@ export function ProfileDogScene() {
         width: 'calc(100% + 36px)' as unknown as number,
         marginLeft: -18,
         height: HEIGHT_PX,
-        // No marginBottom — the dog's "feet" sit flush against the
-        // companion-name line below for a tighter hero card. The
-        // sprite's empty top region (clipped by HEIGHT_PX) handles
-        // the top breathing room.
-        marginBottom: -4,
+        // Heavy negative marginBottom — pulls the next sibling
+        // (companion-name "шукайпес") UP into the scene's lower
+        // portion so the text sits at the dog's body level. The dog
+        // walks "next to" / behind the label rather than above it.
+        // Tuned by eye against companion-name's font size.
+        marginBottom: -55,
         // Hide overflow so a slide that overshoots doesn't leak past
         // the card edge mid-resize, and so the sprite-top clip
         // (HEIGHT_PX < SPRITE_PX) cuts cleanly.
