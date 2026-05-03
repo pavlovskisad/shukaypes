@@ -20,7 +20,14 @@ import { useEffect, useState } from 'react';
 // trying to fake one with a rotation looks worse than letting the dog
 // slide while still facing east/west.
 
-export type DogAnim = 'walking' | 'sitting' | 'running' | 'sniffing' | 'lying';
+export type DogAnim =
+  | 'walking'
+  | 'sitting'
+  | 'running'
+  | 'sniffing'
+  | 'lying'
+  | 'jumping'
+  | 'crouched';
 
 interface Sheet {
   url: string;
@@ -52,6 +59,14 @@ const SHEETS: Record<DogAnim, Sheet> = {
   // fully-down) and looping it reads as the dog popping back up
   // every cycle. Static frame keeps the dog peacefully laid out.
   lying: { url: '/dog/lying.png', frameCount: 4, frameMs: 320, staticFrame: 3 },
+  // 6-frame hop cycle. ~110ms/frame matches walking, full cycle ≈
+  // 660ms which is about right for one tap-reaction beat.
+  jumping: { url: '/dog/jumping.png', frameCount: 6, frameMs: 110 },
+  // Source sheet ships 448×55; we pre-pad to 448×64 (9px transparent
+  // top strip) so the frame grid stays uniform — see the same trick
+  // for sniffing. Treated as a transition into the held crouch and
+  // pinned to the last frame, similar to lying.
+  crouched: { url: '/dog/crouched.png', frameCount: 7, frameMs: 140, staticFrame: 6 },
 };
 
 interface DogSpriteProps {

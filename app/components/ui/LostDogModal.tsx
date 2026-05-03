@@ -109,8 +109,11 @@ export function LostDogModal({
         alignItems: 'flex-end',
         justifyContent: 'center',
         // Lift the sheet above the bottom dashboard so the "i've seen
-        // them" button isn't covered.
-        paddingBottom: 80,
+        // them" button isn't covered. Adds env(safe-area-inset-bottom)
+        // so PWA on notched iPhones (where the tab bar sits behind a
+        // ~34px home-indicator strip) gets the same visual breathing
+        // room as Android/desktop.
+        paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' as unknown as number,
         zIndex: 50,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,

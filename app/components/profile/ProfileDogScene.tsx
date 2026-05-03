@@ -68,6 +68,17 @@ const BARKS = [
 // across the app.
 const BARK_DURATION_MS = 4500;
 
+// On tap: pick one of these reaction poses at random, override the
+// state-machine anim for its duration, then resume the regular cycle.
+// Each reaction picks a duration that gives the pose enough time to
+// register (jumping = one full hop cycle; crouched/sitting hold
+// briefly before the state machine takes back over).
+const TAP_REACTIONS: { anim: DogAnim; durMs: number }[] = [
+  { anim: 'jumping', durMs: 720 },
+  { anim: 'crouched', durMs: 1200 },
+  { anim: 'sitting', durMs: 1200 },
+];
+
 // Per-anim downward offset — pushes the sprite down inside the
 // container so the dog's BODY (not its sprite frame) lands on the
 // scene's bottom ground at container y≈190. Different poses have
@@ -79,6 +90,11 @@ const ANIM_BOTTOM_OFFSET: Record<DogAnim, number> = {
   sniffing: 8,
   sitting: -25,
   lying: -5,
+  // Same paw-row alignment as the other standing poses.
+  jumping: -25,
+  // Crouched sheet was top-padded to 64px, so its dog body lands at
+  // the same baseline as sitting.
+  crouched: -25,
 };
 
 const SPRITE_SCALE = 2.5; // 64 × 2.5 = 160 px on screen
@@ -132,6 +148,11 @@ export function ProfileDogScene() {
   const mode: SceneMode = manualMode ?? autoMode;
   const [bark, setBark] = useState<string | null>(null);
   const barkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Override anim on tap so the dog visibly reacts (jump / crouch /
+  // sit). null while the regular state machine is in control.
+  const [reactAnim, setReactAnim] = useState<DogAnim | null>(null);
+  const reactTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const displayedAnim: DogAnim = reactAnim ?? anim;
   // Measured container width — drives how far the sprite can slide
   // before clipping. ResizeObserver covers the orientation-flip case
   // on phones; SSR initial render uses 0 (hidden until measured).
@@ -177,10 +198,10 @@ export function ProfileDogScene() {
     return () => clearInterval(id);
   }, []);
 
-  // Tap on dog → SpeechBubble pops above the head with a random
-  // bark. Re-tapping resets the timer + picks a new word so it
-  // replaces the existing bubble (mirrors the map's single-bubble
-  // behaviour). stopPropagation keeps the tap from also firing the
+  // Tap on dog → SpeechBubble + a random reaction pose (jump /
+  // crouch / sit). Re-tapping resets both timers + picks new text +
+  // pose, mirroring the map's single-bubble behaviour.
+  // stopPropagation keeps the tap from also firing the
   // background-toggle on the scene container.
   const handleBark = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
@@ -188,11 +209,17 @@ export function ProfileDogScene() {
     setBark(text);
     if (barkTimerRef.current) clearTimeout(barkTimerRef.current);
     barkTimerRef.current = setTimeout(() => setBark(null), BARK_DURATION_MS);
+
+    const reaction = TAP_REACTIONS[Math.floor(Math.random() * TAP_REACTIONS.length)]!;
+    setReactAnim(reaction.anim);
+    if (reactTimerRef.current) clearTimeout(reactTimerRef.current);
+    reactTimerRef.current = setTimeout(() => setReactAnim(null), reaction.durMs);
   }, []);
 
   useEffect(
     () => () => {
       if (barkTimerRef.current) clearTimeout(barkTimerRef.current);
+      if (reactTimerRef.current) clearTimeout(reactTimerRef.current);
     },
     [],
   );
@@ -309,7 +336,9 @@ export function ProfileDogScene() {
           // Per-anim downward offset — sitting/lying push the sprite
           // down so empty pixels below the dog body in the sprite
           // frame don't show up as bottom padding inside the card.
-          bottom: ANIM_BOTTOM_OFFSET[anim],
+          // displayedAnim folds the on-tap reaction (jump/crouch/sit)
+          // over the state-machine anim while it's active.
+          bottom: ANIM_BOTTOM_OFFSET[displayedAnim],
           transform: `translateX(${x}px)`,
           width: SPRITE_PX,
           height: SPRITE_PX,
@@ -328,7 +357,7 @@ export function ProfileDogScene() {
           cursor: 'pointer',
         }}
       >
-        <DogSprite anim={anim} facingLeft={facingLeft} scale={SPRITE_SCALE} />
+        <DogSprite anim={displayedAnim} facingLeft={facingLeft} scale={SPRITE_SCALE} />
         {/* Same SpeechBubble component as the map companion — dark
             pill above the dog's head. Single bubble at a time;
             re-tap replaces the text and resets the timer. */}
