@@ -7,7 +7,11 @@
 
 export type CompanionAction =
   | { name: 'start_quest'; args: { dogId: string } }
-  | { name: 'highlight_spot'; args: { spotId: string } };
+  | { name: 'highlight_spot'; args: { spotId: string } }
+  | {
+      name: 'walk';
+      args: { shape: 'roundtrip' | 'oneway'; distance: 'close' | 'far' };
+    };
 
 const ACTION_TAG_RE = /<<act:([a-z_]+):([\s\S]*?)>>\s*$/;
 
@@ -49,6 +53,13 @@ function validate(name: string | undefined, args: unknown): CompanionAction | nu
       const spotId = a.spotId;
       if (typeof spotId !== 'string' || !spotId) return null;
       return { name: 'highlight_spot', args: { spotId } };
+    }
+    case 'walk': {
+      const shape = a.shape;
+      const distance = a.distance;
+      if (shape !== 'roundtrip' && shape !== 'oneway') return null;
+      if (distance !== 'close' && distance !== 'far') return null;
+      return { name: 'walk', args: { shape, distance } };
     }
     // set_waypoint + collect_reward in the prompt grammar are documented
     // but not wired to client handlers yet — drop silently so a stray

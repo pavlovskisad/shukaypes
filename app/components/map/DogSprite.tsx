@@ -20,7 +20,7 @@ import { useEffect, useState } from 'react';
 // trying to fake one with a rotation looks worse than letting the dog
 // slide while still facing east/west.
 
-export type DogAnim = 'walking' | 'sitting' | 'running' | 'sniffing';
+export type DogAnim = 'walking' | 'sitting' | 'running' | 'sniffing' | 'lying';
 
 interface Sheet {
   url: string;
@@ -41,6 +41,11 @@ const SHEETS: Record<DogAnim, Sheet> = {
   // We pre-pad it to 512×64 with a transparent 9px top strip so the
   // frame grid stays uniform — see scripts in the PR description.
   sniffing: { url: '/dog/sniffing.png', frameCount: 8, frameMs: 140 },
+  // Deep idle — the dog has been sitting long enough that it
+  // settles down. Slowest cycle so it reads as "asleep" not "I'm
+  // watching every leaf move". Companion swaps to this after
+  // LYING_DELAY_MS of continuous sitting.
+  lying: { url: '/dog/lying.png', frameCount: 4, frameMs: 320 },
 };
 
 interface DogSpriteProps {

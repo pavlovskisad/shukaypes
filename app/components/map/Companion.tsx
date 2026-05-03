@@ -181,16 +181,42 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
     };
   }, []);
 
+  // Deep-idle: after LYING_DELAY_MS of continuous sitting (no
+  // motion, no sniff override), the dog settles down into the lying
+  // sprite. Reads as "we're chilling, I'm comfortable here" instead
+  // of constant alert sitting. Resets to sitting on any motion.
+  const LYING_DELAY_MS = 30_000;
+  const [resting, setResting] = useState(false);
+  const lyingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(() => {
+    if (motion !== 'still' || sniffing) {
+      setResting(false);
+      if (lyingTimerRef.current) {
+        clearTimeout(lyingTimerRef.current);
+        lyingTimerRef.current = null;
+      }
+      return;
+    }
+    if (lyingTimerRef.current) clearTimeout(lyingTimerRef.current);
+    lyingTimerRef.current = setTimeout(() => setResting(true), LYING_DELAY_MS);
+    return () => {
+      if (lyingTimerRef.current) clearTimeout(lyingTimerRef.current);
+    };
+  }, [motion, sniffing]);
+
   // Anim priority: sniffing (transient collect beat) wins over
   // everything; otherwise straight mapping from observed motion level
-  // to the matching sprite cycle.
+  // to the matching sprite cycle. Lying is the deep-idle variant of
+  // sitting.
   const anim: DogAnim = sniffing
     ? 'sniffing'
     : motion === 'running'
       ? 'running'
       : motion === 'walking'
         ? 'walking'
-        : 'sitting';
+        : resting
+          ? 'lying'
+          : 'sitting';
 
   const flash = useCallback((msg: string, ms = 4500) => {
     setLocalBubble(msg);
