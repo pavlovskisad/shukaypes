@@ -123,7 +123,14 @@ export function recordRecentDestination(id: string): void {
 // through different names.
 const RECENT_VISIT_LIMIT = 4;
 const RECENT_VISIT_PENALTY_PER_RANK_M = 400;
-const VISIT_TOP_K = 8;
+// Wide pool — the visit submenu's job is "give me 3 to pick from"
+// and the user wants to discover the neighbourhood, not see the same
+// 8 closest names cycle. With ~30 cafés in a Podil-density block,
+// top-20 covers most of the realistic walking horizon while still
+// excluding the very-far Places returns. Combined with the recent
+// penalty + uniform shuffle, the same category opened repeatedly
+// surfaces a real cross-section of the area.
+const VISIT_TOP_K = 20;
 const RECENT_VISIT_STORAGE_KEY = 'shukajpes.visits.recent.v1';
 
 function loadRecentVisitIds(): string[] {
@@ -303,14 +310,23 @@ function pickBest(
     .map((c) => ({ c, d: distanceMeters(origin, c.position) }))
     .map((x) => ({ ...x, s: score(x.c, x.d, targetM, recentIds) }))
     .sort((a, b) => a.s - b.s);
-  // Prefer the band; if it's too thin (sparse city block / long-leg
-  // walks where the band is wide and empty), widen to top scorers
-  // from the full eligible list. MIN_POOL_SIZE ensures the variety
-  // sampling has at least 4 options to choose from.
   const band = scored.filter(({ d }) => Math.abs(d - targetM) <= SPOT_BUCKET_M);
-  const pool =
-    band.length >= MIN_POOL_SIZE ? band : scored.slice(0, MIN_POOL_SIZE);
-  return pickFromQualityBand(pool);
+  if (band.length >= MIN_POOL_SIZE) {
+    // Dense band — apply the quality-band filter so we only sample
+    // candidates that are roughly comparable on score.
+    return pickFromQualityBand(band);
+  }
+  // Sparse band — variety beats distance-fit perfection. Take the
+  // top MIN_POOL_SIZE scorers regardless of quality gap (the band of
+  // 1-2 candidates collapsed to a deterministic pick after the
+  // quality-band filter, which is exactly what we're trying to avoid
+  // for long-distance walks in low-density areas). Uniform random
+  // pick within the top-N — recent penalty still rotates between
+  // them across taps.
+  const topN = scored.slice(0, MIN_POOL_SIZE);
+  if (topN.length === 0) return null;
+  const idx = Math.floor(Math.random() * topN.length);
+  return topN[idx]!.c;
 }
 
 // Compute a synthetic via-point offset perpendicular to the
