@@ -31,6 +31,91 @@ interface BackdropProps {
 const VIEW_W = 360;
 const VIEW_H = 130;
 
+// Ground line y in viewBox units. Houses, trees, and lamppost all
+// stand on this; the dog's per-anim bottomOffset aligns its paws
+// here too.
+const GROUND_Y = 115;
+
+interface HouseProps {
+  x: number; // left edge of body
+  bodyW: number;
+  bodyH: number; // body height (excluding roof)
+  body: string; // body fill
+  roof: string; // roof fill
+}
+
+// A single old-town house: stepped pitched roof, body, 2×3 window
+// grid, small door at the bottom-center. All measurements snap to a
+// 2-px grid for consistent pixel-art look. The body sits flush with
+// GROUND_Y so houses share a baseline.
+function House({ x, bodyW, bodyH, body, roof }: HouseProps) {
+  const bodyY = GROUND_Y - bodyH;
+  // Stepped pitched roof — three horizontal rectangles narrowing
+  // toward the apex. 8 px total roof height.
+  const roofY = bodyY - 8;
+  const roofPad = 4; // how far the eaves overhang the body each side
+  const rW1 = bodyW + roofPad * 2;
+  const rW2 = Math.max(4, bodyW);
+  const rW3 = Math.max(4, bodyW - roofPad * 2);
+  // Window grid — 2 columns × 2 rows, 4×4 windows, 4 px gutters.
+  const winW = 4;
+  const winH = 4;
+  const colGap = 4;
+  const rowGap = 5;
+  const cols = 2;
+  const rows = 2;
+  const winsW = cols * winW + (cols - 1) * colGap;
+  const winsLeft = x + (bodyW - winsW) / 2;
+  const winsTop = bodyY + 6;
+  // Door — 6×10 at body bottom center.
+  const doorW = 6;
+  const doorH = 10;
+  const doorX = x + (bodyW - doorW) / 2;
+  const doorY = GROUND_Y - doorH;
+  // Window + door colors derived from roof for cohesion.
+  const windowFill = '#e8eef2';
+  const doorFill = roof;
+  return (
+    <g>
+      {/* Roof — three stacked rectangles, narrowing upward */}
+      <rect x={x - roofPad} y={roofY + 6} width={rW1} height={2} fill={roof} />
+      <rect
+        x={x - roofPad + (rW1 - rW2) / 2}
+        y={roofY + 3}
+        width={rW2}
+        height={3}
+        fill={roof}
+      />
+      <rect
+        x={x - roofPad + (rW1 - rW3) / 2}
+        y={roofY}
+        width={rW3}
+        height={3}
+        fill={roof}
+      />
+      {/* Body */}
+      <rect x={x} y={bodyY} width={bodyW} height={bodyH} fill={body} />
+      {/* Windows */}
+      {Array.from({ length: rows }).map((_, r) =>
+        Array.from({ length: cols }).map((_, c) => (
+          <rect
+            key={`${r}-${c}`}
+            x={winsLeft + c * (winW + colGap)}
+            y={winsTop + r * (winH + rowGap)}
+            width={winW}
+            height={winH}
+            fill={windowFill}
+          />
+        )),
+      )}
+      {/* Door */}
+      <rect x={doorX} y={doorY} width={doorW} height={doorH} fill={doorFill} />
+      {/* Tiny door knob for character */}
+      <rect x={doorX + doorW - 2} y={doorY + doorH / 2} width={1} height={1} fill="#3a2a1a" />
+    </g>
+  );
+}
+
 function layerStyle(
   dogCenterX: number,
   cardWidth: number,
@@ -60,38 +145,26 @@ export function ProfileSceneBackdrop({
 }: BackdropProps) {
   return (
     <>
-      {/* Far layer — distant cityscape + windows. Slowest parallax. */}
+      {/* Far layer — old-town houses. Each house has a body in a
+          warm pastel, a stepped pitched roof in a darker tone, a 2×3
+          window grid, and a small door at the bottom-center.
+          Heights stop well above the ground line so the dog walks
+          IN FRONT of them; varied widths + colors give the row a
+          European-old-town silhouette without being noisy. */}
       <svg
         viewBox={`0 0 ${VIEW_W} ${VIEW_H}`}
         preserveAspectRatio="none"
         style={layerStyle(dogCenterX, cardWidth, 0.06, transitionMs)}
         aria-hidden
       >
-        <g fill="#e6e6ea">
-          <rect x="40" y="62" width="14" height="48" />
-          <rect x="54" y="56" width="22" height="54" />
-          <rect x="76" y="68" width="16" height="42" />
-          <rect x="92" y="60" width="20" height="50" />
-          <rect x="184" y="64" width="18" height="46" />
-          <rect x="202" y="58" width="12" height="52" />
-          <rect x="214" y="66" width="22" height="44" />
-          <rect x="236" y="60" width="14" height="50" />
-        </g>
-        <g fill="#c2c2c8">
-          <rect x="58" y="62" width="2" height="2" />
-          <rect x="64" y="62" width="2" height="2" />
-          <rect x="70" y="62" width="2" height="2" />
-          <rect x="58" y="72" width="2" height="2" />
-          <rect x="64" y="72" width="2" height="2" />
-          <rect x="70" y="72" width="2" height="2" />
-          <rect x="96" y="68" width="2" height="2" />
-          <rect x="102" y="68" width="2" height="2" />
-          <rect x="108" y="68" width="2" height="2" />
-          <rect x="220" y="72" width="2" height="2" />
-          <rect x="226" y="72" width="2" height="2" />
-          <rect x="220" y="80" width="2" height="2" />
-          <rect x="226" y="80" width="2" height="2" />
-        </g>
+        <House x={4} bodyW={40} bodyH={62} body="#f0d9b5" roof="#a05a3c" />
+        <House x={50} bodyW={32} bodyH={70} body="#dde7d6" roof="#7a8c6e" />
+        <House x={88} bodyW={36} bodyH={58} body="#e4cdb5" roof="#8c5a3c" />
+        <House x={130} bodyW={28} bodyH={66} body="#dfd5e6" roof="#6c5a76" />
+        <House x={186} bodyW={42} bodyH={68} body="#e9dac1" roof="#946d4b" />
+        <House x={236} bodyW={30} bodyH={56} body="#d8dde6" roof="#5e7080" />
+        <House x={272} bodyW={36} bodyH={64} body="#e4d2c4" roof="#a45e44" />
+        <House x={316} bodyW={28} bodyH={58} body="#dde0d2" roof="#7a8068" />
       </svg>
 
       {/* Mid layer — trees + lamppost. Medium parallax. */}
