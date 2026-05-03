@@ -29,7 +29,11 @@ const SCENE: SceneEntry[] = [
 
 const SPRITE_SCALE = 2.5; // 64 × 2.5 = 160 px on screen
 const SPRITE_PX = 64 * SPRITE_SCALE;
-const HEIGHT_PX = SPRITE_PX + 8;
+// Clip the top ~12 source pixels of the sprite frame (which are
+// empty for every pose — the dog's body sits in rows 12-60). This
+// kills the visual whitespace above the dog without cropping the
+// head in walking/running poses.
+const HEIGHT_PX = SPRITE_PX - 30;
 
 function pickEntry(prev: DogAnim | null): SceneEntry {
   // Exclude the previous anim from the pool so the dog doesn't loop
@@ -134,9 +138,14 @@ export function ProfileDogScene() {
         position: 'relative',
         width: '100%',
         height: HEIGHT_PX,
-        marginBottom: 8,
+        // No marginBottom — the dog's "feet" sit flush against the
+        // companion-name line below for a tighter hero card. The
+        // sprite's empty top region (clipped by HEIGHT_PX) handles
+        // the top breathing room.
+        marginBottom: -4,
         // Hide overflow so a slide that overshoots doesn't leak past
-        // the card edge mid-resize.
+        // the card edge mid-resize, and so the sprite-top clip
+        // (HEIGHT_PX < SPRITE_PX) cuts cleanly.
         overflow: 'hidden',
         pointerEvents: 'none',
       }}
