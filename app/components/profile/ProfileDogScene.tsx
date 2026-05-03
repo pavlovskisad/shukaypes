@@ -1,6 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { DogSprite, type DogAnim } from '../map/DogSprite';
-import { ProfileSceneBackdrop } from './ProfileSceneBackdrop';
+import { ProfileSceneBackdrop, type SceneMode } from './ProfileSceneBackdrop';
+import { ProfileSceneBirds } from './ProfileSceneBirds';
 
 // Ambient dog scene for the profile hero — replaces the 🐶 emoji
 // with the live pixel-art companion. Runs a small state machine that
@@ -69,9 +70,24 @@ function randomBetween([lo, hi]: [number, number]): number {
   return lo + Math.random() * (hi - lo);
 }
 
+// Day from 7:00 to 19:00 local time, otherwise night. Tuned so dawn /
+// dusk both read as "night" — a lit lamppost at 6am feels right.
+function isDayHour(): boolean {
+  const h = new Date().getHours();
+  return h >= 7 && h < 19;
+}
+
 export function ProfileDogScene() {
   const [anim, setAnim] = useState<DogAnim>('sitting');
   const [facingLeft, setFacingLeft] = useState(false);
+  // Auto-derived mode follows real wall-clock time. Manual override
+  // takes precedence when set — used by the tap-to-toggle for testing
+  // and so users can pin a mode they like.
+  const [autoMode, setAutoMode] = useState<SceneMode>(() =>
+    isDayHour() ? 'day' : 'night',
+  );
+  const [manualMode, setManualMode] = useState<SceneMode | null>(null);
+  const mode: SceneMode = manualMode ?? autoMode;
   // Measured container width — drives how far the sprite can slide
   // before clipping. ResizeObserver covers the orientation-flip case
   // on phones; SSR initial render uses 0 (hidden until measured).
@@ -106,6 +122,23 @@ export function ProfileDogScene() {
       setX(center);
     }
   }, [width]);
+
+  // Re-check the wall clock every minute so the scene drifts from day
+  // to night across a long session without a refresh. Cheap; doesn't
+  // re-render anything if the mode hasn't changed.
+  useEffect(() => {
+    const id = setInterval(() => {
+      setAutoMode(isDayHour() ? 'day' : 'night');
+    }, 60_000);
+    return () => clearInterval(id);
+  }, []);
+
+  const toggleMode = useCallback(() => {
+    setManualMode((prev) => {
+      const current = prev ?? (isDayHour() ? 'day' : 'night');
+      return current === 'day' ? 'night' : 'day';
+    });
+  }, []);
 
   // State-machine tick — picks a new entry, sets the anim, and (if
   // moving) starts a CSS transition toward a new x. Each tick
@@ -149,6 +182,9 @@ export function ProfileDogScene() {
   return (
     <div
       ref={containerRef}
+      onClick={toggleMode}
+      role="button"
+      aria-label={`Scene mode: ${mode}. Tap to toggle.`}
       style={{
         position: 'relative',
         // Break out of the card's 18px horizontal padding so the dog
@@ -168,7 +204,7 @@ export function ProfileDogScene() {
         // the card edge mid-resize, and so the sprite-top clip
         // (HEIGHT_PX < SPRITE_PX) cuts cleanly.
         overflow: 'hidden',
-        pointerEvents: 'none',
+        cursor: 'pointer',
       }}
     >
       {/* Pixelated city/park backdrop sits behind the dog. Three
@@ -180,7 +216,12 @@ export function ProfileDogScene() {
         dogCenterX={x + SPRITE_PX / 2}
         cardWidth={width}
         transitionMs={transitionMs}
+        mode={mode}
       />
+      {/* Random ambient flyovers — birds in day, bat at night, plus
+          occasional falling leaves / fireflies. Sits above the
+          backdrop so it parallaxes naturally with the far layer. */}
+      <ProfileSceneBirds cardWidth={width} mode={mode} />
       <div
         style={{
           position: 'absolute',
@@ -199,6 +240,7 @@ export function ProfileDogScene() {
             transitionMs > 0
               ? `transform ${transitionMs}ms linear, bottom 80ms ease-out`
               : 'bottom 80ms ease-out',
+          pointerEvents: 'none',
         }}
       >
         <DogSprite anim={anim} facingLeft={facingLeft} scale={SPRITE_SCALE} />
