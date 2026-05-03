@@ -39,12 +39,16 @@ const GROUND_Y = 110;
 const PALETTE = {
   day: {
     sky: '#dbeaf4',
-    foreground: '#cdd5c0',
+    // Light spring green for the ground below the horizon — the
+    // earlier '#cdd5c0' read as khaki/olive against the green
+    // foliage. Same family as foliage but a few shades lighter so
+    // it stays visually behind.
+    foreground: '#c5e09a',
     foliage: '#88a878',
     foliageHighlight: '#a3c195',
     trunk: '#735940',
     bench: '#735940',
-    grass: '#8aa078',
+    grass: '#7ea850',
     cloud: '#ffffff',
     cloudShadow: '#f0f3f6',
     lamppost: '#4a4a4a',
@@ -215,7 +219,6 @@ export function ProfileSceneBackdrop({
           height={VIEW_H - GROUND_Y}
           fill={p.foreground}
         />
-        <rect x={0} y={GROUND_Y} width={VIEW_W} height={3} fill="#c5c8b5" />
       </svg>
 
       {/* Far layer — sun-or-moon, stars at night, clouds. */}
