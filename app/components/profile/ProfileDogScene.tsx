@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { DogSprite, type DogAnim } from '../map/DogSprite';
+import { ProfileSceneBackdrop } from './ProfileSceneBackdrop';
 
 // Ambient dog scene for the profile hero — replaces the 🐶 emoji
 // with the live pixel-art companion. Runs a small state machine that
@@ -171,6 +172,16 @@ export function ProfileDogScene() {
         pointerEvents: 'none',
       }}
     >
+      {/* Pixelated city/park backdrop sits behind the dog. Three
+          parallax layers (far/mid/near) translate opposite to the
+          dog's motion at increasing rates for depth. The transition
+          duration matches the dog's, so layers slide in lockstep
+          with the dog instead of lagging. */}
+      <ProfileSceneBackdrop
+        dogCenterX={x + SPRITE_PX / 2}
+        cardWidth={width}
+        transitionMs={transitionMs}
+      />
       <div
         style={{
           position: 'absolute',
@@ -180,6 +191,8 @@ export function ProfileDogScene() {
           // frame don't show up as bottom padding inside the card.
           bottom: ANIM_BOTTOM_OFFSET[anim],
           transform: `translateX(${x}px)`,
+          // Sprite stays above the SVG backdrop.
+          zIndex: 1,
           // Transition the slide on its real duration; the bottom
           // offset transitions much faster (80ms) so the per-anim
           // "drop" doesn't read as a separate motion event.
