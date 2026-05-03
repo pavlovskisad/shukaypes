@@ -15,26 +15,39 @@ interface SceneEntry {
   moves: boolean;
 }
 
+// Stationary durations are deliberately wide — when the dog decides
+// to lie down, it should commit (8-20s reads as a real nap), not just
+// glance at the floor for 5s. Walking/running stay shorter because
+// they're traversal beats, not "settle in" moments.
 const SCENE: SceneEntry[] = [
-  { anim: 'sitting', weight: 3, durMs: [3000, 6000], moves: false },
-  { anim: 'lying', weight: 3, durMs: [5000, 9000], moves: false },
-  { anim: 'sniffing', weight: 2, durMs: [2500, 5000], moves: false },
+  { anim: 'sitting', weight: 3, durMs: [4000, 12000], moves: false },
+  { anim: 'lying', weight: 3, durMs: [8000, 20000], moves: false },
+  { anim: 'sniffing', weight: 2, durMs: [3000, 7000], moves: false },
   { anim: 'walking', weight: 3, durMs: [4500, 8000], moves: true },
   { anim: 'running', weight: 1, durMs: [2200, 3500], moves: true },
 ];
 
 const SPRITE_SCALE = 2.5; // 64 × 2.5 = 160 px on screen
 const SPRITE_PX = 64 * SPRITE_SCALE;
-const HEIGHT_PX = SPRITE_PX + 8;
+// Clip the top ~12 source pixels of the sprite frame (which are
+// empty for every pose — the dog's body sits in rows 12-60). This
+// kills the visual whitespace above the dog without cropping the
+// head in walking/running poses.
+const HEIGHT_PX = SPRITE_PX - 30;
 
-function pickEntry(): SceneEntry {
-  const total = SCENE.reduce((sum, e) => sum + e.weight, 0);
+function pickEntry(prev: DogAnim | null): SceneEntry {
+  // Exclude the previous anim from the pool so the dog doesn't loop
+  // "lying → lying → lying" — visible as a glitchy "settle-glance-
+  // settle-glance" instead of a single committed session. With 5
+  // entries one removed leaves 4, plenty of variety.
+  const pool = prev ? SCENE.filter((e) => e.anim !== prev) : SCENE;
+  const total = pool.reduce((sum, e) => sum + e.weight, 0);
   let r = Math.random() * total;
-  for (const e of SCENE) {
+  for (const e of pool) {
     r -= e.weight;
     if (r <= 0) return e;
   }
-  return SCENE[0]!;
+  return pool[0]!;
 }
 
 function randomBetween([lo, hi]: [number, number]): number {
@@ -86,8 +99,10 @@ export function ProfileDogScene() {
   useEffect(() => {
     if (width === 0) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
+    let lastAnim: DogAnim | null = null;
     const step = () => {
-      const entry = pickEntry();
+      const entry = pickEntry(lastAnim);
+      lastAnim = entry.anim;
       const dur = randomBetween(entry.durMs);
       setAnim(entry.anim);
       if (entry.moves && width > SPRITE_PX) {
@@ -123,9 +138,14 @@ export function ProfileDogScene() {
         position: 'relative',
         width: '100%',
         height: HEIGHT_PX,
-        marginBottom: 8,
+        // No marginBottom — the dog's "feet" sit flush against the
+        // companion-name line below for a tighter hero card. The
+        // sprite's empty top region (clipped by HEIGHT_PX) handles
+        // the top breathing room.
+        marginBottom: -4,
         // Hide overflow so a slide that overshoots doesn't leak past
-        // the card edge mid-resize.
+        // the card edge mid-resize, and so the sprite-top clip
+        // (HEIGHT_PX < SPRITE_PX) cuts cleanly.
         overflow: 'hidden',
         pointerEvents: 'none',
       }}
