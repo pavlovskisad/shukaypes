@@ -29,26 +29,26 @@ const SCENE: SceneEntry[] = [
 ];
 
 // Per-anim downward offset — pushes the sprite down inside the
-// container so the dog's BODY (not its sprite frame) sits flush
-// with the ground line. Different poses have different amounts of
-// empty pixels below the dog's paws/butt in their source frames,
-// so the offsets vary. Tuned by eye against the SVG ground line at
-// container y=115.
+// container so the dog's BODY (not its sprite frame) lands on the
+// scene's bottom ground at container y≈190. Different poses have
+// different paw rows in their frames so the offsets vary; tuned by
+// eye against the new HEIGHT_PX = 200.
 const ANIM_BOTTOM_OFFSET: Record<DogAnim, number> = {
-  walking: -22,
-  running: -22,
-  sniffing: -2,
-  sitting: -22,
-  lying: -8,
+  walking: -25,
+  running: -25,
+  sniffing: 8,
+  sitting: -25,
+  lying: -5,
 };
 
 const SPRITE_SCALE = 2.5; // 64 × 2.5 = 160 px on screen
 const SPRITE_PX = 64 * SPRITE_SCALE;
-// Clip the top ~12 source pixels of the sprite frame (which are
-// empty for every pose — the dog's body sits in rows 12-60). This
-// kills the visual whitespace above the dog without cropping the
-// head in walking/running poses.
-const HEIGHT_PX = SPRITE_PX - 30;
+// Scene container is taller than the sprite — added sky above the
+// ground line so the dog "lives" lower in the card. The whole hero
+// card grows by ~70 px on the bottom end as a result, with the dog
+// landing at the vertical position where the "шукайпес" label
+// used to be.
+const HEIGHT_PX = 200;
 
 function pickEntry(prev: DogAnim | null): SceneEntry {
   // Exclude the previous anim from the pool so the dog doesn't loop
@@ -161,12 +161,9 @@ export function ProfileDogScene() {
         width: 'calc(100% + 36px)' as unknown as number,
         marginLeft: -18,
         height: HEIGHT_PX,
-        // Heavy negative marginBottom — pulls the next sibling
-        // (companion-name "шукайпес") UP into the scene's lower
-        // portion so the text sits at the dog's body level. The dog
-        // walks "next to" / behind the label rather than above it.
-        // Tuned by eye against companion-name's font size.
-        marginBottom: -55,
+        // Small negative marginBottom — companion-name follows the
+        // scene closely below, no big air gap.
+        marginBottom: -4,
         // Hide overflow so a slide that overshoots doesn't leak past
         // the card edge mid-resize, and so the sprite-top clip
         // (HEIGHT_PX < SPRITE_PX) cuts cleanly.

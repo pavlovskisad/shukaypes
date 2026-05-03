@@ -29,14 +29,13 @@ interface BackdropProps {
 }
 
 const VIEW_W = 360;
-const VIEW_H = 130;
+const VIEW_H = 200;
 
-// Ground line y in viewBox units. Trees, lamppost, bench and grass
-// tufts all stand on this; the dog's per-anim bottomOffset aligns
-// its paws here too. Bumped from 115 → 122 so the dog's actual
-// pixel paws (which sit ~5 px above the sprite frame's bottom in
-// most poses) land squarely on the line instead of floating above.
-const GROUND_Y = 122;
+// The "ground line" trees + lamppost + bench stand on. Sits in the
+// upper-middle of the viewBox so the dog (whose paws land near
+// y≈190 of the container) walks visibly BELOW this line — like a
+// foreground strip in front of the park scene.
+const GROUND_Y = 110;
 
 interface CloudProps {
   x: number;
