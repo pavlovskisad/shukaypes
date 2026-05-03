@@ -27,9 +27,15 @@ const SHEET_ANIM_MS = 280;
 // Big-photo height. Tall enough that the dog is recognisable at a
 // glance (no extra tap-to-zoom step), short enough that the modal
 // still leaves room for name + reward + two action buttons above
-// the bottom dashboard. Reads as ~60-70% of the lightbox view we
-// used to gate behind the small round avatar.
-const PHOTO_HEIGHT_PX = 280;
+// the bottom dashboard AND clears the top HUD on shorter Safari
+// viewports (URL bar eats ~80-100px more than a PWA install).
+const PHOTO_HEIGHT_PX = 220;
+// Reserve space at the top of the overlay so the modal can't grow
+// up into the HUD pills (paws / bone / sun + menu icon). The HUD
+// row sits in roughly the top ~90px (status bar + pills + breathing
+// room). Without this, on browser viewports the modal's top edge
+// landed right under the HUD instead of leaving a map gap.
+const TOP_RESERVE_PX = 90;
 
 function relativeTime(iso: string): string {
   const then = new Date(iso).getTime();
@@ -116,6 +122,11 @@ export function LostDogModal({
         // ~34px home-indicator strip) gets the same visual breathing
         // room as Android/desktop.
         paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' as unknown as number,
+        // Hard top reserve so the modal can never grow into the HUD
+        // area on shorter viewports (Safari with URL bar). Combined
+        // with overflow:hidden on the sheet, content gets clipped
+        // here rather than overlapping the pills above.
+        paddingTop: TOP_RESERVE_PX,
         zIndex: 50,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
@@ -133,6 +144,12 @@ export function LostDogModal({
           padding: 0,
           width: '100%',
           maxWidth: 480,
+          // Cap at the available height (overlay's flex content area)
+          // so on shorter viewports the body scrolls instead of the
+          // whole sheet pushing up past paddingTop into the HUD.
+          maxHeight: '100%',
+          display: 'flex',
+          flexDirection: 'column',
           position: 'relative',
           animation: `sheet-${closing ? 'down' : 'up'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
           boxShadow: '0 -10px 30px rgba(0,0,0,0.12)',
@@ -142,12 +159,15 @@ export function LostDogModal({
         {/* Big photo banner — fills the top of the modal so the dog is
             recognisable at a glance. Falls back to a coloured panel
             with the emoji centred when no photo is available.
-            Badge + close button float over the photo for compactness. */}
+            Badge + close button float over the photo for compactness.
+            flexShrink: 0 keeps the photo at its full height when the
+            body scrolls on shorter viewports. */}
         <div
           style={{
             position: 'relative',
             width: '100%',
             height: PHOTO_HEIGHT_PX,
+            flexShrink: 0,
             background: '#f0f0f0',
             overflow: 'hidden',
           }}
@@ -231,8 +251,16 @@ export function LostDogModal({
           </button>
         </div>
 
-        {/* Body — name + meta, reward pill, primary actions. */}
-        <div style={{ padding: '14px 22px 22px' }}>
+        {/* Body — name + meta, reward pill, primary actions. Scrolls
+            internally if the modal can't fit on a tiny viewport. */}
+        <div
+          style={{
+            padding: '14px 22px 22px',
+            overflowY: 'auto',
+            flexGrow: 1,
+            minHeight: 0,
+          }}
+        >
           <div style={{ marginBottom: 14 }}>
             <div style={{ fontFamily: SYSTEM_FONT, fontSize: 26, fontWeight: 700, lineHeight: 1.15 }}>
               {renderDog.name}
