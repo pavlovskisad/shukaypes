@@ -18,18 +18,17 @@ function TokenMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => v
         role="button"
         tabIndex={0}
         onClick={onTap}
+        aria-label="paw token"
         style={{
           width: 16,
           height: 16,
-          fontSize: 13,
-          lineHeight: '16px',
-          textAlign: 'center',
+          backgroundImage: 'url(/icons/paws.svg)',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: 'contain',
           cursor: 'pointer',
           userSelect: 'none',
         }}
-      >
-        🐾
-      </div>
+      />
     </OverlayViewF>
   );
 }
