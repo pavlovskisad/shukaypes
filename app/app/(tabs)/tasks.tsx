@@ -148,6 +148,21 @@ export default function TasksScreen() {
     }, [refresh])
   );
 
+  // Preload neighbour photos on the first modal open so prev/next
+  // swipes find them in cache and don't briefly show the grey
+  // backdrop while the photo decodes. Browser dedupes by URL.
+  // window.Image (not the RN <Image> imported above) is the
+  // browser's HTMLImageElement constructor.
+  useEffect(() => {
+    if (!modalDogId || typeof window === 'undefined') return;
+    for (const d of sortedDogs) {
+      if (d.photoUrl) {
+        const img = new window.Image();
+        img.src = d.photoUrl;
+      }
+    }
+  }, [modalDogId, sortedDogs]);
+
   // Refetch quest history on focus so a freshly completed quest shows
   // up immediately. Errors fail silent — the card just stays empty.
   useFocusEffect(
