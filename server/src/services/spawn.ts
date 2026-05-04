@@ -4,6 +4,13 @@ import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import type { LatLng } from '../utils/geo.js';
 import { scatter, scatterInRadius } from '../utils/geo.js';
+import {
+  shouldTopupUserArea,
+  noteUserAreaTopup,
+  parkPawsGate,
+  parkBonesGate,
+  dogZoneGate,
+} from './spawnCooldown.js';
 
 // Parser landmark fallback used by the OLX pipeline. Pets at the exact
 // Kyiv city-center coord are low-signal (no real geography in the post),
@@ -59,29 +66,42 @@ export async function ensureTokensForUser(
 
   // 2. User-area pool — base supply around the walker, with radial
   // bias so it's denser near them and thins out toward the edge.
-  const userDistExpr = haversineSql(center, schema.tokens.lat, schema.tokens.lng);
-  const userRows = await db
-    .select({ live: sql<number>`count(*)::int` })
-    .from(schema.tokens)
-    .where(
-      and(
-        eq(schema.tokens.ownerId, userId),
-        isNull(schema.tokens.collectedAt),
-        sql`${userDistExpr} <= ${balance.userAreaRadiusM}`,
-      ),
-    );
-  const userLive = userRows[0]?.live ?? 0;
-  if (userLive < balance.tokensInUserArea) {
-    const missing = balance.tokensInUserArea - userLive;
-    const positions = scatterInRadius(
-      center,
-      missing,
-      balance.userAreaRadiusM,
-      balance.tokenCenterBias,
-      balance.userAreaInnerRadiusM,
-    );
-    const rows = buildTokenRows(userId, positions);
-    if (rows.length) await db.insert(schema.tokens).values(rows);
+  // Gated by movement+time: only refills if the walker has actually
+  // moved >userAreaMovementThresholdM since the last topup, OR
+  // userAreaCooldownMs has elapsed. Without this, every 15s sync
+  // refilled paws the user just collected and the count never went
+  // down — undermining the whole "made progress" feeling.
+  const userAreaOk = await shouldTopupUserArea(userId, center);
+  if (userAreaOk) {
+    const userDistExpr = haversineSql(center, schema.tokens.lat, schema.tokens.lng);
+    const userRows = await db
+      .select({ live: sql<number>`count(*)::int` })
+      .from(schema.tokens)
+      .where(
+        and(
+          eq(schema.tokens.ownerId, userId),
+          isNull(schema.tokens.collectedAt),
+          sql`${userDistExpr} <= ${balance.userAreaRadiusM}`,
+        ),
+      );
+    const userLive = userRows[0]?.live ?? 0;
+    if (userLive < balance.tokensInUserArea) {
+      const missing = balance.tokensInUserArea - userLive;
+      const positions = scatterInRadius(
+        center,
+        missing,
+        balance.userAreaRadiusM,
+        balance.tokenCenterBias,
+        balance.userAreaInnerRadiusM,
+      );
+      const rows = buildTokenRows(userId, positions);
+      if (rows.length) await db.insert(schema.tokens).values(rows);
+    }
+    // Note the topup whether or not we wrote rows — the gate's job
+    // is to throttle the EXPENSIVE step (the count + insert), not
+    // just the insert itself. If the user-area was already full,
+    // we still don't want to recheck for another threshold/cooldown.
+    await noteUserAreaTopup(userId, center);
   }
 
   // 3. Per-pet pool — each nearby active lost pet gets its search
@@ -110,6 +130,7 @@ export async function ensureTokensForUser(
     );
 
   for (const d of nearbyDogs) {
+    if (!(await dogZoneGate.shouldTopup(userId, d.id))) continue;
     const dogPos = { lat: d.lat, lng: d.lng };
     const zoneDistExpr = haversineSql(dogPos, schema.tokens.lat, schema.tokens.lng);
     const zoneRows = await db
@@ -123,6 +144,7 @@ export async function ensureTokensForUser(
         ),
       );
     const zoneLive = zoneRows[0]?.live ?? 0;
+    await dogZoneGate.note(userId, d.id);
     if (zoneLive >= balance.tokensPerDogArea) continue;
     const missing = balance.tokensPerDogArea - zoneLive;
     const positions = scatterInRadius(dogPos, missing, d.zoneRadiusM);
@@ -136,6 +158,7 @@ export async function ensureTokensForUser(
   // the gap. Skipped if the client hasn't passed parks yet (first
   // sync before Places loads).
   for (const park of parks) {
+    if (!(await parkPawsGate.shouldTopup(userId, park))) continue;
     const parkDistExpr = haversineSql(park, schema.tokens.lat, schema.tokens.lng);
     const parkRows = await db
       .select({ live: sql<number>`count(*)::int` })
@@ -148,6 +171,7 @@ export async function ensureTokensForUser(
         ),
       );
     const parkLive = parkRows[0]?.live ?? 0;
+    await parkPawsGate.note(userId, park);
     if (parkLive >= balance.tokensPerPark) continue;
     const missing = balance.tokensPerPark - parkLive;
     const positions = scatterInRadius(park, missing, balance.parkPawRadiusM);
@@ -180,6 +204,7 @@ export async function ensureFoodForUser(
   // the paws-per-pet pattern — places earn bones, not random streets.
   if (parks.length) {
     for (const park of parks) {
+      if (!(await parkBonesGate.shouldTopup(userId, park))) continue;
       const distExpr = haversineSql(park, schema.foodItems.lat, schema.foodItems.lng);
       const zoneRows = await db
         .select({ live: sql<number>`count(*)::int` })
@@ -192,6 +217,7 @@ export async function ensureFoodForUser(
           ),
         );
       const zoneLive = zoneRows[0]?.live ?? 0;
+      await parkBonesGate.note(userId, park);
       if (zoneLive >= balance.bonesPerPark) continue;
       const missing = balance.bonesPerPark - zoneLive;
       const positions = scatterInRadius(park, missing, balance.parkScatterRadiusM);
