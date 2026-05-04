@@ -98,12 +98,13 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
-        // Same dual-padding recipe as LostDogModal: reserve the top
-        // for the HUD pills and add the iPhone safe-area on the
-        // bottom so PWA + Safari-with-URL-bar both fit. Without
-        // these the rows list overflowed on Safari mobile.
-        paddingTop: 90,
-        paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' as unknown as number,
+        // Reserve the top for the HUD pills and the bottom for the
+        // tab dashboard + iPhone home-indicator. Bumped 100→124px
+        // because on PWA users reported the rows list slipping
+        // under the dashboard — the previous gap was just enough to
+        // clear it but visually felt too tight.
+        paddingTop: 80,
+        paddingBottom: 'calc(124px + env(safe-area-inset-bottom))' as unknown as number,
         zIndex: 80,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
