@@ -216,6 +216,14 @@ export function LostDogModal({
             <img
               src={renderDog.photoUrl}
               alt={renderDog.name}
+              // Opacity 0 → 1 on load so cold-cache photos fade in
+              // gracefully instead of popping into the slid-in frame.
+              // The grey backdrop on the photo container fills the
+              // gap while we wait. Re-mounts with the slide-track on
+              // dog id change, so each new pet starts at 0.
+              onLoad={(e) => {
+                e.currentTarget.style.opacity = '1';
+              }}
               style={{
                 width: '100%',
                 height: '100%',
@@ -228,6 +236,8 @@ export function LostDogModal({
                 // single-default for the corpus.
                 objectPosition: 'center center',
                 display: 'block',
+                opacity: 0,
+                transition: 'opacity 220ms ease-out',
                 // Slight zoom-in so any baked-in white borders /
                 // letterboxing in the source photo (some OLX listings
                 // ship with a 4-8px white frame) are cropped away.
@@ -464,12 +474,12 @@ export function LostDogModal({
             to { transform: translateY(100%); }
           }
           @keyframes slide-in-from-left {
-            from { transform: translateX(-40px); opacity: 0; }
-            to   { transform: translateX(0); opacity: 1; }
+            from { transform: translateX(-22px); }
+            to   { transform: translateX(0); }
           }
           @keyframes slide-in-from-right {
-            from { transform: translateX(40px); opacity: 0; }
-            to   { transform: translateX(0); opacity: 1; }
+            from { transform: translateX(22px); }
+            to   { transform: translateX(0); }
           }
         `}</style>
       </div>
