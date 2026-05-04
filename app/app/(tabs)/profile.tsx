@@ -7,6 +7,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
 import { api } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
+import { Icon } from '../../components/ui/Icon';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
 // aggregate counts from /profile/me on focus, with the live game
@@ -134,17 +135,17 @@ export default function ProfileScreen() {
           ) : null}
           <View style={styles.meterRow}>
             <View style={styles.meterPill}>
-              <Text style={styles.meterEmoji}>☀️</Text>
+              <Icon name="sun" size={16} />
               <Text style={styles.meterValue}>
                 {Math.round(data?.companion.happiness ?? 0)}%
               </Text>
             </View>
             <View style={styles.meterPill}>
-              <Text style={styles.meterEmoji}>🦴</Text>
+              <Icon name="bone" size={16} />
               <Text style={styles.meterValue}>{Math.round(data?.companion.hunger ?? 0)}%</Text>
             </View>
             <View style={styles.meterPill}>
-              <Text style={styles.meterEmoji}>🐾</Text>
+              <Icon name="paws" size={16} />
               <Text style={styles.meterValue}>{data?.stats.pawsCollected ?? 0}</Text>
             </View>
           </View>

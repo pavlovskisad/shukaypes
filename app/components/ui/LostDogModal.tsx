@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { Icon } from './Icon';
 
 interface LostDogModalProps {
   dog: NearbyLostDog | null;
@@ -286,8 +287,18 @@ export function LostDogModal({
                 used to sit between meta and the action buttons. The
                 pill ate ~70px of vertical space on a surface where
                 the photo is the actual point. */}
-            <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>
-              🐾 complete search quest for {renderDog.rewardPoints} bonus pts
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 6,
+                fontSize: 12,
+                color: '#777',
+                marginTop: 4,
+              }}
+            >
+              <Icon name="paws" size={14} />
+              complete search quest for {renderDog.rewardPoints} bonus pts
             </div>
           </div>
 
