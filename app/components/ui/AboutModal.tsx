@@ -226,6 +226,29 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           >
             *tail wag* — when in doubt, just walk. we'll figure the rest out together. 🐾
           </div>
+          {/* OpenMoji is CC BY-SA 4.0 — credit required wherever the
+              emojis show up. The whole interface uses the OpenMoji
+              web font so they look the same on every device. */}
+          <div
+            style={{
+              fontSize: 11,
+              color: '#aaa',
+              textAlign: 'center',
+              marginTop: 12,
+              lineHeight: 1.4,
+            }}
+          >
+            emoji set by{' '}
+            <a
+              href="https://openmoji.org/"
+              target="_blank"
+              rel="noopener noreferrer"
+              style={{ color: '#aaa', textDecoration: 'underline' }}
+            >
+              openmoji.org
+            </a>{' '}
+            — CC BY-SA 4.0
+          </div>
         </div>
 
         <style>{`
