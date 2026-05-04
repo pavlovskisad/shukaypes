@@ -30,46 +30,6 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="default" />
     <meta name="apple-mobile-web-app-title" content="шукайпес" />
 
-    <!-- OpenMoji color web font — every emoji in the interface (HUD
-         pills, badges, profile pose icons, chat replies, OLX pet
-         names with sparkles, etc.) renders the same way on every
-         device instead of hopping between Apple Color Emoji /
-         Segoe UI Emoji / Noto. CC BY-SA 4.0; attribution lives in
-         the about modal.
-
-         Self-hosted from /public/fonts/ — the previous jsDelivr CDN
-         URL 403'd ("host_not_allowed") for many requests, leaving
-         users on system emoji even after the merge. Same-origin
-         file removes the CDN dependency and gets cached by Vercel's
-         edge.
-
-         WOFF2 ~2.7 MB (vs ~10 MB ttf). unicode-range scopes the
-         @font-face to emoji blocks so the browser doesn't consult
-         OpenMoji for Latin text. font-display: swap so first paint
-         shows system emoji briefly until the font lands. -->
-    <link
-      rel="preload"
-      href="/fonts/openmoji.woff2"
-      as="font"
-      type="font/woff2"
-      crossorigin="anonymous"
-    />
-    <style>
-      @font-face {
-        font-family: 'OpenMoji';
-        src: url('/fonts/openmoji.woff2') format('woff2');
-        font-display: swap;
-        unicode-range:
-          U+1F000-1FAFF, U+2600-27BF, U+2300-23FF, U+2B00-2BFF,
-          U+1F100-1F1FF, U+1F200-1F2FF, U+200D, U+FE0F;
-      }
-      html,
-      body {
-        font-family: system-ui, -apple-system, BlinkMacSystemFont,
-          'Segoe UI', Roboto, 'OpenMoji', sans-serif;
-      }
-    </style>
-
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
       /* These styles make the body full-height */

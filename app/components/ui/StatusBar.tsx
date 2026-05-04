@@ -1,6 +1,7 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
+import { Icon, type IconName } from './Icon';
 
 // Four white-frosted-glass pills laid out identically: icon + value with
 // a consistent gap so happiness / hunger / tokens / spots-toggle read
@@ -16,13 +17,17 @@ const PILL_MIN_WIDTH = 50;
 const PROGRESS_BLUE = 'rgba(0,60,255,0.85)';
 const GLASS_BG = 'rgba(255,255,255,0.85)';
 const GLASS_SHADOW_COLOR = '#000';
+// HUD icons are pixel-art SVGs (see components/ui/Icon.tsx). 18px
+// renders crisp at the 38px pill height; smaller (the previous emoji
+// fontSize 14) read as cramped against the value text.
+const ICON_SIZE = 18;
 
 function MeterPill({
   icon,
   value,
   label,
 }: {
-  icon: string;
+  icon: IconName;
   value: number;
   label: string;
 }) {
@@ -38,7 +43,7 @@ function MeterPill({
           },
         ]}
       />
-      <Text style={styles.emoji}>{icon}</Text>
+      <Icon name={icon} size={ICON_SIZE} />
       <Text
         style={styles.value}
         accessibilityLabel={`${label} ${fillPct} percent`}
@@ -55,14 +60,14 @@ function CounterPill({
   label,
   suffix,
 }: {
-  icon: string;
+  icon: IconName;
   value: number;
   label: string;
   suffix?: string;
 }) {
   return (
     <View style={[styles.pill, styles.counterPill]}>
-      <Text style={styles.emoji}>{icon}</Text>
+      <Icon name={icon} size={ICON_SIZE} />
       <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
         {Math.round(value)}
         {suffix ?? ''}
@@ -72,7 +77,7 @@ function CounterPill({
 }
 
 // Tap-to-toggle visibility of the spots overlay. Off state dims the
-// pin emoji + softens the pill bg; on state matches the rest of the
+// pin icon + softens the pill bg; on state matches the rest of the
 // HUD family. Independent of whether spots are loaded into the
 // store — the user can hide the cached layer without re-fetching.
 function SpotsTogglePill() {
@@ -91,7 +96,7 @@ function SpotsTogglePill() {
         pressed && { opacity: 0.7 },
       ]}
     >
-      <Text style={[styles.emoji, !visible && styles.emojiOff]}>📍</Text>
+      <Icon name="pin" size={ICON_SIZE} opacity={visible ? 1 : 0.45} />
     </Pressable>
   );
 }
@@ -108,9 +113,9 @@ export function StatusBar() {
     // is obviously "+20% fed", not "I ate 20 bones". Paw pill keeps
     // the lifetime collected count.
     <View style={styles.wrap} pointerEvents="box-none">
-      <MeterPill icon="☀️" value={happiness} label="happiness" />
-      <MeterPill icon="🦴" value={hunger} label="hunger" />
-      <CounterPill icon="🐾" value={tokensCollected} label="paws" />
+      <MeterPill icon="sun" value={happiness} label="happiness" />
+      <MeterPill icon="bone" value={hunger} label="hunger" />
+      <CounterPill icon="paws" value={tokensCollected} label="paws" />
       <SpotsTogglePill />
     </View>
   );
@@ -152,21 +157,12 @@ const styles = StyleSheet.create({
   togglePillOff: {
     backgroundColor: 'rgba(255,255,255,0.55)',
   },
-  emojiOff: {
-    // grayscale the color emoji so the "off" state reads as b&w —
-    // RN Web passes `filter` straight through to CSS.
-    filter: 'grayscale(1)',
-    opacity: 0.7,
-  },
   fill: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
     opacity: 0.75,
-  },
-  emoji: {
-    fontSize: 14,
   },
   value: {
     color: colors.black,

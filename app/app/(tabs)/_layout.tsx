@@ -1,21 +1,22 @@
 import { Tabs } from 'expo-router';
-import { Text } from 'react-native';
+import { View } from 'react-native';
 import { colors } from '../../constants/colors';
+import { Icon, type IconName } from '../../components/ui/Icon';
 
-function TabIcon({ icon, focused }: { icon: string; focused: boolean }) {
+// Tab icons are pixel-art SVGs (see components/ui/Icon.tsx). Inactive
+// tabs read as desaturated/dimmed via a wrapper View — RN-Web passes
+// `filter` through to CSS, so the same grayscale recipe we used on
+// emoji glyphs still works on the SVG-backed Icon.
+function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
   return (
-    <Text
+    <View
       style={{
-        fontSize: 22,
-        // Inactive tabs read as b&w — grayscale strips the color from
-        // emoji glyphs (RN Web passes `filter` through to CSS), opacity
-        // softens them further so the focused tab visibly pops.
         filter: focused ? undefined : 'grayscale(1)',
         opacity: focused ? 1 : 0.55,
       }}
     >
-      {icon}
-    </Text>
+      <Icon name={name} size={26} />
+    </View>
   );
 }
 
@@ -63,35 +64,35 @@ export default function TabsLayout() {
         name="index"
         options={{
           title: 'map',
-          tabBarIcon: ({ focused }) => <TabIcon icon="🗺️" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name="map" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="tasks"
         options={{
           title: 'quests',
-          tabBarIcon: ({ focused }) => <TabIcon icon="✓" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name="task" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="chat"
         options={{
           title: 'chat',
-          tabBarIcon: ({ focused }) => <TabIcon icon="💬" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name="chat" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="spots"
         options={{
           title: 'spots',
-          tabBarIcon: ({ focused }) => <TabIcon icon="📍" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name="pin" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
           title: 'profile',
-          tabBarIcon: ({ focused }) => <TabIcon icon="👤" focused={focused} />,
+          tabBarIcon: ({ focused }) => <TabIcon name="user" focused={focused} />,
         }}
       />
     </Tabs>

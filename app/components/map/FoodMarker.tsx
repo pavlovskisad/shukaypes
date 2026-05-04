@@ -16,18 +16,17 @@ function FoodMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => vo
         role="button"
         tabIndex={0}
         onClick={onTap}
+        aria-label="bone"
         style={{
           width: 24,
           height: 24,
-          fontSize: 18,
-          lineHeight: '24px',
-          textAlign: 'center',
+          backgroundImage: 'url(/icons/bone.svg)',
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: 'contain',
           cursor: 'pointer',
           userSelect: 'none',
         }}
-      >
-        🦴
-      </div>
+      />
     </OverlayViewF>
   );
 }
