@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
+import { useIsFocused } from '@react-navigation/native';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
@@ -63,6 +64,25 @@ export default function ProfileScreen() {
   const [data, setData] = useState<ProfileData | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  // Mount the dog scene only when this tab is BOTH the focused screen
+  // AND the document is visible. Without this, the scene runs forever
+  // after the user's first profile visit — DogSprite frame intervals
+  // (12 ticks/s on the running anim), the scene state machine, the
+  // ambient-event scheduler, and CSS keyframes for clouds + bird wings
+  // all keep firing on background tabs. Same recipe as the map view's
+  // tab-blur pause from PR #160.
+  const isFocused = useIsFocused();
+  const [docVisible, setDocVisible] = useState(
+    typeof document === 'undefined' ? true : !document.hidden,
+  );
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const onChange = () => setDocVisible(!document.hidden);
+    document.addEventListener('visibilitychange', onChange);
+    return () => document.removeEventListener('visibilitychange', onChange);
+  }, []);
+  const sceneActive = isFocused && docVisible;
+
   const refetch = useCallback(async () => {
     try {
       const fresh = (await api.getProfile()) as ProfileData | { error: string };
@@ -95,8 +115,11 @@ export default function ProfileScreen() {
         <View style={styles.card}>
           {/* Live pixel-art companion in place of the 🐶 emoji.
               Cycles sitting / lying / walking / sniffing / running
-              and slides across the card during moving anims. */}
-          <ProfileDogScene />
+              and slides across the card during moving anims.
+              Mounts only while the tab is focused + document visible
+              (see sceneActive above) — unmount tears down all the
+              scene's intervals + keyframe animations cleanly. */}
+          {sceneActive ? <ProfileDogScene /> : <View style={styles.scenePlaceholder} />}
           <Text style={styles.companionName}>{data?.companion.name ?? companionName}</Text>
           <Text style={styles.companionMeta}>
             level {data?.companion.level ?? 1}
@@ -207,6 +230,19 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textTransform: 'lowercase',
     letterSpacing: 0.3,
+  },
+  // Empty box that occupies the same footprint as ProfileDogScene so
+  // the card layout doesn't shift while the scene is unmounted on
+  // background tabs. Numbers mirror the scene's outer container —
+  // height 200, marginTop -18 / marginLeft -18 / marginBottom -4 to
+  // break out of the card's 18px padding and sit flush at the top.
+  scenePlaceholder: {
+    width: 'calc(100% + 36px)' as unknown as number,
+    height: 200,
+    marginTop: -18,
+    marginLeft: -18,
+    marginBottom: -4,
+    backgroundColor: '#dbeaf4',
   },
   companionName: {
     fontFamily: SYSTEM_FONT,
