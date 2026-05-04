@@ -9,19 +9,20 @@ function TokenMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => v
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -8, y: -8 })}
+      getPixelPositionOffset={() => ({ x: -11, y: -11 })}
     >
-      {/* Small footprint — literal tiny pawprints the walker picks up.
-          40% smaller than before so a cluster of them reads as a trail
-          rather than a grid of emoji badges. */}
+      {/* Footprint sized to read at zoom 16 — small enough that a
+          cluster reads as a trail of paws, big enough that a single
+          token is obviously tappable on touch. Slightly under the
+          bone marker (24) since paws are denser. */}
       <div
         role="button"
         tabIndex={0}
         onClick={onTap}
         aria-label="paw token"
         style={{
-          width: 16,
-          height: 16,
+          width: 22,
+          height: 22,
           backgroundImage: 'url(/icons/paws.svg)',
           backgroundRepeat: 'no-repeat',
           backgroundSize: 'contain',
