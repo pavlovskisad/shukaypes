@@ -98,7 +98,12 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         display: 'flex',
         alignItems: 'flex-end',
         justifyContent: 'center',
-        paddingBottom: 80,
+        // Same dual-padding recipe as LostDogModal: reserve the top
+        // for the HUD pills and add the iPhone safe-area on the
+        // bottom so PWA + Safari-with-URL-bar both fit. Without
+        // these the rows list overflowed on Safari mobile.
+        paddingTop: 90,
+        paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' as unknown as number,
         zIndex: 80,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
@@ -112,7 +117,10 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           padding: '22px 20px 22px',
           width: '100%',
           maxWidth: 430,
-          maxHeight: '78vh',
+          // Cap to the available flex content area (overlay padding
+          // already reserves clearance) so the inner rows scroll
+          // instead of the sheet pushing past the HUD.
+          maxHeight: '100%',
           display: 'flex',
           flexDirection: 'column',
           animation: `sheet-${closing ? 'down' : 'up'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
