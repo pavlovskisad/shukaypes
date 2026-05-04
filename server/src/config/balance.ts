@@ -68,6 +68,20 @@ export const balance = {
   foodExpireMinutes: 5,
   foodSpreadDeg: 0.014,
   foodCount: 8,
+  // Spawn-topup cooldowns. Without these the user-area / per-park /
+  // per-dog-zone pools "self-heal" on every 15s sync — collected
+  // items reappear within seconds, making the eat/collect gesture
+  // feel meaningless. The gates kill the standing-still respawn
+  // while preserving the walking-forward feed (user-area refills
+  // when the walker actually moves to a new patch).
+  // - User-area: refill if user has moved this far since the last
+  //   topup OR the cooldown has elapsed (whichever fires first).
+  userAreaMovementThresholdM: 300,
+  userAreaCooldownMs: 5 * 60 * 1000,
+  // - Per-park / per-dog-zone: simple time-based cooldown. Long
+  //   enough that eating a bone reads as "park is empty for a few
+  //   minutes" instead of "bone instantly back".
+  poolCooldownMs: 3 * 60 * 1000,
   // Anti-cheat: max distance between client-reported collect position
   // and target. Sized slightly above the client's auto-collect radius
   // (130m for food, 90m for tokens) so the auto-collect band doesn't
