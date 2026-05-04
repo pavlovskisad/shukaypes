@@ -11,8 +11,11 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
   return (
     <View
       style={{
+        // Pulled inactive opacity 0.55 → 0.32 so the focused tab
+        // dominates more obviously. Grayscale stays for the colour
+        // strip on top.
         filter: focused ? undefined : 'grayscale(1)',
-        opacity: focused ? 1 : 0.55,
+        opacity: focused ? 1 : 0.32,
       }}
     >
       <Icon name={name} size={26} />
