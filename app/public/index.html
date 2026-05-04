@@ -35,22 +35,29 @@
          names with sparkles, etc.) renders the same way on every
          device instead of hopping between Apple Color Emoji /
          Segoe UI Emoji / Noto. CC BY-SA 4.0; attribution lives in
-         the about modal. ~7 MB color font, cached after first load.
+         the about modal.
 
-         unicode-range scopes the @font-face to emoji blocks so the
-         browser doesn't even consult OpenMoji for Latin text. -->
+         Self-hosted from /public/fonts/ — the previous jsDelivr CDN
+         URL 403'd ("host_not_allowed") for many requests, leaving
+         users on system emoji even after the merge. Same-origin
+         file removes the CDN dependency and gets cached by Vercel's
+         edge.
+
+         WOFF2 ~2.7 MB (vs ~10 MB ttf). unicode-range scopes the
+         @font-face to emoji blocks so the browser doesn't consult
+         OpenMoji for Latin text. font-display: swap so first paint
+         shows system emoji briefly until the font lands. -->
     <link
       rel="preload"
-      href="https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@15.1.0/font/OpenMoji-color-colr1_svg/OpenMoji-color-colr1_svg.ttf"
+      href="/fonts/openmoji.woff2"
       as="font"
-      type="font/ttf"
+      type="font/woff2"
       crossorigin="anonymous"
     />
     <style>
       @font-face {
         font-family: 'OpenMoji';
-        src: url('https://cdn.jsdelivr.net/gh/hfg-gmuend/openmoji@15.1.0/font/OpenMoji-color-colr1_svg/OpenMoji-color-colr1_svg.ttf')
-          format('truetype');
+        src: url('/fonts/openmoji.woff2') format('woff2');
         font-display: swap;
         unicode-range:
           U+1F000-1FAFF, U+2600-27BF, U+2300-23FF, U+2B00-2BFF,
