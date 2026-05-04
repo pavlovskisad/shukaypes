@@ -20,7 +20,21 @@ export type CompanionAction =
   | {
       name: 'walk';
       args: { shape: 'roundtrip' | 'oneway'; distance: 'close' | 'far' };
+    }
+  | {
+      name: 'walk_to_spot';
+      args: { spotId: string; shape: 'roundtrip' | 'oneway' };
     };
+
+// Minimum spot info the chat call needs to send so the companion can
+// reference real nearby spots in its CONTEXT block. Mirrors the
+// server's NearbySpot. Closest-first, capped at ~8 by the caller.
+export interface ChatNearbySpot {
+  id: string;
+  name: string;
+  category: string;
+  distM: number;
+}
 
 export interface NearbyLostDog {
   id: string;
@@ -189,17 +203,27 @@ export const api = {
 
   getChatHistory: () => req<{ messages: ChatMessage[] }>('/chat/history'),
 
-  sendChat: (text: string, pos: LatLng | null, greet = false) =>
+  sendChat: (
+    text: string,
+    pos: LatLng | null,
+    spots: ChatNearbySpot[] | null,
+    greet = false,
+  ) =>
     req<{
       id: string;
       text: string;
       // Server-parsed structured action the companion attached to the
-      // reply. Currently only `start_quest` is wired end-to-end; new
-      // names land as the parser + client dispatch grow.
+      // reply.
       action: CompanionAction | null;
     }>('/chat', {
       method: 'POST',
-      body: JSON.stringify({ text, greet, lat: pos?.lat, lng: pos?.lng }),
+      body: JSON.stringify({
+        text,
+        greet,
+        lat: pos?.lat,
+        lng: pos?.lng,
+        spots: spots ?? undefined,
+      }),
     }),
 
   ambientChat: (pos: LatLng | null) =>

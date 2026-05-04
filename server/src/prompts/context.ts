@@ -3,12 +3,23 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 
+// NearbySpot is sent from the client per chat call (the server doesn't
+// persist Google Places data — keeping the API quota client-side).
+// Already-distance-sorted, capped to a small handful by the client.
+export interface NearbySpot {
+  id: string;
+  name: string;
+  category: string;
+  distM: number;
+}
+
 interface ContextInput {
   userId: string;
   pos?: { lat: number; lng: number } | null;
+  spots?: NearbySpot[];
 }
 
-export async function buildContextBlock({ userId, pos }: ContextInput): Promise<string> {
+export async function buildContextBlock({ userId, pos, spots }: ContextInput): Promise<string> {
   const [user] = await db
     .select()
     .from(schema.users)
@@ -62,6 +73,17 @@ export async function buildContextBlock({ userId, pos }: ContextInput): Promise<
 
   const kyivTime = new Date().toLocaleString('en-GB', { timeZone: 'Europe/Kyiv' });
 
+  // Nearby spots the companion can route to via walk_to_spot. Cap at
+  // 8 — beyond that, the prompt bloats and the model's selection
+  // accuracy doesn't improve. Only included when spots were sent and
+  // the companion can actually emit walk_to_spot for them.
+  let nearbySpots: string[] = [];
+  if (spots && spots.length > 0) {
+    nearbySpots = spots.slice(0, 8).map((s) => {
+      return `  - ${s.name} (${s.category}), ~${Math.round(s.distM)}m away [id:${s.id}]`;
+    });
+  }
+
   const lines = [
     'CONTEXT (live, changes every request)',
     `- local time in Kyiv: ${kyivTime}`,
@@ -70,6 +92,7 @@ export async function buildContextBlock({ userId, pos }: ContextInput): Promise<
     `- uncollected tokens still on the map: ${uncollectedTokens[0]?.n ?? 0}`,
     pos ? `- current GPS: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}` : '- GPS not shared this turn',
     nearbyPets.length ? `- lost pets nearby you could mention (dogs or cats — mention by name if natural):\n${nearbyPets.join('\n')}` : '- no active lost-pet reports in your radius',
+    nearbySpots.length ? `- nearby spots you can route to via walk_to_spot (mention by name if the human asks):\n${nearbySpots.join('\n')}` : '- no spots loaded this turn',
   ];
   return lines.join('\n');
 }
