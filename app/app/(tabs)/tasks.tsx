@@ -8,6 +8,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { api, type NearbyLostDog } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
 import { LostDogModal } from '../../components/ui/LostDogModal';
+import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 
 interface QuestHistoryRow {
@@ -50,14 +51,17 @@ type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings'
 
 interface TaskRow {
   key: TaskKey;
-  icon: string;
+  // Either iconName (renders as a pixel <Icon>) or icon (an emoji
+  // string fallback for tasks we haven't drawn yet).
+  iconName?: IconName;
+  icon?: string;
   label: string;
   target: number;
 }
 
 const TASKS: TaskRow[] = [
-  { key: 'tokens', icon: '🐾', label: 'collect 10 tokens', target: DAILY_TARGETS.tokens },
-  { key: 'bones', icon: '🦴', label: 'feed 3 bones', target: DAILY_TARGETS.bones },
+  { key: 'tokens', iconName: 'paws', label: 'collect 10 tokens', target: DAILY_TARGETS.tokens },
+  { key: 'bones', iconName: 'bone', label: 'feed 3 bones', target: DAILY_TARGETS.bones },
   {
     key: 'lostPetChecks',
     icon: '🔍',
@@ -210,7 +214,13 @@ export default function TasksScreen() {
             return (
               <View key={t.key} style={[styles.task, i > 0 && styles.taskDivider]}>
                 <View style={styles.row}>
-                  <Text style={styles.icon}>{t.icon}</Text>
+                  {t.iconName ? (
+                    <View style={styles.iconWrap}>
+                      <Icon name={t.iconName} size={20} />
+                    </View>
+                  ) : (
+                    <Text style={styles.icon}>{t.icon}</Text>
+                  )}
                   <Text style={[styles.label, complete && styles.labelDone]}>
                     {t.label}
                   </Text>
@@ -454,6 +464,9 @@ const styles = StyleSheet.create({
     gap: 10,
   },
   icon: { fontSize: 18 },
+  // Width matches the natural footprint of the emoji glyph above so
+  // both code paths align horizontally with the row's label column.
+  iconWrap: { width: 22, alignItems: 'center' },
   label: { flex: 1, fontSize: 14, color: colors.black },
   labelDone: { color: '#aaa', textDecorationLine: 'line-through' },
   count: { fontSize: 12, color: '#777', fontWeight: '700' },

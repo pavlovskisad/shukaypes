@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { Icon, type IconName } from './Icon';
 
 interface AboutModalProps {
   open: boolean;
@@ -9,7 +10,10 @@ interface AboutModalProps {
 const SHEET_ANIM_MS = 280;
 
 interface Row {
-  emoji: string;
+  // iconName takes precedence (renders the pixel <Icon>); emoji is
+  // the fallback for surfaces we haven't drawn yet.
+  iconName?: IconName;
+  emoji?: string;
   title: string;
   body: string;
 }
@@ -30,32 +34,32 @@ const ROWS: Row[] = [
     body: 'spotted a missing pet in real life? open them and tap the button — updates the search zone for everyone hunting.',
   },
   {
-    emoji: '🐾',
+    iconName: 'paws',
     title: 'paws + bones',
     body: 'i like to eat these. paws scatter near you, bones cluster in parks. fills my hunger meter — keeps me happy on the walk.',
   },
   {
-    emoji: '☀️',
+    iconName: 'sun',
     title: 'mood + meters',
     body: 'top-left pills show happiness, hunger, paws collected, plus a 📍 toggle to hide the cafe pins when the map gets busy.',
   },
   {
-    emoji: '✓',
+    iconName: 'task',
     title: 'daily tasks',
     body: 'small loops — collect paws, check on pets, visit a spot. resets every day so there is always a reason to come back.',
   },
   {
-    emoji: '💬',
+    iconName: 'chat',
     title: 'chat',
     body: 'talk to me about anything. i sniff out other dogs nearby (yes, really), know vet + health stuff when something feels off, help when you need a hand fast, and remember every walk we share.',
   },
   {
-    emoji: '📍',
+    iconName: 'pin',
     title: 'spots',
     body: 'cafés, vets, pet stores, parks near you. tap one → "walk here" plots the route. great when i need to stretch my legs.',
   },
   {
-    emoji: '👤',
+    iconName: 'user',
     title: 'profile',
     body: 'your stats. distance walked, paws collected, pets searched, my level + xp.',
   },
@@ -188,7 +192,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                   flexShrink: 0,
                 }}
               >
-                {r.emoji}
+                {r.iconName ? <Icon name={r.iconName} size={22} /> : r.emoji}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
