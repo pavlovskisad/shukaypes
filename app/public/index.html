@@ -47,6 +47,27 @@
         height: 100%;
         flex: 1;
       }
+
+      /* Desktop: the product is mobile-first and looks broken stretched
+         to a 1920px laptop screen — HUD pills floating in the corner,
+         dashboard spanning the whole width, modals docked far off. Cap
+         the app to a phone-width column on viewports ≥ 900px and dim
+         the wings around it so the desktop preview reads as a mobile
+         display. No fake phone bezel; just the natural mobile column.
+         position:relative on #root keeps the app's internal absolute-
+         positioned modals + overlays anchored to the column, not the
+         viewport. */
+      @media (min-width: 900px) {
+        body {
+          background: #15151a;
+        }
+        #root {
+          position: relative;
+          max-width: 430px;
+          margin: 0 auto;
+          box-shadow: 0 0 60px rgba(0, 0, 0, 0.4);
+        }
+      }
     </style>
   </head>
 
