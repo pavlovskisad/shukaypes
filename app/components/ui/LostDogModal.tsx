@@ -26,10 +26,9 @@ const SWIPE_THRESHOLD_PX = 60;
 const SHEET_ANIM_MS = 280;
 // Big-photo height. Tall enough that the dog is recognisable AND
 // portrait-aspect photos aren't cropped down to a thin slice. Got
-// bumped from 190 → 250 after the reward pill was removed —
-// reclaiming that vertical space for the only thing on this surface
-// that matters at a glance: the photo.
-const PHOTO_HEIGHT_PX = 250;
+// bumped 250 → 300 after the action buttons collapsed from two
+// stacked rows into a single side-by-side pill row.
+const PHOTO_HEIGHT_PX = 300;
 // Reserve space at the top of the overlay so the modal can't grow
 // up into the HUD pills (paws / bone / sun + menu icon). The HUD
 // row sits in roughly the top ~90px (status bar + pills + breathing
@@ -180,20 +179,21 @@ export function LostDogModal({
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
-                // Bias the crop toward the top of the source image —
-                // most pet photos frame the dog's head in the upper
-                // half, so 'center top' keeps the face visible when
-                // a portrait photo gets cropped to fit a wide banner.
-                objectPosition: 'center top',
+                // Centre the source image both ways. Earlier we tried
+                // 'center top' to preserve heads framed in the upper
+                // half, but plenty of pet photos frame the dog in the
+                // LOWER half (sitting / shot from above), and 'top'
+                // dropped them off-screen. Centred is the safest
+                // single-default for the corpus.
+                objectPosition: 'center center',
                 display: 'block',
                 // Slight zoom-in so any baked-in white borders /
                 // letterboxing in the source photo (some OLX listings
                 // ship with a 4-8px white frame) are cropped away.
                 // Kept conservative (1.04) so we don't over-crop the
-                // dog itself; combined with object-fit: cover this
-                // just trims the very edges.
+                // dog itself.
                 transform: 'scale(1.04)',
-                transformOrigin: 'center top',
+                transformOrigin: 'center center',
               }}
             />
           ) : (
@@ -291,45 +291,53 @@ export function LostDogModal({
             </div>
           </div>
 
-          <button
-            onClick={() => onReportSighting?.(renderDog)}
-            style={{
-              width: '100%',
-              background: '#1a1a1a',
-              color: '#ffffff',
-              border: 'none',
-              borderRadius: 14,
-              padding: '12px 18px',
-              fontFamily: SYSTEM_FONT,
-              fontSize: 18,
-              fontWeight: 700,
-              cursor: 'pointer',
-            }}
-          >
-            👀 i've seen them
-          </button>
+          {/* Action buttons — side-by-side pills. Stacking them was
+              eating ~100px on a surface where the photo IS the
+              point. Both share equal width via flex: 1; primary
+              (i've seen them) keeps the dark fill, secondary (start
+              search) the outlined treatment. */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => onReportSighting?.(renderDog)}
+              style={{
+                flex: 1,
+                background: '#1a1a1a',
+                color: '#ffffff',
+                border: 'none',
+                borderRadius: 22,
+                padding: '11px 14px',
+                fontFamily: SYSTEM_FONT,
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              👀 i've seen them
+            </button>
 
-          <button
-            onClick={() => onStartSearch?.(renderDog)}
-            disabled={searchActive}
-            style={{
-              width: '100%',
-              background: searchActive ? '#e8e8f2' : 'rgba(0,0,255,0.06)',
-              color: searchActive ? '#777' : 'rgba(0,0,255,0.85)',
-              border: searchActive
-                ? '1px solid #d4d4dc'
-                : '1px solid rgba(0,0,255,0.3)',
-              borderRadius: 14,
-              padding: '10px 18px',
-              marginTop: 8,
-              fontFamily: SYSTEM_FONT,
-              fontSize: 16,
-              fontWeight: 700,
-              cursor: searchActive ? 'default' : 'pointer',
-            }}
-          >
-            {searchActive ? '🔍 search in progress…' : '🔍 start search'}
-          </button>
+            <button
+              onClick={() => onStartSearch?.(renderDog)}
+              disabled={searchActive}
+              style={{
+                flex: 1,
+                background: searchActive ? '#e8e8f2' : 'rgba(0,0,255,0.06)',
+                color: searchActive ? '#777' : 'rgba(0,0,255,0.85)',
+                border: searchActive
+                  ? '1px solid #d4d4dc'
+                  : '1px solid rgba(0,0,255,0.3)',
+                borderRadius: 22,
+                padding: '10px 14px',
+                fontFamily: SYSTEM_FONT,
+                fontSize: 15,
+                fontWeight: 700,
+                cursor: searchActive ? 'default' : 'pointer',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {searchActive ? '🔍 searching…' : '🔍 start search'}
+            </button>
+          </div>
         </div>
 
         {/* Prev/next chevrons — vertically centred on the whole card
