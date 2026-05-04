@@ -26,10 +26,9 @@ const SWIPE_THRESHOLD_PX = 60;
 const SHEET_ANIM_MS = 280;
 // Big-photo height. Tall enough that the dog is recognisable at a
 // glance (no extra tap-to-zoom step), short enough that the modal
-// still leaves room for name + reward + two action buttons above
-// the bottom dashboard AND clears the top HUD on shorter Safari
-// viewports (URL bar eats ~80-100px more than a PWA install).
-const PHOTO_HEIGHT_PX = 220;
+// fits without scrolling on a Safari-mobile viewport (URL bar eats
+// ~80-100px more than a PWA install).
+const PHOTO_HEIGHT_PX = 190;
 // Reserve space at the top of the overlay so the modal can't grow
 // up into the HUD pills (paws / bone / sun + menu icon). The HUD
 // row sits in roughly the top ~90px (status bar + pills + breathing
@@ -181,6 +180,13 @@ export function LostDogModal({
                 height: '100%',
                 objectFit: 'cover',
                 display: 'block',
+                // Slight zoom-in so any baked-in white borders /
+                // letterboxing in the source photo (some OLX listings
+                // ship with a 4-8px white frame) are cropped away.
+                // Combined with object-fit: cover this just trims a
+                // few pixels from each edge, not visible content.
+                transform: 'scale(1.06)',
+                transformOrigin: 'center',
               }}
             />
           ) : (
@@ -255,18 +261,18 @@ export function LostDogModal({
             internally if the modal can't fit on a tiny viewport. */}
         <div
           style={{
-            padding: '14px 22px 22px',
+            padding: '12px 20px 14px',
             overflowY: 'auto',
             flexGrow: 1,
             minHeight: 0,
           }}
         >
-          <div style={{ marginBottom: 14 }}>
-            <div style={{ fontFamily: SYSTEM_FONT, fontSize: 26, fontWeight: 700, lineHeight: 1.15 }}>
+          <div style={{ marginBottom: 10 }}>
+            <div style={{ fontFamily: SYSTEM_FONT, fontSize: 24, fontWeight: 700, lineHeight: 1.15 }}>
               {renderDog.name}
             </div>
-            <div style={{ fontSize: 14, color: '#777', marginTop: 3 }}>{renderDog.breed}</div>
-            <div style={{ fontSize: 12, color: '#777', marginTop: 3 }}>
+            <div style={{ fontSize: 13, color: '#777', marginTop: 2 }}>{renderDog.breed}</div>
+            <div style={{ fontSize: 12, color: '#777', marginTop: 2 }}>
               last seen {relativeTime(renderDog.lastSeen.at)}
             </div>
           </div>
@@ -275,16 +281,16 @@ export function LostDogModal({
             style={{
               background: '#f0f0f0',
               borderRadius: 14,
-              padding: '12px 14px',
+              padding: '10px 14px',
               display: 'flex',
               alignItems: 'center',
               gap: 10,
-              marginBottom: 14,
+              marginBottom: 10,
             }}
           >
-            <span style={{ fontSize: 22 }}>🐾</span>
+            <span style={{ fontSize: 20 }}>🐾</span>
             <div>
-              <div style={{ fontFamily: SYSTEM_FONT, fontSize: 17, fontWeight: 700 }}>
+              <div style={{ fontFamily: SYSTEM_FONT, fontSize: 16, fontWeight: 700 }}>
                 {renderDog.rewardPoints} pts reward
               </div>
               <div style={{ fontSize: 11, color: '#777' }}>bonus tokens near search zone</div>
@@ -298,10 +304,10 @@ export function LostDogModal({
               background: '#1a1a1a',
               color: '#ffffff',
               border: 'none',
-              borderRadius: 16,
-              padding: '14px 18px',
+              borderRadius: 14,
+              padding: '12px 18px',
               fontFamily: SYSTEM_FONT,
-              fontSize: 20,
+              fontSize: 18,
               fontWeight: 700,
               cursor: 'pointer',
             }}
@@ -319,11 +325,11 @@ export function LostDogModal({
               border: searchActive
                 ? '1px solid #d4d4dc'
                 : '1px solid rgba(0,0,255,0.3)',
-              borderRadius: 16,
-              padding: '12px 18px',
-              marginTop: 10,
+              borderRadius: 14,
+              padding: '10px 18px',
+              marginTop: 8,
               fontFamily: SYSTEM_FONT,
-              fontSize: 17,
+              fontSize: 16,
               fontWeight: 700,
               cursor: searchActive ? 'default' : 'pointer',
             }}
@@ -332,9 +338,11 @@ export function LostDogModal({
           </button>
         </div>
 
-        {/* Prev/next chevrons — only rendered when the parent supplies
-            cycle handlers. Vertically centred on the body (below the
-            photo) so they don't sit on top of the photo content. */}
+        {/* Prev/next chevrons — bigger now, positioned over the photo
+            (vertically centred on the photo area) so they never
+            overlap the action buttons in the body below. Dark
+            translucent pill so they stay readable against any
+            photo. Only rendered when the parent supplies handlers. */}
         {onPrev ? (
           <button
             onClick={(e) => {
@@ -344,17 +352,20 @@ export function LostDogModal({
             aria-label="previous pet"
             style={{
               position: 'absolute',
-              left: 6,
-              bottom: 110,
-              width: 36,
-              height: 36,
-              borderRadius: 18,
+              left: 10,
+              top: PHOTO_HEIGHT_PX / 2,
+              transform: 'translateY(-50%)',
+              width: 44,
+              height: 44,
+              borderRadius: 22,
               border: 'none',
-              background: 'rgba(0,0,0,0.05)',
-              color: '#444',
-              fontSize: 22,
-              lineHeight: 1,
+              background: 'rgba(0,0,0,0.55)',
+              color: '#ffffff',
+              fontSize: 26,
+              lineHeight: '44px',
+              padding: 0,
               cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
             }}
           >
             ‹
@@ -369,17 +380,20 @@ export function LostDogModal({
             aria-label="next pet"
             style={{
               position: 'absolute',
-              right: 6,
-              bottom: 110,
-              width: 36,
-              height: 36,
-              borderRadius: 18,
+              right: 10,
+              top: PHOTO_HEIGHT_PX / 2,
+              transform: 'translateY(-50%)',
+              width: 44,
+              height: 44,
+              borderRadius: 22,
               border: 'none',
-              background: 'rgba(0,0,0,0.05)',
-              color: '#444',
-              fontSize: 22,
-              lineHeight: 1,
+              background: 'rgba(0,0,0,0.55)',
+              color: '#ffffff',
+              fontSize: 26,
+              lineHeight: '44px',
+              padding: 0,
               cursor: 'pointer',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
             }}
           >
             ›
