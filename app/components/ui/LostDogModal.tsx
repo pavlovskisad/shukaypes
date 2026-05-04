@@ -24,11 +24,12 @@ interface LostDogModalProps {
 const SWIPE_THRESHOLD_PX = 60;
 
 const SHEET_ANIM_MS = 280;
-// Big-photo height. Tall enough that the dog is recognisable at a
-// glance (no extra tap-to-zoom step), short enough that the modal
-// fits without scrolling on a Safari-mobile viewport (URL bar eats
-// ~80-100px more than a PWA install).
-const PHOTO_HEIGHT_PX = 190;
+// Big-photo height. Tall enough that the dog is recognisable AND
+// portrait-aspect photos aren't cropped down to a thin slice. Got
+// bumped from 190 → 250 after the reward pill was removed —
+// reclaiming that vertical space for the only thing on this surface
+// that matters at a glance: the photo.
+const PHOTO_HEIGHT_PX = 250;
 // Reserve space at the top of the overlay so the modal can't grow
 // up into the HUD pills (paws / bone / sun + menu icon). The HUD
 // row sits in roughly the top ~90px (status bar + pills + breathing
@@ -179,14 +180,20 @@ export function LostDogModal({
                 width: '100%',
                 height: '100%',
                 objectFit: 'cover',
+                // Bias the crop toward the top of the source image —
+                // most pet photos frame the dog's head in the upper
+                // half, so 'center top' keeps the face visible when
+                // a portrait photo gets cropped to fit a wide banner.
+                objectPosition: 'center top',
                 display: 'block',
                 // Slight zoom-in so any baked-in white borders /
                 // letterboxing in the source photo (some OLX listings
                 // ship with a 4-8px white frame) are cropped away.
-                // Combined with object-fit: cover this just trims a
-                // few pixels from each edge, not visible content.
-                transform: 'scale(1.06)',
-                transformOrigin: 'center',
+                // Kept conservative (1.04) so we don't over-crop the
+                // dog itself; combined with object-fit: cover this
+                // just trims the very edges.
+                transform: 'scale(1.04)',
+                transformOrigin: 'center top',
               }}
             />
           ) : (
@@ -267,7 +274,7 @@ export function LostDogModal({
             minHeight: 0,
           }}
         >
-          <div style={{ marginBottom: 10 }}>
+          <div style={{ marginBottom: 12 }}>
             <div style={{ fontFamily: SYSTEM_FONT, fontSize: 24, fontWeight: 700, lineHeight: 1.15 }}>
               {renderDog.name}
             </div>
@@ -275,25 +282,12 @@ export function LostDogModal({
             <div style={{ fontSize: 12, color: '#777', marginTop: 2 }}>
               last seen {relativeTime(renderDog.lastSeen.at)}
             </div>
-          </div>
-
-          <div
-            style={{
-              background: '#f0f0f0',
-              borderRadius: 14,
-              padding: '10px 14px',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 10,
-              marginBottom: 10,
-            }}
-          >
-            <span style={{ fontSize: 20 }}>🐾</span>
-            <div>
-              <div style={{ fontFamily: SYSTEM_FONT, fontSize: 16, fontWeight: 700 }}>
-                {renderDog.rewardPoints} pts reward
-              </div>
-              <div style={{ fontSize: 11, color: '#777' }}>bonus tokens near search zone</div>
+            {/* Reward hint — replaces the chunky 200pts pill that
+                used to sit between meta and the action buttons. The
+                pill ate ~70px of vertical space on a surface where
+                the photo is the actual point. */}
+            <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>
+              🐾 complete search quest for {renderDog.rewardPoints} bonus pts
             </div>
           </div>
 
@@ -338,11 +332,10 @@ export function LostDogModal({
           </button>
         </div>
 
-        {/* Prev/next chevrons — bigger now, positioned over the photo
-            (vertically centred on the photo area) so they never
-            overlap the action buttons in the body below. Dark
-            translucent pill so they stay readable against any
-            photo. Only rendered when the parent supplies handlers. */}
+        {/* Prev/next chevrons — vertically centred on the whole card
+            (top: 50%) so they sit around the photo/body seam, never
+            on top of the action buttons. Dark translucent pill so
+            they stay readable against any photo. */}
         {onPrev ? (
           <button
             onClick={(e) => {
@@ -353,7 +346,7 @@ export function LostDogModal({
             style={{
               position: 'absolute',
               left: 10,
-              top: PHOTO_HEIGHT_PX / 2,
+              top: '50%',
               transform: 'translateY(-50%)',
               width: 44,
               height: 44,
@@ -381,7 +374,7 @@ export function LostDogModal({
             style={{
               position: 'absolute',
               right: 10,
-              top: PHOTO_HEIGHT_PX / 2,
+              top: '50%',
               transform: 'translateY(-50%)',
               width: 44,
               height: 44,
