@@ -22,7 +22,8 @@ import {
   recordRecentDestination,
 } from '../../utils/walk';
 import { fetchWalkingRoute } from '../../services/directions';
-import { api, type CompanionAction } from '../../services/api';
+import { api, type CompanionAction, type ChatNearbySpot } from '../../services/api';
+import { distanceMeters } from '../../utils/geo';
 import type { ChatMessage } from '@shukajpes/shared';
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
@@ -114,6 +115,29 @@ export default function ChatScreen() {
             router.push('/');
             return `🚶 walking to ${plan.primary.name}`;
           }
+          case 'walk_to_spot': {
+            // Companion picked a specific spot from the CONTEXT it was
+            // shown — look it up in the gameStore (the same source of
+            // truth that built the request), plot a real walking route
+            // there, route the user to the map.
+            const { userPosition: pos, spots: ctxSpots } = useGameStore.getState();
+            if (!pos) return '🚶 need your location first';
+            const target = ctxSpots.find((s) => s.id === action.args.spotId);
+            if (!target) return '🚶 lost track of that spot — try again';
+            const waypoints =
+              action.args.shape === 'roundtrip'
+                ? [pos, target.position, pos]
+                : [pos, target.position];
+            const route = await fetchWalkingRoute(pos, waypoints);
+            if (!route) return '🚶 couldn\'t plot that route';
+            useGameStore.getState().setWalkRoute(route, {
+              shape: action.args.shape,
+              spotId: target.id,
+            });
+            recordRecentDestination(target.id);
+            router.push('/');
+            return `🚶 walking to ${target.name}`;
+          }
           default:
             return null;
         }
@@ -130,6 +154,24 @@ export default function ChatScreen() {
     }, []),
   );
 
+  // Build the closest-spots payload sent with each chat call. Cap at
+  // 8 — the prompt grows the longer this list, and the companion's
+  // pick accuracy doesn't improve much beyond that. Returns null when
+  // there's no GPS or no spots loaded yet, so sendChat omits the field.
+  const buildSpotsPayload = useCallback((): ChatNearbySpot[] | null => {
+    const { userPosition: pos, spots } = useGameStore.getState();
+    if (!pos || spots.length === 0) return null;
+    return spots
+      .map((s) => ({
+        id: s.id,
+        name: s.name,
+        category: s.category,
+        distM: distanceMeters(pos, s.position),
+      }))
+      .sort((a, b) => a.distM - b.distM)
+      .slice(0, 8);
+  }, []);
+
   useEffect(() => {
     if (bootedRef.current) return;
     bootedRef.current = true;
@@ -141,7 +183,7 @@ export default function ChatScreen() {
         setMessages(history);
         if (history.length === 0) {
           setTyping(true);
-          const res = await api.sendChat('', userPosition, true);
+          const res = await api.sendChat('', userPosition, buildSpotsPayload(), true);
           if (cancelled) return;
           setMessages([
             {
@@ -183,7 +225,7 @@ export default function ChatScreen() {
     setSending(true);
     setTyping(true);
     try {
-      const res = await api.sendChat(t, userPosition);
+      const res = await api.sendChat(t, userPosition, buildSpotsPayload());
       setMessages((m) => [
         ...m,
         {

@@ -7,7 +7,7 @@ import { anthropic, ACTIVE_MODEL, AMBIENT_MODEL } from '../services/anthropic.js
 import { CORE_SYSTEM } from '../prompts/core.js';
 import { ACTIONS_SYSTEM } from '../prompts/actions.js';
 import { loadMemoryBlock } from '../prompts/memory.js';
-import { buildContextBlock } from '../prompts/context.js';
+import { buildContextBlock, type NearbySpot } from '../prompts/context.js';
 import { parseActionTag, type CompanionAction } from '../services/actionParser.js';
 import { scheduleMemoryUpdate } from '../services/memorySummary.js';
 
@@ -16,7 +16,11 @@ const MAX_INPUT_CHARS = 2000;
 
 interface Pos { lat?: number; lng?: number }
 
-async function assembleSystem(userId: string, pos: Pos): Promise<Anthropic.TextBlockParam[]> {
+async function assembleSystem(
+  userId: string,
+  pos: Pos,
+  spots?: NearbySpot[],
+): Promise<Anthropic.TextBlockParam[]> {
   // Render order is tools → system → messages. Keep stable blocks first
   // so cache_control breakpoints survive volatile memory/context edits below.
   const [memory, context] = await Promise.all([
@@ -24,6 +28,7 @@ async function assembleSystem(userId: string, pos: Pos): Promise<Anthropic.TextB
     buildContextBlock({
       userId,
       pos: pos.lat != null && pos.lng != null ? { lat: pos.lat, lng: pos.lng } : null,
+      spots,
     }),
   ]);
   return [
@@ -73,7 +78,19 @@ const plugin: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post<{ Body: { text: string; lat?: number; lng?: number; greet?: boolean } }>(
+  app.post<{
+    Body: {
+      text: string;
+      lat?: number;
+      lng?: number;
+      greet?: boolean;
+      // Closest few spots from the client's gameStore. Used to populate
+      // the CONTEXT block so the companion can emit walk_to_spot for
+      // spots the human names. Optional — chat still works without it,
+      // just without the spot-routing capability.
+      spots?: NearbySpot[];
+    };
+  }>(
     '/chat',
     { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
     async (req, reply) => {
@@ -102,8 +119,9 @@ const plugin: FastifyPluginAsync = async (app) => {
         });
       }
 
+      const spots = Array.isArray(body.spots) ? (body.spots as NearbySpot[]) : undefined;
       const [system, history] = await Promise.all([
-        assembleSystem(req.userId, pos),
+        assembleSystem(req.userId, pos, spots),
         recentHistory(req.userId),
       ]);
       const last = history[history.length - 1];
