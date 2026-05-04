@@ -52,6 +52,11 @@ const CLUSTER_BADGE_THRESHOLD = 6;
 // concern, not a "is it nearby" concern.
 const MAP_RENDER_RADIUS_M = 2000;
 
+// Module-level flag so the "tap my logo" hint only fires once per
+// JS session — i.e., once per app open. PWA / browser reload resets
+// it; tab switches and re-focuses inside one session don't.
+let hasGreetedThisSession = false;
+
 export default function MapViewWeb() {
   const { isLoaded, loadError } = useJsApiLoader({
     googleMapsApiKey: env.googleMapsApiKey,
@@ -147,9 +152,16 @@ export default function MapViewWeb() {
 
   // Greet on every map-tab focus — pick a random "woof" so it doesn't
   // get repetitive. Same energy as Claude Code's *percolating* /
-  // *combobulating* spinner words.
+  // *combobulating* spinner words. The very first focus per session
+  // also nudges the user toward the about modal so newcomers find
+  // the help affordance (top-left logo tap).
   useFocusEffect(
     useCallback(() => {
+      if (!hasGreetedThisSession) {
+        hasGreetedThisSession = true;
+        showBubble('woof! tap my logo top-left to learn what\'s what 🐾', 5500);
+        return;
+      }
       const woofs = [
         'woof 🐾',
         '*sniff sniff*',
@@ -174,6 +186,22 @@ export default function MapViewWeb() {
       showBubble(pick, 4000);
     }, [showBubble]),
   );
+
+  // Preload neighbour photos on the FIRST modal open per session so
+  // prev/next swipes find them in cache and don't briefly show the
+  // grey backdrop while the photo decodes. Idempotent — the browser
+  // dedupes by URL across re-renders. window.Image (not the RN
+  // <Image> component imported up top) is the browser's HTMLImageElement
+  // constructor which kicks off a network fetch when src is set.
+  useEffect(() => {
+    if (!selectedDogId || typeof window === 'undefined') return;
+    for (const d of lostDogs) {
+      if (d.photoUrl) {
+        const img = new window.Image();
+        img.src = d.photoUrl;
+      }
+    }
+  }, [selectedDogId, lostDogs]);
 
   useEffect(() => {
     if (userPos) setUserPosition(userPos);
