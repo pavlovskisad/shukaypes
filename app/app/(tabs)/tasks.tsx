@@ -386,12 +386,35 @@ export default function TasksScreen() {
           state so it doesn't fight with the map's selection (which
           drives the search-zone circle there). onStartSearch routes
           to the map after the quest commits — the user lands on
-          the active quest's polyline. */}
+          the active quest's polyline.
+
+          Prev/next cycle within sortedDogs (closest-first), wrapping
+          at the ends so the user can swipe forever. */}
       <LostDogModal
         dog={modalDog}
         onClose={() => setModalDogId(null)}
         searchActive={!!activeQuest && activeQuest.dogId === modalDogId}
         onStartSearch={(d) => handleStartSearch(d)}
+        onPrev={
+          modalDogId && sortedDogs.length > 1
+            ? () => {
+                const idx = sortedDogs.findIndex((d) => d.id === modalDogId);
+                if (idx < 0) return;
+                const prev = sortedDogs[(idx - 1 + sortedDogs.length) % sortedDogs.length]!;
+                setModalDogId(prev.id);
+              }
+            : undefined
+        }
+        onNext={
+          modalDogId && sortedDogs.length > 1
+            ? () => {
+                const idx = sortedDogs.findIndex((d) => d.id === modalDogId);
+                if (idx < 0) return;
+                const next = sortedDogs[(idx + 1) % sortedDogs.length]!;
+                setModalDogId(next.id);
+              }
+            : undefined
+        }
       />
     </SafeAreaView>
   );

@@ -64,6 +64,11 @@ export function LostDogModal({
   const touchStartXRef = useRef<number | null>(null);
   const [renderDog, setRenderDog] = useState<NearbyLostDog | null>(dog);
   const [closing, setClosing] = useState(false);
+  // Direction of the last cycle (prev / next / swipe) — drives the
+  // slide-in keyframe on the inner content track. Null on a fresh
+  // open so the initial sheet-up animation doesn't compose with a
+  // horizontal slide.
+  const [slideDir, setSlideDir] = useState<'left' | 'right' | null>(null);
 
   // Three transitions matter:
   //   prop dog: A   →  prop dog: B    (swap content, no animation)
@@ -71,6 +76,10 @@ export function LostDogModal({
   //   prop dog: null → A              (mount, enter animation runs)
   useEffect(() => {
     if (dog) {
+      // Fresh-open vs. cycle-swap: only clear slideDir on a fresh
+      // open (renderDog was null). For A → B swaps, leave slideDir
+      // set so the keyframe on the new track mount runs.
+      if (!renderDog) setSlideDir(null);
       setRenderDog(dog);
       setClosing(false);
       return;
@@ -80,12 +89,27 @@ export function LostDogModal({
       const t = setTimeout(() => {
         setRenderDog(null);
         setClosing(false);
+        setSlideDir(null);
       }, SHEET_ANIM_MS);
       return () => clearTimeout(t);
     }
   }, [dog]);
 
   if (!renderDog) return null;
+
+  // Cycle helpers — set slideDir BEFORE invoking the parent callback
+  // so the next render (with the new renderDog) picks up the right
+  // direction for its keyframe.
+  const handlePrev = () => {
+    if (!onPrev) return;
+    setSlideDir('left');
+    onPrev();
+  };
+  const handleNext = () => {
+    if (!onNext) return;
+    setSlideDir('right');
+    onNext();
+  };
 
   const handleTouchStart = (e: React.TouchEvent) => {
     touchStartXRef.current = e.touches[0]?.clientX ?? null;
@@ -97,8 +121,8 @@ export function LostDogModal({
     const end = e.changedTouches[0]?.clientX ?? start;
     const delta = end - start;
     if (Math.abs(delta) < SWIPE_THRESHOLD_PX) return;
-    if (delta > 0) onPrev?.();
-    else onNext?.();
+    if (delta > 0) handlePrev();
+    else handleNext();
   };
 
   const urgent = renderDog.urgency === 'urgent';
@@ -156,6 +180,22 @@ export function LostDogModal({
           overflow: 'hidden',
         }}
       >
+        {/* Slide track — keyed on dog id so each prev/next remounts
+            and runs the slide-in keyframe once. Chevrons sit OUTSIDE
+            this wrapper (they're absolutely positioned on the sheet)
+            so they stay put while the photo + body slide in. */}
+        <div
+          key={renderDog.id}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            flex: 1,
+            minHeight: 0,
+            animation: slideDir
+              ? `slide-in-from-${slideDir} ${SHEET_ANIM_MS}ms cubic-bezier(0.2,0.7,0.3,1)`
+              : undefined,
+          }}
+        >
         {/* Big photo banner — fills the top of the modal so the dog is
             recognisable at a glance. Falls back to a coloured panel
             with the emoji centred when no photo is available.
@@ -350,16 +390,18 @@ export function LostDogModal({
             </button>
           </div>
         </div>
+        </div>
 
         {/* Prev/next chevrons — vertically centred on the whole card
             (top: 50%) so they sit around the photo/body seam, never
             on top of the action buttons. Dark translucent pill so
-            they stay readable against any photo. */}
+            they stay readable against any photo. Sit OUTSIDE the
+            slide track so they don't move with the sliding content. */}
         {onPrev ? (
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onPrev();
+              handlePrev();
             }}
             aria-label="previous pet"
             style={{
@@ -387,7 +429,7 @@ export function LostDogModal({
           <button
             onClick={(e) => {
               e.stopPropagation();
-              onNext();
+              handleNext();
             }}
             aria-label="next pet"
             style={{
@@ -420,6 +462,14 @@ export function LostDogModal({
           @keyframes sheet-down {
             from { transform: translateY(0); }
             to { transform: translateY(100%); }
+          }
+          @keyframes slide-in-from-left {
+            from { transform: translateX(-40px); opacity: 0; }
+            to   { transform: translateX(0); opacity: 1; }
+          }
+          @keyframes slide-in-from-right {
+            from { transform: translateX(40px); opacity: 0; }
+            to   { transform: translateX(0); opacity: 1; }
           }
         `}</style>
       </div>
