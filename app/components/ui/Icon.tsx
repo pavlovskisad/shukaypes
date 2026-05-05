@@ -4,9 +4,10 @@ import { Image } from 'react-native';
 // <Image> so the same component works in RN-Web today and would
 // work on native if/when we ship there.
 //
-// All icons are uniformly framed PNGs (500×500, transparent
-// background) — no per-icon size compensation needed; each one
-// fills its bounding box predictably.
+// Vector SVGs auto-traced from the original 500×500 PNGs via
+// potrace, with viewBoxes cropped to the actual content bbox so
+// each icon fills its bounding rect uniformly — no per-icon size
+// compensation needed at the consumer side.
 //
 // Naming follows the visual: `house` (the home tab), not "user"
 // or "profile". Slot identifiers describe the icon, not the
@@ -23,14 +24,14 @@ export type IconName =
   | 'house';
 
 const URL: Record<IconName, string> = {
-  paws: '/icons/paws.png',
-  bone: '/icons/bone.png',
-  sun: '/icons/sun.png',
-  pin: '/icons/pin.png',
-  map: '/icons/map.png',
-  chat: '/icons/chat.png',
-  task: '/icons/task.png',
-  house: '/icons/house.png',
+  paws: '/icons/paws.svg',
+  bone: '/icons/bone.svg',
+  sun: '/icons/sun.svg',
+  pin: '/icons/pin.svg',
+  map: '/icons/map.svg',
+  chat: '/icons/chat.svg',
+  task: '/icons/task.svg',
+  house: '/icons/house.svg',
 };
 
 interface IconProps {
