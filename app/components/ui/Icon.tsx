@@ -5,33 +5,74 @@ import { Image } from 'react-native';
 // work on native if/when we ship there.
 //
 // Vector SVGs auto-traced from the original 500×500 PNGs via
-// potrace, with viewBoxes cropped to the actual content bbox so
-// each icon fills its bounding rect uniformly — no per-icon size
-// compensation needed at the consumer side.
+// potrace, with viewBoxes cropped to the actual content bbox
+// (+8px padding) so each icon fills its bounding rect uniformly.
 //
-// Naming follows the visual: `house` (the home tab), not "user"
-// or "profile". Slot identifiers describe the icon, not the
-// surface that consumes it.
+// Naming follows the visual ("house", not "user"; "eyes", not
+// "sightings"). Slot identifiers describe the icon, not the
+// surface that consumes it — many slots are used in multiple
+// surfaces.
 
 export type IconName =
+  // HUD pills
   | 'paws'
   | 'bone'
   | 'sun'
-  | 'pin'
+  // Bottom tab bar
   | 'map'
-  | 'chat'
   | 'task'
-  | 'house';
+  | 'chat'
+  | 'pin'
+  | 'house'
+  // Radial menu actions
+  | 'walk'
+  | 'search'
+  | 'meet'
+  | 'oneway'
+  | 'roundtrip'
+  // Spot categories
+  | 'restaurant'
+  | 'bar'
+  | 'pet_store'
+  | 'vet'
+  // Lost-pet badges + sightings
+  | 'urgent'
+  | 'warning'
+  | 'eyes';
 
 const URL: Record<IconName, string> = {
   paws: '/icons/paws.svg',
   bone: '/icons/bone.svg',
   sun: '/icons/sun.svg',
-  pin: '/icons/pin.svg',
   map: '/icons/map.svg',
-  chat: '/icons/chat.svg',
   task: '/icons/task.svg',
+  chat: '/icons/chat.svg',
+  pin: '/icons/pin.svg',
   house: '/icons/house.svg',
+  walk: '/icons/walk.svg',
+  search: '/icons/search.svg',
+  meet: '/icons/meet.svg',
+  oneway: '/icons/oneway.svg',
+  roundtrip: '/icons/roundtrip.svg',
+  restaurant: '/icons/restaurant.svg',
+  bar: '/icons/bar.svg',
+  pet_store: '/icons/pet_store.svg',
+  vet: '/icons/vet.svg',
+  urgent: '/icons/urgent.svg',
+  warning: '/icons/warning.svg',
+  eyes: '/icons/eyes.svg',
+};
+
+// Per-icon size compensation. Most icons fill their tight viewBox
+// solidly so a uniform `size` prop renders them at the same visual
+// weight. The exceptions are radiating shapes (sun rays, urgent
+// siren rays) where the bbox spans the ray-spread but the rays are
+// thin lines with empty space between them — at uniform size their
+// central body reads small. Bumping them ~40% brings the body's
+// visual weight in line with the rest.
+const SIZE_SCALE: Partial<Record<IconName, number>> = {
+  sun: 1.4,
+  urgent: 1.3,
 };
 
 interface IconProps {
@@ -43,10 +84,11 @@ interface IconProps {
 }
 
 export function Icon({ name, size, opacity }: IconProps) {
+  const finalSize = size * (SIZE_SCALE[name] ?? 1);
   return (
     <Image
       source={{ uri: URL[name] }}
-      style={{ width: size, height: size, opacity }}
+      style={{ width: finalSize, height: finalSize, opacity }}
       resizeMode="contain"
     />
   );

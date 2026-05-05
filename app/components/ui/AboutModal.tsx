@@ -24,12 +24,12 @@ interface Row {
 // logo tap; mirrors the LostDogModal/SpotModal slide-up family.
 const ROWS: Row[] = [
   {
-    emoji: '🚨',
+    iconName: 'urgent',
     title: 'lost pets',
     body: 'red glow on the map = real missing dogs and cats from olx, telegram, facebook. tap one → start a search → i guide you through 3 waypoints. earn pts when we finish.',
   },
   {
-    emoji: '👀',
+    iconName: 'eyes',
     title: "i've seen them",
     body: 'spotted a missing pet in real life? open them and tap the button — updates the search zone for everyone hunting.',
   },

@@ -126,7 +126,8 @@ export function LostDogModal({
   };
 
   const urgent = renderDog.urgency === 'urgent';
-  const badgeText = urgent ? '🚨 URGENT' : '⚠️ searching';
+  const badgeIcon = urgent ? 'urgent' : 'warning';
+  const badgeText = urgent ? 'URGENT' : 'searching';
   const badgeBg = urgent ? '#fde8e8' : '#fdf3e0';
   const badgeFg = urgent ? '#e84040' : '#d9a030';
 
@@ -288,8 +289,12 @@ export function LostDogModal({
               fontWeight: 700,
               letterSpacing: 0.5,
               boxShadow: '0 2px 6px rgba(0,0,0,0.15)',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 6,
             }}
           >
+            <Icon name={badgeIcon} size={14} />
             {badgeText}
           </span>
           <button
@@ -372,9 +377,14 @@ export function LostDogModal({
                 fontWeight: 700,
                 cursor: 'pointer',
                 whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
               }}
             >
-              👀 i've seen them
+              <Icon name="eyes" size={18} />
+              i've seen them
             </button>
 
             <button
@@ -394,9 +404,14 @@ export function LostDogModal({
                 fontWeight: 700,
                 cursor: searchActive ? 'default' : 'pointer',
                 whiteSpace: 'nowrap',
+                display: 'inline-flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                gap: 8,
               }}
             >
-              {searchActive ? '🔍 searching…' : '🔍 start search'}
+              <Icon name="search" size={18} />
+              {searchActive ? 'searching…' : 'start search'}
             </button>
           </div>
         </div>
