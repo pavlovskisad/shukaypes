@@ -41,7 +41,7 @@ const ROWS: Row[] = [
   {
     iconName: 'sun',
     title: 'mood + meters',
-    body: 'top-left pills show happiness, hunger, paws collected, plus a 📍 toggle to hide the cafe pins when the map gets busy.',
+    body: 'top-left pills show happiness, hunger, paws collected, plus a pin toggle to hide the cafe pins when the map gets busy.',
   },
   {
     iconName: 'task',

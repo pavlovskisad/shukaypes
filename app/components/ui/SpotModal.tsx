@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { Icon, iconForCategory } from './Icon';
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -147,7 +148,10 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               flexShrink: 0,
             }}
           >
-            {renderSpot.icon ?? '📍'}
+            {(() => {
+              const slot = iconForCategory(renderSpot.category);
+              return slot ? <Icon name={slot} size={42} /> : (renderSpot.icon ?? '📍');
+            })()}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div

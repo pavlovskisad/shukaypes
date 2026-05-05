@@ -11,7 +11,9 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
+  Image,
 } from 'react-native';
+import logoNose from '../../assets/logo-nose.png';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -314,7 +316,9 @@ export default function ChatScreen() {
         pointerEvents="box-none"
       >
         <View style={styles.headerCard} pointerEvents="auto">
-          <Text style={styles.headerEmoji}>🐶</Text>
+          <View style={styles.headerLogoPill}>
+            <Image source={logoNose} style={styles.headerLogo} resizeMode="contain" />
+          </View>
           <Text style={styles.headerTitle}>{header}</Text>
         </View>
       </View>
@@ -455,8 +459,19 @@ const styles = StyleSheet.create({
     gap: 8,
     ...CARD_SHADOW,
   },
-  headerEmoji: {
-    fontSize: 16,
+  // Logo lives inside a small white pill so it reads as a brand
+  // chip distinct from the companion-name text.
+  headerLogoPill: {
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#ffffff',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  headerLogo: {
+    width: 18,
+    height: 18,
   },
   headerTitle: {
     fontFamily: SYSTEM_FONT,

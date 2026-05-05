@@ -2,21 +2,26 @@ import { memo } from 'react';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { Icon, iconForCategory } from '../ui/Icon';
 
-// Small emoji pin for a Google Places result. Same OverlayViewF pattern
+// Small pin for a Google Places result. Same OverlayViewF pattern
 // as LostDogMarker; soft blue glow distinguishes "places to walk to"
 // from the warm-tone lost-pet pins (red/amber). When selected we scale
-// up + show the name label.
+// up + show the name label. Renders the custom <Icon> for known
+// categories, falls back to the spot's emoji string for anything
+// the icon set doesn't cover yet.
 
 interface PoiMarkerProps {
   position: LatLng;
   emoji: string;
+  category: string;
   name: string;
   selected: boolean;
   onTap: () => void;
 }
 
-function PoiMarkerImpl({ position, emoji, name, selected, onTap }: PoiMarkerProps) {
+function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: PoiMarkerProps) {
+  const slot = iconForCategory(category);
   return (
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
@@ -56,7 +61,7 @@ function PoiMarkerImpl({ position, emoji, name, selected, onTap }: PoiMarkerProp
               : '0 0 10px rgba(60,120,255,0.22), 0 2px 6px rgba(0,0,0,0.05)',
           }}
         >
-          {emoji}
+          {slot ? <Icon name={slot} size={22} /> : emoji}
         </div>
         {selected ? (
           <>
