@@ -691,8 +691,15 @@ export default function MapViewWeb() {
   // doesn't ring the screen with chips. Each chip shows the pet
   // avatar + a small "→ 420m" / "→ 1.2km" hint; tap pans the map
   // to that pet's last-seen position.
-  const offscreenDogIndicators = useMemo(() => {
-    if (!mapBounds || !userPos) return [];
+  //
+  // NOTE: plain const (not useMemo) on purpose — this block sits
+  // after the `if (!isLoaded || !userPos) return …` early return at
+  // the top of the function. A useMemo here would change the hook
+  // count between the two render branches and trigger React's
+  // "Rendered more hooks than during the previous render" crash on
+  // first load. The work is tiny (≤2km × ≤5 dogs, simple math).
+  const offscreenDogIndicators = (() => {
+    if (!mapBounds) return [];
     const { n, s, e, w } = mapBounds;
     const sideReserve = 0.05;
     const topReserve = 0.15;
@@ -737,7 +744,7 @@ export default function MapViewWeb() {
     }
     out.sort((a, b) => a.distanceM - b.distanceM);
     return out.slice(0, 5);
-  }, [mapBounds, userPos?.lat, userPos?.lng, visibleLostDogs]);
+  })();
 
   const formatDistance = (m: number): string => {
     if (m < 1000) return `${Math.round(m / 10) * 10}m`;

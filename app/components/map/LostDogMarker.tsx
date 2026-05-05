@@ -33,15 +33,16 @@ const WANDER_PX = 35;
 // as jerks.
 const RETARGET_MS = 25_000;
 const TRANSITION_MS = 30_000;
-// SOS beep: a ring emanates from the pet on its own cadence. Each pet
-// gets a unique period inside [BEEP_PERIOD_MIN_MS, BEEP_PERIOD_MAX_MS]
-// at mount + a random initial delay, so the map as a whole doesn't
-// breathe in sync. Single-period + random offset still drifts back
-// into phase after a few cycles, which read as "the city is beeping at
-// us"; giving each pet its own rhythm keeps the field asynchronous.
+// SOS beep: a soft two-ring ripple emanates from the pet on its own
+// cadence. Each pet gets a unique period inside [BEEP_PERIOD_MIN_MS,
+// BEEP_PERIOD_MAX_MS] at mount + a random initial delay, so the map as
+// a whole doesn't breathe in sync. The earlier single-ring linear-out
+// version felt sharp and a bit alarmy; the new two-ring expand-and-fade
+// with an out-quint easing reads as a gentle "we're tracking them"
+// pulse — wavy and minimal rather than radar-pingy.
 const BEEP_PERIOD_MIN_MS = 18_000;
 const BEEP_PERIOD_MAX_MS = 42_000;
-const BEEP_DURATION_MS = 1800;
+const BEEP_DURATION_MS = 2600;
 
 interface LostDogMarkerProps {
   position: LatLng;
@@ -94,9 +95,12 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
       beepTimeoutRef.current = setTimeout(() => {
         if (cancelled) return;
         setBeeping(true);
+        // Stay mounted long enough for ring B to finish — ring B starts
+        // half a duration in and runs for a full duration, so the last
+        // wave clears at 1.5 × BEEP_DURATION_MS.
         setTimeout(() => {
           if (!cancelled) setBeeping(false);
-        }, BEEP_DURATION_MS);
+        }, BEEP_DURATION_MS * 1.5);
         schedule(periodMs);
       }, delay);
     };
@@ -128,24 +132,44 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
           transition: `transform ${TRANSITION_MS}ms ease-in-out`,
         }}
       >
-        {/* SOS beep ring — absolute so it expands out of the pin center
-            without reflowing layout. Rendered only while `beeping` so
-            it's zero paint cost 90% of the time. */}
+        {/* SOS pulse — two soft rings staggered so they read as a wavy
+            ripple rather than a single radar ping. Both rings start at
+            the pin's footprint and fade out as they expand; ring B
+            follows ring A by half the duration so a new wave is
+            already on the way out as the first one finishes. Rendered
+            only while `beeping` so it's zero paint cost between pings. */}
         {beeping ? (
-          <div
-            style={{
-              position: 'absolute',
-              top: 0,
-              left: '50%',
-              width: 54,
-              height: 54,
-              marginLeft: -27,
-              borderRadius: '50%',
-              border: `2px solid ${halo.ring}`,
-              animation: `sos-beep ${BEEP_DURATION_MS}ms ease-out forwards`,
-              pointerEvents: 'none',
-            }}
-          />
+          <>
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: '50%',
+                width: 54,
+                height: 54,
+                marginLeft: -27,
+                borderRadius: '50%',
+                border: `1.5px solid ${halo.ring}`,
+                animation: `sos-pulse ${BEEP_DURATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1) forwards`,
+                pointerEvents: 'none',
+              }}
+            />
+            <div
+              style={{
+                position: 'absolute',
+                top: 0,
+                left: '50%',
+                width: 54,
+                height: 54,
+                marginLeft: -27,
+                borderRadius: '50%',
+                border: `1.5px solid ${halo.ring}`,
+                animation: `sos-pulse ${BEEP_DURATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1) ${BEEP_DURATION_MS / 2}ms forwards`,
+                pointerEvents: 'none',
+                opacity: 0,
+              }}
+            />
+          </>
         ) : null}
         {/* Photo when the parser pulled one off the post; emoji fallback
             otherwise. White ring + urgency glow are unchanged so the pet's
@@ -209,9 +233,10 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
           {name}
         </div>
         <style>{`
-          @keyframes sos-beep {
-            0%   { transform: scale(1); opacity: 0.7; }
-            100% { transform: scale(4.5); opacity: 0; }
+          @keyframes sos-pulse {
+            0%   { transform: scale(1);   opacity: 0.55; }
+            60%  { opacity: 0.18; }
+            100% { transform: scale(3.4); opacity: 0; }
           }
         `}</style>
       </div>
