@@ -76,10 +76,11 @@ const URL: Record<IconName, string> = {
 // weight. The exceptions are radiating shapes (sun rays, urgent
 // siren rays) where the bbox spans the ray-spread but the rays are
 // thin lines with empty space between them — at uniform size their
-// central body reads small. Bumping them ~40% brings the body's
-// visual weight in line with the rest.
+// central body reads small. Bumping them brings the body's visual
+// weight in line with the rest. Sun got pushed to 1.8 after the 1.4
+// pass still felt small everywhere it appeared.
 const SIZE_SCALE: Partial<Record<IconName, number>> = {
-  sun: 1.4,
+  sun: 1.8,
   urgent: 1.3,
 };
 

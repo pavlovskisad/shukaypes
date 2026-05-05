@@ -462,16 +462,16 @@ const styles = StyleSheet.create({
   // Logo lives inside a small white pill so it reads as a brand
   // chip distinct from the companion-name text.
   headerLogoPill: {
-    width: 26,
-    height: 26,
-    borderRadius: 13,
+    width: 36,
+    height: 36,
+    borderRadius: 18,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
   },
   headerLogo: {
-    width: 18,
-    height: 18,
+    width: 26,
+    height: 26,
   },
   headerTitle: {
     fontFamily: SYSTEM_FONT,
