@@ -683,28 +683,45 @@ export default function MapViewWeb() {
     mapRef.current.panTo(companionPos as unknown as google.maps.LatLngLiteral);
   };
 
-  // Off-screen lost-pet bookmarks: same edge-clamp idea as the
-  // companion indicator, but applied to every nearby pet that's
-  // currently outside the map viewport. Surfaces the "we're sniffing
-  // for these" set even when the user has zoomed in or panned away
-  // from the search zones. Capped at 5 closest so a city-dense area
-  // doesn't ring the screen with chips. Each chip shows the pet
-  // avatar + a small "→ 420m" / "→ 1.2km" hint; tap pans the map
-  // to that pet's last-seen position.
+  // Off-screen lost-pet bookmarks. One small chip per nearby pet
+  // (≤ MAP_RENDER_RADIUS_M) that's currently outside the map viewport,
+  // edge-pinned on the side closest to the pet. Per the latest design
+  // pass, chips MUST never stack on top of each other — they're an
+  // approximate location clue, but they have to stay readable. The
+  // pipeline:
+  //   1. For each off-screen pet: ray-cast from viewport centre toward
+  //      the pet, find which safe-box edge the ray hits first, record
+  //      the position along that edge in [0..1].
+  //   2. Cap to the 5 closest pets so dense areas don't ring the screen.
+  //   3. Group by edge, sort by along-axis, and apply a min-spacing
+  //      pass (forward-then-back) so co-located chips spread out
+  //      cleanly. Sacrifices a few px of "this chip points exactly
+  //      to the pet" precision in exchange for "you can read every
+  //      chip at a glance" — the user explicitly chose readability.
+  //   4. Render with a CSS transition on left/top so the chip slides
+  //      smoothly between positions as the user pans, instead of
+  //      teleporting frame-to-frame.
   //
   // NOTE: plain const (not useMemo) on purpose — this block sits
   // after the `if (!isLoaded || !userPos) return …` early return at
   // the top of the function. A useMemo here would change the hook
   // count between the two render branches and trigger React's
-  // "Rendered more hooks than during the previous render" crash on
-  // first load. The work is tiny (≤2km × ≤5 dogs, simple math).
+  // "Rendered more hooks than during the previous render" crash.
   const offscreenDogIndicators = (() => {
     if (!mapBounds) return [];
     const { n, s, e, w } = mapBounds;
     const sideReserve = 0.05;
     const topReserve = 0.15;
     const bottomReserve = 0.14;
-    const out: {
+    // ~12% of the viewport per chip along its edge. Picked so 5 chips
+    // (the cap) span 4 × 12% = 48% of the safe range and fit
+    // comfortably within the [reserve, 1-reserve] window on either
+    // axis. Vertical edges use the same value — works fine on tall
+    // phones where 12% is ~80-100px.
+    const SPACING_ALONG = 0.12;
+
+    type EdgeName = 'top' | 'right' | 'bottom' | 'left';
+    interface Chip {
       id: string;
       emoji: string;
       photoUrl: string | null;
@@ -712,25 +729,38 @@ export default function MapViewWeb() {
       name: string;
       distanceM: number;
       target: LatLng;
-      left: string;
-      top: string;
-    }[] = [];
+      edge: EdgeName;
+      along: number;
+      crossPct: number;
+    }
+
+    const chips: Chip[] = [];
     for (const d of visibleLostDogs) {
       const p = d.lastSeen.position;
       if (p.lat <= n && p.lat >= s && p.lng <= e && p.lng >= w) continue;
+      // Ray from viewport centre toward the pet, in normalised
+      // viewport coords (x=0 west, y=0 top, both 0..1).
       const nx = (p.lng - w) / (e - w);
       const ny = (n - p.lat) / (n - s);
       const dx = nx - 0.5;
       const dy = ny - 0.5;
-      const xLimit = (0.5 - sideReserve) / Math.max(Math.abs(dx), 1e-6);
-      const yLimit =
-        dy < 0
-          ? (0.5 - topReserve) / Math.max(Math.abs(dy), 1e-6)
-          : (0.5 - bottomReserve) / Math.max(Math.abs(dy), 1e-6);
-      const k = Math.min(xLimit, yLimit);
-      const ex = 0.5 + dx * k;
-      const ey = 0.5 + dy * k;
-      out.push({
+      const xBound = dx > 0 ? (1 - sideReserve) - 0.5 : 0.5 - sideReserve;
+      const yBound = dy > 0 ? (1 - bottomReserve) - 0.5 : 0.5 - topReserve;
+      const tx = Math.abs(xBound / Math.max(Math.abs(dx), 1e-6));
+      const ty = Math.abs(yBound / Math.max(Math.abs(dy), 1e-6));
+      let edge: EdgeName;
+      let along: number;
+      let crossPct: number;
+      if (tx < ty) {
+        edge = dx > 0 ? 'right' : 'left';
+        along = 0.5 + dy * tx;
+        crossPct = edge === 'right' ? 1 - sideReserve : sideReserve;
+      } else {
+        edge = dy > 0 ? 'bottom' : 'top';
+        along = 0.5 + dx * ty;
+        crossPct = edge === 'bottom' ? 1 - bottomReserve : topReserve;
+      }
+      chips.push({
         id: d.id,
         emoji: d.emoji,
         photoUrl: d.photoUrl ?? null,
@@ -738,12 +768,66 @@ export default function MapViewWeb() {
         name: d.name,
         distanceM: distanceMeters(userPos, p),
         target: p,
-        left: `${ex * 100}%`,
-        top: `${ey * 100}%`,
+        edge,
+        along,
+        crossPct,
       });
     }
-    out.sort((a, b) => a.distanceM - b.distanceM);
-    return out.slice(0, 5);
+    chips.sort((a, b) => a.distanceM - b.distanceM);
+    const limited = chips.slice(0, 5);
+
+    // Group by edge, then forward + back min-spacing pass.
+    const groups: Record<EdgeName, Chip[]> = {
+      top: [], right: [], bottom: [], left: [],
+    };
+    for (const c of limited) groups[c.edge].push(c);
+    const edges: EdgeName[] = ['top', 'right', 'bottom', 'left'];
+    for (const edgeName of edges) {
+      const g = groups[edgeName];
+      if (g.length === 0) continue;
+      g.sort((a, b) => a.along - b.along);
+      const lo = edgeName === 'left' || edgeName === 'right' ? topReserve : sideReserve;
+      const hi =
+        edgeName === 'left' || edgeName === 'right'
+          ? 1 - bottomReserve
+          : 1 - sideReserve;
+      // Forward: each chip ≥ prev + spacing
+      for (let i = 1; i < g.length; i++) {
+        g[i]!.along = Math.max(g[i]!.along, g[i - 1]!.along + SPACING_ALONG);
+      }
+      // Tail clamp + back pass if we overran the edge bound
+      if (g[g.length - 1]!.along > hi) {
+        g[g.length - 1]!.along = hi;
+        for (let i = g.length - 2; i >= 0; i--) {
+          g[i]!.along = Math.min(g[i]!.along, g[i + 1]!.along - SPACING_ALONG);
+        }
+      }
+      // Head clamp + forward pass if we underran (back pass pushed
+      // earlier ones below the lo bound).
+      if (g[0]!.along < lo) {
+        g[0]!.along = lo;
+        for (let i = 1; i < g.length; i++) {
+          g[i]!.along = Math.max(g[i]!.along, g[i - 1]!.along + SPACING_ALONG);
+        }
+      }
+    }
+
+    // Compose final %.
+    return limited.map((c) => {
+      const leftPct = c.edge === 'left' || c.edge === 'right' ? c.crossPct : c.along;
+      const topPct = c.edge === 'left' || c.edge === 'right' ? c.along : c.crossPct;
+      return {
+        id: c.id,
+        emoji: c.emoji,
+        photoUrl: c.photoUrl,
+        urgency: c.urgency,
+        name: c.name,
+        distanceM: c.distanceM,
+        target: c.target,
+        left: `${leftPct * 100}%`,
+        top: `${topPct * 100}%`,
+      };
+    });
   })();
 
   const formatDistance = (m: number): string => {
@@ -1082,19 +1166,23 @@ export default function MapViewWeb() {
       ) : null}
 
       {/* Off-screen lost-pet bookmarks. One small chip per nearby pet
-          that's currently outside the viewport, edge-pinned along the
-          ray from map centre to the pet's last-seen position. Soft
-          urgency-coloured pulse + live distance counter from the user
-          read as "шукайпес is sniffing for them right now". Tap pans
-          the map to the pet. Capped at 5 closest in the parent memo so
-          dense neighbourhoods don't ring the screen with chips. */}
+          that's currently outside the viewport. The parent IIFE has
+          already grouped them by edge and applied a min-spacing pass
+          so they never stack — chips are an approximate location
+          clue but stay readable.
+
+          CSS transitions on `left` / `top` smooth the motion as the
+          user pans (380ms out-quint). Stable React keys per dog id
+          mean the same DOM element persists across renders, so the
+          transition runs against the new target instead of unmounting
+          and remounting. */}
       {offscreenDogIndicators.map((d) => {
         const halo =
           d.urgency === 'urgent'
-            ? { ring: 'rgba(232,64,64,0.55)', glow: '0 0 12px rgba(232,64,64,0.45)' }
+            ? { ring: 'rgba(232,64,64,0.55)', glow: '0 0 10px rgba(232,64,64,0.42)' }
             : d.urgency === 'medium'
-              ? { ring: 'rgba(217,160,48,0.55)', glow: '0 0 12px rgba(217,160,48,0.45)' }
-              : { ring: 'rgba(160,160,160,0.45)', glow: '0 0 10px rgba(160,160,160,0.32)' };
+              ? { ring: 'rgba(217,160,48,0.55)', glow: '0 0 10px rgba(217,160,48,0.42)' }
+              : { ring: 'rgba(160,160,160,0.45)', glow: '0 0 8px rgba(160,160,160,0.3)' };
         return (
           <div
             key={`offscreen-dog-${d.id}`}
@@ -1106,6 +1194,8 @@ export default function MapViewWeb() {
               left: d.left,
               top: d.top,
               transform: 'translate(-50%, -50%)',
+              transition:
+                'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
               zIndex: 24,
               cursor: 'pointer',
               display: 'flex',
@@ -1118,8 +1208,8 @@ export default function MapViewWeb() {
             <div
               style={{
                 position: 'relative',
-                width: 38,
-                height: 38,
+                width: 34,
+                height: 34,
                 borderRadius: '50%',
                 background: '#ffffff',
                 border: `1.5px solid ${halo.ring}`,
@@ -1128,8 +1218,7 @@ export default function MapViewWeb() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 19,
-                animation: 'sniff-pulse 2400ms ease-in-out infinite',
+                fontSize: 17,
               }}
             >
               <span style={{ position: 'absolute' }}>{d.emoji}</span>
@@ -1155,7 +1244,7 @@ export default function MapViewWeb() {
             </div>
             <div
               style={{
-                fontSize: 10,
+                fontSize: 9.5,
                 fontWeight: 700,
                 color: '#1a1a1a',
                 background: 'rgba(255,255,255,0.85)',
@@ -1173,12 +1262,6 @@ export default function MapViewWeb() {
           </div>
         );
       })}
-      <style>{`
-        @keyframes sniff-pulse {
-          0%, 100% { box-shadow: 0 0 8px rgba(60,120,255,0.0); }
-          50%      { box-shadow: 0 0 14px rgba(60,120,255,0.18); }
-        }
-      `}</style>
 
       {/* Floating "stack all" affordance — visible only while at
           least one spot cluster is expanded. Pinned to the right
