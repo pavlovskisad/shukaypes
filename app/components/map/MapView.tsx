@@ -713,12 +713,13 @@ export default function MapViewWeb() {
     const sideReserve = 0.05;
     const topReserve = 0.15;
     const bottomReserve = 0.14;
-    // ~12% of the viewport per chip along its edge. Picked so 5 chips
-    // (the cap) span 4 × 12% = 48% of the safe range and fit
-    // comfortably within the [reserve, 1-reserve] window on either
-    // axis. Vertical edges use the same value — works fine on tall
-    // phones where 12% is ~80-100px.
-    const SPACING_ALONG = 0.12;
+    // ~14% of the viewport per chip along its edge. Tuned for the
+    // 48px chip + label below: on a 400px-wide phone that's ~56px
+    // center-to-center which clears chip widths, on a typical 800px
+    // tall viewport it's plenty for the chip+label vertical extent.
+    // 5 chips (the cap) span 4 × 14% = 56% of the safe range, well
+    // within the [reserve, 1-reserve] window on either axis.
+    const SPACING_ALONG = 0.14;
 
     type EdgeName = 'top' | 'right' | 'bottom' | 'left';
     interface Chip {
@@ -1208,8 +1209,8 @@ export default function MapViewWeb() {
             <div
               style={{
                 position: 'relative',
-                width: 34,
-                height: 34,
+                width: 48,
+                height: 48,
                 borderRadius: '50%',
                 background: '#ffffff',
                 border: `1.5px solid ${halo.ring}`,
@@ -1218,7 +1219,7 @@ export default function MapViewWeb() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
-                fontSize: 17,
+                fontSize: 24,
               }}
             >
               <span style={{ position: 'absolute' }}>{d.emoji}</span>
@@ -1244,15 +1245,15 @@ export default function MapViewWeb() {
             </div>
             <div
               style={{
-                fontSize: 9.5,
+                fontSize: 11,
                 fontWeight: 700,
                 color: '#1a1a1a',
                 background: 'rgba(255,255,255,0.85)',
-                paddingLeft: 5,
-                paddingRight: 5,
+                paddingLeft: 6,
+                paddingRight: 6,
                 paddingTop: 1,
                 paddingBottom: 1,
-                borderRadius: 7,
+                borderRadius: 8,
                 textShadow: '0 1px 2px rgba(255,255,255,0.95)',
                 whiteSpace: 'nowrap',
               }}
