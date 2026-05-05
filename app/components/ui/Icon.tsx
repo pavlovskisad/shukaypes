@@ -1,12 +1,16 @@
 import { Image } from 'react-native';
 
-// Pixel-art icon set served from /public/icons/. Renders as an
-// <Image> so the same component works in RN-Web (today's web pilot)
-// and would work on native if/when we wire react-native-svg, since
-// the markup never leans on raw <img>.
+// Hand-drawn icon set served from /public/icons/. Renders as an
+// <Image> so the same component works in RN-Web today and would
+// work on native if/when we ship there.
 //
-// New names slot in here as we extend the set. Keep the URL list
-// flat — each icon is a single SVG, no per-icon variants.
+// All icons are uniformly framed PNGs (500×500, transparent
+// background) — no per-icon size compensation needed; each one
+// fills its bounding box predictably.
+//
+// Naming follows the visual: `house` (the home tab), not "user"
+// or "profile". Slot identifiers describe the icon, not the
+// surface that consumes it.
 
 export type IconName =
   | 'paws'
@@ -16,30 +20,17 @@ export type IconName =
   | 'map'
   | 'chat'
   | 'task'
-  | 'user';
+  | 'house';
 
 const URL: Record<IconName, string> = {
-  paws: '/icons/paws.svg',
-  bone: '/icons/bone.svg',
-  sun: '/icons/sun.svg',
-  pin: '/icons/pin.svg',
-  map: '/icons/map.svg',
-  chat: '/icons/chat.svg',
-  task: '/icons/task.svg',
-  user: '/icons/user.svg',
-};
-
-// Per-icon size compensation. The asset SVGs come from different
-// sources with different "padding" inside their viewBox — chat /
-// user ship as solid silhouettes centered in a 100×100 box with
-// significant whitespace around the shape, while the line-art set
-// (map, task, pin, sun) fills its viewBox almost edge-to-edge. So
-// at the same passed-in size, chat / user render visibly smaller.
-// These multipliers bring them up to match the line-art family
-// without re-cropping the assets.
-const SIZE_SCALE: Partial<Record<IconName, number>> = {
-  chat: 1.4,
-  user: 1.4,
+  paws: '/icons/paws.png',
+  bone: '/icons/bone.png',
+  sun: '/icons/sun.png',
+  pin: '/icons/pin.png',
+  map: '/icons/map.png',
+  chat: '/icons/chat.png',
+  task: '/icons/task.png',
+  house: '/icons/house.png',
 };
 
 interface IconProps {
@@ -51,11 +42,10 @@ interface IconProps {
 }
 
 export function Icon({ name, size, opacity }: IconProps) {
-  const finalSize = size * (SIZE_SCALE[name] ?? 1);
   return (
     <Image
       source={{ uri: URL[name] }}
-      style={{ width: finalSize, height: finalSize, opacity }}
+      style={{ width: size, height: size, opacity }}
       resizeMode="contain"
     />
   );

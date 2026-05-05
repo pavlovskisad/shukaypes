@@ -59,8 +59,8 @@ const ROWS: Row[] = [
     body: 'cafés, vets, pet stores, parks near you. tap one → "walk here" plots the route. great when i need to stretch my legs.',
   },
   {
-    iconName: 'user',
-    title: 'profile',
+    iconName: 'house',
+    title: 'home',
     body: 'your stats. distance walked, paws collected, pets searched, my level + xp.',
   },
 ];
