@@ -683,6 +683,72 @@ export default function MapViewWeb() {
     mapRef.current.panTo(companionPos as unknown as google.maps.LatLngLiteral);
   };
 
+  // Off-screen lost-pet bookmarks: same edge-clamp idea as the
+  // companion indicator, but applied to every nearby pet that's
+  // currently outside the map viewport. Surfaces the "we're sniffing
+  // for these" set even when the user has zoomed in or panned away
+  // from the search zones. Capped at 5 closest so a city-dense area
+  // doesn't ring the screen with chips. Each chip shows the pet
+  // avatar + a small "→ 420m" / "→ 1.2km" hint; tap pans the map
+  // to that pet's last-seen position.
+  const offscreenDogIndicators = useMemo(() => {
+    if (!mapBounds || !userPos) return [];
+    const { n, s, e, w } = mapBounds;
+    const sideReserve = 0.05;
+    const topReserve = 0.15;
+    const bottomReserve = 0.14;
+    const out: {
+      id: string;
+      emoji: string;
+      photoUrl: string | null;
+      urgency: UrgencyLevel;
+      name: string;
+      distanceM: number;
+      target: LatLng;
+      left: string;
+      top: string;
+    }[] = [];
+    for (const d of visibleLostDogs) {
+      const p = d.lastSeen.position;
+      if (p.lat <= n && p.lat >= s && p.lng <= e && p.lng >= w) continue;
+      const nx = (p.lng - w) / (e - w);
+      const ny = (n - p.lat) / (n - s);
+      const dx = nx - 0.5;
+      const dy = ny - 0.5;
+      const xLimit = (0.5 - sideReserve) / Math.max(Math.abs(dx), 1e-6);
+      const yLimit =
+        dy < 0
+          ? (0.5 - topReserve) / Math.max(Math.abs(dy), 1e-6)
+          : (0.5 - bottomReserve) / Math.max(Math.abs(dy), 1e-6);
+      const k = Math.min(xLimit, yLimit);
+      const ex = 0.5 + dx * k;
+      const ey = 0.5 + dy * k;
+      out.push({
+        id: d.id,
+        emoji: d.emoji,
+        photoUrl: d.photoUrl ?? null,
+        urgency: d.urgency,
+        name: d.name,
+        distanceM: distanceMeters(userPos, p),
+        target: p,
+        left: `${ex * 100}%`,
+        top: `${ey * 100}%`,
+      });
+    }
+    out.sort((a, b) => a.distanceM - b.distanceM);
+    return out.slice(0, 5);
+  }, [mapBounds, userPos?.lat, userPos?.lng, visibleLostDogs]);
+
+  const formatDistance = (m: number): string => {
+    if (m < 1000) return `${Math.round(m / 10) * 10}m`;
+    return `${(m / 1000).toFixed(m < 10000 ? 1 : 0)}km`;
+  };
+
+  const panToDog = (target: LatLng) => {
+    if (!mapRef.current) return;
+    mapRef.current.panTo(target as unknown as google.maps.LatLngLiteral);
+  };
+
   return (
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
       <GoogleMap
@@ -1007,6 +1073,105 @@ export default function MapViewWeb() {
           />
         </div>
       ) : null}
+
+      {/* Off-screen lost-pet bookmarks. One small chip per nearby pet
+          that's currently outside the viewport, edge-pinned along the
+          ray from map centre to the pet's last-seen position. Soft
+          urgency-coloured pulse + live distance counter from the user
+          read as "шукайпес is sniffing for them right now". Tap pans
+          the map to the pet. Capped at 5 closest in the parent memo so
+          dense neighbourhoods don't ring the screen with chips. */}
+      {offscreenDogIndicators.map((d) => {
+        const halo =
+          d.urgency === 'urgent'
+            ? { ring: 'rgba(232,64,64,0.55)', glow: '0 0 12px rgba(232,64,64,0.45)' }
+            : d.urgency === 'medium'
+              ? { ring: 'rgba(217,160,48,0.55)', glow: '0 0 12px rgba(217,160,48,0.45)' }
+              : { ring: 'rgba(160,160,160,0.45)', glow: '0 0 10px rgba(160,160,160,0.32)' };
+        return (
+          <div
+            key={`offscreen-dog-${d.id}`}
+            onClick={() => panToDog(d.target)}
+            role="button"
+            aria-label={`pan to ${d.name}, ${formatDistance(d.distanceM)} away`}
+            style={{
+              position: 'absolute',
+              left: d.left,
+              top: d.top,
+              transform: 'translate(-50%, -50%)',
+              zIndex: 24,
+              cursor: 'pointer',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
+              userSelect: 'none',
+            }}
+          >
+            <div
+              style={{
+                position: 'relative',
+                width: 38,
+                height: 38,
+                borderRadius: '50%',
+                background: '#ffffff',
+                border: `1.5px solid ${halo.ring}`,
+                boxShadow: halo.glow,
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 19,
+                animation: 'sniff-pulse 2400ms ease-in-out infinite',
+              }}
+            >
+              <span style={{ position: 'absolute' }}>{d.emoji}</span>
+              {d.photoUrl ? (
+                <img
+                  src={d.photoUrl}
+                  alt={d.name}
+                  draggable={false}
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    transform: 'scale(1.2)',
+                  }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : null}
+            </div>
+            <div
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                color: '#1a1a1a',
+                background: 'rgba(255,255,255,0.85)',
+                paddingLeft: 5,
+                paddingRight: 5,
+                paddingTop: 1,
+                paddingBottom: 1,
+                borderRadius: 7,
+                textShadow: '0 1px 2px rgba(255,255,255,0.95)',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {formatDistance(d.distanceM)}
+            </div>
+          </div>
+        );
+      })}
+      <style>{`
+        @keyframes sniff-pulse {
+          0%, 100% { box-shadow: 0 0 8px rgba(60,120,255,0.0); }
+          50%      { box-shadow: 0 0 14px rgba(60,120,255,0.18); }
+        }
+      `}</style>
 
       {/* Floating "stack all" affordance — visible only while at
           least one spot cluster is expanded. Pinned to the right
