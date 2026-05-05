@@ -13,6 +13,7 @@ import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
 import type { Spot, SpotCategory } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { Icon, type IconName } from '../../components/ui/Icon';
 
 const CATEGORY_LABEL: Record<string, string> = {
   cafe: 'cafe',
@@ -27,20 +28,23 @@ type FilterValue = 'all' | SpotCategory;
 interface FilterOption {
   value: FilterValue;
   label: string;
+  // Either iconName for the pixel <Icon> or icon (emoji fallback).
+  // 'all' + 'cafe' don't have custom icons yet.
+  iconName?: IconName;
   icon: string;
 }
 
-// Order + emojis match VISIT_CATEGORY_ACTIONS / CATEGORY_EMOJI in
+// Order + glyphs match VISIT_CATEGORY_ACTIONS / CATEGORY_EMOJI in
 // services/places.ts so the filter chip, the map marker, and the
 // radial menu all use the same glyph for each category. "all" is the
 // only synthetic chip and gets a neutral sparkle.
 const FILTERS: FilterOption[] = [
   { value: 'all', label: 'all', icon: '✨' },
-  { value: 'cafe', label: 'cafe', icon: '☕' },
-  { value: 'restaurant', label: 'eat', icon: '🍜' },
-  { value: 'bar', label: 'drink', icon: '🍹' },
-  { value: 'pet_store', label: 'pet shop', icon: '🐶' },
-  { value: 'veterinary_care', label: 'vet', icon: '⛑️' },
+  { value: 'cafe', label: 'cafe', iconName: 'cafe', icon: '☕' },
+  { value: 'restaurant', label: 'eat', iconName: 'restaurant', icon: '🍜' },
+  { value: 'bar', label: 'drink', iconName: 'bar', icon: '🍹' },
+  { value: 'pet_store', label: 'pet shop', iconName: 'pet_store', icon: '🐶' },
+  { value: 'veterinary_care', label: 'vet', iconName: 'vet', icon: '⛑️' },
 ];
 
 export default function SpotsScreen() {
@@ -115,9 +119,13 @@ export default function SpotsScreen() {
                     pressed && !muted && { opacity: 0.7 },
                   ]}
                 >
-                  <Text style={[styles.filterChipIcon, muted && styles.filterChipMutedText]}>
-                    {opt.icon}
-                  </Text>
+                  {opt.iconName ? (
+                    <Icon name={opt.iconName} size={18} opacity={muted ? 0.55 : 1} />
+                  ) : (
+                    <Text style={[styles.filterChipIcon, muted && styles.filterChipMutedText]}>
+                      {opt.icon}
+                    </Text>
+                  )}
                   <Text
                     style={[
                       styles.filterChipLabel,

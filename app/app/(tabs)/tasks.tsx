@@ -64,14 +64,14 @@ const TASKS: TaskRow[] = [
   { key: 'bones', iconName: 'bone', label: 'feed 3 bones', target: DAILY_TARGETS.bones },
   {
     key: 'lostPetChecks',
-    icon: '🔍',
+    iconName: 'search',
     label: 'check 2 lost pets',
     target: DAILY_TARGETS.lostPetChecks,
   },
-  { key: 'spotVisits', icon: '☕', label: 'visit a spot', target: DAILY_TARGETS.spotVisits },
+  { key: 'spotVisits', iconName: 'cafe', label: 'visit a spot', target: DAILY_TARGETS.spotVisits },
   {
     key: 'sightings',
-    icon: '👀',
+    iconName: 'eyes',
     label: "report you've seen a pet",
     target: DAILY_TARGETS.sightings,
   },

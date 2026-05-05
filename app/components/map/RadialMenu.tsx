@@ -1,39 +1,44 @@
 import { balance } from '../../constants/balance';
+import { Icon, type IconName } from '../../components/ui/Icon';
 
 export interface RadialAction {
   id: string;
+  // Either iconName (renders as a pixel <Icon>) or icon (emoji
+  // fallback for runtime-generated entries like visit:spot:<id>
+  // that pull the spot's category emoji from gameStore).
+  iconName?: IconName;
   icon: string;
   label: string;
 }
 
 export const PRIMARY_ACTIONS: RadialAction[] = [
-  { id: 'search', icon: '🔍', label: 'search' },
-  { id: 'walk', icon: '🚶', label: 'walk' },
-  { id: 'visit', icon: '📍', label: 'visit' },
-  { id: 'meet', icon: '👥', label: 'meet' },
-  { id: 'chat', icon: '💬', label: 'chat' },
+  { id: 'search', iconName: 'search', icon: '🔍', label: 'search' },
+  { id: 'walk', iconName: 'walk', icon: '🚶', label: 'walk' },
+  { id: 'visit', iconName: 'pin', icon: '📍', label: 'visit' },
+  { id: 'meet', iconName: 'meet', icon: '👥', label: 'meet' },
+  { id: 'chat', iconName: 'chat', icon: '💬', label: 'chat' },
 ];
 
 // Walk drills two levels deep: shape (roundtrip / one-way) → distance
 // (close ~1km / far ~3km). Leaf fires the route flow.
 export const WALK_SHAPE_ACTIONS: RadialAction[] = [
-  { id: 'walk:roundtrip', icon: '🔄', label: 'roundtrip' },
-  { id: 'walk:oneway', icon: '➡️', label: 'one-way' },
+  { id: 'walk:roundtrip', iconName: 'roundtrip', icon: '🔄', label: 'roundtrip' },
+  { id: 'walk:oneway', iconName: 'oneway', icon: '➡️', label: 'one-way' },
 ];
 
 export const WALK_DISTANCE_ACTIONS: RadialAction[] = [
-  { id: ':close', icon: '🏘', label: 'close' },
-  { id: ':far', icon: '🌆', label: 'far' },
+  { id: ':close', iconName: 'close', icon: '🏘', label: 'close' },
+  { id: ':far', iconName: 'far', icon: '🌆', label: 'far' },
 ];
 
 // Visit drills two levels deep: category → 3 closest spots in that
 // category. Closest-spots level is computed at runtime in Companion.
 export const VISIT_CATEGORY_ACTIONS: RadialAction[] = [
-  { id: 'visit:cafe', icon: '☕', label: 'cafe' },
-  { id: 'visit:restaurant', icon: '🍜', label: 'food' },
-  { id: 'visit:bar', icon: '🍹', label: 'bar' },
-  { id: 'visit:pet_store', icon: '🐶', label: 'pet store' },
-  { id: 'visit:veterinary_care', icon: '⛑️', label: 'vet' },
+  { id: 'visit:cafe', iconName: 'cafe', icon: '☕', label: 'cafe' },
+  { id: 'visit:restaurant', iconName: 'restaurant', icon: '🍜', label: 'food' },
+  { id: 'visit:bar', iconName: 'bar', icon: '🍹', label: 'bar' },
+  { id: 'visit:pet_store', iconName: 'pet_store', icon: '🐶', label: 'pet store' },
+  { id: 'visit:veterinary_care', iconName: 'vet', icon: '⛑️', label: 'vet' },
 ];
 
 // Trig-positioned radial around a center point (105, 105) with radius R (demo lines 187-210).
@@ -129,7 +134,7 @@ export function RadialMenu({
               }}
               aria-label={a.label}
             >
-              {a.icon}
+              {a.iconName ? <Icon name={a.iconName} size={28} /> : a.icon}
             </button>
             {showLabels ? (
               <span
