@@ -462,9 +462,59 @@ export default function MapViewWeb() {
         out.push({
           key: `${cat}:${ids.join('|')}`,
           category: cat,
-          center: c.center,
+          center: { ...c.center },
           items,
         });
+      }
+    }
+
+    // Spread pass: even after category-clustering, multiple stacks
+    // (e.g. cafe + bar + restaurant) can land on the same street and
+    // their badges visually overlap. Iteratively push any pair that
+    // sits within the same disk-overlap radius apart, weighted so the
+    // smaller stack moves more (anchors the dense pile, drifts the
+    // less-populated chip outward). Capped iterations — converges in
+    // 4-6 for typical Kyiv neighbourhoods.
+    if (out.length > 1) {
+      // Per-cluster effective radius — multi-item stacks render the
+      // 44px PoiCluster badge, singles render the 36px PoiMarker.
+      // Use a slightly larger min-separation so even neighbouring
+      // singles get a touch of breathing room.
+      const stackPx = 46; // 44 cluster badge with 2px breathing
+      const stackM = stackPx * mPerPx;
+      const ITER = 8;
+      for (let it = 0; it < ITER; it++) {
+        let moved = false;
+        for (let i = 0; i < out.length; i++) {
+          for (let j = i + 1; j < out.length; j++) {
+            const ci = out[i]!.center;
+            const cj = out[j]!.center;
+            // Convert delta to meters (linear approx around mapCenterLat).
+            const cosLat = Math.cos((ci.lat * Math.PI) / 180);
+            const dM_lat = (cj.lat - ci.lat) * 111320;
+            const dM_lng = (cj.lng - ci.lng) * 111320 * cosLat;
+            const mag = Math.sqrt(dM_lat * dM_lat + dM_lng * dM_lng);
+            if (mag >= stackM) continue;
+            // Use a tiny epsilon nudge if they're exactly on top so
+            // subsequent iterations have a direction to push along.
+            const ux = mag > 1e-3 ? dM_lat / mag : 1;
+            const uy = mag > 1e-3 ? dM_lng / mag : 0;
+            const overlap = stackM - mag;
+            const ni = out[i]!.items.length;
+            const nj = out[j]!.items.length;
+            const wI = nj / (ni + nj);
+            const wJ = ni / (ni + nj);
+            const halfM = overlap * 0.5;
+            const lngScale = 1 / (111320 * cosLat);
+            const latScale = 1 / 111320;
+            ci.lat -= ux * halfM * 2 * wI * latScale;
+            ci.lng -= uy * halfM * 2 * wI * lngScale;
+            cj.lat += ux * halfM * 2 * wJ * latScale;
+            cj.lng += uy * halfM * 2 * wJ * lngScale;
+            moved = true;
+          }
+        }
+        if (!moved) break;
       }
     }
     return out;
@@ -957,42 +1007,47 @@ export default function MapViewWeb() {
         </div>
       ) : null}
 
-      {/* Floating "collapse all" pill — visible only while at least
-          one spot cluster is expanded. Sits at the top-centre of the
-          map, just below the HUD pills, so the user has an obvious
-          re-stack affordance without each cluster needing its own
-          close button. */}
+      {/* Floating "stack all" affordance — visible only while at
+          least one spot cluster is expanded. Pinned to the right
+          edge of the screen and vertically centred so it stays
+          out of the way until the user actually has clusters open.
+          Three little horizontal bars draw a generic "stack" glyph;
+          no text — keeps it minimal and language-agnostic. */}
       {expandedSpotKeys.size > 0 ? (
         <div
           onClick={() => setExpandedSpotKeys(new Set())}
           role="button"
-          aria-label="collapse expanded spot clusters"
+          aria-label="restack all expanded spot clusters"
           style={{
             position: 'absolute',
-            top: 92,
-            left: '50%',
-            transform: 'translateX(-50%)',
+            top: '50%',
+            right: 0,
+            transform: 'translateY(-50%)',
             zIndex: 25,
             cursor: 'pointer',
             background: 'rgba(255,255,255,0.92)',
             backdropFilter: 'blur(14px) saturate(160%)',
             WebkitBackdropFilter: 'blur(14px) saturate(160%)',
-            borderRadius: 18,
-            paddingLeft: 14,
-            paddingRight: 14,
-            height: 36,
-            display: 'inline-flex',
+            // Round on the LEFT side only so it reads as docked to
+            // the screen edge.
+            borderTopLeftRadius: 28,
+            borderBottomLeftRadius: 28,
+            width: 56,
+            height: 56,
+            display: 'flex',
+            flexDirection: 'column',
             alignItems: 'center',
-            gap: 6,
-            fontFamily: 'system-ui',
-            fontSize: 13,
-            fontWeight: 700,
-            color: '#1a1a1a',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
+            justifyContent: 'center',
+            gap: 3,
+            boxShadow: '0 6px 20px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.08)',
             userSelect: 'none',
           }}
         >
-          ↺ stack
+          {/* Three stacked bars — the longer bottom bar reads as
+              "stack" the way a hamburger-but-tapered glyph does. */}
+          <div style={{ width: 18, height: 3, background: '#1a1a1a', borderRadius: 2 }} />
+          <div style={{ width: 22, height: 3, background: '#1a1a1a', borderRadius: 2 }} />
+          <div style={{ width: 26, height: 3, background: '#1a1a1a', borderRadius: 2 }} />
         </div>
       ) : null}
 
