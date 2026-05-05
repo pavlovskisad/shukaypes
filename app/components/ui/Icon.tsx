@@ -30,7 +30,10 @@ export type IconName =
   | 'meet'
   | 'oneway'
   | 'roundtrip'
+  | 'close'
+  | 'far'
   // Spot categories
+  | 'cafe'
   | 'restaurant'
   | 'bar'
   | 'pet_store'
@@ -54,6 +57,9 @@ const URL: Record<IconName, string> = {
   meet: '/icons/meet.svg',
   oneway: '/icons/oneway.svg',
   roundtrip: '/icons/roundtrip.svg',
+  close: '/icons/close.svg',
+  far: '/icons/far.svg',
+  cafe: '/icons/cafe.svg',
   restaurant: '/icons/restaurant.svg',
   bar: '/icons/bar.svg',
   pet_store: '/icons/pet_store.svg',

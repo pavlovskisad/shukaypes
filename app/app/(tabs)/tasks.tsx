@@ -68,7 +68,7 @@ const TASKS: TaskRow[] = [
     label: 'check 2 lost pets',
     target: DAILY_TARGETS.lostPetChecks,
   },
-  { key: 'spotVisits', icon: '☕', label: 'visit a spot', target: DAILY_TARGETS.spotVisits },
+  { key: 'spotVisits', iconName: 'cafe', label: 'visit a spot', target: DAILY_TARGETS.spotVisits },
   {
     key: 'sightings',
     iconName: 'eyes',

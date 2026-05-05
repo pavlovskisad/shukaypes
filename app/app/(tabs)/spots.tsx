@@ -40,7 +40,7 @@ interface FilterOption {
 // only synthetic chip and gets a neutral sparkle.
 const FILTERS: FilterOption[] = [
   { value: 'all', label: 'all', icon: '✨' },
-  { value: 'cafe', label: 'cafe', icon: '☕' },
+  { value: 'cafe', label: 'cafe', iconName: 'cafe', icon: '☕' },
   { value: 'restaurant', label: 'eat', iconName: 'restaurant', icon: '🍜' },
   { value: 'bar', label: 'drink', iconName: 'bar', icon: '🍹' },
   { value: 'pet_store', label: 'pet shop', iconName: 'pet_store', icon: '🐶' },
