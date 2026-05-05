@@ -247,10 +247,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   lastSpotsFetchPos: null,
   spotsLoading: false,
   selectedSpotId: null,
-  // Default off — POIs only render once the user explicitly enables
-  // the layer via the HUD toggle. Avoids cluttering the map at first
-  // load with every nearby cafe and pet store.
-  spotsVisible: false,
+  // Default ON — smart per-category clustering keeps the map clean
+  // even with many spots loaded, and surfacing them by default makes
+  // the "walk to a place" flow discoverable. Users can still hide via
+  // the HUD toggle if they want a clean walking map.
+  spotsVisible: true,
   spotsCategoryFilter: 'all',
   walkRoute: null,
   walkRouteMeta: null,

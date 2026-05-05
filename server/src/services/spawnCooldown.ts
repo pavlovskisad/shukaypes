@@ -30,10 +30,20 @@ function userAreaKey(userId: string): string {
 }
 
 // Stable-string key for a per-pool cooldown. Lat/lng come as floats
-// that may shift sub-meter between syncs (Places re-fetches), so we
-// floor to ~1m precision via toFixed(5).
+// that DRIFT meaningfully between syncs — Google Places returns the
+// same physical park at slightly different coords on re-fetch (we've
+// seen 5-30m drift on big parks where sub-sections / entrances are
+// inconsistently picked). The previous toFixed(5) (~1m precision)
+// minted a fresh gate key for each drift step, so each drifted
+// position spawned its own bone+paws round on the next 3min cycle and
+// stacks accumulated. toFixed(3) snaps to a ~110m grid — same physical
+// park within a few tens of meters of drift now hits the same gate.
+// 110m is roughly the SERVER_PARK_DEDUP_M (150m) ballpark, comfortably
+// above any legitimate drift while staying tighter than the client's
+// 120m park-dedup threshold (so two genuinely distinct parks that
+// survived client dedup are still very unlikely to grid-collide).
 function poolKey(userId: string, kind: string, anchor: LatLng | string): string {
-  const a = typeof anchor === 'string' ? anchor : `${anchor.lat.toFixed(5)}_${anchor.lng.toFixed(5)}`;
+  const a = typeof anchor === 'string' ? anchor : `${anchor.lat.toFixed(3)}_${anchor.lng.toFixed(3)}`;
   return `topup:${kind}:${userId}:${a}`;
 }
 
