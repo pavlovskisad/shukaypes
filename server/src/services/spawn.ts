@@ -3,7 +3,7 @@ import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import type { LatLng } from '../utils/geo.js';
-import { scatter, scatterInRadius } from '../utils/geo.js';
+import { distanceMeters, scatter, scatterInRadius } from '../utils/geo.js';
 import {
   shouldTopupUserArea,
   noteUserAreaTopup,
@@ -11,6 +11,24 @@ import {
   parkBonesGate,
   dogZoneGate,
 } from './spawnCooldown.js';
+
+// Server-side dedup threshold for the parks the client passes in.
+// The client already collapses Places entries within 120m, but Google
+// occasionally returns the same physical park at slightly different
+// coords across syncs (sub-section + entrance + plaza for one big
+// area). When per-park bones/paws spawn off each of those entries,
+// you end up with 4-6 bones piled in a small disk. 150m is wide enough
+// to absorb that drift without merging legitimately distinct parks
+// that survived the client's tighter 120m pass.
+const SERVER_PARK_DEDUP_M = 150;
+function dedupeParks(parks: LatLng[]): LatLng[] {
+  const out: LatLng[] = [];
+  for (const p of parks) {
+    if (out.some((q) => distanceMeters(q, p) < SERVER_PARK_DEDUP_M)) continue;
+    out.push(p);
+  }
+  return out;
+}
 
 // Parser landmark fallback used by the OLX pipeline. Pets at the exact
 // Kyiv city-center coord are low-signal (no real geography in the post),
@@ -45,6 +63,7 @@ export async function ensureTokensForUser(
   center: LatLng,
   parks: LatLng[] = [],
 ) {
+  parks = dedupeParks(parks);
   // 1. Age out uncollected tokens older than `tokenExpireMinutes`. The
   // previous distance-based cull didn't fit the new pool model — a paw
   // seeded inside a dog's zone 3km from the walker is legitimate even
@@ -185,6 +204,7 @@ export async function ensureFoodForUser(
   center: LatLng,
   parks: LatLng[] = [],
 ) {
+  parks = dedupeParks(parks);
   // Age out uncollected bones the same way tokens do — keeps legacy
   // uniform-scatter bones from lingering once we switch to park mode,
   // and refreshes positions over time.
