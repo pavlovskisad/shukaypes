@@ -53,13 +53,14 @@ const CLUSTER_BADGE_THRESHOLD = 6;
 // concern, not a "is it nearby" concern.
 const MAP_RENDER_RADIUS_M = 2000;
 
-// Spot clustering — disk-overlap criterion. Each PoiMarker is a 36px
-// disc, so two pins "visually overlap" when their centres are within
-// ~36-40px of each other on screen. We translate that pixel threshold
-// to METERS at the current zoom + map-centre latitude so clustering
-// adapts naturally: aggressive at the locked min-zoom 16 (where the
-// pile-up problem lives) and barely-active when the user zooms in.
-const SPOT_OVERLAP_PX = 40;
+// Spot clustering — disk-overlap criterion. Each PoiMarker is now a
+// 44px disc and PoiCluster a 54px disc, so two pins "visually
+// overlap" when their centres are within ~46-56px of each other.
+// We translate that pixel threshold to METERS at the current zoom +
+// map-centre latitude so clustering adapts naturally: aggressive at
+// the locked min-zoom 16 (where the pile-up problem lives) and
+// barely-active when the user zooms in.
+const SPOT_OVERLAP_PX = 48;
 // Web Mercator: meters-per-pixel at zoom 0 / equator. Standard
 // constant from Google's tile spec.
 const MPP_EQUATOR_Z0 = 156543.03392;
@@ -477,10 +478,10 @@ export default function MapViewWeb() {
     // 4-6 for typical Kyiv neighbourhoods.
     if (out.length > 1) {
       // Per-cluster effective radius — multi-item stacks render the
-      // 44px PoiCluster badge, singles render the 36px PoiMarker.
+      // 54px PoiCluster badge, singles render the 44px PoiMarker.
       // Use a slightly larger min-separation so even neighbouring
       // singles get a touch of breathing room.
-      const stackPx = 46; // 44 cluster badge with 2px breathing
+      const stackPx = 58; // 54 cluster badge with 4px breathing
       const stackM = stackPx * mPerPx;
       const ITER = 8;
       for (let it = 0; it < ITER; it++) {
