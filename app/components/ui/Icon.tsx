@@ -74,13 +74,16 @@ const URL: Record<IconName, string> = {
 // Per-icon size compensation. Most icons fill their tight viewBox
 // solidly so a uniform `size` prop renders them at the same visual
 // weight. Urgent siren has rays around it like the sun used to —
-// keep a small bump there. Sun itself was bumped earlier (1.4 →
-// 1.8) but that made the HUD happiness pill 1.8× wider than the
-// neighbouring bone/paws pills. The viewBox is now cropped tight
-// to the central body (rays clipped to stubs), so SIZE_SCALE goes
-// back to 1.0 — pill widths match across the HUD again.
+// keep a small bump there. Sun's viewBox is cropped tight to the
+// central body (rays clipped to stubs); even so the body itself
+// reads visually smaller than bone/paws silhouettes at size 18,
+// so a modest 1.3× bump pulls it up to family weight. The
+// happiness pill ends up ~5px wider than its neighbours — close
+// enough that it still reads as part of the family, much tighter
+// than the original 1.8× that made the pill obviously oversized.
 const SIZE_SCALE: Partial<Record<IconName, number>> = {
   urgent: 1.3,
+  sun: 1.3,
 };
 
 interface IconProps {
