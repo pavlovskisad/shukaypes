@@ -25,6 +25,7 @@ import { LostDogModal } from '../ui/LostDogModal';
 import { SpotModal } from '../ui/SpotModal';
 import { fetchWalkingRoute } from '../../services/directions';
 import { PoiMarker } from './PoiMarker';
+import { PoiCluster } from './PoiCluster';
 import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import type { LatLng } from '@shukajpes/shared';
@@ -51,6 +52,17 @@ const CLUSTER_BADGE_THRESHOLD = 6;
 // walking horizon at our zoom levels — anything further is a planning
 // concern, not a "is it nearby" concern.
 const MAP_RENDER_RADIUS_M = 2000;
+
+// Spot clustering — disk-overlap criterion. Each PoiMarker is a 36px
+// disc, so two pins "visually overlap" when their centres are within
+// ~36-40px of each other on screen. We translate that pixel threshold
+// to METERS at the current zoom + map-centre latitude so clustering
+// adapts naturally: aggressive at the locked min-zoom 16 (where the
+// pile-up problem lives) and barely-active when the user zooms in.
+const SPOT_OVERLAP_PX = 40;
+// Web Mercator: meters-per-pixel at zoom 0 / equator. Standard
+// constant from Google's tile spec.
+const MPP_EQUATOR_Z0 = 156543.03392;
 
 // Module-level flag so the "tap my logo" hint only fires once per
 // JS session — i.e., once per app open. PWA / browser reload resets
@@ -95,6 +107,15 @@ export default function MapViewWeb() {
   const [mapBounds, setMapBounds] = useState<{
     n: number; s: number; e: number; w: number;
   } | null>(null);
+  // Current zoom level + centre lat — used to translate the pixel
+  // overlap threshold into a geographic radius for spot clustering.
+  // Synced from the map in onIdle (fires after every pan/zoom).
+  const [mapZoom, setMapZoom] = useState<number>(balance.mapZoomDefault);
+  const [mapCenterLat, setMapCenterLat] = useState<number>(50.45);
+  // Which clusters the user has tapped to expand. Stored by cluster
+  // key (sorted item ids); cleared by the floating "collapse all" pill
+  // that appears at the top of the map while any cluster is open.
+  const [expandedSpotKeys, setExpandedSpotKeys] = useState<Set<string>>(() => new Set());
   const tokens = useGameStore((s) => s.tokens);
   const foodItems = useGameStore((s) => s.foodItems);
   const lostDogs = useGameStore((s) => s.lostDogs);
@@ -387,6 +408,76 @@ export default function MapViewWeb() {
     });
   }, [visibleLostDogs]);
 
+  // Spot clustering by category. Disk-overlap criterion: derive a
+  // meters-radius from a fixed pixel threshold so the clustering
+  // adapts naturally to zoom (aggressive at zoom 16, near-noop at
+  // zoom 18+). Singletons + the actively-selected spot always
+  // render as solo PoiMarkers; groups of 2+ collapse to a PoiCluster
+  // that the user can expand by tap (and re-stack via the floating
+  // collapse pill).
+  const spotClusters = useMemo(() => {
+    if (!spotsVisible && !selectedSpotId && !walkRouteMeta?.spotId) return [];
+    const renderSet = new Set<string>();
+    if (spotsVisible) {
+      for (const s of spots) {
+        if (
+          spotsCategoryFilter === 'all' ||
+          s.category === spotsCategoryFilter
+        ) {
+          renderSet.add(s.id);
+        }
+      }
+    }
+    if (selectedSpotId) renderSet.add(selectedSpotId);
+    if (walkRouteMeta?.spotId) renderSet.add(walkRouteMeta.spotId);
+    const live = spots.filter((s) => renderSet.has(s.id));
+    if (live.length === 0) return [];
+    const mPerPx =
+      (MPP_EQUATOR_Z0 * Math.cos((mapCenterLat * Math.PI) / 180)) /
+      Math.pow(2, mapZoom);
+    const radiusM = SPOT_OVERLAP_PX * mPerPx;
+    // Cluster within each category separately so a cafe + restaurant
+    // sitting on the same street don't get smushed into a generic
+    // "stack" — the user wants category-distinct stacks.
+    const byCat = new Map<string, typeof live>();
+    for (const s of live) {
+      const arr = byCat.get(s.category) ?? [];
+      arr.push(s);
+      byCat.set(s.category, arr);
+    }
+    const out: Array<{
+      key: string;
+      category: string;
+      center: { lat: number; lng: number };
+      items: typeof live;
+    }> = [];
+    for (const [cat, list] of byCat) {
+      const raw = clusterByDistance(
+        list.map((s) => ({ id: s.id, position: s.position })),
+        radiusM,
+      );
+      for (const c of raw) {
+        const ids = c.items.map((i) => i.id).sort();
+        const items = list.filter((s) => ids.includes(s.id));
+        out.push({
+          key: `${cat}:${ids.join('|')}`,
+          category: cat,
+          center: c.center,
+          items,
+        });
+      }
+    }
+    return out;
+  }, [
+    spots,
+    spotsVisible,
+    spotsCategoryFilter,
+    selectedSpotId,
+    walkRouteMeta?.spotId,
+    mapZoom,
+    mapCenterLat,
+  ]);
+
   // Each pet gets a deterministic display offset inside its own
   // searchZoneRadiusM. Posted location is landmark-level and the zone
   // radius is the parser's uncertainty; jitter picks a stable point in
@@ -570,6 +661,12 @@ export default function MapViewWeb() {
             e: ne.lng(),
             w: sw.lng(),
           });
+          // Same hook syncs zoom + centre lat for the spot-cluster
+          // pixel-to-meter conversion.
+          const z = mapRef.current?.getZoom();
+          if (typeof z === 'number') setMapZoom(z);
+          const c = mapRef.current?.getCenter();
+          if (c) setMapCenterLat(c.lat());
         }}
         onClick={() => {
           // Suppress when the click came right after a companion tap —
@@ -679,23 +776,18 @@ export default function MapViewWeb() {
             the modal's pin shows) and the walk-route destination (so
             the polyline always points at a visible marker) — they're
             the user's explicit focus. */}
-        {(() => {
-          const renderSet = new Set<string>();
-          if (spotsVisible) {
-            for (const s of spots) {
-              if (
-                spotsCategoryFilter === 'all' ||
-                s.category === spotsCategoryFilter
-              ) {
-                renderSet.add(s.id);
-              }
-            }
-          }
-          if (selectedSpotId) renderSet.add(selectedSpotId);
-          if (walkRouteMeta?.spotId) renderSet.add(walkRouteMeta.spotId);
-          return spots
-            .filter((s) => renderSet.has(s.id))
-            .map((s) => (
+        {spotClusters.flatMap((c) => {
+          // Singles + the actively-selected spot + the active walk
+          // destination always render expanded — collapsing the
+          // currently-focused pin would feel broken.
+          const expanded =
+            c.items.length === 1 ||
+            expandedSpotKeys.has(c.key) ||
+            c.items.some(
+              (s) => s.id === selectedSpotId || s.id === walkRouteMeta?.spotId,
+            );
+          if (expanded) {
+            return c.items.map((s) => (
               <PoiMarker
                 key={s.id}
                 position={s.position}
@@ -706,7 +798,24 @@ export default function MapViewWeb() {
                 onTap={() => setSelectedSpot(s.id === selectedSpotId ? null : s.id)}
               />
             ));
-        })()}
+          }
+          return [
+            <PoiCluster
+              key={c.key}
+              position={c.center}
+              category={c.category}
+              emoji={c.items[0]?.icon ?? '📍'}
+              count={c.items.length}
+              onTap={() =>
+                setExpandedSpotKeys((prev) => {
+                  const next = new Set(prev);
+                  next.add(c.key);
+                  return next;
+                })
+              }
+            />,
+          ];
+        })}
 
         {activeQuest ? (
           <>
@@ -845,6 +954,45 @@ export default function MapViewWeb() {
             style={{ width: 30, height: 30 }}
             resizeMode="contain"
           />
+        </div>
+      ) : null}
+
+      {/* Floating "collapse all" pill — visible only while at least
+          one spot cluster is expanded. Sits at the top-centre of the
+          map, just below the HUD pills, so the user has an obvious
+          re-stack affordance without each cluster needing its own
+          close button. */}
+      {expandedSpotKeys.size > 0 ? (
+        <div
+          onClick={() => setExpandedSpotKeys(new Set())}
+          role="button"
+          aria-label="collapse expanded spot clusters"
+          style={{
+            position: 'absolute',
+            top: 92,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: 25,
+            cursor: 'pointer',
+            background: 'rgba(255,255,255,0.92)',
+            backdropFilter: 'blur(14px) saturate(160%)',
+            WebkitBackdropFilter: 'blur(14px) saturate(160%)',
+            borderRadius: 18,
+            paddingLeft: 14,
+            paddingRight: 14,
+            height: 36,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 6,
+            fontFamily: 'system-ui',
+            fontSize: 13,
+            fontWeight: 700,
+            color: '#1a1a1a',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
+            userSelect: 'none',
+          }}
+        >
+          ↺ stack
         </div>
       ) : null}
 
