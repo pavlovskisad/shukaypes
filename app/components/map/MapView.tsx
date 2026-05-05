@@ -700,6 +700,7 @@ export default function MapViewWeb() {
                 key={s.id}
                 position={s.position}
                 emoji={s.icon ?? '📍'}
+                category={s.category}
                 name={s.name}
                 selected={s.id === selectedSpotId}
                 onTap={() => setSelectedSpot(s.id === selectedSpotId ? null : s.id)}

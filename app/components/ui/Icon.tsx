@@ -38,6 +38,7 @@ export type IconName =
   | 'bar'
   | 'pet_store'
   | 'vet'
+  | 'all'
   // Lost-pet badges + sightings
   | 'urgent'
   | 'warning'
@@ -64,6 +65,7 @@ const URL: Record<IconName, string> = {
   bar: '/icons/bar.svg',
   pet_store: '/icons/pet_store.svg',
   vet: '/icons/vet.svg',
+  all: '/icons/all.svg',
   urgent: '/icons/urgent.svg',
   warning: '/icons/warning.svg',
   eyes: '/icons/eyes.svg',
@@ -87,6 +89,22 @@ interface IconProps {
   // Optional opacity override — used by the spots-toggle pill that
   // greys the icon when the toggle is off.
   opacity?: number;
+}
+
+// Map a Google-Places-style spot category to its icon slot. The
+// category strings come from services/places.ts SpotCategory.
+// Returns null for any category we don't have a custom icon for —
+// caller can fall back to the spot's stored emoji.
+const CATEGORY_TO_ICON: Record<string, IconName> = {
+  cafe: 'cafe',
+  restaurant: 'restaurant',
+  bar: 'bar',
+  pet_store: 'pet_store',
+  veterinary_care: 'vet',
+};
+
+export function iconForCategory(category: string): IconName | null {
+  return CATEGORY_TO_ICON[category] ?? null;
 }
 
 export function Icon({ name, size, opacity }: IconProps) {

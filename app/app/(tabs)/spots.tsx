@@ -13,7 +13,7 @@ import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
 import type { Spot, SpotCategory } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { Icon, type IconName } from '../../components/ui/Icon';
+import { Icon, iconForCategory, type IconName } from '../../components/ui/Icon';
 
 const CATEGORY_LABEL: Record<string, string> = {
   cafe: 'cafe',
@@ -39,7 +39,7 @@ interface FilterOption {
 // radial menu all use the same glyph for each category. "all" is the
 // only synthetic chip and gets a neutral sparkle.
 const FILTERS: FilterOption[] = [
-  { value: 'all', label: 'all', icon: '✨' },
+  { value: 'all', label: 'all', iconName: 'all', icon: '✨' },
   { value: 'cafe', label: 'cafe', iconName: 'cafe', icon: '☕' },
   { value: 'restaurant', label: 'eat', iconName: 'restaurant', icon: '🍜' },
   { value: 'bar', label: 'drink', iconName: 'bar', icon: '🍹' },
@@ -196,7 +196,14 @@ export default function SpotsScreen() {
                 ]}
               >
                 <View style={styles.icon}>
-                  <Text style={styles.iconText}>{s.icon}</Text>
+                  {(() => {
+                    const slot = iconForCategory(s.category);
+                    return slot ? (
+                      <Icon name={slot} size={26} />
+                    ) : (
+                      <Text style={styles.iconText}>{s.icon}</Text>
+                    );
+                  })()}
                 </View>
                 <View style={styles.body}>
                   <Text style={styles.name} numberOfLines={1}>
