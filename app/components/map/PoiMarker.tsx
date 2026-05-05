@@ -26,7 +26,7 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -18, y: -36 })}
+      getPixelPositionOffset={() => ({ x: -22, y: -44 })}
     >
       <div
         role="button"
@@ -44,8 +44,8 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
       >
         <div
           style={{
-            width: 36,
-            height: 36,
+            width: 44,
+            height: 44,
             borderRadius: '50%',
             // No backdrop-filter — with 5-20 spots visible, each blur
             // pass was re-running on every map frame and was the main
@@ -55,13 +55,13 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 18,
+            fontSize: 22,
             boxShadow: selected
               ? '0 0 18px rgba(60,120,255,0.45), 0 3px 8px rgba(0,0,0,0.08)'
               : '0 0 10px rgba(60,120,255,0.22), 0 2px 6px rgba(0,0,0,0.05)',
           }}
         >
-          {slot ? <Icon name={slot} size={22} /> : emoji}
+          {slot ? <Icon name={slot} size={28} /> : emoji}
         </div>
         {selected ? (
           <>

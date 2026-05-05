@@ -30,7 +30,7 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
       mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -22, y: -22 })}
+      getPixelPositionOffset={() => ({ x: -27, y: -27 })}
     >
       <div
         role="button"
@@ -42,20 +42,20 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
         aria-label={`${count} ${category} nearby — tap to expand`}
         style={{
           position: 'relative',
-          width: 44,
-          height: 44,
-          borderRadius: 22,
+          width: 54,
+          height: 54,
+          borderRadius: 27,
           background: 'rgba(255,255,255,0.85)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          fontSize: 22,
+          fontSize: 24,
           boxShadow: '0 0 14px rgba(60,120,255,0.32), 0 3px 8px rgba(0,0,0,0.08)',
           cursor: 'pointer',
           userSelect: 'none',
         }}
       >
-        {slot ? <Icon name={slot} size={26} /> : emoji}
+        {slot ? <Icon name={slot} size={32} /> : emoji}
         {/* Count chip — top-right of the badge, blue so it reads as
             "this group has N" rather than as part of the icon. */}
         <div
