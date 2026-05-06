@@ -66,7 +66,7 @@ const SPOT_OVERLAP_PX = 48;
 // constant from Google's tile spec.
 const MPP_EQUATOR_Z0 = 156543.03392;
 
-// Module-level flag so the "tap my logo" hint only fires once per
+// Module-level flag so the greeting hint only fires once per
 // JS session — i.e., once per app open. PWA / browser reload resets
 // it; tab switches and re-focuses inside one session don't.
 let hasGreetedThisSession = false;
@@ -124,6 +124,7 @@ export default function MapViewWeb() {
   const selectedDogId = useGameStore((s) => s.selectedDogId);
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
+  const sniffMode = useGameStore((s) => s.sniffMode);
   const spotsCategoryFilter = useGameStore((s) => s.spotsCategoryFilter);
   const selectedSpotId = useGameStore((s) => s.selectedSpotId);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
@@ -182,7 +183,7 @@ export default function MapViewWeb() {
     useCallback(() => {
       if (!hasGreetedThisSession) {
         hasGreetedThisSession = true;
-        showBubble('woof! tap my logo top-left to learn what\'s what 🐾', 5500);
+        showBubble("woof! tap me to learn what's what 🐾", 5500);
         return;
       }
       const woofs = [
@@ -645,6 +646,9 @@ export default function MapViewWeb() {
   // sticks to the screen edge nearest to the companion. Tap recenters.
   // `mapBounds` is the latest snapshot from the map's `idle` event; the
   // edge position is computed against the current companion lat/lng.
+  // `topReserve` is 0 — chip anchors to the actual top edge of the
+  // screen via a per-edge transform so it isn't clipped, regardless
+  // of sniff mode (the HUD has been pushed down to make room).
   const offscreenIndicator = (() => {
     if (!mapBounds || !companionPos) return null;
     const { n, s, e, w } = mapBounds;
@@ -656,27 +660,30 @@ export default function MapViewWeb() {
     ) {
       return null;
     }
-    // Normalised position 0..1 across the map viewport. Linear is fine
-    // at our zooms; pole-distortion is a non-issue in Kyiv.
     const nx = (companionPos.lng - w) / (e - w);
     const ny = (n - companionPos.lat) / (n - s);
     const dx = nx - 0.5;
     const dy = ny - 0.5;
-    // Clamp the (cx + dx*k, cy + dy*k) ray to a box that *isn't*
-    // square: top reserve keeps the indicator below the HUD pills,
-    // bottom reserve keeps it above the dashboard tab bar.
-    const sideReserve = 0.05;
-    const topReserve = 0.15;
+    const sideReserve = 0.03;
+    const topReserve = 0;
     const bottomReserve = 0.14;
-    const xLimit = (0.5 - sideReserve) / Math.max(Math.abs(dx), 1e-6);
-    const yLimit =
-      dy < 0
-        ? (0.5 - topReserve) / Math.max(Math.abs(dy), 1e-6)
-        : (0.5 - bottomReserve) / Math.max(Math.abs(dy), 1e-6);
-    const k = Math.min(xLimit, yLimit);
-    const ex = 0.5 + dx * k;
-    const ey = 0.5 + dy * k;
-    return { left: `${ex * 100}%`, top: `${ey * 100}%` };
+    const xBound = dx > 0 ? 1 - sideReserve - 0.5 : 0.5 - sideReserve;
+    const yBound = dy > 0 ? 1 - bottomReserve - 0.5 : 0.5 - topReserve;
+    const tx = Math.abs(xBound / Math.max(Math.abs(dx), 1e-6));
+    const ty = Math.abs(yBound / Math.max(Math.abs(dy), 1e-6));
+    let edge: 'top' | 'right' | 'bottom' | 'left';
+    let leftPct: number;
+    let topPct: number;
+    if (tx < ty) {
+      edge = dx > 0 ? 'right' : 'left';
+      leftPct = edge === 'right' ? 1 - sideReserve : sideReserve;
+      topPct = 0.5 + dy * tx;
+    } else {
+      edge = dy > 0 ? 'bottom' : 'top';
+      leftPct = 0.5 + dx * ty;
+      topPct = edge === 'bottom' ? 1 - bottomReserve : topReserve;
+    }
+    return { left: `${leftPct * 100}%`, top: `${topPct * 100}%`, edge };
   })();
 
   const recenterOnCompanion = () => {
@@ -709,6 +716,11 @@ export default function MapViewWeb() {
   // count between the two render branches and trigger React's
   // "Rendered more hooks than during the previous render" crash.
   const offscreenDogIndicators = (() => {
+    // Edge chips are a sniff-mode-only feature visually, but we always
+    // compute them and render them with opacity/scale gated on
+    // `sniffMode` so the bubble-pop transition runs symmetrically on
+    // both enter and exit. Without always-mounted DOM nodes the
+    // out-transition has nothing to animate.
     if (!mapBounds) return [];
     const { n, s, e, w } = mapBounds;
     // Top has zero reserve now — HUD has been pushed down with extra
@@ -1141,7 +1153,9 @@ export default function MapViewWeb() {
       {/* Off-screen companion bookmark. Sticks to the viewport edge
           along the line from map center to the companion's position
           so the user can always see where they are even after panning
-          far away. Tap recenters the map. */}
+          far away. Tap recenters the map. Per-edge transform anchors
+          the chip's edge-side to the screen edge so dropping
+          topReserve to 0 doesn't clip half the chip. */}
       {offscreenIndicator ? (
         <div
           onClick={recenterOnCompanion}
@@ -1151,7 +1165,16 @@ export default function MapViewWeb() {
             position: 'absolute',
             left: offscreenIndicator.left,
             top: offscreenIndicator.top,
-            transform: 'translate(-50%, -50%)',
+            transform:
+              offscreenIndicator.edge === 'top'
+                ? 'translate(-50%, 0)'
+                : offscreenIndicator.edge === 'bottom'
+                  ? 'translate(-50%, -100%)'
+                  : offscreenIndicator.edge === 'left'
+                    ? 'translate(0, -50%)'
+                    : 'translate(-100%, -50%)',
+            transition:
+              'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
             zIndex: 25,
             cursor: 'pointer',
             background: '#ffffff',
@@ -1173,17 +1196,18 @@ export default function MapViewWeb() {
         </div>
       ) : null}
 
-      {/* Off-screen lost-pet bookmarks. One small chip per nearby pet
-          that's currently outside the viewport. The parent IIFE has
-          already grouped them by edge and applied a min-spacing pass
-          so they never stack — chips are an approximate location
-          clue but stay readable.
-
-          CSS transitions on `left` / `top` smooth the motion as the
-          user pans (380ms out-quint). Stable React keys per dog id
-          mean the same DOM element persists across renders, so the
-          transition runs against the new target instead of unmounting
-          and remounting. */}
+      {/* Off-screen lost-pet bookmarks (sniff mode only). Three nested
+          divs:
+            1. Outer — absolute position + edge-anchor transform +
+               smooth `left`/`top` transition while panning.
+            2. Pop-anim — runs the bubble-pop scale keyframe on mount
+               so chips bubble in when sniff mode flips on.
+            3. Disc-wrapper — sized to the chip; the actual disc
+               (with `overflow: hidden` for image cropping) lives
+               here as one child, the urgency-coloured distance
+               badge sits next to it as a SIBLING — i.e. NOT inside
+               the overflow-hidden disc, so the bottom-right badge
+               doesn't get cropped at the disc edge. */}
       {offscreenDogIndicators.map((d) => {
         const halo =
           d.urgency === 'urgent'
@@ -1203,13 +1227,7 @@ export default function MapViewWeb() {
                   glow: '0 0 8px rgba(160,160,160,0.3)',
                   badge: 'rgba(120,120,120,0.92)',
                 };
-        // Per-edge anchoring: instead of always centring on the
-        // computed point, anchor the side of the chip that touches
-        // the screen edge so the chip is fully visible inside the
-        // viewport with the small `*Reserve` value as the gap. Without
-        // this, dropping topReserve to 0 would put the chip's CENTRE
-        // at top:0 and clip half of it.
-        const transform =
+        const edgeTransform =
           d.edge === 'top'
             ? 'translate(-50%, 0)'
             : d.edge === 'bottom'
@@ -1227,7 +1245,7 @@ export default function MapViewWeb() {
               position: 'absolute',
               left: d.left,
               top: d.top,
-              transform,
+              transform: edgeTransform,
               transition:
                 'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
               zIndex: 24,
@@ -1240,41 +1258,53 @@ export default function MapViewWeb() {
                 position: 'relative',
                 width: 48,
                 height: 48,
-                borderRadius: '50%',
-                background: '#ffffff',
-                border: `1.5px solid ${halo.ring}`,
-                boxShadow: halo.glow,
-                overflow: 'hidden',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 24,
+                opacity: sniffMode ? 1 : 0,
+                transform: sniffMode ? 'scale(1)' : 'scale(0)',
+                transition:
+                  'opacity 240ms ease-out, transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                pointerEvents: sniffMode ? 'auto' : 'none',
               }}
             >
-              <span style={{ position: 'absolute' }}>{d.emoji}</span>
-              {d.photoUrl ? (
-                <img
-                  src={d.photoUrl}
-                  alt={d.name}
-                  draggable={false}
-                  referrerPolicy="no-referrer"
-                  loading="lazy"
-                  style={{
-                    position: 'relative',
-                    width: '100%',
-                    height: '100%',
-                    objectFit: 'cover',
-                    transform: 'scale(1.2)',
-                  }}
-                  onError={(e) => {
-                    (e.currentTarget as HTMLImageElement).style.display = 'none';
-                  }}
-                />
-              ) : null}
+              <div
+                style={{
+                  position: 'absolute',
+                  inset: 0,
+                  borderRadius: '50%',
+                  background: '#ffffff',
+                  border: `1.5px solid ${halo.ring}`,
+                  boxShadow: halo.glow,
+                  overflow: 'hidden',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: 24,
+                }}
+              >
+                <span style={{ position: 'absolute' }}>{d.emoji}</span>
+                {d.photoUrl ? (
+                  <img
+                    src={d.photoUrl}
+                    alt={d.name}
+                    draggable={false}
+                    referrerPolicy="no-referrer"
+                    loading="lazy"
+                    style={{
+                      position: 'relative',
+                      width: '100%',
+                      height: '100%',
+                      objectFit: 'cover',
+                      transform: 'scale(1.2)',
+                    }}
+                    onError={(e) => {
+                      (e.currentTarget as HTMLImageElement).style.display = 'none';
+                    }}
+                  />
+                ) : null}
+              </div>
               {/* Distance badge — same shape language as the spot
-                  cluster count chip (top-right, white text on a
-                  rounded pill) but coloured by urgency so it reads
-                  as "this far to a {red|amber|grey} pet" at a glance. */}
+                  cluster count chip but urgency-coloured. Sibling of
+                  the disc so the negative offset isn't clipped by
+                  `overflow: hidden`. */}
               <div
                 style={{
                   position: 'absolute',

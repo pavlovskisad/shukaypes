@@ -42,7 +42,9 @@ export type IconName =
   // Lost-pet badges + sightings
   | 'urgent'
   | 'warning'
-  | 'eyes';
+  | 'eyes'
+  // About-us / help
+  | 'question';
 
 const URL: Record<IconName, string> = {
   paws: '/icons/paws.svg',
@@ -69,6 +71,7 @@ const URL: Record<IconName, string> = {
   urgent: '/icons/urgent.svg',
   warning: '/icons/warning.svg',
   eyes: '/icons/eyes.svg',
+  question: '/icons/question.svg',
 };
 
 // Per-icon size compensation. Most icons fill their tight viewBox

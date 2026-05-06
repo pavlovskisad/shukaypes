@@ -287,6 +287,13 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           flash('no walkers around yet 👥');
           return;
         }
+        case 'about': {
+          // Promoted from the logo tap (which now toggles sniff mode).
+          // Companion → ? → about sheet.
+          useGameStore.getState().setMenuOpen(false);
+          useGameStore.getState().setAboutOpen(true);
+          return;
+        }
       }
 
       // Walk leaves: walk:<shape>:<distance>. Pulls candidates from
