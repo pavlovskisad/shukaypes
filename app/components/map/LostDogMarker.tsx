@@ -23,16 +23,13 @@ const URGENCY_HALO: Record<UrgencyLevel, { glow: string; ring: string }> = {
   },
 };
 
-// Wander amplitude in pixels — small enough to read as "ambient drift"
-// rather than "pet is running around".
-const WANDER_PX = 35;
-// Long transition + longer retarget interval = turtle-pace drift. Each
-// step takes 30s to complete; retarget fires every 25s so the next leg
-// starts during the tail of the previous one — motion is continuous but
-// glacial. ease-in-out softens direction reversals so they don't read
-// as jerks.
-const RETARGET_MS = 25_000;
-const TRANSITION_MS = 30_000;
+// Wander was removed — pins now sit STATIC at their displayPositions
+// (zone-jittered by dog id). The earlier turtle-pace drift offset the
+// pin from its actual lat/lng, so tapping the off-screen sniff-mode
+// chip would pan to a near-empty spot beside the visible pin. Static
+// pins make tap-to-pet land on the pet, and the zone jitter still
+// keeps multiple pets from overlapping at the same landmark.
+//
 // SOS beep: a soft two-ring ripple emanates from the pet on its own
 // cadence. Each pet gets a unique period inside [BEEP_PERIOD_MIN_MS,
 // BEEP_PERIOD_MAX_MS] at mount + a random initial delay, so the map as
@@ -73,25 +70,9 @@ interface LostDogMarkerProps {
 // Beep: a translucent ring expands out of the pin every ~22s. Per-pet
 // random phase so they don't synchronize across the map.
 function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, active = true }: LostDogMarkerProps) {
-  const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [beeping, setBeeping] = useState(false);
   const beepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const halo = URGENCY_HALO[urgency];
-
-  // Continuous wander — setInterval means exactly one pending timer per
-  // marker regardless of mount/unmount timing. Cleared synchronously on
-  // unmount, AND when `active` flips false (marker scrolled off-screen)
-  // so off-screen markers stop costing re-renders.
-  useEffect(() => {
-    if (!active) return;
-    const id = setInterval(() => {
-      setOffset({
-        x: (Math.random() * 2 - 1) * WANDER_PX,
-        y: (Math.random() * 2 - 1) * WANDER_PX,
-      });
-    }, RETARGET_MS);
-    return () => clearInterval(id);
-  }, [active]);
 
   // SOS beep. Each pet rolls its own period at mount (inside the
   // min/max band above) so the map doesn't breathe in sync. A random
@@ -141,8 +122,6 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
           alignItems: 'center',
           cursor: 'pointer',
           userSelect: 'none',
-          transform: `translate(${offset.x}px, ${offset.y}px)`,
-          transition: `transform ${TRANSITION_MS}ms ease-in-out`,
         }}
       >
         {/* SOS pulse — two soft rings staggered so they read as a wavy

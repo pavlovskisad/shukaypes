@@ -775,13 +775,12 @@ export default function MapViewWeb() {
     const { n, s, e, w } = mapBounds;
     // Reserves carve a safe rectangle the chips can pin to. With the
     // PWA meta switched to `black-translucent`, the map (and chips)
-    // extend under the iOS status bar — `topReserve` only needs to
-    // clear the status-bar height itself, not the HUD (chips sit
-    // alongside / above the HUD logo, which only occupies the left
-    // corner). Bottom reserve accounts for the dashboard tab bar
-    // PLUS the bottom-right distance badge that overhangs each chip.
+    // extend all the way under the iOS status bar — chips can hug the
+    // actual top edge same as the companion off-screen indicator.
+    // Bottom reserve clears the dashboard tab bar PLUS the bottom-
+    // right distance badge that overhangs each chip.
     const sideReserve = 0.03;
-    const topReserve = 0.06;
+    const topReserve = 0;
     const bottomReserve = 0.13;
     // Chip half-extent in viewport %, used to align side chip BOTTOMS
     // with the bottom-edge chip's bottom. ~4% covers the new 54px
@@ -839,7 +838,13 @@ export default function MapViewWeb() {
         urgency: d.urgency,
         name: d.name,
         distanceM: distanceMeters(userPos, p),
-        target: p,
+        // Pan target = the visual pin position (zone-jittered), not
+        // the raw lastSeen coord. The on-map LostDogMarker renders at
+        // `displayPositions.get(d.id) ?? d.lastSeen.position`, so
+        // tapping the chip should land the user where the pin
+        // actually is — otherwise (with the wander offset removed)
+        // they'd pan to a near-empty spot offset from the pin.
+        target: displayPositions.get(d.id) ?? p,
         edge,
         along,
         crossPct,
@@ -1070,11 +1075,17 @@ export default function MapViewWeb() {
             key={t.id}
             position={t.position}
             onTap={tokenTapHandlers.get(t.id)!}
+            inverted={sniffMode}
           />
         ))}
 
         {visibleFood.map((f) => (
-          <FoodMarker key={f.id} position={f.position} onTap={foodTapHandlers.get(f.id)!} />
+          <FoodMarker
+            key={f.id}
+            position={f.position}
+            onTap={foodTapHandlers.get(f.id)!}
+            inverted={sniffMode}
+          />
         ))}
 
         {/* Spots layer. Toggle off hides the ambient field; the
