@@ -15,18 +15,21 @@ const R = 6371000;
 //
 // Tuple is [lat, lng].
 const RIVER_POLYGON: ReadonlyArray<readonly [number, number]> = [
+  // West bank pulled west — earlier pass left a strip between this
+  // edge and the actual Podil/Petrivka bank where jitter offsets
+  // were landing in real water without getting snapped.
   [50.620, 30.510],
   [50.580, 30.500],
   [50.555, 30.500],
-  [50.530, 30.515],
-  [50.510, 30.515],
-  [50.495, 30.520],
-  [50.480, 30.535],
-  [50.470, 30.540],
-  [50.460, 30.545],
-  [50.450, 30.555],
-  [50.440, 30.565],
-  [50.430, 30.580],
+  [50.530, 30.510],
+  [50.510, 30.510],
+  [50.495, 30.515],
+  [50.480, 30.520],
+  [50.470, 30.525],
+  [50.460, 30.530],
+  [50.450, 30.540],
+  [50.440, 30.555],
+  [50.430, 30.575],
   [50.420, 30.585],
   [50.405, 30.595],
   [50.385, 30.610],
