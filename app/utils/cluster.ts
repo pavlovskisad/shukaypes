@@ -63,15 +63,34 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
-// Approximate Dnipro main channel through central Kyiv. Restored
-// the original 30.555 – 30.620 east edge after the user reported
-// pets STILL swimming with the narrower 30.610: the original wider
-// bound was the version that demonstrably worked. Trade-off is the
-// same — false-positive snaps for the very western edge of
-// Rusanivka / Hidropark / Pozniaky strip — but pets there are rare
-// enough to accept versus visibly-swimming pets in the channel.
-const RIVER_WEST_EDGE = 30.545;
-const RIVER_EAST_EDGE = 30.620;
+// Approximate Dnipro main channel through Kyiv as a stack of lat-banded
+// lng rects. The river both bends and changes width as it flows from
+// Vyshhorod down to Osokorky bay, so a single rect missed coords in
+// the bands above and below central Kyiv. Hand-traced from satellite —
+// rough but covers the whole pilot envelope; a real polygon is
+// out-of-scope for now.
+//
+// Each band: [latMin, latMax, lngWestEdge, lngEastEdge].
+const RIVER_BANDS: ReadonlyArray<readonly [number, number, number, number]> = [
+  // Vyshhorod / Kyiv Sea exit
+  [50.55, 51.0, 30.4, 30.55],
+  // Obolon waterfront — narrower channel, slightly westward
+  [50.5, 50.55, 30.5, 30.57],
+  // Central Kyiv (Podil → Hidropark → Trukhaniv) — widest, includes
+  // the east channel around the island
+  [50.45, 50.5, 30.545, 30.62],
+  // Pechersk → Vydubychi
+  [50.4, 50.45, 30.575, 30.645],
+  // Osokorky / Bortnychi bay
+  [49.9, 50.4, 30.6, 30.7],
+];
+
+function bandsFor(lat: number): readonly [number, number] | null {
+  for (const [latMin, latMax, west, east] of RIVER_BANDS) {
+    if (lat >= latMin && lat < latMax) return [west, east];
+  }
+  return null;
+}
 
 // Snap a coord to the closer river bank if it falls inside the
 // Dnipro main channel. Used on the pet's CENTER (raw lastSeen.position)
@@ -81,31 +100,25 @@ const RIVER_EAST_EDGE = 30.620;
 // Snap-then-jitter keeps the whole zone on land; the jitter result
 // still gets a final `avoidWater` check as a belt-and-braces.
 function snapToLandIfInRiver(pos: LatLng): LatLng {
-  if (pos.lng <= RIVER_WEST_EDGE || pos.lng >= RIVER_EAST_EDGE) return pos;
-  const midRiver = (RIVER_WEST_EDGE + RIVER_EAST_EDGE) / 2;
-  return {
-    ...pos,
-    lng: pos.lng < midRiver ? RIVER_WEST_EDGE : RIVER_EAST_EDGE,
-  };
+  const band = bandsFor(pos.lat);
+  if (!band) return pos;
+  const [west, east] = band;
+  if (pos.lng <= west || pos.lng >= east) return pos;
+  const mid = (west + east) / 2;
+  return { ...pos, lng: pos.lng < mid ? west : east };
 }
 
 function avoidWater(_center: LatLng, jittered: LatLng): LatLng {
-  if (jittered.lng <= RIVER_WEST_EDGE || jittered.lng >= RIVER_EAST_EDGE) {
-    return jittered;
-  }
-  // Jittered into the main channel. Snap to whichever bank the
-  // jittered point is closer to — using the jittered position's
-  // own lng (not center.lng). Earlier version checked center.lng,
-  // which broke when the pet's reported coord was itself in the
-  // river (OLX postings of "найшов на Дніпрі" with imprecise
-  // mid-river coords): center mid-river → west-bank decision for
-  // every pet → all river-coord pets piled on the west bank.
-  // Closest-bank-wins gives sensible bilateral spread.
-  const midRiver = (RIVER_WEST_EDGE + RIVER_EAST_EDGE) / 2;
-  return {
-    ...jittered,
-    lng: jittered.lng < midRiver ? RIVER_WEST_EDGE : RIVER_EAST_EDGE,
-  };
+  const band = bandsFor(jittered.lat);
+  if (!band) return jittered;
+  const [west, east] = band;
+  if (jittered.lng <= west || jittered.lng >= east) return jittered;
+  // Jittered into the main channel for this latitude band. Snap to the
+  // closer bank — using jittered.lng (not center.lng) so river-coord
+  // pets get sensible bilateral spread instead of all collapsing to
+  // one bank.
+  const mid = (west + east) / 2;
+  return { ...jittered, lng: jittered.lng < mid ? west : east };
 }
 
 // Deterministic pseudo-random offset inside a circle of `radiusM` meters
