@@ -5,39 +5,123 @@ export interface LatLng {
 
 const R = 6371000;
 
-// Approximate Dnipro main channel as a stack of lat-banded lng rects.
-// Mirrors the client's avoidWater() in app/utils/cluster.ts; needs to
-// stay in sync — both bones (around parks like Hidropark on
-// Trukhaniv island) and paws (scattered around the user) were
-// landing in water with the previous single narrow rect that didn't
-// follow the river's bend + width changes.
+// Hand-traced polygon of the Dnipro through the Kyiv pilot area.
+// Mirrors the client's RIVER_POLYGON in app/utils/cluster.ts — needs
+// to stay in sync. Lat-banded rects (the previous approach) couldn't
+// follow the river's bend without leaving wedge-shaped gaps where the
+// bands stepped, so the client's pet markers kept rendering in water
+// at the seams. Polygon traces both banks; islands (Trukhaniv,
+// Hidropark) are intentionally inside the snappable zone.
 //
-// Each band: [latMin, latMax, lngWestEdge, lngEastEdge].
-const RIVER_BANDS: ReadonlyArray<readonly [number, number, number, number]> = [
-  [50.55, 51.0, 30.4, 30.55],     // Vyshhorod / Kyiv Sea exit
-  [50.5, 50.55, 30.5, 30.57],     // Obolon waterfront
-  [50.45, 50.5, 30.545, 30.62],   // Central Kyiv (Podil / Hidropark / Trukhaniv)
-  [50.4, 50.45, 30.575, 30.645],  // Pechersk → Vydubychi
-  [49.9, 50.4, 30.6, 30.7],       // Osokorky / Bortnychi bay
+// Tuple is [lat, lng].
+const RIVER_POLYGON: ReadonlyArray<readonly [number, number]> = [
+  [50.620, 30.510],
+  [50.580, 30.500],
+  [50.555, 30.500],
+  [50.530, 30.515],
+  [50.510, 30.515],
+  [50.495, 30.520],
+  [50.480, 30.535],
+  [50.470, 30.540],
+  [50.460, 30.545],
+  [50.450, 30.555],
+  [50.440, 30.565],
+  [50.430, 30.580],
+  [50.420, 30.585],
+  [50.405, 30.595],
+  [50.385, 30.610],
+  [50.360, 30.625],
+  [50.290, 30.645],
+  [50.290, 30.700],
+  [50.360, 30.690],
+  [50.385, 30.665],
+  [50.405, 30.660],
+  [50.420, 30.640],
+  [50.435, 30.630],
+  [50.450, 30.625],
+  [50.465, 30.620],
+  [50.480, 30.605],
+  [50.495, 30.590],
+  [50.510, 30.585],
+  [50.530, 30.585],
+  [50.555, 30.575],
+  [50.580, 30.555],
+  [50.620, 30.540],
 ];
 
-function bandsFor(lat: number): readonly [number, number] | null {
-  for (const [latMin, latMax, west, east] of RIVER_BANDS) {
-    if (lat >= latMin && lat < latMax) return [west, east];
+const SNAP_OFFSET_DEG = 0.0008;
+
+function pointInRiverPolygon(lat: number, lng: number): boolean {
+  let inside = false;
+  const n = RIVER_POLYGON.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const [yi, xi] = RIVER_POLYGON[i] as readonly [number, number];
+    const [yj, xj] = RIVER_POLYGON[j] as readonly [number, number];
+    const intersects =
+      yi > lat !== yj > lat &&
+      lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
   }
-  return null;
+  return inside;
+}
+
+function projectOntoSegment(
+  pLat: number,
+  pLng: number,
+  aLat: number,
+  aLng: number,
+  bLat: number,
+  bLng: number,
+): readonly [number, number] {
+  const dLat = bLat - aLat;
+  const dLng = bLng - aLng;
+  const lenSq = dLat * dLat + dLng * dLng;
+  if (lenSq === 0) return [aLat, aLng];
+  let t = ((pLat - aLat) * dLat + (pLng - aLng) * dLng) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return [aLat + t * dLat, aLng + t * dLng];
+}
+
+function nearestEdgeProjection(lat: number, lng: number): readonly [number, number] {
+  const first = RIVER_POLYGON[0] as readonly [number, number];
+  let bestLat = first[0];
+  let bestLng = first[1];
+  let bestDistSq = Infinity;
+  const n = RIVER_POLYGON.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const [yi, xi] = RIVER_POLYGON[i] as readonly [number, number];
+    const [yj, xj] = RIVER_POLYGON[j] as readonly [number, number];
+    const [pLat, pLng] = projectOntoSegment(lat, lng, yj, xj, yi, xi);
+    const dLat = pLat - lat;
+    const dLng = pLng - lng;
+    const d = dLat * dLat + dLng * dLng;
+    if (d < bestDistSq) {
+      bestDistSq = d;
+      bestLat = pLat;
+      bestLng = pLng;
+    }
+  }
+  return [bestLat, bestLng];
+}
+
+// If pos is inside the river polygon, project it to the nearest bank
+// and push slightly farther into land. Exported so the listing
+// pipeline can clean LLM-emitted river coords before they're stored.
+export function snapToLandIfInRiver(pos: LatLng): LatLng {
+  if (!pointInRiverPolygon(pos.lat, pos.lng)) return pos;
+  const [edgeLat, edgeLng] = nearestEdgeProjection(pos.lat, pos.lng);
+  const dLat = edgeLat - pos.lat;
+  const dLng = edgeLng - pos.lng;
+  const len = Math.hypot(dLat, dLng);
+  if (len === 0) return { lat: edgeLat, lng: edgeLng };
+  return {
+    lat: edgeLat + (dLat / len) * SNAP_OFFSET_DEG,
+    lng: edgeLng + (dLng / len) * SNAP_OFFSET_DEG,
+  };
 }
 
 function avoidWater(_center: LatLng, sampled: LatLng): LatLng {
-  const band = bandsFor(sampled.lat);
-  if (!band) return sampled;
-  const [west, east] = band;
-  if (sampled.lng <= west || sampled.lng >= east) return sampled;
-  const mid = (west + east) / 2;
-  // Snap to closer bank using the SAMPLED point's own lng — same fix
-  // as the client (center-based snap collapsed all river-coord pets
-  // onto one bank when the originating center was itself in water).
-  return { ...sampled, lng: sampled.lng < mid ? west : east };
+  return snapToLandIfInRiver(sampled);
 }
 
 export function distanceMeters(a: LatLng, b: LatLng): number {
