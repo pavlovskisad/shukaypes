@@ -48,6 +48,11 @@ interface LostDogMarkerProps {
   urgency: UrgencyLevel;
   photoUrl?: string | null;
   onTap: () => void;
+  // Sniff mode flips the name label colour from black-on-white-shadow
+  // to white-on-black-shadow so it stays legible against the dark
+  // map style. Other marker pieces (the photo disc, the urgency glow)
+  // already read fine on dark.
+  inverted?: boolean;
   // True when the marker's underlying lat/lng is inside the current
   // viewport. False when it's mounted but off-screen (still in the
   // 2km render radius). Off-screen markers skip their wander +
@@ -59,6 +64,11 @@ interface LostDogMarkerProps {
   active?: boolean;
 }
 
+const NAME_COLOUR_DAY = '#1a1a1a';
+const NAME_SHADOW_DAY = '0 1px 4px rgba(255,255,255,0.95)';
+const NAME_COLOUR_NIGHT = '#f5f5f5';
+const NAME_SHADOW_NIGHT = '0 1px 4px rgba(0,0,0,0.95)';
+
 // Dog pin — white circle with emoji, urgency-colored glow, handwritten name
 // label below. Memoized because ~20 of these render on the map.
 //
@@ -69,7 +79,7 @@ interface LostDogMarkerProps {
 //
 // Beep: a translucent ring expands out of the pin every ~22s. Per-pet
 // random phase so they don't synchronize across the map.
-function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, active = true }: LostDogMarkerProps) {
+function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, active = true, inverted = false }: LostDogMarkerProps) {
   const [beeping, setBeeping] = useState(false);
   const beepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const halo = URGENCY_HALO[urgency];
@@ -217,8 +227,8 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
             fontFamily: SYSTEM_FONT,
             fontSize: 16,
             fontWeight: 700,
-            color: '#1a1a1a',
-            textShadow: '0 1px 4px rgba(255,255,255,0.95)',
+            color: inverted ? NAME_COLOUR_NIGHT : NAME_COLOUR_DAY,
+            textShadow: inverted ? NAME_SHADOW_NIGHT : NAME_SHADOW_DAY,
             whiteSpace: 'nowrap',
           }}
         >
