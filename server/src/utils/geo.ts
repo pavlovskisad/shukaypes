@@ -5,23 +5,39 @@ export interface LatLng {
 
 const R = 6371000;
 
-// Rough Dnieper main channel through Kyiv. Mirrors the client's
-// avoidWater() in app/utils/cluster.ts. Anything sampled inside this
-// longitude band gets reflected to whichever bank the originating
-// center is closer to. Coarser than a real water polygon but enough
-// that paws + bones stop landing on water.
-const RIVER_WEST_EDGE = 30.555;
-const RIVER_EAST_EDGE = 30.598;
+// Approximate Dnipro main channel as a stack of lat-banded lng rects.
+// Mirrors the client's avoidWater() in app/utils/cluster.ts; needs to
+// stay in sync — both bones (around parks like Hidropark on
+// Trukhaniv island) and paws (scattered around the user) were
+// landing in water with the previous single narrow rect that didn't
+// follow the river's bend + width changes.
+//
+// Each band: [latMin, latMax, lngWestEdge, lngEastEdge].
+const RIVER_BANDS: ReadonlyArray<readonly [number, number, number, number]> = [
+  [50.55, 51.0, 30.4, 30.55],     // Vyshhorod / Kyiv Sea exit
+  [50.5, 50.55, 30.5, 30.57],     // Obolon waterfront
+  [50.45, 50.5, 30.545, 30.62],   // Central Kyiv (Podil / Hidropark / Trukhaniv)
+  [50.4, 50.45, 30.575, 30.645],  // Pechersk → Vydubychi
+  [49.9, 50.4, 30.6, 30.7],       // Osokorky / Bortnychi bay
+];
 
-function avoidWater(center: LatLng, sampled: LatLng): LatLng {
-  if (sampled.lng <= RIVER_WEST_EDGE || sampled.lng >= RIVER_EAST_EDGE) {
-    return sampled;
+function bandsFor(lat: number): readonly [number, number] | null {
+  for (const [latMin, latMax, west, east] of RIVER_BANDS) {
+    if (lat >= latMin && lat < latMax) return [west, east];
   }
-  const midRiver = (RIVER_WEST_EDGE + RIVER_EAST_EDGE) / 2;
-  return {
-    ...sampled,
-    lng: center.lng < midRiver ? RIVER_WEST_EDGE : RIVER_EAST_EDGE,
-  };
+  return null;
+}
+
+function avoidWater(_center: LatLng, sampled: LatLng): LatLng {
+  const band = bandsFor(sampled.lat);
+  if (!band) return sampled;
+  const [west, east] = band;
+  if (sampled.lng <= west || sampled.lng >= east) return sampled;
+  const mid = (west + east) / 2;
+  // Snap to closer bank using the SAMPLED point's own lng — same fix
+  // as the client (center-based snap collapsed all river-coord pets
+  // onto one bank when the originating center was itself in water).
+  return { ...sampled, lng: sampled.lng < mid ? west : east };
 }
 
 export function distanceMeters(a: LatLng, b: LatLng): number {
