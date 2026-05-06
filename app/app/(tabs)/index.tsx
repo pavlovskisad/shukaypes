@@ -1,14 +1,12 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { View, Image, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from '../../components/map';
 import { StatusBar } from '../../components/ui/StatusBar';
 import { QuestPill } from '../../components/ui/QuestPill';
 import { AboutModal } from '../../components/ui/AboutModal';
 import { useGameStore } from '../../stores/gameStore';
-import logoSquare from '../../assets/logo-square.png';
-import logoSquareInverse from '../../assets/logo-square-inverse.png';
 
 // Logo is the brand anchor in the top-left. Prototype has it roughly
 // pill-height; matching that so it reads as a peer of the status pill
@@ -92,49 +90,28 @@ export default function MapScreen() {
             }
             hitSlop={8}
           >
-            {/* Logo. Sniff mode flips the colour scheme — the dark
-                map provides the bg behind the logo now (no black
-                pill needed). Cross-fade between the regular asset
-                and the pre-inverted asset. RN-Web's <Image> renders
-                as a div with background-image; iOS Safari was
-                inconsistent about applying CSS `filter: invert(1)`
-                to that, hence shipping the second asset for
-                reliability. */}
+            {/* Logo as a plain <div> with backgroundImage —
+                same pattern as the paws / bones markers, where
+                CSS `filter: invert(1)` reliably flips the black
+                ink to white in sniff mode. The previous RN-Web
+                <Image> route had the filter ignored by iOS
+                Safari (Image renders via a slightly different
+                wrapper that didn't pass the filter through). The
+                logo PNG was traced to SVG (potrace) so it scales
+                cleanly and `backgroundImage: url(/icons/logo.svg)`
+                works the same way. */}
             <div
               style={{
-                position: 'relative',
                 width: HUD_ICON_SIZE,
                 height: HUD_ICON_SIZE,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
+                backgroundImage: 'url(/icons/logo.svg)',
+                backgroundRepeat: 'no-repeat',
+                backgroundSize: 'contain',
+                backgroundPosition: 'center',
+                filter: sniffMode ? 'invert(1)' : 'none',
+                transition: 'filter 220ms ease-out',
               }}
-            >
-              <Image
-                source={logoSquare}
-                style={[
-                  styles.logo,
-                  styles.logoStacked,
-                  {
-                    opacity: sniffMode ? 0 : 1,
-                    transition: 'opacity 220ms ease-out',
-                  } as any,
-                ]}
-                resizeMode="contain"
-              />
-              <Image
-                source={logoSquareInverse}
-                style={[
-                  styles.logo,
-                  styles.logoStacked,
-                  {
-                    opacity: sniffMode ? 1 : 0,
-                    transition: 'opacity 220ms ease-out',
-                  } as any,
-                ]}
-                resizeMode="contain"
-              />
-            </div>
+            />
           </Pressable>
           {/* StatusBar bubbles out in sniff mode. Anchor the scale
               transform to the right edge so it collapses toward the
@@ -204,15 +181,6 @@ const styles = StyleSheet.create({
     // header elements sit comfortably under the OS status bar without
     // crowding it.
     paddingTop: 22,
-  },
-  logo: {
-    width: HUD_ICON_SIZE,
-    height: HUD_ICON_SIZE,
-  },
-  logoStacked: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
   },
   questRow: {
     flexDirection: 'row',
