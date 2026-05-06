@@ -4,7 +4,17 @@ import type { LatLng } from '@shukajpes/shared';
 
 // 🦴 bone with warm amber glow (demo line 353). Memoized — ~8 of these
 // render but the map re-renders on every pan so it's still worth it.
-function FoodMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => void }) {
+// `inverted` flips the silhouette to white when sniff mode + dark map
+// are active, so the bone doesn't disappear into the dark land fill.
+function FoodMarkerImpl({
+  position,
+  onTap,
+  inverted = false,
+}: {
+  position: LatLng;
+  onTap: () => void;
+  inverted?: boolean;
+}) {
   return (
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
@@ -23,6 +33,7 @@ function FoodMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => vo
           backgroundImage: 'url(/icons/bone.svg)',
           backgroundRepeat: 'no-repeat',
           backgroundSize: 'contain',
+          filter: inverted ? 'invert(1)' : undefined,
           cursor: 'pointer',
           userSelect: 'none',
         }}

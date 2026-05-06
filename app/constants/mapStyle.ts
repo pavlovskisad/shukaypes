@@ -16,21 +16,21 @@ export const greyscaleMapStyle = [
 // so the layer set doesn't shift when sniff toggles.
 export const darkMapStyle = [
   { stylers: [{ saturation: -100 }, { lightness: -85 }] },
-  // Road surface — light grey, high contrast against the deep
-  // charcoal land. Use explicit `color` instead of relative
-  // `lightness` so the result is predictable across base palettes.
-  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#bdbdbd' }] },
-  // Major arteries a touch brighter so they pop above neighbourhood
-  // streets — same hierarchy the day map shows.
+  // Road surface — slight bump above the deep-charcoal land so the
+  // network reads at zoom but doesn't shout. Three-tier hierarchy
+  // mirrors the day map; each step ~10 lightness brighter than the
+  // last. Subtler than the previous near-white pass that made the
+  // map feel less "dark".
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#5a5a5a' }] },
   {
     featureType: 'road.arterial',
     elementType: 'geometry',
-    stylers: [{ color: '#d4d4d4' }],
+    stylers: [{ color: '#6a6a6a' }],
   },
   {
     featureType: 'road.highway',
     elementType: 'geometry',
-    stylers: [{ color: '#e8e8e8' }],
+    stylers: [{ color: '#7a7a7a' }],
   },
   // Water bodies — slightly darker than the land so the Dnipro reads
   // as negative space.
