@@ -982,15 +982,23 @@ export default function MapViewWeb() {
         {clusters.flatMap((c) => {
           if (c.items.length === 1) {
             const d = c.items[0]!.dog;
+            const pos = displayPositions.get(d.id) ?? d.lastSeen.position;
+            const inView =
+              !mapBounds ||
+              (pos.lat <= mapBounds.n &&
+                pos.lat >= mapBounds.s &&
+                pos.lng <= mapBounds.e &&
+                pos.lng >= mapBounds.w);
             return [
               <LostDogMarker
                 key={d.id}
-                position={displayPositions.get(d.id) ?? d.lastSeen.position}
+                position={pos}
                 emoji={d.emoji}
                 name={d.name}
                 urgency={d.urgency}
                 photoUrl={d.photoUrl}
                 onTap={petTapHandlers.get(d.id)!}
+                active={inView}
               />,
             ];
           }
@@ -1001,15 +1009,23 @@ export default function MapViewWeb() {
           if (c.items.length < CLUSTER_BADGE_THRESHOLD) {
             return c.items.map((item) => {
               const d = item.dog;
+              const pos = displayPositions.get(d.id) ?? d.lastSeen.position;
+              const inView =
+                !mapBounds ||
+                (pos.lat <= mapBounds.n &&
+                  pos.lat >= mapBounds.s &&
+                  pos.lng <= mapBounds.e &&
+                  pos.lng >= mapBounds.w);
               return (
                 <LostDogMarker
                   key={d.id}
-                  position={displayPositions.get(d.id) ?? d.lastSeen.position}
+                  position={pos}
                   emoji={d.emoji}
                   name={d.name}
                   urgency={d.urgency}
                   photoUrl={d.photoUrl}
                   onTap={petTapHandlers.get(d.id)!}
+                  active={inView}
                 />
               );
             });
