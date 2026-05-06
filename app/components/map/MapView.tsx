@@ -723,12 +723,15 @@ export default function MapViewWeb() {
     // out-transition has nothing to animate.
     if (!mapBounds) return [];
     const { n, s, e, w } = mapBounds;
-    // Top has zero reserve — HUD is pushed down with extra paddingTop
-    // so the chips hug the actual top edge. Side + bottom keep modest
-    // reserves so chips clear the dashboard tab bar and the spot-
-    // restack pill on the right.
+    // Reserves carve a safe rectangle the chips can pin to. The map
+    // itself extends under the OS status bar (design — it's the bg
+    // there), but the HUD (logo + pills) still sits below the status
+    // bar via the SafeAreaView, so we leave a top reserve big enough
+    // for chips to stay below the HUD as before. Bottom reserve
+    // clears the dashboard tab bar; side reserves keep chips off the
+    // very edge so the spot-restack pill on the right stays usable.
     const sideReserve = 0.03;
-    const topReserve = 0;
+    const topReserve = 0.14;
     const bottomReserve = 0.10;
     // Approximate chip half-extent in viewport %. Used to pull the
     // along-axis spread bounds inward so a side chip's TOP / BOTTOM

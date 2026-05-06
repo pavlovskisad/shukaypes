@@ -64,11 +64,11 @@ export default function MapScreen() {
       <View style={styles.mapLayer}>
         <MapView />
       </View>
-      {/* No `edges={['top']}` — the user wants the map + HUD to render
-          all the way to the actual top edge of the screen (no safe-
-          area inset reserve at the top). The hudRow's paddingTop
-          handles spacing from the very top. */}
-      <SafeAreaView style={styles.hud} pointerEvents="box-none" edges={[]}>
+      {/* Map renders full-screen under the phone status bar (becomes
+          the bg for it — design thing). HUD itself still respects the
+          top safe-area inset via `edges={['top']}` so the logo / pills
+          aren't sitting under the OS status bar. */}
+      <SafeAreaView style={styles.hud} pointerEvents="box-none" edges={['top']}>
         <View style={styles.hudRow}>
           <Pressable
             onPress={toggleSniffMode}
@@ -181,7 +181,10 @@ const styles = StyleSheet.create({
     // so this is the only top-spacing the HUD has.
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingTop: 12,
+    // Middle ground between the original 32 and the brought-up 12 —
+    // header elements sit comfortably under the OS status bar without
+    // crowding it.
+    paddingTop: 22,
   },
   logo: {
     width: HUD_ICON_SIZE,
