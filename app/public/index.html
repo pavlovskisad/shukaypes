@@ -27,7 +27,13 @@
          behave like a standalone app (no browser chrome). -->
     <link rel="apple-touch-icon" href="/icon.png" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
-    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    <!-- `black-translucent` lets the page extend under the iOS status
+         bar instead of getting an inset reserve. The map renders all
+         the way to the top of the screen and acts as the bg for the
+         status bar text — design-only, the HUD itself still respects
+         the safe-area inset via SafeAreaView so logo + pills don't
+         sit under the bar. -->
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
     <meta name="apple-mobile-web-app-title" content="шукайпес" />
 
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->

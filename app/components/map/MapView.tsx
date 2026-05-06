@@ -125,6 +125,15 @@ export default function MapViewWeb() {
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
   const sniffMode = useGameStore((s) => s.sniffMode);
+  // Track whether the user has ever toggled sniff mode on. Used to
+  // suppress the chip-pop-out animation on initial mount — without
+  // this, a fresh app load with sniffMode = false would briefly show
+  // chips at scale(1) before the chip-pop-out keyframe shrinks them
+  // (since CSS animation `forwards` overrides static styles during
+  // playback). Once true, animations play freely on every toggle.
+  const sniffWasEverOnRef = useRef(false);
+  if (sniffMode) sniffWasEverOnRef.current = true;
+  const sniffEverOn = sniffWasEverOnRef.current;
   const spotsCategoryFilter = useGameStore((s) => s.spotsCategoryFilter);
   const selectedSpotId = useGameStore((s) => s.selectedSpotId);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
@@ -723,24 +732,20 @@ export default function MapViewWeb() {
     // out-transition has nothing to animate.
     if (!mapBounds) return [];
     const { n, s, e, w } = mapBounds;
-    // Reserves carve a safe rectangle the chips can pin to. The map
-    // itself extends under the OS status bar (design — it's the bg
-    // there), but the HUD (logo + pills) still sits below the status
-    // bar via the SafeAreaView, so we leave a top reserve big enough
-    // for chips to stay below the HUD as before. Bottom reserve
-    // clears the dashboard tab bar; side reserves keep chips off the
-    // very edge so the spot-restack pill on the right stays usable.
+    // Reserves carve a safe rectangle the chips can pin to. With the
+    // PWA meta switched to `black-translucent`, the map (and chips)
+    // extend under the iOS status bar — `topReserve` only needs to
+    // clear the status-bar height itself, not the HUD (chips sit
+    // alongside / above the HUD logo, which only occupies the left
+    // corner). Bottom reserve accounts for the dashboard tab bar
+    // PLUS the bottom-right distance badge that overhangs each chip.
     const sideReserve = 0.03;
-    const topReserve = 0.14;
-    const bottomReserve = 0.10;
-    // Approximate chip half-extent in viewport %. Used to pull the
-    // along-axis spread bounds inward so a side chip's TOP / BOTTOM
-    // visually aligns with the top / bottom edge chips' edges. Without
-    // this, side chips at the lowest along-position extend ~3% lower
-    // than bottom-edge chips because side chips anchor by their CENTRE
-    // and bottom chips anchor by their BOTTOM. ~3.5% works for the 48px
+    const topReserve = 0.06;
+    const bottomReserve = 0.13;
+    // Chip half-extent in viewport %, used to align side chip BOTTOMS
+    // with the bottom-edge chip's bottom. ~4% covers the new 54px
     // chip on a 600-900px tall phone viewport.
-    const chipHalfPct = 0.035;
+    const chipHalfPct = 0.04;
     // 12% along-axis spacing. With cap = 8 ("supersniff"), 7 × 12% =
     // 84% — fits within a single edge's safe range on a ~800px tall
     // phone, edges share the load when chips are spread around.
@@ -1228,8 +1233,12 @@ export default function MapViewWeb() {
                doesn't get cropped at the disc edge. */}
       {offscreenDogIndicators.map((d) => {
         // Mirror the on-screen LostDogMarker halo so chips visually
-        // echo the actual map pins — same warm urgency-coloured soft
-        // glow + drop shadow, no ring border.
+        // echo the actual map pins. Medium-urgency BADGE swapped from
+        // amber `rgba(217,160,48,...)` (read as gold + clashed with
+        // the photo edges) to a vibrant orange `rgba(255,140,0,...)`
+        // — same "warning" bucket but doesn't read as a gold rim.
+        // The disc's GLOW stays amber so the on-screen ↔ off-screen
+        // urgency cue still ties together.
         const halo =
           d.urgency === 'urgent'
             ? {
@@ -1239,7 +1248,7 @@ export default function MapViewWeb() {
             : d.urgency === 'medium'
               ? {
                   glow: '0 0 14px rgba(217,160,48,0.45), 0 2px 8px rgba(0,0,0,0.12)',
-                  badge: 'rgba(217,160,48,0.95)',
+                  badge: 'rgba(255,140,0,0.95)',
                 }
               : {
                   glow: '0 0 10px rgba(160,160,160,0.3), 0 2px 6px rgba(0,0,0,0.1)',
@@ -1274,12 +1283,21 @@ export default function MapViewWeb() {
             <div
               style={{
                 position: 'relative',
-                width: 48,
-                height: 48,
-                opacity: sniffMode ? 1 : 0,
-                transform: sniffMode ? 'scale(1)' : 'scale(0)',
-                transition:
-                  'opacity 240ms ease-out, transform 320ms cubic-bezier(0.34, 1.56, 0.64, 1)',
+                width: 54,
+                height: 54,
+                // Static defaults: invisible. CSS animation overrides
+                // these during playback (forwards retains end state).
+                // We only attach the animation prop once the user has
+                // actually toggled sniff at least once, so the initial
+                // mount doesn't flash the pop-out keyframe (which
+                // starts at scale 1 in the keyframe definition).
+                opacity: 0,
+                transform: 'scale(0)',
+                animation: sniffEverOn
+                  ? sniffMode
+                    ? 'chip-pop-in 360ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards'
+                    : 'chip-pop-out 280ms ease-in forwards'
+                  : 'none',
                 pointerEvents: sniffMode ? 'auto' : 'none',
               }}
             >
@@ -1299,7 +1317,7 @@ export default function MapViewWeb() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 24,
+                  fontSize: 27,
                 }}
               >
                 <span style={{ position: 'absolute' }}>{d.emoji}</span>
@@ -1354,6 +1372,33 @@ export default function MapViewWeb() {
           </div>
         );
       })}
+
+      {/* Bubble keyframes for the off-screen chips — pop-in overshoots
+          ~12% past target then settles, pop-out briefly grows ~10%
+          before collapsing. Applied via the `animation` prop on the
+          chip wrapper based on sniffMode. */}
+      <style>{`
+        @keyframes chip-pop-in {
+          0%   { transform: scale(0);    opacity: 0; }
+          70%  { transform: scale(1.12); opacity: 1; }
+          100% { transform: scale(1);    opacity: 1; }
+        }
+        @keyframes chip-pop-out {
+          0%   { transform: scale(1);    opacity: 1; }
+          25%  { transform: scale(1.10); opacity: 1; }
+          100% { transform: scale(0);    opacity: 0; }
+        }
+        @keyframes hud-pop-in {
+          0%   { transform: scale(0);    opacity: 0; }
+          70%  { transform: scale(1.08); opacity: 1; }
+          100% { transform: scale(1);    opacity: 1; }
+        }
+        @keyframes hud-pop-out {
+          0%   { transform: scale(1);    opacity: 1; }
+          25%  { transform: scale(1.10); opacity: 1; }
+          100% { transform: scale(0);    opacity: 0; }
+        }
+      `}</style>
 
       {/* Floating "stack all" affordance — visible only while at
           least one spot cluster is expanded. Pinned to the right

@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from 'react';
+import { useCallback, useEffect, useRef } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { View, Image, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,6 +30,13 @@ export default function MapScreen() {
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const sniffMode = useGameStore((s) => s.sniffMode);
   const toggleSniffMode = useGameStore((s) => s.toggleSniffMode);
+  // Track whether the user has ever toggled sniff. Suppresses the
+  // hud-pop-in animation on initial mount (sniffMode starts false; the
+  // HUD's "default visible" state shouldn't replay the pop-in keyframe
+  // every time the screen mounts).
+  const sniffWasEverOnRef = useRef(false);
+  if (sniffMode) sniffWasEverOnRef.current = true;
+  const sniffEverOn = sniffWasEverOnRef.current;
 
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('map');
@@ -130,10 +137,12 @@ export default function MapScreen() {
               edge of the screen rather than the centre. */}
           <div
             style={{
-              transition: `opacity 220ms ease-out, transform 280ms ${POP_IN}`,
-              opacity: sniffMode ? 0 : 1,
-              transform: sniffMode ? 'scale(0)' : 'scale(1)',
               transformOrigin: 'right center',
+              animation: sniffEverOn
+                ? sniffMode
+                  ? `hud-pop-out 320ms ease-in forwards`
+                  : `hud-pop-in 360ms ${POP_IN} forwards`
+                : 'none',
               pointerEvents: sniffMode ? 'none' : 'auto',
             }}
           >
@@ -147,9 +156,11 @@ export default function MapScreen() {
         >
           <div
             style={{
-              transition: `opacity 220ms ease-out, transform 280ms ${POP_IN}`,
-              opacity: sniffMode ? 0 : 1,
-              transform: sniffMode ? 'scale(0)' : 'scale(1)',
+              animation: sniffEverOn
+                ? sniffMode
+                  ? `hud-pop-out 320ms ease-in forwards`
+                  : `hud-pop-in 360ms ${POP_IN} forwards`
+                : 'none',
             }}
           >
             <QuestPill />
