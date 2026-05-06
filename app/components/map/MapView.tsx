@@ -202,6 +202,21 @@ export default function MapViewWeb() {
 
   useGameLoop(showBubble);
 
+  // Companion barks when sniff mode toggles. Skips the initial mount
+  // (sniffMode starts false; we don't want a "back to normal" line on
+  // every app load) via a ref guard.
+  const sniffBubbleInitRef = useRef(true);
+  useEffect(() => {
+    if (sniffBubbleInitRef.current) {
+      sniffBubbleInitRef.current = false;
+      return;
+    }
+    showBubble(
+      sniffMode ? '*deep sniff* supersniff mode 👀' : 'okay, back to walks 🐾',
+      3500,
+    );
+  }, [sniffMode, showBubble]);
+
   // Greet on every map-tab focus — pick a random "woof" so it doesn't
   // get repetitive. Same energy as Claude Code's *percolating* /
   // *combobulating* spinner words. The very first focus per session
@@ -1013,6 +1028,7 @@ export default function MapViewWeb() {
                 photoUrl={d.photoUrl}
                 onTap={petTapHandlers.get(d.id)!}
                 active={inView}
+                inverted={sniffMode}
               />,
             ];
           }
@@ -1040,6 +1056,7 @@ export default function MapViewWeb() {
                   photoUrl={d.photoUrl}
                   onTap={petTapHandlers.get(d.id)!}
                   active={inView}
+                  inverted={sniffMode}
                 />
               );
             });

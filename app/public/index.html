@@ -45,7 +45,23 @@
         margin: 0;
         padding: 0;
       }
-      /* These styles disable body scrolling if you are using <ScrollView> */
+      /* Paint the iOS home-indicator safe-area strip white BEFORE
+         React mounts and reads the inset via useSafeAreaInsets().
+         Without this, the strip flashes the body bg for one frame
+         on cold load + each PWA wake — visible as a small grey
+         blink under the dashboard pill. The dashboard's tab-bar
+         (rgba white) covers the strip in steady state, so the
+         pseudo-element only matters during pre-React paint. */
+      body::after {
+        content: '';
+        position: fixed;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        height: env(safe-area-inset-bottom, 0px);
+        background: #ffffff;
+        z-index: -1;
+      }
       body {
         overflow: hidden;
         /* Body bg stays white — that matches the dashboard tab bar

@@ -71,16 +71,22 @@ function hashSeed(seed: string): number {
 const RIVER_WEST_EDGE = 30.555;
 const RIVER_EAST_EDGE = 30.598;
 
-function avoidWater(center: LatLng, jittered: LatLng): LatLng {
+function avoidWater(_center: LatLng, jittered: LatLng): LatLng {
   if (jittered.lng <= RIVER_WEST_EDGE || jittered.lng >= RIVER_EAST_EDGE) {
     return jittered;
   }
-  // Jittered into the main channel. Reflect back to whichever bank is
-  // closer to the pet's posted coord.
+  // Jittered into the main channel. Snap to whichever bank the
+  // jittered point is closer to — using the jittered position's
+  // own lng (not center.lng). Earlier version checked center.lng,
+  // which broke when the pet's reported coord was itself in the
+  // river (OLX postings of "найшов на Дніпрі" with imprecise
+  // mid-river coords): center mid-river → west-bank decision for
+  // every pet → all river-coord pets piled on the west bank.
+  // Closest-bank-wins gives sensible bilateral spread.
   const midRiver = (RIVER_WEST_EDGE + RIVER_EAST_EDGE) / 2;
   return {
     ...jittered,
-    lng: center.lng < midRiver ? RIVER_WEST_EDGE : RIVER_EAST_EDGE,
+    lng: jittered.lng < midRiver ? RIVER_WEST_EDGE : RIVER_EAST_EDGE,
   };
 }
 
