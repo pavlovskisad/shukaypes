@@ -51,6 +51,15 @@ interface LostDogMarkerProps {
   urgency: UrgencyLevel;
   photoUrl?: string | null;
   onTap: () => void;
+  // True when the marker's underlying lat/lng is inside the current
+  // viewport. False when it's mounted but off-screen (still in the
+  // 2km render radius). Off-screen markers skip their wander +
+  // SOS-beep timers entirely — those re-render the marker each
+  // cycle, which is wasted work when the user can't see the marker.
+  // With dense Kyiv pet counts (200+ active in a 2km radius), the
+  // wasted re-renders compound. Default true so callers that don't
+  // know about the gate get the old "always animate" behaviour.
+  active?: boolean;
 }
 
 // Dog pin — white circle with emoji, urgency-colored glow, handwritten name
@@ -63,7 +72,7 @@ interface LostDogMarkerProps {
 //
 // Beep: a translucent ring expands out of the pin every ~22s. Per-pet
 // random phase so they don't synchronize across the map.
-function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: LostDogMarkerProps) {
+function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, active = true }: LostDogMarkerProps) {
   const [offset, setOffset] = useState({ x: 0, y: 0 });
   const [beeping, setBeeping] = useState(false);
   const beepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -71,8 +80,10 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
 
   // Continuous wander — setInterval means exactly one pending timer per
   // marker regardless of mount/unmount timing. Cleared synchronously on
-  // unmount.
+  // unmount, AND when `active` flips false (marker scrolled off-screen)
+  // so off-screen markers stop costing re-renders.
   useEffect(() => {
+    if (!active) return;
     const id = setInterval(() => {
       setOffset({
         x: (Math.random() * 2 - 1) * WANDER_PX,
@@ -80,13 +91,15 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
       });
     }, RETARGET_MS);
     return () => clearInterval(id);
-  }, []);
+  }, [active]);
 
   // SOS beep. Each pet rolls its own period at mount (inside the
   // min/max band above) so the map doesn't breathe in sync. A random
   // initial delay spreads the first ping, then the re-arm uses the
-  // pet's own period for every subsequent one.
+  // pet's own period for every subsequent one. Same `active` gate
+  // as wander — off-screen markers don't ping.
   useEffect(() => {
+    if (!active) return;
     let cancelled = false;
     const periodMs =
       BEEP_PERIOD_MIN_MS +
@@ -109,7 +122,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap }: 
       cancelled = true;
       if (beepTimeoutRef.current) clearTimeout(beepTimeoutRef.current);
     };
-  }, []);
+  }, [active]);
 
   return (
     <OverlayViewF
