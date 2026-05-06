@@ -711,16 +711,18 @@ export default function MapViewWeb() {
     if (!sniffMode && !sniffJustChanged) return [];
     if (!mapBounds || !userPos) return [];
     const { n, s, e, w } = mapBounds;
-    // Equal padding on all four edges so the chip ring reads as a
-    // symmetric frame around the viewport. Previously the bottom
-    // had a heavy 0.13 reserve to clear the dashboard, which made
-    // the layout feel unbalanced relative to the tight top edge.
-    // 0.05 across the board lets chips overlap the tab bar pill
-    // slightly when they end up on the bottom edge — acceptable
-    // since the tap target is still readable.
+    // Reserves clear the actual UI elements:
+    // - top: small bump to clear the OS status bar (chips can sit
+    //   under the HUD logo's row to the right of it without conflict
+    //   since the logo lives in the top-left corner only).
+    // - bottom: clears the dashboard tab bar (~10% of typical phone
+    //   viewport including the home-indicator strip).
+    // - sides: small padding so chips don't graze the screen edges.
+    // Not perfectly symmetric, but the asymmetry follows the actual
+    // UI footprint instead of being arbitrary.
     const sideReserve = 0.05;
-    const topReserve = 0.05;
-    const bottomReserve = 0.05;
+    const topReserve = 0.08;
+    const bottomReserve = 0.10;
     const chipHalfPct = 0.04;
     const SPACING_ALONG = 0.12;
 
@@ -740,7 +742,15 @@ export default function MapViewWeb() {
 
     const chips: Chip[] = [];
     for (const d of visibleLostDogs) {
-      const p = d.lastSeen.position;
+      // Use the JITTERED display position for both the bound check
+      // AND the ray-cast — that's where the on-screen LostDogMarker
+      // actually renders, so chip and pin agree on visibility:
+      // when the pin is in viewport, no chip; when it's out, chip
+      // points to where the pin actually is (not the raw lastSeen
+      // coord, which can be hundreds of meters away after jitter).
+      // The previous bound check used `lastSeen.position` and was
+      // the cause of "tap chip → both chip and pin showing".
+      const p = displayPositions.get(d.id) ?? d.lastSeen.position;
       if (p.lat <= n && p.lat >= s && p.lng <= e && p.lng >= w) continue;
       const nx = (p.lng - w) / (e - w);
       const ny = (n - p.lat) / (n - s);
@@ -769,7 +779,8 @@ export default function MapViewWeb() {
         urgency: d.urgency,
         name: d.name,
         distanceM: distanceMeters(userPos, p),
-        target: displayPositions.get(d.id) ?? p,
+        // p is already the jittered display position (see top of loop).
+        target: p,
         edge,
         along,
         crossPct,
