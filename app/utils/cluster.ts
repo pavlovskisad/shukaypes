@@ -72,17 +72,11 @@ function hashSeed(seed: string): number {
 //
 // Each band: [latMin, latMax, lngWestEdge, lngEastEdge].
 const RIVER_BANDS: ReadonlyArray<readonly [number, number, number, number]> = [
-  // Vyshhorod / Kyiv Sea exit
-  [50.55, 51.0, 30.4, 30.55],
-  // Obolon waterfront — narrower channel, slightly westward
-  [50.5, 50.55, 30.5, 30.57],
-  // Central Kyiv (Podil → Hidropark → Trukhaniv) — widest, includes
-  // the east channel around the island
-  [50.45, 50.5, 30.545, 30.62],
-  // Pechersk → Vydubychi
-  [50.4, 50.45, 30.575, 30.645],
-  // Osokorky / Bortnychi bay
-  [49.9, 50.4, 30.6, 30.7],
+  [50.55, 51.0, 30.4, 30.55],     // Vyshhorod / Kyiv Sea exit
+  [50.5, 50.55, 30.5, 30.57],     // Obolon waterfront
+  [50.45, 50.5, 30.545, 30.625],  // Central Kyiv (Podil / Hidropark / Trukhaniv) — east bumped 30.62→30.625
+  [50.4, 50.45, 30.575, 30.65],   // Pechersk → Vydubychi — east bumped 30.645→30.65
+  [49.9, 50.4, 30.6, 30.7],       // Osokorky / Bortnychi bay
 ];
 
 function bandsFor(lat: number): readonly [number, number] | null {
@@ -105,7 +99,15 @@ function snapToLandIfInRiver(pos: LatLng): LatLng {
   const [west, east] = band;
   if (pos.lng <= west || pos.lng >= east) return pos;
   const mid = (west + east) / 2;
-  return { ...pos, lng: pos.lng < mid ? west : east };
+  const snapped = { ...pos, lng: pos.lng < mid ? west : east };
+  // TEMP debug: confirm the snap path is actually executing for the
+  // user's "still swimming" pets. Remove once verified — leaving this
+  // in steady-state would print on every render.
+  if (typeof console !== 'undefined') {
+    // eslint-disable-next-line no-console
+    console.log('[river-snap]', pos.lat.toFixed(4), pos.lng.toFixed(4), '→', snapped.lng.toFixed(4));
+  }
+  return snapped;
 }
 
 function avoidWater(_center: LatLng, jittered: LatLng): LatLng {
