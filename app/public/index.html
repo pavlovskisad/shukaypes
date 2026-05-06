@@ -38,35 +38,27 @@
 
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
-      /* Reset margins/padding — iOS Safari PWA defaults can leave a
-         tiny top inset that shows as a white band under the OS
-         status bar. */
+      /* These styles make the body full-height */
       html,
       body {
-        height: 100dvh;
+        height: 100%;
         margin: 0;
         padding: 0;
       }
+      /* These styles disable body scrolling if you are using <ScrollView> */
       body {
-        /* Disable body scrolling if you are using <ScrollView> */
         overflow: hidden;
         /* Dark fallback so any sliver of body bg that peeks through
-           (under the OS status bar before the map paints, etc.)
-           reads as part of the dark map / app shell, not a white
-           band. The greyscale map covers it cleanly in normal mode. */
+           (under the OS status bar before the map paints, between
+           renders, etc.) reads as part of the dark app shell rather
+           than a white band. The greyscale map covers it cleanly in
+           normal mode steady state. */
         background: #0d0d0d;
       }
-      /* Root takes the FULL viewport via fixed positioning so any
-         parent inset injected by iOS Safari PWA / RN-Web wrappers is
-         bypassed and the app renders edge-to-edge. The desktop media
-         query below switches it back to a centred column. */
+      /* These styles make the root element full-height */
       #root {
-        position: fixed;
-        top: 0;
-        left: 0;
-        right: 0;
-        bottom: 0;
         display: flex;
+        height: 100%;
         flex: 1;
       }
 
@@ -84,11 +76,7 @@
           background: #15151a;
         }
         #root {
-          /* Override the mobile fixed-positioning so the column can
-             centre with margin auto. inset: auto unsets the
-             top/left/right/bottom values from the mobile default. */
           position: relative;
-          inset: auto;
           max-width: 430px;
           margin: 0 auto;
           box-shadow: 0 0 60px rgba(0, 0, 0, 0.4);

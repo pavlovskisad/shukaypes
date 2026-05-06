@@ -8,6 +8,7 @@ import { QuestPill } from '../../components/ui/QuestPill';
 import { AboutModal } from '../../components/ui/AboutModal';
 import { useGameStore } from '../../stores/gameStore';
 import logoSquare from '../../assets/logo-square.png';
+import logoSquareInverse from '../../assets/logo-square-inverse.png';
 
 // Logo is the brand anchor in the top-left. Prototype has it roughly
 // pill-height; matching that so it reads as a peer of the status pill
@@ -92,13 +93,13 @@ export default function MapScreen() {
             hitSlop={8}
           >
             {/* Logo. Sniff mode flips the colour scheme — the dark
-                map provides the dark bg behind the logo now, so we
-                don't need a black pill behind the image. Just CSS-
-                invert the original asset so the black lines render
-                white. The earlier "filter renders as solid black on
-                iOS Safari" issue was caused by the black bg PILL
-                interacting badly with the inverted PNG; without the
-                pill, plain `filter: invert(1)` works as expected. */}
+                map provides the bg behind the logo now (no black
+                pill needed). Cross-fade between the regular asset
+                and the pre-inverted asset. RN-Web's <Image> renders
+                as a div with background-image; iOS Safari was
+                inconsistent about applying CSS `filter: invert(1)`
+                to that, hence shipping the second asset for
+                reliability. */}
             <div
               style={{
                 position: 'relative',
@@ -113,12 +114,22 @@ export default function MapScreen() {
                 source={logoSquare}
                 style={[
                   styles.logo,
-                  // CSS `filter` / `transition` aren't in RN's
-                  // ImageStyle type — web target only, so cast to any
-                  // for the inline.
+                  styles.logoStacked,
                   {
-                    filter: sniffMode ? 'invert(1)' : 'none',
-                    transition: 'filter 220ms ease-out',
+                    opacity: sniffMode ? 0 : 1,
+                    transition: 'opacity 220ms ease-out',
+                  } as any,
+                ]}
+                resizeMode="contain"
+              />
+              <Image
+                source={logoSquareInverse}
+                style={[
+                  styles.logo,
+                  styles.logoStacked,
+                  {
+                    opacity: sniffMode ? 1 : 0,
+                    transition: 'opacity 220ms ease-out',
                   } as any,
                 ]}
                 resizeMode="contain"
@@ -197,6 +208,11 @@ const styles = StyleSheet.create({
   logo: {
     width: HUD_ICON_SIZE,
     height: HUD_ICON_SIZE,
+  },
+  logoStacked: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   questRow: {
     flexDirection: 'row',
