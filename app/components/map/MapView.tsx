@@ -629,7 +629,25 @@ export default function MapViewWeb() {
   const displayPositions = useMemo(() => {
     const map = new Map<string, { lat: number; lng: number }>();
     for (const d of lostDogs) {
-      map.set(d.id, jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, d.id));
+      const display = jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, d.id);
+      // TEMP debug: log every pet's name + raw stored coord + final
+      // display coord so we can identify which pet is still rendering
+      // in water (its raw coord must be outside the river polygon).
+      // Remove once the swimming pets are accounted for.
+      if (typeof console !== 'undefined') {
+        // eslint-disable-next-line no-console
+        console.log(
+          '[pet-pos]',
+          d.name,
+          'raw',
+          d.lastSeen.position.lat.toFixed(4),
+          d.lastSeen.position.lng.toFixed(4),
+          'display',
+          display.lat.toFixed(4),
+          display.lng.toFixed(4),
+        );
+      }
+      map.set(d.id, display);
     }
     return map;
   }, [lostDogs]);
