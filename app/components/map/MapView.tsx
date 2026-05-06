@@ -682,6 +682,139 @@ export default function MapViewWeb() {
     );
   }
 
+  // Off-screen lost-pet edge-chip layout. Memoised so the per-pet
+  // ray-cast / spread pass doesn't re-run on every companion lerp
+  // tick (3.3Hz) — that loop iterating over visibleLostDogs (50+
+  // pets in dense Kyiv) was the most likely cause of the lag the
+  // user reported showing up after the second map-rendering pass.
+  // Early-skip when sniff mode is off AND not in the toggle window
+  // means chips don't even render in normal-mode steady state. The
+  // `sniffJustChanged` window keeps them mounted long enough for
+  // the bubble-out animation to complete on toggle off.
+  const offscreenDogIndicators = useMemo(() => {
+    if (!sniffMode && !sniffJustChanged) return [];
+    if (!mapBounds || !userPos) return [];
+    const { n, s, e, w } = mapBounds;
+    const sideReserve = 0.03;
+    const topReserve = 0;
+    const bottomReserve = 0.13;
+    const chipHalfPct = 0.04;
+    const SPACING_ALONG = 0.12;
+
+    type EdgeName = 'top' | 'right' | 'bottom' | 'left';
+    interface Chip {
+      id: string;
+      emoji: string;
+      photoUrl: string | null;
+      urgency: UrgencyLevel;
+      name: string;
+      distanceM: number;
+      target: LatLng;
+      edge: EdgeName;
+      along: number;
+      crossPct: number;
+    }
+
+    const chips: Chip[] = [];
+    for (const d of visibleLostDogs) {
+      const p = d.lastSeen.position;
+      if (p.lat <= n && p.lat >= s && p.lng <= e && p.lng >= w) continue;
+      const nx = (p.lng - w) / (e - w);
+      const ny = (n - p.lat) / (n - s);
+      const dx = nx - 0.5;
+      const dy = ny - 0.5;
+      const xBound = dx > 0 ? (1 - sideReserve) - 0.5 : 0.5 - sideReserve;
+      const yBound = dy > 0 ? (1 - bottomReserve) - 0.5 : 0.5 - topReserve;
+      const tx = Math.abs(xBound / Math.max(Math.abs(dx), 1e-6));
+      const ty = Math.abs(yBound / Math.max(Math.abs(dy), 1e-6));
+      let edge: EdgeName;
+      let along: number;
+      let crossPct: number;
+      if (tx < ty) {
+        edge = dx > 0 ? 'right' : 'left';
+        along = 0.5 + dy * tx;
+        crossPct = edge === 'right' ? 1 - sideReserve : sideReserve;
+      } else {
+        edge = dy > 0 ? 'bottom' : 'top';
+        along = 0.5 + dx * ty;
+        crossPct = edge === 'bottom' ? 1 - bottomReserve : topReserve;
+      }
+      chips.push({
+        id: d.id,
+        emoji: d.emoji,
+        photoUrl: d.photoUrl ?? null,
+        urgency: d.urgency,
+        name: d.name,
+        distanceM: distanceMeters(userPos, p),
+        target: displayPositions.get(d.id) ?? p,
+        edge,
+        along,
+        crossPct,
+      });
+    }
+    chips.sort((a, b) => a.distanceM - b.distanceM);
+    const limited = chips.slice(0, 8);
+
+    const groups: Record<EdgeName, Chip[]> = {
+      top: [], right: [], bottom: [], left: [],
+    };
+    for (const c of limited) groups[c.edge].push(c);
+    const edges: EdgeName[] = ['top', 'right', 'bottom', 'left'];
+    for (const edgeName of edges) {
+      const g = groups[edgeName];
+      if (g.length === 0) continue;
+      g.sort((a, b) => a.along - b.along);
+      const lo =
+        edgeName === 'left' || edgeName === 'right'
+          ? topReserve + chipHalfPct
+          : sideReserve + chipHalfPct;
+      const hi =
+        edgeName === 'left' || edgeName === 'right'
+          ? 1 - bottomReserve - chipHalfPct
+          : 1 - sideReserve - chipHalfPct;
+      for (let i = 1; i < g.length; i++) {
+        g[i]!.along = Math.max(g[i]!.along, g[i - 1]!.along + SPACING_ALONG);
+      }
+      if (g[g.length - 1]!.along > hi) {
+        g[g.length - 1]!.along = hi;
+        for (let i = g.length - 2; i >= 0; i--) {
+          g[i]!.along = Math.min(g[i]!.along, g[i + 1]!.along - SPACING_ALONG);
+        }
+      }
+      if (g[0]!.along < lo) {
+        g[0]!.along = lo;
+        for (let i = 1; i < g.length; i++) {
+          g[i]!.along = Math.max(g[i]!.along, g[i - 1]!.along + SPACING_ALONG);
+        }
+      }
+    }
+
+    return limited.map((c) => {
+      const leftPct = c.edge === 'left' || c.edge === 'right' ? c.crossPct : c.along;
+      const topPct = c.edge === 'left' || c.edge === 'right' ? c.along : c.crossPct;
+      return {
+        id: c.id,
+        emoji: c.emoji,
+        photoUrl: c.photoUrl,
+        urgency: c.urgency,
+        name: c.name,
+        distanceM: c.distanceM,
+        target: c.target,
+        edge: c.edge,
+        left: `${leftPct * 100}%`,
+        top: `${topPct * 100}%`,
+      };
+    });
+  }, [
+    mapBounds,
+    userPos?.lat,
+    userPos?.lng,
+    visibleLostDogs,
+    displayPositions,
+    sniffMode,
+    sniffJustChanged,
+  ]);
+
   if (!isLoaded || !userPos) {
     return (
       <View style={styles.msg}>
@@ -741,183 +874,6 @@ export default function MapViewWeb() {
     mapRef.current.panTo(companionPos as unknown as google.maps.LatLngLiteral);
   };
 
-  // Off-screen lost-pet bookmarks. One small chip per nearby pet
-  // (≤ MAP_RENDER_RADIUS_M) that's currently outside the map viewport,
-  // edge-pinned on the side closest to the pet. Per the latest design
-  // pass, chips MUST never stack on top of each other — they're an
-  // approximate location clue, but they have to stay readable. The
-  // pipeline:
-  //   1. For each off-screen pet: ray-cast from viewport centre toward
-  //      the pet, find which safe-box edge the ray hits first, record
-  //      the position along that edge in [0..1].
-  //   2. Cap to the 5 closest pets so dense areas don't ring the screen.
-  //   3. Group by edge, sort by along-axis, and apply a min-spacing
-  //      pass (forward-then-back) so co-located chips spread out
-  //      cleanly. Sacrifices a few px of "this chip points exactly
-  //      to the pet" precision in exchange for "you can read every
-  //      chip at a glance" — the user explicitly chose readability.
-  //   4. Render with a CSS transition on left/top so the chip slides
-  //      smoothly between positions as the user pans, instead of
-  //      teleporting frame-to-frame.
-  //
-  // NOTE: plain const (not useMemo) on purpose — this block sits
-  // after the `if (!isLoaded || !userPos) return …` early return at
-  // the top of the function. A useMemo here would change the hook
-  // count between the two render branches and trigger React's
-  // "Rendered more hooks than during the previous render" crash.
-  const offscreenDogIndicators = (() => {
-    // Edge chips are a sniff-mode-only feature visually, but we always
-    // compute them and render them with opacity/scale gated on
-    // `sniffMode` so the bubble-pop transition runs symmetrically on
-    // both enter and exit. Without always-mounted DOM nodes the
-    // out-transition has nothing to animate.
-    if (!mapBounds) return [];
-    const { n, s, e, w } = mapBounds;
-    // Reserves carve a safe rectangle the chips can pin to. With the
-    // PWA meta switched to `black-translucent`, the map (and chips)
-    // extend all the way under the iOS status bar — chips can hug the
-    // actual top edge same as the companion off-screen indicator.
-    // Bottom reserve clears the dashboard tab bar PLUS the bottom-
-    // right distance badge that overhangs each chip.
-    const sideReserve = 0.03;
-    const topReserve = 0;
-    const bottomReserve = 0.13;
-    // Chip half-extent in viewport %, used to align side chip BOTTOMS
-    // with the bottom-edge chip's bottom. ~4% covers the new 54px
-    // chip on a 600-900px tall phone viewport.
-    const chipHalfPct = 0.04;
-    // 12% along-axis spacing. With cap = 8 ("supersniff"), 7 × 12% =
-    // 84% — fits within a single edge's safe range on a ~800px tall
-    // phone, edges share the load when chips are spread around.
-    const SPACING_ALONG = 0.12;
-
-    type EdgeName = 'top' | 'right' | 'bottom' | 'left';
-    interface Chip {
-      id: string;
-      emoji: string;
-      photoUrl: string | null;
-      urgency: UrgencyLevel;
-      name: string;
-      distanceM: number;
-      target: LatLng;
-      edge: EdgeName;
-      along: number;
-      crossPct: number;
-    }
-
-    const chips: Chip[] = [];
-    for (const d of visibleLostDogs) {
-      const p = d.lastSeen.position;
-      if (p.lat <= n && p.lat >= s && p.lng <= e && p.lng >= w) continue;
-      // Ray from viewport centre toward the pet, in normalised
-      // viewport coords (x=0 west, y=0 top, both 0..1).
-      const nx = (p.lng - w) / (e - w);
-      const ny = (n - p.lat) / (n - s);
-      const dx = nx - 0.5;
-      const dy = ny - 0.5;
-      const xBound = dx > 0 ? (1 - sideReserve) - 0.5 : 0.5 - sideReserve;
-      const yBound = dy > 0 ? (1 - bottomReserve) - 0.5 : 0.5 - topReserve;
-      const tx = Math.abs(xBound / Math.max(Math.abs(dx), 1e-6));
-      const ty = Math.abs(yBound / Math.max(Math.abs(dy), 1e-6));
-      let edge: EdgeName;
-      let along: number;
-      let crossPct: number;
-      if (tx < ty) {
-        edge = dx > 0 ? 'right' : 'left';
-        along = 0.5 + dy * tx;
-        crossPct = edge === 'right' ? 1 - sideReserve : sideReserve;
-      } else {
-        edge = dy > 0 ? 'bottom' : 'top';
-        along = 0.5 + dx * ty;
-        crossPct = edge === 'bottom' ? 1 - bottomReserve : topReserve;
-      }
-      chips.push({
-        id: d.id,
-        emoji: d.emoji,
-        photoUrl: d.photoUrl ?? null,
-        urgency: d.urgency,
-        name: d.name,
-        distanceM: distanceMeters(userPos, p),
-        // Pan target = the visual pin position (zone-jittered), not
-        // the raw lastSeen coord. The on-map LostDogMarker renders at
-        // `displayPositions.get(d.id) ?? d.lastSeen.position`, so
-        // tapping the chip should land the user where the pin
-        // actually is — otherwise (with the wander offset removed)
-        // they'd pan to a near-empty spot offset from the pin.
-        target: displayPositions.get(d.id) ?? p,
-        edge,
-        along,
-        crossPct,
-      });
-    }
-    chips.sort((a, b) => a.distanceM - b.distanceM);
-    // Cap raised from 5 → 8 — sniff mode is the "everything around me"
-    // view, so it can absorb a few more chips before the edges feel
-    // crowded.
-    const limited = chips.slice(0, 8);
-
-    // Group by edge, then forward + back min-spacing pass.
-    const groups: Record<EdgeName, Chip[]> = {
-      top: [], right: [], bottom: [], left: [],
-    };
-    for (const c of limited) groups[c.edge].push(c);
-    const edges: EdgeName[] = ['top', 'right', 'bottom', 'left'];
-    for (const edgeName of edges) {
-      const g = groups[edgeName];
-      if (g.length === 0) continue;
-      g.sort((a, b) => a.along - b.along);
-      // Pull bounds in by chipHalfPct so a side chip at the lowest
-      // along-position (anchored by its centre) lines up its BOTTOM
-      // with the bottom-edge chip's bottom (anchored by its edge),
-      // and same at the top. Fixes the "bottom chips are higher than
-      // side chips" misalignment.
-      const lo =
-        edgeName === 'left' || edgeName === 'right'
-          ? topReserve + chipHalfPct
-          : sideReserve + chipHalfPct;
-      const hi =
-        edgeName === 'left' || edgeName === 'right'
-          ? 1 - bottomReserve - chipHalfPct
-          : 1 - sideReserve - chipHalfPct;
-      // Forward: each chip ≥ prev + spacing
-      for (let i = 1; i < g.length; i++) {
-        g[i]!.along = Math.max(g[i]!.along, g[i - 1]!.along + SPACING_ALONG);
-      }
-      // Tail clamp + back pass if we overran the edge bound
-      if (g[g.length - 1]!.along > hi) {
-        g[g.length - 1]!.along = hi;
-        for (let i = g.length - 2; i >= 0; i--) {
-          g[i]!.along = Math.min(g[i]!.along, g[i + 1]!.along - SPACING_ALONG);
-        }
-      }
-      // Head clamp + forward pass if we underran (back pass pushed
-      // earlier ones below the lo bound).
-      if (g[0]!.along < lo) {
-        g[0]!.along = lo;
-        for (let i = 1; i < g.length; i++) {
-          g[i]!.along = Math.max(g[i]!.along, g[i - 1]!.along + SPACING_ALONG);
-        }
-      }
-    }
-
-    // Compose final %.
-    return limited.map((c) => {
-      const leftPct = c.edge === 'left' || c.edge === 'right' ? c.crossPct : c.along;
-      const topPct = c.edge === 'left' || c.edge === 'right' ? c.along : c.crossPct;
-      return {
-        id: c.id,
-        emoji: c.emoji,
-        photoUrl: c.photoUrl,
-        urgency: c.urgency,
-        name: c.name,
-        distanceM: c.distanceM,
-        target: c.target,
-        edge: c.edge,
-        left: `${leftPct * 100}%`,
-        top: `${topPct * 100}%`,
-      };
-    });
-  })();
 
   const formatDistance = (m: number): string => {
     if (m < 1000) return `${Math.round(m / 10) * 10}m`;
