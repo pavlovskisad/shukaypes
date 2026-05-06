@@ -1,5 +1,6 @@
 import { Tabs } from 'expo-router';
 import { View } from 'react-native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { Icon, type IconName } from '../../components/ui/Icon';
 
@@ -24,6 +25,14 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
 }
 
 export default function TabsLayout() {
+  // Read the actual bottom safe-area inset (iOS home-indicator
+  // height) so we can extend the tab bar's bg into that strip
+  // and pad the icons up by the same amount. The previous
+  // `paddingBottom: 'env(safe-area-inset-bottom)'` string trick
+  // didn't reach Safari through RN's StyleSheet — using the
+  // numeric value from the hook is the reliable path.
+  const insets = useSafeAreaInsets();
+
   return (
     <Tabs
       screenOptions={{
@@ -56,11 +65,10 @@ export default function TabsLayout() {
           // iOS home-indicator strip — without this, viewport-fit=cover
           // brings the safe-area-inset-bottom region INTO the page and
           // the bg behind the tab bar (now white body) shows as a strip
-          // below the dashboard. The icons stay padded up by the same
-          // inset amount so they don't sit under the home indicator.
-          // RN's style types don't expose CSS env() values, hence the
-          // string cast.
-          paddingBottom: 'env(safe-area-inset-bottom, 0px)' as unknown as number,
+          // below the dashboard. Numeric value from the safe-area
+          // hook (env(safe-area-inset-bottom) as a string didn't get
+          // applied through RN's StyleSheet pipeline).
+          paddingBottom: insets.bottom,
           borderTopWidth: 0,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
