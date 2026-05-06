@@ -316,14 +316,29 @@ export default function MapViewWeb() {
   // Gated on isFocused — when the map tab isn't visible, the
   // /collect/path sweep on refocus catches anything the user walked
   // past while paused (server tracks their last anchor in Redis).
+  // Companion position is read inside the auto-collect / auto-eat
+  // intervals via this ref, NOT through the useEffect closure. The
+  // companion lerps on its own tick (currently 300ms), so closing
+  // over `companionPos` and listing `companionPos?.lat / .lng` in
+  // useEffect deps would tear down + recreate these intervals on
+  // EVERY lerp tick — the intervals barely got a chance to fire
+  // their bodies, and the React reconciliation overhead for the
+  // cleanup churn was the big "compounding tick lag" suspect from
+  // the perf pass. Ref pattern lets the deps array stay stable
+  // (just `isFocused` + the action) so each interval is set once
+  // and ticks cleanly.
+  const companionPosRef = useRef(companionPos);
+  companionPosRef.current = companionPos;
+
   useEffect(() => {
     if (!isFocused) return;
     const id = setInterval(() => {
       const { tokens: ts, userPosition: u } = useGameStore.getState();
-      if (!u && !companionPos) return;
+      const cp = companionPosRef.current;
+      if (!u && !cp) return;
       ts.forEach((t) => {
         if (t.collectedAt) return;
-        const dCompanion = companionPos ? distanceMeters(companionPos, t.position) : Infinity;
+        const dCompanion = cp ? distanceMeters(cp, t.position) : Infinity;
         const dUser = u ? distanceMeters(u, t.position) : Infinity;
         if (Math.min(dCompanion, dUser) < balance.autoCollectToken) {
           collectToken(t.id);
@@ -331,18 +346,20 @@ export default function MapViewWeb() {
       });
     }, balance.roamTick);
     return () => clearInterval(id);
-  }, [companionPos?.lat, companionPos?.lng, isFocused, collectToken]);
+  }, [isFocused, collectToken]);
 
   // Auto-eat food. Same min(user, companion) trick as paws. Same
   // refocus-catchup story — the path-collect sweep credits any bone
-  // the user walked past while not focused.
+  // the user walked past while not focused. Same ref pattern so the
+  // interval doesn't churn on every companion lerp tick.
   useEffect(() => {
     if (!isFocused) return;
     const id = setInterval(() => {
       const { foodItems: fs, userPosition: u } = useGameStore.getState();
-      if (!u && !companionPos) return;
+      const cp = companionPosRef.current;
+      if (!u && !cp) return;
       fs.forEach((f) => {
-        const dCompanion = companionPos ? distanceMeters(companionPos, f.position) : Infinity;
+        const dCompanion = cp ? distanceMeters(cp, f.position) : Infinity;
         const dUser = u ? distanceMeters(u, f.position) : Infinity;
         if (Math.min(dCompanion, dUser) < balance.autoCollectFood) {
           eatFood(f.id);
@@ -350,7 +367,7 @@ export default function MapViewWeb() {
       });
     }, balance.foodCheckInterval);
     return () => clearInterval(id);
-  }, [companionPos?.lat, companionPos?.lng, isFocused, eatFood]);
+  }, [isFocused, eatFood]);
 
   const mapOptions = useMemo(
     () => ({
