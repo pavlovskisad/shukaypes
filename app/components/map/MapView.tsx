@@ -125,15 +125,34 @@ export default function MapViewWeb() {
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
   const sniffMode = useGameStore((s) => s.sniffMode);
-  // Track whether the user has ever toggled sniff mode on. Used to
-  // suppress the chip-pop-out animation on initial mount — without
-  // this, a fresh app load with sniffMode = false would briefly show
-  // chips at scale(1) before the chip-pop-out keyframe shrinks them
-  // (since CSS animation `forwards` overrides static styles during
-  // playback). Once true, animations play freely on every toggle.
-  const sniffWasEverOnRef = useRef(false);
-  if (sniffMode) sniffWasEverOnRef.current = true;
-  const sniffEverOn = sniffWasEverOnRef.current;
+  // The chip pop animations should ONLY play during the brief window
+  // around an actual sniff-mode toggle. Without this, two leaks happen:
+  //
+  // 1. Initial app load (sniffMode = false): if we always attach
+  //    `animation: chip-pop-out`, the keyframe's 0% (scale 1, opacity 1)
+  //    overrides the static styles during playback — so chips briefly
+  //    flash visible before shrinking to 0.
+  //
+  // 2. Mid-session in NORMAL mode: a pet that was on-screen exits the
+  //    viewport (e.g., user pans, companion minimizes), so a new chip
+  //    DOM node mounts. If it mounts with `chip-pop-out` attached, same
+  //    flash — chip pops in for one keyframe before disappearing.
+  //
+  // Fix: use a `sniffJustChanged` flag that goes true on toggle and
+  // clears after the animation duration. New mounts during the rest
+  // of the session get `animation: none` and rely purely on static
+  // styles (opacity / scale) keyed off `sniffMode`.
+  const [sniffJustChanged, setSniffJustChanged] = useState(false);
+  const sniffInitRef = useRef(true);
+  useEffect(() => {
+    if (sniffInitRef.current) {
+      sniffInitRef.current = false;
+      return;
+    }
+    setSniffJustChanged(true);
+    const t = setTimeout(() => setSniffJustChanged(false), 420);
+    return () => clearTimeout(t);
+  }, [sniffMode]);
   const spotsCategoryFilter = useGameStore((s) => s.spotsCategoryFilter);
   const selectedSpotId = useGameStore((s) => s.selectedSpotId);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
@@ -1290,15 +1309,14 @@ export default function MapViewWeb() {
                 position: 'relative',
                 width: 54,
                 height: 54,
-                // Static defaults: invisible. CSS animation overrides
-                // these during playback (forwards retains end state).
-                // We only attach the animation prop once the user has
-                // actually toggled sniff at least once, so the initial
-                // mount doesn't flash the pop-out keyframe (which
-                // starts at scale 1 in the keyframe definition).
-                opacity: 0,
-                transform: 'scale(0)',
-                animation: sniffEverOn
+                // Static styles match the steady state for the current
+                // sniff mode. Animation only attached during the
+                // toggle window — see the `sniffJustChanged` comment
+                // above for why (mid-session chip mounts in normal
+                // mode were flashing visible-then-fade).
+                opacity: sniffMode ? 1 : 0,
+                transform: sniffMode ? 'scale(1)' : 'scale(0)',
+                animation: sniffJustChanged
                   ? sniffMode
                     ? 'chip-pop-in 360ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards'
                     : 'chip-pop-out 280ms ease-in forwards'
