@@ -76,19 +76,23 @@ function hashSeed(seed: string): number {
 // Tuple is [lat, lng]. Vertices are deliberately rough (~100m
 // accuracy); the snap pushes ~80m off the edge to absorb error.
 const RIVER_POLYGON: ReadonlyArray<readonly [number, number]> = [
-  // West bank, north → south
+  // West bank, north → south. Earlier pass had this edge traced
+  // ~500m–1km east of the actual riverbank in Podil/Petrivka, so
+  // jitter offsets that landed in the strip between bank and edge
+  // (Малыш, Ультра) didn't get snapped — pulled the edge west to
+  // sit just inside the actual bank line.
   [50.620, 30.510],
   [50.580, 30.500],
   [50.555, 30.500],
-  [50.530, 30.515],
-  [50.510, 30.515],
-  [50.495, 30.520],
-  [50.480, 30.535],
-  [50.470, 30.540],
-  [50.460, 30.545],
-  [50.450, 30.555],
-  [50.440, 30.565],
-  [50.430, 30.580],
+  [50.530, 30.510],
+  [50.510, 30.510],
+  [50.495, 30.515],
+  [50.480, 30.520],
+  [50.470, 30.525],
+  [50.460, 30.530],
+  [50.450, 30.540],
+  [50.440, 30.555],
+  [50.430, 30.575],
   [50.420, 30.585],
   [50.405, 30.595],
   [50.385, 30.610],
