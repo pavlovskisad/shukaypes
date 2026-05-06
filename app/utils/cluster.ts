@@ -63,17 +63,15 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
-// Approximate Dnipro main channel through central Kyiv. Bounds widened
-// from 30.555/30.598 → 30.545/30.610 because pets were still landing
-// in the river: the previous tight box missed the east channel
-// around Trukhaniv island and the slightly-westward bend near
-// Rybalskyi peninsula. The new bounds catch ~95% of the actual water
-// at typical Kyiv-centric pet coords; in exchange, the very western
-// edge of Rusanivka / Hidropark (around 30.605-30.610) will get
-// false-positive-snapped to the east bank, but pets there are rare
-// enough to accept the trade. Real fix would be a polygon.
+// Approximate Dnipro main channel through central Kyiv. Restored
+// the original 30.555 – 30.620 east edge after the user reported
+// pets STILL swimming with the narrower 30.610: the original wider
+// bound was the version that demonstrably worked. Trade-off is the
+// same — false-positive snaps for the very western edge of
+// Rusanivka / Hidropark / Pozniaky strip — but pets there are rare
+// enough to accept versus visibly-swimming pets in the channel.
 const RIVER_WEST_EDGE = 30.545;
-const RIVER_EAST_EDGE = 30.610;
+const RIVER_EAST_EDGE = 30.620;
 
 // Snap a coord to the closer river bank if it falls inside the
 // Dnipro main channel. Used on the pet's CENTER (raw lastSeen.position)
