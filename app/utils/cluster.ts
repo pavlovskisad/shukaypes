@@ -75,6 +75,22 @@ function hashSeed(seed: string): number {
 const RIVER_WEST_EDGE = 30.545;
 const RIVER_EAST_EDGE = 30.610;
 
+// Snap a coord to the closer river bank if it falls inside the
+// Dnipro main channel. Used on the pet's CENTER (raw lastSeen.position)
+// before jittering, because the LLM-based listing parser sometimes
+// emits coords directly in the river — listings mentioning "Dnipro
+// embankment" or "near the river" land the LLM in the channel itself.
+// Snap-then-jitter keeps the whole zone on land; the jitter result
+// still gets a final `avoidWater` check as a belt-and-braces.
+function snapToLandIfInRiver(pos: LatLng): LatLng {
+  if (pos.lng <= RIVER_WEST_EDGE || pos.lng >= RIVER_EAST_EDGE) return pos;
+  const midRiver = (RIVER_WEST_EDGE + RIVER_EAST_EDGE) / 2;
+  return {
+    ...pos,
+    lng: pos.lng < midRiver ? RIVER_WEST_EDGE : RIVER_EAST_EDGE,
+  };
+}
+
 function avoidWater(_center: LatLng, jittered: LatLng): LatLng {
   if (jittered.lng <= RIVER_WEST_EDGE || jittered.lng >= RIVER_EAST_EDGE) {
     return jittered;
@@ -112,16 +128,22 @@ export function jitterInRadius(
   seed: string,
   angleOverrideRad?: number,
 ): LatLng {
+  // Snap the center to land BEFORE jittering. The LLM-based listing
+  // parser sometimes emits raw river coords; without the pre-snap,
+  // the whole zone (and every jitter result inside it) was anchored
+  // mid-river and `avoidWater` could only catch the small subset of
+  // jittered points that ended up in my approximate channel rect.
+  const safeCenter = snapToLandIfInRiver(center);
   const h = hashSeed(seed);
   const angle =
     angleOverrideRad ?? ((h % 10_000) / 10_000) * 2 * Math.PI;
   const distFrac = 0.05 + (((h >>> 14) % 10_000) / 10_000) * 0.85;
   const dist = radiusM * distFrac;
   const LAT_M = 1 / 111_320;
-  const LNG_M = 1 / (111_320 * Math.cos((center.lat * Math.PI) / 180));
+  const LNG_M = 1 / (111_320 * Math.cos((safeCenter.lat * Math.PI) / 180));
   const raw: LatLng = {
-    lat: center.lat + dist * LAT_M * Math.sin(angle),
-    lng: center.lng + dist * LNG_M * Math.cos(angle),
+    lat: safeCenter.lat + dist * LAT_M * Math.sin(angle),
+    lng: safeCenter.lng + dist * LNG_M * Math.cos(angle),
   };
-  return avoidWater(center, raw);
+  return avoidWater(safeCenter, raw);
 }
