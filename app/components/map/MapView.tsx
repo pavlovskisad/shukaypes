@@ -409,25 +409,41 @@ export default function MapViewWeb() {
   // paws/bones, but the user can only act on what's within ~2km of
   // them. Without the cull every pan re-runs every overlay's wander +
   // SOS-beep timers.
+  // Bucket the user position to a ~100m grid for memo invalidation
+  // purposes. The visible-distance cull is at 2km radius — a few
+  // meters of GPS jitter doesn't meaningfully change which pets /
+  // tokens / food fall inside the cull, but listing precise
+  // userPos.lat/.lng in the deps array meant every GPS tick blew
+  // these memos AND every downstream memo that depended on the
+  // resulting array reference (offscreenDogIndicators, clusters,
+  // etc). Rounding to 3 decimal places (~111m) gives a stable
+  // dependency that only flips when the user actually moves a
+  // meaningful distance — turns out to be a decent chunk of the
+  // "compounding tick lag" the user kept reporting.
+  const userLatBucket = userPos ? Math.round(userPos.lat * 1000) / 1000 : null;
+  const userLngBucket = userPos ? Math.round(userPos.lng * 1000) / 1000 : null;
   const visibleLostDogs = useMemo(() => {
     if (!userPos) return lostDogs;
     return lostDogs.filter(
       (d) => distanceMeters(userPos, d.lastSeen.position) <= MAP_RENDER_RADIUS_M,
     );
-  }, [lostDogs, userPos?.lat, userPos?.lng]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos on purpose; see comment above
+  }, [lostDogs, userLatBucket, userLngBucket]);
   const visibleTokens = useMemo(() => {
     const uncollected = tokens.filter((t) => !t.collectedAt);
     if (!userPos) return uncollected;
     return uncollected.filter(
       (t) => distanceMeters(userPos, t.position) <= MAP_RENDER_RADIUS_M,
     );
-  }, [tokens, userPos?.lat, userPos?.lng]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos on purpose
+  }, [tokens, userLatBucket, userLngBucket]);
   const visibleFood = useMemo(() => {
     if (!userPos) return foodItems;
     return foodItems.filter(
       (f) => distanceMeters(userPos, f.position) <= MAP_RENDER_RADIUS_M,
     );
-  }, [foodItems, userPos?.lat, userPos?.lng]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos on purpose
+  }, [foodItems, userLatBucket, userLngBucket]);
 
   // Clustering runs against TRUE positions so "genuinely close reports"
   // are grouped regardless of display jitter. The cluster badge sits at the
@@ -695,9 +711,16 @@ export default function MapViewWeb() {
     if (!sniffMode && !sniffJustChanged) return [];
     if (!mapBounds || !userPos) return [];
     const { n, s, e, w } = mapBounds;
-    const sideReserve = 0.03;
-    const topReserve = 0;
-    const bottomReserve = 0.13;
+    // Equal padding on all four edges so the chip ring reads as a
+    // symmetric frame around the viewport. Previously the bottom
+    // had a heavy 0.13 reserve to clear the dashboard, which made
+    // the layout feel unbalanced relative to the tight top edge.
+    // 0.05 across the board lets chips overlap the tab bar pill
+    // slightly when they end up on the bottom edge — acceptable
+    // since the tap target is still readable.
+    const sideReserve = 0.05;
+    const topReserve = 0.05;
+    const bottomReserve = 0.05;
     const chipHalfPct = 0.04;
     const SPACING_ALONG = 0.12;
 
