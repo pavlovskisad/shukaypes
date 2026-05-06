@@ -17,6 +17,10 @@ export const PRIMARY_ACTIONS: RadialAction[] = [
   { id: 'visit', iconName: 'pin', icon: '📍', label: 'visit' },
   { id: 'meet', iconName: 'meet', icon: '👥', label: 'meet' },
   { id: 'chat', iconName: 'chat', icon: '💬', label: 'chat' },
+  // About / help — opened from the radial menu now that the logo
+  // tap is wired to sniff-mode toggle. Keeps the onboarding sheet
+  // one tap away.
+  { id: 'about', iconName: 'question', icon: '❓', label: 'about' },
 ];
 
 // Walk drills two levels deep: shape (roundtrip / one-way) → distance

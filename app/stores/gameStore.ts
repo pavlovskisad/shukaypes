@@ -128,6 +128,17 @@ interface GameState {
   // whether spots are loaded into the array — the user can declutter
   // the map without losing the cached Places fetch.
   spotsVisible: boolean;
+  // Sniff mode — toggled by tapping the logo. When ON, the HUD pills
+  // bubble out and off-screen lost-pet edge chips bubble in around the
+  // viewport so the user gets a heightened "where are all the nearby
+  // missing pets" view. On-screen pets render normally in either mode.
+  // Off in normal play; the user opts in.
+  sniffMode: boolean;
+  // About sheet open state — promoted from MapScreen-local state so
+  // the radial menu (a child of MapView) can trigger it via the new
+  // "?" button. MapScreen still hosts the modal so the dashboard tab
+  // bar isn't covered.
+  aboutOpen: boolean;
   // Active category filter for the spots tab + map. 'all' shows
   // everything; any specific category restricts the spots layer to
   // just that category. Lives in the store so the spots tab and the
@@ -184,6 +195,9 @@ interface GameState {
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
+  setSniffMode: (on: boolean) => void;
+  toggleSniffMode: () => void;
+  setAboutOpen: (open: boolean) => void;
   setSpotsCategoryFilter: (filter: 'all' | SpotCategory) => void;
   setWalkRoute: (
     route: LatLng[] | null,
@@ -252,6 +266,8 @@ export const useGameStore = create<GameState>((set, get) => ({
   // the "walk to a place" flow discoverable. Users can still hide via
   // the HUD toggle if they want a clean walking map.
   spotsVisible: true,
+  sniffMode: false,
+  aboutOpen: false,
   spotsCategoryFilter: 'all',
   walkRoute: null,
   walkRouteMeta: null,
@@ -637,6 +653,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
+  setSniffMode: (sniffMode) => set({ sniffMode }),
+  toggleSniffMode: () => set((s) => ({ sniffMode: !s.sniffMode })),
+  setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setSpotsCategoryFilter: (spotsCategoryFilter) =>
     set((s) => ({
       spotsCategoryFilter,
