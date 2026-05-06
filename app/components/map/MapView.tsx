@@ -7,7 +7,7 @@ import type { UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../../constants/env';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
-import { greyscaleMapStyle } from '../../constants/mapStyle';
+import { greyscaleMapStyle, darkMapStyle } from '../../constants/mapStyle';
 import { useGameStore } from '../../stores/gameStore';
 import { useLocation } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
@@ -335,7 +335,12 @@ export default function MapViewWeb() {
 
   const mapOptions = useMemo(
     () => ({
-      styles: greyscaleMapStyle,
+      // Sniff mode swaps in the dark style so the map reads as a
+      // night-vision view — the chips' urgency-coloured glows pop
+      // way harder against a dark land fill, and it makes the mode
+      // shift feel like a real change of state, not just chip-and-pill
+      // animations on the same surface.
+      styles: sniffMode ? darkMapStyle : greyscaleMapStyle,
       disableDefaultUI: true,
       zoomControl: false,
       minZoom: balance.mapZoomMin,
@@ -358,7 +363,7 @@ export default function MapViewWeb() {
         strictBounds: true,
       },
     }),
-    [],
+    [sniffMode],
   );
 
   // Map-only distance cull. Full lists live in the store (Quests tab,
