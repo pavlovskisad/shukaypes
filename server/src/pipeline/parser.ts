@@ -11,6 +11,7 @@
 // center fallback, with parseConfidence dropped accordingly.
 
 import { anthropic } from '../services/anthropic.js';
+import { snapToLandIfInRiver } from '../utils/geo.js';
 import type { ParsedDog, Species, Urgency } from './types.js';
 
 const PARSER_MODEL = 'claude-haiku-4-5';
@@ -206,10 +207,16 @@ export async function parseDogPost(input: ParseDogPostInput): Promise<ParsedDog>
 
   const lat = typeof raw.lastSeenLat === 'number' ? raw.lastSeenLat : 50.4501;
   const lng = typeof raw.lastSeenLng === 'number' ? raw.lastSeenLng : 30.5234;
-  const safeLat = isInsideKyiv(lat, lng) ? lat : 50.4501;
-  const safeLng = isInsideKyiv(lat, lng) ? lng : 30.5234;
+  const inKyiv = isInsideKyiv(lat, lng);
+  // Listings mentioning the embankment / "near the river" routinely
+  // make the LLM emit coords mid-channel. Snap to land here so the
+  // stored row is already clean — the client also snaps on display
+  // as a backstop for older rows already in the DB.
+  const snapped = inKyiv ? snapToLandIfInRiver({ lat, lng }) : { lat: 50.4501, lng: 30.5234 };
+  const safeLat = snapped.lat;
+  const safeLng = snapped.lng;
   const confidence = typeof raw.parseConfidence === 'number' ? Math.max(0, Math.min(1, raw.parseConfidence)) : 0.5;
-  const degradedConfidence = isInsideKyiv(lat, lng) ? confidence : Math.min(confidence, 0.2);
+  const degradedConfidence = inKyiv ? confidence : Math.min(confidence, 0.2);
 
   const lastSeenAtRaw = typeof raw.lastSeenAt === 'string' ? raw.lastSeenAt : new Date().toISOString();
   const lastSeenAt = isNaN(new Date(lastSeenAtRaw).getTime()) ? new Date().toISOString() : lastSeenAtRaw;

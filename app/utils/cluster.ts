@@ -63,64 +63,154 @@ function hashSeed(seed: string): number {
   return h >>> 0;
 }
 
-// Approximate Dnipro main channel through Kyiv as a stack of lat-banded
-// lng rects. The river both bends and changes width as it flows from
-// Vyshhorod down to Osokorky bay, so a single rect missed coords in
-// the bands above and below central Kyiv. Hand-traced from satellite —
-// rough but covers the whole pilot envelope; a real polygon is
-// out-of-scope for now.
+// Hand-traced polygon of the Dnipro through the Kyiv pilot area —
+// closed loop following the WEST bank top→bottom, then EAST bank
+// bottom→top. The polygon includes the in-river islands
+// (Trukhaniv, Hidropark) as "snappable" zone because the LLM-based
+// listing parser frequently lands river-adjacent listings in the
+// channel itself, and the islands are mostly parks / rare for lost
+// pets. Lat-banded rects (the previous approach) couldn't follow
+// the river's bend without leaving wedge-shaped gaps where the
+// bands stepped — pets at the seams kept rendering in water.
 //
-// Each band: [latMin, latMax, lngWestEdge, lngEastEdge].
-const RIVER_BANDS: ReadonlyArray<readonly [number, number, number, number]> = [
-  [50.55, 51.0, 30.4, 30.55],     // Vyshhorod / Kyiv Sea exit
-  [50.5, 50.55, 30.5, 30.57],     // Obolon waterfront
-  [50.45, 50.5, 30.545, 30.625],  // Central Kyiv (Podil / Hidropark / Trukhaniv) — east bumped 30.62→30.625
-  [50.4, 50.45, 30.575, 30.65],   // Pechersk → Vydubychi — east bumped 30.645→30.65
-  [49.9, 50.4, 30.6, 30.7],       // Osokorky / Bortnychi bay
+// Tuple is [lat, lng]. Vertices are deliberately rough (~100m
+// accuracy); the snap pushes ~80m off the edge to absorb error.
+const RIVER_POLYGON: ReadonlyArray<readonly [number, number]> = [
+  // West bank, north → south
+  [50.620, 30.510],
+  [50.580, 30.500],
+  [50.555, 30.500],
+  [50.530, 30.515],
+  [50.510, 30.515],
+  [50.495, 30.520],
+  [50.480, 30.535],
+  [50.470, 30.540],
+  [50.460, 30.545],
+  [50.450, 30.555],
+  [50.440, 30.565],
+  [50.430, 30.580],
+  [50.420, 30.585],
+  [50.405, 30.595],
+  [50.385, 30.610],
+  [50.360, 30.625],
+  [50.290, 30.645],
+  // East bank, south → north
+  [50.290, 30.700],
+  [50.360, 30.690],
+  [50.385, 30.665],
+  [50.405, 30.660],
+  [50.420, 30.640],
+  [50.435, 30.630],
+  [50.450, 30.625],
+  [50.465, 30.620],
+  [50.480, 30.605],
+  [50.495, 30.590],
+  [50.510, 30.585],
+  [50.530, 30.585],
+  [50.555, 30.575],
+  [50.580, 30.555],
+  [50.620, 30.540],
 ];
 
-function bandsFor(lat: number): readonly [number, number] | null {
-  for (const [latMin, latMax, west, east] of RIVER_BANDS) {
-    if (lat >= latMin && lat < latMax) return [west, east];
+// Push the snapped point this many degrees off the bank into land,
+// to absorb polygon-tracing imprecision. ~80m at Kyiv latitudes.
+const SNAP_OFFSET_DEG = 0.0008;
+
+// Standard ray-cast point-in-polygon. Counts how many polygon edges
+// a horizontal ray from the point crosses going east; odd = inside.
+function pointInPolygon(lat: number, lng: number): boolean {
+  let inside = false;
+  const n = RIVER_POLYGON.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const [yi, xi] = RIVER_POLYGON[i] as readonly [number, number];
+    const [yj, xj] = RIVER_POLYGON[j] as readonly [number, number];
+    const intersects =
+      yi > lat !== yj > lat &&
+      lng < ((xj - xi) * (lat - yi)) / (yj - yi) + xi;
+    if (intersects) inside = !inside;
   }
-  return null;
+  return inside;
 }
 
-// Snap a coord to the closer river bank if it falls inside the
-// Dnipro main channel. Used on the pet's CENTER (raw lastSeen.position)
-// before jittering, because the LLM-based listing parser sometimes
-// emits coords directly in the river — listings mentioning "Dnipro
-// embankment" or "near the river" land the LLM in the channel itself.
-// Snap-then-jitter keeps the whole zone on land; the jitter result
-// still gets a final `avoidWater` check as a belt-and-braces.
+// Project p onto segment a→b in planar (lat, lng) space, clamped to
+// the segment endpoints. Adequate for the urban scale we operate at —
+// degree-of-longitude distortion across a single segment is tiny.
+function projectOntoSegment(
+  pLat: number,
+  pLng: number,
+  aLat: number,
+  aLng: number,
+  bLat: number,
+  bLng: number,
+): readonly [number, number] {
+  const dLat = bLat - aLat;
+  const dLng = bLng - aLng;
+  const lenSq = dLat * dLat + dLng * dLng;
+  if (lenSq === 0) return [aLat, aLng];
+  let t = ((pLat - aLat) * dLat + (pLng - aLng) * dLng) / lenSq;
+  t = Math.max(0, Math.min(1, t));
+  return [aLat + t * dLat, aLng + t * dLng];
+}
+
+// Find the nearest point on any polygon edge.
+function nearestEdgeProjection(lat: number, lng: number): readonly [number, number] {
+  const first = RIVER_POLYGON[0] as readonly [number, number];
+  let bestLat = first[0];
+  let bestLng = first[1];
+  let bestDistSq = Infinity;
+  const n = RIVER_POLYGON.length;
+  for (let i = 0, j = n - 1; i < n; j = i++) {
+    const [yi, xi] = RIVER_POLYGON[i] as readonly [number, number];
+    const [yj, xj] = RIVER_POLYGON[j] as readonly [number, number];
+    const [pLat, pLng] = projectOntoSegment(lat, lng, yj, xj, yi, xi);
+    const dLat = pLat - lat;
+    const dLng = pLng - lng;
+    const d = dLat * dLat + dLng * dLng;
+    if (d < bestDistSq) {
+      bestDistSq = d;
+      bestLat = pLat;
+      bestLng = pLng;
+    }
+  }
+  return [bestLat, bestLng];
+}
+
+// If pos is inside the river polygon, project it to the nearest bank
+// and push slightly farther into land. Pets whose true coord is in
+// the channel (LLM hallucinations like "near the embankment" mapped
+// to mid-river) end up reliably on a real bank instead of swimming.
 function snapToLandIfInRiver(pos: LatLng): LatLng {
-  const band = bandsFor(pos.lat);
-  if (!band) return pos;
-  const [west, east] = band;
-  if (pos.lng <= west || pos.lng >= east) return pos;
-  const mid = (west + east) / 2;
-  const snapped = { ...pos, lng: pos.lng < mid ? west : east };
-  // TEMP debug: confirm the snap path is actually executing for the
-  // user's "still swimming" pets. Remove once verified — leaving this
-  // in steady-state would print on every render.
+  if (!pointInPolygon(pos.lat, pos.lng)) return pos;
+  const [edgeLat, edgeLng] = nearestEdgeProjection(pos.lat, pos.lng);
+  const dLat = edgeLat - pos.lat;
+  const dLng = edgeLng - pos.lng;
+  const len = Math.hypot(dLat, dLng);
+  const snapped: LatLng =
+    len === 0
+      ? { lat: edgeLat, lng: edgeLng }
+      : {
+          lat: edgeLat + (dLat / len) * SNAP_OFFSET_DEG,
+          lng: edgeLng + (dLng / len) * SNAP_OFFSET_DEG,
+        };
+  // TEMP debug: confirm the polygon snap path runs for the user's
+  // "still swimming" pets. Remove once verified — printing on every
+  // render is noisy in steady-state.
   if (typeof console !== 'undefined') {
     // eslint-disable-next-line no-console
-    console.log('[river-snap]', pos.lat.toFixed(4), pos.lng.toFixed(4), '→', snapped.lng.toFixed(4));
+    console.log(
+      '[river-snap]',
+      pos.lat.toFixed(4),
+      pos.lng.toFixed(4),
+      '→',
+      snapped.lat.toFixed(4),
+      snapped.lng.toFixed(4),
+    );
   }
   return snapped;
 }
 
 function avoidWater(_center: LatLng, jittered: LatLng): LatLng {
-  const band = bandsFor(jittered.lat);
-  if (!band) return jittered;
-  const [west, east] = band;
-  if (jittered.lng <= west || jittered.lng >= east) return jittered;
-  // Jittered into the main channel for this latitude band. Snap to the
-  // closer bank — using jittered.lng (not center.lng) so river-coord
-  // pets get sensible bilateral spread instead of all collapsing to
-  // one bank.
-  const mid = (west + east) / 2;
-  return { ...jittered, lng: jittered.lng < mid ? west : east };
+  return snapToLandIfInRiver(jittered);
 }
 
 // Deterministic pseudo-random offset inside a circle of `radiusM` meters
