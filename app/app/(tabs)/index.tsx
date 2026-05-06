@@ -171,7 +171,20 @@ export default function MapScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  mapLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
+  // `position: fixed` (web-only style RN-Web passes through) anchors
+  // the map to the actual viewport instead of the tab screen's
+  // container — that container picks up an implicit top safe-area
+  // inset on iOS PWAs, leaving a white strip under the OS status bar.
+  // Fixed positioning bypasses all of that so the map renders edge-
+  // to-edge regardless of parent safe-area handling. The HUD stays
+  // `position: absolute` so it lives inside the safe-area rectangle.
+  mapLayer: {
+    position: 'fixed' as 'absolute',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+  },
   hud: {
     position: 'absolute',
     top: 0,
