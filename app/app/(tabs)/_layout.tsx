@@ -51,6 +51,16 @@ export default function TabsLayout() {
           backdropFilter: 'blur(18px) saturate(160%)',
           // @ts-expect-error — safari prefix not in RN style types
           WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+          // Extend the tab bar's bg all the way to the actual viewport
+          // bottom so the dashboard pill's white surface covers the
+          // iOS home-indicator strip — without this, viewport-fit=cover
+          // brings the safe-area-inset-bottom region INTO the page and
+          // the bg behind the tab bar (now white body) shows as a strip
+          // below the dashboard. The icons stay padded up by the same
+          // inset amount so they don't sit under the home indicator.
+          // RN's style types don't expose CSS env() values, hence the
+          // string cast.
+          paddingBottom: 'env(safe-area-inset-bottom, 0px)' as unknown as number,
           borderTopWidth: 0,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },

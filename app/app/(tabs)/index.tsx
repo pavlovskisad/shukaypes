@@ -90,16 +90,12 @@ export default function MapScreen() {
             }
             hitSlop={8}
           >
-            {/* Logo as a plain <div> with backgroundImage —
-                same pattern as the paws / bones markers, where
-                CSS `filter: invert(1)` reliably flips the black
-                ink to white in sniff mode. The previous RN-Web
-                <Image> route had the filter ignored by iOS
-                Safari (Image renders via a slightly different
-                wrapper that didn't pass the filter through). The
-                logo PNG was traced to SVG (potrace) so it scales
-                cleanly and `backgroundImage: url(/icons/logo.svg)`
-                works the same way. */}
+            {/* Corner logo — plain <div> with backgroundImage. The
+                white-on-dark sniff-mode appearance is produced by
+                the app-wide body filter (see app/_layout.tsx), so
+                the per-element invert is gone here. The SVG was
+                traced from the original PNG (potrace) for crisp
+                scaling. */}
             <div
               style={{
                 width: HUD_ICON_SIZE,
@@ -108,8 +104,6 @@ export default function MapScreen() {
                 backgroundRepeat: 'no-repeat',
                 backgroundSize: 'contain',
                 backgroundPosition: 'center',
-                filter: sniffMode ? 'invert(1)' : 'none',
-                transition: 'filter 220ms ease-out',
               }}
             />
           </Pressable>
