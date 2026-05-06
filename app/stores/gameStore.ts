@@ -132,8 +132,11 @@ interface GameState {
   // bubble out and off-screen lost-pet edge chips bubble in around the
   // viewport so the user gets a heightened "where are all the nearby
   // missing pets" view. On-screen pets render normally in either mode.
-  // Off in normal play; the user opts in.
+  // Off in normal play; the user opts in. Toggling on stashes the
+  // spots-visible state and clears the spots layer (sniff mode is
+  // about pets, not places); toggling off restores the prior state.
   sniffMode: boolean;
+  spotsVisibleBeforeSniff: boolean | null;
   // About sheet open state — promoted from MapScreen-local state so
   // the radial menu (a child of MapView) can trigger it via the new
   // "?" button. MapScreen still hosts the modal so the dashboard tab
@@ -267,6 +270,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   // the HUD toggle if they want a clean walking map.
   spotsVisible: true,
   sniffMode: false,
+  spotsVisibleBeforeSniff: null,
   aboutOpen: false,
   spotsCategoryFilter: 'all',
   walkRoute: null,
@@ -653,8 +657,37 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
-  setSniffMode: (sniffMode) => set({ sniffMode }),
-  toggleSniffMode: () => set((s) => ({ sniffMode: !s.sniffMode })),
+  setSniffMode: (sniffMode) =>
+    set((s) => {
+      if (sniffMode === s.sniffMode) return s;
+      if (sniffMode) {
+        return {
+          sniffMode: true,
+          spotsVisibleBeforeSniff: s.spotsVisible,
+          spotsVisible: false,
+        };
+      }
+      return {
+        sniffMode: false,
+        spotsVisible: s.spotsVisibleBeforeSniff ?? s.spotsVisible,
+        spotsVisibleBeforeSniff: null,
+      };
+    }),
+  toggleSniffMode: () =>
+    set((s) => {
+      if (s.sniffMode) {
+        return {
+          sniffMode: false,
+          spotsVisible: s.spotsVisibleBeforeSniff ?? s.spotsVisible,
+          spotsVisibleBeforeSniff: null,
+        };
+      }
+      return {
+        sniffMode: true,
+        spotsVisibleBeforeSniff: s.spotsVisible,
+        spotsVisible: false,
+      };
+    }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setSpotsCategoryFilter: (spotsCategoryFilter) =>
     set((s) => ({

@@ -723,21 +723,28 @@ export default function MapViewWeb() {
     // out-transition has nothing to animate.
     if (!mapBounds) return [];
     const { n, s, e, w } = mapBounds;
-    // Top has zero reserve now — HUD has been pushed down with extra
-    // paddingTop so the chips can hug the actual screen edge per the
-    // latest design pass. Side + bottom keep small/normal reserves so
-    // chips clear the dashboard tab bar at the bottom and don't run
-    // into the spot-restack pill at the right.
+    // Reserves carve a safe rectangle the chips can pin to. The map
+    // itself extends under the OS status bar (design — it's the bg
+    // there), but the HUD (logo + pills) still sits below the status
+    // bar via the SafeAreaView, so we leave a top reserve big enough
+    // for chips to stay below the HUD as before. Bottom reserve
+    // clears the dashboard tab bar; side reserves keep chips off the
+    // very edge so the spot-restack pill on the right stays usable.
     const sideReserve = 0.03;
-    const topReserve = 0;
-    const bottomReserve = 0.14;
-    // ~13% of the viewport per chip along its edge. Tuned for the
-    // 48px chip with the cluster-style distance badge sitting at the
-    // bottom-right — a touch wider than the bare disc, so spacing
-    // accounts for the badge overhang. 5 chips × 13% = 52% of the
-    // safe range fits comfortably inside the [reserve, 1-reserve]
-    // window on either axis.
-    const SPACING_ALONG = 0.13;
+    const topReserve = 0.14;
+    const bottomReserve = 0.10;
+    // Approximate chip half-extent in viewport %. Used to pull the
+    // along-axis spread bounds inward so a side chip's TOP / BOTTOM
+    // visually aligns with the top / bottom edge chips' edges. Without
+    // this, side chips at the lowest along-position extend ~3% lower
+    // than bottom-edge chips because side chips anchor by their CENTRE
+    // and bottom chips anchor by their BOTTOM. ~3.5% works for the 48px
+    // chip on a 600-900px tall phone viewport.
+    const chipHalfPct = 0.035;
+    // 12% along-axis spacing. With cap = 8 ("supersniff"), 7 × 12% =
+    // 84% — fits within a single edge's safe range on a ~800px tall
+    // phone, edges share the load when chips are spread around.
+    const SPACING_ALONG = 0.12;
 
     type EdgeName = 'top' | 'right' | 'bottom' | 'left';
     interface Chip {
@@ -793,7 +800,10 @@ export default function MapViewWeb() {
       });
     }
     chips.sort((a, b) => a.distanceM - b.distanceM);
-    const limited = chips.slice(0, 5);
+    // Cap raised from 5 → 8 — sniff mode is the "everything around me"
+    // view, so it can absorb a few more chips before the edges feel
+    // crowded.
+    const limited = chips.slice(0, 8);
 
     // Group by edge, then forward + back min-spacing pass.
     const groups: Record<EdgeName, Chip[]> = {
@@ -805,11 +815,19 @@ export default function MapViewWeb() {
       const g = groups[edgeName];
       if (g.length === 0) continue;
       g.sort((a, b) => a.along - b.along);
-      const lo = edgeName === 'left' || edgeName === 'right' ? topReserve : sideReserve;
+      // Pull bounds in by chipHalfPct so a side chip at the lowest
+      // along-position (anchored by its centre) lines up its BOTTOM
+      // with the bottom-edge chip's bottom (anchored by its edge),
+      // and same at the top. Fixes the "bottom chips are higher than
+      // side chips" misalignment.
+      const lo =
+        edgeName === 'left' || edgeName === 'right'
+          ? topReserve + chipHalfPct
+          : sideReserve + chipHalfPct;
       const hi =
         edgeName === 'left' || edgeName === 'right'
-          ? 1 - bottomReserve
-          : 1 - sideReserve;
+          ? 1 - bottomReserve - chipHalfPct
+          : 1 - sideReserve - chipHalfPct;
       // Forward: each chip ≥ prev + spacing
       for (let i = 1; i < g.length; i++) {
         g[i]!.along = Math.max(g[i]!.along, g[i - 1]!.along + SPACING_ALONG);
@@ -1209,22 +1227,22 @@ export default function MapViewWeb() {
                the overflow-hidden disc, so the bottom-right badge
                doesn't get cropped at the disc edge. */}
       {offscreenDogIndicators.map((d) => {
+        // Mirror the on-screen LostDogMarker halo so chips visually
+        // echo the actual map pins — same warm urgency-coloured soft
+        // glow + drop shadow, no ring border.
         const halo =
           d.urgency === 'urgent'
             ? {
-                ring: 'rgba(232,64,64,0.55)',
-                glow: '0 0 10px rgba(232,64,64,0.42)',
+                glow: '0 0 14px rgba(232,64,64,0.45), 0 2px 8px rgba(0,0,0,0.12)',
                 badge: 'rgba(232,64,64,0.95)',
               }
             : d.urgency === 'medium'
               ? {
-                  ring: 'rgba(217,160,48,0.55)',
-                  glow: '0 0 10px rgba(217,160,48,0.42)',
+                  glow: '0 0 14px rgba(217,160,48,0.45), 0 2px 8px rgba(0,0,0,0.12)',
                   badge: 'rgba(217,160,48,0.95)',
                 }
               : {
-                  ring: 'rgba(160,160,160,0.45)',
-                  glow: '0 0 8px rgba(160,160,160,0.3)',
+                  glow: '0 0 10px rgba(160,160,160,0.3), 0 2px 6px rgba(0,0,0,0.1)',
                   badge: 'rgba(120,120,120,0.92)',
                 };
         const edgeTransform =
@@ -1271,7 +1289,11 @@ export default function MapViewWeb() {
                   inset: 0,
                   borderRadius: '50%',
                   background: '#ffffff',
-                  border: `1.5px solid ${halo.ring}`,
+                  // No urgency-coloured ring border — that read as a
+                  // gold rim around medium-urgency chips and dominated
+                  // the chip's look. The urgency-coloured glow + the
+                  // distance badge carry the urgency signal alone, same
+                  // as the on-screen LostDogMarker.
                   boxShadow: halo.glow,
                   overflow: 'hidden',
                   display: 'flex',
