@@ -53,22 +53,22 @@ export default function TabsLayout() {
           position: 'absolute',
           left: 0,
           right: 0,
-          bottom: 0,
+          // Shift the bar's anchor DOWN by the bottom inset so its bg
+          // extends INTO the home-indicator strip; the matching
+          // `paddingBottom` pads the icons back up so they don't sit
+          // under the indicator. Without the negative `bottom` offset
+          // the bar's anchor sits at the TOP of the safe-area strip
+          // (the screen container respects the inset by default), so
+          // adding paddingBottom alone just made the bar taller upward
+          // and left the strip below uncovered.
+          bottom: -insets.bottom,
+          paddingBottom: insets.bottom,
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
           backgroundColor: 'rgba(255,255,255,0.85)',
           backdropFilter: 'blur(18px) saturate(160%)',
           // @ts-expect-error — safari prefix not in RN style types
           WebkitBackdropFilter: 'blur(18px) saturate(160%)',
-          // Extend the tab bar's bg all the way to the actual viewport
-          // bottom so the dashboard pill's white surface covers the
-          // iOS home-indicator strip — without this, viewport-fit=cover
-          // brings the safe-area-inset-bottom region INTO the page and
-          // the bg behind the tab bar (now white body) shows as a strip
-          // below the dashboard. Numeric value from the safe-area
-          // hook (env(safe-area-inset-bottom) as a string didn't get
-          // applied through RN's StyleSheet pipeline).
-          paddingBottom: insets.bottom,
           borderTopWidth: 0,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },
