@@ -48,12 +48,15 @@
       /* These styles disable body scrolling if you are using <ScrollView> */
       body {
         overflow: hidden;
-        /* Dark fallback so any sliver of body bg that peeks through
-           (under the OS status bar before the map paints, between
-           renders, etc.) reads as part of the dark app shell rather
-           than a white band. The greyscale map covers it cleanly in
-           normal mode steady state. */
-        background: #0d0d0d;
+        /* Body bg stays white — that matches the dashboard tab bar
+           pill so the home-indicator strip reads as the same surface,
+           and it matches the original initial-load flash colour
+           (was white before; switching to dark introduced both a
+           visible black flash on cold-load AND a black strip below
+           the tab bar). With the PWA meta extending the page under
+           the OS status bar, the map itself covers the top region
+           in steady state, so we don't need a dark fallback there. */
+        background: #ffffff;
       }
       /* These styles make the root element full-height */
       #root {
