@@ -8,21 +8,36 @@ export const greyscaleMapStyle = [
 ];
 
 // Sniff-mode dark style — desaturated, then dropped lightness across
-// the board so the bg / land reads as deep charcoal with streets a
-// slightly brighter grey. Streets stay legible (the user is still
-// trying to follow them toward a pet); labels are dimmed but kept
-// because at this zoom street names are how a human navigates. Same
-// POI / transit-label overrides as the day style so the map doesn't
-// suddenly clutter when sniff turns on.
+// the board so the bg / land reads as deep charcoal. Streets are
+// pushed back UP to a near-white grey so the road network stays
+// crisp against the dark land fill (the user is following streets
+// to find pets — the road graph has to read at a glance). Labels
+// stay dim white. POI / transit-label overrides match the day style
+// so the layer set doesn't shift when sniff toggles.
 export const darkMapStyle = [
   { stylers: [{ saturation: -100 }, { lightness: -85 }] },
-  // Streets a touch brighter than the background so the road network
-  // still reads against the dark land fill.
-  { featureType: 'road', stylers: [{ lightness: -65 }] },
-  // Water bodies — slightly different shade so they don't merge with
-  // land at a glance (Dnipro reads as a darker negative-space).
+  // Road surface — light grey, high contrast against the deep
+  // charcoal land. Use explicit `color` instead of relative
+  // `lightness` so the result is predictable across base palettes.
+  { featureType: 'road', elementType: 'geometry', stylers: [{ color: '#bdbdbd' }] },
+  // Major arteries a touch brighter so they pop above neighbourhood
+  // streets — same hierarchy the day map shows.
+  {
+    featureType: 'road.arterial',
+    elementType: 'geometry',
+    stylers: [{ color: '#d4d4d4' }],
+  },
+  {
+    featureType: 'road.highway',
+    elementType: 'geometry',
+    stylers: [{ color: '#e8e8e8' }],
+  },
+  // Water bodies — slightly darker than the land so the Dnipro reads
+  // as negative space.
   { featureType: 'water', stylers: [{ lightness: -92 }] },
-  // Labels: visible but very dim white text so they don't shout.
+  // Labels: dim white text so they don't shout but stay readable
+  // against the darker bg (now even darker compared to the brighter
+  // streets).
   {
     featureType: 'all',
     elementType: 'labels.text.fill',
