@@ -90,12 +90,12 @@ export default function MapScreen() {
             }
             hitSlop={8}
           >
-            {/* Corner logo — plain <div> with backgroundImage. The
-                white-on-dark sniff-mode appearance is produced by
-                the app-wide body filter (see app/_layout.tsx), so
-                the per-element invert is gone here. The SVG was
-                traced from the original PNG (potrace) for crisp
-                scaling. */}
+            {/* Corner logo — plain <div> with backgroundImage so CSS
+                `filter: invert(1)` works reliably (the previous RN
+                <Image> wrapper ate the filter on iOS Safari). Sniff
+                mode flips the black logo to white so it stays
+                visible against the dark map. SVG was potrace-traced
+                from the original PNG for crisp scaling. */}
             <div
               style={{
                 width: HUD_ICON_SIZE,
@@ -104,6 +104,8 @@ export default function MapScreen() {
                 backgroundRepeat: 'no-repeat',
                 backgroundSize: 'contain',
                 backgroundPosition: 'center',
+                filter: sniffMode ? 'invert(1)' : undefined,
+                transition: 'filter 220ms ease-out',
               }}
             />
           </Pressable>

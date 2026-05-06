@@ -3,10 +3,18 @@ import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
 
 // 🐾 token with lime glow (demo line 319 / TO class). Memoized — ~30 of
-// these render, map re-renders on every pan. Sniff mode's "white on
-// dark" appearance is now produced by an app-wide body filter (see
-// app/_layout.tsx), so the per-marker `inverted` prop is gone.
-function TokenMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => void }) {
+// these render, map re-renders on every pan. `inverted` flips the
+// black silhouette to white via CSS filter when sniff mode + dark
+// map are active, so the paws don't disappear into the dark land.
+function TokenMarkerImpl({
+  position,
+  onTap,
+  inverted = false,
+}: {
+  position: LatLng;
+  onTap: () => void;
+  inverted?: boolean;
+}) {
   return (
     <OverlayViewF
       position={position as unknown as google.maps.LatLngLiteral}
@@ -28,6 +36,7 @@ function TokenMarkerImpl({ position, onTap }: { position: LatLng; onTap: () => v
           backgroundImage: 'url(/icons/paws.svg)',
           backgroundRepeat: 'no-repeat',
           backgroundSize: 'contain',
+          filter: inverted ? 'invert(1)' : undefined,
           cursor: 'pointer',
           userSelect: 'none',
         }}
