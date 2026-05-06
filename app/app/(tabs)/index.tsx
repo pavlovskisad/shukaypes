@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { View, Image, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -30,13 +30,20 @@ export default function MapScreen() {
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const sniffMode = useGameStore((s) => s.sniffMode);
   const toggleSniffMode = useGameStore((s) => s.toggleSniffMode);
-  // Track whether the user has ever toggled sniff. Suppresses the
-  // hud-pop-in animation on initial mount (sniffMode starts false; the
-  // HUD's "default visible" state shouldn't replay the pop-in keyframe
-  // every time the screen mounts).
-  const sniffWasEverOnRef = useRef(false);
-  if (sniffMode) sniffWasEverOnRef.current = true;
-  const sniffEverOn = sniffWasEverOnRef.current;
+  // Pop animations on the HUD pills should only run during the brief
+  // window around an actual sniff toggle, not on every re-render or
+  // on initial mount. Static styles handle the steady state.
+  const [sniffJustChanged, setSniffJustChanged] = useState(false);
+  const sniffInitRef = useRef(true);
+  useEffect(() => {
+    if (sniffInitRef.current) {
+      sniffInitRef.current = false;
+      return;
+    }
+    setSniffJustChanged(true);
+    const t = setTimeout(() => setSniffJustChanged(false), 420);
+    return () => clearTimeout(t);
+  }, [sniffMode]);
 
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('map');
@@ -138,7 +145,9 @@ export default function MapScreen() {
           <div
             style={{
               transformOrigin: 'right center',
-              animation: sniffEverOn
+              opacity: sniffMode ? 0 : 1,
+              transform: sniffMode ? 'scale(0)' : 'scale(1)',
+              animation: sniffJustChanged
                 ? sniffMode
                   ? `hud-pop-out 320ms ease-in forwards`
                   : `hud-pop-in 360ms ${POP_IN} forwards`
@@ -156,7 +165,9 @@ export default function MapScreen() {
         >
           <div
             style={{
-              animation: sniffEverOn
+              opacity: sniffMode ? 0 : 1,
+              transform: sniffMode ? 'scale(0)' : 'scale(1)',
+              animation: sniffJustChanged
                 ? sniffMode
                   ? `hud-pop-out 320ms ease-in forwards`
                   : `hud-pop-in 360ms ${POP_IN} forwards`
