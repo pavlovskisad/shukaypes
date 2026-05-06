@@ -7,7 +7,7 @@ import type { UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../../constants/env';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
-import { greyscaleMapStyle } from '../../constants/mapStyle';
+import { greyscaleMapStyle, darkMapStyle } from '../../constants/mapStyle';
 import { useGameStore } from '../../stores/gameStore';
 import { useLocation } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
@@ -371,12 +371,14 @@ export default function MapViewWeb() {
 
   const mapOptions = useMemo(
     () => ({
-      // Single style now — sniff mode's "dark map" effect is achieved
-      // app-wide via a CSS `filter: invert(1) hue-rotate(180deg)` on
-      // <body> (see app/_layout.tsx). Way cheaper than swapping
-      // Google Maps style rules at runtime, since the tiles never
-      // re-render on toggle — only the GPU compositing layer flips.
-      styles: greyscaleMapStyle,
+      // Sniff mode swaps to the dark style — deep-charcoal land,
+      // brighter dark-grey streets, dim labels. Cost is a one-time
+      // tile re-render per toggle (no sustained perf hit). The
+      // body-filter route was attempted earlier but mangled photos
+      // and the profile dog scene + felt laggy on iOS Safari from
+      // forcing every child element into its own GPU compositing
+      // layer; per-element approach is the right call here.
+      styles: sniffMode ? darkMapStyle : greyscaleMapStyle,
       disableDefaultUI: true,
       zoomControl: false,
       minZoom: balance.mapZoomMin,
@@ -399,7 +401,7 @@ export default function MapViewWeb() {
         strictBounds: true,
       },
     }),
-    [],
+    [sniffMode],
   );
 
   // Map-only distance cull. Full lists live in the store (Quests tab,
@@ -1065,6 +1067,7 @@ export default function MapViewWeb() {
             key={t.id}
             position={t.position}
             onTap={tokenTapHandlers.get(t.id)!}
+            inverted={sniffMode}
           />
         ))}
 
@@ -1073,6 +1076,7 @@ export default function MapViewWeb() {
             key={f.id}
             position={f.position}
             onTap={foodTapHandlers.get(f.id)!}
+            inverted={sniffMode}
           />
         ))}
 
