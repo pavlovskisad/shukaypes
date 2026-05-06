@@ -8,6 +8,7 @@ import { QuestPill } from '../../components/ui/QuestPill';
 import { AboutModal } from '../../components/ui/AboutModal';
 import { useGameStore } from '../../stores/gameStore';
 import logoSquare from '../../assets/logo-square.png';
+import logoSquareInverse from '../../assets/logo-square-inverse.png';
 
 // Logo is the brand anchor in the top-left. Prototype has it roughly
 // pill-height; matching that so it reads as a peer of the status pill
@@ -63,7 +64,11 @@ export default function MapScreen() {
       <View style={styles.mapLayer}>
         <MapView />
       </View>
-      <SafeAreaView style={styles.hud} pointerEvents="box-none" edges={['top']}>
+      {/* No `edges={['top']}` — the user wants the map + HUD to render
+          all the way to the actual top edge of the screen (no safe-
+          area inset reserve at the top). The hudRow's paddingTop
+          handles spacing from the very top. */}
+      <SafeAreaView style={styles.hud} pointerEvents="box-none" edges={[]}>
         <View style={styles.hudRow}>
           <Pressable
             onPress={toggleSniffMode}
@@ -73,12 +78,14 @@ export default function MapScreen() {
             }
             hitSlop={8}
           >
-            {/* Logo. Sniff mode flips the colour scheme — black
-                rounded-square fill behind a CSS-inverted image so the
-                originally-black lines render as white. Programmatic;
-                no second asset. */}
+            {/* Logo. Sniff mode swaps to a separate inverse asset
+                (white outlines + nose) on a black rounded-square pill.
+                The CSS `filter: invert(1)` route had rendering quirks
+                on iOS Safari (showed as a solid black square), so we
+                ship a real second asset and cross-fade between them. */}
             <div
               style={{
+                position: 'relative',
                 width: HUD_ICON_SIZE,
                 height: HUD_ICON_SIZE,
                 borderRadius: 12,
@@ -87,18 +94,32 @@ export default function MapScreen() {
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
+                overflow: 'hidden',
               }}
             >
               <Image
                 source={logoSquare}
                 style={[
                   styles.logo,
-                  // @ts-expect-error — RN style types don't know about
-                  // CSS `filter` / `transition`; web target only.
+                  styles.logoStacked,
+                  // CSS `transition` isn't in RN's ImageStyle type —
+                  // web target only, so cast to any for the inline.
                   {
-                    filter: sniffMode ? 'invert(1)' : 'none',
-                    transition: 'filter 220ms ease-out',
-                  },
+                    opacity: sniffMode ? 0 : 1,
+                    transition: 'opacity 220ms ease-out',
+                  } as any,
+                ]}
+                resizeMode="contain"
+              />
+              <Image
+                source={logoSquareInverse}
+                style={[
+                  styles.logo,
+                  styles.logoStacked,
+                  {
+                    opacity: sniffMode ? 1 : 0,
+                    transition: 'opacity 220ms ease-out',
+                  } as any,
                 ]}
                 resizeMode="contain"
               />
@@ -155,16 +176,23 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     // Center vertically so the pill sits on the logo's horizontal midline.
     // Equal paddingHorizontal keeps distance-to-edge matching on both sides.
-    // paddingTop pushes the HUD a bit down from the top safe-area inset
-    // so the off-screen lost-pet chips have room to sit at the actual
-    // top edge of the screen without overlapping the logo / pills.
+    // paddingTop is small now — the SafeAreaView no longer adds a top
+    // inset (we want map + HUD to reach the very top of the screen),
+    // so this is the only top-spacing the HUD has.
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingTop: 32,
+    paddingTop: 12,
   },
   logo: {
     width: HUD_ICON_SIZE,
     height: HUD_ICON_SIZE,
+  },
+  // Both logo variants stack absolutely so we can cross-fade between
+  // them on sniff-mode toggle without the layout shifting.
+  logoStacked: {
+    position: 'absolute',
+    top: 0,
+    left: 0,
   },
   questRow: {
     flexDirection: 'row',
