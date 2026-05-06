@@ -95,9 +95,12 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     // Center vertically so the pill sits on the logo's horizontal midline.
     // Equal paddingHorizontal keeps distance-to-edge matching on both sides.
+    // paddingTop pushes the HUD a bit down from the top safe-area inset
+    // so the off-screen lost-pet chips have room to sit at the actual
+    // top edge of the screen without overlapping the logo / pills.
     alignItems: 'center',
     paddingHorizontal: 12,
-    paddingTop: 8,
+    paddingTop: 32,
   },
   logo: {
     width: HUD_ICON_SIZE,

@@ -29,6 +29,7 @@ import { PoiCluster } from './PoiCluster';
 import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import type { LatLng } from '@shukajpes/shared';
+import { SYSTEM_FONT } from '../../constants/fonts';
 
 const CONTAINER_STYLE = { width: '100%', height: '100%' };
 const LIBRARIES: ('places')[] = ['places'];
@@ -710,16 +711,21 @@ export default function MapViewWeb() {
   const offscreenDogIndicators = (() => {
     if (!mapBounds) return [];
     const { n, s, e, w } = mapBounds;
-    const sideReserve = 0.05;
-    const topReserve = 0.15;
+    // Top has zero reserve now — HUD has been pushed down with extra
+    // paddingTop so the chips can hug the actual screen edge per the
+    // latest design pass. Side + bottom keep small/normal reserves so
+    // chips clear the dashboard tab bar at the bottom and don't run
+    // into the spot-restack pill at the right.
+    const sideReserve = 0.03;
+    const topReserve = 0;
     const bottomReserve = 0.14;
-    // ~14% of the viewport per chip along its edge. Tuned for the
-    // 48px chip + label below: on a 400px-wide phone that's ~56px
-    // center-to-center which clears chip widths, on a typical 800px
-    // tall viewport it's plenty for the chip+label vertical extent.
-    // 5 chips (the cap) span 4 × 14% = 56% of the safe range, well
-    // within the [reserve, 1-reserve] window on either axis.
-    const SPACING_ALONG = 0.14;
+    // ~13% of the viewport per chip along its edge. Tuned for the
+    // 48px chip with the cluster-style distance badge sitting at the
+    // bottom-right — a touch wider than the bare disc, so spacing
+    // accounts for the badge overhang. 5 chips × 13% = 52% of the
+    // safe range fits comfortably inside the [reserve, 1-reserve]
+    // window on either axis.
+    const SPACING_ALONG = 0.13;
 
     type EdgeName = 'top' | 'right' | 'bottom' | 'left';
     interface Chip {
@@ -825,6 +831,7 @@ export default function MapViewWeb() {
         name: c.name,
         distanceM: c.distanceM,
         target: c.target,
+        edge: c.edge,
         left: `${leftPct * 100}%`,
         top: `${topPct * 100}%`,
       };
@@ -1180,10 +1187,36 @@ export default function MapViewWeb() {
       {offscreenDogIndicators.map((d) => {
         const halo =
           d.urgency === 'urgent'
-            ? { ring: 'rgba(232,64,64,0.55)', glow: '0 0 10px rgba(232,64,64,0.42)' }
+            ? {
+                ring: 'rgba(232,64,64,0.55)',
+                glow: '0 0 10px rgba(232,64,64,0.42)',
+                badge: 'rgba(232,64,64,0.95)',
+              }
             : d.urgency === 'medium'
-              ? { ring: 'rgba(217,160,48,0.55)', glow: '0 0 10px rgba(217,160,48,0.42)' }
-              : { ring: 'rgba(160,160,160,0.45)', glow: '0 0 8px rgba(160,160,160,0.3)' };
+              ? {
+                  ring: 'rgba(217,160,48,0.55)',
+                  glow: '0 0 10px rgba(217,160,48,0.42)',
+                  badge: 'rgba(217,160,48,0.95)',
+                }
+              : {
+                  ring: 'rgba(160,160,160,0.45)',
+                  glow: '0 0 8px rgba(160,160,160,0.3)',
+                  badge: 'rgba(120,120,120,0.92)',
+                };
+        // Per-edge anchoring: instead of always centring on the
+        // computed point, anchor the side of the chip that touches
+        // the screen edge so the chip is fully visible inside the
+        // viewport with the small `*Reserve` value as the gap. Without
+        // this, dropping topReserve to 0 would put the chip's CENTRE
+        // at top:0 and clip half of it.
+        const transform =
+          d.edge === 'top'
+            ? 'translate(-50%, 0)'
+            : d.edge === 'bottom'
+              ? 'translate(-50%, -100%)'
+              : d.edge === 'left'
+                ? 'translate(0, -50%)'
+                : 'translate(-100%, -50%)';
         return (
           <div
             key={`offscreen-dog-${d.id}`}
@@ -1194,15 +1227,11 @@ export default function MapViewWeb() {
               position: 'absolute',
               left: d.left,
               top: d.top,
-              transform: 'translate(-50%, -50%)',
+              transform,
               transition:
                 'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
               zIndex: 24,
               cursor: 'pointer',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              gap: 2,
               userSelect: 'none',
             }}
           >
@@ -1242,23 +1271,33 @@ export default function MapViewWeb() {
                   }}
                 />
               ) : null}
-            </div>
-            <div
-              style={{
-                fontSize: 11,
-                fontWeight: 700,
-                color: '#1a1a1a',
-                background: 'rgba(255,255,255,0.85)',
-                paddingLeft: 6,
-                paddingRight: 6,
-                paddingTop: 1,
-                paddingBottom: 1,
-                borderRadius: 8,
-                textShadow: '0 1px 2px rgba(255,255,255,0.95)',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              {formatDistance(d.distanceM)}
+              {/* Distance badge — same shape language as the spot
+                  cluster count chip (top-right, white text on a
+                  rounded pill) but coloured by urgency so it reads
+                  as "this far to a {red|amber|grey} pet" at a glance. */}
+              <div
+                style={{
+                  position: 'absolute',
+                  bottom: -4,
+                  right: -6,
+                  minWidth: 22,
+                  height: 18,
+                  paddingLeft: 5,
+                  paddingRight: 5,
+                  borderRadius: 9,
+                  background: halo.badge,
+                  color: '#ffffff',
+                  fontFamily: SYSTEM_FONT,
+                  fontSize: 10,
+                  fontWeight: 700,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.18)',
+                }}
+              >
+                {formatDistance(d.distanceM)}
+              </div>
             </div>
           </div>
         );
