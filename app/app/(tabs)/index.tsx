@@ -39,7 +39,10 @@ export default function MapScreen() {
       return;
     }
     setSniffJustChanged(true);
-    const t = setTimeout(() => setSniffJustChanged(false), 420);
+    // Match MapView's window so the staggered HUD/chip animations
+    // (one leg delayed 200ms) get the full 200+360 = 560ms to play
+    // before the flag clears.
+    const t = setTimeout(() => setSniffJustChanged(false), 700);
     return () => clearTimeout(t);
   }, [sniffMode]);
 
@@ -117,10 +120,15 @@ export default function MapScreen() {
               transformOrigin: 'right center',
               opacity: sniffMode ? 0 : 1,
               transform: sniffMode ? 'scale(0)' : 'scale(1)',
+              // Stagger: HUD collapses immediately on sniff-on; on
+              // sniff-off it bubbles back in AFTER the chips have
+              // popped out (200ms delay). `both` fill mode applies
+              // the 0% keyframe during the delay so the HUD doesn't
+              // flash visible before the animation starts.
               animation: sniffJustChanged
                 ? sniffMode
-                  ? `hud-pop-out 320ms ease-in forwards`
-                  : `hud-pop-in 360ms ${POP_IN} forwards`
+                  ? `pop-out 320ms ease-in forwards`
+                  : `pop-in 360ms ${POP_IN} 200ms both`
                 : 'none',
               pointerEvents: sniffMode ? 'none' : 'auto',
             }}
@@ -137,10 +145,15 @@ export default function MapScreen() {
             style={{
               opacity: sniffMode ? 0 : 1,
               transform: sniffMode ? 'scale(0)' : 'scale(1)',
+              // Stagger: HUD collapses immediately on sniff-on; on
+              // sniff-off it bubbles back in AFTER the chips have
+              // popped out (200ms delay). `both` fill mode applies
+              // the 0% keyframe during the delay so the HUD doesn't
+              // flash visible before the animation starts.
               animation: sniffJustChanged
                 ? sniffMode
-                  ? `hud-pop-out 320ms ease-in forwards`
-                  : `hud-pop-in 360ms ${POP_IN} forwards`
+                  ? `pop-out 320ms ease-in forwards`
+                  : `pop-in 360ms ${POP_IN} 200ms both`
                 : 'none',
             }}
           >

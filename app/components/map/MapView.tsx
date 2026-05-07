@@ -150,7 +150,10 @@ export default function MapViewWeb() {
       return;
     }
     setSniffJustChanged(true);
-    const t = setTimeout(() => setSniffJustChanged(false), 420);
+    // 700ms covers the staggered timeline: one leg runs 0-320ms,
+    // the other leg runs 200-560ms with an animation-delay so HUD
+    // and chips don't fight for attention in the same instant.
+    const t = setTimeout(() => setSniffJustChanged(false), 700);
     return () => clearTimeout(t);
   }, [sniffMode]);
   const spotsCategoryFilter = useGameStore((s) => s.spotsCategoryFilter);
@@ -1379,10 +1382,16 @@ export default function MapViewWeb() {
                 // mode were flashing visible-then-fade).
                 opacity: sniffMode ? 1 : 0,
                 transform: sniffMode ? 'scale(1)' : 'scale(0)',
+                // Stagger so chips bubble in AFTER the HUD finishes
+                // collapsing on sniff-on (200ms delay), and pop OUT
+                // immediately on sniff-off (HUD then bubbles back in
+                // with its own delay). `both` fill mode applies the
+                // 0% keyframe during the delay window so chips don't
+                // flash visible before the animation starts.
                 animation: sniffJustChanged
                   ? sniffMode
-                    ? 'chip-pop-in 360ms cubic-bezier(0.34, 1.56, 0.64, 1) forwards'
-                    : 'chip-pop-out 280ms ease-in forwards'
+                    ? 'pop-in 360ms cubic-bezier(0.34, 1.56, 0.64, 1) 200ms both'
+                    : 'pop-out 280ms ease-in forwards'
                   : 'none',
                 pointerEvents: sniffMode ? 'auto' : 'none',
               }}
@@ -1459,27 +1468,19 @@ export default function MapViewWeb() {
         );
       })}
 
-      {/* Bubble keyframes for the off-screen chips — pop-in overshoots
-          ~12% past target then settles, pop-out briefly grows ~10%
-          before collapsing. Applied via the `animation` prop on the
-          chip wrapper based on sniffMode. */}
+      {/* Unified bubble keyframes shared by the off-screen chips
+          AND the HUD pills (StatusBar / QuestPill). The previous
+          `chip-pop-out` / `hud-pop-out` were already identical;
+          `chip-pop-in` / `hud-pop-in` differed only in the overshoot
+          magnitude (1.12 vs 1.08) which read the same on screen.
+          One pair of keyframes, less to keep in sync. */}
       <style>{`
-        @keyframes chip-pop-in {
+        @keyframes pop-in {
           0%   { transform: scale(0);    opacity: 0; }
-          70%  { transform: scale(1.12); opacity: 1; }
+          70%  { transform: scale(1.10); opacity: 1; }
           100% { transform: scale(1);    opacity: 1; }
         }
-        @keyframes chip-pop-out {
-          0%   { transform: scale(1);    opacity: 1; }
-          25%  { transform: scale(1.10); opacity: 1; }
-          100% { transform: scale(0);    opacity: 0; }
-        }
-        @keyframes hud-pop-in {
-          0%   { transform: scale(0);    opacity: 0; }
-          70%  { transform: scale(1.08); opacity: 1; }
-          100% { transform: scale(1);    opacity: 1; }
-        }
-        @keyframes hud-pop-out {
+        @keyframes pop-out {
           0%   { transform: scale(1);    opacity: 1; }
           25%  { transform: scale(1.10); opacity: 1; }
           100% { transform: scale(0);    opacity: 0; }
