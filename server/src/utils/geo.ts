@@ -127,6 +127,17 @@ function avoidWater(_center: LatLng, sampled: LatLng): LatLng {
   return snapToLandIfInRiver(sampled);
 }
 
+// How many fresh samples to try before falling back to the snap. The
+// snap collapses many in-water samples onto the same edge point + 80m
+// offset, which produces tight clusters of stacked tokens at the bank
+// (the visible "stamped pile of paws" bug). Resampling preserves the
+// scatter spread for points that legitimately had a water roll.
+const RESAMPLE_LIMIT = 8;
+
+function isInRiver(p: LatLng): boolean {
+  return pointInRiverPolygon(p.lat, p.lng);
+}
+
 export function distanceMeters(a: LatLng, b: LatLng): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
   const dLat = toRad(b.lat - a.lat);
@@ -174,22 +185,28 @@ export function scatter(
   lngSpread: number,
   centerBias = 0,
 ): LatLng[] {
-  const out: LatLng[] = [];
-  for (let i = 0; i < count; i++) {
-    let sampled: LatLng;
+  const sampleOne = (): LatLng => {
     if (centerBias > 0) {
       const u = Math.random();
       const theta = Math.random() * 2 * Math.PI;
       const r = Math.pow(u, 0.5 + centerBias);
-      sampled = {
+      return {
         lat: center.lat + Math.sin(theta) * r * latSpread,
         lng: center.lng + Math.cos(theta) * r * lngSpread,
       };
-    } else {
-      sampled = {
-        lat: center.lat + (Math.random() - 0.5) * 2 * latSpread,
-        lng: center.lng + (Math.random() - 0.5) * 2 * lngSpread,
-      };
+    }
+    return {
+      lat: center.lat + (Math.random() - 0.5) * 2 * latSpread,
+      lng: center.lng + (Math.random() - 0.5) * 2 * lngSpread,
+    };
+  };
+  const out: LatLng[] = [];
+  for (let i = 0; i < count; i++) {
+    let sampled = sampleOne();
+    let tries = 0;
+    while (isInRiver(sampled) && tries < RESAMPLE_LIMIT) {
+      sampled = sampleOne();
+      tries++;
     }
     out.push(avoidWater(center, sampled));
   }
@@ -220,17 +237,23 @@ export function scatterInRadius(
   const maxSq = radiusM * radiusM;
   const span = maxSq - minSq;
   const biasExp = 1 + 2 * Math.max(0, centerBias);
-  for (let i = 0; i < count; i++) {
+  const sampleOne = (): LatLng => {
     const u = Math.random();
     const theta = Math.random() * 2 * Math.PI;
-    // Biased uniform-area sampling on the annulus [minR, maxR].
-    // Reduces to the disk case when minRadiusM = 0.
     const uBiased = Math.pow(u, biasExp);
     const rM = Math.sqrt(minSq + uBiased * span);
-    const sampled: LatLng = {
+    return {
       lat: center.lat + (Math.sin(theta) * rM) / latMetersPerDeg,
       lng: center.lng + (Math.cos(theta) * rM) / lngMetersPerDeg,
     };
+  };
+  for (let i = 0; i < count; i++) {
+    let sampled = sampleOne();
+    let tries = 0;
+    while (isInRiver(sampled) && tries < RESAMPLE_LIMIT) {
+      sampled = sampleOne();
+      tries++;
+    }
     out.push(avoidWater(center, sampled));
   }
   return out;
