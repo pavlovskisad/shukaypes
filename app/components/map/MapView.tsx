@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { GoogleMap, PolylineF, useJsApiLoader } from '@react-google-maps/api';
@@ -144,7 +144,13 @@ export default function MapViewWeb() {
   // styles (opacity / scale) keyed off `sniffMode`.
   const [sniffJustChanged, setSniffJustChanged] = useState(false);
   const sniffInitRef = useRef(true);
-  useEffect(() => {
+  // useLayoutEffect (not useEffect) so `sniffJustChanged` flips in the
+  // same paint cycle as sniffMode. With useEffect there's a one-frame
+  // gap where the new sniffMode static styles paint without the
+  // animation attached — chips/HUD snap to their target state for a
+  // frame, then the animation kicks in and re-animates from the 0%
+  // keyframe, producing a visible blink before the animation runs.
+  useLayoutEffect(() => {
     if (sniffInitRef.current) {
       sniffInitRef.current = false;
       return;
