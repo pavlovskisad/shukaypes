@@ -189,28 +189,11 @@ function snapToLandIfInRiver(pos: LatLng): LatLng {
   const dLat = edgeLat - pos.lat;
   const dLng = edgeLng - pos.lng;
   const len = Math.hypot(dLat, dLng);
-  const snapped: LatLng =
-    len === 0
-      ? { lat: edgeLat, lng: edgeLng }
-      : {
-          lat: edgeLat + (dLat / len) * SNAP_OFFSET_DEG,
-          lng: edgeLng + (dLng / len) * SNAP_OFFSET_DEG,
-        };
-  // TEMP debug: confirm the polygon snap path runs for the user's
-  // "still swimming" pets. Remove once verified — printing on every
-  // render is noisy in steady-state.
-  if (typeof console !== 'undefined') {
-    // eslint-disable-next-line no-console
-    console.log(
-      '[river-snap]',
-      pos.lat.toFixed(4),
-      pos.lng.toFixed(4),
-      '→',
-      snapped.lat.toFixed(4),
-      snapped.lng.toFixed(4),
-    );
-  }
-  return snapped;
+  if (len === 0) return { lat: edgeLat, lng: edgeLng };
+  return {
+    lat: edgeLat + (dLat / len) * SNAP_OFFSET_DEG,
+    lng: edgeLng + (dLng / len) * SNAP_OFFSET_DEG,
+  };
 }
 
 function avoidWater(_center: LatLng, jittered: LatLng): LatLng {
