@@ -729,19 +729,23 @@ export default function MapViewWeb() {
     if (!mapBounds || !userPos) return [];
     const { n, s, e, w } = mapBounds;
     // Reserves clear the actual UI elements:
-    // - top: small bump to clear the OS status bar (chips can sit
-    //   under the HUD logo's row to the right of it without conflict
-    //   since the logo lives in the top-left corner only).
+    // - top: small bump to clear the OS status bar / dynamic island.
+    //   `topLeftSkip` separately keeps the leftmost chunk of the top
+    //   edge clear of the corner logo (which lives at top-left).
     // - bottom: clears the dashboard tab bar (~10% of typical phone
     //   viewport including the home-indicator strip).
     // - sides: small padding so chips don't graze the screen edges.
     // Not perfectly symmetric, but the asymmetry follows the actual
     // UI footprint instead of being arbitrary.
     const sideReserve = 0.05;
-    const topReserve = 0.08;
+    const topReserve = 0.04;
     const bottomReserve = 0.10;
     const chipHalfPct = 0.04;
     const SPACING_ALONG = 0.12;
+    // Logo sits at top-left corner (~70px wide on a 392px-wide
+    // viewport ≈ 0.18). Top-edge chips skip this region so they don't
+    // overlap the logo even though the chip overlay paints above it.
+    const topLeftSkip = 0.18;
 
     type EdgeName = 'top' | 'right' | 'bottom' | 'left';
     interface Chip {
@@ -818,7 +822,9 @@ export default function MapViewWeb() {
       const lo =
         edgeName === 'left' || edgeName === 'right'
           ? topReserve + chipHalfPct
-          : sideReserve + chipHalfPct;
+          : edgeName === 'top'
+            ? topLeftSkip + chipHalfPct
+            : sideReserve + chipHalfPct;
       const hi =
         edgeName === 'left' || edgeName === 'right'
           ? 1 - bottomReserve - chipHalfPct
@@ -880,9 +886,8 @@ export default function MapViewWeb() {
   // sticks to the screen edge nearest to the companion. Tap recenters.
   // `mapBounds` is the latest snapshot from the map's `idle` event; the
   // edge position is computed against the current companion lat/lng.
-  // `topReserve` is 0 — chip anchors to the actual top edge of the
-  // screen via a per-edge transform so it isn't clipped, regardless
-  // of sniff mode (the HUD has been pushed down to make room).
+  // `topReserve` clears the iPhone dynamic island / OS status bar — at
+  // 0 the bookmark was clipping under the curved system bar.
   const offscreenIndicator = (() => {
     if (!mapBounds || !companionPos) return null;
     const { n, s, e, w } = mapBounds;
@@ -899,7 +904,7 @@ export default function MapViewWeb() {
     const dx = nx - 0.5;
     const dy = ny - 0.5;
     const sideReserve = 0.03;
-    const topReserve = 0;
+    const topReserve = 0.05;
     const bottomReserve = 0.14;
     const xBound = dx > 0 ? 1 - sideReserve - 0.5 : 0.5 - sideReserve;
     const yBound = dy > 0 ? 1 - bottomReserve - 0.5 : 0.5 - topReserve;
@@ -1275,7 +1280,10 @@ export default function MapViewWeb() {
                     : 'translate(-100%, -50%)',
             transition:
               'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-            zIndex: 25,
+            // Bumped to clear the HUD overlay reliably even in
+            // PWA/iOS Safari where DOM-order tie-breaks were leaving
+            // the bookmark un-tappable behind the corner logo zone.
+            zIndex: 60,
             cursor: 'pointer',
             background: '#ffffff',
             borderRadius: '50%',
@@ -1352,7 +1360,9 @@ export default function MapViewWeb() {
               transform: edgeTransform,
               transition:
                 'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-              zIndex: 24,
+              // Bumped above the HUD layer so taps reliably hit the
+              // chip even where it overlaps the corner logo zone.
+              zIndex: 60,
               cursor: 'pointer',
               userSelect: 'none',
             }}
@@ -1492,7 +1502,9 @@ export default function MapViewWeb() {
             top: '50%',
             right: 0,
             transform: 'translateY(-50%)',
-            zIndex: 25,
+            // Bumped to match the chip + companion-bookmark layer so
+            // it reliably stacks above the HUD on web/PWA.
+            zIndex: 60,
             cursor: 'pointer',
             background: 'rgba(255,255,255,0.92)',
             backdropFilter: 'blur(14px) saturate(160%)',

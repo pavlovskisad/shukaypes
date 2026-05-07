@@ -161,7 +161,12 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    zIndex: 10,
+    // Was 10, but the off-screen lost-pet chips and companion-bookmark
+    // overlay (rendered inside MapView) had zIndex 24/25 yet still
+    // weren't intercepting taps in PWA/iOS Safari — the HUD wins hit
+    // tests because it's painted later in the DOM. Drop to 1 so the
+    // overlay layer reliably stacks above the HUD.
+    zIndex: 1,
   },
   hudRow: {
     flexDirection: 'row',
