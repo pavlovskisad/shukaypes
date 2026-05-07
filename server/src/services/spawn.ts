@@ -186,7 +186,12 @@ export async function ensureTokensForUser(
         and(
           eq(schema.tokens.ownerId, userId),
           isNull(schema.tokens.collectedAt),
-          sql`${parkDistExpr} <= ${balance.parkPawRadiusM}`,
+          // Count with SERVER_PARK_DEDUP_M (not the scatter radius) so
+          // a small Places drift across syncs doesn't make the new
+          // anchor's count miss the previous anchor's tokens. Without
+          // this, every reload that re-fetched Places would add
+          // another token round and visible piles built up at parks.
+          sql`${parkDistExpr} <= ${SERVER_PARK_DEDUP_M}`,
         ),
       );
     const parkLive = parkRows[0]?.live ?? 0;
@@ -233,7 +238,11 @@ export async function ensureFoodForUser(
           and(
             eq(schema.foodItems.ownerId, userId),
             isNull(schema.foodItems.consumedAt),
-            sql`${distExpr} <= ${balance.parkScatterRadiusM}`,
+            // Count with SERVER_PARK_DEDUP_M (not the scatter radius)
+            // so a Places drift across syncs doesn't make the new
+            // anchor's count miss bones from the previous anchor —
+            // that's why reloads were stacking bones at parks.
+            sql`${distExpr} <= ${SERVER_PARK_DEDUP_M}`,
           ),
         );
       const zoneLive = zoneRows[0]?.live ?? 0;
