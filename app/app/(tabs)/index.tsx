@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -33,7 +33,11 @@ export default function MapScreen() {
   // on initial mount. Static styles handle the steady state.
   const [sniffJustChanged, setSniffJustChanged] = useState(false);
   const sniffInitRef = useRef(true);
-  useEffect(() => {
+  // useLayoutEffect so `sniffJustChanged` flips in the same paint
+  // cycle as sniffMode — without it there's a one-frame gap where the
+  // new sniffMode static styles paint without the animation attached,
+  // producing a visible blink before the animation kicks in.
+  useLayoutEffect(() => {
     if (sniffInitRef.current) {
       sniffInitRef.current = false;
       return;
