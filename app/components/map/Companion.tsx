@@ -90,6 +90,10 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   const spots = useGameStore((s) => s.spots);
   const userPosition = useGameStore((s) => s.userPosition);
+  // Sniff mode uses a dark map; the existing light-frosted menu reads
+  // well there. On the light (normal) map a light menu disappeared
+  // into the background, so invert the menu theme when sniff is off.
+  const sniffMode = useGameStore((s) => s.sniffMode);
   const [localBubble, setLocalBubble] = useState<string | null>(null);
   // Stack of branch ids representing the current menu drill-down. Empty
   // = root (PRIMARY_ACTIONS). Tapping the companion always resets to
@@ -500,6 +504,7 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           open={menuOpen}
           actions={currentActions}
           onSelect={handleSelect}
+          inverted={!sniffMode}
           // Show readable names at the named-spot leaves only — every
           // other level has self-explanatory icons and a label below
           // each ring item would clutter the cardinal slots.

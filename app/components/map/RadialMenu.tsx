@@ -73,11 +73,16 @@ export function RadialMenu({
   // size. Size is 2*radius + button + buffer so rim buttons fit.
   const CONTAINER = radius * 2 + 80;
   const CENTER = CONTAINER / 2;
-  // Frosted-glass buttons regardless of `inverted`. `inverted` kept for
-  // API compatibility but no longer changes colors.
-  const bg = 'rgba(255,255,255,0.55)';
-  const fg = '#1a1a1a';
-  void inverted;
+  // `inverted` flips the menu to a dark theme so it stays readable on
+  // the LIGHT map style. Sniff mode (dark map) keeps the original
+  // light frosted-glass theme since dark icons read fine on the
+  // pale frosted disc. Caller passes `inverted={!sniffMode}`.
+  const bg = inverted ? 'rgba(26,26,26,0.65)' : 'rgba(255,255,255,0.55)';
+  const fg = inverted ? '#f5f5f5' : '#1a1a1a';
+  const labelColor = inverted ? '#f5f5f5' : '#1a1a1a';
+  const labelShadow = inverted
+    ? '0 1px 4px rgba(0,0,0,0.95)'
+    : '0 1px 4px rgba(255,255,255,0.95)';
 
   return (
     <div
@@ -138,7 +143,7 @@ export function RadialMenu({
               }}
               aria-label={a.label}
             >
-              {a.iconName ? <Icon name={a.iconName} size={28} /> : a.icon}
+              {a.iconName ? <Icon name={a.iconName} size={28} inverted={inverted} /> : a.icon}
             </button>
             {showLabels ? (
               <span
@@ -146,8 +151,8 @@ export function RadialMenu({
                   marginTop: 4,
                   fontSize: 11,
                   fontWeight: 700,
-                  color: '#1a1a1a',
-                  textShadow: '0 1px 4px rgba(255,255,255,0.95)',
+                  color: labelColor,
+                  textShadow: labelShadow,
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
