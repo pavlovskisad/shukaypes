@@ -95,6 +95,13 @@ interface IconProps {
   // Optional opacity override — used by the spots-toggle pill that
   // greys the icon when the toggle is off.
   opacity?: number;
+  // When true, render the icon in its inverted colour (white instead
+  // of black). Used by the radial menu on the LIGHT map style where
+  // a dark frosted disc needs a light icon to stay readable.
+  // Implementation uses a <div> with backgroundImage + CSS
+  // `filter: invert(1)` because RN-Web's <Image> wrapper drops the
+  // filter on iOS Safari (same trick as the corner logo).
+  inverted?: boolean;
 }
 
 // Map a Google-Places-style spot category to its icon slot. The
@@ -113,8 +120,24 @@ export function iconForCategory(category: string): IconName | null {
   return CATEGORY_TO_ICON[category] ?? null;
 }
 
-export function Icon({ name, size, opacity }: IconProps) {
+export function Icon({ name, size, opacity, inverted = false }: IconProps) {
   const finalSize = size * (SIZE_SCALE[name] ?? 1);
+  if (inverted) {
+    return (
+      <div
+        style={{
+          width: finalSize,
+          height: finalSize,
+          backgroundImage: `url(${URL[name]})`,
+          backgroundRepeat: 'no-repeat',
+          backgroundSize: 'contain',
+          backgroundPosition: 'center',
+          filter: 'invert(1)',
+          opacity,
+        }}
+      />
+    );
+  }
   return (
     <Image
       source={{ uri: URL[name] }}
