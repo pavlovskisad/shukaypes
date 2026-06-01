@@ -77,13 +77,13 @@ const URL: Record<IconName, string> = {
 // Per-icon size compensation. Most icons fill their tight viewBox
 // solidly so a uniform `size` prop renders them at the same visual
 // weight. Urgent siren has rays around it so it needs a small bump.
-// Sun (happiness) is now a hand-drawn crayon PNG with whitespace
-// padding around the body+rays, so it renders smaller than the
-// bone/paws silhouettes at a uniform size — a 1.3× bump pulls the
-// happiness pill icon back up to family weight.
+// Sun (happiness) is a hand-drawn crayon PNG with thin spread rays +
+// whitespace padding, so the body reads small at a uniform size — a
+// 1.7× bump pulls it up a touch bigger than the previous sun art per
+// request.
 const SIZE_SCALE: Partial<Record<IconName, number>> = {
   urgent: 1.3,
-  sun: 1.3,
+  sun: 1.7,
 };
 
 interface IconProps {
