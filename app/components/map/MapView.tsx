@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import { GoogleMap, PolylineF, useJsApiLoader } from '@react-google-maps/api';
+import { GoogleMap, useJsApiLoader } from '@react-google-maps/api';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../../constants/env';
@@ -14,6 +14,7 @@ import { useCompanion } from '../../hooks/useCompanion';
 import { useGameLoop } from '../../hooks/useGameLoop';
 import { distanceMeters } from '../../utils/geo';
 import { Companion } from './Companion';
+import { CrayonRoute } from './CrayonRoute';
 import logoNose from '../../assets/logo-nose.png';
 import { UserMarker } from './UserMarker';
 import { TokenMarker } from './TokenMarker';
@@ -1169,27 +1170,16 @@ export default function MapViewWeb() {
                 *some* ordering hint. clickable=false on both so the
                 line never steals taps from overlays on top. */}
             {questRoute && questRoute.length > 1 ? (
-              <PolylineF
-                path={questRoute}
-                options={{
-                  strokeColor: '#0000ff',
-                  strokeOpacity: 0.55,
-                  strokeWeight: 4,
-                  clickable: false,
-                }}
-              />
+              <CrayonRoute path={questRoute} color="#2f6bff" weight={5} opacity={0.9} />
             ) : (
-              <PolylineF
+              <CrayonRoute
                 path={activeQuest.waypoints.map((w) => ({
                   lat: w.position.lat,
                   lng: w.position.lng,
                 }))}
-                options={{
-                  strokeColor: '#0000ff',
-                  strokeOpacity: 0.35,
-                  strokeWeight: 2,
-                  clickable: false,
-                }}
+                color="#2f6bff"
+                weight={3.5}
+                opacity={0.6}
               />
             )}
             {activeQuest.waypoints.map((w, i) => {
@@ -1241,15 +1231,7 @@ export default function MapViewWeb() {
             today; if we ever differentiate, dashed for one of them
             would be the move. clickable=false so taps go through. */}
         {walkRoute && walkRoute.length > 1 ? (
-          <PolylineF
-            path={walkRoute}
-            options={{
-              strokeColor: '#0000ff',
-              strokeOpacity: 0.4,
-              strokeWeight: 3,
-              clickable: false,
-            }}
-          />
+          <CrayonRoute path={walkRoute} color="#2f6bff" weight={4} opacity={0.7} />
         ) : null}
 
         {companionPos ? (
