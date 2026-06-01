@@ -59,12 +59,12 @@ let FILTER_UID = 0;
 // translates the cached result, so no per-frame filter cost.
 function crayonFilterMarkup(id: string, seed: number): string {
   return `
-    <filter id="${id}" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="${seed % 1000}" result="warp"/>
-      <feDisplacementMap in="SourceGraphic" in2="warp" scale="2.6" xChannelSelector="R" yChannelSelector="G" result="rough"/>
-      <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="${(seed + 17) % 1000}" result="speck"/>
+    <filter id="${id}" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="${seed % 1000}" result="warp"/>
+      <feDisplacementMap in="SourceGraphic" in2="warp" scale="4.5" xChannelSelector="R" yChannelSelector="G" result="rough"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.32" numOctaves="2" seed="${(seed + 17) % 1000}" result="speck"/>
       <feComponentTransfer in="speck" result="grain">
-        <feFuncA type="linear" slope="0.7" intercept="0.5"/>
+        <feFuncA type="linear" slope="1.1" intercept="0.35"/>
       </feComponentTransfer>
       <feComposite in="rough" in2="grain" operator="in"/>
     </filter>`;
@@ -222,10 +222,10 @@ function makeOverlay(
 export function CrayonRoute({
   path,
   color = '#2f6bff',
-  weight = 7,
-  opacity = 0.9,
-  roughness = 1.6,
-  bowing = 0.9,
+  weight = 10,
+  opacity = 0.92,
+  roughness = 1.8,
+  bowing = 1.0,
 }: CrayonRouteProps) {
   const map = useGoogleMap();
   useEffect(() => {
