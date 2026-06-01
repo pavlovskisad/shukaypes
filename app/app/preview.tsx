@@ -240,11 +240,13 @@ function applyCrayonOverride(map: maplibregl.Map) {
       continue;
     }
 
-    // Buildings — kill 3D extrusion (flatten the look), recolor as
-    // cream paper if a flat fill layer exists.
+    // Buildings — keep liberty's 3D extrusion (per request) but warm
+    // the colour to a hand-drawn cream. Flat fills also get the same
+    // treatment if liberty draws any.
     if (sl === 'building') {
       if (type === 'fill-extrusion') {
-        map.setLayoutProperty(id, 'visibility', 'none');
+        map.setPaintProperty(id, 'fill-extrusion-color', '#e7dbb1');
+        map.setPaintProperty(id, 'fill-extrusion-opacity', 0.85);
         continue;
       }
       if (type === 'fill') {
@@ -338,10 +340,10 @@ export default function PhaseTwoPreview() {
       center: KYIV_CENTER,
       zoom: 14,
       attributionControl: { compact: true },
-      // Pitch=0 + max-pitch=0 so the user can't tilt; we want the flat
-      // hand-drawn 2D map feel.
+      // Default-flat but allow tilt (two-finger drag) since liberty's
+      // 3D building extrusions are kept — gives users an isometric
+      // option without forcing it.
       pitch: 0,
-      maxPitch: 0,
     });
     mapRef.current = map;
     map.on('style.load', () => {
