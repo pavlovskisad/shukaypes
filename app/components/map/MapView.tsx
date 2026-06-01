@@ -7,7 +7,7 @@ import type { UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../../constants/env';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
-import { greyscaleMapStyle, darkMapStyle } from '../../constants/mapStyle';
+import { brightMapStyle, darkMapStyle } from '../../constants/mapStyle';
 import { useGameStore } from '../../stores/gameStore';
 import { useLocation } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
@@ -402,7 +402,7 @@ export default function MapViewWeb() {
       // and the profile dog scene + felt laggy on iOS Safari from
       // forcing every child element into its own GPU compositing
       // layer; per-element approach is the right call here.
-      styles: sniffMode ? darkMapStyle : greyscaleMapStyle,
+      styles: sniffMode ? darkMapStyle : brightMapStyle,
       disableDefaultUI: true,
       zoomControl: false,
       minZoom: balance.mapZoomMin,
