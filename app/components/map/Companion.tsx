@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import { useGameStore } from '../../stores/gameStore';
+import { iconForCategory } from '../ui/Icon';
 import { SpeechBubble } from '../ui/SpeechBubble';
 import {
   RadialMenu,
@@ -40,8 +41,15 @@ function buildVisitLeaves(
 ): RadialAction[] {
   const inCategory = spots.filter((s) => s.category === category);
   const sampled = pickVisitCandidates(inCategory, userPos, VISIT_LEAVES_PER_CATEGORY);
+  // Stamp the category's pixel icon so the leaf level matches the rest
+  // of the radial menu (cafe/food/bar/pet/vet). Without iconName the
+  // leaves fell back to the spot's raw emoji — the odd one out in an
+  // otherwise pixel-icon menu. The spot's name (shown as the label at
+  // this level) is what differentiates the three leaves, not the icon.
+  const iconName = iconForCategory(category) ?? undefined;
   return sampled.map((s) => ({
     id: `visit:spot:${s.id}`,
+    iconName,
     icon: s.icon ?? '📍',
     label: s.name.slice(0, 16),
   }));
