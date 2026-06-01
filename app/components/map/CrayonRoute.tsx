@@ -43,6 +43,33 @@ function seedFor(path: LatLng[]): number {
   return Math.abs(Math.floor((a.lat + a.lng + b.lat + b.lng) * 1000)) % 100000;
 }
 
+// Unique-id source so each overlay's SVG filter doesn't collide.
+let FILTER_UID = 0;
+
+// Crayon-grain SVG filter. rough.js only wobbles the path GEOMETRY —
+// the stroke fill is still a clean, solid "marker ink" shape. This
+// filter adds the actual crayon TEXTURE:
+//   1. feTurbulence (coarse) + feDisplacementMap roughens the stroke
+//      EDGES so they're irregular, not the crisp edge of a marker.
+//   2. feTurbulence (fine) shaped into an alpha mask + feComposite
+//      "in" speckles the fill — paper grain showing through, like
+//      crayon dragged over a textured page (alpha floored at ~0.5 so
+//      it textures without breaking the line apart).
+// Rasterised once per zoom (when the SVG is rebuilt); pan just
+// translates the cached result, so no per-frame filter cost.
+function crayonFilterMarkup(id: string, seed: number): string {
+  return `
+    <filter id="${id}" x="-25%" y="-25%" width="150%" height="150%" color-interpolation-filters="sRGB">
+      <feTurbulence type="fractalNoise" baseFrequency="0.045" numOctaves="2" seed="${seed % 1000}" result="warp"/>
+      <feDisplacementMap in="SourceGraphic" in2="warp" scale="2.6" xChannelSelector="R" yChannelSelector="G" result="rough"/>
+      <feTurbulence type="fractalNoise" baseFrequency="0.55" numOctaves="2" seed="${(seed + 17) % 1000}" result="speck"/>
+      <feComponentTransfer in="speck" result="grain">
+        <feFuncA type="linear" slope="0.7" intercept="0.5"/>
+      </feComponentTransfer>
+      <feComposite in="rough" in2="grain" operator="in"/>
+    </filter>`;
+}
+
 function makeOverlay(
   map: google.maps.Map,
   path: LatLng[],
@@ -53,6 +80,7 @@ function makeOverlay(
   bowing: number,
 ): google.maps.OverlayView {
   const seed = seedFor(path);
+  const filterId = `crayon-tex-${++FILTER_UID}`;
 
   class CrayonOverlay extends google.maps.OverlayView {
     private div: HTMLDivElement | null = null;
@@ -149,6 +177,14 @@ function makeOverlay(
         p.setAttribute('stroke-linecap', 'round');
         p.setAttribute('stroke-linejoin', 'round');
       });
+
+      // Crayon-grain filter lives in <defs>; apply it to the whole
+      // rough path group so the texture covers every stroke pass.
+      const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
+      defs.innerHTML = crayonFilterMarkup(filterId, seed);
+      svg.appendChild(defs);
+      node.setAttribute('filter', `url(#${filterId})`);
+
       svg.appendChild(node);
       this.div.innerHTML = '';
       this.div.appendChild(svg);
