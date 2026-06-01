@@ -14,22 +14,22 @@
 // "all geometry" colour is the land fill, and parks/water/roads
 // override it below.
 
-// Bright, crayon-saturated, game-like day map. Land stays a warm
-// "paper" near-white so the saturated colour marks pop ON it — the
-// way a hand-drawn map is coloured strokes on a page. Parks +
-// water + highways carry the vivid crayon hues; POI/transit clutter
-// is hidden so the pets + tokens own the attention.
+// Greyscale day map with ONLY the green areas (parks / natural land)
+// and water painted in colour — land, roads, and labels all stay
+// black & white so the green + blue are the only colour on the page.
+// The green/blue fills still come from Google's own landuse geometry
+// (featureType poi.park / landscape.natural / water), so they follow
+// the real boundaries at every zoom.
 export const brightMapStyle = [
-  // Base land — warm paper white. Light + slightly warm so the
-  // saturated park/water marks read as bold colour against it.
-  { elementType: 'geometry', stylers: [{ color: '#f7f2e4' }] },
-  // Default labels: soft warm-grey text with a thick paper halo so
-  // they stay legible over the vivid fills.
-  { elementType: 'labels.text.fill', stylers: [{ color: '#6b6452' }] },
-  { elementType: 'labels.text.stroke', stylers: [{ color: '#f7f2e4' }, { weight: 3 }] },
+  // Base land — neutral light grey (B&W). Everything inherits this
+  // until a more-specific rule below repaints water / parks / roads.
+  { elementType: 'geometry', stylers: [{ color: '#e8e8e8' }] },
+  // Labels: neutral grey text with a white halo.
+  { elementType: 'labels.text.fill', stylers: [{ color: '#6f6f6f' }] },
+  { elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }, { weight: 3 }] },
 
   // Strip the clutter: business pins, POI + transit labels, road
-  // shields. The app's own markers carry all the meaning.
+  // shields, parcel/neighbourhood lines.
   { featureType: 'poi', elementType: 'labels', stylers: [{ visibility: 'off' }] },
   { featureType: 'transit', stylers: [{ visibility: 'off' }] },
   { featureType: 'road', elementType: 'labels.icon', stylers: [{ visibility: 'off' }] },
@@ -37,31 +37,29 @@ export const brightMapStyle = [
   { featureType: 'administrative.land_parcel', stylers: [{ visibility: 'off' }] },
   { featureType: 'administrative.neighborhood', stylers: [{ visibility: 'off' }] },
 
-  // Parks — the hero colour. Bold crayon grass-green; park name
-  // labels kept (people navigate by parks here) in a deep green.
+  // Parks — the only green. Bold crayon grass-green; park name labels
+  // kept (people navigate by parks here) in a deep green.
   { featureType: 'poi.park', elementType: 'geometry', stylers: [{ color: '#62bf43' }] },
   { featureType: 'poi.park', elementType: 'labels.text.fill', stylers: [{ color: '#357a25' }] },
-  { featureType: 'poi.park', elementType: 'labels.text.stroke', stylers: [{ color: '#f7f2e4' }, { weight: 2.5 }] },
+  { featureType: 'poi.park', elementType: 'labels.text.stroke', stylers: [{ color: '#ffffff' }, { weight: 2.5 }] },
 
-  // Other natural land (forest / scrub / landcover) — a vivid lighter
-  // green so the city edges read clearly green without overpowering
-  // the parks.
+  // Other natural land (forest / scrub / landcover) — vivid lighter
+  // green so all genuinely-green areas read as colour.
   { featureType: 'landscape.natural', elementType: 'geometry', stylers: [{ color: '#a4dd7e' }] },
 
-  // Water — vivid crayon marker-blue.
+  // Water — vivid crayon marker-blue (the only blue).
   { featureType: 'water', elementType: 'geometry', stylers: [{ color: '#36a6e0' }] },
   { featureType: 'water', elementType: 'labels.text.fill', stylers: [{ color: '#1f7bac' }] },
 
-  // Roads — clean white network with a soft warm casing so the graph
-  // reads at a glance without shouting. Highways get a bold crayon
-  // yellow with an orange casing for a friendly game-map hierarchy.
+  // Roads — clean white network with a grey casing. Greyscale
+  // hierarchy: highways a touch darker-cased than locals so the
+  // graph still reads without any colour.
   { featureType: 'road', elementType: 'geometry.fill', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#ecdcae' }] },
-  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#9a9079' }] },
-  { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#ffcf3d' }] },
-  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#f2b134' }] },
-  { featureType: 'road.arterial', elementType: 'geometry.fill', stylers: [{ color: '#ffffff' }] },
-  { featureType: 'road.local', elementType: 'geometry.fill', stylers: [{ color: '#fbf7e9' }] },
+  { featureType: 'road', elementType: 'geometry.stroke', stylers: [{ color: '#d6d6d6' }] },
+  { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+  { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#fcfcfc' }] },
+  { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#c6c6c6' }] },
+  { featureType: 'road.local', elementType: 'geometry.fill', stylers: [{ color: '#fafafa' }] },
 ];
 
 // Sniff-mode dark style — deep charcoal land with a crisp light-grey
