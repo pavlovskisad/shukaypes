@@ -1170,7 +1170,7 @@ export default function MapViewWeb() {
                 *some* ordering hint. clickable=false on both so the
                 line never steals taps from overlays on top. */}
             {questRoute && questRoute.length > 1 ? (
-              <CrayonRoute path={questRoute} color="#2f6bff" weight={5} opacity={0.9} />
+              <CrayonRoute path={questRoute} color="#2f6bff" weight={7.5} opacity={0.9} />
             ) : (
               <CrayonRoute
                 path={activeQuest.waypoints.map((w) => ({
@@ -1178,7 +1178,7 @@ export default function MapViewWeb() {
                   lng: w.position.lng,
                 }))}
                 color="#2f6bff"
-                weight={3.5}
+                weight={5}
                 opacity={0.6}
               />
             )}
@@ -1231,7 +1231,7 @@ export default function MapViewWeb() {
             today; if we ever differentiate, dashed for one of them
             would be the move. clickable=false so taps go through. */}
         {walkRoute && walkRoute.length > 1 ? (
-          <CrayonRoute path={walkRoute} color="#2f6bff" weight={4} opacity={0.7} />
+          <CrayonRoute path={walkRoute} color="#2f6bff" weight={6.5} opacity={0.75} />
         ) : null}
 
         {companionPos ? (
