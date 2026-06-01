@@ -138,9 +138,12 @@ function makeOverlay(
         bowing,
         seed,
         preserveVertices: true,
-        // Single continuous stroke instead of the sketchy double pass
-        // — reads as one crayon line, not a brush scribble.
-        disableMultiStroke: true,
+        // Multi-stroke back ON for a hand-drawn "discontinued" feel —
+        // the overlapping passes break the line up here and there.
+        // Kept at a lower roughness than the original brushy version
+        // so the breaks read as occasional crayon character, not a
+        // busy scribble.
+        disableMultiStroke: false,
       });
       node.querySelectorAll('path').forEach((p) => {
         p.setAttribute('stroke-linecap', 'round');
@@ -183,10 +186,10 @@ function makeOverlay(
 export function CrayonRoute({
   path,
   color = '#2f6bff',
-  weight = 5,
+  weight = 7,
   opacity = 0.9,
-  roughness = 1.1,
-  bowing = 0.7,
+  roughness = 1.6,
+  bowing = 0.9,
 }: CrayonRouteProps) {
   const map = useGoogleMap();
   useEffect(() => {
