@@ -4,39 +4,39 @@ import rough from 'roughjs';
 import type { LatLng } from '@shukajpes/shared';
 
 // Hand-drawn "crayon" walking route. Google's PolylineF can only draw
-// a clean vector line — no stroke texture, no wobble — so to get a
-// sketchy hand-drawn look we render the route ourselves with rough.js
-// inside a custom OverlayView.
+// a clean vector line — no wobble — so we render the route ourselves
+// with rough.js inside a custom OverlayView (CrayonRoute).
 //
-// Perf: the expensive part (rough.js generating a multi-stroke wobbly
-// path) runs ONLY when the zoom level changes. Under pan, Google
-// translates the overlay pane for us and the pane-relative pixel
-// coords are unchanged, so draw() early-returns and does no work.
-// That keeps this as cheap as the PolylineF it replaces — no
-// per-frame cost, which matters given how marker-heavy the map is.
+// Anchoring + perf split (this is the important bit):
+//   - The div's screen position is recomputed on EVERY draw() —
+//     that's the proven Google custom-overlay pattern. fromLatLngTo
+//     DivPixel changes as the map pans, so skipping this makes the
+//     overlay stick to the screen instead of the geography (the pan
+//     bug). It's one projection + two style writes, basically free.
+//   - The expensive part (rough.js regenerating the wobbly SVG) runs
+//     ONLY when the zoom level changes — at constant zoom the route's
+//     pixel SHAPE is unchanged, just translated, so we reuse the SVG
+//     and only move the div. No per-frame rough.js cost.
 
 interface CrayonRouteProps {
   path: LatLng[];
   color?: string;
   weight?: number;
   opacity?: number;
-  // roughness/bowing tune the wobble. Higher = more hand-drawn.
+  // Wobble tuning. Lower = more continuous / less sketchy.
   roughness?: number;
   bowing?: number;
 }
 
 // Drop points closer than this many screen pixels to the previously
-// kept point. A Directions route can carry hundreds of vertices;
-// thinning to a screen-space minimum keeps the generated SVG small
-// (and the crayon wobble legible) without changing the visible shape.
+// kept point — a Directions route can carry hundreds of vertices;
+// thinning keeps the SVG small without changing the visible shape.
 const MIN_PX_GAP = 7;
-// Extra room around the bbox so the wobble + stroke width don't get
-// clipped at the SVG edge.
-const PAD = 16;
+// Room around the bbox so the wobble + stroke width aren't clipped.
+const PAD = 18;
 
 // Stable per-route seed so the wobble doesn't re-randomise on every
-// zoom redraw (which would make the line shimmer). Derived from the
-// endpoints so different routes still look different.
+// zoom redraw (which would make the line shimmer).
 function seedFor(path: LatLng[]): number {
   const a = path[0]!;
   const b = path[path.length - 1]!;
@@ -57,37 +57,34 @@ function makeOverlay(
   class CrayonOverlay extends google.maps.OverlayView {
     private div: HTMLDivElement | null = null;
     private lastZoom: number | null = null;
+    // Offset from path[0]'s pane pixel to the div's top-left corner,
+    // captured at regen time. Stable under pan (uniform translation),
+    // only changes with zoom — lets us reposition every frame from a
+    // single projection.
+    private offX = 0;
+    private offY = 0;
 
     onAdd() {
       const div = document.createElement('div');
       div.style.position = 'absolute';
       div.style.pointerEvents = 'none'; // never steal taps (clickable:false)
-      div.style.willChange = 'transform';
       this.div = div;
       // overlayLayer = non-interactive layer below the marker panes,
       // so the route sits under the pins (same as the old PolylineF).
       this.getPanes()!.overlayLayer.appendChild(div);
     }
 
-    draw() {
-      const proj = this.getProjection();
-      if (!proj || !this.div) return;
-      const zoom = map.getZoom() ?? null;
-      // Pan keeps pane-relative coords constant — only zoom changes
-      // them. So skip the (relatively) costly rough.js regen unless
-      // the zoom actually changed.
-      if (zoom === this.lastZoom) return;
-      this.lastZoom = zoom;
-
+    private regenerate(proj: google.maps.MapCanvasProjection) {
+      if (!this.div) return;
       // Project to pane pixels + thin in screen space.
       const pts: Array<[number, number]> = [];
       let prev: google.maps.Point | null = null;
+      let firstPx: google.maps.Point | null = null;
       for (let i = 0; i < path.length; i++) {
         const p = path[i]!;
-        const px = proj.fromLatLngToDivPixel(
-          new google.maps.LatLng(p.lat, p.lng),
-        );
+        const px = proj.fromLatLngToDivPixel(new google.maps.LatLng(p.lat, p.lng));
         if (!px) continue;
+        if (i === 0) firstPx = px;
         const isEnd = i === 0 || i === path.length - 1;
         if (!isEnd && prev) {
           const dx = px.x - prev.x;
@@ -97,12 +94,11 @@ function makeOverlay(
         pts.push([px.x, px.y]);
         prev = px;
       }
-      if (pts.length < 2) {
+      if (pts.length < 2 || !firstPx) {
         this.div.innerHTML = '';
         return;
       }
 
-      // Bounding box → position the div, draw points in local coords.
       let minX = Infinity;
       let minY = Infinity;
       let maxX = -Infinity;
@@ -115,10 +111,12 @@ function makeOverlay(
       }
       const w = maxX - minX + PAD * 2;
       const h = maxY - minY + PAD * 2;
-      this.div.style.left = `${minX - PAD}px`;
-      this.div.style.top = `${minY - PAD}px`;
       this.div.style.width = `${w}px`;
       this.div.style.height = `${h}px`;
+      // Capture div-top-left relative to path[0] so pan can reposition
+      // from one projection.
+      this.offX = minX - PAD - firstPx.x;
+      this.offY = minY - PAD - firstPx.y;
 
       const local: Array<[number, number]> = pts.map(([x, y]) => [
         x - minX + PAD,
@@ -139,17 +137,38 @@ function makeOverlay(
         roughness,
         bowing,
         seed,
-        preserveVertices: false,
+        preserveVertices: true,
+        // Single continuous stroke instead of the sketchy double pass
+        // — reads as one crayon line, not a brush scribble.
+        disableMultiStroke: true,
       });
-      // Round caps/joins read more like a crayon than the default butt.
       node.querySelectorAll('path').forEach((p) => {
         p.setAttribute('stroke-linecap', 'round');
         p.setAttribute('stroke-linejoin', 'round');
       });
       svg.appendChild(node);
-
       this.div.innerHTML = '';
       this.div.appendChild(svg);
+    }
+
+    draw() {
+      const proj = this.getProjection();
+      if (!proj || !this.div) return;
+      const zoom = map.getZoom() ?? null;
+      if (zoom !== this.lastZoom) {
+        this.lastZoom = zoom;
+        this.regenerate(proj);
+      }
+      // Reposition EVERY frame (pan + zoom) from path[0]'s current
+      // pane pixel + the captured offset. This is what keeps the route
+      // pinned to the geography as the map moves.
+      const a = proj.fromLatLngToDivPixel(
+        new google.maps.LatLng(path[0]!.lat, path[0]!.lng),
+      );
+      if (a) {
+        this.div.style.left = `${a.x + this.offX}px`;
+        this.div.style.top = `${a.y + this.offY}px`;
+      }
     }
 
     onRemove() {
@@ -166,8 +185,8 @@ export function CrayonRoute({
   color = '#2f6bff',
   weight = 5,
   opacity = 0.9,
-  roughness = 2.2,
-  bowing = 1.2,
+  roughness = 1.1,
+  bowing = 0.7,
 }: CrayonRouteProps) {
   const map = useGoogleMap();
   useEffect(() => {
