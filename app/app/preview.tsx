@@ -468,10 +468,10 @@ function applyCrayonOverride(map: maplibregl.Map) {
               'line-width': lineWidth,
               'line-offset': v.offset,
               'line-opacity': 1,
-              // Light feather on the clones — enough to read as a
-              // pencil-scuff rather than a hard parallel line, but
-              // not so much that the wobble disappears into the base.
-              'line-blur': 1.0,
+              // Heavier feather on the clones — reads as a pencil-
+              // scuff trail alongside the main stroke, like a crayon
+              // dragged with the side hitting the paper.
+              'line-blur': 2.0,
             },
             layout: {
               'line-cap': 'round',
