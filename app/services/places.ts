@@ -1,11 +1,12 @@
 import type { LatLng } from '@shukajpes/shared';
+import { env } from '../constants/env';
 
-// Thin wrapper around google.maps.places.PlacesService. Web-only (native
-// gets the stub below). We use the "nearbySearch" path which requires an
-// HTMLElement for attribution — we create a detached <div> per call and
-// throw it away. Can't use PlacesService before the maps script has
-// loaded; MapView's useJsApiLoader signals readiness so callers should
-// gate on that.
+// Nearby places via the Google PLACES API (NEW) — places.googleapis.com.
+// Direct browser calls; the new endpoints expose CORS so no proxy or
+// Google Maps JS SDK is needed.
+//
+// Requires "Places API (New)" enabled on the Cloud project behind
+// EXPO_PUBLIC_GOOGLE_MAPS_API_KEY (separate from the legacy Places API).
 
 export type SpotCategory =
   | 'cafe'
@@ -37,81 +38,107 @@ export function emojiFor(category: SpotCategory): string {
 }
 
 const DEFAULT_RADIUS_M = 800;
+const SEARCH_ENDPOINT = 'https://places.googleapis.com/v1/places:searchNearby';
 
-function runSearch(
-  svc: google.maps.places.PlacesService,
-  request: google.maps.places.PlaceSearchRequest,
-): Promise<google.maps.places.PlaceResult[]> {
-  return new Promise((resolve) => {
-    svc.nearbySearch(request, (results, status) => {
-      if (status === google.maps.places.PlacesServiceStatus.OK && results) {
-        resolve(results);
-      } else {
-        // Zero results + quota errors both resolve to [] — the UI just
-        // shows an empty list rather than throwing, which matches the
-        // prototype's behaviour.
-        resolve([]);
-      }
-    });
-  });
+// Places API (New) uses the same primary-type strings as legacy for our
+// categories, except `veterinary_care` is now `veterinary_care` still.
+const TYPE_FOR_CATEGORY: Record<SpotCategory, string> = {
+  cafe: 'cafe',
+  restaurant: 'restaurant',
+  bar: 'bar',
+  pet_store: 'pet_store',
+  veterinary_care: 'veterinary_care',
+};
+
+interface NewPlace {
+  id?: string;
+  displayName?: { text?: string };
+  location?: { latitude: number; longitude: number };
+  rating?: number;
+  formattedAddress?: string;
+  primaryType?: string;
 }
 
-// Google's "type" filter takes one value per request. We fan out across
-// categories and merge by place_id so the same venue (e.g. a bar that's
-// also tagged restaurant) doesn't render twice.
-// PlacesService accepts either a Map or a detached HTMLDivElement for
-// attribution; we use a detached div so the Spots tab doesn't have to
-// thread the map ref through.
+async function searchNearby(
+  center: LatLng,
+  radiusM: number,
+  includedTypes: string[],
+  maxResults: number,
+  fieldMask: string,
+): Promise<NewPlace[]> {
+  if (!env.googleMapsApiKey) return [];
+  try {
+    const resp = await fetch(SEARCH_ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': env.googleMapsApiKey,
+        'X-Goog-FieldMask': fieldMask,
+      },
+      body: JSON.stringify({
+        includedTypes,
+        maxResultCount: maxResults,
+        locationRestriction: {
+          circle: {
+            center: { latitude: center.lat, longitude: center.lng },
+            radius: radiusM,
+          },
+        },
+      }),
+    });
+    if (!resp.ok) return [];
+    const data = (await resp.json()) as { places?: NewPlace[] };
+    return data.places ?? [];
+  } catch {
+    return [];
+  }
+}
+
+// Spots — cafes/restaurants/bars/pet stores/vets. One API call across
+// all five categories (Places API New supports up to 50 types per
+// request), then mapped back via primaryType.
 export async function fetchNearbySpots(
   center: LatLng,
   radiusM: number = DEFAULT_RADIUS_M,
 ): Promise<Spot[]> {
-  if (typeof google === 'undefined' || !google.maps?.places) return [];
-
-  const attrContainer = document.createElement('div');
-  const svc = new google.maps.places.PlacesService(attrContainer);
-  const categories: SpotCategory[] = ['cafe', 'restaurant', 'bar', 'pet_store', 'veterinary_care'];
-
-  const byPlaceId = new Map<string, Spot>();
-  await Promise.all(
-    categories.map(async (category) => {
-      const results = await runSearch(svc, {
-        location: center as unknown as google.maps.LatLngLiteral,
-        radius: radiusM,
-        type: category,
-      });
-      for (const r of results) {
-        if (!r.place_id || !r.geometry?.location || byPlaceId.has(r.place_id)) continue;
-        byPlaceId.set(r.place_id, {
-          id: r.place_id,
-          name: r.name ?? '(unnamed)',
-          category,
-          position: {
-            lat: r.geometry.location.lat(),
-            lng: r.geometry.location.lng(),
-          },
-          rating: r.rating,
-          address: r.vicinity,
-          icon: emojiFor(category),
-        });
-      }
-    }),
+  const types = (Object.keys(TYPE_FOR_CATEGORY) as SpotCategory[]).map(
+    (c) => TYPE_FOR_CATEGORY[c],
   );
-
-  // Nearest first.
-  const sorted = Array.from(byPlaceId.values()).sort((a, b) => {
+  const results = await searchNearby(
+    center,
+    radiusM,
+    types,
+    20,
+    'places.id,places.displayName,places.location,places.rating,places.formattedAddress,places.primaryType',
+  );
+  const byId = new Map<string, Spot>();
+  for (const r of results) {
+    if (!r.id || !r.location) continue;
+    const category = (Object.keys(TYPE_FOR_CATEGORY) as SpotCategory[]).find(
+      (c) => TYPE_FOR_CATEGORY[c] === r.primaryType,
+    );
+    if (!category) continue;
+    if (byId.has(r.id)) continue;
+    byId.set(r.id, {
+      id: r.id,
+      name: r.displayName?.text ?? '(unnamed)',
+      category,
+      position: { lat: r.location.latitude, lng: r.location.longitude },
+      rating: r.rating,
+      address: r.formattedAddress,
+      icon: emojiFor(category),
+    });
+  }
+  return Array.from(byId.values()).sort((a, b) => {
     const da = haversineM(center, a.position);
     const db = haversineM(center, b.position);
     return da - db;
   });
-  return sorted;
 }
 
-// Nearby parks for the bones pool + walk candidates. Returns name +
-// place_id alongside position so the walk leaf can label routes
-// ("loop via Маріїнський парк") and dedupe by stable id. Bones spawn
-// only off `position`. 1200m covers the ~15min walking neighborhood;
-// parks farther than that are next-door's problem.
+// Parks — for the bones pool + walk candidates. 1200m covers a
+// ~15-min walking neighborhood. Google often returns 4-6 rows for one
+// physical park (sub-sections, entrances) so we dedupe within 120m.
 const PARK_RADIUS_M = 1200;
 
 export interface Park {
@@ -121,29 +148,23 @@ export interface Park {
 }
 
 export async function fetchNearbyParks(center: LatLng): Promise<Park[]> {
-  if (typeof google === 'undefined' || !google.maps?.places) return [];
-  const attrContainer = document.createElement('div');
-  const svc = new google.maps.places.PlacesService(attrContainer);
-  const results = await runSearch(svc, {
-    location: center as unknown as google.maps.LatLngLiteral,
-    radius: PARK_RADIUS_M,
-    type: 'park',
-  });
-  // Dedupe overlapping Places entries for the same physical park. Google
-  // often returns 4-6 rows for one big park (sub-sections, different
-  // entrances). With 1 bone per park that still became a pile of 4-6
-  // bones within 100m. Collapse anything within 120m of an already-
-  // accepted park.
+  const results = await searchNearby(
+    center,
+    PARK_RADIUS_M,
+    ['park'],
+    20,
+    'places.id,places.displayName,places.location',
+  );
   const DEDUPE_RADIUS_M = 120;
   const out: Park[] = [];
   for (const r of results) {
-    if (!r.geometry?.location || !r.place_id) continue;
-    const pos = { lat: r.geometry.location.lat(), lng: r.geometry.location.lng() };
+    if (!r.id || !r.location) continue;
+    const pos = { lat: r.location.latitude, lng: r.location.longitude };
     const dup = out.some((p) => haversineM(p.position, pos) < DEDUPE_RADIUS_M);
     if (!dup) {
       out.push({
-        id: r.place_id,
-        name: r.name ?? 'park',
+        id: r.id,
+        name: r.displayName?.text ?? 'park',
         position: pos,
       });
     }
