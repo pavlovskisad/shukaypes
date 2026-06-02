@@ -19,28 +19,13 @@ interface CrayonRouteProps {
   bowing?: number;
 }
 
-const MIN_PX_GAP = 7;
+const MIN_PX_GAP = 11;
 const PAD = 18;
 
 function seedFor(path: LatLng[]): number {
   const a = path[0]!;
   const b = path[path.length - 1]!;
   return Math.abs(Math.floor((a.lat + a.lng + b.lat + b.lng) * 1000)) % 100000;
-}
-
-let FILTER_UID = 0;
-
-function crayonFilterMarkup(id: string, seed: number): string {
-  return `
-    <filter id="${id}" x="-30%" y="-30%" width="160%" height="160%" color-interpolation-filters="sRGB">
-      <feTurbulence type="fractalNoise" baseFrequency="0.05" numOctaves="2" seed="${seed % 1000}" result="warp"/>
-      <feDisplacementMap in="SourceGraphic" in2="warp" scale="4.5" xChannelSelector="R" yChannelSelector="G" result="rough"/>
-      <feTurbulence type="fractalNoise" baseFrequency="0.32" numOctaves="2" seed="${(seed + 17) % 1000}" result="speck"/>
-      <feComponentTransfer in="speck" result="grain">
-        <feFuncA type="linear" slope="1.1" intercept="0.35"/>
-      </feComponentTransfer>
-      <feComposite in="rough" in2="grain" operator="in"/>
-    </filter>`;
 }
 
 function attachRoute(
@@ -53,7 +38,6 @@ function attachRoute(
   bowing: number,
 ): () => void {
   const seed = seedFor(path);
-  const filterId = `crayon-tex-${++FILTER_UID}`;
   const div = document.createElement('div');
   div.style.position = 'absolute';
   div.style.pointerEvents = 'none';
@@ -128,16 +112,21 @@ function attachRoute(
       bowing,
       seed,
       preserveVertices: true,
-      disableMultiStroke: false,
+      // Single-stroke pass — the second wobbly pass roughly doubles
+      // the geometry and was a big contributor to the lag the user
+      // saw on long routes. The crayon character still reads with
+      // just rough.js's primary stroke.
+      disableMultiStroke: true,
     });
     node.querySelectorAll('path').forEach((p) => {
       p.setAttribute('stroke-linecap', 'round');
       p.setAttribute('stroke-linejoin', 'round');
     });
-    const defs = document.createElementNS('http://www.w3.org/2000/svg', 'defs');
-    defs.innerHTML = crayonFilterMarkup(filterId, seed);
-    svg.appendChild(defs);
-    node.setAttribute('filter', `url(#${filterId})`);
+    // SVG filter (feTurbulence + feDisplacementMap) used to live here
+    // for an extra paper-tooth feel. It re-paints on every frame of
+    // pan/zoom because MapLibre repositions the div, and a long city
+    // route inside it caused noticeable lag. The rough.js stroke alone
+    // is hand-drawn enough — keep the route fast.
     svg.appendChild(node);
     div.innerHTML = '';
     div.appendChild(svg);
