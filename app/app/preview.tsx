@@ -492,57 +492,33 @@ function applyCrayonOverride(map: maplibregl.Map) {
   }
 
   // Dark crayon building outline drawn LAST so it paints above the
-  // walls + the polygon softeners. Triple-stroke pencil wobble around
-  // each building — original + 2 offset clones at ±0.6 px in slightly
-  // varied dark shades, all feathered with line-blur. Reads as a
-  // hand-sketched building footprint trace (a few pencil passes) and
-  // pairs with the inherent top-down / 3D-extrusion mis-alignment to
-  // give that "lines miss the form" sketchy character.
-  if (buildingSource) {
-    const buildingVariants: Array<{
-      id: string;
-      offset: number;
-      color: string;
-      opacity: number;
-    }> = [
-      { id: 'crayon-building-outline', offset: 0, color: '#000000', opacity: 0.9 },
-      { id: 'crayon-building-outline-w-a', offset: 0.7, color: '#0c0c0c', opacity: 0.6 },
-      { id: 'crayon-building-outline-w-b', offset: -0.7, color: '#181818', opacity: 0.6 },
-    ];
-    for (const v of buildingVariants) {
-      if (map.getLayer(v.id)) continue;
-      const layerSpec: LayerSpecification = {
-        id: v.id,
-        type: 'line',
-        source: buildingSource,
-        'source-layer': 'building',
-        minzoom: 13,
-        paint: {
-          'line-color': v.color,
-          'line-opacity': v.opacity,
-          'line-offset': v.offset,
-          // Light feather only — keep the strokes crisp so they read
-          // as distinct pencil traces, not soft halos.
-          'line-blur': 0.2,
-          // Hair-thin pencil weight across all zoom stops.
-          'line-width': [
-            'interpolate', ['linear'], ['zoom'],
-            13, 0.14,
-            16, 0.35,
-            19, 0.6,
-          ],
-        },
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round',
-        },
-      } as LayerSpecification;
-      try {
-        map.addLayer(layerSpec);
-      } catch {
-        /* skip if MapLibre rejects */
-      }
-    }
+  // walls + the polygon softeners. Single thin trace per building —
+  // the "lines miss the form" sketchy feel comes for FREE from the
+  // top-down outline not perfectly aligning with the 3D extrusion
+  // under pitch, no manual wobble needed.
+  if (buildingSource && !map.getLayer('crayon-building-outline')) {
+    const outlineLayer: LayerSpecification = {
+      id: 'crayon-building-outline',
+      type: 'line',
+      source: buildingSource,
+      'source-layer': 'building',
+      minzoom: 13,
+      paint: {
+        'line-color': CRAYON,
+        'line-opacity': 0.55,
+        'line-width': [
+          'interpolate', ['linear'], ['zoom'],
+          13, 0.4,
+          16, 0.9,
+          19, 1.4,
+        ],
+      },
+      layout: {
+        'line-cap': 'round',
+        'line-join': 'round',
+      },
+    } as LayerSpecification;
+    map.addLayer(outlineLayer);
   }
 }
 
