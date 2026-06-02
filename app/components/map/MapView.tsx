@@ -302,16 +302,38 @@ export default function MapViewWeb() {
     if (!userPos || !isFocused) return;
     void collectPath(userPos);
     void syncMap(userPos);
-    syncSpots(userPos);
+    // syncSpots is driven separately by the viewport-watcher effect
+    // below so the dog finds places where the human is LOOKING, not
+    // just where they're standing.
     const id = setInterval(() => {
       const pos = useGameStore.getState().userPosition;
       if (!pos) return;
       void collectPath(pos);
       void syncMap(pos);
-      syncSpots(pos);
     }, TOKEN_REFRESH_MS);
     return () => clearInterval(id);
-  }, [userPos?.lat, userPos?.lng, isFocused, collectPath, syncMap, syncSpots]);
+  }, [userPos?.lat, userPos?.lng, isFocused, collectPath, syncMap]);
+
+  // Viewport-driven spots sync. When the user pans to a new
+  // neighborhood we want to surface its cafes / vets / pet stores
+  // without making them physically walk there. Fetches are still
+  // gated by gameStore.syncSpots' own distance threshold so a small
+  // pan doesn't burn a Places quota call.
+  useEffect(() => {
+    if (!isFocused || !mapBounds) return;
+    const center = {
+      lat: (mapBounds.n + mapBounds.s) / 2,
+      lng: (mapBounds.e + mapBounds.w) / 2,
+    };
+    syncSpots(center);
+  }, [
+    isFocused,
+    mapBounds?.n,
+    mapBounds?.s,
+    mapBounds?.e,
+    mapBounds?.w,
+    syncSpots,
+  ]);
 
   // Pull the active quest (if any) on mount so a refreshed tab sees the
   // quest the user started earlier. No polling — quest state only changes
@@ -509,6 +531,23 @@ export default function MapViewWeb() {
   // collapse pill).
   const spotClusters = useMemo(() => {
     if (!spotsVisible && !selectedSpotId && !walkRouteMeta?.spotId) return [];
+    // Bbox cull: only consider spots inside the visible viewport so the
+    // marker count and the clustering pass scale with what's on screen,
+    // not the user's lifetime fetch history. Selected + walk-route spots
+    // bypass the cull so they don't vanish when the user pans away from
+    // them. Padded slightly so spots just past the edge don't pop in
+    // mid-pan.
+    const inView = (lat: number, lng: number): boolean => {
+      if (!mapBounds) return true;
+      const padLat = (mapBounds.n - mapBounds.s) * 0.08;
+      const padLng = (mapBounds.e - mapBounds.w) * 0.08;
+      return (
+        lat <= mapBounds.n + padLat &&
+        lat >= mapBounds.s - padLat &&
+        lng <= mapBounds.e + padLng &&
+        lng >= mapBounds.w - padLng
+      );
+    };
     const renderSet = new Set<string>();
     if (spotsVisible) {
       for (const s of spots) {
@@ -516,6 +555,7 @@ export default function MapViewWeb() {
           spotsCategoryFilter === 'all' ||
           s.category === spotsCategoryFilter
         ) {
+          if (!inView(s.position.lat, s.position.lng)) continue;
           renderSet.add(s.id);
         }
       }
@@ -618,6 +658,7 @@ export default function MapViewWeb() {
     walkRouteMeta?.spotId,
     mapZoom,
     mapCenterLat,
+    mapBounds,
   ]);
 
   // Each pet gets a deterministic display offset inside its own
@@ -1296,6 +1337,7 @@ export default function MapViewWeb() {
           <Companion
             position={companionPos}
             bubble={bubble}
+            hideBubble={offscreenIndicator != null}
             onTap={() => {
               companionTappedAtRef.current = Date.now();
             }}
@@ -1350,6 +1392,46 @@ export default function MapViewWeb() {
             style={{ width: 30, height: 30 }}
             resizeMode="contain"
           />
+        </div>
+      ) : null}
+
+      {/* When the dog is off-screen we mirror his current bubble next
+          to the edge chip so the user keeps hearing him while they pan
+          around looking at other neighborhoods. Anchored to the same
+          edge as the chip but pushed inward so it doesn't clip the
+          screen border. */}
+      {offscreenIndicator && bubble ? (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: offscreenIndicator.left,
+            top: offscreenIndicator.top,
+            transform:
+              offscreenIndicator.edge === 'top'
+                ? 'translate(-50%, 48px)'
+                : offscreenIndicator.edge === 'bottom'
+                  ? 'translate(-50%, calc(-100% - 48px))'
+                  : offscreenIndicator.edge === 'left'
+                    ? 'translate(54px, -50%)'
+                    : 'translate(calc(-100% - 54px), -50%)',
+            transition:
+              'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
+            zIndex: 59,
+            maxWidth: 220,
+            padding: '8px 12px',
+            background: '#ffffff',
+            color: '#1a1a1a',
+            borderRadius: 14,
+            fontFamily: SYSTEM_FONT,
+            fontSize: 13,
+            lineHeight: 1.35,
+            boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
+            border: '1px solid rgba(0,0,0,0.06)',
+            pointerEvents: 'none',
+          }}
+        >
+          {bubble}
         </div>
       ) : null}
 

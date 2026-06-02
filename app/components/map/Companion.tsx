@@ -78,6 +78,10 @@ function getNonVisitActions(path: string[]): RadialAction[] | null {
 interface CompanionProps {
   position: LatLng;
   bubble: string | null;
+  // Suppress the in-map bubble — used when the dog is off-screen and
+  // MapView wants to render the bubble next to the edge chip instead
+  // (so the user can still see the dog's remark while panning around).
+  hideBubble?: boolean;
   onTapCompanion?: () => void;
   // Fires on EVERY tap (open and close), before the menu state changes.
   // Parent uses it to record a timestamp and suppress the map-level
@@ -90,7 +94,7 @@ interface CompanionProps {
 // (bubble, menu) live inside this OverlayView div so they move with the map
 // (demo's floatPane pattern). The expanding aura rings were a bit much —
 // we'll revisit that animation later when we have the right sensor metaphor.
-export function Companion({ position, bubble, onTapCompanion, onTap }: CompanionProps) {
+export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap }: CompanionProps) {
   const router = useRouter();
   const menuOpen = useGameStore((s) => s.menuOpen);
   const setMenuOpen = useGameStore((s) => s.setMenuOpen);
@@ -466,7 +470,10 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
   // Hide bubbles while the radial menu is open — otherwise the bubble
   // (above the companion) and the top "search" button fight for the
   // same vertical slot.
-  const activeBubble = menuOpen ? null : bubble ?? localBubble;
+  // hideBubble: parent (MapView) is mirroring the bubble next to the
+  // off-screen edge chip, so we suppress the in-map version to avoid
+  // double-render.
+  const activeBubble = menuOpen || hideBubble ? null : bubble ?? localBubble;
 
   return (
     <MapLibreMarker position={position}>
