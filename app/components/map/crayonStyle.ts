@@ -27,16 +27,18 @@ import type { LayerSpecification } from 'maplibre-gl';
 export const LIGHT_PALETTE = {
   paper: '#ffffff',
   crayon: '#2a2a2a',
-  greyRoad: '#a8a8a8',
+  greyRoad: '#d4d4d4',
   green: '#9fcc6e',
   greenDark: '#6ea846',
   greenLight: '#d9ecbb',
   blue: '#88c5e4',
   blueDark: '#5aa2c8',
   blueLight: '#cae6f3',
-  // Road wobble clone colours (light + dark variants of the base).
-  roadWobbleLight: '#dcdcdc',
-  roadWobbleDark: '#3a3a3a',
+  // Road wobble clone colours — kept close to greyRoad so the offset
+  // copies read as a subtle "double line" texture instead of as a
+  // stack of dark cables crossing the city.
+  roadWobbleLight: '#e8e8e8',
+  roadWobbleDark: '#bcbcbc',
   // Tinted speckles for the paper-tooth multiply overlay — warmer +
   // less saturated to match the soft pastel feel.
   paperSpeckleA: '#b4a578',
@@ -207,15 +209,17 @@ function roadPattern(p: Palette): ImageData {
   const r = rng(23);
   for (let i = 0; i < 110; i++) {
     ctx.fillStyle = p.paper;
-    ctx.globalAlpha = 0.22 + r() * 0.4;
+    ctx.globalAlpha = 0.32 + r() * 0.4;
     const x = r() * w;
     const y = r() * h;
     const s = 0.4 + r() * 1.0;
     ctx.fillRect(x, y, s, s);
   }
-  for (let i = 0; i < 220; i++) {
-    ctx.fillStyle = r() > 0.5 ? '#888888' : '#2c2c2c';
-    ctx.globalAlpha = 0.08 + r() * 0.18;
+  // Keep some darker grain but never near-black — roads should read
+  // as a light pencil hatch, not as a stack of dark cables.
+  for (let i = 0; i < 160; i++) {
+    ctx.fillStyle = r() > 0.5 ? '#b8b8b8' : '#9a9a9a';
+    ctx.globalAlpha = 0.06 + r() * 0.14;
     const x = Math.floor(r() * w);
     const y = Math.floor(r() * h);
     ctx.fillRect(x, y, 1, 1);
@@ -393,6 +397,18 @@ export function applyCrayonOverride(
         map.setLayoutProperty(id, 'visibility', 'none');
         continue;
       }
+      // Non-road transportation classes — rail, aerialway, ferry,
+      // transit, tram, etc. — also live under the `transportation`
+      // source-layer. If we apply the road pattern to them they read
+      // as wide ghostly diagonals crossing the city. Hide them.
+      const isNonRoad =
+        /(^|[_-])(rail|railway|aerialway|cable|gondola|chair|funicular|ferry|transit|tram|monorail|subway|pier)([_-]|$)/.test(
+          lower,
+        );
+      if (isNonRoad) {
+        map.setLayoutProperty(id, 'visibility', 'none');
+        continue;
+      }
       clear(map, id, 'line-color');
       clear(map, id, 'line-dasharray');
       map.setPaintProperty(id, 'line-pattern', 'crayon-road');
@@ -530,9 +546,12 @@ export function applyCrayonOverride(
       | undefined;
     if (!base || !base.source || !base['source-layer']) continue;
     const lineWidth = map.getPaintProperty(baseId, 'line-width');
+    // Single subtle wobble companion at +1.5 px — just enough to
+    // hint at a doubled crayon stroke, not enough to read as a
+    // separate cable. Two clones at ±5 with blur 2 stacked into the
+    // "wires across the city" effect.
     const variants: Array<{ suffix: string; offset: number; color: string }> = [
-      { suffix: 'lo', offset: 5.0, color: palette.roadWobbleLight },
-      { suffix: 'hi', offset: -5.0, color: palette.roadWobbleDark },
+      { suffix: 'lo', offset: 1.5, color: palette.roadWobbleLight },
     ];
     for (const v of variants) {
       const id = `wobble-${baseId}-${v.suffix}`;
@@ -554,8 +573,8 @@ export function applyCrayonOverride(
               'line-color': v.color,
               'line-width': lineWidth,
               'line-offset': v.offset,
-              'line-opacity': 1,
-              'line-blur': 2.0,
+              'line-opacity': 0.7,
+              'line-blur': 0.8,
             },
             layout: {
               'line-cap': 'round',
