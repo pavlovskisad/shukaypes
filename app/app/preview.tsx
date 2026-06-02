@@ -27,7 +27,7 @@ const KYIV_CENTER: [number, number] = [30.5234, 50.4501]; // [lng, lat]
 
 const PAPER = '#ffffff';
 const CRAYON = '#1a1a1a';
-const GREY_ROAD = '#6a6a6a';
+const GREY_ROAD = '#7c7c7c';
 const GREEN = '#65b246';
 const GREEN_DARK = '#3a7e2a';
 const GREEN_LIGHT = '#d8eccb';
@@ -442,12 +442,13 @@ function applyCrayonOverride(map: maplibregl.Map) {
       | undefined;
     if (!base || !base.source || !base['source-layer']) continue;
     const lineWidth = map.getPaintProperty(baseId, 'line-width');
-    // Bigger offsets so the parallel passes are clearly visible past
-    // the base line. ±3.5 px lands them just past the edge of a 3px
-    // motorway / well outside thinner roads.
+    // Wobble offsets bumped to ±5 so the parallel pencil passes
+    // are unambiguously visible past the base stroke at any road
+    // width. Light clone (#c8c8c8) lifted to stay visible against
+    // the lighter #7c7c7c base; dark clone stays near-black.
     const variants: Array<{ suffix: string; offset: number; color: string }> = [
-      { suffix: 'lo', offset: 3.5, color: '#b0b0b0' },
-      { suffix: 'hi', offset: -3.5, color: '#1f1f1f' },
+      { suffix: 'lo', offset: 5.0, color: '#c8c8c8' },
+      { suffix: 'hi', offset: -5.0, color: '#1c1c1c' },
     ];
     for (const v of variants) {
       const id = `wobble-${baseId}-${v.suffix}`;
@@ -467,9 +468,10 @@ function applyCrayonOverride(map: maplibregl.Map) {
               'line-width': lineWidth,
               'line-offset': v.offset,
               'line-opacity': 1,
-              // Feather the clones into pencil-scuff trails alongside
-              // the main stroke, rather than crisp parallel lines.
-              'line-blur': 1.5,
+              // Light feather on the clones — enough to read as a
+              // pencil-scuff rather than a hard parallel line, but
+              // not so much that the wobble disappears into the base.
+              'line-blur': 1.0,
             },
             layout: {
               'line-cap': 'round',
