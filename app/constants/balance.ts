@@ -27,7 +27,7 @@ export const balance = {
   bubbleDuration: 7000,
   menuRadius: 60,
   subMenuRadius: 100,
-  mapZoomMin: 14,
+  mapZoomMin: 15,
   mapZoomMax: 19,
   mapZoomDefault: 16,
   gpsCircleRadius: 60,
