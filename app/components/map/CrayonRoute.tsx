@@ -1,5 +1,5 @@
-import { useEffect, useId, useMemo } from 'react';
-import type maplibregl from 'maplibre-gl';
+import { useEffect, useId, useMemo, useRef } from 'react';
+import maplibregl from 'maplibre-gl';
 import type { LatLng } from '@shukajpes/shared';
 import { useMaplibreMap } from './MapContext';
 
@@ -105,6 +105,10 @@ export function CrayonRoute({
   const uid = useId().replace(/[:]/g, '');
   const sourceId = useMemo(() => `route-${uid}`, [uid]);
   const layerId = `${sourceId}-line`;
+  // Only autofit ONCE per route instance — re-centering on every prop
+  // change would fight the user if they panned to read the route in
+  // detail and a tick later we re-flew them home.
+  const didFitRef = useRef(false);
 
   useEffect(() => {
     if (!map || path.length < 2) return;
@@ -154,8 +158,36 @@ export function CrayonRoute({
       });
     };
 
-    if (map.isStyleLoaded()) add();
-    else map.once('style.load', add);
+    // Once the layer is on the map, ease the view to fit the route.
+    // Padding clears the top HUD pills, the bottom tab bar, and gives
+    // the side a touch of breathing room. minZoom respects the global
+    // floor so a tiny round-trip doesn't slam the map all the way in.
+    const fitOnce = () => {
+      if (didFitRef.current) return;
+      didFitRef.current = true;
+      const bounds = coords.reduce(
+        (b, [lng, lat]) => b.extend([lng, lat]),
+        new maplibregl.LngLatBounds(
+          coords[0] as [number, number],
+          coords[0] as [number, number],
+        ),
+      );
+      map.fitBounds(bounds, {
+        padding: { top: 110, bottom: 130, left: 40, right: 40 },
+        maxZoom: 17,
+        duration: 700,
+      });
+    };
+
+    if (map.isStyleLoaded()) {
+      add();
+      fitOnce();
+    } else {
+      map.once('style.load', () => {
+        add();
+        fitOnce();
+      });
+    }
 
     return () => {
       if (map.getLayer(layerId)) map.removeLayer(layerId);
