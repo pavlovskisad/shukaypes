@@ -27,7 +27,7 @@ const KYIV_CENTER: [number, number] = [30.5234, 50.4501]; // [lng, lat]
 
 const PAPER = '#ffffff';
 const CRAYON = '#1a1a1a';
-const GREY_ROAD = '#7c7c7c';
+const GREY_ROAD = '#989898';
 const GREEN = '#65b246';
 const GREEN_DARK = '#3a7e2a';
 const GREEN_LIGHT = '#d8eccb';
@@ -296,7 +296,12 @@ function applyCrayonOverride(map: maplibregl.Map) {
       } else if (type === 'fill-extrusion') {
         clear(map, id, 'fill-extrusion-pattern');
         map.setPaintProperty(id, 'fill-extrusion-color', PAPER);
-        map.setPaintProperty(id, 'fill-extrusion-opacity', 1);
+        // Lowered from 1 -> 0.7 so the auto vertical-gradient's
+        // bottom-darken blends with the white paper underneath —
+        // wall "shadow" reads as a lighter grey instead of solid
+        // mid-grey. MapLibre doesn't let you tune the gradient
+        // intensity directly; opacity is the lever.
+        map.setPaintProperty(id, 'fill-extrusion-opacity', 0.7);
       }
       continue;
     }
@@ -447,7 +452,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
     // width. Light clone (#c8c8c8) lifted to stay visible against
     // the lighter #7c7c7c base; dark clone stays near-black.
     const variants: Array<{ suffix: string; offset: number; color: string }> = [
-      { suffix: 'lo', offset: 5.0, color: '#c8c8c8' },
+      { suffix: 'lo', offset: 5.0, color: '#d8d8d8' },
       { suffix: 'hi', offset: -5.0, color: '#1c1c1c' },
     ];
     for (const v of variants) {
