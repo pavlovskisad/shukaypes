@@ -45,9 +45,14 @@ function attachRoute(
   div.style.top = '0px';
 
   // canvasContainer holds MapLibre's WebGL canvas + transforms with
-  // pan/zoom. Absolute children inside it move with the map.
+  // pan/zoom. Insert BEFORE the first marker so route paints under
+  // pins instead of on top of them — markers were added at mount,
+  // routes get added later when the user starts a walk, and naive
+  // appendChild was putting them above the dog.
   const container = map.getCanvasContainer();
-  container.appendChild(div);
+  const firstMarker = container.querySelector('.maplibregl-marker');
+  if (firstMarker) container.insertBefore(div, firstMarker);
+  else container.appendChild(div);
 
   let lastZoom: number | null = null;
   let offX = 0;
@@ -146,6 +151,19 @@ function attachRoute(
     }
     reposition();
   };
+  // Under 3D pitch, projecting just the first point and translating
+  // the cached SVG by that offset is no longer correct for the rest
+  // of the path — perspective scales different parts of the screen
+  // differently. Pure horizontal pan/rotate happens to land close
+  // enough, but vertical pan slides the route off the streets.
+  // Regenerate on moveend so the route snaps back to the right
+  // pixels once the gesture settles. During the gesture itself the
+  // cheap translate still tracks "close enough" so the route doesn't
+  // flicker mid-pan.
+  const onMoveEnd = () => {
+    regenerate();
+    reposition();
+  };
 
   // Initial render — wait for style to be loaded so projection is
   // valid; if it already is, run immediately.
@@ -155,9 +173,11 @@ function attachRoute(
     map.once('load', onMove);
   }
   map.on('move', onMove);
+  map.on('moveend', onMoveEnd);
 
   return () => {
     map.off('move', onMove);
+    map.off('moveend', onMoveEnd);
     if (div.parentNode) div.parentNode.removeChild(div);
   };
 }
