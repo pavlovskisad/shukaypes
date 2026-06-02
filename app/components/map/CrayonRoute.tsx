@@ -1,26 +1,46 @@
-import { useEffect } from 'react';
-import maplibregl from 'maplibre-gl';
-import rough from 'roughjs';
+import { useEffect, useId, useMemo } from 'react';
+import type maplibregl from 'maplibre-gl';
 import type { LatLng } from '@shukajpes/shared';
 import { useMaplibreMap } from './MapContext';
 
-// Hand-drawn "crayon" walking route — MapLibre port. Renders the route
-// as a rough.js sketchy SVG attached to the map's canvas container,
-// positioned each frame from map.project() so the route stays pinned
-// to the geography under pan/zoom. The rough.js regenerate runs ONLY
-// when zoom changes; pan just translates the cached SVG.
+// Hand-drawn walking route — rendered as a NATIVE MapLibre line layer
+// off a GeoJSON source. Earlier versions painted an absolute-positioned
+// SVG inside the canvas container, repositioned per `move` event. That
+// approach drifted under pitch/pan because the SVG was cached in pixel
+// space while the map was redrawing in lat/lng space; routes also
+// painted above markers in DOM order.
+//
+// Going through MapLibre's own pipeline fixes both: the line is part
+// of the same WebGL frame as the basemap (never drifts), and we insert
+// it BEFORE marker layers so the dog and pins stay on top.
+//
+// "Crayon" character comes from pre-jittering the polyline vertices
+// with a deterministic seed (same path → same wobble, no flicker) and
+// a small line-blur for soft pencil edges.
 
 interface CrayonRouteProps {
   path: LatLng[];
   color?: string;
   weight?: number;
   opacity?: number;
-  roughness?: number;
-  bowing?: number;
 }
 
-const MIN_PX_GAP = 11;
-const PAD = 18;
+// Subdivide segments at this many meters so there are enough vertices
+// to show the per-vertex jitter as a continuous wobble rather than a
+// step every block.
+const MAX_SEG_M = 8;
+// Max perpendicular jitter per inserted vertex, in meters. ~1 m gives
+// a hand-drawn wobble without making the route ambiguous about which
+// street it follows.
+const JITTER_M = 1.1;
+
+function rng(seed: number): () => number {
+  let s = seed >>> 0 || 1;
+  return () => {
+    s = (s * 1664525 + 1013904223) >>> 0;
+    return s / 0xffffffff;
+  };
+}
 
 function seedFor(path: LatLng[]): number {
   const a = path[0]!;
@@ -28,172 +48,120 @@ function seedFor(path: LatLng[]): number {
   return Math.abs(Math.floor((a.lat + a.lng + b.lat + b.lng) * 1000)) % 100000;
 }
 
-function attachRoute(
-  map: maplibregl.Map,
-  path: LatLng[],
-  color: string,
-  weight: number,
-  opacity: number,
-  roughness: number,
-  bowing: number,
-): () => void {
-  const seed = seedFor(path);
-  const div = document.createElement('div');
-  div.style.position = 'absolute';
-  div.style.pointerEvents = 'none';
-  div.style.left = '0px';
-  div.style.top = '0px';
+// Approx meters-per-degree at a given latitude. Flat-earth fine for
+// our scale (one walking route in one city).
+function metersPerDegLat(): number {
+  return 111320;
+}
+function metersPerDegLng(lat: number): number {
+  return 111320 * Math.cos((lat * Math.PI) / 180);
+}
 
-  // canvasContainer holds MapLibre's WebGL canvas + transforms with
-  // pan/zoom. Insert BEFORE the first marker so route paints under
-  // pins instead of on top of them — markers were added at mount,
-  // routes get added later when the user starts a walk, and naive
-  // appendChild was putting them above the dog.
-  const container = map.getCanvasContainer();
-  const firstMarker = container.querySelector('.maplibregl-marker');
-  if (firstMarker) container.insertBefore(div, firstMarker);
-  else container.appendChild(div);
-
-  let lastZoom: number | null = null;
-  let offX = 0;
-  let offY = 0;
-
-  const regenerate = () => {
-    const pts: Array<[number, number]> = [];
-    let prev: maplibregl.Point | null = null;
-    let firstPx: maplibregl.Point | null = null;
-    for (let i = 0; i < path.length; i++) {
-      const p = path[i]!;
-      const px = map.project([p.lng, p.lat]);
-      if (i === 0) firstPx = px;
-      const isEnd = i === 0 || i === path.length - 1;
-      if (!isEnd && prev) {
-        const dx = px.x - prev.x;
-        const dy = px.y - prev.y;
-        if (dx * dx + dy * dy < MIN_PX_GAP * MIN_PX_GAP) continue;
-      }
-      pts.push([px.x, px.y]);
-      prev = px;
+function jitteredCoords(path: LatLng[]): GeoJSON.Position[] {
+  if (path.length < 2) return path.map((p) => [p.lng, p.lat]);
+  const r = rng(seedFor(path));
+  const out: GeoJSON.Position[] = [];
+  out.push([path[0]!.lng, path[0]!.lat]);
+  for (let i = 0; i < path.length - 1; i++) {
+    const a = path[i]!;
+    const b = path[i + 1]!;
+    const midLat = (a.lat + b.lat) / 2;
+    const mLat = metersPerDegLat();
+    const mLng = metersPerDegLng(midLat);
+    const dxM = (b.lng - a.lng) * mLng;
+    const dyM = (b.lat - a.lat) * mLat;
+    const lenM = Math.hypot(dxM, dyM);
+    if (lenM < 1e-3) continue;
+    const steps = Math.max(1, Math.floor(lenM / MAX_SEG_M));
+    // Unit perpendicular (in meter space) — rotate the unit tangent
+    // 90° so jitter shifts the route sideways, not along its length.
+    const ux = dxM / lenM;
+    const uy = dyM / lenM;
+    const perpX = -uy;
+    const perpY = ux;
+    for (let k = 1; k <= steps; k++) {
+      const t = k / steps;
+      // Skip end-vertex jitter — keep endpoints clean so the route
+      // starts on the dog and ends on the destination pin.
+      const isEnd = k === steps;
+      const j = isEnd ? 0 : (r() - 0.5) * 2 * JITTER_M;
+      const offLng = (perpX * j) / mLng;
+      const offLat = (perpY * j) / mLat;
+      const lat = a.lat + (b.lat - a.lat) * t + offLat;
+      const lng = a.lng + (b.lng - a.lng) * t + offLng;
+      out.push([lng, lat]);
     }
-    if (pts.length < 2 || !firstPx) {
-      div.innerHTML = '';
-      return;
-    }
-
-    let minX = Infinity;
-    let minY = Infinity;
-    let maxX = -Infinity;
-    let maxY = -Infinity;
-    for (const [x, y] of pts) {
-      if (x < minX) minX = x;
-      if (y < minY) minY = y;
-      if (x > maxX) maxX = x;
-      if (y > maxY) maxY = y;
-    }
-    const w = maxX - minX + PAD * 2;
-    const h = maxY - minY + PAD * 2;
-    div.style.width = `${w}px`;
-    div.style.height = `${h}px`;
-    offX = minX - PAD - firstPx.x;
-    offY = minY - PAD - firstPx.y;
-
-    const local: Array<[number, number]> = pts.map(([x, y]) => [
-      x - minX + PAD,
-      y - minY + PAD,
-    ]);
-
-    const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
-    svg.setAttribute('width', `${w}`);
-    svg.setAttribute('height', `${h}`);
-    svg.setAttribute('viewBox', `0 0 ${w} ${h}`);
-    svg.style.opacity = `${opacity}`;
-    svg.style.overflow = 'visible';
-
-    const rc = rough.svg(svg);
-    const node = rc.linearPath(local, {
-      stroke: color,
-      strokeWidth: weight,
-      roughness,
-      bowing,
-      seed,
-      preserveVertices: true,
-      // Single-stroke pass — the second wobbly pass roughly doubles
-      // the geometry and was a big contributor to the lag the user
-      // saw on long routes. The crayon character still reads with
-      // just rough.js's primary stroke.
-      disableMultiStroke: true,
-    });
-    node.querySelectorAll('path').forEach((p) => {
-      p.setAttribute('stroke-linecap', 'round');
-      p.setAttribute('stroke-linejoin', 'round');
-    });
-    // SVG filter (feTurbulence + feDisplacementMap) used to live here
-    // for an extra paper-tooth feel. It re-paints on every frame of
-    // pan/zoom because MapLibre repositions the div, and a long city
-    // route inside it caused noticeable lag. The rough.js stroke alone
-    // is hand-drawn enough — keep the route fast.
-    svg.appendChild(node);
-    div.innerHTML = '';
-    div.appendChild(svg);
-  };
-
-  const reposition = () => {
-    const a = map.project([path[0]!.lng, path[0]!.lat]);
-    div.style.left = `${a.x + offX}px`;
-    div.style.top = `${a.y + offY}px`;
-  };
-
-  const onMove = () => {
-    const zoom = map.getZoom();
-    if (zoom !== lastZoom) {
-      lastZoom = zoom;
-      regenerate();
-    }
-    reposition();
-  };
-  // Under 3D pitch, projecting just the first point and translating
-  // the cached SVG by that offset is no longer correct for the rest
-  // of the path — perspective scales different parts of the screen
-  // differently. Pure horizontal pan/rotate happens to land close
-  // enough, but vertical pan slides the route off the streets.
-  // Regenerate on moveend so the route snaps back to the right
-  // pixels once the gesture settles. During the gesture itself the
-  // cheap translate still tracks "close enough" so the route doesn't
-  // flicker mid-pan.
-  const onMoveEnd = () => {
-    regenerate();
-    reposition();
-  };
-
-  // Initial render — wait for style to be loaded so projection is
-  // valid; if it already is, run immediately.
-  if (map.isStyleLoaded()) {
-    onMove();
-  } else {
-    map.once('load', onMove);
   }
-  map.on('move', onMove);
-  map.on('moveend', onMoveEnd);
-
-  return () => {
-    map.off('move', onMove);
-    map.off('moveend', onMoveEnd);
-    if (div.parentNode) div.parentNode.removeChild(div);
-  };
+  return out;
 }
 
 export function CrayonRoute({
   path,
   color = '#2f6bff',
-  weight = 10,
-  opacity = 0.92,
-  roughness = 1.8,
-  bowing = 1.0,
+  weight = 9,
+  opacity = 0.8,
 }: CrayonRouteProps) {
   const map = useMaplibreMap();
+  const uid = useId().replace(/[:]/g, '');
+  const sourceId = useMemo(() => `route-${uid}`, [uid]);
+  const layerId = `${sourceId}-line`;
+
   useEffect(() => {
     if (!map || path.length < 2) return;
-    return attachRoute(map, path, color, weight, opacity, roughness, bowing);
-  }, [map, path, color, weight, opacity, roughness, bowing]);
+    const coords = jitteredCoords(path);
+    const data: GeoJSON.Feature = {
+      type: 'Feature',
+      geometry: { type: 'LineString', coordinates: coords },
+      properties: {},
+    };
+
+    // Place the route ABOVE basemap layers but BELOW our injected
+    // building outline + the first marker layer — markers themselves
+    // are DOM elements layered separately, so all we need to do is
+    // not jump above other LINE layers in the style. Passing no
+    // `before` argument appends to the top of the style stack; the
+    // DOM layering then keeps markers on top automatically.
+    const add = () => {
+      const existing = map.getSource(sourceId) as
+        | maplibregl.GeoJSONSource
+        | undefined;
+      if (existing) {
+        existing.setData(data);
+        if (map.getLayer(layerId)) {
+          map.setPaintProperty(layerId, 'line-color', color);
+          map.setPaintProperty(layerId, 'line-width', weight);
+          map.setPaintProperty(layerId, 'line-opacity', opacity);
+        }
+        return;
+      }
+      map.addSource(sourceId, { type: 'geojson', data });
+      map.addLayer({
+        id: layerId,
+        type: 'line',
+        source: sourceId,
+        paint: {
+          'line-color': color,
+          'line-width': weight,
+          'line-opacity': opacity,
+          // Soft pencil edge — keeps the crayon feel without the
+          // expensive SVG filter the old implementation used.
+          'line-blur': 0.6,
+        },
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+      });
+    };
+
+    if (map.isStyleLoaded()) add();
+    else map.once('style.load', add);
+
+    return () => {
+      if (map.getLayer(layerId)) map.removeLayer(layerId);
+      if (map.getSource(sourceId)) map.removeSource(sourceId);
+    };
+  }, [map, path, color, weight, opacity, sourceId, layerId]);
+
   return null;
 }
