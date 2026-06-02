@@ -703,24 +703,22 @@ export default function MapViewWeb() {
     if (current < 17) map.setZoom(17);
   }, [selectedSpotId, spots]);
 
-  // MapLibre construction. Fetch liberty's style, swap glyphs URL to
-  // our Caveat PBFs, hand the mutated style to the map. Same approach
-  // as `/preview` but with the production map's restrictions + the
-  // ambient `MapContext.Provider` so markers can find the map ref.
+  // MapLibre construction. Idempotent — bails if the map already
+  // exists. Deps include `userPos` because on first paint it's null
+  // (we render the "locating…" screen, so mapContainerRef.current is
+  // also null then), and we need the effect to re-fire once GPS
+  // resolves to actually construct the map.
   useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) return;
+    if (mapRef.current) return;
+    if (!mapContainerRef.current) return;
     if (!userPos) return;
     let cancelled = false;
-    let cleanupPaper: (() => void) | null = null;
     (async () => {
       try {
         const style = await fetchCrayonStyleSpec();
-        if (cancelled || !mapContainerRef.current) return;
-        // Clamp center within MAX_BOUNDS — MapLibre rejects/clips a
-        // map whose initial center is outside maxBounds, and if the
-        // user is on the periphery of (or outside) the pilot box we
-        // need the map to still render. We pan to userPos right after
-        // construction.
+        if (cancelled || !mapContainerRef.current || mapRef.current) return;
+        // Clamp center within MAX_BOUNDS — MapLibre rejects construction
+        // when center is outside maxBounds.
         const clampedCenter: [number, number] = [
           Math.min(
             MAP_MAX_BOUNDS[1][0],
@@ -742,45 +740,47 @@ export default function MapViewWeb() {
           pitch: 30,
           attributionControl: { compact: true },
         });
-        // Log any internal MapLibre errors so they show up in the
-        // console rather than the map silently rendering nothing.
         map.on('error', (e) => {
           // eslint-disable-next-line no-console
           console.error('[maplibre]', e?.error || e);
         });
         mapRef.current = map;
-      const onStyleLoad = () => {
-        applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE);
-      };
-      map.on('style.load', onStyleLoad);
-      map.on('idle', () => {
-        const b = map.getBounds();
-        setMapBounds({
-          n: b.getNorth(),
-          s: b.getSouth(),
-          e: b.getEast(),
-          w: b.getWest(),
+        map.on('style.load', () => {
+          applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE);
         });
-        setMapZoom(map.getZoom());
-        setMapCenterLat(map.getCenter().lat);
-      });
-      map.on('click', () => {
-        if (
-          Date.now() - companionTappedAtRef.current <
-          SUPPRESS_MAP_CLICK_MS
-        ) {
-          return;
-        }
-        setExpandedClusterKey(null);
-        useGameStore.getState().setMenuOpen(false);
-        setWalkRoute(null, null);
-      });
-        cleanupPaper = installPaperOverlaySync(
+        map.on('idle', () => {
+          const b = map.getBounds();
+          setMapBounds({
+            n: b.getNorth(),
+            s: b.getSouth(),
+            e: b.getEast(),
+            w: b.getWest(),
+          });
+          setMapZoom(map.getZoom());
+          setMapCenterLat(map.getCenter().lat);
+        });
+        map.on('click', () => {
+          if (
+            Date.now() - companionTappedAtRef.current <
+            SUPPRESS_MAP_CLICK_MS
+          ) {
+            return;
+          }
+          setExpandedClusterKey(null);
+          useGameStore.getState().setMenuOpen(false);
+          setWalkRoute(null, null);
+        });
+        const cleanupPaper = installPaperOverlaySync(
           map,
           paperOverlayRef,
           userPos.lng,
           userPos.lat,
         );
+        // Stash the paper cleanup on the map instance so the unmount
+        // effect can call it without sharing a closure variable across
+        // hooks.
+        (map as unknown as { __paperCleanup?: () => void }).__paperCleanup =
+          cleanupPaper;
         setMapInstance(map);
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -789,15 +789,23 @@ export default function MapViewWeb() {
     })();
     return () => {
       cancelled = true;
-      cleanupPaper?.();
+    };
+    // sniffMode read inside but intentionally not a dep — the sniff
+    // toggle re-applies the override via its own effect below.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userPos]);
+
+  // Map destruction — runs only on unmount, NOT on every effect re-run.
+  useEffect(() => {
+    return () => {
       const m = mapRef.current;
+      if (m) {
+        (m as unknown as { __paperCleanup?: () => void }).__paperCleanup?.();
+        m.remove();
+      }
       mapRef.current = null;
       setMapInstance(null);
-      if (m) m.remove();
     };
-    // userPos used as initial-only — we don't re-create the map on
-    // every GPS tick. Deps intentionally exclude it after first init.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Re-apply the crayon override when sniff mode toggles. The override
