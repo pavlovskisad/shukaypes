@@ -200,25 +200,18 @@ function generatePaperTextureUrl(): string {
   c.width = size;
   c.height = size;
   const ctx = c.getContext('2d')!;
-  // WHITE base — the multiply blend only darkens where speckles are
-  // dark, so a white "blank" means no cream tint of the underlying
-  // colours, just the texture grain showing.
+  // WHITE base — multiply blend only darkens where speckles are
+  // dark, so a white "blank" leaves the underlying colours untinted,
+  // just the texture grain showing.
   ctx.fillStyle = '#ffffff';
   ctx.fillRect(0, 0, size, size);
   const r = rng(99);
-  // Long faint horizontal paper streaks for "tooth direction".
-  for (let i = 0; i < 140; i++) {
-    ctx.globalAlpha = 0.05 + r() * 0.12;
-    ctx.fillStyle = r() > 0.5 ? '#b0a47a' : '#c8bd97';
-    const y = r() * size;
-    const x0 = r() * size;
-    const len = 70 + r() * 260;
-    ctx.fillRect(x0, y, len, 0.4 + r() * 0.8);
-  }
-  // Dense fine speckles — the high-frequency grain that reads as
-  // "paper fibres" when multiplied. Boosted density + contrast so
-  // the texture is clearly visible at the lower overlay opacity.
-  for (let i = 0; i < 9500; i++) {
+  // Dense fine speckles ONLY — the high-frequency grain that reads
+  // as "paper fibres" when multiplied. The prior horizontal-streak
+  // pass was meant to mimic a directional tooth from the reference
+  // image but read as scan-lines / digital artifacts when the
+  // texture panned with the map. Real paper grain is omnidirectional.
+  for (let i = 0; i < 11000; i++) {
     ctx.globalAlpha = 0.05 + r() * 0.22;
     ctx.fillStyle = r() > 0.6 ? '#9a8d5c' : '#cdc097';
     const x = Math.floor(r() * size);
