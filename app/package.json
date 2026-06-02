@@ -39,6 +39,7 @@
   },
   "devDependencies": {
     "@types/react": "~18.3.12",
+    "fontnik": "^0.7.4",
     "typescript": "^5.6.3"
   }
 }

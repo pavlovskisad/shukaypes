@@ -83,6 +83,9 @@ importers:
       '@types/react':
         specifier: ~18.3.12
         version: 18.3.28
+      fontnik:
+        specifier: ^0.7.4
+        version: 0.7.4
       typescript:
         specifier: ^5.6.3
         version: 5.9.3
@@ -2306,6 +2309,9 @@ packages:
   csstype@3.2.3:
     resolution: {integrity: sha512-z1HGKcYy2xA8AGQfwrn0PAy+PB7X/GSj3UVJW9qKyn43xWa+gl5nXmU4qqLMRzWVLFC8KusUX8T/0kCiOYpAIQ==}
 
+  d3-queue@3.0.7:
+    resolution: {integrity: sha512-2rs+6pNFKkrJhqe1rg5znw7dKJ7KZr62j9aLZfhondkrnz6U7VRmJj1UGcbD8MRc46c7H8m4SWhab8EalBQrkw==}
+
   dateformat@4.6.3:
     resolution: {integrity: sha512-2P0p0pFGzHS5EMnhdxQi7aJN+iMheud0UhG4dlE1DLAlvL8JHjJJTX/CSm4JXwV0Ka5nGk3zC5mcb5bUQUxxMA==}
 
@@ -2858,6 +2864,10 @@ packages:
 
   fontfaceobserver@2.3.0:
     resolution: {integrity: sha512-6FPvD/IVyT4ZlNe7Wcn5Fb/4ChigpucKYSvD6a+0iMoLn2inpo711eyIcKjmDtE5XNcgAkSH9uN/nfAeZzHEfg==}
+
+  fontnik@0.7.4:
+    resolution: {integrity: sha512-JDULqTXaTVn5YSPmkoW7WnTzN7/fnN//hIqA4xYK2ROn37zg/US01hyVnUwtiHkj6annFYjTbJb8JeKRttLSpg==}
+    hasBin: true
 
   foreground-child@3.3.1:
     resolution: {integrity: sha512-gIXjKqtFuWEgzFRJA9WCQeSJLZDjgJUOMCMzxtvFq/37KojM1BFGufqsCy0r4qSQmYLsZYMeyRqzIWOMup03sw==}
@@ -3617,6 +3627,9 @@ packages:
   nice-try@1.0.5:
     resolution: {integrity: sha512-1nh45deeb5olNY7eX82BkPO7SSxR5SSYJiPTrTdFUVYwAl8CKMA5N9PjTYkHiRjisVcxcQ1HXdLhx2qxxJzLNQ==}
 
+  node-addon-api@2.0.2:
+    resolution: {integrity: sha512-Ntyt4AIXyaLIuMHF6IOoTakB3K+RWxwtsHNRxllEoA6vPwP9o4866g6YWDLUdnucilZhmkxiHwHr11gAENw+QA==}
+
   node-dir@0.1.17:
     resolution: {integrity: sha512-tmPX422rYgofd4epzrNoOXiE8XFZYOcCq1vD7MAXCDO+O+zndlA2ztdKKMa+EeuBG5tHETpr4ml4RGgpqDCCAg==}
     engines: {node: '>= 0.10.5'}
@@ -3633,6 +3646,10 @@ packages:
   node-forge@1.4.0:
     resolution: {integrity: sha512-LarFH0+6VfriEhqMMcLX2F7SwSXeWwnEAJEsYm5QKWchiVYVvJyV9v7UDvUv+w5HO23ZpQTXDv/GxdDdMyOuoQ==}
     engines: {node: '>= 6.13.0'}
+
+  node-gyp-build@4.8.4:
+    resolution: {integrity: sha512-LA4ZjwlnUblHVgq0oBF3Jl/6h/Nvs5fzBLwdEF4nuxnFdsfajde4WfxtJr3CaiH+F6ewcIB/q4jQ4UzPyid+CQ==}
+    hasBin: true
 
   node-int64@0.4.0:
     resolution: {integrity: sha512-O5lz91xSOeoXP6DulyHfllpq+Eg00MWitZIbtPfoSEvqIHdl5gfcY6hYzDWnj0qD5tz52PI08u9qUvSVeUBeHw==}
@@ -7428,6 +7445,8 @@ snapshots:
 
   csstype@3.2.3: {}
 
+  d3-queue@3.0.7: {}
+
   dateformat@4.6.3: {}
 
   debug@2.6.9:
@@ -8008,6 +8027,14 @@ snapshots:
   flow-parser@0.309.0: {}
 
   fontfaceobserver@2.3.0: {}
+
+  fontnik@0.7.4:
+    dependencies:
+      d3-queue: 3.0.7
+      glob: 7.2.3
+      minimist: 1.2.8
+      node-addon-api: 2.0.2
+      node-gyp-build: 4.8.4
 
   foreground-child@3.3.1:
     dependencies:
@@ -8882,6 +8909,8 @@ snapshots:
 
   nice-try@1.0.5: {}
 
+  node-addon-api@2.0.2: {}
+
   node-dir@0.1.17:
     dependencies:
       minimatch: 3.1.5
@@ -8891,6 +8920,8 @@ snapshots:
       whatwg-url: 5.0.0
 
   node-forge@1.4.0: {}
+
+  node-gyp-build@4.8.4: {}
 
   node-int64@0.4.0: {}
 

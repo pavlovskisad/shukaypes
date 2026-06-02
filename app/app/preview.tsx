@@ -222,6 +222,27 @@ function generatePaperTextureUrl(): string {
   return c.toDataURL('image/png');
 }
 
+// Anchor the paper-tooth overlay's background-position to a fixed
+// lat/lng. Without this the texture stays screen-fixed and feels like
+// "dirty glass" the map slides under. With this it travels with the
+// geography. Zoom intentionally NOT compensated — constant screen-
+// pixel grain reads as consistent paper tooth across zooms.
+function installPaperOverlaySync(
+  map: maplibregl.Map,
+  overlayRef: React.RefObject<HTMLDivElement | null>,
+) {
+  const anchor = { lng: KYIV_CENTER[0], lat: KYIV_CENTER[1] };
+  const initialPx = map.project(anchor);
+  const sync = () => {
+    const el = overlayRef.current;
+    if (!el) return;
+    const px = map.project(anchor);
+    el.style.backgroundPosition = `${px.x - initialPx.x}px ${px.y - initialPx.y}px`;
+  };
+  map.on('move', sync);
+  sync();
+}
+
 function addImg(map: maplibregl.Map, id: string, img: ImageData, pixelRatio = 1) {
   if (map.hasImage(id)) map.removeImage(id);
   map.addImage(id, img, { pixelRatio });
@@ -381,6 +402,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
     // 'place', so they stay hidden.
     if (sl === 'place' && type === 'symbol') {
       try {
+        map.setLayoutProperty(id, 'text-font', ['Kalam Regular']);
         map.setPaintProperty(id, 'text-color', '#1a1a1a');
         map.setPaintProperty(id, 'text-halo-color', '#ffffff');
         map.setPaintProperty(id, 'text-halo-width', 2);
@@ -395,6 +417,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
     // Tier 1 (always): water names — rivers/lakes/seas.
     if (sl === 'water_name' && type === 'symbol') {
       try {
+        map.setLayoutProperty(id, 'text-font', ['Kalam Regular']);
         map.setPaintProperty(id, 'text-color', '#155d85');
         map.setPaintProperty(id, 'text-halo-color', '#ffffff');
         map.setPaintProperty(id, 'text-halo-width', 2);
@@ -419,6 +442,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
             setLayerZoomRange: (id: string, min: number, max: number) => void;
           }
         ).setLayerZoomRange(id, 15, 24);
+        map.setLayoutProperty(id, 'text-font', ['Kalam Regular']);
         map.setPaintProperty(id, 'text-color', '#2a2a2a');
         map.setPaintProperty(id, 'text-halo-color', '#ffffff');
         map.setPaintProperty(id, 'text-halo-width', 1.8);
@@ -592,49 +616,38 @@ export default function PhaseTwoPreview() {
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
-    const map = new maplibregl.Map({
-      container: containerRef.current,
-      style: 'https://tiles.openfreemap.org/styles/liberty',
-      center: KYIV_CENTER,
-      zoom: 14,
-      pitch: 30,
-      attributionControl: { compact: true },
-    });
-    mapRef.current = map;
-    map.on('style.load', () => {
-      applyCrayonOverride(map);
-    });
-
-    // Anchor the paper texture overlay to the geography. A
-    // screen-fixed CSS background reads as "dirty glass" when the
-    // user pans — the texture stays put while the map content
-    // moves underneath. To make it feel like paper UNDER the map,
-    // pick a fixed lat/lng (the initial centre), record its starting
-    // pixel position, and on every move event shift the overlay's
-    // background-position by the delta. Texture now travels with
-    // the geography. Zoom intentionally NOT compensated — keeping
-    // the grain at constant screen-pixel size reads as a consistent
-    // paper tooth across zoom levels.
-    const anchor = { lng: KYIV_CENTER[0], lat: KYIV_CENTER[1] };
-    const initialPx = map.project(anchor);
-    const syncPaperPosition = () => {
-      const el = paperOverlayRef.current;
-      if (!el) return;
-      const px = map.project(anchor);
-      const dx = px.x - initialPx.x;
-      const dy = px.y - initialPx.y;
-      el.style.backgroundPosition = `${dx}px ${dy}px`;
-    };
-    map.on('move', syncPaperPosition);
-    // Run once after load so the texture's position settles before
-    // the user pans (otherwise the very first pan jumps by the
-    // initial offset).
-    syncPaperPosition();
+    let cancelled = false;
+    // Fetch liberty's style JSON, swap its glyphs URL to our locally-
+    // hosted Kalam PBFs, then hand the mutated style to MapLibre. The
+    // applyCrayonOverride below also forces text-font: ['Kalam Regular']
+    // on every kept label layer so Liberty's default font (Noto Sans)
+    // never gets requested — otherwise MapLibre would 404 fetching
+    // glyphs we don't have.
+    (async () => {
+      const resp = await fetch('https://tiles.openfreemap.org/styles/liberty');
+      const style = (await resp.json()) as Record<string, unknown>;
+      style.glyphs = `${window.location.origin}/fonts/{fontstack}/{range}.pbf`;
+      if (cancelled || !containerRef.current) return;
+      const map = new maplibregl.Map({
+        container: containerRef.current,
+        style: style as unknown as maplibregl.StyleSpecification,
+        center: KYIV_CENTER,
+        zoom: 14,
+        pitch: 30,
+        attributionControl: { compact: true },
+      });
+      mapRef.current = map;
+      map.on('style.load', () => {
+        applyCrayonOverride(map);
+      });
+      installPaperOverlaySync(map, paperOverlayRef);
+    })();
 
     return () => {
-      map.off('move', syncPaperPosition);
+      cancelled = true;
+      const m = mapRef.current;
       mapRef.current = null;
-      map.remove();
+      if (m) m.remove();
     };
   }, []);
 
