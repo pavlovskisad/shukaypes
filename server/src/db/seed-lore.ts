@@ -32,9 +32,13 @@ import { anthropic, ACTIVE_MODEL } from '../services/anthropic.js';
 // Pulled from OSM's "Kyiv" relation bounds, padded slightly.
 const KYIV_BBOX = [50.21, 30.24, 50.59, 30.83] as const;
 
-// Which OSM tag combinations qualify as "the dog would have a story
-// about this". Kept narrow on purpose — random shops don't have lore.
-const OVERPASS_QUERY = `
+// Query split into category chunks so any one Overpass call stays
+// small enough to dodge "server too busy" 504s. Each chunk returns a
+// few hundred elements rather than ~2k in one go.
+const QUERY_CHUNKS: Array<{ label: string; body: string }> = [
+  {
+    label: 'historic+memorial',
+    body: `
 [out:json][timeout:90];
 (
   node["historic"](${KYIV_BBOX.join(',')});
@@ -42,27 +46,50 @@ const OVERPASS_QUERY = `
   relation["historic"](${KYIV_BBOX.join(',')});
   node["memorial"](${KYIV_BBOX.join(',')});
   way["memorial"](${KYIV_BBOX.join(',')});
-  node["tourism"="attraction"](${KYIV_BBOX.join(',')});
-  way["tourism"="attraction"](${KYIV_BBOX.join(',')});
-  relation["tourism"="attraction"](${KYIV_BBOX.join(',')});
-  node["tourism"="museum"](${KYIV_BBOX.join(',')});
-  way["tourism"="museum"](${KYIV_BBOX.join(',')});
-  node["tourism"="artwork"](${KYIV_BBOX.join(',')});
-  way["tourism"="artwork"](${KYIV_BBOX.join(',')});
-  node["tourism"="gallery"](${KYIV_BBOX.join(',')});
-  way["tourism"="gallery"](${KYIV_BBOX.join(',')});
+);
+out center tags;`.trim(),
+  },
+  {
+    label: 'tourism',
+    body: `
+[out:json][timeout:90];
+(
+  node["tourism"~"^(attraction|museum|artwork|gallery)$"](${KYIV_BBOX.join(',')});
+  way["tourism"~"^(attraction|museum|artwork|gallery)$"](${KYIV_BBOX.join(',')});
+  relation["tourism"~"^(attraction|museum|artwork|gallery)$"](${KYIV_BBOX.join(',')});
+);
+out center tags;`.trim(),
+  },
+  {
+    label: 'religious',
+    body: `
+[out:json][timeout:90];
+(
+  way["building"~"^(cathedral|church|chapel|synagogue|mosque|temple)$"](${KYIV_BBOX.join(',')});
+  relation["building"~"^(cathedral|church|chapel|synagogue|mosque|temple)$"](${KYIV_BBOX.join(',')});
+);
+out center tags;`.trim(),
+  },
+  {
+    label: 'monuments',
+    body: `
+[out:json][timeout:90];
+(
   node["man_made"="obelisk"](${KYIV_BBOX.join(',')});
   way["man_made"="obelisk"](${KYIV_BBOX.join(',')});
   node["man_made"="tower"]["tower:type"!="communication"](${KYIV_BBOX.join(',')});
-  way["building"="cathedral"](${KYIV_BBOX.join(',')});
-  way["building"="church"](${KYIV_BBOX.join(',')});
-  way["building"="chapel"](${KYIV_BBOX.join(',')});
-  way["building"="synagogue"](${KYIV_BBOX.join(',')});
-  way["building"="mosque"](${KYIV_BBOX.join(',')});
-  way["building"="temple"](${KYIV_BBOX.join(',')});
 );
-out center tags;
-`.trim();
+out center tags;`.trim(),
+  },
+];
+
+// Public Overpass endpoints, tried in order. Main can throw 504 under
+// load; Kumi mirror is the usual fallback.
+const OVERPASS_ENDPOINTS = [
+  'https://overpass-api.de/api/interpreter',
+  'https://overpass.kumi.systems/api/interpreter',
+  'https://lz4.overpass-api.de/api/interpreter',
+];
 
 interface OverpassElement {
   type: 'node' | 'way' | 'relation';
@@ -109,26 +136,63 @@ function parseWikipediaTag(value: string | undefined): { lang: string; title: st
   return { lang: m[1]!, title: m[2]! };
 }
 
-async function fetchOverpass(): Promise<OverpassElement[]> {
-  console.log('→ querying Overpass for Kyiv lore tags…');
-  const res = await fetch('https://overpass-api.de/api/interpreter', {
-    method: 'POST',
-    // Overpass returns 406 if you don't send an Accept + identifying
-    // User-Agent on POST. They're explicit about wanting contact info
-    // in the UA so they can reach out before throttling abusive clients.
-    headers: {
-      'content-type': 'application/x-www-form-urlencoded',
-      accept: 'application/json',
-      'user-agent': 'shukajpes-lore-seed/1.0 (contact: pavlovskisad@gmail.com)',
-    },
-    body: `data=${encodeURIComponent(OVERPASS_QUERY)}`,
-  });
-  if (!res.ok) {
-    throw new Error(`overpass ${res.status}: ${await res.text()}`);
+async function fetchOverpassChunk(
+  label: string,
+  body: string,
+): Promise<OverpassElement[]> {
+  let lastErr: unknown = null;
+  for (const endpoint of OVERPASS_ENDPOINTS) {
+    for (let attempt = 0; attempt < 3; attempt++) {
+      try {
+        const res = await fetch(endpoint, {
+          method: 'POST',
+          headers: {
+            'content-type': 'application/x-www-form-urlencoded',
+            accept: 'application/json',
+            'user-agent':
+              'shukajpes-lore-seed/1.0 (contact: pavlovskisad@gmail.com)',
+          },
+          body: `data=${encodeURIComponent(body)}`,
+        });
+        if (res.status === 429 || res.status === 504) {
+          // Server told us to back off — wait then retry on same endpoint.
+          const wait = 2000 * Math.pow(2, attempt);
+          console.log(`    ${label}: ${endpoint} ${res.status}, retry in ${wait}ms`);
+          await sleep(wait);
+          continue;
+        }
+        if (!res.ok) {
+          throw new Error(`overpass ${res.status} from ${endpoint}`);
+        }
+        const json = (await res.json()) as OverpassResult;
+        return json.elements;
+      } catch (err) {
+        lastErr = err;
+        const wait = 1500 * Math.pow(2, attempt);
+        console.log(`    ${label}: ${endpoint} failed (${(err as Error).message}), retry in ${wait}ms`);
+        await sleep(wait);
+      }
+    }
+    console.log(`    ${label}: ${endpoint} exhausted, trying next endpoint…`);
   }
-  const json = (await res.json()) as OverpassResult;
-  console.log(`  got ${json.elements.length} elements`);
-  return json.elements;
+  throw new Error(
+    `overpass chunk ${label} failed on all endpoints: ${(lastErr as Error)?.message ?? 'unknown'}`,
+  );
+}
+
+async function fetchOverpass(): Promise<OverpassElement[]> {
+  console.log('→ querying Overpass in chunks…');
+  const all: OverpassElement[] = [];
+  for (const chunk of QUERY_CHUNKS) {
+    console.log(`  · ${chunk.label}`);
+    const els = await fetchOverpassChunk(chunk.label, chunk.body);
+    console.log(`    got ${els.length}`);
+    all.push(...els);
+    // Polite gap between chunks so we don't hammer one endpoint.
+    await sleep(800);
+  }
+  console.log(`  total ${all.length} elements across ${QUERY_CHUNKS.length} chunks`);
+  return all;
 }
 
 function buildCandidates(elements: OverpassElement[]): Candidate[] {
