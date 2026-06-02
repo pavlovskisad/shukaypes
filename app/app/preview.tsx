@@ -2,20 +2,20 @@
 // Production `/` map stays 100% Google.
 //
 // Direction:
-//   - Palette: BLACK / WHITE / GREEN / BLUE only.
-//   - Roads as crayon strokes at half liberty's width hierarchy.
-//   - Buildings BACK as 3D (paper walls + dark crayon outline).
-//   - Park / water / road TEXTURES rewritten as natural grain
-//     instead of scribble patterns:
-//       * Bigger tiles (256×256 fills, 128×16 roads) so repeats
-//         are harder for the eye to catch.
-//       * pixelRatio: 1 so the tile renders at its true size on
-//         screen (prior 2x made each repeat tiny + obvious).
-//       * Three stacked noise layers per tile — large soft accent
-//         blobs (uneven coverage), medium scattered dots, fine 1px
-//         speckles. No recognisable motifs / curves / lines.
-//   - Everything else (POIs, place labels, transit, boundaries,
-//     residential / commercial / industrial fills) hidden.
+//   - Palette: BLACK / WHITE / GREEN / BLUE (+ greys for roads).
+//   - Roads: light-grey crayon-textured strokes, solid opacity 1.0.
+//     Earlier opacity-based "pencil" + wobble approach was dropped
+//     because translucent lines stacked at intersections into ink-
+//     puddle darkness. The grey colour in the pattern itself gives
+//     the pencil/crayon read without alpha stacking.
+//   - Buildings: 3D B&W (paper walls + dark crayon outline on top).
+//   - Park + water FILLS get layered-noise grain (natural crayon
+//     coverage, no motifs).
+//   - Polygon corners SOFTENED: each park / water polygon gets a
+//     thick same-colour line drawn around it with round caps + joins.
+//     MapLibre has no native rounded-fill, so the thick stroke covers
+//     the polygon's sharp edges and arcs every corner — the shape
+//     appears as a rounded crayon blob.
 
 import { useEffect, useRef } from 'react';
 import { View, StyleSheet, Text, Pressable } from 'react-native';
@@ -27,6 +27,7 @@ const KYIV_CENTER: [number, number] = [30.5234, 50.4501]; // [lng, lat]
 
 const PAPER = '#fafafa';
 const CRAYON = '#1a1a1a';
+const GREY_ROAD = '#4a4a4a';
 const GREEN = '#65b246';
 const GREEN_DARK = '#3a7e2a';
 const GREEN_LIGHT = '#d8eccb';
@@ -34,16 +35,12 @@ const BLUE = '#2f99d8';
 const BLUE_DARK = '#1a679a';
 const BLUE_LIGHT = '#a7ddf3';
 
-// Multiplier wrapped around liberty's line-width expression for every
-// transportation line. Preserves liberty's per-class + per-zoom
-// hierarchy. Aggressive cut — liberty's motorway is ~14px at zoom 14
-// so even 0.5 still read as fat after the dark line-pattern fill.
-// 0.22 lands motorway around 3px (hand-drawn marker thickness) while
-// keeping residential streets visible at a thin ~0.6-0.8px.
+// Liberty's per-class line-width preserved; halved further (was 0.5
+// then 0.22). Keeps motorway around 3px / residential around 0.6px.
 const ROAD_WIDTH_SCALE = 0.22;
 
 // ---------------------------------------------------------------------
-// Canvas pattern generators — layered noise, NOT scribble motifs.
+// Canvas pattern generators — layered noise, no motifs.
 // ---------------------------------------------------------------------
 
 function rng(seed: number): () => number {
@@ -61,16 +58,12 @@ function ctxFor(w: number, h: number) {
   return { c, ctx: c.getContext('2d')! };
 }
 
-// Three-layer noise fill: soft accent blobs (uneven coverage) +
-// medium scattered dots + fine 1px speckles. No motifs. Reads as
-// natural crayon grain at any viewport scale.
 function noiseFill(opts: {
   size: number;
   base: string;
   darker: string;
   lighter: string;
   seed: number;
-  // Tuning knobs per layer.
   blobs?: number;
   blobAlpha?: number;
   blobRadius?: [number, number];
@@ -100,9 +93,6 @@ function noiseFill(opts: {
   ctx.fillRect(0, 0, size, size);
   const r = rng(seed);
 
-  // Layer 1: large soft accent blobs — "uneven coverage" feel a
-  // crayon naturally leaves.
-  ctx.globalCompositeOperation = 'source-over';
   for (let i = 0; i < blobs; i++) {
     ctx.fillStyle = r() > 0.5 ? darker : lighter;
     ctx.globalAlpha = blobAlpha * (0.5 + r() * 1.0);
@@ -113,8 +103,6 @@ function noiseFill(opts: {
     ctx.arc(x, y, radius, 0, Math.PI * 2);
     ctx.fill();
   }
-
-  // Layer 2: medium scattered dots of varied size + color.
   for (let i = 0; i < dots; i++) {
     ctx.fillStyle = r() > 0.55 ? darker : lighter;
     ctx.globalAlpha = dotAlpha[0] + r() * (dotAlpha[1] - dotAlpha[0]);
@@ -123,9 +111,6 @@ function noiseFill(opts: {
     const s = dotSize[0] + r() * (dotSize[1] - dotSize[0]);
     ctx.fillRect(x, y, s, s);
   }
-
-  // Layer 3: very fine 1px speckles — the high-frequency grain that
-  // sells "crayon on paper" up close.
   for (let i = 0; i < speckles; i++) {
     ctx.fillStyle = r() > 0.6 ? darker : lighter;
     ctx.globalAlpha = speckleAlpha[0] + r() * (speckleAlpha[1] - speckleAlpha[0]);
@@ -133,7 +118,6 @@ function noiseFill(opts: {
     const y = Math.floor(r() * size);
     ctx.fillRect(x, y, 1, 1);
   }
-
   ctx.globalAlpha = 1;
   return ctx.getImageData(0, 0, size, size);
 }
@@ -155,48 +139,31 @@ function waterPattern(): ImageData {
     darker: BLUE_DARK,
     lighter: BLUE_LIGHT,
     seed: 13,
-    // A touch more blob variation on water for a subtle "depth" feel
-    // without going back into directional ripple lines.
     blobs: 18,
     blobAlpha: 0.07,
   });
 }
 
-// Road tile: dark CRAYON base + paper specks. Wider tile (128×16)
-// drastically reduces visible repeats vs the prior 32×8. No
-// horizontal "drag" lines (those created visible streaks).
+// Road tile: medium-grey base (NOT pure black — avoids the ink-puddle
+// darkening at intersections) + paper specks + light grey speckles.
 function roadPattern(): ImageData {
   const w = 128;
   const h = 16;
   const { c, ctx } = ctxFor(w, h);
-  ctx.fillStyle = CRAYON;
+  ctx.fillStyle = GREY_ROAD;
   ctx.fillRect(0, 0, w, h);
   const r = rng(23);
-
-  // Soft darker blobs for subtle uneven darkness across the line.
-  for (let i = 0; i < 12; i++) {
-    ctx.fillStyle = '#0a0a0a';
-    ctx.globalAlpha = 0.06 + r() * 0.1;
-    const x = r() * w;
-    const y = r() * h;
-    const radius = 4 + r() * 14;
-    ctx.beginPath();
-    ctx.arc(x, y, radius, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  // Paper specks — "crayon missed paper".
-  for (let i = 0; i < 120; i++) {
+  for (let i = 0; i < 110; i++) {
     ctx.fillStyle = PAPER;
-    ctx.globalAlpha = 0.18 + r() * 0.4;
+    ctx.globalAlpha = 0.22 + r() * 0.4;
     const x = r() * w;
     const y = r() * h;
     const s = 0.4 + r() * 1.0;
     ctx.fillRect(x, y, s, s);
   }
-  // Fine 1px speckles for paper texture.
-  for (let i = 0; i < 300; i++) {
-    ctx.fillStyle = r() > 0.5 ? PAPER : '#3a3a3a';
-    ctx.globalAlpha = 0.06 + r() * 0.15;
+  for (let i = 0; i < 220; i++) {
+    ctx.fillStyle = r() > 0.5 ? '#888888' : '#2c2c2c';
+    ctx.globalAlpha = 0.08 + r() * 0.18;
     const x = Math.floor(r() * w);
     const y = Math.floor(r() * h);
     ctx.fillRect(x, y, 1, 1);
@@ -221,9 +188,6 @@ function clear(map: maplibregl.Map, id: string, prop: string) {
 // ---------------------------------------------------------------------
 
 function applyCrayonOverride(map: maplibregl.Map) {
-  // pixelRatio: 1 so each tile renders at its full pixel size on
-  // screen (prior 2x halved the rendered tile size, making repeats
-  // tiny + obvious).
   addImg(map, 'crayon-park', parkPattern(), 1);
   addImg(map, 'crayon-water', waterPattern(), 1);
   addImg(map, 'crayon-road', roadPattern(), 1);
@@ -233,6 +197,18 @@ function applyCrayonOverride(map: maplibregl.Map) {
     (l) => (l as { 'source-layer'?: string })['source-layer'] === 'building',
   );
   const buildingSource = (buildingLayer as { source?: string } | undefined)?.source;
+
+  // Track polygons that should get a softening outline AFTER the main
+  // pass — we need the original layer's source + filter to know what
+  // shapes to outline.
+  type PolygonInfo = {
+    baseId: string;
+    source: string;
+    sourceLayer: string;
+    filter: unknown;
+    color: string;
+  };
+  const polygonsToSoften: PolygonInfo[] = [];
 
   for (const l of layers) {
     const id = l.id;
@@ -251,15 +227,17 @@ function applyCrayonOverride(map: maplibregl.Map) {
         clear(map, id, 'fill-color');
         map.setPaintProperty(id, 'fill-pattern', 'crayon-water');
         map.setPaintProperty(id, 'fill-opacity', 1);
+        const src = (l as { source?: string }).source;
+        const filt = (l as { filter?: unknown }).filter;
+        if (src) polygonsToSoften.push({
+          baseId: id, source: src, sourceLayer: 'water', filter: filt, color: BLUE,
+        });
         continue;
       }
       map.setLayoutProperty(id, 'visibility', 'none');
       continue;
     }
 
-    // Buildings: KEEP 3D extrusion (per request), paint walls PAPER
-    // white. The injected dark outline layer (below) gives the
-    // building footprint a crayon stroke seen from above.
     if (sl === 'building') {
       if (type === 'fill') {
         clear(map, id, 'fill-pattern');
@@ -269,10 +247,6 @@ function applyCrayonOverride(map: maplibregl.Map) {
         clear(map, id, 'fill-extrusion-pattern');
         map.setPaintProperty(id, 'fill-extrusion-color', PAPER);
         map.setPaintProperty(id, 'fill-extrusion-opacity', 1);
-        // Leave liberty's height expression intact — that's what
-        // makes them 3D. Keep vertical-gradient default (subtle
-        // wall shading toward gray) for a hint of dimension without
-        // breaking the B&W palette.
       }
       continue;
     }
@@ -290,6 +264,11 @@ function applyCrayonOverride(map: maplibregl.Map) {
         clear(map, id, 'fill-color');
         map.setPaintProperty(id, 'fill-pattern', 'crayon-park');
         map.setPaintProperty(id, 'fill-opacity', 1);
+        const src = (l as { source?: string }).source;
+        const filt = (l as { filter?: unknown }).filter;
+        if (src && sl) polygonsToSoften.push({
+          baseId: id, source: src, sourceLayer: sl, filter: filt, color: GREEN,
+        });
       } else {
         map.setLayoutProperty(id, 'visibility', 'none');
       }
@@ -309,10 +288,9 @@ function applyCrayonOverride(map: maplibregl.Map) {
       clear(map, id, 'line-color');
       clear(map, id, 'line-dasharray');
       map.setPaintProperty(id, 'line-pattern', 'crayon-road');
-      // Drop the line a touch — dark-fill line-pattern reads visually
-      // heavier than its actual width. Lower opacity nudges it toward
-      // pencil-on-paper instead of ink-solid.
-      map.setPaintProperty(id, 'line-opacity', 0.5);
+      // Solid opacity — the grey colour in the pattern handles the
+      // "pencil" feel without alpha stacking at intersections.
+      map.setPaintProperty(id, 'line-opacity', 1);
       const curW = map.getPaintProperty(id, 'line-width');
       const newW: unknown = ['max', 0.4, ['*', ROAD_WIDTH_SCALE, curW ?? 1]];
       try {
@@ -338,17 +316,56 @@ function applyCrayonOverride(map: maplibregl.Map) {
     map.setLayoutProperty(id, 'visibility', 'none');
   }
 
-  // "Wobble" by duplicating each transportation line at perpendicular
-  // offsets. MapLibre can't actually warp vector-tile geometry, so we
-  // fake the hand-drawn jitter with two extra parallel strokes per
-  // road at +/-0.5px offset, each at lower opacity. The three passes
-  // overlap to read as a crayon dragged a few times along the same
-  // path — sketchy edges, slight tremor — without us having to write
-  // a custom WebGL layer.
+  // Polygon corner softening. MapLibre has no native rounded-fill, so
+  // we draw a thick same-colour line around each green / water polygon
+  // with line-cap/join round. The stroke covers the polygon's sharp
+  // perimeter and ARCS every corner — the shape ends up reading as a
+  // rounded crayon blob instead of a hard polygon. Stroke width is
+  // zoom-interpolated so the rounding stays proportional.
+  for (const p of polygonsToSoften) {
+    const softId = `soften-${p.baseId}`;
+    if (map.getLayer(softId)) continue;
+    try {
+      map.addLayer({
+        id: softId,
+        type: 'line',
+        source: p.source,
+        'source-layer': p.sourceLayer,
+        ...(p.filter !== undefined ? { filter: p.filter } : {}),
+        paint: {
+          'line-color': p.color,
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            10, 2,
+            14, 6,
+            18, 14,
+          ],
+          'line-opacity': 1,
+        },
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+      } as LayerSpecification);
+    } catch {
+      /* skip silently — some layer specs may reject */
+    }
+  }
+
+  // Wobble — boosted version. Each transportation line gets two
+  // offset clones (+1.0 / -1.0 px perpendicular) drawn in SOLID
+  // contrasting greys (one lighter, one darker) at full opacity.
+  // Reads as three parallel pencil passes; the colour variation
+  // (instead of alpha) keeps intersections clean — opaque grey-on-
+  // grey overpaint, no alpha darkening.
   const roadIds: string[] = [];
   for (const l of map.getStyle().layers ?? []) {
     const sl = (l as { 'source-layer'?: string })['source-layer'];
-    if (l.type === 'line' && sl === 'transportation' && !l.id.startsWith('wobble-')) {
+    if (
+      l.type === 'line' &&
+      sl === 'transportation' &&
+      !l.id.startsWith('wobble-')
+    ) {
       roadIds.push(l.id);
     }
   }
@@ -364,42 +381,44 @@ function applyCrayonOverride(map: maplibregl.Map) {
       | undefined;
     if (!base || !base.source || !base['source-layer']) continue;
     const lineWidth = map.getPaintProperty(baseId, 'line-width');
-    const linePattern = map.getPaintProperty(baseId, 'line-pattern');
-    for (const variant of [
-      { suffix: 'a', offset: 0.6 },
-      { suffix: 'b', offset: -0.6 },
-    ]) {
-      const id = `wobble-${baseId}-${variant.suffix}`;
+    const variants: Array<{ suffix: string; offset: number; color: string }> = [
+      { suffix: 'lo', offset: 1.0, color: '#8a8a8a' },
+      { suffix: 'hi', offset: -1.0, color: '#2a2a2a' },
+    ];
+    for (const v of variants) {
+      const id = `wobble-${baseId}-${v.suffix}`;
       if (map.getLayer(id)) continue;
-      const spec: LayerSpecification = {
-        id,
-        type: 'line',
-        source: base.source,
-        'source-layer': base['source-layer'],
-        ...(base.filter !== undefined ? { filter: base.filter } : {}),
-        ...(base.minzoom !== undefined ? { minzoom: base.minzoom } : {}),
-        ...(base.maxzoom !== undefined ? { maxzoom: base.maxzoom } : {}),
-        paint: {
-          'line-pattern': linePattern,
-          'line-width': lineWidth,
-          'line-offset': variant.offset,
-          'line-opacity': 0.35,
-        },
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round',
-        },
-      } as LayerSpecification;
       try {
-        map.addLayer(spec, baseId); // insert before the original = below in z
+        map.addLayer(
+          {
+            id,
+            type: 'line',
+            source: base.source,
+            'source-layer': base['source-layer'],
+            ...(base.filter !== undefined ? { filter: base.filter } : {}),
+            ...(base.minzoom !== undefined ? { minzoom: base.minzoom } : {}),
+            ...(base.maxzoom !== undefined ? { maxzoom: base.maxzoom } : {}),
+            paint: {
+              'line-color': v.color,
+              'line-width': lineWidth,
+              'line-offset': v.offset,
+              'line-opacity': 1,
+            },
+            layout: {
+              'line-cap': 'round',
+              'line-join': 'round',
+            },
+          } as LayerSpecification,
+          baseId, // insert before the original = below in z-order
+        );
       } catch {
-        /* skip silently — some classes may reject the spec shape */
+        /* skip — some classes may reject */
       }
     }
   }
 
-  // Dark crayon outline drawn from the building source-layer.
-  // Painted LAST so the outline sits above roads + walls.
+  // Dark crayon building outline drawn LAST so it paints above the
+  // walls + the polygon softeners.
   if (buildingSource && !map.getLayer('crayon-building-outline')) {
     const outlineLayer: LayerSpecification = {
       id: 'crayon-building-outline',
@@ -411,9 +430,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
         'line-color': CRAYON,
         'line-opacity': 0.55,
         'line-width': [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
+          'interpolate', ['linear'], ['zoom'],
           13, 0.4,
           16, 0.9,
           19, 1.4,
@@ -439,7 +456,7 @@ export default function PhaseTwoPreview() {
       style: 'https://tiles.openfreemap.org/styles/liberty',
       center: KYIV_CENTER,
       zoom: 14,
-      pitch: 30, // slight default tilt to show off the 3D extrusion
+      pitch: 30,
       attributionControl: { compact: true },
     });
     mapRef.current = map;
@@ -457,7 +474,7 @@ export default function PhaseTwoPreview() {
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       <View style={styles.banner} pointerEvents="box-none">
         <View style={styles.bannerInner}>
-          <Text style={styles.bannerText}>Phase 2 preview · B&amp;W crayon · natural grain</Text>
+          <Text style={styles.bannerText}>Phase 2 preview · grey roads · soft corners</Text>
           <Pressable
             onPress={() => router.replace('/')}
             style={styles.backBtn}
