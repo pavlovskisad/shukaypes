@@ -241,3 +241,32 @@ export const dailyTasks = pgTable(
     pk: primaryKey({ columns: [t.userId, t.date] }),
   }),
 );
+
+// Kyiv lore — a curated geo-indexed corpus of stories the companion
+// can mention when the walker passes by. Built one-off by seed-lore.ts
+// from OSM (historic / tourism / memorial / artwork tags) joined with
+// Wikidata + Wikipedia, each entry rewritten through Sonnet into a
+// single in-voice sentence. Read at chat time by buildContextBlock via
+// a small haversine proximity query.
+export const kyivLore = pgTable(
+  'kyiv_lore',
+  {
+    id: text('id').primaryKey(), // osm:<type>:<id>
+    name: text('name').notNull(),
+    nameEn: text('name_en'),
+    category: text('category').notNull(), // historic | memorial | tourism | artwork | religious | park | other
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    story: text('story').notNull(),
+    osmType: text('osm_type').notNull(), // node | way | relation
+    osmId: text('osm_id').notNull(),
+    wikidataId: text('wikidata_id'),
+    wikipediaTitle: text('wikipedia_title'),
+    sourceLang: text('source_lang'), // uk | en
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastRewroteAt: timestamp('last_rewrote_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    bboxIdx: index('lore_lat_lng_idx').on(t.lat, t.lng),
+  }),
+);

@@ -84,6 +84,29 @@ export async function buildContextBlock({ userId, pos, spots }: ContextInput): P
     });
   }
 
+  // Kyiv lore — pre-rewritten short stories the dog already "knows"
+  // about places around him. Pull at most 2 within ~200 m so they
+  // land as natural recall, not as a tour. Each story is already a
+  // dog-voice sentence; the dog can drop one verbatim or paraphrase.
+  let nearbyLore: string[] = [];
+  if (pos) {
+    const loreDist = sql<number>`(6371000 * acos(cos(radians(${pos.lat})) * cos(radians(lat)) * cos(radians(lng) - radians(${pos.lng})) + sin(radians(${pos.lat})) * sin(radians(lat))))`;
+    const lore = await db
+      .select({
+        name: schema.kyivLore.name,
+        category: schema.kyivLore.category,
+        story: schema.kyivLore.story,
+        dist: loreDist,
+      })
+      .from(schema.kyivLore)
+      .where(sql`${loreDist} < 200`)
+      .orderBy(loreDist)
+      .limit(2);
+    nearbyLore = lore.map(
+      (l) => `  - ${l.name} (${l.category}, ~${Math.round(l.dist)}m): "${l.story}"`,
+    );
+  }
+
   const lines = [
     'CONTEXT (live, changes every request)',
     `- local time in Kyiv: ${kyivTime}`,
@@ -93,7 +116,8 @@ export async function buildContextBlock({ userId, pos, spots }: ContextInput): P
     pos ? `- current GPS: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}` : '- GPS not shared this turn',
     nearbyPets.length ? `- lost pets nearby you could mention (dogs or cats — mention by name if natural):\n${nearbyPets.join('\n')}` : '- no active lost-pet reports in your radius',
     nearbySpots.length ? `- nearby spots you can route to via walk_to_spot (mention by name if the human asks):\n${nearbySpots.join('\n')}` : '- no spots loaded this turn',
-  ];
+    nearbyLore.length ? `- places you happen to know within ~200m — drop one in only if it lands naturally for this turn, otherwise ignore:\n${nearbyLore.join('\n')}` : null,
+  ].filter(Boolean);
   return lines.join('\n');
 }
 
