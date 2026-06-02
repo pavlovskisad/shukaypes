@@ -529,9 +529,9 @@ function applyCrayonOverride(map: maplibregl.Map) {
           // the higher opacity.
           'line-width': [
             'interpolate', ['linear'], ['zoom'],
-            13, 0.28,
-            16, 0.7,
-            19, 1.1,
+            13, 0.18,
+            16, 0.45,
+            19, 0.75,
           ],
         },
         layout: {
