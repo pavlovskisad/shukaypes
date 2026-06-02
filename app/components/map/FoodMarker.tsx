@@ -1,6 +1,6 @@
 import { memo } from 'react';
-import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
+import { MapLibreMarker } from './MapLibreMarker';
 
 // 🦴 bone with warm amber glow (demo line 353). Memoized — ~8 of these
 // render but the map re-renders on every pan so it's still worth it.
@@ -16,16 +16,11 @@ function FoodMarkerImpl({
   inverted?: boolean;
 }) {
   return (
-    <OverlayViewF
-      position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -12, y: -12 })}
-    >
+    <MapLibreMarker position={position} onClick={onTap}>
       {/* No glow, no animation — keep it light for the paint budget. */}
       <div
         role="button"
         tabIndex={0}
-        onClick={onTap}
         aria-label="bone"
         style={{
           width: 24,
@@ -38,7 +33,7 @@ function FoodMarkerImpl({
           userSelect: 'none',
         }}
       />
-    </OverlayViewF>
+    </MapLibreMarker>
   );
 }
 

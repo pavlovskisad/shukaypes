@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
+import { MapLibreMarker } from './MapLibreMarker';
 import { useGameStore } from '../../stores/gameStore';
 import { iconForCategory } from '../ui/Icon';
 import { SpeechBubble } from '../ui/SpeechBubble';
@@ -469,11 +469,7 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
   const activeBubble = menuOpen ? null : bubble ?? localBubble;
 
   return (
-    <OverlayViewF
-      position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -70, y: -70 })}
-    >
+    <MapLibreMarker position={position}>
       {/* Outer container is 140×140 — the entire box is the tap target
           even though the visible nose glyph is only 55×55 centered.
           At map-zoomed-out the companion sits on top of the UserMarker's
@@ -519,6 +515,6 @@ export function Companion({ position, bubble, onTapCompanion, onTap }: Companion
           showLabels={menuPath.length === 2 && menuPath[0] === 'visit'}
         />
       </div>
-    </OverlayViewF>
+    </MapLibreMarker>
   );
 }

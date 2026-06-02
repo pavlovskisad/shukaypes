@@ -1,50 +1,91 @@
 import type { LatLng } from '@shukajpes/shared';
+import { env } from '../constants/env';
 
-// Walking-mode directions via the already-loaded google.maps JS API.
-// Kept separate from places.ts because this one needs the `routes`
-// library. `useJsApiLoader` in MapView loads `places` today; when we
-// first use this, google.maps.DirectionsService comes along regardless
-// because core maps ships it. No extra library load required.
+// Walking directions via the Google ROUTES API (the modern successor
+// to the legacy Directions API). Called directly from the browser —
+// Routes API endpoints expose CORS, so we don't need the Google Maps
+// JS SDK loaded just to make this call. Same function signature as
+// before; callers don't change.
+//
+// Requires the "Routes API" enabled on the Google Cloud project
+// behind EXPO_PUBLIC_GOOGLE_MAPS_API_KEY (separate from the legacy
+// Directions API). The HTTP-referrer restriction on that key
+// already covers our origins.
 
-// We ignore the full DirectionsResult shape and just flatten every
-// polyline path in the first route's legs/steps — that's what renders
-// as a street-hugging line through the waypoints.
+const ENDPOINT = 'https://routes.googleapis.com/directions/v2:computeRoutes';
+
+interface RoutesResponse {
+  routes?: Array<{ polyline?: { encodedPolyline?: string } }>;
+}
+
+// Decode Google's encoded-polyline format (the same format the
+// legacy DirectionsResult exposes). Standard reference algorithm.
+function decodePolyline(encoded: string): LatLng[] {
+  const points: LatLng[] = [];
+  let index = 0;
+  let lat = 0;
+  let lng = 0;
+  while (index < encoded.length) {
+    let result = 0;
+    let shift = 0;
+    let b: number;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lat += (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    result = 0;
+    shift = 0;
+    do {
+      b = encoded.charCodeAt(index++) - 63;
+      result |= (b & 0x1f) << shift;
+      shift += 5;
+    } while (b >= 0x20);
+    lng += (result & 1) !== 0 ? ~(result >> 1) : result >> 1;
+    points.push({ lat: lat / 1e5, lng: lng / 1e5 });
+  }
+  return points;
+}
+
+function asWaypoint(p: LatLng) {
+  return { location: { latLng: { latitude: p.lat, longitude: p.lng } } };
+}
 
 export async function fetchWalkingRoute(
   origin: LatLng,
   waypoints: LatLng[],
 ): Promise<LatLng[] | null> {
-  if (typeof google === 'undefined' || !google.maps) return null;
+  if (!env.googleMapsApiKey) return null;
   if (waypoints.length === 0) return null;
-  const svc = new google.maps.DirectionsService();
   const destination = waypoints[waypoints.length - 1]!;
-  const intermediate = waypoints.slice(0, -1).map((p) => ({
-    location: p as unknown as google.maps.LatLngLiteral,
-    stopover: true,
-  }));
-  return new Promise((resolve) => {
-    svc.route(
-      {
-        origin: origin as unknown as google.maps.LatLngLiteral,
-        destination: destination as unknown as google.maps.LatLngLiteral,
-        waypoints: intermediate,
-        travelMode: google.maps.TravelMode.WALKING,
+  const intermediates = waypoints.slice(0, -1).map(asWaypoint);
+
+  try {
+    const resp = await fetch(ENDPOINT, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-Goog-Api-Key': env.googleMapsApiKey,
+        // Routes API requires a field mask — we only need the overall
+        // polyline. Smaller response = less bandwidth + latency.
+        'X-Goog-FieldMask': 'routes.polyline.encodedPolyline',
       },
-      (res, status) => {
-        if (status !== google.maps.DirectionsStatus.OK || !res) {
-          resolve(null);
-          return;
-        }
-        const path: LatLng[] = [];
-        for (const leg of res.routes[0]?.legs ?? []) {
-          for (const step of leg.steps ?? []) {
-            for (const p of step.path ?? []) {
-              path.push({ lat: p.lat(), lng: p.lng() });
-            }
-          }
-        }
-        resolve(path.length ? path : null);
-      },
-    );
-  });
+      body: JSON.stringify({
+        origin: asWaypoint(origin),
+        destination: asWaypoint(destination),
+        intermediates,
+        travelMode: 'WALK',
+        polylineEncoding: 'ENCODED_POLYLINE',
+      }),
+    });
+    if (!resp.ok) return null;
+    const data = (await resp.json()) as RoutesResponse;
+    const encoded = data.routes?.[0]?.polyline?.encodedPolyline;
+    if (!encoded) return null;
+    const path = decodePolyline(encoded);
+    return path.length > 1 ? path : null;
+  } catch {
+    return null;
+  }
 }

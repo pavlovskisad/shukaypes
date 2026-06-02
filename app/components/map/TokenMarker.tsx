@@ -1,6 +1,6 @@
 import { memo } from 'react';
-import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
+import { MapLibreMarker } from './MapLibreMarker';
 
 // 🐾 token with lime glow (demo line 319 / TO class). Memoized — ~30 of
 // these render, map re-renders on every pan. `inverted` flips the
@@ -16,11 +16,7 @@ function TokenMarkerImpl({
   inverted?: boolean;
 }) {
   return (
-    <OverlayViewF
-      position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -11, y: -11 })}
-    >
+    <MapLibreMarker position={position} onClick={onTap}>
       {/* Footprint sized to read at zoom 16 — small enough that a
           cluster reads as a trail of paws, big enough that a single
           token is obviously tappable on touch. Slightly under the
@@ -28,7 +24,6 @@ function TokenMarkerImpl({
       <div
         role="button"
         tabIndex={0}
-        onClick={onTap}
         aria-label="paw token"
         style={{
           width: 22,
@@ -41,7 +36,7 @@ function TokenMarkerImpl({
           userSelect: 'none',
         }}
       />
-    </OverlayViewF>
+    </MapLibreMarker>
   );
 }
 

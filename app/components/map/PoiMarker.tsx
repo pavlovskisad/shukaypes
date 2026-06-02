@@ -1,8 +1,8 @@
 import { memo } from 'react';
-import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Icon, iconForCategory } from '../ui/Icon';
+import { MapLibreMarker } from './MapLibreMarker';
 
 // Small pin for a Google Places result. Same OverlayViewF pattern
 // as LostDogMarker; soft blue glow distinguishes "places to walk to"
@@ -23,15 +23,10 @@ interface PoiMarkerProps {
 function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: PoiMarkerProps) {
   const slot = iconForCategory(category);
   return (
-    <OverlayViewF
-      position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -22, y: -44 })}
-    >
+    <MapLibreMarker position={position} anchor="bottom" onClick={onTap}>
       <div
         role="button"
         tabIndex={0}
-        onClick={onTap}
         style={{
           display: 'flex',
           flexDirection: 'column',
@@ -81,7 +76,7 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
           </>
         ) : null}
       </div>
-    </OverlayViewF>
+    </MapLibreMarker>
   );
 }
 
