@@ -1,19 +1,19 @@
 // Phase 2 PREVIEW. Pure "judge call" screen — not a feature.
 // Production `/` map stays 100% Google.
 //
-// Current direction (B&W crayon, minimal):
+// Direction:
 //   - Palette: BLACK / WHITE / GREEN / BLUE only.
-//   - Roads as crayon strokes; weight hierarchy from liberty's
-//     per-class widths, halved (was too fat).
-//   - Buildings back as outline-only: paper fill (invisible on
-//     paper bg) + dark crayon outline layer added on top of
-//     liberty's stack.
-//   - Park and water FILLS get a subtle crayon-coloring texture —
-//     base color + sparse lighter streaks for "paper showing
-//     through". Less decoration than the prior scribble patterns;
-//     reads like a kid colouring with a crayon, not a sketch.
-//   - Road strokes also get a granulated noise pattern (dark base
-//     + sparse paper-color specks) so they're not marker-clean.
+//   - Roads as crayon strokes at half liberty's width hierarchy.
+//   - Buildings BACK as 3D (paper walls + dark crayon outline).
+//   - Park / water / road TEXTURES rewritten as natural grain
+//     instead of scribble patterns:
+//       * Bigger tiles (256×256 fills, 128×16 roads) so repeats
+//         are harder for the eye to catch.
+//       * pixelRatio: 1 so the tile renders at its true size on
+//         screen (prior 2x made each repeat tiny + obvious).
+//       * Three stacked noise layers per tile — large soft accent
+//         blobs (uneven coverage), medium scattered dots, fine 1px
+//         speckles. No recognisable motifs / curves / lines.
 //   - Everything else (POIs, place labels, transit, boundaries,
 //     residential / commercial / industrial fills) hidden.
 
@@ -25,22 +25,22 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 
 const KYIV_CENTER: [number, number] = [30.5234, 50.4501]; // [lng, lat]
 
-// Restricted palette.
 const PAPER = '#fafafa';
 const CRAYON = '#1a1a1a';
 const GREEN = '#65b246';
+const GREEN_DARK = '#3a7e2a';
+const GREEN_LIGHT = '#d8eccb';
 const BLUE = '#2f99d8';
+const BLUE_DARK = '#1a679a';
+const BLUE_LIGHT = '#a7ddf3';
 
-// Multiplier applied to liberty's existing line-width expressions
-// for every transportation line. Halving gets us out of "too fat"
-// territory while keeping liberty's zoom + class hierarchy intact.
+// Multiplier wrapped around liberty's line-width expression for every
+// transportation line. Preserves liberty's per-class + per-zoom
+// hierarchy, just halves it (was too fat).
 const ROAD_WIDTH_SCALE = 0.5;
 
 // ---------------------------------------------------------------------
-// Canvas pattern generators. All return ImageData; we hand them to
-// `map.addImage` and reference by id in fill-pattern / line-pattern.
-// Designed for "crayon coloring", not "scribble" — base color + sparse
-// lighter streaks suggesting paper showing through the crayon.
+// Canvas pattern generators — layered noise, NOT scribble motifs.
 // ---------------------------------------------------------------------
 
 function rng(seed: number): () => number {
@@ -58,108 +58,155 @@ function ctxFor(w: number, h: number) {
   return { c, ctx: c.getContext('2d')! };
 }
 
-// Park: solid green + sparse PAPER-coloured short curves (paper grain).
-function parkPattern(): ImageData {
-  const size = 64;
+// Three-layer noise fill: soft accent blobs (uneven coverage) +
+// medium scattered dots + fine 1px speckles. No motifs. Reads as
+// natural crayon grain at any viewport scale.
+function noiseFill(opts: {
+  size: number;
+  base: string;
+  darker: string;
+  lighter: string;
+  seed: number;
+  // Tuning knobs per layer.
+  blobs?: number;
+  blobAlpha?: number;
+  blobRadius?: [number, number];
+  dots?: number;
+  dotAlpha?: [number, number];
+  dotSize?: [number, number];
+  speckles?: number;
+  speckleAlpha?: [number, number];
+}): ImageData {
+  const {
+    size,
+    base,
+    darker,
+    lighter,
+    seed,
+    blobs = 14,
+    blobAlpha = 0.06,
+    blobRadius = [25, 80],
+    dots = 600,
+    dotAlpha = [0.1, 0.32],
+    dotSize = [0.5, 1.6],
+    speckles = 1800,
+    speckleAlpha = [0.03, 0.12],
+  } = opts;
   const { c, ctx } = ctxFor(size, size);
-  ctx.fillStyle = GREEN;
+  ctx.fillStyle = base;
   ctx.fillRect(0, 0, size, size);
-  const r = rng(7);
-  ctx.strokeStyle = PAPER;
-  ctx.lineCap = 'round';
-  ctx.lineJoin = 'round';
-  for (let i = 0; i < 18; i++) {
-    ctx.globalAlpha = 0.18 + r() * 0.18;
-    ctx.lineWidth = 0.7 + r() * 0.9;
-    let x = r() * size;
-    let y = r() * size;
-    const ang = r() * Math.PI * 2;
-    const len = 6 + r() * 12;
-    const segs = 2 + Math.floor(r() * 2);
-    ctx.beginPath();
-    ctx.moveTo(x, y);
-    for (let j = 0; j < segs; j++) {
-      const wob = (r() - 0.5) * 2;
-      x += (Math.cos(ang) * len) / segs + wob;
-      y += (Math.sin(ang) * len) / segs + wob;
-      ctx.lineTo(x, y);
-    }
-    ctx.stroke();
-  }
-  ctx.globalAlpha = 1;
-  return ctx.getImageData(0, 0, size, size);
-}
+  const r = rng(seed);
 
-// Water: solid blue + sparse lighter horizontal wavy "ripples".
-function waterPattern(): ImageData {
-  const size = 64;
-  const { c, ctx } = ctxFor(size, size);
-  ctx.fillStyle = BLUE;
-  ctx.fillRect(0, 0, size, size);
-  const r = rng(13);
-  ctx.strokeStyle = '#a7ddf3';
-  ctx.lineWidth = 1.0;
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 8; i++) {
-    ctx.globalAlpha = 0.28 + r() * 0.22;
+  // Layer 1: large soft accent blobs — "uneven coverage" feel a
+  // crayon naturally leaves.
+  ctx.globalCompositeOperation = 'source-over';
+  for (let i = 0; i < blobs; i++) {
+    ctx.fillStyle = r() > 0.5 ? darker : lighter;
+    ctx.globalAlpha = blobAlpha * (0.5 + r() * 1.0);
+    const x = r() * size;
     const y = r() * size;
-    const amp = 1.0 + r() * 1.6;
-    const phase = r() * Math.PI * 2;
+    const radius = blobRadius[0] + r() * (blobRadius[1] - blobRadius[0]);
     ctx.beginPath();
-    for (let x = -4; x <= size + 4; x += 2) {
-      const yy = y + Math.sin((x / size) * Math.PI * 3 + phase) * amp;
-      if (x === -4) ctx.moveTo(x, yy);
-      else ctx.lineTo(x, yy);
-    }
-    ctx.stroke();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
   }
+
+  // Layer 2: medium scattered dots of varied size + color.
+  for (let i = 0; i < dots; i++) {
+    ctx.fillStyle = r() > 0.55 ? darker : lighter;
+    ctx.globalAlpha = dotAlpha[0] + r() * (dotAlpha[1] - dotAlpha[0]);
+    const x = r() * size;
+    const y = r() * size;
+    const s = dotSize[0] + r() * (dotSize[1] - dotSize[0]);
+    ctx.fillRect(x, y, s, s);
+  }
+
+  // Layer 3: very fine 1px speckles — the high-frequency grain that
+  // sells "crayon on paper" up close.
+  for (let i = 0; i < speckles; i++) {
+    ctx.fillStyle = r() > 0.6 ? darker : lighter;
+    ctx.globalAlpha = speckleAlpha[0] + r() * (speckleAlpha[1] - speckleAlpha[0]);
+    const x = Math.floor(r() * size);
+    const y = Math.floor(r() * size);
+    ctx.fillRect(x, y, 1, 1);
+  }
+
   ctx.globalAlpha = 1;
   return ctx.getImageData(0, 0, size, size);
 }
 
-// Road: dark crayon base + sparse PAPER specks for "crayon-miss" grain.
-// line-pattern stretches the tile to the line's width, so we use a
-// short fat horizontal tile (32×8) tuned to a typical road thickness.
+function parkPattern(): ImageData {
+  return noiseFill({
+    size: 256,
+    base: GREEN,
+    darker: GREEN_DARK,
+    lighter: GREEN_LIGHT,
+    seed: 7,
+  });
+}
+
+function waterPattern(): ImageData {
+  return noiseFill({
+    size: 256,
+    base: BLUE,
+    darker: BLUE_DARK,
+    lighter: BLUE_LIGHT,
+    seed: 13,
+    // A touch more blob variation on water for a subtle "depth" feel
+    // without going back into directional ripple lines.
+    blobs: 18,
+    blobAlpha: 0.07,
+  });
+}
+
+// Road tile: dark CRAYON base + paper specks. Wider tile (128×16)
+// drastically reduces visible repeats vs the prior 32×8. No
+// horizontal "drag" lines (those created visible streaks).
 function roadPattern(): ImageData {
-  const w = 32;
-  const h = 8;
+  const w = 128;
+  const h = 16;
   const { c, ctx } = ctxFor(w, h);
   ctx.fillStyle = CRAYON;
   ctx.fillRect(0, 0, w, h);
   const r = rng(23);
-  // Random PAPER-coloured specks scattered for crayon grain.
-  ctx.fillStyle = PAPER;
-  for (let i = 0; i < 22; i++) {
-    ctx.globalAlpha = 0.35 + r() * 0.45;
+
+  // Soft darker blobs for subtle uneven darkness across the line.
+  for (let i = 0; i < 12; i++) {
+    ctx.fillStyle = '#0a0a0a';
+    ctx.globalAlpha = 0.06 + r() * 0.1;
     const x = r() * w;
     const y = r() * h;
-    const s = 0.6 + r() * 1.0;
+    const radius = 4 + r() * 14;
+    ctx.beginPath();
+    ctx.arc(x, y, radius, 0, Math.PI * 2);
+    ctx.fill();
+  }
+  // Paper specks — "crayon missed paper".
+  for (let i = 0; i < 120; i++) {
+    ctx.fillStyle = PAPER;
+    ctx.globalAlpha = 0.18 + r() * 0.4;
+    const x = r() * w;
+    const y = r() * h;
+    const s = 0.4 + r() * 1.0;
     ctx.fillRect(x, y, s, s);
   }
-  // A couple short horizontal lighter strokes too — crayon drags.
-  ctx.strokeStyle = PAPER;
-  ctx.lineWidth = 0.6;
-  ctx.lineCap = 'round';
-  for (let i = 0; i < 3; i++) {
-    ctx.globalAlpha = 0.25 + r() * 0.2;
-    const y = r() * h;
-    const x0 = r() * (w - 8);
-    ctx.beginPath();
-    ctx.moveTo(x0, y);
-    ctx.lineTo(x0 + 4 + r() * 6, y + (r() - 0.5) * 1.6);
-    ctx.stroke();
+  // Fine 1px speckles for paper texture.
+  for (let i = 0; i < 300; i++) {
+    ctx.fillStyle = r() > 0.5 ? PAPER : '#3a3a3a';
+    ctx.globalAlpha = 0.06 + r() * 0.15;
+    const x = Math.floor(r() * w);
+    const y = Math.floor(r() * h);
+    ctx.fillRect(x, y, 1, 1);
   }
   ctx.globalAlpha = 1;
   return ctx.getImageData(0, 0, w, h);
 }
 
-function addImg(map: maplibregl.Map, id: string, img: ImageData, pixelRatio = 2) {
+function addImg(map: maplibregl.Map, id: string, img: ImageData, pixelRatio = 1) {
   if (map.hasImage(id)) map.removeImage(id);
   map.addImage(id, img, { pixelRatio });
 }
 
-// Best-effort clear of a paint property — wrapped because MapLibre
-// throws when the layer doesn't support that prop name.
 function clear(map: maplibregl.Map, id: string, prop: string) {
   try {
     (map.setPaintProperty as (l: string, p: string, v: unknown) => void)(id, prop, undefined);
@@ -171,14 +218,14 @@ function clear(map: maplibregl.Map, id: string, prop: string) {
 // ---------------------------------------------------------------------
 
 function applyCrayonOverride(map: maplibregl.Map) {
-  addImg(map, 'crayon-park', parkPattern(), 2);
-  addImg(map, 'crayon-water', waterPattern(), 2);
-  // pixelRatio 1 on road so the 8px tile height maps ~1:1 to line
-  // width on screen, instead of being squished by retina scaling.
+  // pixelRatio: 1 so each tile renders at its full pixel size on
+  // screen (prior 2x halved the rendered tile size, making repeats
+  // tiny + obvious).
+  addImg(map, 'crayon-park', parkPattern(), 1);
+  addImg(map, 'crayon-water', waterPattern(), 1);
   addImg(map, 'crayon-road', roadPattern(), 1);
 
   const layers = map.getStyle().layers ?? [];
-  // Source name for the building outline layer we'll inject.
   const buildingLayer = layers.find(
     (l) => (l as { 'source-layer'?: string })['source-layer'] === 'building',
   );
@@ -207,28 +254,26 @@ function applyCrayonOverride(map: maplibregl.Map) {
       continue;
     }
 
-    // Buildings — paper fill (invisible against the bg) so the outline
-    // layer we add later is the only visible building marker. Flatten
-    // any 3D extrusion so the top-down view stays clean.
+    // Buildings: KEEP 3D extrusion (per request), paint walls PAPER
+    // white. The injected dark outline layer (below) gives the
+    // building footprint a crayon stroke seen from above.
     if (sl === 'building') {
       if (type === 'fill') {
         clear(map, id, 'fill-pattern');
         map.setPaintProperty(id, 'fill-color', PAPER);
         map.setPaintProperty(id, 'fill-opacity', 1);
       } else if (type === 'fill-extrusion') {
+        clear(map, id, 'fill-extrusion-pattern');
         map.setPaintProperty(id, 'fill-extrusion-color', PAPER);
         map.setPaintProperty(id, 'fill-extrusion-opacity', 1);
-        try {
-          map.setPaintProperty(id, 'fill-extrusion-height', 0);
-          map.setPaintProperty(id, 'fill-extrusion-base', 0);
-        } catch {
-          /* expressions may not be replaceable; leave as is */
-        }
+        // Leave liberty's height expression intact — that's what
+        // makes them 3D. Keep vertical-gradient default (subtle
+        // wall shading toward gray) for a hint of dimension without
+        // breaking the B&W palette.
       }
       continue;
     }
 
-    // Greenspace.
     const isLanduseFill =
       (sl === 'landuse' || sl === 'landcover') && type === 'fill';
     const isParkLayer = sl === 'park' && type === 'fill';
@@ -248,7 +293,6 @@ function applyCrayonOverride(map: maplibregl.Map) {
       continue;
     }
 
-    // Roads.
     if (sl === 'transportation' && type === 'line') {
       const isCasing =
         lower.includes('casing') ||
@@ -259,13 +303,9 @@ function applyCrayonOverride(map: maplibregl.Map) {
         map.setLayoutProperty(id, 'visibility', 'none');
         continue;
       }
-      // Crayon stroke pattern; pattern provides the colour so we
-      // explicitly clear any existing line-color so the pattern wins.
       clear(map, id, 'line-color');
       clear(map, id, 'line-dasharray');
       map.setPaintProperty(id, 'line-pattern', 'crayon-road');
-      // Wrap existing width in a multiply so liberty's zoom + class
-      // hierarchy stays intact, just halved.
       const curW = map.getPaintProperty(id, 'line-width');
       const newW: unknown = ['max', 0.4, ['*', ROAD_WIDTH_SCALE, curW ?? 1]];
       try {
@@ -275,7 +315,6 @@ function applyCrayonOverride(map: maplibregl.Map) {
           newW,
         );
       } catch {
-        /* fall back to a flat value if expression rejected */
         if (typeof curW === 'number') {
           map.setPaintProperty(id, 'line-width', curW * ROAD_WIDTH_SCALE);
         }
@@ -284,7 +323,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
         map.setLayoutProperty(id, 'line-cap', 'round');
         map.setLayoutProperty(id, 'line-join', 'round');
       } catch {
-        /* some layers don't accept these layout props */
+        /* not all line layers accept these layout props */
       }
       continue;
     }
@@ -292,9 +331,8 @@ function applyCrayonOverride(map: maplibregl.Map) {
     map.setLayoutProperty(id, 'visibility', 'none');
   }
 
-  // Inject a dark crayon outline drawn from the building source-layer.
-  // Added LAST so it paints on top of everything (roads etc) — building
-  // shapes become the only visible building cue.
+  // Dark crayon outline drawn from the building source-layer.
+  // Painted LAST so the outline sits above roads + walls.
   if (buildingSource && !map.getLayer('crayon-building-outline')) {
     const outlineLayer: LayerSpecification = {
       id: 'crayon-building-outline',
@@ -334,9 +372,8 @@ export default function PhaseTwoPreview() {
       style: 'https://tiles.openfreemap.org/styles/liberty',
       center: KYIV_CENTER,
       zoom: 14,
+      pitch: 30, // slight default tilt to show off the 3D extrusion
       attributionControl: { compact: true },
-      pitch: 0,
-      maxPitch: 0,
     });
     mapRef.current = map;
     map.on('style.load', () => {
@@ -353,7 +390,7 @@ export default function PhaseTwoPreview() {
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       <View style={styles.banner} pointerEvents="box-none">
         <View style={styles.bannerInner}>
-          <Text style={styles.bannerText}>Phase 2 preview · B&amp;W crayon (textured)</Text>
+          <Text style={styles.bannerText}>Phase 2 preview · B&amp;W crayon · natural grain</Text>
           <Pressable
             onPress={() => router.replace('/')}
             style={styles.backBtn}
