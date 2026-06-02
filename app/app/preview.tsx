@@ -522,6 +522,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
 export default function PhaseTwoPreview() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  const paperOverlayRef = useRef<HTMLDivElement | null>(null);
   // Paper-tooth overlay generated once on mount.
   const paperUrl = useMemo(() => generatePaperTextureUrl(), []);
 
@@ -539,7 +540,35 @@ export default function PhaseTwoPreview() {
     map.on('style.load', () => {
       applyCrayonOverride(map);
     });
+
+    // Anchor the paper texture overlay to the geography. A
+    // screen-fixed CSS background reads as "dirty glass" when the
+    // user pans — the texture stays put while the map content
+    // moves underneath. To make it feel like paper UNDER the map,
+    // pick a fixed lat/lng (the initial centre), record its starting
+    // pixel position, and on every move event shift the overlay's
+    // background-position by the delta. Texture now travels with
+    // the geography. Zoom intentionally NOT compensated — keeping
+    // the grain at constant screen-pixel size reads as a consistent
+    // paper tooth across zoom levels.
+    const anchor = { lng: KYIV_CENTER[0], lat: KYIV_CENTER[1] };
+    const initialPx = map.project(anchor);
+    const syncPaperPosition = () => {
+      const el = paperOverlayRef.current;
+      if (!el) return;
+      const px = map.project(anchor);
+      const dx = px.x - initialPx.x;
+      const dy = px.y - initialPx.y;
+      el.style.backgroundPosition = `${dx}px ${dy}px`;
+    };
+    map.on('move', syncPaperPosition);
+    // Run once after load so the texture's position settles before
+    // the user pans (otherwise the very first pan jumps by the
+    // initial offset).
+    syncPaperPosition();
+
     return () => {
+      map.off('move', syncPaperPosition);
       mapRef.current = null;
       map.remove();
     };
@@ -549,10 +578,13 @@ export default function PhaseTwoPreview() {
     <View style={styles.root}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
       {/* Paper-tooth multiply overlay. Sits ABOVE the MapLibre canvas
-          so paper grain pervades every fill / line / building wall. The
-          noisy darkening also roughens MapLibre's crisp line edges as a
-          freebie — no extra layers needed for "hand-drawn" edge feel. */}
+          so paper grain pervades every fill / line / building wall.
+          Its background-position is tied to a fixed lat/lng (the
+          initial centre) via syncPaperPosition() in useEffect, so the
+          texture travels with the map content during pan instead of
+          staying screen-fixed (which read as "dirty glass"). */}
       <div
+        ref={paperOverlayRef}
         aria-hidden
         style={{
           position: 'absolute',
