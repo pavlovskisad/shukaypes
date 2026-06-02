@@ -409,6 +409,20 @@ export function applyCrayonOverride(
         map.setLayoutProperty(id, 'visibility', 'none');
         continue;
       }
+      // Pedestrian / minor-noise classes. OSM tags every separate
+      // sidewalk, plaza diagonal, courtyard cut-through, driveway and
+      // service alley as its own `transportation` feature — liberty
+      // renders them all. That's what's drawing the parallel "wires"
+      // along Хрещатик and the spaghetti inside Maidan. Hide them all
+      // and let real streets carry the visual.
+      const isNoisyClass =
+        /(^|[_-])(path|footway|pedestrian|cycleway|steps|bridleway|service|track|construction|raceway)([_-]|$)/.test(
+          lower,
+        );
+      if (isNoisyClass) {
+        map.setLayoutProperty(id, 'visibility', 'none');
+        continue;
+      }
       clear(map, id, 'line-color');
       clear(map, id, 'line-dasharray');
       map.setPaintProperty(id, 'line-pattern', 'crayon-road');
@@ -522,14 +536,16 @@ export function applyCrayonOverride(
   }
 
   // Road wobble clones — light + dark grey offset shadows of each
-  // transportation line.
+  // transportation line. Skip layers we just hid (rail, paths, etc.)
+  // so we don't draw wobble shadows under invisible features.
   const roadIds: string[] = [];
   for (const l of map.getStyle().layers ?? []) {
     const sl = (l as { 'source-layer'?: string })['source-layer'];
     if (
       l.type === 'line' &&
       sl === 'transportation' &&
-      !l.id.startsWith('wobble-')
+      !l.id.startsWith('wobble-') &&
+      (l.layout?.visibility ?? 'visible') !== 'none'
     ) {
       roadIds.push(l.id);
     }
