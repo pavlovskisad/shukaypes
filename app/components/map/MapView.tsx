@@ -713,20 +713,42 @@ export default function MapViewWeb() {
     let cancelled = false;
     let cleanupPaper: (() => void) | null = null;
     (async () => {
-      const style = await fetchCrayonStyleSpec();
-      if (cancelled || !mapContainerRef.current) return;
-      const map = new maplibregl.Map({
-        container: mapContainerRef.current,
-        style: style as maplibregl.StyleSpecification,
-        center: [userPos.lng, userPos.lat],
-        zoom: balance.mapZoomDefault,
-        minZoom: balance.mapZoomMin,
-        maxZoom: balance.mapZoomMax,
-        maxBounds: MAP_MAX_BOUNDS,
-        pitch: 30,
-        attributionControl: { compact: true },
-      });
-      mapRef.current = map;
+      try {
+        const style = await fetchCrayonStyleSpec();
+        if (cancelled || !mapContainerRef.current) return;
+        // Clamp center within MAX_BOUNDS — MapLibre rejects/clips a
+        // map whose initial center is outside maxBounds, and if the
+        // user is on the periphery of (or outside) the pilot box we
+        // need the map to still render. We pan to userPos right after
+        // construction.
+        const clampedCenter: [number, number] = [
+          Math.min(
+            MAP_MAX_BOUNDS[1][0],
+            Math.max(MAP_MAX_BOUNDS[0][0], userPos.lng),
+          ),
+          Math.min(
+            MAP_MAX_BOUNDS[1][1],
+            Math.max(MAP_MAX_BOUNDS[0][1], userPos.lat),
+          ),
+        ];
+        const map = new maplibregl.Map({
+          container: mapContainerRef.current,
+          style: style as maplibregl.StyleSpecification,
+          center: clampedCenter,
+          zoom: balance.mapZoomDefault,
+          minZoom: balance.mapZoomMin,
+          maxZoom: balance.mapZoomMax,
+          maxBounds: MAP_MAX_BOUNDS,
+          pitch: 30,
+          attributionControl: { compact: true },
+        });
+        // Log any internal MapLibre errors so they show up in the
+        // console rather than the map silently rendering nothing.
+        map.on('error', (e) => {
+          // eslint-disable-next-line no-console
+          console.error('[maplibre]', e?.error || e);
+        });
+        mapRef.current = map;
       const onStyleLoad = () => {
         applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE);
       };
@@ -753,13 +775,17 @@ export default function MapViewWeb() {
         useGameStore.getState().setMenuOpen(false);
         setWalkRoute(null, null);
       });
-      cleanupPaper = installPaperOverlaySync(
-        map,
-        paperOverlayRef,
-        userPos.lng,
-        userPos.lat,
-      );
-      setMapInstance(map);
+        cleanupPaper = installPaperOverlaySync(
+          map,
+          paperOverlayRef,
+          userPos.lng,
+          userPos.lat,
+        );
+        setMapInstance(map);
+      } catch (err) {
+        // eslint-disable-next-line no-console
+        console.error('[map init failed]', err);
+      }
     })();
     return () => {
       cancelled = true;
@@ -1014,7 +1040,7 @@ export default function MapViewWeb() {
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
       <div
         ref={mapContainerRef}
-        style={{ position: 'absolute', inset: 0 }}
+        style={{ width: '100%', height: '100%' }}
       />
       <div
         ref={paperOverlayRef}
