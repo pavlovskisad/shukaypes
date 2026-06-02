@@ -492,30 +492,54 @@ function applyCrayonOverride(map: maplibregl.Map) {
   }
 
   // Dark crayon building outline drawn LAST so it paints above the
-  // walls + the polygon softeners.
-  if (buildingSource && !map.getLayer('crayon-building-outline')) {
-    const outlineLayer: LayerSpecification = {
-      id: 'crayon-building-outline',
-      type: 'line',
-      source: buildingSource,
-      'source-layer': 'building',
-      minzoom: 13,
-      paint: {
-        'line-color': CRAYON,
-        'line-opacity': 0.55,
-        'line-width': [
-          'interpolate', ['linear'], ['zoom'],
-          13, 0.4,
-          16, 0.9,
-          19, 1.4,
-        ],
-      },
-      layout: {
-        'line-cap': 'round',
-        'line-join': 'round',
-      },
-    } as LayerSpecification;
-    map.addLayer(outlineLayer);
+  // walls + the polygon softeners. Triple-stroke pencil wobble around
+  // each building — original + 2 offset clones at ±0.6 px in slightly
+  // varied dark shades, all feathered with line-blur. Reads as a
+  // hand-sketched building footprint trace (a few pencil passes) and
+  // pairs with the inherent top-down / 3D-extrusion mis-alignment to
+  // give that "lines miss the form" sketchy character.
+  if (buildingSource) {
+    const buildingVariants: Array<{
+      id: string;
+      offset: number;
+      color: string;
+      opacity: number;
+    }> = [
+      { id: 'crayon-building-outline', offset: 0, color: CRAYON, opacity: 0.55 },
+      { id: 'crayon-building-outline-w-a', offset: 0.7, color: '#2a2a2a', opacity: 0.4 },
+      { id: 'crayon-building-outline-w-b', offset: -0.7, color: '#404040', opacity: 0.4 },
+    ];
+    for (const v of buildingVariants) {
+      if (map.getLayer(v.id)) continue;
+      const layerSpec: LayerSpecification = {
+        id: v.id,
+        type: 'line',
+        source: buildingSource,
+        'source-layer': 'building',
+        minzoom: 13,
+        paint: {
+          'line-color': v.color,
+          'line-opacity': v.opacity,
+          'line-offset': v.offset,
+          'line-blur': 0.6,
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            13, 0.35,
+            16, 0.85,
+            19, 1.3,
+          ],
+        },
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+      } as LayerSpecification;
+      try {
+        map.addLayer(layerSpec);
+      } catch {
+        /* skip if MapLibre rejects */
+      }
+    }
   }
 }
 
