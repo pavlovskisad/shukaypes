@@ -405,39 +405,20 @@ function applyCrayonOverride(map: maplibregl.Map) {
       continue;
     }
 
-    // Tier 2 (zoom 14+, major roads only): street names.
-    // Liberty's transportation_name layer carries all roads — we
-    // raise its minzoom so residential streets don't crowd the map
-    // until the user is zoomed in close enough to actually navigate
-    // by street, AND filter to the major classes.
+    // Tier 2 (zoom 15+, ALL streets): transportation names.
+    // No class filter — every road eligible for a label. Liberty's
+    // built-in per-class zoom rules already stagger major streets
+    // earlier than residential ones. We just raise the floor so the
+    // map doesn't crowd until the user is at walk-distance zoom.
     if (sl === 'transportation_name' && type === 'symbol') {
       try {
         map.setLayoutProperty(id, 'visibility', 'visible');
-        // Filter to major / arterial roads (drop residential, service,
-        // path, track). OpenMapTiles `class` enum varies — keep the
-        // top tiers.
-        map.setFilter(id, [
-          'all',
-          ['has', 'class'],
-          [
-            'in',
-            ['get', 'class'],
-            ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary']],
-          ],
-        ]);
-        // Push minzoom so even major-road labels only appear when the
-        // user is close enough to actually use them.
-        // (Liberty's source-layer is loaded at lower zoom; we just
-        // gate the label by raising the layer's minzoom.)
-        const layer = map.getLayer(id);
-        if (layer) {
-          // setLayerZoomRange exists on MapLibre maps.
-          (
-            map as unknown as {
-              setLayerZoomRange: (id: string, min: number, max: number) => void;
-            }
-          ).setLayerZoomRange(id, 14, 24);
-        }
+        // No filter — let every street class through.
+        (
+          map as unknown as {
+            setLayerZoomRange: (id: string, min: number, max: number) => void;
+          }
+        ).setLayerZoomRange(id, 15, 24);
         map.setPaintProperty(id, 'text-color', '#2a2a2a');
         map.setPaintProperty(id, 'text-halo-color', '#ffffff');
         map.setPaintProperty(id, 'text-halo-width', 1.8);
