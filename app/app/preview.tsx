@@ -31,13 +31,9 @@ const GREY_ROAD = '#6a6a6a';
 const GREEN = '#65b246';
 const GREEN_DARK = '#3a7e2a';
 const GREEN_LIGHT = '#d8eccb';
-const GREEN_EDGE_LIGHT = '#82cc6a';
-const GREEN_EDGE_DARK = '#2a5e1a';
 const BLUE = '#2f99d8';
 const BLUE_DARK = '#1a679a';
 const BLUE_LIGHT = '#a7ddf3';
-const BLUE_EDGE_LIGHT = '#5cb5e5';
-const BLUE_EDGE_DARK = '#0e567f';
 
 // Liberty's per-class line-width preserved; halved further (was 0.5
 // then 0.22). Keeps motorway around 3px / residential around 0.6px.
@@ -342,69 +338,36 @@ function applyCrayonOverride(map: maplibregl.Map) {
   // zoom-interpolated so the rounding stays proportional.
   for (const p of polygonsToSoften) {
     const softId = `soften-${p.baseId}`;
-    if (!map.getLayer(softId)) {
-      try {
-        map.addLayer({
-          id: softId,
-          type: 'line',
-          source: p.source,
-          'source-layer': p.sourceLayer,
-          ...(p.filter !== undefined ? { filter: p.filter } : {}),
-          paint: {
-            'line-color': p.color,
-            'line-width': [
-              'interpolate', ['linear'], ['zoom'],
-              10, 2,
-              14, 6,
-              18, 14,
-            ],
-            'line-opacity': 1,
-          },
-          layout: {
-            'line-cap': 'round',
-            'line-join': 'round',
-          },
-        } as LayerSpecification);
-      } catch {
-        /* skip silently — some layer specs may reject */
-      }
-    }
-    // Wobble the polygon perimeter too — two offset clones in
-    // lighter / darker shades of the polygon colour. Same trick as
-    // roads: gives the rounded outline a "traced over a few times"
-    // multi-stroke crayon look without alpha stacking.
-    const edgeLight = p.color === GREEN ? GREEN_EDGE_LIGHT : BLUE_EDGE_LIGHT;
-    const edgeDark = p.color === GREEN ? GREEN_EDGE_DARK : BLUE_EDGE_DARK;
-    for (const v of [
-      { suffix: 'lo', offset: 2.0, color: edgeLight },
-      { suffix: 'hi', offset: -2.0, color: edgeDark },
-    ]) {
-      const id = `${softId}-w-${v.suffix}`;
-      if (map.getLayer(id)) continue;
-      try {
-        map.addLayer({
-          id,
-          type: 'line',
-          source: p.source,
-          'source-layer': p.sourceLayer,
-          ...(p.filter !== undefined ? { filter: p.filter } : {}),
-          paint: {
-            'line-color': v.color,
-            'line-width': [
-              'interpolate', ['linear'], ['zoom'],
-              10, 1.4, 14, 4, 18, 10,
-            ],
-            'line-offset': v.offset,
-            'line-opacity': 1,
-          },
-          layout: {
-            'line-cap': 'round',
-            'line-join': 'round',
-          },
-        } as LayerSpecification);
-      } catch {
-        /* skip */
-      }
+    if (map.getLayer(softId)) continue;
+    try {
+      map.addLayer({
+        id: softId,
+        type: 'line',
+        source: p.source,
+        'source-layer': p.sourceLayer,
+        ...(p.filter !== undefined ? { filter: p.filter } : {}),
+        paint: {
+          'line-color': p.color,
+          // Halved from the previous (10,2 / 14,6 / 18,14). The
+          // earlier widths + the offset clones I tried turned every
+          // park into a thick-bordered sticker. Subtler outline still
+          // delivers the rounded-corner effect via line-join: round
+          // without bloating the polygon's visible footprint.
+          'line-width': [
+            'interpolate', ['linear'], ['zoom'],
+            10, 1,
+            14, 3,
+            18, 7,
+          ],
+          'line-opacity': 1,
+        },
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+      } as LayerSpecification);
+    } catch {
+      /* skip silently — some layer specs may reject */
     }
   }
 
@@ -437,11 +400,12 @@ function applyCrayonOverride(map: maplibregl.Map) {
       | undefined;
     if (!base || !base.source || !base['source-layer']) continue;
     const lineWidth = map.getPaintProperty(baseId, 'line-width');
-    // Bigger offsets (was 1.0) so the parallel passes are clearly
-    // visible past the base line. Wider colour contrast too.
+    // Bigger offsets so the parallel passes are clearly visible past
+    // the base line. ±3.5 px lands them just past the edge of a 3px
+    // motorway / well outside thinner roads.
     const variants: Array<{ suffix: string; offset: number; color: string }> = [
-      { suffix: 'lo', offset: 2.5, color: '#b0b0b0' },
-      { suffix: 'hi', offset: -2.5, color: '#1f1f1f' },
+      { suffix: 'lo', offset: 3.5, color: '#b0b0b0' },
+      { suffix: 'hi', offset: -3.5, color: '#1f1f1f' },
     ];
     for (const v of variants) {
       const id = `wobble-${baseId}-${v.suffix}`;
