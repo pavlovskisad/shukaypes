@@ -17,7 +17,7 @@
 //     the polygon's sharp edges and arcs every corner — the shape
 //     appears as a rounded crayon blob.
 
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import maplibregl, { type LayerSpecification } from 'maplibre-gl';
@@ -186,6 +186,46 @@ function roadPattern(): ImageData {
   return ctx.getImageData(0, 0, w, h);
 }
 
+// Paper-tooth overlay. A large cream-tinted canvas with horizontal
+// pencil-grain streaks + dense darker speckles. Used as a CSS
+// `mix-blend-mode: multiply` overlay over the whole MapLibre canvas
+// so the paper texture pervades EVERYTHING (parks, water, roads,
+// buildings, the white land in between). Same trick a pencil-on-
+// textured-paper rendering uses — the noisy multiply tints darken
+// the surfaces unevenly, which both reads as paper grain AND
+// roughens crisp MapLibre line edges as a freebie.
+function generatePaperTextureUrl(): string {
+  const size = 512;
+  const c = document.createElement('canvas');
+  c.width = size;
+  c.height = size;
+  const ctx = c.getContext('2d')!;
+  // Cream base — the colour the multiply blend tints land toward.
+  ctx.fillStyle = '#f6efd9';
+  ctx.fillRect(0, 0, size, size);
+  const r = rng(99);
+  // Long faint horizontal paper streaks for "tooth direction".
+  for (let i = 0; i < 90; i++) {
+    ctx.globalAlpha = 0.04 + r() * 0.07;
+    ctx.fillStyle = '#c8bd97';
+    const y = r() * size;
+    const x0 = r() * size;
+    const len = 80 + r() * 240;
+    ctx.fillRect(x0, y, len, 0.4 + r() * 0.7);
+  }
+  // Dense fine speckles — the high-frequency grain that reads as
+  // "paper fibres" when multiplied.
+  for (let i = 0; i < 6500; i++) {
+    ctx.globalAlpha = 0.04 + r() * 0.14;
+    ctx.fillStyle = r() > 0.65 ? '#a89a6c' : '#d6cda3';
+    const x = Math.floor(r() * size);
+    const y = Math.floor(r() * size);
+    ctx.fillRect(x, y, 1, 1);
+  }
+  ctx.globalAlpha = 1;
+  return c.toDataURL('image/png');
+}
+
 function addImg(map: maplibregl.Map, id: string, img: ImageData, pixelRatio = 1) {
   if (map.hasImage(id)) map.removeImage(id);
   map.addImage(id, img, { pixelRatio });
@@ -348,18 +388,24 @@ function applyCrayonOverride(map: maplibregl.Map) {
         ...(p.filter !== undefined ? { filter: p.filter } : {}),
         paint: {
           'line-color': p.color,
-          // Halved from the previous (10,2 / 14,6 / 18,14). The
-          // earlier widths + the offset clones I tried turned every
-          // park into a thick-bordered sticker. Subtler outline still
-          // delivers the rounded-corner effect via line-join: round
-          // without bloating the polygon's visible footprint.
+          // Hard-outline-visible was the prior pain. Switch to a
+          // SOFT FADE: thin same-colour line + big line-blur. The
+          // blur (bigger than the line width) feathers the edge to
+          // invisible at distance — reads as a watercolor halo
+          // softening the polygon boundary, not a sticker border.
           'line-width': [
             'interpolate', ['linear'], ['zoom'],
-            10, 1,
-            14, 3,
-            18, 7,
+            10, 0.6,
+            14, 1.6,
+            18, 3.5,
           ],
-          'line-opacity': 1,
+          'line-blur': [
+            'interpolate', ['linear'], ['zoom'],
+            10, 1.5,
+            14, 4,
+            18, 9,
+          ],
+          'line-opacity': 0.9,
         },
         layout: {
           'line-cap': 'round',
@@ -425,6 +471,9 @@ function applyCrayonOverride(map: maplibregl.Map) {
               'line-width': lineWidth,
               'line-offset': v.offset,
               'line-opacity': 1,
+              // Feather the clones into pencil-scuff trails alongside
+              // the main stroke, rather than crisp parallel lines.
+              'line-blur': 1.5,
             },
             layout: {
               'line-cap': 'round',
@@ -470,6 +519,8 @@ function applyCrayonOverride(map: maplibregl.Map) {
 export default function PhaseTwoPreview() {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  // Paper-tooth overlay generated once on mount.
+  const paperUrl = useMemo(() => generatePaperTextureUrl(), []);
 
   useEffect(() => {
     if (!containerRef.current || mapRef.current) return;
@@ -494,6 +545,26 @@ export default function PhaseTwoPreview() {
   return (
     <View style={styles.root}>
       <div ref={containerRef} style={{ width: '100%', height: '100%' }} />
+      {/* Paper-tooth multiply overlay. Sits ABOVE the MapLibre canvas
+          so paper grain pervades every fill / line / building wall. The
+          noisy darkening also roughens MapLibre's crisp line edges as a
+          freebie — no extra layers needed for "hand-drawn" edge feel. */}
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          pointerEvents: 'none',
+          backgroundImage: `url(${paperUrl})`,
+          backgroundRepeat: 'repeat',
+          backgroundSize: '512px 512px',
+          mixBlendMode: 'multiply',
+          opacity: 0.45,
+        }}
+      />
       <View style={styles.banner} pointerEvents="box-none">
         <View style={styles.bannerInner}>
           <Text style={styles.bannerText}>Phase 2 preview · grey roads · soft corners</Text>
