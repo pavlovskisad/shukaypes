@@ -113,7 +113,14 @@ async function fetchOverpass(): Promise<OverpassElement[]> {
   console.log('→ querying Overpass for Kyiv lore tags…');
   const res = await fetch('https://overpass-api.de/api/interpreter', {
     method: 'POST',
-    headers: { 'content-type': 'application/x-www-form-urlencoded' },
+    // Overpass returns 406 if you don't send an Accept + identifying
+    // User-Agent on POST. They're explicit about wanting contact info
+    // in the UA so they can reach out before throttling abusive clients.
+    headers: {
+      'content-type': 'application/x-www-form-urlencoded',
+      accept: 'application/json',
+      'user-agent': 'shukajpes-lore-seed/1.0 (contact: pavlovskisad@gmail.com)',
+    },
     body: `data=${encodeURIComponent(OVERPASS_QUERY)}`,
   });
   if (!res.ok) {
