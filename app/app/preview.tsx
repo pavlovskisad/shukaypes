@@ -505,9 +505,9 @@ function applyCrayonOverride(map: maplibregl.Map) {
       color: string;
       opacity: number;
     }> = [
-      { id: 'crayon-building-outline', offset: 0, color: CRAYON, opacity: 0.55 },
-      { id: 'crayon-building-outline-w-a', offset: 0.7, color: '#2a2a2a', opacity: 0.4 },
-      { id: 'crayon-building-outline-w-b', offset: -0.7, color: '#404040', opacity: 0.4 },
+      { id: 'crayon-building-outline', offset: 0, color: '#0a0a0a', opacity: 0.85 },
+      { id: 'crayon-building-outline-w-a', offset: 0.7, color: '#181818', opacity: 0.55 },
+      { id: 'crayon-building-outline-w-b', offset: -0.7, color: '#262626', opacity: 0.55 },
     ];
     for (const v of buildingVariants) {
       if (map.getLayer(v.id)) continue;
@@ -521,12 +521,17 @@ function applyCrayonOverride(map: maplibregl.Map) {
           'line-color': v.color,
           'line-opacity': v.opacity,
           'line-offset': v.offset,
-          'line-blur': 0.6,
+          // Lighter feather so the dark strokes stay crisp / distinct
+          // from the grey road graph (was 0.6, outlines were blending
+          // into road colour).
+          'line-blur': 0.35,
+          // Thinner — keeps each stroke clearly pencil-weight even at
+          // the higher opacity.
           'line-width': [
             'interpolate', ['linear'], ['zoom'],
-            13, 0.35,
-            16, 0.85,
-            19, 1.3,
+            13, 0.28,
+            16, 0.7,
+            19, 1.1,
           ],
         },
         layout: {
