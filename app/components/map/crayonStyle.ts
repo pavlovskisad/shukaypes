@@ -21,29 +21,33 @@ import type { LayerSpecification } from 'maplibre-gl';
 // Palette
 // ---------------------------------------------------------------------
 
+// Palette tuned to the in-app pixel-art home screen: pastel grass green,
+// pale sky blue, soft cards. Keeps crayon dark for legibility but the
+// nature fills move from "vivid sticker" to "pastel storybook".
 export const LIGHT_PALETTE = {
   paper: '#ffffff',
-  crayon: '#1a1a1a',
-  greyRoad: '#989898',
-  green: '#65b246',
-  greenDark: '#3a7e2a',
-  greenLight: '#d8eccb',
-  blue: '#2f99d8',
-  blueDark: '#1a679a',
-  blueLight: '#a7ddf3',
+  crayon: '#2a2a2a',
+  greyRoad: '#a8a8a8',
+  green: '#9fcc6e',
+  greenDark: '#6ea846',
+  greenLight: '#d9ecbb',
+  blue: '#88c5e4',
+  blueDark: '#5aa2c8',
+  blueLight: '#cae6f3',
   // Road wobble clone colours (light + dark variants of the base).
-  roadWobbleLight: '#d8d8d8',
-  roadWobbleDark: '#1c1c1c',
-  // Tinted speckles for the paper-tooth multiply overlay.
-  paperSpeckleA: '#9a8d5c',
-  paperSpeckleB: '#cdc097',
+  roadWobbleLight: '#dcdcdc',
+  roadWobbleDark: '#3a3a3a',
+  // Tinted speckles for the paper-tooth multiply overlay — warmer +
+  // less saturated to match the soft pastel feel.
+  paperSpeckleA: '#b4a578',
+  paperSpeckleB: '#d6caa6',
   // Label tier colours.
-  labelText: '#1a1a1a',
+  labelText: '#2a2a2a',
   labelHalo: '#ffffff',
-  labelWater: '#155d85',
-  labelStreet: '#2a2a2a',
+  labelWater: '#3a7da0',
+  labelStreet: '#3a3a3a',
   // Multiply overlay opacity (lightens darken effect).
-  paperOpacity: 0.55,
+  paperOpacity: 0.48,
 };
 
 export const DARK_PALETTE = {
