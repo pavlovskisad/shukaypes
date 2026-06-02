@@ -207,6 +207,32 @@ export default function MapViewWeb() {
     };
   }, [activeQuest?.id]);
 
+  // When a quest starts, ease the camera to cover the user + every
+  // waypoint so the human sees themselves relative to the trail at
+  // once. Same coordinated easeTo we use for walking routes; padding
+  // clears the HUD pills + tab bar so nothing important lands under
+  // an overlay. Fires once per quest (deps on activeQuest.id alone).
+  useEffect(() => {
+    if (!activeQuest || !userPos) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const points: Array<[number, number]> = [
+      [userPos.lng, userPos.lat],
+      ...activeQuest.waypoints.map(
+        (w) => [w.position.lng, w.position.lat] as [number, number],
+      ),
+    ];
+    const bounds = points.reduce(
+      (b, p) => b.extend(p),
+      new maplibregl.LngLatBounds(points[0]!, points[0]!),
+    );
+    map.fitBounds(bounds, {
+      padding: { top: 110, bottom: 130, left: 40, right: 40 },
+      maxZoom: 17,
+      duration: 700,
+    });
+  }, [activeQuest?.id]);
+
   const showBubble = useCallback((msg: string, duration?: number) => {
     setBubble(msg);
     if (bubbleTimeoutRef.current) clearTimeout(bubbleTimeoutRef.current);
@@ -1283,7 +1309,13 @@ export default function MapViewWeb() {
                 *some* ordering hint. clickable=false on both so the
                 line never steals taps from overlays on top. */}
             {questRoute && questRoute.length > 1 ? (
-              <CrayonRoute path={questRoute} color="#2f6bff" weight={10} opacity={0.92} />
+              <CrayonRoute
+                path={questRoute}
+                color="#2f6bff"
+                weight={10}
+                opacity={0.92}
+                autoFit={false}
+              />
             ) : (
               <CrayonRoute
                 path={activeQuest.waypoints.map((w) => ({
@@ -1293,6 +1325,7 @@ export default function MapViewWeb() {
                 color="#2f6bff"
                 weight={6.5}
                 opacity={0.65}
+                autoFit={false}
               />
             )}
             {activeQuest.waypoints.map((w, i) => {

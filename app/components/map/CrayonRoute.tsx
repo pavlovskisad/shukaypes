@@ -23,6 +23,11 @@ interface CrayonRouteProps {
   color?: string;
   weight?: number;
   opacity?: number;
+  // Default true — the route fits the camera to itself on first
+  // render. Quests pass false because MapView does its own fit that
+  // also includes the user position, so the dog can see themselves
+  // relative to the quest waypoints.
+  autoFit?: boolean;
 }
 
 // Subdivide segments at this many meters so there are enough vertices
@@ -100,6 +105,7 @@ export function CrayonRoute({
   color = '#2f6bff',
   weight = 9,
   opacity = 0.8,
+  autoFit = true,
 }: CrayonRouteProps) {
   const map = useMaplibreMap();
   const uid = useId().replace(/[:]/g, '');
@@ -163,6 +169,7 @@ export function CrayonRoute({
     // the side a touch of breathing room. minZoom respects the global
     // floor so a tiny round-trip doesn't slam the map all the way in.
     const fitOnce = () => {
+      if (!autoFit) return;
       if (didFitRef.current) return;
       didFitRef.current = true;
       const bounds = coords.reduce(
@@ -193,7 +200,7 @@ export function CrayonRoute({
       if (map.getLayer(layerId)) map.removeLayer(layerId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
     };
-  }, [map, path, color, weight, opacity, sourceId, layerId]);
+  }, [map, path, color, weight, opacity, sourceId, layerId, autoFit]);
 
   return null;
 }
