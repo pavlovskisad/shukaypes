@@ -36,8 +36,11 @@ const BLUE_LIGHT = '#a7ddf3';
 
 // Multiplier wrapped around liberty's line-width expression for every
 // transportation line. Preserves liberty's per-class + per-zoom
-// hierarchy, just halves it (was too fat).
-const ROAD_WIDTH_SCALE = 0.5;
+// hierarchy. Aggressive cut — liberty's motorway is ~14px at zoom 14
+// so even 0.5 still read as fat after the dark line-pattern fill.
+// 0.22 lands motorway around 3px (hand-drawn marker thickness) while
+// keeping residential streets visible at a thin ~0.6-0.8px.
+const ROAD_WIDTH_SCALE = 0.22;
 
 // ---------------------------------------------------------------------
 // Canvas pattern generators — layered noise, NOT scribble motifs.
@@ -306,6 +309,10 @@ function applyCrayonOverride(map: maplibregl.Map) {
       clear(map, id, 'line-color');
       clear(map, id, 'line-dasharray');
       map.setPaintProperty(id, 'line-pattern', 'crayon-road');
+      // Drop the line a touch — dark-fill line-pattern reads visually
+      // heavier than its actual width, opacity 0.78 nudges it back
+      // toward pencil-on-paper instead of ink-solid.
+      map.setPaintProperty(id, 'line-opacity', 0.78);
       const curW = map.getPaintProperty(id, 'line-width');
       const newW: unknown = ['max', 0.4, ['*', ROAD_WIDTH_SCALE, curW ?? 1]];
       try {
