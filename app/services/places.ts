@@ -94,41 +94,49 @@ async function searchNearby(
   }
 }
 
-// Spots — cafes/restaurants/bars/pet stores/vets. One API call across
-// all five categories (Places API New supports up to 50 types per
-// request), then mapped back via primaryType.
+// Spots — cafes/restaurants/bars/pet stores/vets. Places API (New)
+// caps `searchNearby` at 20 results PER REQUEST regardless of how many
+// types you ask for, so a single call for all five categories was
+// silently returning ~20 total (4-ish each in dense Kyiv). Fan out one
+// request per type in parallel and merge — gives up to 100 total in
+// dense neighborhoods at the cost of 5x the Places calls (still
+// distance-thresholded by gameStore so a small pan is free).
 export async function fetchNearbySpots(
   center: LatLng,
   radiusM: number = DEFAULT_RADIUS_M,
 ): Promise<Spot[]> {
-  const types = (Object.keys(TYPE_FOR_CATEGORY) as SpotCategory[]).map(
-    (c) => TYPE_FOR_CATEGORY[c],
-  );
-  const results = await searchNearby(
-    center,
-    radiusM,
-    types,
-    20,
-    'places.id,places.displayName,places.location,places.rating,places.formattedAddress,places.primaryType',
+  const categories = Object.keys(TYPE_FOR_CATEGORY) as SpotCategory[];
+  const fieldMask =
+    'places.id,places.displayName,places.location,places.rating,places.formattedAddress,places.primaryType';
+  const perCategory = await Promise.all(
+    categories.map((cat) =>
+      searchNearby(center, radiusM, [TYPE_FOR_CATEGORY[cat]], 20, fieldMask),
+    ),
   );
   const byId = new Map<string, Spot>();
-  for (const r of results) {
-    if (!r.id || !r.location) continue;
-    const category = (Object.keys(TYPE_FOR_CATEGORY) as SpotCategory[]).find(
-      (c) => TYPE_FOR_CATEGORY[c] === r.primaryType,
-    );
-    if (!category) continue;
-    if (byId.has(r.id)) continue;
-    byId.set(r.id, {
-      id: r.id,
-      name: r.displayName?.text ?? '(unnamed)',
-      category,
-      position: { lat: r.location.latitude, lng: r.location.longitude },
-      rating: r.rating,
-      address: r.formattedAddress,
-      icon: emojiFor(category),
-    });
-  }
+  perCategory.forEach((results, i) => {
+    const requestedCat = categories[i]!;
+    for (const r of results) {
+      if (!r.id || !r.location) continue;
+      // Prefer the category whose request returned the place, falling
+      // back to primaryType lookup if Google's primaryType ever drifts
+      // from the included type.
+      const category =
+        (Object.keys(TYPE_FOR_CATEGORY) as SpotCategory[]).find(
+          (c) => TYPE_FOR_CATEGORY[c] === r.primaryType,
+        ) ?? requestedCat;
+      if (byId.has(r.id)) continue;
+      byId.set(r.id, {
+        id: r.id,
+        name: r.displayName?.text ?? '(unnamed)',
+        category,
+        position: { lat: r.location.latitude, lng: r.location.longitude },
+        rating: r.rating,
+        address: r.formattedAddress,
+        icon: emojiFor(category),
+      });
+    }
+  });
   return Array.from(byId.values()).sort((a, b) => {
     const da = haversineM(center, a.position);
     const db = haversineM(center, b.position);
