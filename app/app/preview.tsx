@@ -393,7 +393,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
     // all below; we selectively keep three groups and restyle them
     // with crayon-friendly text props (dark fill + heavy paper halo
     // so they read on every fill colour). When we later wire a real
-    // hand-drawn font (Kalam glyph PBFs) the text-color/halo stays
+    // hand-drawn font (Caveat glyph PBFs) the text-color/halo stays
     // the same; only text-font changes.
 
     // Tier 1 (always): place labels — districts/neighbourhoods/towns.
@@ -402,7 +402,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
     // 'place', so they stay hidden.
     if (sl === 'place' && type === 'symbol') {
       try {
-        map.setLayoutProperty(id, 'text-font', ['Kalam Regular']);
+        map.setLayoutProperty(id, 'text-font', ['Caveat Regular']);
         map.setPaintProperty(id, 'text-color', '#1a1a1a');
         map.setPaintProperty(id, 'text-halo-color', '#ffffff');
         map.setPaintProperty(id, 'text-halo-width', 2);
@@ -417,7 +417,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
     // Tier 1 (always): water names — rivers/lakes/seas.
     if (sl === 'water_name' && type === 'symbol') {
       try {
-        map.setLayoutProperty(id, 'text-font', ['Kalam Regular']);
+        map.setLayoutProperty(id, 'text-font', ['Caveat Regular']);
         map.setPaintProperty(id, 'text-color', '#155d85');
         map.setPaintProperty(id, 'text-halo-color', '#ffffff');
         map.setPaintProperty(id, 'text-halo-width', 2);
@@ -442,7 +442,7 @@ function applyCrayonOverride(map: maplibregl.Map) {
             setLayerZoomRange: (id: string, min: number, max: number) => void;
           }
         ).setLayerZoomRange(id, 15, 24);
-        map.setLayoutProperty(id, 'text-font', ['Kalam Regular']);
+        map.setLayoutProperty(id, 'text-font', ['Caveat Regular']);
         map.setPaintProperty(id, 'text-color', '#2a2a2a');
         map.setPaintProperty(id, 'text-halo-color', '#ffffff');
         map.setPaintProperty(id, 'text-halo-width', 1.8);
@@ -618,8 +618,8 @@ export default function PhaseTwoPreview() {
     if (!containerRef.current || mapRef.current) return;
     let cancelled = false;
     // Fetch liberty's style JSON, swap its glyphs URL to our locally-
-    // hosted Kalam PBFs, then hand the mutated style to MapLibre. The
-    // applyCrayonOverride below also forces text-font: ['Kalam Regular']
+    // hosted Caveat PBFs, then hand the mutated style to MapLibre. The
+    // applyCrayonOverride below also forces text-font: ['Caveat Regular']
     // on every kept label layer so Liberty's default font (Noto Sans)
     // never gets requested — otherwise MapLibre would 404 fetching
     // glyphs we don't have.
