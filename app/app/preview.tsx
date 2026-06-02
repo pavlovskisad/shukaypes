@@ -368,6 +368,86 @@ function applyCrayonOverride(map: maplibregl.Map) {
       continue;
     }
 
+    // LABEL TIERS. Most symbol layers are still hidden by the catch-
+    // all below; we selectively keep three groups and restyle them
+    // with crayon-friendly text props (dark fill + heavy paper halo
+    // so they read on every fill colour). When we later wire a real
+    // hand-drawn font (Kalam glyph PBFs) the text-color/halo stays
+    // the same; only text-font changes.
+
+    // Tier 1 (always): place labels — districts/neighbourhoods/towns.
+    // Liberty filters this layer by `class` itself; we just keep it
+    // visible and restyle. POI labels live under sl === 'poi', NOT
+    // 'place', so they stay hidden.
+    if (sl === 'place' && type === 'symbol') {
+      try {
+        map.setPaintProperty(id, 'text-color', '#1a1a1a');
+        map.setPaintProperty(id, 'text-halo-color', '#ffffff');
+        map.setPaintProperty(id, 'text-halo-width', 2);
+        map.setPaintProperty(id, 'text-halo-blur', 0.5);
+        map.setLayoutProperty(id, 'text-letter-spacing', 0.08);
+      } catch {
+        /* layer may not accept all props */
+      }
+      continue;
+    }
+
+    // Tier 1 (always): water names — rivers/lakes/seas.
+    if (sl === 'water_name' && type === 'symbol') {
+      try {
+        map.setPaintProperty(id, 'text-color', '#155d85');
+        map.setPaintProperty(id, 'text-halo-color', '#ffffff');
+        map.setPaintProperty(id, 'text-halo-width', 2);
+        map.setLayoutProperty(id, 'text-letter-spacing', 0.08);
+      } catch {
+        /* skip */
+      }
+      continue;
+    }
+
+    // Tier 2 (zoom 14+, major roads only): street names.
+    // Liberty's transportation_name layer carries all roads — we
+    // raise its minzoom so residential streets don't crowd the map
+    // until the user is zoomed in close enough to actually navigate
+    // by street, AND filter to the major classes.
+    if (sl === 'transportation_name' && type === 'symbol') {
+      try {
+        map.setLayoutProperty(id, 'visibility', 'visible');
+        // Filter to major / arterial roads (drop residential, service,
+        // path, track). OpenMapTiles `class` enum varies — keep the
+        // top tiers.
+        map.setFilter(id, [
+          'all',
+          ['has', 'class'],
+          [
+            'in',
+            ['get', 'class'],
+            ['literal', ['motorway', 'trunk', 'primary', 'secondary', 'tertiary']],
+          ],
+        ]);
+        // Push minzoom so even major-road labels only appear when the
+        // user is close enough to actually use them.
+        // (Liberty's source-layer is loaded at lower zoom; we just
+        // gate the label by raising the layer's minzoom.)
+        const layer = map.getLayer(id);
+        if (layer) {
+          // setLayerZoomRange exists on MapLibre maps.
+          (
+            map as unknown as {
+              setLayerZoomRange: (id: string, min: number, max: number) => void;
+            }
+          ).setLayerZoomRange(id, 14, 24);
+        }
+        map.setPaintProperty(id, 'text-color', '#2a2a2a');
+        map.setPaintProperty(id, 'text-halo-color', '#ffffff');
+        map.setPaintProperty(id, 'text-halo-width', 1.8);
+        map.setLayoutProperty(id, 'text-letter-spacing', 0.05);
+      } catch {
+        /* skip */
+      }
+      continue;
+    }
+
     map.setLayoutProperty(id, 'visibility', 'none');
   }
 
