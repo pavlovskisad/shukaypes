@@ -27,13 +27,17 @@ const KYIV_CENTER: [number, number] = [30.5234, 50.4501]; // [lng, lat]
 
 const PAPER = '#fafafa';
 const CRAYON = '#1a1a1a';
-const GREY_ROAD = '#4a4a4a';
+const GREY_ROAD = '#6a6a6a';
 const GREEN = '#65b246';
 const GREEN_DARK = '#3a7e2a';
 const GREEN_LIGHT = '#d8eccb';
+const GREEN_EDGE_LIGHT = '#82cc6a';
+const GREEN_EDGE_DARK = '#2a5e1a';
 const BLUE = '#2f99d8';
 const BLUE_DARK = '#1a679a';
 const BLUE_LIGHT = '#a7ddf3';
+const BLUE_EDGE_LIGHT = '#5cb5e5';
+const BLUE_EDGE_DARK = '#0e567f';
 
 // Liberty's per-class line-width preserved; halved further (was 0.5
 // then 0.22). Keeps motorway around 3px / residential around 0.6px.
@@ -129,6 +133,15 @@ function parkPattern(): ImageData {
     darker: GREEN_DARK,
     lighter: GREEN_LIGHT,
     seed: 7,
+    // Boosted crayon grain — higher contrast + more density across
+    // all three layers so the texture obviously reads as hand-coloured.
+    blobs: 18,
+    blobAlpha: 0.1,
+    dots: 950,
+    dotAlpha: [0.16, 0.45],
+    dotSize: [0.5, 1.9],
+    speckles: 2400,
+    speckleAlpha: [0.06, 0.22],
   });
 }
 
@@ -139,8 +152,13 @@ function waterPattern(): ImageData {
     darker: BLUE_DARK,
     lighter: BLUE_LIGHT,
     seed: 13,
-    blobs: 18,
-    blobAlpha: 0.07,
+    blobs: 22,
+    blobAlpha: 0.11,
+    dots: 950,
+    dotAlpha: [0.16, 0.42],
+    dotSize: [0.5, 1.9],
+    speckles: 2400,
+    speckleAlpha: [0.06, 0.22],
   });
 }
 
@@ -324,31 +342,69 @@ function applyCrayonOverride(map: maplibregl.Map) {
   // zoom-interpolated so the rounding stays proportional.
   for (const p of polygonsToSoften) {
     const softId = `soften-${p.baseId}`;
-    if (map.getLayer(softId)) continue;
-    try {
-      map.addLayer({
-        id: softId,
-        type: 'line',
-        source: p.source,
-        'source-layer': p.sourceLayer,
-        ...(p.filter !== undefined ? { filter: p.filter } : {}),
-        paint: {
-          'line-color': p.color,
-          'line-width': [
-            'interpolate', ['linear'], ['zoom'],
-            10, 2,
-            14, 6,
-            18, 14,
-          ],
-          'line-opacity': 1,
-        },
-        layout: {
-          'line-cap': 'round',
-          'line-join': 'round',
-        },
-      } as LayerSpecification);
-    } catch {
-      /* skip silently — some layer specs may reject */
+    if (!map.getLayer(softId)) {
+      try {
+        map.addLayer({
+          id: softId,
+          type: 'line',
+          source: p.source,
+          'source-layer': p.sourceLayer,
+          ...(p.filter !== undefined ? { filter: p.filter } : {}),
+          paint: {
+            'line-color': p.color,
+            'line-width': [
+              'interpolate', ['linear'], ['zoom'],
+              10, 2,
+              14, 6,
+              18, 14,
+            ],
+            'line-opacity': 1,
+          },
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        } as LayerSpecification);
+      } catch {
+        /* skip silently — some layer specs may reject */
+      }
+    }
+    // Wobble the polygon perimeter too — two offset clones in
+    // lighter / darker shades of the polygon colour. Same trick as
+    // roads: gives the rounded outline a "traced over a few times"
+    // multi-stroke crayon look without alpha stacking.
+    const edgeLight = p.color === GREEN ? GREEN_EDGE_LIGHT : BLUE_EDGE_LIGHT;
+    const edgeDark = p.color === GREEN ? GREEN_EDGE_DARK : BLUE_EDGE_DARK;
+    for (const v of [
+      { suffix: 'lo', offset: 2.0, color: edgeLight },
+      { suffix: 'hi', offset: -2.0, color: edgeDark },
+    ]) {
+      const id = `${softId}-w-${v.suffix}`;
+      if (map.getLayer(id)) continue;
+      try {
+        map.addLayer({
+          id,
+          type: 'line',
+          source: p.source,
+          'source-layer': p.sourceLayer,
+          ...(p.filter !== undefined ? { filter: p.filter } : {}),
+          paint: {
+            'line-color': v.color,
+            'line-width': [
+              'interpolate', ['linear'], ['zoom'],
+              10, 1.4, 14, 4, 18, 10,
+            ],
+            'line-offset': v.offset,
+            'line-opacity': 1,
+          },
+          layout: {
+            'line-cap': 'round',
+            'line-join': 'round',
+          },
+        } as LayerSpecification);
+      } catch {
+        /* skip */
+      }
     }
   }
 
@@ -381,9 +437,11 @@ function applyCrayonOverride(map: maplibregl.Map) {
       | undefined;
     if (!base || !base.source || !base['source-layer']) continue;
     const lineWidth = map.getPaintProperty(baseId, 'line-width');
+    // Bigger offsets (was 1.0) so the parallel passes are clearly
+    // visible past the base line. Wider colour contrast too.
     const variants: Array<{ suffix: string; offset: number; color: string }> = [
-      { suffix: 'lo', offset: 1.0, color: '#8a8a8a' },
-      { suffix: 'hi', offset: -1.0, color: '#2a2a2a' },
+      { suffix: 'lo', offset: 2.5, color: '#b0b0b0' },
+      { suffix: 'hi', offset: -2.5, color: '#1f1f1f' },
     ];
     for (const v of variants) {
       const id = `wobble-${baseId}-${v.suffix}`;
