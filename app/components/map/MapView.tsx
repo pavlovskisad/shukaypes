@@ -1,14 +1,22 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import { GoogleMap, useJsApiLoader } from '@react-google-maps/api';
+import maplibregl from 'maplibre-gl';
+import 'maplibre-gl/dist/maplibre-gl.css';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
-import { env } from '../../constants/env';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
-import { brightMapStyle, darkMapStyle } from '../../constants/mapStyle';
 import { useGameStore } from '../../stores/gameStore';
+import { MapContext } from './MapContext';
+import {
+  LIGHT_PALETTE,
+  DARK_PALETTE,
+  applyCrayonOverride,
+  fetchCrayonStyleSpec,
+  generatePaperTextureUrl,
+  installPaperOverlaySync,
+} from './crayonStyle';
 import { useLocation } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
 import { useGameLoop } from '../../hooks/useGameLoop';
@@ -32,8 +40,6 @@ import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
-const CONTAINER_STYLE = { width: '100%', height: '100%' };
-const LIBRARIES: ('places')[] = ['places'];
 const TOKEN_REFRESH_MS = 15000;
 
 // Two pets within this radius are visually grouped together — either
@@ -73,21 +79,21 @@ const MPP_EQUATOR_Z0 = 156543.03392;
 let hasGreetedThisSession = false;
 
 export default function MapViewWeb() {
-  const { isLoaded, loadError } = useJsApiLoader({
-    googleMapsApiKey: env.googleMapsApiKey,
-    libraries: LIBRARIES,
-  });
-
   const location = useLocation();
   const [bubble, setBubble] = useState<string | null>(null);
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const mapRef = useRef<google.maps.Map | null>(null);
-  // Google Maps fires its own onClick on the map div independently of
-  // DOM event propagation — `stopPropagation` inside an OverlayViewF
-  // child doesn't reach it. At low zoom the companion overlaps the map
-  // surface enough that opening the radial menu also triggers a
+  const mapContainerRef = useRef<HTMLDivElement | null>(null);
+  const mapRef = useRef<maplibregl.Map | null>(null);
+  // Stored in state too so React-tree children (markers) can be wired
+  // to the map via MapContext when it's ready.
+  const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
+  const paperOverlayRef = useRef<HTMLDivElement | null>(null);
+  // Map fires its own click on the canvas independently of DOM event
+  // propagation from markers — `stopPropagation` inside a marker
+  // child doesn't reach it. At low zoom the companion overlaps the
+  // map surface enough that opening the radial menu also triggers a
   // "background click" that closes it ~1 frame later. Record every
-  // companion tap and suppress the map onClick for a short window.
+  // companion tap and suppress the map click for a short window.
   const companionTappedAtRef = useRef<number>(0);
   const SUPPRESS_MAP_CLICK_MS = 300;
   // Which cluster is currently "spiderified" — tapping a cluster pops its
@@ -394,40 +400,30 @@ export default function MapViewWeb() {
     return () => clearInterval(id);
   }, [isFocused, eatFood]);
 
-  const mapOptions = useMemo(
-    () => ({
-      // Sniff mode swaps to the dark style — deep-charcoal land,
-      // brighter dark-grey streets, dim labels. Cost is a one-time
-      // tile re-render per toggle (no sustained perf hit). The
-      // body-filter route was attempted earlier but mangled photos
-      // and the profile dog scene + felt laggy on iOS Safari from
-      // forcing every child element into its own GPU compositing
-      // layer; per-element approach is the right call here.
-      styles: sniffMode ? darkMapStyle : brightMapStyle,
-      disableDefaultUI: true,
-      zoomControl: false,
-      minZoom: balance.mapZoomMin,
-      maxZoom: balance.mapZoomMax,
-      gestureHandling: 'greedy' as const,
-      clickableIcons: false,
-      // Hard-box the viewport around central Kyiv so panning + zoom
-      // don't spill into empty map tiles + wasted /tokens/nearby,
-      // /dogs/nearby queries. ±0.045° lat / ±0.07° lng ≈ a 10×10km
-      // square centered on the Maidan-ish area — covers Podil,
-      // Pechersk, Lukianivka, Solomianka, Vynohradar. Outside the
-      // pilot geography we'll swap this for a per-user anchor.
-      restriction: {
-        latLngBounds: {
-          north: 50.4951,
-          south: 50.4051,
-          east: 30.5934,
-          west: 30.4534,
-        },
-        strictBounds: true,
-      },
-    }),
-    [sniffMode],
+  // MapLibre viewport restriction: a 10x10km box around central Kyiv
+  // matching the prior Google `restriction.latLngBounds`. ±0.045° lat
+  // / ±0.07° lng covers Podil, Pechersk, Lukianivka, Solomianka,
+  // Vynohradar. Outside the pilot geography we'll swap to a per-user
+  // anchor.
+  const MAP_MAX_BOUNDS: [[number, number], [number, number]] = [
+    [30.4534, 50.4051],
+    [30.5934, 50.4951],
+  ];
+  // Paper-tooth overlay URL. Light + dark variants exist; we pick the
+  // active one from sniffMode below.
+  const paperUrlLight = useMemo(
+    () => generatePaperTextureUrl(LIGHT_PALETTE),
+    [],
   );
+  const paperUrlDark = useMemo(
+    () => generatePaperTextureUrl(DARK_PALETTE),
+    [],
+  );
+  const paperUrl = sniffMode ? paperUrlDark : paperUrlLight;
+  const paperOpacity = sniffMode
+    ? DARK_PALETTE.paperOpacity
+    : LIGHT_PALETTE.paperOpacity;
+  const paperBlend = sniffMode ? 'screen' : 'multiply';
 
   // Map-only distance cull. Full lists live in the store (Quests tab,
   // auto-collect loops, sync diff math); only the rendered DOM is
@@ -702,28 +698,91 @@ export default function MapViewWeb() {
     const spot = spots.find((s) => s.id === selectedSpotId);
     const map = mapRef.current;
     if (!spot || !map) return;
-    map.panTo(spot.position as unknown as google.maps.LatLngLiteral);
+    map.panTo(spot.position);
     const current = map.getZoom() ?? balance.mapZoomDefault;
     if (current < 17) map.setZoom(17);
   }, [selectedSpotId, spots]);
 
-  if (!env.googleMapsApiKey) {
-    return (
-      <View style={styles.msg}>
-        <Text style={styles.t}>missing EXPO_PUBLIC_GOOGLE_MAPS_API_KEY</Text>
-        <Text style={styles.s}>copy app/.env.example → app/.env</Text>
-      </View>
-    );
-  }
+  // MapLibre construction. Fetch liberty's style, swap glyphs URL to
+  // our Caveat PBFs, hand the mutated style to the map. Same approach
+  // as `/preview` but with the production map's restrictions + the
+  // ambient `MapContext.Provider` so markers can find the map ref.
+  useEffect(() => {
+    if (!mapContainerRef.current || mapRef.current) return;
+    if (!userPos) return;
+    let cancelled = false;
+    let cleanupPaper: (() => void) | null = null;
+    (async () => {
+      const style = await fetchCrayonStyleSpec();
+      if (cancelled || !mapContainerRef.current) return;
+      const map = new maplibregl.Map({
+        container: mapContainerRef.current,
+        style: style as maplibregl.StyleSpecification,
+        center: [userPos.lng, userPos.lat],
+        zoom: balance.mapZoomDefault,
+        minZoom: balance.mapZoomMin,
+        maxZoom: balance.mapZoomMax,
+        maxBounds: MAP_MAX_BOUNDS,
+        pitch: 30,
+        attributionControl: { compact: true },
+      });
+      mapRef.current = map;
+      const onStyleLoad = () => {
+        applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE);
+      };
+      map.on('style.load', onStyleLoad);
+      map.on('idle', () => {
+        const b = map.getBounds();
+        setMapBounds({
+          n: b.getNorth(),
+          s: b.getSouth(),
+          e: b.getEast(),
+          w: b.getWest(),
+        });
+        setMapZoom(map.getZoom());
+        setMapCenterLat(map.getCenter().lat);
+      });
+      map.on('click', () => {
+        if (
+          Date.now() - companionTappedAtRef.current <
+          SUPPRESS_MAP_CLICK_MS
+        ) {
+          return;
+        }
+        setExpandedClusterKey(null);
+        useGameStore.getState().setMenuOpen(false);
+        setWalkRoute(null, null);
+      });
+      cleanupPaper = installPaperOverlaySync(
+        map,
+        paperOverlayRef,
+        userPos.lng,
+        userPos.lat,
+      );
+      setMapInstance(map);
+    })();
+    return () => {
+      cancelled = true;
+      cleanupPaper?.();
+      const m = mapRef.current;
+      mapRef.current = null;
+      setMapInstance(null);
+      if (m) m.remove();
+    };
+    // userPos used as initial-only — we don't re-create the map on
+    // every GPS tick. Deps intentionally exclude it after first init.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
-  if (loadError) {
-    return (
-      <View style={styles.msg}>
-        <Text style={styles.t}>google maps failed to load</Text>
-        <Text style={styles.s}>{String(loadError.message ?? loadError)}</Text>
-      </View>
-    );
-  }
+  // Re-apply the crayon override when sniff mode toggles. The override
+  // is idempotent — it just rewrites paint properties + tops up any
+  // injected layers.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!map.isStyleLoaded()) return;
+    applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE);
+  }, [sniffMode]);
 
   // Off-screen lost-pet edge-chip layout. Memoised so the per-pet
   // ray-cast / spread pass doesn't re-run on every companion lerp
@@ -882,7 +941,7 @@ export default function MapViewWeb() {
     sniffJustChanged,
   ]);
 
-  if (!isLoaded || !userPos) {
+  if (!userPos) {
     return (
       <View style={styles.msg}>
         <Text style={styles.t}>locating…</Text>
@@ -937,7 +996,7 @@ export default function MapViewWeb() {
 
   const recenterOnCompanion = () => {
     if (!companionPos || !mapRef.current) return;
-    mapRef.current.panTo(companionPos as unknown as google.maps.LatLngLiteral);
+    mapRef.current.panTo(companionPos);
   };
 
 
@@ -948,65 +1007,30 @@ export default function MapViewWeb() {
 
   const panToDog = (target: LatLng) => {
     if (!mapRef.current) return;
-    mapRef.current.panTo(target as unknown as google.maps.LatLngLiteral);
+    mapRef.current.panTo(target);
   };
 
   return (
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
-      <GoogleMap
-        mapContainerStyle={CONTAINER_STYLE as unknown as React.CSSProperties}
-        options={mapOptions}
-        onLoad={(map) => {
-          mapRef.current = map;
-          // Center + zoom are applied once on load and then left uncontrolled.
-          // Passing `center` as a prop made the map re-pan on every GPS tick
-          // and fought our cluster-tap setZoom calls.
-          map.setCenter(userPos as unknown as google.maps.LatLngLiteral);
-          map.setZoom(balance.mapZoomDefault);
+      <div
+        ref={mapContainerRef}
+        style={{ position: 'absolute', inset: 0 }}
+      />
+      <div
+        ref={paperOverlayRef}
+        aria-hidden
+        style={{
+          position: 'absolute',
+          inset: 0,
+          pointerEvents: 'none',
+          backgroundImage: `url(${paperUrl})`,
+          backgroundRepeat: 'repeat',
+          backgroundSize: '512px 512px',
+          mixBlendMode: paperBlend,
+          opacity: paperOpacity,
         }}
-        onUnmount={() => {
-          mapRef.current = null;
-        }}
-        onIdle={() => {
-          // Sync mapBounds for the off-screen indicator math. Fires
-          // after every pan / zoom completes, plus once on initial load.
-          const b = mapRef.current?.getBounds();
-          if (!b) return;
-          const ne = b.getNorthEast();
-          const sw = b.getSouthWest();
-          setMapBounds({
-            n: ne.lat(),
-            s: sw.lat(),
-            e: ne.lng(),
-            w: sw.lng(),
-          });
-          // Same hook syncs zoom + centre lat for the spot-cluster
-          // pixel-to-meter conversion.
-          const z = mapRef.current?.getZoom();
-          if (typeof z === 'number') setMapZoom(z);
-          const c = mapRef.current?.getCenter();
-          if (c) setMapCenterLat(c.lat());
-        }}
-        onClick={() => {
-          // Suppress when the click came right after a companion tap —
-          // Google fires the map-level click independently of DOM
-          // propagation, which would otherwise close the menu we just
-          // opened (very visible at low zoom where the companion sits
-          // on top of the map surface).
-          if (Date.now() - companionTappedAtRef.current < SUPPRESS_MAP_CLICK_MS) {
-            return;
-          }
-          setExpandedClusterKey(null);
-          // Tapping the map background collapses the companion's radial
-          // menu too — matches the prototype's "tap anywhere else to
-          // dismiss" pattern.
-          useGameStore.getState().setMenuOpen(false);
-          // Tapping background also dismisses an active walking route.
-          // Quest routes are sticky to the active quest and aren't
-          // touched here.
-          setWalkRoute(null, null);
-        }}
-      >
+      />
+      <MapContext.Provider value={mapInstance}>
         <UserMarker position={userPos} />
 
         {/* Zone is only drawn for the currently-selected pet — otherwise
@@ -1244,7 +1268,7 @@ export default function MapViewWeb() {
             onTapCompanion={() => showBubble('woof 🐾', 4000)}
           />
         ) : null}
-      </GoogleMap>
+      </MapContext.Provider>
 
       {/* Off-screen companion bookmark. Sticks to the viewport edge
           along the line from map center to the companion's position

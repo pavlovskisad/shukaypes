@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
+import { MapLibreMarker } from './MapLibreMarker';
 import type { LatLng } from '@shukajpes/shared';
 import { Icon, iconForCategory } from '../ui/Icon';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -27,11 +27,7 @@ interface PoiClusterProps {
 function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterProps) {
   const slot = iconForCategory(category);
   return (
-    <OverlayViewF
-      position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -27, y: -27 })}
-    >
+    <MapLibreMarker position={position}>
       <div
         role="button"
         tabIndex={0}
@@ -82,7 +78,7 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
           {count}
         </div>
       </div>
-    </OverlayViewF>
+    </MapLibreMarker>
   );
 }
 

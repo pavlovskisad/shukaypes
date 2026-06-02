@@ -1,16 +1,12 @@
 import { memo } from 'react';
-import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
+import { MapLibreMarker } from './MapLibreMarker';
 
 // Black dot with a subtle breathing ring (demo lines 172-177). Memoized so
 // GPS ticks don't force the other overlays to flicker.
 function UserMarkerImpl({ position }: { position: LatLng }) {
   return (
-    <OverlayViewF
-      position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -6, y: -6 })}
-    >
+    <MapLibreMarker position={position}>
       <div style={{ position: 'relative', width: 12, height: 12 }}>
         <div
           style={{
@@ -44,7 +40,7 @@ function UserMarkerImpl({ position }: { position: LatLng }) {
           }
         `}</style>
       </div>
-    </OverlayViewF>
+    </MapLibreMarker>
   );
 }
 

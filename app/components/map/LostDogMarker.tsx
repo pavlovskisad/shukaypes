@@ -1,7 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
-import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { MapLibreMarker } from './MapLibreMarker';
 
 // Urgency drives the glow color: red = urgent (act now), amber =
 // searching (still hot), grey = resolved. Toned down from earlier
@@ -116,15 +116,10 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
   }, [active]);
 
   return (
-    <OverlayViewF
-      position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -27, y: -68 })}
-    >
+    <MapLibreMarker position={position} anchor="bottom" onClick={onTap}>
       <div
         role="button"
         tabIndex={0}
-        onClick={onTap}
         style={{
           position: 'relative',
           display: 'flex',
@@ -242,7 +237,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
           }
         `}</style>
       </div>
-    </OverlayViewF>
+    </MapLibreMarker>
   );
 }
 

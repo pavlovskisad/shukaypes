@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
+import { MapLibreMarker } from './MapLibreMarker';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -63,11 +63,7 @@ function LostDogClusterImpl({
 }: LostDogClusterProps) {
   const count = items.length;
   return (
-    <OverlayViewF
-      position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -CONTAINER_CENTER, y: -CONTAINER_CENTER })}
-    >
+    <MapLibreMarker position={position}>
       <div
         style={{
           position: 'relative',
@@ -183,7 +179,7 @@ function LostDogClusterImpl({
           );
         })}
       </div>
-    </OverlayViewF>
+    </MapLibreMarker>
   );
 }
 

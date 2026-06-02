@@ -1,7 +1,7 @@
 import { memo } from 'react';
-import { OverlayViewF, FLOAT_PANE } from '@react-google-maps/api';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { MapLibreMarker } from './MapLibreMarker';
 
 // Numbered waypoint pin for detective quests. Three states:
 //   - active:  blue glow, full opacity, the current target
@@ -23,15 +23,10 @@ function WaypointMarkerImpl({ position, index, state, onTap }: WaypointMarkerPro
   const reached = state === 'reached';
   const active = state === 'active';
   return (
-    <OverlayViewF
-      position={position as unknown as google.maps.LatLngLiteral}
-      mapPaneName={FLOAT_PANE}
-      getPixelPositionOffset={() => ({ x: -14, y: -14 })}
-    >
+    <MapLibreMarker position={position} onClick={onTap}>
       <div
         role={onTap ? 'button' : undefined}
         tabIndex={onTap ? 0 : -1}
-        onClick={onTap}
         style={{
           width: 28,
           height: 28,
@@ -64,7 +59,7 @@ function WaypointMarkerImpl({ position, index, state, onTap }: WaypointMarkerPro
           `}</style>
         ) : null}
       </div>
-    </OverlayViewF>
+    </MapLibreMarker>
   );
 }
 
