@@ -732,16 +732,24 @@ export default function MapViewWeb() {
     return m;
   }, [clusters, setSelectedDog]);
 
-  // When the Spots tab routes the user here with a selection, pan + zoom
-  // to that spot once per selection change.
+  // When the Spots tab routes the user here with a selection, ease to
+  // that spot in ONE coordinated tween. Padding biases the visual
+  // centre away from the top HUD pills and the bottom tab bar so the
+  // selected spot lands where the eye is actually looking, not under a
+  // glass pill. Previously panTo + setZoom fired separately and the
+  // second animation occasionally clobbered the first's centre.
   useEffect(() => {
     if (!selectedSpotId) return;
     const spot = spots.find((s) => s.id === selectedSpotId);
     const map = mapRef.current;
     if (!spot || !map) return;
-    map.panTo(spot.position);
     const current = map.getZoom() ?? balance.mapZoomDefault;
-    if (current < 17) map.setZoom(17);
+    map.easeTo({
+      center: [spot.position.lng, spot.position.lat],
+      zoom: Math.max(current, 17),
+      padding: { top: 110, bottom: 130, left: 20, right: 20 },
+      duration: 500,
+    });
   }, [selectedSpotId, spots]);
 
   // MapLibre construction. Idempotent — bails if the map already
@@ -882,7 +890,11 @@ export default function MapViewWeb() {
     // Not perfectly symmetric, but the asymmetry follows the actual
     // UI footprint instead of being arbitrary.
     const sideReserve = 0.05;
-    const topReserve = 0.04;
+    // Was 0.04 — chips on the top edge ended up directly under the
+    // StatusBar pills (sun% / bone% / paws), which still catch taps
+    // even though the HUD container is pointer-transparent. Push
+    // chips below the pills so they're actually tappable.
+    const topReserve = 0.11;
     const bottomReserve = 0.10;
     const chipHalfPct = 0.04;
     const SPACING_ALONG = 0.12;
@@ -1048,7 +1060,9 @@ export default function MapViewWeb() {
     const dx = nx - 0.5;
     const dy = ny - 0.5;
     const sideReserve = 0.03;
-    const topReserve = 0.05;
+    // Companion chip lands under the HUD pills at top: 0.05. Push
+    // down past them so it stays tappable in normal mode too.
+    const topReserve = 0.11;
     const bottomReserve = 0.14;
     const xBound = dx > 0 ? 1 - sideReserve - 0.5 : 0.5 - sideReserve;
     const yBound = dy > 0 ? 1 - bottomReserve - 0.5 : 0.5 - topReserve;
