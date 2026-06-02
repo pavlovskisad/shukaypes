@@ -60,6 +60,11 @@ export const brightMapStyle = [
   { featureType: 'road.highway', elementType: 'geometry.fill', stylers: [{ color: '#fcfcfc' }] },
   { featureType: 'road.highway', elementType: 'geometry.stroke', stylers: [{ color: '#c6c6c6' }] },
   { featureType: 'road.local', elementType: 'geometry.fill', stylers: [{ color: '#fafafa' }] },
+
+  // Kill ALL labels last so it overrides any text fills set above.
+  // No street names, place names, water labels, park labels —
+  // navigation cues come from the colour fills + the app's own pins.
+  { elementType: 'labels', stylers: [{ visibility: 'off' }] },
 ];
 
 // Sniff-mode dark style — deep charcoal land with a crisp light-grey
@@ -93,4 +98,7 @@ export const darkMapStyle = [
   { featureType: 'road.arterial', elementType: 'geometry', stylers: [{ color: '#6a6a6a' }] },
   { featureType: 'road.highway', elementType: 'geometry', stylers: [{ color: '#7a7a7a' }] },
   { featureType: 'road', elementType: 'labels.text.fill', stylers: [{ color: '#8a8a8a' }] },
+
+  // Kill ALL labels last so it overrides anything above.
+  { elementType: 'labels', stylers: [{ visibility: 'off' }] },
 ];
