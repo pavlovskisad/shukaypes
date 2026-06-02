@@ -310,9 +310,9 @@ function applyCrayonOverride(map: maplibregl.Map) {
       clear(map, id, 'line-dasharray');
       map.setPaintProperty(id, 'line-pattern', 'crayon-road');
       // Drop the line a touch — dark-fill line-pattern reads visually
-      // heavier than its actual width, opacity 0.78 nudges it back
-      // toward pencil-on-paper instead of ink-solid.
-      map.setPaintProperty(id, 'line-opacity', 0.78);
+      // heavier than its actual width. Lower opacity nudges it toward
+      // pencil-on-paper instead of ink-solid.
+      map.setPaintProperty(id, 'line-opacity', 0.5);
       const curW = map.getPaintProperty(id, 'line-width');
       const newW: unknown = ['max', 0.4, ['*', ROAD_WIDTH_SCALE, curW ?? 1]];
       try {
@@ -336,6 +336,66 @@ function applyCrayonOverride(map: maplibregl.Map) {
     }
 
     map.setLayoutProperty(id, 'visibility', 'none');
+  }
+
+  // "Wobble" by duplicating each transportation line at perpendicular
+  // offsets. MapLibre can't actually warp vector-tile geometry, so we
+  // fake the hand-drawn jitter with two extra parallel strokes per
+  // road at +/-0.5px offset, each at lower opacity. The three passes
+  // overlap to read as a crayon dragged a few times along the same
+  // path — sketchy edges, slight tremor — without us having to write
+  // a custom WebGL layer.
+  const roadIds: string[] = [];
+  for (const l of map.getStyle().layers ?? []) {
+    const sl = (l as { 'source-layer'?: string })['source-layer'];
+    if (l.type === 'line' && sl === 'transportation' && !l.id.startsWith('wobble-')) {
+      roadIds.push(l.id);
+    }
+  }
+  for (const baseId of roadIds) {
+    const base = map.getLayer(baseId) as
+      | (LayerSpecification & {
+          source?: string;
+          'source-layer'?: string;
+          filter?: unknown;
+          minzoom?: number;
+          maxzoom?: number;
+        })
+      | undefined;
+    if (!base || !base.source || !base['source-layer']) continue;
+    const lineWidth = map.getPaintProperty(baseId, 'line-width');
+    const linePattern = map.getPaintProperty(baseId, 'line-pattern');
+    for (const variant of [
+      { suffix: 'a', offset: 0.6 },
+      { suffix: 'b', offset: -0.6 },
+    ]) {
+      const id = `wobble-${baseId}-${variant.suffix}`;
+      if (map.getLayer(id)) continue;
+      const spec: LayerSpecification = {
+        id,
+        type: 'line',
+        source: base.source,
+        'source-layer': base['source-layer'],
+        ...(base.filter !== undefined ? { filter: base.filter } : {}),
+        ...(base.minzoom !== undefined ? { minzoom: base.minzoom } : {}),
+        ...(base.maxzoom !== undefined ? { maxzoom: base.maxzoom } : {}),
+        paint: {
+          'line-pattern': linePattern,
+          'line-width': lineWidth,
+          'line-offset': variant.offset,
+          'line-opacity': 0.35,
+        },
+        layout: {
+          'line-cap': 'round',
+          'line-join': 'round',
+        },
+      } as LayerSpecification;
+      try {
+        map.addLayer(spec, baseId); // insert before the original = below in z
+      } catch {
+        /* skip silently — some classes may reject the spec shape */
+      }
+    }
   }
 
   // Dark crayon outline drawn from the building source-layer.
