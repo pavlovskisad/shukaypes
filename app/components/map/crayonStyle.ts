@@ -409,19 +409,36 @@ export function applyCrayonOverride(
         map.setLayoutProperty(id, 'visibility', 'none');
         continue;
       }
-      // Pedestrian / minor-noise classes. OSM tags every separate
-      // sidewalk, plaza diagonal, courtyard cut-through, driveway and
-      // service alley as its own `transportation` feature — liberty
-      // renders them all. That's what's drawing the parallel "wires"
-      // along Хрещатик and the spaghetti inside Maidan. Hide them all
-      // and let real streets carry the visual.
-      const isNoisyClass =
-        /(^|[_-])(path|footway|pedestrian|cycleway|steps|bridleway|service|track|construction|raceway)([_-]|$)/.test(
-          lower,
-        );
-      if (isNoisyClass) {
+      // Service / construction / track / raceway — driveways, alleys,
+      // dead-end utility roads. Pure noise at any zoom; hide.
+      const isAlwaysHidden =
+        /(^|[_-])(service|track|construction|raceway)([_-]|$)/.test(lower);
+      if (isAlwaysHidden) {
         map.setLayoutProperty(id, 'visibility', 'none');
         continue;
+      }
+      // Path / footway / pedestrian / cycleway / steps / bridleway —
+      // these are the classes that draw sidewalk doubles along
+      // Хрещатик AND the actual paths through Маріїнський park. We
+      // can't tell them apart from tags alone, so zoom-gate: only
+      // render at zoom >= 16, where the user is plainly looking at
+      // one place and a path is detail, not city-overview clutter.
+      const isPathish =
+        /(^|[_-])(path|footway|pedestrian|cycleway|steps|bridleway)([_-]|$)/.test(
+          lower,
+        );
+      if (isPathish) {
+        try {
+          (
+            map as unknown as {
+              setLayerZoomRange: (id: string, min: number, max: number) => void;
+            }
+          ).setLayerZoomRange(id, 16, 24);
+        } catch {
+          /* skip */
+        }
+        // Continue through so the path still gets the crayon-road
+        // pattern at the zooms it does appear at.
       }
       clear(map, id, 'line-color');
       clear(map, id, 'line-dasharray');
