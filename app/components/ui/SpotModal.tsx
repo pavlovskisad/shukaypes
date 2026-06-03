@@ -194,9 +194,14 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             fontSize: 18,
             fontWeight: 700,
             cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
           }}
         >
-          🚶 walk here
+          <Icon name="walk" size={22} inverted />
+          <span>walk here</span>
         </button>
 
         <button
@@ -213,9 +218,14 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             fontSize: 16,
             fontWeight: 700,
             cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 10,
           }}
         >
-          🔄 roundtrip
+          <Icon name="roundtrip" size={20} />
+          <span>roundtrip</span>
         </button>
 
         <style>{`

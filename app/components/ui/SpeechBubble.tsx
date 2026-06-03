@@ -1,3 +1,5 @@
+import { VOICE } from '../../constants/voice';
+
 interface SpeechBubbleProps {
   text: string | null;
 }
@@ -25,18 +27,18 @@ export function SpeechBubble({ text }: SpeechBubbleProps) {
         left: '50%',
         bottom: '85%',
         transform: 'translateX(-50%)',
-        background: '#1a1a1a',
-        color: '#ffffff',
+        background: VOICE.background,
+        color: VOICE.color,
         padding: '8px 14px',
         borderRadius: '18px 18px 18px 4px',
         fontSize: 14,
         lineHeight: 1.35,
-        fontFamily: 'system-ui, -apple-system, sans-serif',
+        fontFamily: VOICE.fontFamily,
         whiteSpace: 'pre-line',
         width: 'max-content',
         maxWidth: 'min(70vw, 340px)',
         textAlign: 'center',
-        boxShadow: '0 4px 14px rgba(0,0,0,0.25)',
+        boxShadow: VOICE.shadow,
         pointerEvents: 'none',
         opacity: 0.98,
       }}

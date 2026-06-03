@@ -41,6 +41,7 @@ import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import { SniffPress } from './SniffPress';
 import type { LatLng } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
+import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
 const TOKEN_REFRESH_MS = 15000;
@@ -1576,18 +1577,17 @@ export default function MapViewWeb() {
             zIndex: Z.HUD_CHIP_BUBBLE,
             maxWidth: 220,
             padding: '8px 12px',
-            // Inverted vs the in-map bubble (white-on-dark instead of
-            // dark-on-white) — the white bubble was getting lost on
-            // the pale map. Dark chip reads as the dog's voice
-            // bridging from his off-screen chip to the visible map.
-            background: '#1a1a1a',
-            color: '#ffffff',
+            // Dog's voice — uses the shared VOICE token so all
+            // "talking right now" surfaces (in-map bubble, off-screen
+            // mirror, sniff indicators, lore stories) read as one.
+            background: VOICE.background,
+            color: VOICE.color,
             borderRadius: 14,
-            fontFamily: SYSTEM_FONT,
+            fontFamily: VOICE.fontFamily,
             fontSize: 13,
             lineHeight: 1.35,
-            boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
-            border: '1px solid rgba(255,255,255,0.06)',
+            boxShadow: VOICE.shadow,
+            border: VOICE.border,
             pointerEvents: 'none',
           }}
         >

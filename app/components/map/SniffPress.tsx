@@ -8,6 +8,7 @@ import { fetchWalkingRoute } from '../../services/directions';
 import { useGameStore } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
+import { VOICE } from '../../constants/voice';
 
 // Long-press "sniff this place" gesture.
 //
@@ -346,14 +347,14 @@ export function SniffPress() {
         <div
           style={{
             padding: '8px 12px',
-            background: '#ffffff',
-            color: '#1a1a1a',
+            background: VOICE.background,
+            color: VOICE.color,
             borderRadius: 14,
-            fontFamily: SYSTEM_FONT,
+            fontFamily: VOICE.fontFamily,
             fontSize: 13,
             lineHeight: 1.35,
-            boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
-            border: '1px solid rgba(0,0,0,0.06)',
+            boxShadow: VOICE.shadow,
+            border: VOICE.border,
             textAlign: 'center',
           }}
         >
@@ -426,14 +427,14 @@ function SniffingBubble({ position }: { position: LatLng }) {
         <div
           style={{
             padding: '6px 12px',
-            background: '#ffffff',
-            color: '#1a1a1a',
+            background: VOICE.background,
+            color: VOICE.color,
             borderRadius: 14,
-            fontFamily: SYSTEM_FONT,
+            fontFamily: VOICE.fontFamily,
             fontSize: 13,
             fontStyle: 'italic',
-            boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
-            border: '1px solid rgba(0,0,0,0.06)',
+            boxShadow: VOICE.shadow,
+            border: VOICE.border,
           }}
         >
           sniffing{dots}
