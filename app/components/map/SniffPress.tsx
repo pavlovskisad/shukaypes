@@ -78,6 +78,11 @@ export function SniffPress() {
   const startTRef = useRef<number>(0);
   const rafRef = useRef<number | null>(null);
   const startPxRef = useRef<{ x: number; y: number } | null>(null);
+  // Grace timer before showing the "sniffing…" bubble. A quick tap or
+  // a pan that starts as a press shouldn't flash a sniffing label
+  // for one frame.
+  const bubbleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const SNIFFING_BUBBLE_DELAY_MS = 350;
 
   const [discovered, setDiscovered] = useState<DiscoveredLore | null>(null);
   const [routing, setRouting] = useState(false);
@@ -164,6 +169,12 @@ export function SniffPress() {
         rafRef.current = null;
       }
     };
+    const clearBubbleTimer = () => {
+      if (bubbleTimerRef.current != null) {
+        clearTimeout(bubbleTimerRef.current);
+        bubbleTimerRef.current = null;
+      }
+    };
 
     const clearVisuals = () => {
       if (map.getLayer(fillId)) {
@@ -179,6 +190,7 @@ export function SniffPress() {
       pressLatLngRef.current = null;
       startPxRef.current = null;
       cancelAnim();
+      clearBubbleTimer();
       // Tween the fill out and shrink slightly so the moment of
       // discovery reads as "found".
       clearVisuals();
@@ -221,6 +233,7 @@ export function SniffPress() {
       pressLatLngRef.current = null;
       startPxRef.current = null;
       cancelAnim();
+      clearBubbleTimer();
       clearVisuals();
       setSniffingAt(null);
     };
@@ -238,7 +251,14 @@ export function SniffPress() {
       pressLatLngRef.current = ll;
       startPxRef.current = { x: e.point.x, y: e.point.y };
       startTRef.current = performance.now();
-      setSniffingAt(ll);
+      // Delay the "sniffing…" bubble so quick taps + the first frames
+      // of a pan don't flash a bubble. If the press is still alive
+      // after the grace window, show it.
+      clearBubbleTimer();
+      bubbleTimerRef.current = setTimeout(() => {
+        bubbleTimerRef.current = null;
+        if (pressLatLngRef.current) setSniffingAt(ll);
+      }, SNIFFING_BUBBLE_DELAY_MS);
 
       const tick = (t: number) => {
         const elapsed = t - startTRef.current;
@@ -289,6 +309,7 @@ export function SniffPress() {
       map.off('dragstart', cancelHold);
       map.off('zoomstart', cancelHold);
       cancelAnim();
+      clearBubbleTimer();
     };
   }, [map, sourceId, fillId, lineId]);
 
