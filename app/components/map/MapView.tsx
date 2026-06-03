@@ -17,6 +17,7 @@ import {
   generatePaperTextureUrl,
   installPaperOverlaySync,
 } from './crayonStyle';
+import type { Spot } from '../../services/places';
 import { useLocation } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
 import { useGameLoop } from '../../hooks/useGameLoop';
@@ -185,6 +186,24 @@ export default function MapViewWeb() {
   const forceAdvanceActiveWaypoint = useGameStore((s) => s.forceAdvanceActiveWaypoint);
   const walkRoute = useGameStore((s) => s.walkRoute);
   const walkRouteMeta = useGameStore((s) => s.walkRouteMeta);
+  const abandonActiveQuest = useGameStore((s) => s.abandonActiveQuest);
+
+  // Snapshot of the walk-destination Spot. spots refetch when the
+  // viewport pans, and viewport-driven fetches don't necessarily
+  // include the destination anymore — without this cache the pin at
+  // the end of the route silently vanishes. Captured the first time
+  // the destination is present in spots after the walk starts, then
+  // reused even if subsequent fetches drop it.
+  const walkDestRef = useRef<Spot | null>(null);
+  useEffect(() => {
+    const sid = walkRouteMeta?.spotId;
+    if (!sid) {
+      walkDestRef.current = null;
+      return;
+    }
+    const found = spots.find((s) => s.id === sid);
+    if (found) walkDestRef.current = found;
+  }, [walkRouteMeta?.spotId, spots]);
   const setWalkRoute = useGameStore((s) => s.setWalkRoute);
 
   // Street-hugging walking route through the active quest's waypoints.
@@ -588,7 +607,16 @@ export default function MapViewWeb() {
     }
     if (selectedSpotId) renderSet.add(selectedSpotId);
     if (walkRouteMeta?.spotId) renderSet.add(walkRouteMeta.spotId);
-    const live = spots.filter((s) => renderSet.has(s.id));
+    // Splice the cached walk destination back into the candidate set
+    // if a viewport refetch dropped it from `spots` — keeps the
+    // route's end pin on the map even when the user pans away.
+    let effectiveSpots: Spot[] = spots;
+    const sid = walkRouteMeta?.spotId;
+    const cachedDest = walkDestRef.current;
+    if (sid && cachedDest && cachedDest.id === sid && !spots.find((s) => s.id === sid)) {
+      effectiveSpots = [...spots, cachedDest];
+    }
+    const live = effectiveSpots.filter((s) => renderSet.has(s.id));
     if (live.length === 0) return [];
     const mPerPx =
       (MPP_EQUATOR_Z0 * Math.cos((mapCenterLat * Math.PI) / 180)) /
@@ -1392,6 +1420,76 @@ export default function MapViewWeb() {
           />
         ) : null}
       </MapContext.Provider>
+
+      {/* Cancel pills — small floating chips that drop in below the
+          HUD when a route or quest is active. Stacked vertically so
+          both can show at once (rare but valid: a walk + a separate
+          quest). Tapping a pill clears the corresponding state. */}
+      {(walkRoute || activeQuest) ? (
+        <div
+          style={{
+            position: 'absolute',
+            top: 100,
+            left: 0,
+            right: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: 8,
+            zIndex: 55,
+            pointerEvents: 'none',
+          }}
+        >
+          {walkRoute ? (
+            <div
+              role="button"
+              aria-label="cancel walk"
+              onClick={() => setWalkRoute(null, null)}
+              style={{
+                pointerEvents: 'auto',
+                cursor: 'pointer',
+                padding: '8px 16px',
+                background: 'rgba(255,255,255,0.92)',
+                color: '#1a1a1a',
+                borderRadius: 999,
+                fontFamily: SYSTEM_FONT,
+                fontSize: 13,
+                fontWeight: 600,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                border: '1px solid rgba(0,0,0,0.06)',
+                userSelect: 'none',
+              }}
+            >
+              × cancel walk
+            </div>
+          ) : null}
+          {activeQuest ? (
+            <div
+              role="button"
+              aria-label="abandon quest"
+              onClick={() => {
+                void abandonActiveQuest();
+              }}
+              style={{
+                pointerEvents: 'auto',
+                cursor: 'pointer',
+                padding: '8px 16px',
+                background: 'rgba(255,255,255,0.92)',
+                color: '#1a1a1a',
+                borderRadius: 999,
+                fontFamily: SYSTEM_FONT,
+                fontSize: 13,
+                fontWeight: 600,
+                boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+                border: '1px solid rgba(0,0,0,0.06)',
+                userSelect: 'none',
+              }}
+            >
+              × abandon quest
+            </div>
+          ) : null}
+        </div>
+      ) : null}
 
       {/* Off-screen companion bookmark. Sticks to the viewport edge
           along the line from map center to the companion's position
