@@ -38,6 +38,7 @@ import { PoiMarker } from './PoiMarker';
 import { PoiCluster } from './PoiCluster';
 import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
+import { SniffPress } from './SniffPress';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
@@ -1410,6 +1411,12 @@ export default function MapViewWeb() {
         {walkRoute && walkRoute.length > 1 ? (
           <CrayonRoute path={walkRoute} color="#2f6bff" weight={9} opacity={0.8} />
         ) : null}
+
+        {/* Long-press anywhere on the bare map → dog sniffs the area
+            and surfaces one nearby kyiv_lore entry with a story and
+            a "let's go here" CTA. Past finds excluded so each press
+            picks something new. */}
+        <SniffPress />
 
         {companionPos ? (
           <Companion

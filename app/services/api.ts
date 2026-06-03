@@ -320,4 +320,22 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ date, key, amount }),
     }),
+
+  // Long-press "sniff this area" — pick one nearby kyiv_lore entry the
+  // dog can talk about, excluding what's already been surfaced this
+  // session.
+  discoverLore: (lat: number, lng: number, excludeIds: string[] = []) => {
+    const params = new URLSearchParams({ lat: String(lat), lng: String(lng) });
+    if (excludeIds.length) params.set('exclude', excludeIds.join(','));
+    return req<{
+      lore: {
+        id: string;
+        name: string;
+        category: string;
+        story: string;
+        position: LatLng;
+        distM: number;
+      } | null;
+    }>(`/lore/discover?${params.toString()}`);
+  },
 };
