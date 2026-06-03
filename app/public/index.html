@@ -87,6 +87,10 @@
            the OS status bar, the map itself covers the top region
            in steady state, so we don't need a dark fallback there. */
         background: #ffffff;
+        /* Brand font applies app-wide so any RN <Text> without an
+           explicit fontFamily style still inherits Annex Regular
+           instead of dropping back to the browser default serif. */
+        font-family: 'Annex Regular', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
       /* These styles make the root element full-height */
       #root {
