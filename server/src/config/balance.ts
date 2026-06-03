@@ -19,10 +19,11 @@ export const balance = {
   // extra pools inside each nearby active lost-pet search zone, so
   // following a pet's zone earns more pickups than walking random
   // streets. The user-area pool is sized so even a quiet block has
-  // paws to find — 35 in a 1200m disk = ~7 per km², a paw every
-  // ~120m on a typical walk. Bumped from 25 after parks ended up
-  // hoarding most of the visible density.
-  tokensInUserArea: 35,
+  // paws to find — 20 in a 1200m disk = ~4 per km², a paw every
+  // ~180m on a typical walk. Cut from 35 after the gate + cap fixes
+  // shifted the visible density problem to be sheer count, not
+  // stacking.
+  tokensInUserArea: 20,
   userAreaRadiusM: 1200,
   // Inner exclusion radius for the user-area pool — paws never spawn
   // inside this disk. Without it, the 15s topup keeps dropping new
@@ -30,7 +31,11 @@ export const balance = {
   // instantly, ticking the counter up while the user is standing
   // still. Sized comfortably above autoCollectToken (90m).
   userAreaInnerRadiusM: 130,
-  tokensPerDogArea: 18,
+  // Was 18 — but with the 1500 m dog scan radius dense Kyiv ends up
+  // with 5-10 active pets at once, so 18 each piled to 100+ tokens
+  // just from dog zones. 8 each keeps following a zone meaningfully
+  // denser than random streets without flooding the map.
+  tokensPerDogArea: 8,
   // Per-park pool — paws cluster around parks as a soft "trail to a
   // walking destination". Tuned down from 4 → 2 because 4 piled up
   // visibly when Google's dedupe still left near-overlapping park
@@ -56,9 +61,12 @@ export const balance = {
   // race, a server restart that wipes Redis gates, or a Places drift
   // pushes us over these, the oldest uncollected items are culled
   // so on-screen density stays bounded. Soft caps; we don't surface
-  // an error, we just thin the surplus.
-  maxTokensPerUser: 90,
-  maxFoodPerUser: 35,
+  // an error, we just thin the surplus. Cut from 90/35 once the
+  // gate race was closed — those bigger ceilings only existed to
+  // absorb the race's overshoot. With the per-pool quotas honoured,
+  // 55/20 is what the design actually intends.
+  maxTokensPerUser: 55,
+  maxFoodPerUser: 20,
   // Radial density bias inside the user-area pool. 0 = uniform disk,
   // 0.5 = areal density ∝ 1/r (visibly denser near the walker), 1 =
   // strong nest. Dog-area pools spawn uniformly (bias=0) so zones
