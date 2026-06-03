@@ -200,6 +200,24 @@ export async function ensureTokensForUser(
     const rows = buildTokenRows(userId, positions);
     if (rows.length) await db.insert(schema.tokens).values(rows);
   }
+
+  // 5. Defensive global cap — if all the per-pool topups (or a stale
+  // spawn round from before the gate fix, or a server restart that
+  // wiped Redis) put us over the user's ceiling, cull the OLDEST
+  // surplus by marking it collected. Keeps on-screen density bounded
+  // without waiting for tokenExpireMinutes to age each row out.
+  await db.execute(sql`
+    UPDATE ${schema.tokens}
+    SET collected_at = NOW()
+    WHERE id IN (
+      SELECT id
+      FROM ${schema.tokens}
+      WHERE owner_id = ${userId}
+        AND collected_at IS NULL
+      ORDER BY spawned_at ASC
+      OFFSET ${balance.maxTokensPerUser}
+    )
+  `);
 }
 
 export async function ensureFoodForUser(
@@ -256,6 +274,7 @@ export async function ensureFoodForUser(
       }));
       if (rows.length) await db.insert(schema.foodItems).values(rows);
     }
+    await capFoodForUser(userId);
     return;
   }
 
@@ -278,4 +297,24 @@ export async function ensureFoodForUser(
     value: 1,
   }));
   if (rows.length) await db.insert(schema.foodItems).values(rows);
+  await capFoodForUser(userId);
+}
+
+// Defensive global cap — same shape as the token cap. Applied at the
+// END of every food sync so a surplus that snuck in (race, restart,
+// drift) gets actively thinned instead of waiting on
+// foodExpireMinutes.
+async function capFoodForUser(userId: string): Promise<void> {
+  await db.execute(sql`
+    UPDATE ${schema.foodItems}
+    SET consumed_at = NOW()
+    WHERE id IN (
+      SELECT id
+      FROM ${schema.foodItems}
+      WHERE owner_id = ${userId}
+        AND consumed_at IS NULL
+      ORDER BY spawned_at ASC
+      OFFSET ${balance.maxFoodPerUser}
+    )
+  `);
 }

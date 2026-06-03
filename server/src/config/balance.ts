@@ -52,6 +52,13 @@ export const balance = {
   // pools stacking on top. The pools self-heal on every 15s poll, so
   // shuffled positions just read as "fresh paws", not flicker.
   tokenExpireMinutes: 5,
+  // Defensive global ceilings — applied AFTER per-pool topups. If a
+  // race, a server restart that wipes Redis gates, or a Places drift
+  // pushes us over these, the oldest uncollected items are culled
+  // so on-screen density stays bounded. Soft caps; we don't surface
+  // an error, we just thin the surplus.
+  maxTokensPerUser: 90,
+  maxFoodPerUser: 35,
   // Radial density bias inside the user-area pool. 0 = uniform disk,
   // 0.5 = areal density ∝ 1/r (visibly denser near the walker), 1 =
   // strong nest. Dog-area pools spawn uniformly (bias=0) so zones
