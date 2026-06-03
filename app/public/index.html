@@ -38,6 +38,20 @@
 
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
+      /* Brand font for all UI chrome (HUD, bubbles, modals, tabs).
+         font-display: swap lets the system font render first then
+         hot-swaps to Annex Regular when it lands — avoids the FOIT
+         blink on cold load. font-weight 100 900 lets the single
+         face cover any RN fontWeight without us having to ship a
+         separate file per weight. */
+      @font-face {
+        font-family: 'Annex Regular';
+        src: url('/fonts/Annex Regular/Annex-Regular.ttf') format('truetype');
+        font-weight: 100 900;
+        font-style: normal;
+        font-display: swap;
+      }
+
       /* These styles make the body full-height */
       html,
       body {
