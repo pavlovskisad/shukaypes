@@ -622,8 +622,15 @@ export function applyCrayonOverride(
     }
   }
 
-  // Dark building outline.
-  if (buildingSource && !map.getLayer('crayon-building-outline')) {
+  // Building outline — currently hidden to see how the map reads
+  // without the dark trace. Flip BUILDING_OUTLINE_OPACITY back to
+  // a non-zero value (0.3 — 0.55 was the prior tuning) to restore.
+  const BUILDING_OUTLINE_OPACITY = 0;
+  if (
+    BUILDING_OUTLINE_OPACITY > 0 &&
+    buildingSource &&
+    !map.getLayer('crayon-building-outline')
+  ) {
     const outlineLayer: LayerSpecification = {
       id: 'crayon-building-outline',
       type: 'line',
@@ -632,7 +639,7 @@ export function applyCrayonOverride(
       minzoom: 13,
       paint: {
         'line-color': palette.crayon,
-        'line-opacity': 0.55,
+        'line-opacity': BUILDING_OUTLINE_OPACITY,
         'line-width': [
           'interpolate', ['linear'], ['zoom'],
           13, 0.4,
@@ -647,7 +654,14 @@ export function applyCrayonOverride(
     } as LayerSpecification;
     map.addLayer(outlineLayer);
   } else if (buildingSource && map.getLayer('crayon-building-outline')) {
-    map.setPaintProperty('crayon-building-outline', 'line-color', palette.crayon);
+    // Layer exists from a prior render — drop it if we've disabled
+    // outlines, otherwise re-sync its colour.
+    if (BUILDING_OUTLINE_OPACITY <= 0) {
+      map.removeLayer('crayon-building-outline');
+    } else {
+      map.setPaintProperty('crayon-building-outline', 'line-color', palette.crayon);
+      map.setPaintProperty('crayon-building-outline', 'line-opacity', BUILDING_OUTLINE_OPACITY);
+    }
   }
 }
 
