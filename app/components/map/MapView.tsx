@@ -1575,14 +1575,18 @@ export default function MapViewWeb() {
             zIndex: 59,
             maxWidth: 220,
             padding: '8px 12px',
-            background: '#ffffff',
-            color: '#1a1a1a',
+            // Inverted vs the in-map bubble (white-on-dark instead of
+            // dark-on-white) — the white bubble was getting lost on
+            // the pale map. Dark chip reads as the dog's voice
+            // bridging from his off-screen chip to the visible map.
+            background: '#1a1a1a',
+            color: '#ffffff',
             borderRadius: 14,
             fontFamily: SYSTEM_FONT,
             fontSize: 13,
             lineHeight: 1.35,
-            boxShadow: '0 4px 14px rgba(0,0,0,0.14)',
-            border: '1px solid rgba(0,0,0,0.06)',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+            border: '1px solid rgba(255,255,255,0.06)',
             pointerEvents: 'none',
           }}
         >
