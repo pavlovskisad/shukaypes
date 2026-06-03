@@ -333,6 +333,8 @@ export const api = {
         name: string;
         category: string;
         story: string;
+        wikipediaTitle: string | null;
+        sourceLang: string | null;
         position: LatLng;
         distM: number;
       } | null;

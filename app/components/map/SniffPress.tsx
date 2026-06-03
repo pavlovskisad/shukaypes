@@ -62,8 +62,28 @@ interface DiscoveredLore {
   name: string;
   category: string;
   story: string;
+  wikipediaTitle: string | null;
+  sourceLang: string | null;
   position: LatLng;
   distM: number;
+}
+
+const READ_MORE_MAX_CHARS = 600;
+
+async function fetchWikipediaExtract(
+  lang: string,
+  title: string,
+): Promise<string | null> {
+  try {
+    const res = await fetch(
+      `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
+    );
+    if (!res.ok) return null;
+    const json = (await res.json()) as { extract?: string };
+    return json.extract ?? null;
+  } catch {
+    return null;
+  }
 }
 
 export function SniffPress() {
@@ -88,6 +108,13 @@ export function SniffPress() {
 
   const [discovered, setDiscovered] = useState<DiscoveredLore | null>(null);
   const [routing, setRouting] = useState(false);
+  // Read-more state. Fetched lazily from Wikipedia's public summary
+  // endpoint the first time the user expands a given discovery —
+  // most discoveries the user sees once and moves on, so eager
+  // prefetch would burn a Wikipedia request per sniff for no win.
+  const [moreOpen, setMoreOpen] = useState(false);
+  const [moreLoading, setMoreLoading] = useState(false);
+  const [moreText, setMoreText] = useState<string | null>(null);
   // Mirror of the press position for the React tree. While set, a
   // "sniffing…" bubble sits above the press point so the gesture
   // reads as in-progress rather than as nothing happening. Stays up
@@ -203,6 +230,11 @@ export function SniffPress() {
         if (lore) {
           excludeRef.current.add(lore.id);
           setDiscovered(lore);
+          // Reset the read-more state for the new discovery so an
+          // expanded previous bubble doesn't leak into the new one.
+          setMoreText(null);
+          setMoreLoading(false);
+          setMoreOpen(false);
           // Ease the map so the surfaced place lands in the centre of
           // the visible area — padding clears the HUD pills + tab bar
           // so the story bubble isn't sitting under an overlay. Same
@@ -220,6 +252,8 @@ export function SniffPress() {
             name: 'тут поки тиша',
             category: 'none',
             story: '*ніс у землю* нічого знайомого. далі від цього кутка є щось — спробуй там.',
+            wikipediaTitle: null,
+            sourceLang: null,
             position: ll,
             distM: 0,
           });
@@ -315,6 +349,27 @@ export function SniffPress() {
     };
   }, [map, sourceId, fillId, lineId]);
 
+  const expandMore = async () => {
+    if (!discovered || moreLoading) return;
+    if (moreOpen) {
+      setMoreOpen(false);
+      return;
+    }
+    if (moreText) {
+      setMoreOpen(true);
+      return;
+    }
+    if (!discovered.wikipediaTitle || !discovered.sourceLang) return;
+    setMoreLoading(true);
+    const text = await fetchWikipediaExtract(
+      discovered.sourceLang,
+      discovered.wikipediaTitle,
+    );
+    setMoreText(text);
+    setMoreOpen(text != null);
+    setMoreLoading(false);
+  };
+
   const goHere = async () => {
     if (!discovered || !userPos || routing) return;
     if (discovered.id === '__none__') return;
@@ -360,6 +415,50 @@ export function SniffPress() {
         >
           <div style={{ fontWeight: 700, marginBottom: 2 }}>{discovered.name}</div>
           <div>{discovered.story}</div>
+          {moreOpen && moreText ? (
+            <div
+              style={{
+                marginTop: 8,
+                paddingTop: 8,
+                borderTop: '1px solid rgba(255,255,255,0.12)',
+                fontSize: 12,
+                lineHeight: 1.45,
+                opacity: 0.85,
+                textAlign: 'left',
+                maxHeight: 180,
+                overflowY: 'auto',
+                whiteSpace: 'pre-line',
+              }}
+            >
+              {moreText.length > READ_MORE_MAX_CHARS
+                ? moreText.slice(0, READ_MORE_MAX_CHARS).trimEnd() + '…'
+                : moreText}
+            </div>
+          ) : null}
+          {discovered.id !== '__none__' && discovered.wikipediaTitle ? (
+            <div
+              role="button"
+              onClick={(e) => {
+                e.stopPropagation();
+                void expandMore();
+              }}
+              style={{
+                marginTop: 6,
+                fontSize: 11,
+                fontWeight: 700,
+                opacity: 0.7,
+                textTransform: 'lowercase',
+                cursor: 'pointer',
+                userSelect: 'none',
+              }}
+            >
+              {moreLoading
+                ? 'opening…'
+                : moreOpen
+                  ? 'less ▴'
+                  : 'more ▾'}
+            </div>
+          ) : null}
         </div>
         {discovered.id !== '__none__' ? (
           <div

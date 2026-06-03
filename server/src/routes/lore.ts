@@ -50,6 +50,8 @@ const plugin: FastifyPluginAsync = async (app) => {
         name: schema.kyivLore.name,
         category: schema.kyivLore.category,
         story: schema.kyivLore.story,
+        wikipediaTitle: schema.kyivLore.wikipediaTitle,
+        sourceLang: schema.kyivLore.sourceLang,
         lat: schema.kyivLore.lat,
         lng: schema.kyivLore.lng,
         dist,
@@ -69,6 +71,10 @@ const plugin: FastifyPluginAsync = async (app) => {
         name: pick.name,
         category: pick.category,
         story: pick.story,
+        // Wikipedia handles for the on-demand "read more" — client
+        // fetches the public summary endpoint when the user expands.
+        wikipediaTitle: pick.wikipediaTitle,
+        sourceLang: pick.sourceLang,
         position: { lat: pick.lat, lng: pick.lng },
         distM: Math.round(pick.dist),
       },
