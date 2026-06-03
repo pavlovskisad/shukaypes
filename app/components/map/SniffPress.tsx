@@ -7,6 +7,7 @@ import { api } from '../../services/api';
 import { fetchWalkingRoute } from '../../services/directions';
 import { useGameStore } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { Z } from '../../constants/z';
 
 // Long-press "sniff this place" gesture.
 //
@@ -332,7 +333,7 @@ export function SniffPress() {
   }
   if (!discovered) return null;
   return (
-    <MapLibreMarker position={discovered.position} anchor="bottom" zIndex={70}>
+    <MapLibreMarker position={discovered.position} anchor="bottom" zIndex={Z.HUD_SNIFF_BUBBLE}>
       <div
         style={{
           display: 'flex',
@@ -412,7 +413,7 @@ function SniffingBubble({ position }: { position: LatLng }) {
     return () => clearInterval(t);
   }, []);
   return (
-    <MapLibreMarker position={position} anchor="bottom" zIndex={70}>
+    <MapLibreMarker position={position} anchor="bottom" zIndex={Z.HUD_SNIFF_BUBBLE}>
       <div
         style={{
           display: 'flex',

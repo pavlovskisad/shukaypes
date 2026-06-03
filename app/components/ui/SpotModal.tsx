@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { Z } from '../../constants/z';
 import { Icon, iconForCategory } from './Icon';
 
 interface SpotModalProps {
@@ -79,7 +80,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         // ~34px home-indicator strip) gets the same visual breathing
         // room as Android/desktop.
         paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' as unknown as number,
-        zIndex: 50,
+        zIndex: Z.MODAL_MAP,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
       }}

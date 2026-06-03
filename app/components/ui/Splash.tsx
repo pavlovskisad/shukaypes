@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { View, Image, StyleSheet } from 'react-native';
 import logoFull from '../../assets/logo-full.png';
+import { Z } from '../../constants/z';
 
 // Simple first-load splash. Overlays everything, fades out after a short
 // beat. Web-specific — Expo's native splash-screen plugin covers iOS/
@@ -46,7 +47,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
-    zIndex: 100,
+    zIndex: Z.SPLASH,
     // @ts-expect-error — RN doesn't type the web-only transition property
     // but react-native-web forwards it to CSS, giving us a free fade-out
     // without wiring up Animated API.

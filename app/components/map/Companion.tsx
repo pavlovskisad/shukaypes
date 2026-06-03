@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { MapLibreMarker } from './MapLibreMarker';
 import { useGameStore } from '../../stores/gameStore';
+import { Z } from '../../constants/z';
 import { iconForCategory } from '../ui/Icon';
 import { SpeechBubble } from '../ui/SpeechBubble';
 import {
@@ -476,7 +477,7 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
   const activeBubble = menuOpen || hideBubble ? null : bubble ?? localBubble;
 
   return (
-    <MapLibreMarker position={position}>
+    <MapLibreMarker position={position} zIndex={Z.MARKER_COMPANION}>
       {/* Outer container is 140×140 — the entire box is the tap target
           even though the visible nose glyph is only 55×55 centered.
           At map-zoomed-out the companion sits on top of the UserMarker's
@@ -500,7 +501,7 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
           alignItems: 'center',
           justifyContent: 'center',
           touchAction: 'manipulation',
-          zIndex: 2,
+          zIndex: Z.MARKER_COMPANION,
         }}
       >
         {/* Pixel-art companion — 64×64 sprite scaled 2× = 128px on

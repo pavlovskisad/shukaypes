@@ -40,6 +40,7 @@ import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import { SniffPress } from './SniffPress';
 import type { LatLng } from '@shukajpes/shared';
+import { Z } from '../../constants/z';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
 const TOKEN_REFRESH_MS = 15000;
@@ -1446,7 +1447,7 @@ export default function MapViewWeb() {
             flexDirection: 'column',
             alignItems: 'center',
             gap: 8,
-            zIndex: 55,
+            zIndex: Z.HUD_PILLS_OVERLAY,
             pointerEvents: 'none',
           }}
         >
@@ -1529,7 +1530,7 @@ export default function MapViewWeb() {
             // Bumped to clear the HUD overlay reliably even in
             // PWA/iOS Safari where DOM-order tie-breaks were leaving
             // the bookmark un-tappable behind the corner logo zone.
-            zIndex: 60,
+            zIndex: Z.HUD_CHIPS,
             cursor: 'pointer',
             background: '#ffffff',
             borderRadius: '50%',
@@ -1572,7 +1573,7 @@ export default function MapViewWeb() {
                     : 'translate(calc(-100% - 54px), -50%)',
             transition:
               'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-            zIndex: 59,
+            zIndex: Z.HUD_CHIP_BUBBLE,
             maxWidth: 220,
             padding: '8px 12px',
             // Inverted vs the in-map bubble (white-on-dark instead of
@@ -1652,7 +1653,7 @@ export default function MapViewWeb() {
                 'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
               // Bumped above the HUD layer so taps reliably hit the
               // chip even where it overlaps the corner logo zone.
-              zIndex: 60,
+              zIndex: Z.HUD_CHIPS,
               cursor: 'pointer',
               userSelect: 'none',
             }}
@@ -1792,7 +1793,7 @@ export default function MapViewWeb() {
             transform: 'translateY(-50%)',
             // Bumped to match the chip + companion-bookmark layer so
             // it reliably stacks above the HUD on web/PWA.
-            zIndex: 60,
+            zIndex: Z.HUD_PILLS_OVERLAY,
             cursor: 'pointer',
             background: 'rgba(255,255,255,0.92)',
             backdropFilter: 'blur(14px) saturate(160%)',

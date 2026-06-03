@@ -6,6 +6,7 @@ import MapView from '../../components/map';
 import { StatusBar } from '../../components/ui/StatusBar';
 import { QuestPill } from '../../components/ui/QuestPill';
 import { AboutModal } from '../../components/ui/AboutModal';
+import { Z } from '../../constants/z';
 import { useGameStore } from '../../stores/gameStore';
 
 // Logo is the brand anchor in the top-left. Prototype has it roughly
@@ -181,9 +182,9 @@ const styles = StyleSheet.create({
     // Was 10, but the off-screen lost-pet chips and companion-bookmark
     // overlay (rendered inside MapView) had zIndex 24/25 yet still
     // weren't intercepting taps in PWA/iOS Safari — the HUD wins hit
-    // tests because it's painted later in the DOM. Drop to 1 so the
-    // overlay layer reliably stacks above the HUD.
-    zIndex: 1,
+    // Lower than HUD_CHIPS so off-screen chip overlays still win.
+    // Higher than markers so the HUD pills paint above the map.
+    zIndex: Z.HUD_PILLS,
   },
   hudRow: {
     flexDirection: 'row',

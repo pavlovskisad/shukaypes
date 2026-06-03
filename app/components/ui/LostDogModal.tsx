@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { Z } from '../../constants/z';
 import { Icon } from './Icon';
 
 interface LostDogModalProps {
@@ -152,7 +153,7 @@ export function LostDogModal({
         // with overflow:hidden on the sheet, content gets clipped
         // here rather than overlapping the pills above.
         paddingTop: TOP_RESERVE_PX,
-        zIndex: 50,
+        zIndex: Z.MODAL_MAP,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
       }}

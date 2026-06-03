@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { Z } from '../../constants/z';
 import { Icon, type IconName } from './Icon';
 
 interface AboutModalProps {
@@ -105,7 +106,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         // clear it but visually felt too tight.
         paddingTop: 80,
         paddingBottom: 'calc(124px + env(safe-area-inset-bottom))' as unknown as number,
-        zIndex: 80,
+        zIndex: Z.MODAL_GLOBAL,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
       }}

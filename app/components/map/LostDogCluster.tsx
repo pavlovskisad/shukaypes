@@ -3,6 +3,7 @@ import { MapLibreMarker } from './MapLibreMarker';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { Z } from '../../constants/z';
 
 // Dominant-urgency wins the glow color. Urgent beats medium beats resolved
 // so the cluster reads "there's an urgent pet in here" at a glance.
@@ -99,7 +100,7 @@ function LostDogClusterImpl({
             cursor: 'pointer',
             userSelect: 'none',
             pointerEvents: 'auto',
-            zIndex: 2,
+            zIndex: Z.MARKER_CLUSTER_CHILD,
           }}
         >
           {expanded ? (
@@ -170,7 +171,7 @@ function LostDogClusterImpl({
                 alignItems: 'center',
                 justifyContent: 'center',
                 userSelect: 'none',
-                zIndex: 1,
+                zIndex: Z.MARKER_DEFAULT,
               }}
               aria-label={d.name}
             >
