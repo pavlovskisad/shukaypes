@@ -81,6 +81,12 @@ export function SniffPress() {
 
   const [discovered, setDiscovered] = useState<DiscoveredLore | null>(null);
   const [routing, setRouting] = useState(false);
+  // Mirror of the press position for the React tree. While set, a
+  // "sniffing…" bubble sits above the press point so the gesture
+  // reads as in-progress rather than as nothing happening. Stays up
+  // through the server fetch and only clears when we have something
+  // to swap to (story bubble or empty-radius fallback).
+  const [sniffingAt, setSniffingAt] = useState<LatLng | null>(null);
   const excludeRef = useRef<Set<string>>(new Set());
   const userPos = useGameStore((s) => s.userPosition);
   const setWalkRoute = useGameStore((s) => s.setWalkRoute);
@@ -197,6 +203,8 @@ export function SniffPress() {
         }
       } catch {
         /* swallow — gesture is best-effort */
+      } finally {
+        setSniffingAt(null);
       }
     };
 
@@ -205,6 +213,7 @@ export function SniffPress() {
       startPxRef.current = null;
       cancelAnim();
       clearVisuals();
+      setSniffingAt(null);
     };
 
     const startHold = (e: maplibregl.MapMouseEvent | maplibregl.MapTouchEvent) => {
@@ -220,6 +229,7 @@ export function SniffPress() {
       pressLatLngRef.current = ll;
       startPxRef.current = { x: e.point.x, y: e.point.y };
       startTRef.current = performance.now();
+      setSniffingAt(ll);
 
       const tick = (t: number) => {
         const elapsed = t - startTRef.current;
@@ -287,6 +297,9 @@ export function SniffPress() {
     }
   };
 
+  if (sniffingAt && !discovered) {
+    return <SniffingBubble position={sniffingAt} />;
+  }
   if (!discovered) return null;
   return (
     <MapLibreMarker position={discovered.position} anchor="bottom">
@@ -349,6 +362,59 @@ export function SniffPress() {
             borderRadius: 5,
             background: SNIFF_COLOR,
             boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+          }}
+        />
+      </div>
+    </MapLibreMarker>
+  );
+}
+
+// Animated "sniffing…" bubble that sits above the press point while
+// the radial scan is in progress. Same dot-cycle as the chat tab's
+// typing indicator so the metaphor (dog is thinking) is consistent
+// across surfaces.
+function SniffingBubble({ position }: { position: LatLng }) {
+  const [dots, setDots] = useState('.');
+  useEffect(() => {
+    const t = setInterval(() => {
+      setDots((d) => (d.length >= 3 ? '.' : d + '.'));
+    }, 380);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <MapLibreMarker position={position} anchor="bottom">
+      <div
+        style={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: 6,
+          pointerEvents: 'none',
+        }}
+      >
+        <div
+          style={{
+            padding: '6px 12px',
+            background: '#ffffff',
+            color: '#1a1a1a',
+            borderRadius: 14,
+            fontFamily: SYSTEM_FONT,
+            fontSize: 13,
+            fontStyle: 'italic',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.12)',
+            border: '1px solid rgba(0,0,0,0.06)',
+          }}
+        >
+          sniffing{dots}
+        </div>
+        <div
+          style={{
+            width: 8,
+            height: 8,
+            borderRadius: 4,
+            background: SNIFF_COLOR,
+            opacity: 0.7,
+            boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
           }}
         />
       </div>
