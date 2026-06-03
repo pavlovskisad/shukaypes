@@ -359,14 +359,25 @@ export function SniffPress() {
       setMoreOpen(true);
       return;
     }
-    if (!discovered.wikipediaTitle || !discovered.sourceLang) return;
+    // No Wikipedia link → still open with a gentle in-voice fallback
+    // so the affordance doesn't read as broken.
+    if (!discovered.wikipediaTitle || !discovered.sourceLang) {
+      setMoreText('*чухає за вухом* більше не пригадую — тільки те, що сказав.');
+      setMoreOpen(true);
+      return;
+    }
     setMoreLoading(true);
     const text = await fetchWikipediaExtract(
       discovered.sourceLang,
       discovered.wikipediaTitle,
     );
-    setMoreText(text);
-    setMoreOpen(text != null);
+    if (text) {
+      setMoreText(text);
+      setMoreOpen(true);
+    } else {
+      setMoreText('*чухає за вухом* більше не пригадую — тільки те, що сказав.');
+      setMoreOpen(true);
+    }
     setMoreLoading(false);
   };
 
@@ -435,7 +446,7 @@ export function SniffPress() {
                 : moreText}
             </div>
           ) : null}
-          {discovered.id !== '__none__' && discovered.wikipediaTitle ? (
+          {discovered.id !== '__none__' ? (
             <div
               role="button"
               onClick={(e) => {
