@@ -58,12 +58,58 @@ function buildTokenRows(userId: string, positions: LatLng[]) {
   }));
 }
 
+// Minimum gap between any two on-screen tokens (or food items) so
+// successive spawn rounds don't pile new positions on top of older
+// ones. ~18 m is a marker's visual diameter — closer than this and
+// the discs literally stack at the same point on screen.
+const MIN_SPACING_M = 18;
+
+// Drop candidate positions that fall within MIN_SPACING_M of any
+// position in `existing`. Mutates `existing` to include the kept
+// candidates so within a single spawn pass we also don't cluster
+// new positions against newer ones. Simple O(n*m) — both lists are
+// bounded by maxTokensPerUser so cost stays well under a ms.
+function filterAntiCluster(
+  candidates: LatLng[],
+  existing: LatLng[],
+): LatLng[] {
+  const kept: LatLng[] = [];
+  for (const c of candidates) {
+    let tooClose = false;
+    for (const e of existing) {
+      if (distanceMeters(c, e) < MIN_SPACING_M) {
+        tooClose = true;
+        break;
+      }
+    }
+    if (tooClose) continue;
+    kept.push(c);
+    existing.push(c);
+  }
+  return kept;
+}
+
 export async function ensureTokensForUser(
   userId: string,
   center: LatLng,
   parks: LatLng[] = [],
 ) {
   parks = dedupeParks(parks);
+  // Anti-cluster ledger — populated lazily before the first scatter
+  // call. Each per-pool scatter filters its candidates against this
+  // list so two successive spawn rounds can't stack tokens on top of
+  // each other. Cheaper to fetch once than to re-query for every
+  // pool.
+  let existingPositions: LatLng[] | null = null;
+  const loadExisting = async (): Promise<LatLng[]> => {
+    if (existingPositions) return existingPositions;
+    const rows = await db
+      .select({ lat: schema.tokens.lat, lng: schema.tokens.lng })
+      .from(schema.tokens)
+      .where(and(eq(schema.tokens.ownerId, userId), isNull(schema.tokens.collectedAt)));
+    existingPositions = rows.map((r) => ({ lat: r.lat, lng: r.lng }));
+    return existingPositions;
+  };
   // 1. Age out uncollected tokens older than `tokenExpireMinutes`. The
   // previous distance-based cull didn't fit the new pool model — a paw
   // seeded inside a dog's zone 3km from the walker is legitimate even
@@ -113,7 +159,8 @@ export async function ensureTokensForUser(
         balance.tokenCenterBias,
         balance.userAreaInnerRadiusM,
       );
-      const rows = buildTokenRows(userId, positions);
+      const kept = filterAntiCluster(positions, await loadExisting());
+      const rows = buildTokenRows(userId, kept);
       if (rows.length) await db.insert(schema.tokens).values(rows);
     }
     // Note the topup whether or not we wrote rows — the gate's job
@@ -166,7 +213,8 @@ export async function ensureTokensForUser(
     if (zoneLive >= balance.tokensPerDogArea) continue;
     const missing = balance.tokensPerDogArea - zoneLive;
     const positions = scatterInRadius(dogPos, missing, d.zoneRadiusM);
-    const rows = buildTokenRows(userId, positions);
+    const kept = filterAntiCluster(positions, await loadExisting());
+    const rows = buildTokenRows(userId, kept);
     if (rows.length) await db.insert(schema.tokens).values(rows);
   }
 
@@ -197,7 +245,8 @@ export async function ensureTokensForUser(
     if (parkLive >= balance.tokensPerPark) continue;
     const missing = balance.tokensPerPark - parkLive;
     const positions = scatterInRadius(park, missing, balance.parkPawRadiusM);
-    const rows = buildTokenRows(userId, positions);
+    const kept = filterAntiCluster(positions, await loadExisting());
+    const rows = buildTokenRows(userId, kept);
     if (rows.length) await db.insert(schema.tokens).values(rows);
   }
 
@@ -226,6 +275,16 @@ export async function ensureFoodForUser(
   parks: LatLng[] = [],
 ) {
   parks = dedupeParks(parks);
+  let existingFoodPositions: LatLng[] | null = null;
+  const loadExistingFood = async (): Promise<LatLng[]> => {
+    if (existingFoodPositions) return existingFoodPositions;
+    const rows = await db
+      .select({ lat: schema.foodItems.lat, lng: schema.foodItems.lng })
+      .from(schema.foodItems)
+      .where(and(eq(schema.foodItems.ownerId, userId), isNull(schema.foodItems.consumedAt)));
+    existingFoodPositions = rows.map((r) => ({ lat: r.lat, lng: r.lng }));
+    return existingFoodPositions;
+  };
   // Age out uncollected bones the same way tokens do — keeps legacy
   // uniform-scatter bones from lingering once we switch to park mode,
   // and refreshes positions over time.
@@ -265,7 +324,8 @@ export async function ensureFoodForUser(
       if (zoneLive >= balance.bonesPerPark) continue;
       const missing = balance.bonesPerPark - zoneLive;
       const positions = scatterInRadius(park, missing, balance.parkScatterRadiusM);
-      const rows = positions.map((p) => ({
+      const kept = filterAntiCluster(positions, await loadExistingFood());
+      const rows = kept.map((p) => ({
         id: nanoid(),
         ownerId: userId,
         lat: p.lat,
@@ -289,7 +349,8 @@ export async function ensureFoodForUser(
   if (live >= balance.foodCount) return;
   const missing = balance.foodCount - live;
   const positions = scatter(center, missing, balance.foodSpreadDeg, balance.foodSpreadDeg);
-  const rows = positions.map((p) => ({
+  const kept = filterAntiCluster(positions, await loadExistingFood());
+  const rows = kept.map((p) => ({
     id: nanoid(),
     ownerId: userId,
     lat: p.lat,
