@@ -20,6 +20,7 @@ async function assembleSystem(
   userId: string,
   pos: Pos,
   spots?: NearbySpot[],
+  viewport?: Pos | null,
 ): Promise<Anthropic.TextBlockParam[]> {
   // Render order is tools → system → messages. Keep stable blocks first
   // so cache_control breakpoints survive volatile memory/context edits below.
@@ -29,6 +30,10 @@ async function assembleSystem(
       userId,
       pos: pos.lat != null && pos.lng != null ? { lat: pos.lat, lng: pos.lng } : null,
       spots,
+      viewport:
+        viewport && viewport.lat != null && viewport.lng != null
+          ? { lat: viewport.lat, lng: viewport.lng }
+          : null,
     }),
   ]);
   return [
@@ -83,6 +88,12 @@ const plugin: FastifyPluginAsync = async (app) => {
       text: string;
       lat?: number;
       lng?: number;
+      // Where the user is LOOKING on the map (viewport centre).
+      // Optional. When present, the dog leans on this for lore /
+      // lost-pet proximity so he comments on the area being browsed,
+      // not just the GPS spot the human is standing on.
+      vLat?: number;
+      vLng?: number;
       greet?: boolean;
       // Closest few spots from the client's gameStore. Used to populate
       // the CONTEXT block so the companion can emit walk_to_spot for
@@ -106,6 +117,10 @@ const plugin: FastifyPluginAsync = async (app) => {
         ? '*user just opened chat and has not said anything yet. you have no language signal from them. greet warmly in english with one short ukrainian phrase alongside (e.g. "hi / привіт") so they can pick the language with their reply. one short sentence, dog voice, no stacked questions.*'
         : rawText;
       const pos: Pos = { lat: body.lat, lng: body.lng };
+      const viewport: Pos | null =
+        body.vLat != null && body.vLng != null
+          ? { lat: body.vLat, lng: body.vLng }
+          : null;
 
       // Persist user message first so it's in history even if Claude fails.
       const userMsgId = nanoid();
@@ -121,7 +136,7 @@ const plugin: FastifyPluginAsync = async (app) => {
 
       const spots = Array.isArray(body.spots) ? (body.spots as NearbySpot[]) : undefined;
       const [system, history] = await Promise.all([
-        assembleSystem(req.userId, pos, spots),
+        assembleSystem(req.userId, pos, spots, viewport),
         recentHistory(req.userId),
       ]);
       const last = history[history.length - 1];

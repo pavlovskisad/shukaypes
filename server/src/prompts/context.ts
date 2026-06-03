@@ -16,10 +16,20 @@ export interface NearbySpot {
 interface ContextInput {
   userId: string;
   pos?: { lat: number; lng: number } | null;
+  // Where the user is currently looking on the map. When set, lore +
+  // lost-pet proximity queries use this instead of `pos` so the dog
+  // can chat about Podil while the human is panning Podil from
+  // Pechersk. Falls back to `pos` when null. Game-mechanic state
+  // (current GPS line, mechanic anchoring) still uses `pos`.
+  viewport?: { lat: number; lng: number } | null;
   spots?: NearbySpot[];
 }
 
-export async function buildContextBlock({ userId, pos, spots }: ContextInput): Promise<string> {
+export async function buildContextBlock({ userId, pos, viewport, spots }: ContextInput): Promise<string> {
+  // browsePos = "where we look right now" — viewport when present,
+  // otherwise fall back to the user's GPS so a no-viewport caller
+  // behaves identically to the old code.
+  const browsePos = viewport ?? pos ?? null;
   const [user] = await db
     .select()
     .from(schema.users)
@@ -85,12 +95,16 @@ export async function buildContextBlock({ userId, pos, spots }: ContextInput): P
   }
 
   // Kyiv lore — pre-rewritten short stories the dog already "knows"
-  // about places around him. Pull at most 2 within ~200 m so they
-  // land as natural recall, not as a tour. Each story is already a
-  // dog-voice sentence; the dog can drop one verbatim or paraphrase.
+  // about places around him. Pull at most 3 within ~250 m of where
+  // the human is BROWSING (viewport when set, else GPS) so they land
+  // as natural recall about the area on screen, not the area you're
+  // physically standing on. Each story is already a dog-voice
+  // sentence; the dog can drop one verbatim or paraphrase.
   let nearbyLore: string[] = [];
-  if (pos) {
-    const loreDist = sql<number>`(6371000 * acos(cos(radians(${pos.lat})) * cos(radians(lat)) * cos(radians(lng) - radians(${pos.lng})) + sin(radians(${pos.lat})) * sin(radians(lat))))`;
+  const lorePos = browsePos;
+  const browsingViewport = viewport != null && !!pos;
+  if (lorePos) {
+    const loreDist = sql<number>`(6371000 * acos(cos(radians(${lorePos.lat})) * cos(radians(lat)) * cos(radians(lng) - radians(${lorePos.lng})) + sin(radians(${lorePos.lat})) * sin(radians(lat))))`;
     const lore = await db
       .select({
         name: schema.kyivLore.name,
@@ -99,9 +113,9 @@ export async function buildContextBlock({ userId, pos, spots }: ContextInput): P
         dist: loreDist,
       })
       .from(schema.kyivLore)
-      .where(sql`${loreDist} < 200`)
+      .where(sql`${loreDist} < 250`)
       .orderBy(loreDist)
-      .limit(2);
+      .limit(3);
     nearbyLore = lore.map(
       (l) => `  - ${l.name} (${l.category}, ~${Math.round(l.dist)}m): "${l.story}"`,
     );
@@ -114,9 +128,14 @@ export async function buildContextBlock({ userId, pos, spots }: ContextInput): P
     `- the human has ${user.points} treats saved up and ${user.totalTokens} tokens picked up so far.`,
     `- uncollected tokens still on the map: ${uncollectedTokens[0]?.n ?? 0}`,
     pos ? `- current GPS: ${pos.lat.toFixed(5)}, ${pos.lng.toFixed(5)}` : '- GPS not shared this turn',
+    browsingViewport
+      ? `- the human is looking at a different part of the map than where they're standing — viewport centre ~${viewport!.lat.toFixed(5)}, ${viewport!.lng.toFixed(5)}. places/stories below are about THAT area; if asked "what's interesting here" or "tell me about this place", refer to those.`
+      : null,
     nearbyPets.length ? `- lost pets nearby you could mention (dogs or cats — mention by name if natural):\n${nearbyPets.join('\n')}` : '- no active lost-pet reports in your radius',
     nearbySpots.length ? `- nearby spots you can route to via walk_to_spot (mention by name if the human asks):\n${nearbySpots.join('\n')}` : '- no spots loaded this turn',
-    nearbyLore.length ? `- places you happen to know within ~200m — drop one in only if it lands naturally for this turn, otherwise ignore:\n${nearbyLore.join('\n')}` : null,
+    nearbyLore.length
+      ? `- places you happen to know within ~250m of where the human is looking — drop one in if it lands naturally for this turn OR if they explicitly ask for something interesting / a story / what's around. otherwise ignore:\n${nearbyLore.join('\n')}`
+      : null,
   ].filter(Boolean);
   return lines.join('\n');
 }

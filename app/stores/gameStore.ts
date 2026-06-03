@@ -124,6 +124,11 @@ interface GameState {
   lastSpotsFetchPos: LatLng | null;
   spotsLoading: boolean;
   selectedSpotId: string | null;
+  // Where the human is currently LOOKING on the map (viewport centre).
+  // Set by MapView on map idle. Distinct from userPosition (GPS): used
+  // by chat for lore/lost-pet proximity so the dog comments on the
+  // area being browsed even when the user is physically elsewhere.
+  viewportCenter: LatLng | null;
   // Map-overlay visibility toggle for the spots layer. Independent of
   // whether spots are loaded into the array — the user can declutter
   // the map without losing the cached Places fetch.
@@ -202,6 +207,7 @@ interface GameState {
   toggleSniffMode: () => void;
   setAboutOpen: (open: boolean) => void;
   setSpotsCategoryFilter: (filter: 'all' | SpotCategory) => void;
+  setViewportCenter: (p: LatLng | null) => void;
   setWalkRoute: (
     route: LatLng[] | null,
     meta: { shape: 'roundtrip' | 'oneway'; spotId: string | null } | null,
@@ -273,6 +279,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   spotsVisibleBeforeSniff: null,
   aboutOpen: false,
   spotsCategoryFilter: 'all',
+  viewportCenter: null,
   walkRoute: null,
   walkRouteMeta: null,
   // Initial state is empty for today's date; refreshDailyTasks() pulls
@@ -689,6 +696,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       };
     }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
+  setViewportCenter: (viewportCenter) => set({ viewportCenter }),
   setSpotsCategoryFilter: (spotsCategoryFilter) =>
     set((s) => ({
       spotsCategoryFilter,

@@ -208,6 +208,7 @@ export const api = {
     pos: LatLng | null,
     spots: ChatNearbySpot[] | null,
     greet = false,
+    viewport: LatLng | null = null,
   ) =>
     req<{
       id: string;
@@ -223,6 +224,13 @@ export const api = {
         lat: pos?.lat,
         lng: pos?.lng,
         spots: spots ?? undefined,
+        // Where the human is LOOKING on the map (viewport centre),
+        // not where they're standing. Server uses this for lore +
+        // lost-pet proximity so the dog can talk about Podil when
+        // you've panned to Podil from Pechersk. Falls back to GPS
+        // server-side when null.
+        vLat: viewport?.lat,
+        vLng: viewport?.lng,
       }),
     }),
 

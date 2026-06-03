@@ -178,6 +178,7 @@ export default function MapViewWeb() {
   const setUserPosition = useGameStore((s) => s.setUserPosition);
   const syncMap = useGameStore((s) => s.syncMap);
   const syncSpots = useGameStore((s) => s.syncSpots);
+  const setViewportCenter = useGameStore((s) => s.setViewportCenter);
   const collectPath = useGameStore((s) => s.collectPath);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const activeQuest = useGameStore((s) => s.activeQuest);
@@ -370,6 +371,7 @@ export default function MapViewWeb() {
       lat: (mapBounds.n + mapBounds.s) / 2,
       lng: (mapBounds.e + mapBounds.w) / 2,
     };
+    setViewportCenter(center);
     syncSpots(center);
   }, [
     isFocused,
@@ -377,6 +379,7 @@ export default function MapViewWeb() {
     mapBounds?.s,
     mapBounds?.e,
     mapBounds?.w,
+    setViewportCenter,
     syncSpots,
   ]);
 

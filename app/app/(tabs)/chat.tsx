@@ -185,7 +185,13 @@ export default function ChatScreen() {
         setMessages(history);
         if (history.length === 0) {
           setTyping(true);
-          const res = await api.sendChat('', userPosition, buildSpotsPayload(), true);
+          const res = await api.sendChat(
+            '',
+            userPosition,
+            buildSpotsPayload(),
+            true,
+            useGameStore.getState().viewportCenter,
+          );
           if (cancelled) return;
           setMessages([
             {
@@ -227,7 +233,13 @@ export default function ChatScreen() {
     setSending(true);
     setTyping(true);
     try {
-      const res = await api.sendChat(t, userPosition, buildSpotsPayload());
+      const res = await api.sendChat(
+        t,
+        userPosition,
+        buildSpotsPayload(),
+        false,
+        useGameStore.getState().viewportCenter,
+      );
       setMessages((m) => [
         ...m,
         {
