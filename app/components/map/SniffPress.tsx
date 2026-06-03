@@ -332,7 +332,7 @@ export function SniffPress() {
   }
   if (!discovered) return null;
   return (
-    <MapLibreMarker position={discovered.position} anchor="bottom">
+    <MapLibreMarker position={discovered.position} anchor="bottom" zIndex={70}>
       <div
         style={{
           display: 'flex',
@@ -412,7 +412,7 @@ function SniffingBubble({ position }: { position: LatLng }) {
     return () => clearInterval(t);
   }, []);
   return (
-    <MapLibreMarker position={position} anchor="bottom">
+    <MapLibreMarker position={position} anchor="bottom" zIndex={70}>
       <div
         style={{
           display: 'flex',
