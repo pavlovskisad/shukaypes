@@ -473,14 +473,18 @@ export default function MapViewWeb() {
     return () => clearInterval(id);
   }, [isFocused, eatFood]);
 
-  // MapLibre viewport restriction: a 10x10km box around central Kyiv
-  // matching the prior Google `restriction.latLngBounds`. ±0.045° lat
-  // / ±0.07° lng covers Podil, Pechersk, Lukianivka, Solomianka,
-  // Vynohradar. Outside the pilot geography we'll swap to a per-user
-  // anchor.
+  // MapLibre viewport restriction. Was a tight 10×10 km box around
+  // central Kyiv that cut off the left bank (Троєщина, Воскресенка,
+  // Дарниця, Лівобережна) and outer right-bank districts (Виноградар,
+  // Троєщина). Widened to a generous Kyiv-wide envelope with a comfy
+  // padding so we don't accidentally clip something. ~38 km E-W, ~36
+  // km N-S — covers everything between Vynohradar and Troieshchyna
+  // and from the southern industrial belt up past Obolon, plus a
+  // small ring of "outside the city" buffer so panning to a periphery
+  // address never bumps a wall.
   const MAP_MAX_BOUNDS: [[number, number], [number, number]] = [
-    [30.4534, 50.4051],
-    [30.5934, 50.4951],
+    [30.28, 50.30],
+    [30.85, 50.62],
   ];
   // Paper-tooth overlay URL. Light + dark variants exist; we pick the
   // active one from sniffMode below.
