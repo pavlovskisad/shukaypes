@@ -7,17 +7,20 @@
 //   - User-area gate: requires the user to have moved
 //     `userAreaMovementThresholdM` meters since the last topup, OR
 //     `userAreaCooldownMs` to have elapsed. Either condition opens
-//     the gate.
-//   - Keyed gate: simple time-based lock for a per-pool key (a park,
-//     a dog zone, etc). Used by parks + dog zones where movement
-//     isn't the right signal — the pool is anchored to a fixed point,
-//     not the walker.
+//     the gate. Wrapped in a tiny race-lock so two syncs landing in
+//     the same millisecond don't both pass the check.
+//   - Per-pool gate (park paws, park bones, dog zones): simple
+//     time-based lock. Implemented as ATOMIC `SET NX EX` — the gate
+//     state and the "I am claiming this round" write are one Redis
+//     call, so parallel syncs can't both pass. Closes the race that
+//     was causing 2-3× token piles at parks and dog zones.
 
 import { redis } from '../db/redis.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
 
 const TTL_S = 24 * 60 * 60;
+const USER_AREA_LOCK_TTL_S = 2;
 
 interface UserAreaRecord {
   at: number;
@@ -27,6 +30,9 @@ interface UserAreaRecord {
 
 function userAreaKey(userId: string): string {
   return `topup:user-area:${userId}`;
+}
+function userAreaLockKey(userId: string): string {
+  return `lock:topup:user-area:${userId}`;
 }
 
 // Stable-string key for a per-pool cooldown. Lat/lng come as floats
@@ -50,6 +56,18 @@ function poolKey(userId: string, kind: string, anchor: LatLng | string): string 
 export async function shouldTopupUserArea(userId: string, pos: LatLng): Promise<boolean> {
   try {
     if (redis.status !== 'ready') return true;
+    // Race lock — if another sync is currently inside this branch we
+    // return false so we don't both pass the check and both spawn.
+    // 2-second TTL is well above any single syncMap latency and
+    // expires on its own if the holder crashes mid-topup.
+    const lock = await redis.set(
+      userAreaLockKey(userId),
+      '1',
+      'EX',
+      USER_AREA_LOCK_TTL_S,
+      'NX',
+    );
+    if (lock !== 'OK') return false;
     const raw = await redis.get(userAreaKey(userId));
     if (!raw) return true; // first sync — bootstrap.
     const rec = JSON.parse(raw) as UserAreaRecord;
@@ -72,51 +90,43 @@ export async function noteUserAreaTopup(userId: string, pos: LatLng): Promise<vo
   }
 }
 
-// Generic time-based gate for a (userId, kind, anchor) pool. Returns
-// true if no record OR the record is older than `poolCooldownMs`.
-async function shouldTopupKeyed(
+// Atomic acquire-and-claim for a (userId, kind, anchor) pool topup.
+// Returns true if THIS caller wins the topup round (and therefore
+// should spawn); false if another sync already claimed it. The SET
+// NX EX is one Redis call — no GET-then-SET window for a concurrent
+// caller to slip through.
+async function acquirePoolTopup(
   userId: string,
   kind: string,
   anchor: LatLng | string,
 ): Promise<boolean> {
   try {
     if (redis.status !== 'ready') return true;
-    const raw = await redis.get(poolKey(userId, kind, anchor));
-    if (!raw) return true;
-    const at = Number(raw);
-    if (!Number.isFinite(at)) return true;
-    return Date.now() - at >= balance.poolCooldownMs;
+    const cooldownS = Math.max(1, Math.ceil(balance.poolCooldownMs / 1000));
+    const res = await redis.set(
+      poolKey(userId, kind, anchor),
+      String(Date.now()),
+      'EX',
+      cooldownS,
+      'NX',
+    );
+    return res === 'OK';
   } catch {
     return true;
   }
 }
 
-async function noteKeyedTopup(
-  userId: string,
-  kind: string,
-  anchor: LatLng | string,
-): Promise<void> {
-  try {
-    if (redis.status !== 'ready') return;
-    await redis.set(poolKey(userId, kind, anchor), String(Date.now()), 'EX', TTL_S);
-  } catch {
-    /* best-effort */
-  }
-}
-
 export const parkPawsGate = {
-  shouldTopup: (userId: string, anchor: LatLng) =>
-    shouldTopupKeyed(userId, 'park-paws', anchor),
-  note: (userId: string, anchor: LatLng) => noteKeyedTopup(userId, 'park-paws', anchor),
+  acquire: (userId: string, anchor: LatLng) =>
+    acquirePoolTopup(userId, 'park-paws', anchor),
 };
 
 export const parkBonesGate = {
-  shouldTopup: (userId: string, anchor: LatLng) =>
-    shouldTopupKeyed(userId, 'park-bones', anchor),
-  note: (userId: string, anchor: LatLng) => noteKeyedTopup(userId, 'park-bones', anchor),
+  acquire: (userId: string, anchor: LatLng) =>
+    acquirePoolTopup(userId, 'park-bones', anchor),
 };
 
 export const dogZoneGate = {
-  shouldTopup: (userId: string, dogId: string) => shouldTopupKeyed(userId, 'dog-zone', dogId),
-  note: (userId: string, dogId: string) => noteKeyedTopup(userId, 'dog-zone', dogId),
+  acquire: (userId: string, dogId: string) =>
+    acquirePoolTopup(userId, 'dog-zone', dogId),
 };

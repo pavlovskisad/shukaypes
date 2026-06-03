@@ -149,7 +149,7 @@ export async function ensureTokensForUser(
     );
 
   for (const d of nearbyDogs) {
-    if (!(await dogZoneGate.shouldTopup(userId, d.id))) continue;
+    if (!(await dogZoneGate.acquire(userId, d.id))) continue;
     const dogPos = { lat: d.lat, lng: d.lng };
     const zoneDistExpr = haversineSql(dogPos, schema.tokens.lat, schema.tokens.lng);
     const zoneRows = await db
@@ -163,7 +163,6 @@ export async function ensureTokensForUser(
         ),
       );
     const zoneLive = zoneRows[0]?.live ?? 0;
-    await dogZoneGate.note(userId, d.id);
     if (zoneLive >= balance.tokensPerDogArea) continue;
     const missing = balance.tokensPerDogArea - zoneLive;
     const positions = scatterInRadius(dogPos, missing, d.zoneRadiusM);
@@ -177,7 +176,7 @@ export async function ensureTokensForUser(
   // the gap. Skipped if the client hasn't passed parks yet (first
   // sync before Places loads).
   for (const park of parks) {
-    if (!(await parkPawsGate.shouldTopup(userId, park))) continue;
+    if (!(await parkPawsGate.acquire(userId, park))) continue;
     const parkDistExpr = haversineSql(park, schema.tokens.lat, schema.tokens.lng);
     const parkRows = await db
       .select({ live: sql<number>`count(*)::int` })
@@ -195,7 +194,6 @@ export async function ensureTokensForUser(
         ),
       );
     const parkLive = parkRows[0]?.live ?? 0;
-    await parkPawsGate.note(userId, park);
     if (parkLive >= balance.tokensPerPark) continue;
     const missing = balance.tokensPerPark - parkLive;
     const positions = scatterInRadius(park, missing, balance.parkPawRadiusM);
@@ -229,7 +227,7 @@ export async function ensureFoodForUser(
   // the paws-per-pet pattern — places earn bones, not random streets.
   if (parks.length) {
     for (const park of parks) {
-      if (!(await parkBonesGate.shouldTopup(userId, park))) continue;
+      if (!(await parkBonesGate.acquire(userId, park))) continue;
       const distExpr = haversineSql(park, schema.foodItems.lat, schema.foodItems.lng);
       const zoneRows = await db
         .select({ live: sql<number>`count(*)::int` })
@@ -246,7 +244,6 @@ export async function ensureFoodForUser(
           ),
         );
       const zoneLive = zoneRows[0]?.live ?? 0;
-      await parkBonesGate.note(userId, park);
       if (zoneLive >= balance.bonesPerPark) continue;
       const missing = balance.bonesPerPark - zoneLive;
       const positions = scatterInRadius(park, missing, balance.parkScatterRadiusM);
