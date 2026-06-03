@@ -189,6 +189,15 @@ export function SniffPress() {
         if (lore) {
           excludeRef.current.add(lore.id);
           setDiscovered(lore);
+          // Ease the map so the surfaced place lands in the centre of
+          // the visible area — padding clears the HUD pills + tab bar
+          // so the story bubble isn't sitting under an overlay. Same
+          // tween shape as the walk-route / quest fits for consistency.
+          map.easeTo({
+            center: [lore.position.lng, lore.position.lat],
+            padding: { top: 110, bottom: 200, left: 40, right: 40 },
+            duration: 600,
+          });
         } else {
           // Nothing within range — give a tiny prompt so the gesture
           // doesn't read as broken.
