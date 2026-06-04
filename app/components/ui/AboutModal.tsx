@@ -27,37 +27,47 @@ const ROWS: Row[] = [
   {
     iconName: 'urgent',
     title: 'lost pets',
-    body: 'red glow on the map = real missing dogs and cats from olx, telegram, facebook. tap one → start a search → i guide you through 3 waypoints. earn pts when we finish.',
+    body: 'red glow = real missing pets, scraped daily from olx. tap one → start a search → i walk you through three waypoints around their last-seen zone. finishing earns points.',
   },
   {
     iconName: 'eyes',
     title: "i've seen them",
-    body: 'spotted a missing pet in real life? open them and tap the button — updates the search zone for everyone hunting.',
+    body: 'spotted a missing pet for real? open the pet, tap the sighting button — moves the search zone for everyone else hunting.',
+  },
+  {
+    iconName: 'search',
+    title: 'sniff mode',
+    body: 'tap the sun-to-moon icon top-left. map dims, every lost pet within ~5 km bubbles up as a chip on the screen edge with a photo + distance. tap a chip to bookmark and walk over.',
+  },
+  {
+    iconName: 'meet',
+    title: 'press + hold the map',
+    body: "press anywhere on the bare map and hold ~2 seconds. i sniff the area and pull up a kyiv place i know with a short story. 'let's go here' plots a walk. press again — another place. each session i remember what we already saw.",
   },
   {
     iconName: 'paws',
     title: 'paws + bones',
-    body: 'i like to eat these. paws scatter near you, bones cluster in parks. fills my hunger meter — keeps me happy on the walk.',
+    body: "paws scatter near you and along trails, bones drop near parks. i pick them up as we walk past — fills my hunger meter and keeps me happy on the walk.",
   },
   {
     iconName: 'sun',
     title: 'mood + meters',
-    body: 'top-left pills show happiness, hunger, paws collected, plus a pin toggle to hide the cafe pins when the map gets busy.',
+    body: 'top-left pills show happiness (sun), hunger (bone), and paws collected. they tick down slowly, so it pays to keep moving.',
   },
   {
     iconName: 'task',
     title: 'daily tasks',
-    body: 'small loops — collect paws, check on pets, visit a spot. resets every day so there is always a reason to come back.',
+    body: 'small loops — collect paws, check on pets, visit a spot, report a sighting — refresh every day. always a small reason to come back.',
   },
   {
     iconName: 'chat',
     title: 'chat',
-    body: 'talk to me about anything. i sniff out other dogs nearby (yes, really), know vet + health stuff when something feels off, help when you need a hand fast, and remember every walk we share.',
+    body: "talk to me about anything. i know your area, lost pets nearby, kyiv stories about wherever you pan the map, and vet/safety basics when something feels off. i remember every walk we share.",
   },
   {
     iconName: 'pin',
     title: 'spots',
-    body: 'cafés, vets, pet stores, parks near you. tap one → "walk here" plots the route. great when i need to stretch my legs.',
+    body: "cafés, restaurants, bars, vets, pet stores nearby. tap one → 'walk here' plots a route. roundtrip option brings you back where you started.",
   },
   {
     iconName: 'house',
@@ -172,9 +182,9 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             *sniff sniff*
           </div>
           <div style={{ fontSize: 14, color: '#444', marginTop: 6, lineHeight: 1.45 }}>
-            привіт! i'm <strong>шукайпес</strong> — your companion for finding lost pets in
-            kyiv and having good times. we walk, we sniff, we help bring animals home.
-            here's what's on the map:
+            привіт! i'm <strong>шукайпес</strong> — your kyiv walking companion. we
+            sniff out lost pets, learn the city, collect paws together. here's what
+            lives on the map:
           </div>
         </div>
 
