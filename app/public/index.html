@@ -33,19 +33,6 @@
       crossorigin
     />
 
-    <!-- DIAGNOSTIC: Pixelify Sans (Google Fonts) — pixel-art font with
-         full Cyrillic. Swapped in temporarily so we can see definitively
-         whether the SYSTEM_FONT cascade reaches every component. If
-         this loads visibly, the wiring is fine and the Annex TTF was
-         the only thing failing. Preconnect first so the CSS request
-         doesn't pay the TLS handshake separately. -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;700&subset=cyrillic,cyrillic-ext,latin,latin-ext&display=swap"
-      rel="stylesheet"
-    />
-
     <!-- iOS PWA: apple-touch-icon is what shows on the home screen,
          the apple-mobile-web-app meta block makes the launched site
          behave like a standalone app (no browser chrome). -->
@@ -117,7 +104,7 @@
         /* Brand font applies app-wide so any RN <Text> without an
            explicit fontFamily style still inherits Annex Regular
            instead of dropping back to the browser default serif. */
-        font-family: 'Pixelify Sans', 'Annex Regular', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        font-family: 'Annex Regular', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
       }
       /* These styles make the root element full-height */
       #root {
