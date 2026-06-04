@@ -41,12 +41,14 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
           width: 54,
           height: 54,
           borderRadius: 27,
-          background: 'rgba(255,255,255,0.85)',
+          background: '#ffffff',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
           fontSize: 24,
-          boxShadow: '0 0 14px rgba(60,120,255,0.32), 0 3px 8px rgba(0,0,0,0.08)',
+          // Subtle natural drop shadow (no blue glow) — same shape as
+          // PoiMarker so single + cluster read as the same family.
+          boxShadow: '0 2px 8px rgba(0,0,0,0.14), 0 1px 2px rgba(0,0,0,0.08)',
           cursor: 'pointer',
           userSelect: 'none',
         }}

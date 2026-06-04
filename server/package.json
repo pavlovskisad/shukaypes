@@ -13,7 +13,8 @@
     "db:migrate": "tsx src/db/migrate.ts",
     "db:studio": "drizzle-kit studio",
     "db:seed-dogs": "tsx src/db/seed-dogs.ts",
-    "seed:lore": "tsx src/db/seed-lore.ts"
+    "seed:lore": "tsx src/db/seed-lore.ts",
+    "backfill:landmarks": "tsx src/db/backfill-landmark-jitter.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

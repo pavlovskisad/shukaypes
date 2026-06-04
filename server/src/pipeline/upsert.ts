@@ -11,6 +11,7 @@ import { and, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import type { IngestAction, IngestResult, ParsedDog } from './types.js';
+import { findLandmark, jitterAround } from './landmarks.js';
 
 const DEDUPE_RADIUS_M = 1500;
 const DEDUPE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
@@ -128,8 +129,14 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
         photoUrl: parsed.photoUrl ?? undefined,
       };
       if (!coordDriftSmall) {
-        updateFields.lastSeenLat = parsed.lastSeenLat;
-        updateFields.lastSeenLng = parsed.lastSeenLng;
+        // Same landmark-jitter the insert path uses, seeded by the
+        // existing id so the dog stays at the same scattered point.
+        const lm = findLandmark(parsed.lastSeenLat, parsed.lastSeenLng);
+        const pin = lm
+          ? jitterAround(parsed.lastSeenLat, parsed.lastSeenLng, match.id, 120)
+          : { lat: parsed.lastSeenLat, lng: parsed.lastSeenLng };
+        updateFields.lastSeenLat = pin.lat;
+        updateFields.lastSeenLng = pin.lng;
       }
       await db
         .update(schema.lostDogs)
@@ -143,6 +150,15 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
 
   // Fresh dog.
   const id = `${sourceSlug(source)}-${nanoid(10)}`;
+  // If the parser landed on one of the ~30 landmark coords (its
+  // "good enough" geocoding for posts that don't mention an exact
+  // street), jitter the pin ~120 m around the landmark so multiple
+  // landmark-matched pets spread out instead of stacking on the
+  // pixel. Seeded by the row id so re-upserts keep the same point.
+  const landmark = findLandmark(parsed.lastSeenLat, parsed.lastSeenLng);
+  const pin = landmark
+    ? jitterAround(parsed.lastSeenLat, parsed.lastSeenLng, id, 120)
+    : { lat: parsed.lastSeenLat, lng: parsed.lastSeenLng };
   await db.insert(schema.lostDogs).values({
     id,
     name: parsed.name,
@@ -150,8 +166,8 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
     breed: parsed.breed,
     emoji: parsed.emoji,
     photoUrl: parsed.photoUrl ?? null,
-    lastSeenLat: parsed.lastSeenLat,
-    lastSeenLng: parsed.lastSeenLng,
+    lastSeenLat: pin.lat,
+    lastSeenLng: pin.lng,
     lastSeenAt,
     lastSeenDescription: parsed.lastSeenDescription,
     urgency: parsed.urgency,

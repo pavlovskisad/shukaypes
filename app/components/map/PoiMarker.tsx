@@ -42,18 +42,17 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
             width: 44,
             height: 44,
             borderRadius: '50%',
-            // No backdrop-filter — with 5-20 spots visible, each blur
-            // pass was re-running on every map frame and was the main
-            // reason scrolling felt heavy. Plain rgba bg reads as glass
-            // against the greyscale map without the GPU cost.
-            background: 'rgba(255,255,255,0.2)',
+            // Solid white disc (not semi-transparent glass) so the
+            // marker reads cleanly against the soft pastel map. Subtle
+            // natural drop shadow instead of the blue glow.
+            background: '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: 22,
             boxShadow: selected
-              ? '0 0 18px rgba(60,120,255,0.45), 0 3px 8px rgba(0,0,0,0.08)'
-              : '0 0 10px rgba(60,120,255,0.22), 0 2px 6px rgba(0,0,0,0.05)',
+              ? '0 3px 10px rgba(0,0,0,0.18), 0 1px 2px rgba(0,0,0,0.10)'
+              : '0 2px 6px rgba(0,0,0,0.12), 0 1px 1px rgba(0,0,0,0.06)',
           }}
         >
           {slot ? <Icon name={slot} size={28} /> : emoji}
