@@ -19,60 +19,60 @@ interface Row {
   body: string;
 }
 
-// Quick orientation written from шукайпес's voice — sniff sounds, short
-// lowercase lines, one row per surface so a first-time visitor can scan
-// what's on the map without reading prose. Triggered from the top-left
+// Quick orientation written from шукайпес's voice — sensory + warm,
+// not "feature → benefit." Reads like a dog giving a friend a quick
+// tour of the map, one row per surface. Triggered from the top-left
 // logo tap; mirrors the LostDogModal/SpotModal slide-up family.
 const ROWS: Row[] = [
   {
     iconName: 'urgent',
     title: 'lost pets',
-    body: 'red glow = real missing pets, scraped daily from olx. tap one → start a search → i walk you through three waypoints around their last-seen zone. finishing earns points.',
+    body: "the ones with the red glow — somebody's missing them right now. tap one and we go look. i sniff out three spots near where they were last seen, you walk, i wag, we find.",
   },
   {
     iconName: 'eyes',
-    title: "i've seen them",
-    body: 'spotted a missing pet for real? open the pet, tap the sighting button — moves the search zone for everyone else hunting.',
+    title: "if you spot one",
+    body: "if you actually see one of these pets out in real life — open their photo and tell me. i'll let everyone else looking know where to look next. that's a real one for the books.",
   },
   {
     iconName: 'search',
     title: 'sniff mode',
-    body: 'tap the sun-to-moon icon top-left. map dims, every lost pet within ~5 km bubbles up as a chip on the screen edge with a photo + distance. tap a chip to bookmark and walk over.',
+    body: 'tap the little moon up top-left when you want to focus. the streets dim down and every missing pet within walking range pops up around the edges of the screen. tap a photo and we head that way.',
   },
   {
     iconName: 'meet',
     title: 'press + hold the map',
-    body: "press anywhere on the bare map and hold ~2 seconds. i sniff the area and pull up a kyiv place i know with a short story. 'let's go here' plots a walk. press again — another place. each session i remember what we already saw.",
+    body: "hold your finger on the map anywhere, count to two — i'll sniff around and tell you about a place i know there. some old monument, a courtyard with a story, a corner with a secret. tap again somewhere else for another one.",
   },
   {
     iconName: 'paws',
     title: 'paws + bones',
-    body: "paws scatter near you and along trails, bones drop near parks. i pick them up as we walk past — fills my hunger meter and keeps me happy on the walk.",
+    body: 'little paws and bones along the way — i scoop them up as we pass. paws turn up around the neighborhood, bones rest near the parks. they keep me fed and bouncy.',
   },
   {
     iconName: 'sun',
-    title: 'mood + meters',
-    body: 'top-left pills show happiness (sun), hunger (bone), and paws collected. they tick down slowly, so it pays to keep moving.',
+    title: 'how i feel',
+    body: "the sun up top is how happy i am. the bone is how hungry. the little paw print is what we've picked up together so far. walks fill them up, sitting still lets them drift down — so let's keep going.",
   },
   {
     iconName: 'task',
-    title: 'daily tasks',
-    body: 'small loops — collect paws, check on pets, visit a spot, report a sighting — refresh every day. always a small reason to come back.',
+    title: 'today',
+    body: "small things to do each day — a few paws, a pet to check on, a place to visit. nothing serious. just a little reason to take me out tomorrow too.",
   },
   {
     iconName: 'chat',
-    title: 'chat',
-    body: "talk to me about anything. i know your area, lost pets nearby, kyiv stories about wherever you pan the map, and vet/safety basics when something feels off. i remember every walk we share.",
+    title: 'talk to me',
+    body: "anytime. i know the streets we walk, the pets nearby waiting to be found, and the old stories kyiv keeps under its windows. if you ever worry about your dog or cat, i know enough to help. and i remember every walk.",
   },
   {
     iconName: 'pin',
-    title: 'spots',
-    body: "cafés, restaurants, bars, vets, pet stores nearby. tap one → 'walk here' plots a route. roundtrip option brings you back where you started.",
+    title: 'places to stop',
+    body: "coffee, food, a drink, vets, pet shops. tap any one and we'll walk there together. ask for a round trip if you want me to bring you home after.",
   },
   {
     iconName: 'house',
-    title: 'home',
-    body: 'your stats. distance walked, paws collected, pets searched, my level + xp.',
+    title: "where we keep things",
+    body: "all our walks add up here. how far we went, how many paws we found, how many pets we've helped. we level up together, you and me.",
   },
 ];
 
@@ -182,9 +182,9 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             *sniff sniff*
           </div>
           <div style={{ fontSize: 14, color: '#444', marginTop: 6, lineHeight: 1.45 }}>
-            привіт! i'm <strong>шукайпес</strong> — your kyiv walking companion. we
-            sniff out lost pets, learn the city, collect paws together. here's what
-            lives on the map:
+            привіт. i'm <strong>шукайпес</strong>. we walk kyiv together — look for
+            lost pets, learn the streets, find a few paws on the way. here's
+            everything you'll see on the map:
           </div>
         </div>
 
