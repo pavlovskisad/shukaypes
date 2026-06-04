@@ -22,6 +22,17 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#ffffff" />
 
+    <!-- Preload the brand font alongside the HTML so the browser
+         starts fetching before CSS parses @font-face. crossorigin is
+         required by the spec for font preloads even on same-origin. -->
+    <link
+      rel="preload"
+      href="/fonts/Annex-Regular/Annex-Regular.woff2?v=3"
+      as="font"
+      type="font/woff2"
+      crossorigin
+    />
+
     <!-- iOS PWA: apple-touch-icon is what shows on the home screen,
          the apple-mobile-web-app meta block makes the launched site
          behave like a standalone app (no browser chrome). -->
@@ -39,22 +50,17 @@
     <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element -->
     <style id="expo-reset">
       /* Brand font for all UI chrome (HUD, bubbles, modals, tabs).
-         font-display: swap lets the system font render first then
-         hot-swaps to Annex Regular when it lands — avoids the FOIT
-         blink on cold load. Single weight: the file is a static
-         TTF, not a variable font, so declaring a weight RANGE
-         (100 900) breaks the @font-face in Safari and falls the
-         whole thing back to system. The browser still synthesises
-         bold/600/etc. from this single face. The ?v=2 query string
-         busts any CDN / iOS Safari cache that latched onto the
-         earlier broken response; bump it again on any future face
-         swap. format() hint dropped — some browsers refuse the
-         face when the served Content-Type doesn't match the hint
-         exactly, and Vercel's auto-detected font/ttf differs from
-         the spec's expected font/truetype on some clients. */
+         WOFF2 first — it's the format iOS Safari prefers and the
+         only one where it reliably ignores Content-Type mismatches.
+         TTF stays as fallback for ancient browsers. ?v=3 busts any
+         stuck CDN / Safari font cache from the earlier broken
+         declarations (variable weight range, no format hint).
+         font-display: swap so the system stack renders first, then
+         the browser swaps once Annex lands. */
       @font-face {
         font-family: 'Annex Regular';
-        src: url('/fonts/Annex-Regular/Annex-Regular.ttf?v=2');
+        src: url('/fonts/Annex-Regular/Annex-Regular.woff2?v=3') format('woff2'),
+             url('/fonts/Annex-Regular/Annex-Regular.ttf?v=3') format('truetype');
         font-weight: normal;
         font-style: normal;
         font-display: swap;
