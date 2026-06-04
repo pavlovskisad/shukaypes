@@ -59,20 +59,22 @@ export const LANDMARKS: Landmark[] = [
   { name: 'Hydropark / Гідропарк',       lat: 50.4461, lng: 30.5736 },
 ];
 
-// Exact-equality on float coords is fine — the parser outputs these
-// constants verbatim, and we apply the jitter BEFORE they get stored,
-// so a re-upsert would no longer match. The epsilon guards against
-// rounding drift across JSON serialisation roundtrips.
-const COORD_EPS = 1e-5;
+// Match radius for "this coord is a landmark." Loose enough to catch
+// small LLM precision drift (Sonnet/Haiku sometimes emit 50.4502
+// instead of the listed 50.4503) but tight enough that a real "I
+// found her at Хрещатик 14" doesn't accidentally get bucketed as a
+// fallback. 20 m is well below any meaningful Kyiv geography.
+const MATCH_RADIUS_M = 20;
+
+function metersBetween(a: Landmark, lat: number, lng: number): number {
+  const dLat = (lat - a.lat) * 111320;
+  const dLng = (lng - a.lng) * 111320 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.sqrt(dLat * dLat + dLng * dLng);
+}
 
 export function findLandmark(lat: number, lng: number): Landmark | null {
   for (const l of LANDMARKS) {
-    if (
-      Math.abs(l.lat - lat) < COORD_EPS &&
-      Math.abs(l.lng - lng) < COORD_EPS
-    ) {
-      return l;
-    }
+    if (metersBetween(l, lat, lng) < MATCH_RADIUS_M) return l;
   }
   return null;
 }
