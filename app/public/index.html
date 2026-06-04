@@ -41,13 +41,15 @@
       /* Brand font for all UI chrome (HUD, bubbles, modals, tabs).
          font-display: swap lets the system font render first then
          hot-swaps to Annex Regular when it lands — avoids the FOIT
-         blink on cold load. font-weight 100 900 lets the single
-         face cover any RN fontWeight without us having to ship a
-         separate file per weight. */
+         blink on cold load. Single weight: the file is a static
+         TTF, not a variable font, so declaring a weight RANGE
+         (100 900) breaks the @font-face in Safari and falls the
+         whole thing back to system. The browser still synthesises
+         bold/600/etc. from this single face. */
       @font-face {
         font-family: 'Annex Regular';
         src: url('/fonts/Annex-Regular/Annex-Regular.ttf') format('truetype');
-        font-weight: 100 900;
+        font-weight: normal;
         font-style: normal;
         font-display: swap;
       }
