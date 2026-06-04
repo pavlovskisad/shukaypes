@@ -1,9 +1,11 @@
-// Brand font for the whole UI. Annex Regular is loaded via @font-face
-// in app/public/index.html with font-display: swap, so the system
-// stack acts as the fallback during the brief window before the TTF
-// lands. Same face for heading + body — weight/size does hierarchy.
+// DIAGNOSTIC: leading with 'Pixelify Sans' (loaded via Google Fonts in
+// index.html) so we can definitively see whether the UI font cascade
+// actually reaches every component. Pixel-art look — if it shows up
+// anywhere, that surface is fed by SYSTEM_FONT / VOICE / body inherit
+// correctly. If a surface still looks like SF Pro, that's a real bug
+// to chase. Revert to 'Annex Regular' once the diagnosis is done.
 const SYSTEM =
-  "'Annex Regular', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
+  "'Pixelify Sans', 'Annex Regular', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif";
 
 export const fonts = {
   heading: SYSTEM,
