@@ -27,52 +27,52 @@ const ROWS: Row[] = [
   {
     iconName: 'urgent',
     title: 'lost pets',
-    body: "the ones with the red glow — somebody's missing them right now. tap one and we go look. i sniff out three spots near where they were last seen, you walk, i wag, we find.",
+    body: "the ones with the red glow are missing right now — somebody's heart is heavy. tap one and i'll lead you to three spots where they might be hiding. ears up, nose down, off we go.",
   },
   {
     iconName: 'eyes',
     title: "if you spot one",
-    body: "if you actually see one of these pets out in real life — open their photo and tell me. i'll let everyone else looking know where to look next. that's a real one for the books.",
+    body: "see one of these pets out there for real?! open their photo and tap the eye — i'll bark the news to everyone else looking. *full body wag*",
   },
   {
     iconName: 'search',
     title: 'sniff mode',
-    body: 'tap the little moon up top-left when you want to focus. the streets dim down and every missing pet within walking range pops up around the edges of the screen. tap a photo and we head that way.',
+    body: "tap the little moon up top-left — i slip into hunting mode. the streets dim, my nose lifts, and every pet within walking distance peeks at you from the edges of the screen. tap one and we're off.",
   },
   {
     iconName: 'meet',
     title: 'press + hold the map',
-    body: "hold your finger on the map anywhere, count to two — i'll sniff around and tell you about a place i know there. some old monument, a courtyard with a story, a corner with a secret. tap again somewhere else for another one.",
+    body: "press anywhere on the map and hold — close your eyes for two seconds, i'm sniffing. i'll tell you about an old stone, a courtyard with a secret, a corner with a story. press somewhere else for another one.",
   },
   {
     iconName: 'paws',
     title: 'paws + bones',
-    body: 'little paws and bones along the way — i scoop them up as we pass. paws turn up around the neighborhood, bones rest near the parks. they keep me fed and bouncy.',
+    body: "little paws scattered around our streets, bones tucked near parks. i scoop them up as we pass — fills my belly, fluffs my tail, keeps me bouncing alongside you.",
   },
   {
     iconName: 'sun',
     title: 'how i feel',
-    body: "the sun up top is how happy i am. the bone is how hungry. the little paw print is what we've picked up together so far. walks fill them up, sitting still lets them drift down — so let's keep going.",
+    body: "the sun up top is how happy i am. the bone is how hungry. the paw print is how many we've gathered together. walking fills them all up — sitting too long, *tail droops*. so let's go.",
   },
   {
     iconName: 'task',
     title: 'today',
-    body: "small things to do each day — a few paws, a pet to check on, a place to visit. nothing serious. just a little reason to take me out tomorrow too.",
+    body: "tiny things to chew through each day — find some paws, peek at a pet, visit a place. nothing big. just enough reason to take me out again tomorrow. *eager wag*",
   },
   {
     iconName: 'chat',
     title: 'talk to me',
-    body: "anytime. i know the streets we walk, the pets nearby waiting to be found, and the old stories kyiv keeps under its windows. if you ever worry about your dog or cat, i know enough to help. and i remember every walk.",
+    body: "anytime. i know our streets, the pets nearby waiting to be found, the old stories kyiv keeps under its windows. worried about your dog or cat? i know enough to help. and i remember every walk we've taken — every single one.",
   },
   {
     iconName: 'pin',
     title: 'places to stop',
-    body: "coffee, food, a drink, vets, pet shops. tap any one and we'll walk there together. ask for a round trip if you want me to bring you home after.",
+    body: "coffee, food, a drink, vets, pet shops. tap any one and we'll trot over together. ask for a round trip and i'll bring you home after — promise.",
   },
   {
     iconName: 'house',
     title: "where we keep things",
-    body: "all our walks add up here. how far we went, how many paws we found, how many pets we've helped. we level up together, you and me.",
+    body: "all our walks gather here. how far we've gone, how many paws collected, how many pets we've helped find. we level up together, you and me. paw in hand.",
   },
 ];
 
@@ -182,9 +182,8 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             *sniff sniff*
           </div>
           <div style={{ fontSize: 14, color: '#444', marginTop: 6, lineHeight: 1.45 }}>
-            привіт. i'm <strong>шукайпес</strong>. we walk kyiv together — look for
-            lost pets, learn the streets, find a few paws on the way. here's
-            everything you'll see on the map:
+            привіт! i'm <strong>шукайпес</strong>. we walk, we sniff, we find lost
+            pets, we learn this city paw by paw. here's what you'll see on the map:
           </div>
         </div>
 
