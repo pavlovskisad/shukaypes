@@ -45,10 +45,16 @@
          TTF, not a variable font, so declaring a weight RANGE
          (100 900) breaks the @font-face in Safari and falls the
          whole thing back to system. The browser still synthesises
-         bold/600/etc. from this single face. */
+         bold/600/etc. from this single face. The ?v=2 query string
+         busts any CDN / iOS Safari cache that latched onto the
+         earlier broken response; bump it again on any future face
+         swap. format() hint dropped — some browsers refuse the
+         face when the served Content-Type doesn't match the hint
+         exactly, and Vercel's auto-detected font/ttf differs from
+         the spec's expected font/truetype on some clients. */
       @font-face {
         font-family: 'Annex Regular';
-        src: url('/fonts/Annex-Regular/Annex-Regular.ttf') format('truetype');
+        src: url('/fonts/Annex-Regular/Annex-Regular.ttf?v=2');
         font-weight: normal;
         font-style: normal;
         font-display: swap;
