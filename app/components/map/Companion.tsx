@@ -118,31 +118,39 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Sprite facing + motion state, both derived from per-tick position
-  // deltas (the hook ticks every 100ms and pushes a fresh `position`
+  // deltas (the hook ticks every 300ms and pushes a fresh `position`
   // prop). The sheets are right-facing only, so a leftward dlng flips
   // via scaleX(-1) rather than a separate mirrored asset.
   //
   // Three motion levels, with thresholds tuned to the lerp speeds in
-  // useCompanion (HUNT_STEP_M=3.0/tick, IDLE_STEP_M=0.8/tick, lerp
+  // useCompanion (HUNT_STEP_M=2.0/tick, IDLE_STEP_M=0.55/tick, lerp
   // tail decelerates the last few metres of any approach):
-  //   - movedM > RUN_THRESHOLD_M: running sprite. With HUNT_STEP_M=3.0
-  //     and tail starting at D=15m, running fires only while the dog
-  //     is still >12m from its target — the actual sprint phase. Once
-  //     the lerp tail kicks in (D<12), step drops below threshold and
-  //     the sprite reads as walking. Net: running shows up for short
-  //     bursts (1-2s on a far hunt) instead of the entire approach.
+  //   - movedM > RUN_THRESHOLD_M: running sprite. Fires only while
+  //     the dog is in the initial dash phase of a hunt. Once the
+  //     lerp tail kicks in, the step drops below threshold and the
+  //     sprite reads as walking. Net: running shows up for short
+  //     bursts (1-2s on a far hunt), not the whole approach.
   //   - RUN_THRESHOLD_M ≥ movedM > WALK_THRESHOLD_M: walking sprite.
   //     Covers the lerp tail of any approach AND keeping pace with a
   //     walking user.
   //   - movedM ≤ WALK_THRESHOLD_M: sitting sprite, after a debounce
   //     so a single quiet tick mid-walk doesn't blink to sit.
-  const RUN_THRESHOLD_M = 2.4;
+  const RUN_THRESHOLD_M = 1.5;
   const WALK_THRESHOLD_M = 0.04;
   const STILL_DEBOUNCE_MS = 400;
   const [motion, setMotion] = useState<'still' | 'walking' | 'running'>('still');
   const [facingLeft, setFacingLeft] = useState(false);
   const lastPosRef = useRef<LatLng | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  // Multi-tick smoothing for the facing direction. Per-tick dLng was
+  // flickering near zero when the dog's trajectory crossed a tile
+  // boundary or a target switched 180° — sprite could face one way
+  // while the body slid the other for a frame ("running backwards"
+  // bug the user reported). Average the last 4 ticks' dLng + only
+  // flip when the smoothed value crosses a hysteresis band.
+  const FACING_WINDOW = 4;
+  const FACING_HYSTERESIS = 5e-7;
+  const recentDLngRef = useRef<number[]>([]);
   useEffect(() => {
     const last = lastPosRef.current;
     lastPosRef.current = position;
@@ -152,9 +160,24 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     else if (movedM > WALK_THRESHOLD_M) setMotion('walking');
     if (movedM > WALK_THRESHOLD_M) {
       const dLng = position.lng - last.lng;
-      if (Math.abs(dLng) > 1e-7) setFacingLeft(dLng < 0);
+      recentDLngRef.current.push(dLng);
+      if (recentDLngRef.current.length > FACING_WINDOW) {
+        recentDLngRef.current.shift();
+      }
+      const avgDLng =
+        recentDLngRef.current.reduce((a, b) => a + b, 0) /
+        recentDLngRef.current.length;
+      if (avgDLng > FACING_HYSTERESIS) setFacingLeft(false);
+      else if (avgDLng < -FACING_HYSTERESIS) setFacingLeft(true);
+      // Inside the hysteresis band → keep previous facing (don't flip
+      // on noise near zero).
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       idleTimerRef.current = setTimeout(() => setMotion('still'), STILL_DEBOUNCE_MS);
+    } else {
+      // Movement stopped — let the dLng history age out so the next
+      // motion start gets fresh samples, not stale averages from the
+      // previous burst.
+      recentDLngRef.current = [];
     }
   }, [position]);
   useEffect(() => {

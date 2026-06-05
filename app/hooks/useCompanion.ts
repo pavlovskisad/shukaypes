@@ -12,20 +12,19 @@ const HUNT_RADIUS_M = 200;
 
 // Two speed caps. Lerp shape (distance * LERP_TAIL) softens the
 // approach for both, but the cap dominates while the dog is far.
-//   HUNT_STEP_M = 3.0 → 30 m/s, real-dog full-burst sprint. Used for
-//                       chasing prey AND running back from a finished
-//                       hunt — both are "I am closing distance fast"
-//                       moments. Sized so the SPRITE running/walking
-//                       transition (RUN_THRESHOLD_M in Companion.tsx)
-//                       only fires during the initial sprint phase
-//                       and the deceleration tail reads as walking.
-//   IDLE_STEP_M = 0.8 → 8 m/s, decisive trot. Used for keeping pace
+//   HUNT_STEP_M = 2.0 → 6.7 m/s, dog jog. Used for chasing prey AND
+//                       running back from a finished hunt. Sized so
+//                       the SPRITE running/walking transition
+//                       (RUN_THRESHOLD_M in Companion.tsx) only fires
+//                       during the initial dash phase and the
+//                       deceleration tail reads as walking.
+//   IDLE_STEP_M = 0.55 → 1.8 m/s, brisk trot. Used for keeping pace
 //                       with a walking user from the orbit ring.
-// LERP_TAIL = 0.2 only kicks in inside the last ~15m for HUNT and
-// ~4m for IDLE; produces a natural deceleration that the sprite picks
+// LERP_TAIL = 0.2 only kicks in inside the last ~10m for HUNT and
+// ~3m for IDLE; produces a natural deceleration that the sprite picks
 // up as a swap from running to walking.
-const HUNT_STEP_M = 3.0;
-const IDLE_STEP_M = 0.8;
+const HUNT_STEP_M = 2.0;
+const IDLE_STEP_M = 0.55;
 const LERP_TAIL = 0.2;
 
 // Distance from the orbit "follow position" below which we stop

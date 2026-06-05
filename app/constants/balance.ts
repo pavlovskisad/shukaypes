@@ -7,7 +7,11 @@ export const balance = {
   tokenCount: 15,
   bonusPerDog: 6,
   foodCount: 8,
-  roamRadius: 0.001,
+  // Orbit radius around the walker. 0.0003° ≈ 33 m — close enough
+  // the dog reads as a companion right beside you, not a far-flung
+  // satellite. Was 0.001° ≈ 111 m which felt distant and forced the
+  // dog into constant cross-screen sprints when the user moved.
+  roamRadius: 0.0003,
   // Bumped from 100ms — that loop scans the full token list to
   // auto-collect anything within 90m of user/companion. Token list
   // grows during a session (5min expiry, but high spawn density),
@@ -16,7 +20,10 @@ export const balance = {
   // disappeared" feedback (~500ms before the delay reads as
   // sluggish). Same interval drives the quest waypoint check.
   roamTick: 300,
-  roamRadiusWobble: 0.0003,
+  // Wobble proportional to the new tighter roamRadius — keeps the
+  // orbit from feeling perfectly geometric without flinging the dog
+  // 30 m off the new ring.
+  roamRadiusWobble: 0.0001,
   roamRadiusWobblePeriod: 7000,
   autoCollectToken: 90,
   autoCollectFood: 130,
