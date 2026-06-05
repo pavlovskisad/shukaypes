@@ -1,7 +1,7 @@
 {
   "name": "шукайпес",
   "short_name": "шукайпес",
-  "description": "find lost pets in kyiv. real walks, real dogs.",
+  "description": "every walk has a purpose.",
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
