@@ -37,7 +37,7 @@ export function emojiFor(category: SpotCategory): string {
   return CATEGORY_EMOJI[category];
 }
 
-const DEFAULT_RADIUS_M = 800;
+const DEFAULT_RADIUS_M = 1400;
 const SEARCH_ENDPOINT = 'https://places.googleapis.com/v1/places:searchNearby';
 
 // Places API (New) uses the same primary-type strings as legacy for our
@@ -96,11 +96,12 @@ async function searchNearby(
 
 // Spots — cafes/restaurants/bars/pet stores/vets. Places API (New)
 // caps `searchNearby` at 20 results PER REQUEST regardless of how many
-// types you ask for, so a single call for all five categories was
-// silently returning ~20 total (4-ish each in dense Kyiv). Fan out one
-// request per type in parallel and merge — gives up to 100 total in
-// dense neighborhoods at the cost of 5x the Places calls (still
-// distance-thresholded by gameStore so a small pan is free).
+// types you ask for. To surface meaningfully more in dense areas we
+// fan out across BOTH the 5 categories AND a 2×2 sub-grid around the
+// requested centre, then dedupe by place id. Each sub-cell's circle
+// overlaps with its neighbours so we don't miss spots near the cell
+// edges. 5 categories × 4 cells = 20 calls per fetch in dense Kyiv;
+// distance threshold in gameStore still keeps small pans free.
 export async function fetchNearbySpots(
   center: LatLng,
   radiusM: number = DEFAULT_RADIUS_M,
@@ -108,19 +109,39 @@ export async function fetchNearbySpots(
   const categories = Object.keys(TYPE_FOR_CATEGORY) as SpotCategory[];
   const fieldMask =
     'places.id,places.displayName,places.location,places.rating,places.formattedAddress,places.primaryType';
-  const perCategory = await Promise.all(
-    categories.map((cat) =>
-      searchNearby(center, radiusM, [TYPE_FOR_CATEGORY[cat]], 20, fieldMask),
-    ),
-  );
+  // Half-radius offset for the 2×2 grid centres. Sub-cell radius
+  // covers half the parent area plus a generous overlap so the
+  // discs union the full target circle without gaps.
+  const halfM = radiusM * 0.5;
+  const subRadiusM = radiusM * 0.65;
+  const latPerM = 1 / 111320;
+  const lngPerM = 1 / (111320 * Math.cos((center.lat * Math.PI) / 180));
+  const offsets: Array<[number, number]> = [
+    [-halfM, -halfM],
+    [-halfM, +halfM],
+    [+halfM, -halfM],
+    [+halfM, +halfM],
+  ];
+  const subCenters: LatLng[] = offsets.map(([dy, dx]) => ({
+    lat: center.lat + dy * latPerM,
+    lng: center.lng + dx * lngPerM,
+  }));
+  const calls: Array<Promise<NewPlace[]>> = [];
+  const callMeta: SpotCategory[] = [];
+  for (const sub of subCenters) {
+    for (const cat of categories) {
+      calls.push(
+        searchNearby(sub, subRadiusM, [TYPE_FOR_CATEGORY[cat]], 20, fieldMask),
+      );
+      callMeta.push(cat);
+    }
+  }
+  const responses = await Promise.all(calls);
   const byId = new Map<string, Spot>();
-  perCategory.forEach((results, i) => {
-    const requestedCat = categories[i]!;
+  responses.forEach((results, i) => {
+    const requestedCat = callMeta[i]!;
     for (const r of results) {
       if (!r.id || !r.location) continue;
-      // Prefer the category whose request returned the place, falling
-      // back to primaryType lookup if Google's primaryType ever drifts
-      // from the included type.
       const category =
         (Object.keys(TYPE_FOR_CATEGORY) as SpotCategory[]).find(
           (c) => TYPE_FOR_CATEGORY[c] === r.primaryType,
