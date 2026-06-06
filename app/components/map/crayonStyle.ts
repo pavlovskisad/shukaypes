@@ -62,12 +62,16 @@ export const DARK_PALETTE = {
   paper: '#1a1a1a',
   crayon: '#e0e0e0',
   greyRoad: '#a8a8a8',
-  green: '#4a8c30',
-  greenDark: '#2a5e1a',
-  greenLight: '#1f4a14',
-  blue: '#1f7099',
-  blueDark: '#0c4e6f',
-  blueLight: '#356b87',
+  // Greens + blues pulled way down in saturation so sniff mode reads
+  // as a hushed low-light scene, not a stained-glass map. Each accent
+  // sits close to the paper grey with just enough hue to register —
+  // your eye should track lost-pet chips first, geography second.
+  green: '#3d5a35',
+  greenDark: '#243a20',
+  greenLight: '#2d4a28',
+  blue: '#2e4f63',
+  blueDark: '#1a3344',
+  blueLight: '#3d5566',
   // Road wobble clones — light/dark relative to greyRoad on dark bg.
   roadWobbleLight: '#d0d0d0',
   roadWobbleDark: '#646464',
@@ -77,7 +81,8 @@ export const DARK_PALETTE = {
   paperSpeckleB: '#4a4a4a',
   labelText: '#e8e8e8',
   labelHalo: '#0a0a0a',
-  labelWater: '#5cb5e5',
+  // Water labels muted to match the new water fill.
+  labelWater: '#6f96a8',
   labelStreet: '#c8c8c8',
   // Lower opacity on dark — the multiply/screen overlay is subtler.
   paperOpacity: 0.35,
