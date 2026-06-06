@@ -270,3 +270,40 @@ export const kyivLore = pgTable(
     bboxIdx: index('lore_lat_lng_idx').on(t.lat, t.lng),
   }),
 );
+
+// Places API cache. The client used to call Google Places directly
+// from every device per pan, which burned ~$100 in days because each
+// fetch is 5 Places calls. Server now proxies + caches by a coarse
+// (cell, category) key — first user to ping a cell pays one Google
+// call per category, subsequent calls (other users, repeat pans)
+// served from this table for `placesCacheTtlMs`.
+//
+// Cell size is 0.01° (~1.1 km × 0.7 km at Kyiv latitude); a typical
+// user fetch covers 2–6 cells. The cached `spots` payload is the raw
+// Google response per cell, distance-sorted client-side after
+// merging. Composite PK on (cell_lat, cell_lng, category) so an
+// upsert just overwrites the row when a refresh is due.
+export interface CachedPlace {
+  id: string;
+  name: string;
+  category: string;
+  position: { lat: number; lng: number };
+  rating?: number;
+  address?: string;
+  icon?: string;
+}
+
+export const placesCache = pgTable(
+  'places_cache',
+  {
+    cellLat: doublePrecision('cell_lat').notNull(),
+    cellLng: doublePrecision('cell_lng').notNull(),
+    category: text('category').notNull(),
+    spots: jsonb('spots').$type<CachedPlace[]>().notNull(),
+    fetchedAt: timestamp('fetched_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.cellLat, t.cellLng, t.category] }),
+    fetchedIdx: index('places_cache_fetched_idx').on(t.fetchedAt),
+  }),
+);

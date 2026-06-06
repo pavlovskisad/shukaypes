@@ -1,12 +1,13 @@
 import type { LatLng } from '@shukajpes/shared';
 import { env } from '../constants/env';
 
-// Nearby places via the Google PLACES API (NEW) — places.googleapis.com.
-// Direct browser calls; the new endpoints expose CORS so no proxy or
-// Google Maps JS SDK is needed.
+// Nearby places — all queries now go through our backend's
+// /places/* endpoints, which proxy + cache Google Places (see
+// server/src/services/placesCache.ts). Direct browser calls were
+// burning quota per device per pan; the server cache shares results
+// across users + sessions with a 14-day TTL.
 //
-// Requires "Places API (New)" enabled on the Cloud project behind
-// EXPO_PUBLIC_GOOGLE_MAPS_API_KEY (separate from the legacy Places API).
+// Public shape unchanged so call sites don't move.
 
 export type SpotCategory =
   | 'cafe'
@@ -38,118 +39,57 @@ export function emojiFor(category: SpotCategory): string {
 }
 
 const DEFAULT_RADIUS_M = 1100;
-const SEARCH_ENDPOINT = 'https://places.googleapis.com/v1/places:searchNearby';
+const PARK_RADIUS_M = 1500;
 
-// Places API (New) uses the same primary-type strings as legacy for our
-// categories, except `veterinary_care` is now `veterinary_care` still.
-const TYPE_FOR_CATEGORY: Record<SpotCategory, string> = {
-  cafe: 'cafe',
-  restaurant: 'restaurant',
-  bar: 'bar',
-  pet_store: 'pet_store',
-  veterinary_care: 'veterinary_care',
-};
-
-interface NewPlace {
-  id?: string;
-  displayName?: { text?: string };
-  location?: { latitude: number; longitude: number };
+interface CachedPlace {
+  id: string;
+  name: string;
+  category: string;
+  position: LatLng;
   rating?: number;
-  formattedAddress?: string;
-  primaryType?: string;
+  address?: string;
+  icon?: string;
 }
 
-async function searchNearby(
-  center: LatLng,
-  radiusM: number,
-  includedTypes: string[],
-  maxResults: number,
-  fieldMask: string,
-): Promise<NewPlace[]> {
-  if (!env.googleMapsApiKey) return [];
+async function getJSON<T>(path: string): Promise<T | null> {
   try {
-    const resp = await fetch(SEARCH_ENDPOINT, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'X-Goog-Api-Key': env.googleMapsApiKey,
-        'X-Goog-FieldMask': fieldMask,
-      },
-      body: JSON.stringify({
-        includedTypes,
-        maxResultCount: maxResults,
-        locationRestriction: {
-          circle: {
-            center: { latitude: center.lat, longitude: center.lng },
-            radius: radiusM,
-          },
-        },
-      }),
-    });
-    if (!resp.ok) return [];
-    const data = (await resp.json()) as { places?: NewPlace[] };
-    return data.places ?? [];
+    const resp = await fetch(`${env.apiUrl}${path}`);
+    if (!resp.ok) return null;
+    return (await resp.json()) as T;
   } catch {
-    return [];
+    return null;
   }
 }
 
-// Spots — cafes/restaurants/bars/pet stores/vets. Places API (New)
-// caps `searchNearby` at 20 results PER REQUEST regardless of how
-// many types you ask for. Fan out one request per type and merge —
-// 5 calls per fetch, up to 100 results in dense Kyiv. Larger radius
-// (1.1 km) gives Places more area to pick the top-20 from per type,
-// surfacing a more representative slice without ballooning calls.
-//
-// History: tried a 2×2 sub-grid (20 calls per fetch) for genuine
-// density — torched ~$100 of Places quota in days. Reverted. The
-// distance threshold in gameStore (PLACES_REFRESH_THRESHOLD_M)
-// gates re-fetches; if cost still climbs, bump that threshold OR
-// move to a server-side cache shared across users.
 export async function fetchNearbySpots(
   center: LatLng,
   radiusM: number = DEFAULT_RADIUS_M,
 ): Promise<Spot[]> {
-  const categories = Object.keys(TYPE_FOR_CATEGORY) as SpotCategory[];
-  const fieldMask =
-    'places.id,places.displayName,places.location,places.rating,places.formattedAddress,places.primaryType';
-  const perCategory = await Promise.all(
-    categories.map((cat) =>
-      searchNearby(center, radiusM, [TYPE_FOR_CATEGORY[cat]], 20, fieldMask),
-    ),
+  const params = new URLSearchParams({
+    lat: String(center.lat),
+    lng: String(center.lng),
+    radius: String(radiusM),
+  });
+  const data = await getJSON<{ spots: CachedPlace[] }>(
+    `/places/spots?${params.toString()}`,
   );
-  const byId = new Map<string, Spot>();
-  perCategory.forEach((results, i) => {
-    const requestedCat = categories[i]!;
-    for (const r of results) {
-      if (!r.id || !r.location) continue;
-      const category =
-        (Object.keys(TYPE_FOR_CATEGORY) as SpotCategory[]).find(
-          (c) => TYPE_FOR_CATEGORY[c] === r.primaryType,
-        ) ?? requestedCat;
-      if (byId.has(r.id)) continue;
-      byId.set(r.id, {
-        id: r.id,
-        name: r.displayName?.text ?? '(unnamed)',
-        category,
-        position: { lat: r.location.latitude, lng: r.location.longitude },
-        rating: r.rating,
-        address: r.formattedAddress,
-        icon: emojiFor(category),
-      });
-    }
-  });
-  return Array.from(byId.values()).sort((a, b) => {
-    const da = haversineM(center, a.position);
-    const db = haversineM(center, b.position);
-    return da - db;
-  });
+  if (!data) return [];
+  // Server already filters out unknown categories, but narrow the
+  // type defensively here so callers see SpotCategory.
+  return data.spots
+    .filter((s): s is CachedPlace & { category: SpotCategory } =>
+      ['cafe', 'restaurant', 'bar', 'pet_store', 'veterinary_care'].includes(s.category),
+    )
+    .map((s) => ({
+      id: s.id,
+      name: s.name,
+      category: s.category,
+      position: s.position,
+      rating: s.rating,
+      address: s.address,
+      icon: s.icon ?? emojiFor(s.category),
+    }));
 }
-
-// Parks — for the bones pool + walk candidates. 1200m covers a
-// ~15-min walking neighborhood. Google often returns 4-6 rows for one
-// physical park (sub-sections, entrances) so we dedupe within 120m.
-const PARK_RADIUS_M = 1200;
 
 export interface Park {
   id: string;
@@ -158,37 +98,13 @@ export interface Park {
 }
 
 export async function fetchNearbyParks(center: LatLng): Promise<Park[]> {
-  const results = await searchNearby(
-    center,
-    PARK_RADIUS_M,
-    ['park'],
-    20,
-    'places.id,places.displayName,places.location',
+  const params = new URLSearchParams({
+    lat: String(center.lat),
+    lng: String(center.lng),
+    radius: String(PARK_RADIUS_M),
+  });
+  const data = await getJSON<{ parks: Park[] }>(
+    `/places/parks?${params.toString()}`,
   );
-  const DEDUPE_RADIUS_M = 120;
-  const out: Park[] = [];
-  for (const r of results) {
-    if (!r.id || !r.location) continue;
-    const pos = { lat: r.location.latitude, lng: r.location.longitude };
-    const dup = out.some((p) => haversineM(p.position, pos) < DEDUPE_RADIUS_M);
-    if (!dup) {
-      out.push({
-        id: r.id,
-        name: r.displayName?.text ?? 'park',
-        position: pos,
-      });
-    }
-  }
-  return out;
-}
-
-function haversineM(a: LatLng, b: LatLng): number {
-  const R = 6371000;
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(b.lat - a.lat);
-  const dLng = toRad(b.lng - a.lng);
-  const s =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(a.lat)) * Math.cos(toRad(b.lat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * R * Math.asin(Math.sqrt(s));
+  return data?.parks ?? [];
 }

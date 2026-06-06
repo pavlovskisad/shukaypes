@@ -64,6 +64,13 @@
       "when": 1777180000000,
       "tag": "0008_kyiv_lore",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "7",
+      "when": 1777190000000,
+      "tag": "0009_places_cache",
+      "breakpoints": true
     }
   ]
 }
