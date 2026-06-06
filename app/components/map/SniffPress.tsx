@@ -524,41 +524,31 @@ function SniffingBubble({ position }: { position: LatLng }) {
     return () => clearInterval(t);
   }, []);
   return (
-    <MapLibreMarker position={position} anchor="bottom" zIndex={Z.HUD_SNIFF_BUBBLE}>
+    <MapLibreMarker
+      position={position}
+      anchor="bottom"
+      // Lift the bubble ~60 px above the press point so it clears the
+      // finger holding the screen. The expanding radial fill already
+      // anchors the gesture visually; the small dot we used to render
+      // here was redundant once that fill is in.
+      offset={[0, -60]}
+      zIndex={Z.HUD_SNIFF_BUBBLE}
+    >
       <div
         style={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 6,
+          padding: '6px 12px',
+          background: VOICE.background,
+          color: VOICE.color,
+          borderRadius: 14,
+          fontFamily: VOICE.fontFamily,
+          fontSize: 13,
+          fontStyle: 'italic',
+          boxShadow: VOICE.shadow,
+          border: VOICE.border,
           pointerEvents: 'none',
         }}
       >
-        <div
-          style={{
-            padding: '6px 12px',
-            background: VOICE.background,
-            color: VOICE.color,
-            borderRadius: 14,
-            fontFamily: VOICE.fontFamily,
-            fontSize: 13,
-            fontStyle: 'italic',
-            boxShadow: VOICE.shadow,
-            border: VOICE.border,
-          }}
-        >
-          sniffing{dots}
-        </div>
-        <div
-          style={{
-            width: 8,
-            height: 8,
-            borderRadius: 4,
-            background: SNIFF_COLOR,
-            opacity: 0.7,
-            boxShadow: '0 2px 6px rgba(0,0,0,0.18)',
-          }}
-        />
+        sniffing{dots}
       </div>
     </MapLibreMarker>
   );
