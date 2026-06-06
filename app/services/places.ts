@@ -1,5 +1,6 @@
 import type { LatLng } from '@shukajpes/shared';
 import { env } from '../constants/env';
+import { getDeviceId } from './deviceId';
 
 // Nearby places — all queries now go through our backend's
 // /places/* endpoints, which proxy + cache Google Places (see
@@ -51,9 +52,18 @@ interface CachedPlace {
   icon?: string;
 }
 
+// Auth-aware fetch — auth plugin rejects anything without
+// `x-device-id` with a 401, which the spots tab silently rendered as
+// an empty list. Matches the header shape services/api.ts uses for
+// every other authed call.
 async function getJSON<T>(path: string): Promise<T | null> {
   try {
-    const resp = await fetch(`${env.apiUrl}${path}`);
+    const resp = await fetch(`${env.apiUrl}${path}`, {
+      headers: {
+        'content-type': 'application/json',
+        'x-device-id': getDeviceId(),
+      },
+    });
     if (!resp.ok) return null;
     return (await resp.json()) as T;
   } catch {
