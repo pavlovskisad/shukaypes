@@ -35,12 +35,12 @@ const ROWS: Row[] = [
     body: "see one of these pets out there for real?! open their photo and tap the eye — i'll bark the news to everyone else looking. *full body wag*",
   },
   {
-    iconName: 'search',
+    iconName: 'sun',
     title: 'sniff mode',
-    body: "tap the little moon up top-left — i slip into hunting mode. the streets dim, my nose lifts, and every pet within walking distance peeks at you from the edges of the screen. tap one and we're off.",
+    body: "tap the little sun-to-moon up top-left — i slip into hunting mode. the streets dim, my nose lifts, and every pet within walking distance peeks at you from the edges of the screen. tap one and we're off.",
   },
   {
-    iconName: 'meet',
+    iconName: 'pin',
     title: 'press + hold the map',
     body: "press anywhere on the map and hold — close your eyes for two seconds, i'm sniffing. i'll tell you about an old stone, a courtyard with a secret, a corner with a story. press somewhere else for another one.",
   },

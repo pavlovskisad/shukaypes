@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
-import { Icon } from './Icon';
+import { Icon, type IconName } from './Icon';
 
 interface LostDogModalProps {
   dog: NearbyLostDog | null;
@@ -127,7 +127,9 @@ export function LostDogModal({
   };
 
   const urgent = renderDog.urgency === 'urgent';
-  const badgeIcon = urgent ? 'urgent' : 'warning';
+  // 'warning' icon was retired; use 'search' for the non-urgent
+  // 'searching' state — reads literally and stays in the designer set.
+  const badgeIcon: IconName = urgent ? 'urgent' : 'search';
   const badgeText = urgent ? 'URGENT' : 'searching';
   const badgeBg = urgent ? '#fde8e8' : '#fdf3e0';
   const badgeFg = urgent ? '#e84040' : '#d9a030';

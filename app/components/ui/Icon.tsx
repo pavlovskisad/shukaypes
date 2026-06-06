@@ -37,7 +37,6 @@ export type IconName =
   | 'all'
   // Lost-pet badges + sightings
   | 'urgent'
-  | 'warning'
   | 'eyes'
   // About-us / help
   | 'question';
@@ -65,7 +64,6 @@ const URL: Record<IconName, string> = {
   vet: '/icons/vet.svg',
   all: '/icons/all.svg',
   urgent: '/icons/urgent.svg',
-  warning: '/icons/warning.svg',
   eyes: '/icons/eyes.svg',
   question: '/icons/question.svg',
 };
