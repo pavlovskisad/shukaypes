@@ -1550,22 +1550,33 @@ export default function MapViewWeb() {
             // the bookmark un-tappable behind the corner logo zone.
             zIndex: Z.HUD_CHIPS,
             cursor: 'pointer',
-            background: '#ffffff',
+            // Dark chip + inverted (white) logo. The previous white-on-
+            // white blended into the pale map; flipping it makes the
+            // bookmark pop and matches the inverted off-screen bubble
+            // we already render alongside.
+            background: '#1a1a1a',
             borderRadius: '50%',
             width: 44,
             height: 44,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
-            border: '2px solid rgba(0,0,0,0.06)',
+            boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
+            border: '2px solid rgba(255,255,255,0.08)',
           }}
         >
-          <Image
-            source={logoNose}
-            style={{ width: 30, height: 30 }}
-            resizeMode="contain"
-          />
+          {/* Wrapper div carries the CSS invert filter so the dark
+              logoNose PNG flips to white against the dark chip.
+              Filter on the wrapper (not the <Image> itself) avoids
+              the iOS Safari quirk where RN-Web's <Image> wrapper
+              drops the filter prop. */}
+          <div aria-hidden style={{ width: 30, height: 30, filter: 'invert(1)' }}>
+            <Image
+              source={logoNose}
+              style={{ width: 30, height: 30 }}
+              resizeMode="contain"
+            />
+          </div>
         </div>
       ) : null}
 
