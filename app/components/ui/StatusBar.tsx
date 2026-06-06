@@ -20,7 +20,7 @@ const GLASS_SHADOW_COLOR = '#000';
 // HUD icons are pixel-art SVGs (see components/ui/Icon.tsx). 18px
 // renders crisp at the 38px pill height; smaller (the previous emoji
 // fontSize 14) read as cramped against the value text.
-const ICON_SIZE = 35;
+const ICON_SIZE = 32;
 
 function MeterPill({
   icon,
@@ -142,8 +142,8 @@ const styles = StyleSheet.create({
     elevation: 3,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
-    gap: 6,
+    paddingHorizontal: 8,
+    gap: 4,
   },
   meterPill: {
     minWidth: PILL_MIN_WIDTH,
