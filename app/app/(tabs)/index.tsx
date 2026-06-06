@@ -12,7 +12,7 @@ import { useGameStore } from '../../stores/gameStore';
 // Logo is the brand anchor in the top-left. Prototype has it roughly
 // pill-height; matching that so it reads as a peer of the status pill
 // rather than dominating the map.
-const HUD_ICON_SIZE = 69;
+const HUD_ICON_SIZE = 83;
 
 // localStorage flag — once dismissed, the about sheet doesn't pop on
 // future visits. Cheap onboarding without server state.

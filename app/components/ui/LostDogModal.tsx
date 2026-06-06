@@ -295,7 +295,7 @@ export function LostDogModal({
               gap: 6,
             }}
           >
-            <Icon name={badgeIcon} size={18} />
+            <Icon name={badgeIcon} size={22} />
             {badgeText}
           </span>
           <button
@@ -353,7 +353,7 @@ export function LostDogModal({
                 marginTop: 4,
               }}
             >
-              <Icon name="paws" size={18} />
+              <Icon name="paws" size={22} />
               complete search quest for {renderDog.rewardPoints} bonus pts
             </div>
           </div>
@@ -384,7 +384,7 @@ export function LostDogModal({
                 gap: 8,
               }}
             >
-              <Icon name="eyes" size={23} />
+              <Icon name="eyes" size={28} />
               i've seen them
             </button>
 
@@ -411,7 +411,7 @@ export function LostDogModal({
                 gap: 8,
               }}
             >
-              <Icon name="search" size={23} />
+              <Icon name="search" size={28} />
               {searchActive ? 'searching…' : 'start search'}
             </button>
           </div>

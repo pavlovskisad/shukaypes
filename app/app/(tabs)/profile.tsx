@@ -158,17 +158,17 @@ export default function ProfileScreen() {
           ) : null}
           <View style={styles.meterRow}>
             <View style={styles.meterPill}>
-              <Icon name="sun" size={20} />
+              <Icon name="sun" size={24} />
               <Text style={styles.meterValue}>
                 {Math.round(data?.companion.happiness ?? 0)}%
               </Text>
             </View>
             <View style={styles.meterPill}>
-              <Icon name="bone" size={20} />
+              <Icon name="bone" size={24} />
               <Text style={styles.meterValue}>{Math.round(data?.companion.hunger ?? 0)}%</Text>
             </View>
             <View style={styles.meterPill}>
-              <Icon name="paws" size={20} />
+              <Icon name="paws" size={24} />
               <Text style={styles.meterValue}>{data?.stats.pawsCollected ?? 0}</Text>
             </View>
           </View>

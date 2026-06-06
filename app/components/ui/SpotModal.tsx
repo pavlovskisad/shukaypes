@@ -151,7 +151,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           >
             {(() => {
               const slot = iconForCategory(renderSpot.category);
-              return slot ? <Icon name={slot} size={52} /> : (renderSpot.icon ?? '📍');
+              return slot ? <Icon name={slot} size={62} /> : (renderSpot.icon ?? '📍');
             })()}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -200,7 +200,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             gap: 10,
           }}
         >
-          <Icon name="walk" size={28} inverted />
+          <Icon name="walk" size={34} inverted />
           <span>walk here</span>
         </button>
 
@@ -224,7 +224,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             gap: 10,
           }}
         >
-          <Icon name="roundtrip" size={25} />
+          <Icon name="roundtrip" size={30} />
           <span>roundtrip</span>
         </button>
 
