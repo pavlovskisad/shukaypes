@@ -211,7 +211,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                   flexShrink: 0,
                 }}
               >
-                {r.iconName ? <Icon name={r.iconName} size={34} /> : r.emoji}
+                {r.iconName ? <Icon name={r.iconName} size={42} /> : r.emoji}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div

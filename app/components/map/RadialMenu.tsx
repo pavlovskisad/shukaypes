@@ -143,7 +143,7 @@ export function RadialMenu({
               }}
               aria-label={a.label}
             >
-              {a.iconName ? <Icon name={a.iconName} size={42} inverted={inverted} /> : a.icon}
+              {a.iconName ? <Icon name={a.iconName} size={52} inverted={inverted} /> : a.icon}
             </button>
             {showLabels ? (
               <span

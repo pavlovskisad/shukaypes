@@ -53,7 +53,7 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
           userSelect: 'none',
         }}
       >
-        {slot ? <Icon name={slot} size={48} /> : emoji}
+        {slot ? <Icon name={slot} size={60} /> : emoji}
         {/* Count chip — top-right of the badge, blue so it reads as
             "this group has N" rather than as part of the icon. */}
         <div

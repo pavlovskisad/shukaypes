@@ -353,7 +353,7 @@ export function LostDogModal({
                 marginTop: 4,
               }}
             >
-              <Icon name="paws" size={22} />
+              <Icon name="paws" size={28} />
               complete search quest for {renderDog.rewardPoints} bonus pts
             </div>
           </div>
@@ -411,7 +411,7 @@ export function LostDogModal({
                 gap: 8,
               }}
             >
-              <Icon name="search" size={28} />
+              <Icon name="search" size={35} />
               {searchActive ? 'searching…' : 'start search'}
             </button>
           </div>

@@ -55,7 +55,7 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
               : '0 2px 6px rgba(0,0,0,0.12), 0 1px 1px rgba(0,0,0,0.06)',
           }}
         >
-          {slot ? <Icon name={slot} size={42} /> : emoji}
+          {slot ? <Icon name={slot} size={52} /> : emoji}
         </div>
         {selected ? (
           <>
