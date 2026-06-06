@@ -168,7 +168,7 @@ export default function SpotsScreen() {
           <View style={styles.card}>
             <Text style={styles.cardTitle}>nearby spots</Text>
             <Text style={styles.placeholder}>
-              nothing within 800m — walk somewhere and pull back
+              nothing nearby yet — pan the map somewhere new and i'll sniff again
             </Text>
           </View>
         ) : visibleSpots.length === 0 ? (
