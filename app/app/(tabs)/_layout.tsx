@@ -19,7 +19,7 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
         opacity: focused ? 1 : 0.32,
       }}
     >
-      <Icon name={name} size={26} />
+      <Icon name={name} size={52} />
     </View>
   );
 }

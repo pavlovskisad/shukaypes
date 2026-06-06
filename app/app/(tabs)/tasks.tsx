@@ -231,7 +231,7 @@ export default function TasksScreen() {
                 <View style={styles.row}>
                   {t.iconName ? (
                     <View style={styles.iconWrap}>
-                      <Icon name={t.iconName} size={20} />
+                      <Icon name={t.iconName} size={25} />
                     </View>
                   ) : (
                     <Text style={styles.icon}>{t.icon}</Text>

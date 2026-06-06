@@ -120,7 +120,7 @@ export default function SpotsScreen() {
                   ]}
                 >
                   {opt.iconName ? (
-                    <Icon name={opt.iconName} size={18} opacity={muted ? 0.55 : 1} />
+                    <Icon name={opt.iconName} size={23} opacity={muted ? 0.55 : 1} />
                   ) : (
                     <Text style={[styles.filterChipIcon, muted && styles.filterChipMutedText]}>
                       {opt.icon}
@@ -199,7 +199,7 @@ export default function SpotsScreen() {
                   {(() => {
                     const slot = iconForCategory(s.category);
                     return slot ? (
-                      <Icon name={slot} size={26} />
+                      <Icon name={slot} size={33} />
                     ) : (
                       <Text style={styles.iconText}>{s.icon}</Text>
                     );
