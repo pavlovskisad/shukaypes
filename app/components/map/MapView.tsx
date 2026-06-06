@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { View, Text, StyleSheet, Image } from 'react-native';
@@ -84,6 +85,13 @@ let hasGreetedThisSession = false;
 
 export default function MapViewWeb() {
   const location = useLocation();
+  // Top-edge chips have to clear the iOS status bar (clock, signal,
+  // battery) — taps inside that strip are intercepted by the system
+  // (scroll-to-top), so a chip overlapping it feels dead. The HUD
+  // SafeAreaView already accounts for this via edges={['top']}; chip
+  // overlays render in a different subtree so we read the same inset
+  // from the hook here.
+  const insets = useSafeAreaInsets();
   const [bubble, setBubble] = useState<string | null>(null);
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -1113,7 +1121,14 @@ export default function MapViewWeb() {
         target: c.target,
         edge: c.edge,
         left: `${leftPct * 100}%`,
-        top: `${topPct * 100}%`,
+        // Push top-edge chips down by the iOS safe-area inset so
+        // they clear the system status bar (clock/signal/battery).
+        // Taps inside the status-bar strip get intercepted by iOS,
+        // so a chip sitting in it feels dead.
+        top:
+          c.edge === 'top'
+            ? `calc(${topPct * 100}% + ${insets.top}px)`
+            : `${topPct * 100}%`,
       };
     });
   }, [
@@ -1179,7 +1194,16 @@ export default function MapViewWeb() {
       leftPct = 0.5 + dx * ty;
       topPct = edge === 'bottom' ? 1 - bottomReserve : topReserve;
     }
-    return { left: `${leftPct * 100}%`, top: `${topPct * 100}%`, edge };
+    return {
+      left: `${leftPct * 100}%`,
+      // Same safe-area shift for top-edge companion chip — keeps
+      // it out of the iOS status-bar tap dead-zone.
+      top:
+        edge === 'top'
+          ? `calc(${topPct * 100}% + ${insets.top}px)`
+          : `${topPct * 100}%`,
+      edge,
+    };
   })();
 
   const recenterOnCompanion = () => {
