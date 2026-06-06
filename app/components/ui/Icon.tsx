@@ -4,14 +4,10 @@ import { Image } from 'react-native';
 // <Image> so the same component works in RN-Web today and would
 // work on native if/when we ship there.
 //
-// Vector SVGs auto-traced from the original 500×500 PNGs via
-// potrace, with viewBoxes cropped to the actual content bbox
-// (+8px padding) so each icon fills its bounding rect uniformly.
-//
-// Naming follows the visual ("house", not "user"; "eyes", not
-// "sightings"). Slot identifiers describe the icon, not the
-// surface that consumes it — many slots are used in multiple
-// surfaces.
+// Current set is a designer-supplied SVG pack (~250×250 viewBox,
+// all single-colour black paths so the inverted variant via CSS
+// `filter: invert(1)` keeps working). When a new icon lands, drop
+// it into /public/icons/<slot>.svg — slot names below are the URL.
 
 export type IconName =
   // HUD pills
@@ -49,7 +45,7 @@ export type IconName =
 const URL: Record<IconName, string> = {
   paws: '/icons/paws.svg',
   bone: '/icons/bone.svg',
-  sun: '/icons/sun.png',
+  sun: '/icons/sun.svg',
   map: '/icons/map.svg',
   task: '/icons/task.svg',
   chat: '/icons/chat.svg',
@@ -74,16 +70,12 @@ const URL: Record<IconName, string> = {
   question: '/icons/question.svg',
 };
 
-// Per-icon size compensation. Most icons fill their tight viewBox
-// solidly so a uniform `size` prop renders them at the same visual
-// weight. Urgent siren has rays around it so it needs a small bump.
-// Sun (happiness) is a hand-drawn crayon PNG with thin spread rays +
-// whitespace padding, so the body reads small at a uniform size — a
-// 1.7× bump pulls it up a touch bigger than the previous sun art per
-// request.
+// Per-icon size compensation. Designer SVGs fill the 250×250 viewBox
+// uniformly so a single `size` prop reads consistently. Urgent siren
+// (still on the original auto-traced set) has rays around it that
+// need a small bump to match the rest of the row.
 const SIZE_SCALE: Partial<Record<IconName, number>> = {
   urgent: 1.3,
-  sun: 1.7,
 };
 
 interface IconProps {
