@@ -43,6 +43,10 @@ export const Z = {
   // off-screen companion chip. One notch above chips so it reads
   // as the chip's speech.
   HUD_CHIP_BUBBLE: 37,
+  // Companion bookmark sits above the lost-pet chips so it never
+  // drowns underneath a stack of pet photos when the dog drifts
+  // off-screen at the same edge as several pets.
+  HUD_CHIP_COMPANION: 38,
   // Cancel-walk / abandon-quest / restack-all pills. Above chips
   // because they're contextual actions and the user is reaching
   // for them.

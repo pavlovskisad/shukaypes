@@ -556,9 +556,40 @@ export default function MapViewWeb() {
   // stable, LostDogCluster's React.memo can actually skip identical-
   // prop renders during companion-lerp ticks (which fire MapView
   // re-renders ~10×/s).
+
+  // Each pet gets a deterministic display offset inside its own
+  // searchZoneRadiusM. Posted location is landmark-level and the
+  // zone radius is the parser's uncertainty; jitter picks a stable
+  // point in that circle based on the pet's id hash.
+  //
+  // Strictly hash-derived — no cluster-fanned override. Previously
+  // pets in a shared cluster got an evenly-fanned angle instead of
+  // the hash one; any sync that shifted cluster membership re-fanned
+  // the group and each pet teleported to a new base position.
+  // Hash-by-id keeps the base rock-stable across syncs.
+  const displayPositions = useMemo(() => {
+    const map = new Map<string, { lat: number; lng: number }>();
+    for (const d of lostDogs) {
+      map.set(d.id, jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, d.id));
+    }
+    return map;
+  }, [lostDogs]);
+
   const clusters = useMemo(() => {
+    // Cluster on the JITTERED display position, not the raw DB
+    // lastSeen. Many pets share the same parser-landmark coord (e.g.
+    // 'somewhere near Maidan' → 50.4503, 30.5234); jitterInRadius
+    // scatters their visual pins across the search zone, but if we
+    // cluster on the raw coord the pile collapses to a single '10
+    // lost pets' badge even though the markers themselves are spread.
+    // Using displayPositions makes the cluster threshold see what the
+    // map actually shows.
     const raw = clusterByDistance(
-      visibleLostDogs.map((d) => ({ id: d.id, position: d.lastSeen.position, dog: d })),
+      visibleLostDogs.map((d) => ({
+        id: d.id,
+        position: displayPositions.get(d.id) ?? d.lastSeen.position,
+        dog: d,
+      })),
       PIN_CLUSTER_RADIUS_M,
     );
     return raw.map((c) => {
@@ -575,7 +606,7 @@ export default function MapViewWeb() {
         .join('');
       return { ...c, key, dogs, dominantUrgency, emojiHint };
     });
-  }, [visibleLostDogs]);
+  }, [visibleLostDogs, displayPositions]);
 
   // Spot clustering by category. Disk-overlap criterion: derive a
   // meters-radius from a fixed pixel threshold so the clustering
@@ -725,25 +756,11 @@ export default function MapViewWeb() {
     mapBounds,
   ]);
 
-  // Each pet gets a deterministic display offset inside its own
-  // searchZoneRadiusM. Posted location is landmark-level and the zone
-  // radius is the parser's uncertainty; jitter picks a stable point in
-  // that circle based on the pet's id hash.
-  //
-  // Strictly hash-derived — no cluster-fanned override. Previously pets
-  // in a shared cluster got an evenly-fanned angle instead of the hash
-  // one; any sync that shifted cluster membership (user walks, new
-  // scrape lands nearby, sighting moves a pin) re-fanned the group and
-  // each pet teleported to a new base position. Hash-by-id keeps the
-  // base rock-stable across syncs; two pets at the same landmark still
-  // end up at different angles because their ids hash differently.
-  const displayPositions = useMemo(() => {
-    const map = new Map<string, { lat: number; lng: number }>();
-    for (const d of lostDogs) {
-      map.set(d.id, jitterInRadius(d.lastSeen.position, d.searchZoneRadiusM, d.id));
-    }
-    return map;
-  }, [lostDogs]);
+  // displayPositions moved above the clusters memo — cluster needs
+  // to see the same jittered points the markers will render at,
+  // otherwise pets sharing a parser-landmark coord collapse to one
+  // badge even though the pins themselves are scattered.
+  // (Definition now lives just above `clusters`.)
 
   // Stable per-id tap handlers so memoized markers don't re-render every
   // time the map re-renders. Without this, inline `() => setSelectedDog(id)`
@@ -968,17 +985,21 @@ export default function MapViewWeb() {
     // UI footprint instead of being arbitrary.
     const sideReserve = 0.05;
     // Was 0.04 — chips on the top edge ended up directly under the
-    // StatusBar pills (sun% / bone% / paws), which still catch taps
-    // even though the HUD container is pointer-transparent. Push
-    // chips below the pills so they're actually tappable.
-    const topReserve = 0.11;
+    // Chips on the top edge now sit at the actual top of the
+    // viewport so 'this pet is far north' reads as far north, not
+    // 'just outside the visible area.' Chips have higher z than the
+    // HUD pills and the corner logo, so a chip overlapping either
+    // catches the tap. Just enough top inset to clear the iPhone
+    // dynamic island / status bar.
+    const topReserve = 0.02;
     const bottomReserve = 0.10;
     const chipHalfPct = 0.04;
     const SPACING_ALONG = 0.12;
-    // Logo sits at top-left corner (~70px wide on a 392px-wide
-    // viewport ≈ 0.18). Top-edge chips skip this region so they don't
-    // overlap the logo even though the chip overlay paints above it.
-    const topLeftSkip = 0.18;
+    // Used to be 0.18 to dodge the corner logo. Dropped to a small
+    // inset since chip z-index already wins over the logo zone — the
+    // chip floats above the logo when they collide. Still skip a
+    // tiny edge so chips don't sit flush against the screen corner.
+    const topLeftSkip = 0.03;
 
     type EdgeName = 'top' | 'right' | 'bottom' | 'left';
     interface Chip {
@@ -1137,9 +1158,10 @@ export default function MapViewWeb() {
     const dx = nx - 0.5;
     const dy = ny - 0.5;
     const sideReserve = 0.03;
-    // Companion chip lands under the HUD pills at top: 0.05. Push
-    // down past them so it stays tappable in normal mode too.
-    const topReserve = 0.11;
+    // Sit at the actual top edge so 'dog is far north' reads as far
+    // north. Chip z-index is above the HUD pills so they don't
+    // intercept its tap when they overlap.
+    const topReserve = 0.02;
     const bottomReserve = 0.14;
     const xBound = dx > 0 ? 1 - sideReserve - 0.5 : 0.5 - sideReserve;
     const yBound = dy > 0 ? 1 - bottomReserve - 0.5 : 0.5 - topReserve;
@@ -1548,13 +1570,13 @@ export default function MapViewWeb() {
             // Bumped to clear the HUD overlay reliably even in
             // PWA/iOS Safari where DOM-order tie-breaks were leaving
             // the bookmark un-tappable behind the corner logo zone.
-            zIndex: Z.HUD_CHIPS,
+            zIndex: Z.HUD_CHIP_COMPANION,
             cursor: 'pointer',
-            // Dark chip + inverted (white) logo. The previous white-on-
-            // white blended into the pale map; flipping it makes the
-            // bookmark pop and matches the inverted off-screen bubble
-            // we already render alongside.
-            background: '#1a1a1a',
+            // Adaptive to mode — dark chip + inverted white logo on
+            // the light map (pops against the pastel bg), light chip
+            // + black logo on sniff mode (pops against the dark bg).
+            // Matches the corner logo's same-recipe inversion.
+            background: sniffMode ? '#ffffff' : '#1a1a1a',
             borderRadius: '50%',
             width: 44,
             height: 44,
@@ -1562,15 +1584,23 @@ export default function MapViewWeb() {
             alignItems: 'center',
             justifyContent: 'center',
             boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
-            border: '2px solid rgba(255,255,255,0.08)',
+            border: sniffMode
+              ? '2px solid rgba(0,0,0,0.06)'
+              : '2px solid rgba(255,255,255,0.08)',
           }}
         >
-          {/* Wrapper div carries the CSS invert filter so the dark
-              logoNose PNG flips to white against the dark chip.
-              Filter on the wrapper (not the <Image> itself) avoids
-              the iOS Safari quirk where RN-Web's <Image> wrapper
-              drops the filter prop. */}
-          <div aria-hidden style={{ width: 30, height: 30, filter: 'invert(1)' }}>
+          {/* Wrapper div carries the CSS invert filter when we need
+              the logoNose PNG flipped to white. Filter on the
+              wrapper (not the <Image> itself) avoids the iOS Safari
+              quirk where RN-Web's <Image> drops the filter prop. */}
+          <div
+            aria-hidden
+            style={{
+              width: 30,
+              height: 30,
+              filter: sniffMode ? undefined : 'invert(1)',
+            }}
+          >
             <Image
               source={logoNose}
               style={{ width: 30, height: 30 }}
