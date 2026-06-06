@@ -35,9 +35,9 @@ const ROWS: Row[] = [
     body: "see one of these pets out there for real?! open their photo and tap the eye — i'll bark the news to everyone else looking. *full body wag*",
   },
   {
-    iconName: 'sun',
+    iconName: 'logo',
     title: 'sniff mode',
-    body: "tap the little sun-to-moon up top-left — i slip into hunting mode. the streets dim, my nose lifts, and every pet within walking distance peeks at you from the edges of the screen. tap one and we're off.",
+    body: "tap me up top-left — i slip into hunting mode. the streets dim, my nose lifts, and every pet within walking distance peeks at you from the edges of the screen. tap one and we're off.",
   },
   {
     iconName: 'pin',

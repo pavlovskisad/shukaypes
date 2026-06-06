@@ -39,7 +39,11 @@ export type IconName =
   | 'urgent'
   | 'eyes'
   // About-us / help
-  | 'question';
+  | 'question'
+  // Brand mark — the corner logo that toggles sniff mode. Lives in
+  // the icon set so the About modal can reference the same artwork
+  // the user actually taps.
+  | 'logo';
 
 const URL: Record<IconName, string> = {
   paws: '/icons/paws.svg',
@@ -66,6 +70,7 @@ const URL: Record<IconName, string> = {
   urgent: '/icons/urgent.svg',
   eyes: '/icons/eyes.svg',
   question: '/icons/question.svg',
+  logo: '/icons/logo.svg',
 };
 
 // Per-icon size compensation. Designer SVGs fill the 250×250 viewBox
