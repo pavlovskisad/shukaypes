@@ -17,7 +17,14 @@ import { distanceMeters } from '../utils/geo';
 // userAreaRadiusM so paws + bones still spawn before the cache
 // goes meaningfully stale, but cheap enough to skip a Places call
 // on every 15s tick.
-const PLACES_REFRESH_THRESHOLD_M = 600;
+// Bumped from 600 → 1500 m after a billing scare: at 600 a leisurely
+// pan across central Kyiv burns one fetch (5 Places calls) per few
+// seconds. With viewport-driven sync the user re-fires every time the
+// viewport centre drifts past the threshold. 1500 m keeps a fetch to
+// "you moved a real neighbourhood over." DEFAULT_RADIUS_M in places.ts
+// is 1100 so neighbouring fetches overlap and nothing pops out of view
+// between threshold steps.
+const PLACES_REFRESH_THRESHOLD_M = 1500;
 
 // Daily tasks — client-side for pilot; promote to server when we add
 // server-auth'd quests. Each field is a monotonic counter for today;
