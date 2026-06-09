@@ -875,7 +875,7 @@ export default function MapViewWeb() {
           minZoom: balance.mapZoomMin,
           maxZoom: balance.mapZoomMax,
           maxBounds: MAP_MAX_BOUNDS,
-          pitch: 30,
+          pitch: 55,
           attributionControl: { compact: true },
           // Drag-pan inertia tuning. The finger-follow phase is always
           // 1:1 — these only shape what happens after the user lifts.

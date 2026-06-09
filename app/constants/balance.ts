@@ -36,6 +36,6 @@ export const balance = {
   subMenuRadius: 100,
   mapZoomMin: 12,
   mapZoomMax: 19,
-  mapZoomDefault: 16,
+  mapZoomDefault: 17,
   gpsCircleRadius: 60,
 } as const;
