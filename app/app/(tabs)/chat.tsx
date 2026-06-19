@@ -17,6 +17,7 @@ import logoNose from '../../assets/logo-nose.png';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { pickBottomInset } from '../../services/telegram';
 import { useGameStore } from '../../stores/gameStore';
 import {
   buildCandidates,
@@ -288,7 +289,11 @@ export default function ChatScreen() {
 
   const header = useMemo(() => companionName || 'шукайпес', [companionName]);
 
-  const insets = useSafeAreaInsets();
+  const iosInsets = useSafeAreaInsets();
+  // In TG Mini App, TG handles the home-indicator strip. Using iOS's
+  // bottom inset there double-pads the chat input wrap so it floats
+  // too far above the tab bar. Pick TG's bottom inset when present.
+  const insets = { ...iosInsets, bottom: pickBottomInset(iosInsets.bottom) };
   // Padding the scroll content reserves an empty band at top + bottom
   // so the first/last bubbles can scroll freely behind the floating
   // header + input cards (which sit on top of the scroll view as

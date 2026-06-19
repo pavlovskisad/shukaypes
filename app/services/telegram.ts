@@ -58,6 +58,26 @@ export function getTelegramSafeAreaInset(): TelegramSafeAreaInset | null {
   return wa.contentSafeAreaInset ?? wa.safeAreaInset ?? null;
 }
 
+// Pick the bottom inset to use for floating UI (tab bar, chat input).
+// In TG Mini App, TG manages the area under the home indicator itself
+// so iOS's env(safe-area-inset-bottom) reports a strip that isn't
+// actually ours to pad for — using it doubles the inset and pushes
+// the tab bar's anchor below TG's content area. Caller passes in the
+// iOS inset (from useSafeAreaInsets) as the fallback for plain web.
+export function pickBottomInset(iosBottom: number): number {
+  const tg = getTelegramSafeAreaInset();
+  if (tg) return tg.bottom;
+  return iosBottom;
+}
+
+// Same idea for the top: when in TG, TG's chrome strip takes the top
+// so the inset should come from TG, not iOS's status-bar env.
+export function pickTopInset(iosTop: number): number {
+  const tg = getTelegramSafeAreaInset();
+  if (tg) return tg.top;
+  return iosTop;
+}
+
 // Configure Mini App chrome to match our brand + smooth the seam.
 // Called once at app boot from app/_layout.tsx.
 export function notifyTelegramReady(): void {

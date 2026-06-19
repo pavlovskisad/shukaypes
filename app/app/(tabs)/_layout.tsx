@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { Icon, type IconName } from '../../components/ui/Icon';
+import { pickBottomInset } from '../../services/telegram';
 
 // Tab icons are pixel-art SVGs (see components/ui/Icon.tsx). Inactive
 // tabs read as desaturated/dimmed via a wrapper View — RN-Web passes
@@ -31,7 +32,13 @@ export default function TabsLayout() {
   // `paddingBottom: 'env(safe-area-inset-bottom)'` string trick
   // didn't reach Safari through RN's StyleSheet — using the
   // numeric value from the hook is the reliable path.
-  const insets = useSafeAreaInsets();
+  const iosInsets = useSafeAreaInsets();
+  // In Telegram Mini App, TG manages the home-indicator strip
+  // itself — using iOS's inset doubles the padding and pushes the
+  // bar's anchor below TG's content area, which is why the dashboard
+  // reads as 'too low' in that context.
+  const bottomInset = pickBottomInset(iosInsets.bottom);
+  const insets = { ...iosInsets, bottom: bottomInset };
 
   return (
     <Tabs
