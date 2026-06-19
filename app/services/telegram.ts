@@ -4,12 +4,25 @@
 // Telegram window.Telegram is undefined; every helper returns null
 // so the existing device-id auth path runs unchanged.
 
+interface TelegramSafeAreaInset {
+  top: number;
+  bottom: number;
+  left: number;
+  right: number;
+}
+
 interface TelegramWebApp {
   initData: string;
   initDataUnsafe?: { user?: { id?: number; first_name?: string; username?: string } };
   ready: () => void;
   expand: () => void;
-  // Plenty more on the real object — only typed what we touch.
+  // Layout helpers — present on TG WebApp SDK ≥ 7.x. We feature-detect
+  // before calling so older clients don't throw.
+  disableVerticalSwipes?: () => void;
+  setHeaderColor?: (color: string) => void;
+  setBackgroundColor?: (color: string) => void;
+  safeAreaInset?: TelegramSafeAreaInset;
+  contentSafeAreaInset?: TelegramSafeAreaInset;
 }
 
 declare global {
@@ -33,9 +46,20 @@ export function isInTelegram(): boolean {
   return getTelegramInitData() !== null;
 }
 
-// Tell Telegram we're ready to render — removes the loading splash
-// it shows over the Mini App's iframe. Safe to call repeatedly; the
-// outermost mount calls this once.
+// Safe-area inset Telegram reports for the Mini App sheet. Differs
+// from iOS's CSS env(safe-area-inset-*) because TG's own chrome eats
+// part of the top. We layer this on top of insets we already read
+// from react-native-safe-area-context elsewhere.
+export function getTelegramSafeAreaInset(): TelegramSafeAreaInset | null {
+  const wa = getTelegramWebApp();
+  if (!wa) return null;
+  // contentSafeAreaInset is the newer (more accurate) field; fall
+  // back to safeAreaInset on older SDKs.
+  return wa.contentSafeAreaInset ?? wa.safeAreaInset ?? null;
+}
+
+// Configure Mini App chrome to match our brand + smooth the seam.
+// Called once at app boot from app/_layout.tsx.
 export function notifyTelegramReady(): void {
   const wa = getTelegramWebApp();
   if (!wa) return;
@@ -44,6 +68,14 @@ export function notifyTelegramReady(): void {
     // expand() opens the Mini App to full height of the TG sheet so
     // we don't render in the short default ~50% window.
     wa.expand();
+    // Without this, swiping the map vertically triggers TG's
+    // 'swipe down to close' gesture — every map pan would close
+    // the app. Critical for a map-centric Mini App.
+    wa.disableVerticalSwipes?.();
+    // Paint TG's header strip + sheet background white so the seam
+    // between our content and TG's chrome disappears.
+    wa.setHeaderColor?.('#ffffff');
+    wa.setBackgroundColor?.('#ffffff');
   } catch {
     /* swallow — best-effort UX hint */
   }
