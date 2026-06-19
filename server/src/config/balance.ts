@@ -14,6 +14,24 @@ export const balance = {
   // Per-waypoint progression bump + extra payoff at the final waypoint.
   // Walking the route is the main "we did it together" signal in v1.
   quest: { happinessPerWaypoint: 8, happinessOnComplete: 25 },
+  // XP sources. Sized so a casual day (~10 paws, 1 bone) earns ~40 XP
+  // and an active day (paws + bones + dailies + a quest) earns ~220.
+  // See lib/xp.ts for the curve — 50-level cap at ~24 500 XP, ~3-4
+  // months active to max, casual users drift indefinitely earning
+  // skin / prestige tiers along the way.
+  xp: {
+    perPaw: 3,
+    perBone: 8,
+    perQuestWaypoint: 25,
+    perQuestComplete: 100,
+    // Happiness bonus: when the dog is happy enough (>= the threshold
+    // below) every paw has a chance to be a "lucky" 2× XP one. Pure
+    // bonus — never penalises low happiness, just rewards keeping the
+    // dog cheerful. Reads to the user as 'oh nice, a lucky paw!'.
+    luckyPawHappinessThreshold: 70,
+    luckyPawChance: 0.2,
+    luckyPawMultiplier: 2,
+  },
   // Token spawning is location-driven: a base pool around the walker
   // (always something underfoot, regardless of nearby lost pets) plus
   // extra pools inside each nearby active lost-pet search zone, so

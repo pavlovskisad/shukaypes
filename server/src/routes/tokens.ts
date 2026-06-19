@@ -155,12 +155,20 @@ const plugin: FastifyPluginAsync = async (app) => {
           lastSeenAt: now,
         })
         .where(eq(schema.users.id, req.userId));
+      // XP per paw is balance.xp.perPaw, with a lucky 2× when happiness
+      // is high enough — pure bonus, never a penalty. Both the dice
+      // roll and the multiplier happen in SQL so it's atomic with the
+      // happiness/hunger bump.
+      const base = balance.xp.perPaw;
+      const luckyXp = base * balance.xp.luckyPawMultiplier;
+      const threshold = balance.xp.luckyPawHappinessThreshold;
+      const chance = balance.xp.luckyPawChance;
       await tx
         .update(schema.companionState)
         .set({
           hunger: sql`LEAST(${balance.hunger.max}, ${schema.companionState.hunger} + ${balance.token.hunger})`,
           happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${balance.token.happiness})`,
-          xp: sql`${schema.companionState.xp} + ${token.value}`,
+          xp: sql`${schema.companionState.xp} + CASE WHEN ${schema.companionState.happiness} >= ${threshold} AND random() < ${chance} THEN ${luckyXp} ELSE ${base} END`,
           // Reset the decay clock — the user is actively engaged, the
           // companion isn't sitting alone losing happiness. Without
           // this, the first collect after a long idle gap gets clobbered

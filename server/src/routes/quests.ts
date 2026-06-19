@@ -273,11 +273,18 @@ const plugin: FastifyPluginAsync = async (app) => {
       const happyDelta =
         balance.quest.happinessPerWaypoint +
         (done ? balance.quest.happinessOnComplete : 0);
-      if (happyDelta > 0) {
+      // XP per waypoint + a much bigger pop on completion. Both ride
+      // along the same companionState update so a partial failure
+      // doesn't grant happiness without XP (or vice versa).
+      const xpDelta =
+        balance.xp.perQuestWaypoint +
+        (done ? balance.xp.perQuestComplete : 0);
+      if (happyDelta > 0 || xpDelta > 0) {
         await tx
           .update(schema.companionState)
           .set({
             happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${happyDelta})`,
+            xp: sql`${schema.companionState.xp} + ${xpDelta}`,
             // Reset decay clock — see tokens.ts collect for rationale.
             lastDecayAt: sql`NOW()`,
           })

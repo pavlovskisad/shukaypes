@@ -131,6 +131,11 @@ const plugin: FastifyPluginAsync = async (app) => {
         .set({
           hunger: sql`LEAST(${balance.hunger.max}, ${schema.companionState.hunger} + ${balance.bone.hunger})`,
           happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${balance.bone.happiness})`,
+          // Bones are scarcer than paws (1 per nearby park vs ~20 in
+          // the user-area pool), so they're worth more XP — feeding
+          // the dog at parks is the small daily ritual we want to
+          // reward.
+          xp: sql`${schema.companionState.xp} + ${balance.xp.perBone}`,
           lastFedAt: now,
           // See note in tokens.ts collect — reset decay clock on every
           // active interaction so a single post-idle tick can't eat the

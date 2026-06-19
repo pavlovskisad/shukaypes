@@ -1,26 +1,32 @@
-// Companion progression. Triangular XP curve, 10-level cap.
+// Companion progression. Triangular XP curve, 50-level cap.
 //
-// xpForLevel(N) = cumulative XP needed to BE at level N. Triangular
-// shape means each level needs more than the last but the slope is
-// gentle — XP gap per level is XP_BASE * (level - 1).
+// Design intent: friendly motivational pacing — fast early dopamine,
+// realistic months-long road to L50 for engaged users, indefinite
+// rewarding drift for casual ones.
 //
-//   L1: 0       (start)
-//   L2: 50
-//   L3: 150
-//   L4: 300
-//   L5: 500
-//   L6: 750
-//   L7: 1050
-//   L8: 1400
-//   L9: 1800
-//   L10: 2250    (max — ~750-2250 paws to top out, comfy for the pilot)
+//   xpForLevel(N) = (XP_BASE * (N-1) * N) / 2
 //
-// Level is derived from xp on read in /state and /profile/me — we don't
-// persist a separate level column. That sidesteps level-up race
-// conditions and means the curve can be tuned without migrations.
+//   L1:  0          (start — instant)
+//   L2:  20
+//   L3:  60
+//   L5:  200
+//   L10: 900
+//   L20: 3 800
+//   L30: 8 700
+//   L40: 15 600
+//   L50: 24 500     (cap)
+//
+// At ~40 XP/casual-walk-day → L30 in ~7 months.
+// At ~220 XP/active-day (paws + bone + dailies + a quest) → L50 in
+// ~3.5 months.
+// XP only ever grows; missed days never lose XP, never lose levels.
+//
+// Level is derived from xp on read — we don't persist a separate
+// level column. Sidesteps level-up race conditions and means the
+// curve can be retuned without migrations.
 
-export const MAX_LEVEL = 10;
-export const XP_BASE = 50;
+export const MAX_LEVEL = 50;
+export const XP_BASE = 20;
 
 export function xpForLevel(level: number): number {
   if (level <= 1) return 0;
