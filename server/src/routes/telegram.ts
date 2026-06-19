@@ -30,6 +30,14 @@ interface TgUpdate {
   };
 }
 
+// Logger handle for sendMessage. Set on plugin init so the helper can
+// report TG API failures without us threading a logger through every
+// caller. Falls back to console when unset (e.g. in tests).
+let sendLog: { info: (o: unknown, m?: string) => void; warn: (o: unknown, m?: string) => void } = {
+  info: (o, m) => console.log(m ?? '', o),
+  warn: (o, m) => console.warn(m ?? '', o),
+};
+
 async function sendMessage(
   chatId: number,
   text: string,
@@ -38,7 +46,7 @@ async function sendMessage(
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!token) return;
   try {
-    await fetch(`${TG_API}/bot${token}/sendMessage`, {
+    const res = await fetch(`${TG_API}/bot${token}/sendMessage`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
@@ -48,8 +56,35 @@ async function sendMessage(
         ...extra,
       }),
     });
-  } catch {
-    /* best-effort — webhook still returns 200 to TG */
+    // Capture TG's response so silent failures (e.g. 'not enough rights
+    // to send messages', 'message to reply not found', HTML parse
+    // errors) actually show up in fly logs.
+    const json = (await res.json().catch(() => null)) as
+      | { ok: boolean; description?: string; error_code?: number }
+      | null;
+    if (!json?.ok) {
+      sendLog.warn(
+        {
+          kind: 'telegram_send',
+          chat_id: chatId,
+          status: res.status,
+          error_code: json?.error_code,
+          description: json?.description,
+          preview: text.slice(0, 80),
+        },
+        '[telegram] sendMessage failed',
+      );
+    } else {
+      sendLog.info(
+        { kind: 'telegram_send', chat_id: chatId, preview: text.slice(0, 80) },
+        '[telegram] sendMessage ok',
+      );
+    }
+  } catch (err) {
+    sendLog.warn(
+      { kind: 'telegram_send', chat_id: chatId, err: (err as Error).message },
+      '[telegram] sendMessage threw',
+    );
   }
 }
 
@@ -168,6 +203,12 @@ async function handleGroupLostPet(
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
+  // Route sendMessage failures through pino so they show up in fly logs
+  // alongside the rest of the request stream.
+  sendLog = {
+    info: (o, m) => app.log.info(o, m),
+    warn: (o, m) => app.log.warn(o, m),
+  };
   app.post<{ Body: TgUpdate }>('/telegram/webhook', async (req, reply) => {
     // Verify Telegram's secret token if we set one. Without this
     // anyone who guesses the webhook URL could spam our bot via us.
