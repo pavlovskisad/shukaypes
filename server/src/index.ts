@@ -18,6 +18,7 @@ import syncMapRoute from './routes/syncMap.js';
 import dailyTasksRoute from './routes/dailyTasks.js';
 import loreRoute from './routes/lore.js';
 import placesRoute from './routes/places.js';
+import telegramRoute, { registerTelegramWebhook } from './routes/telegram.js';
 import { startDecayCron } from './services/decay.js';
 import { startZoneExpansionCron } from './services/searchZoneExpansion.js';
 import { runMemoryCleanupOnce } from './services/memoryCleanup.js';
@@ -84,6 +85,7 @@ async function buildServer() {
   await app.register(dailyTasksRoute);
   await app.register(loreRoute);
   await app.register(placesRoute);
+  await app.register(telegramRoute);
 
   return app;
 }
@@ -99,6 +101,12 @@ async function main() {
   // memory notes written before PR #158 added the filter to new
   // writes. Fire-and-forget so it doesn't delay listen().
   void runMemoryCleanupOnce(app.log);
+  // Register the Telegram webhook every boot — idempotent on TG's
+  // side, makes the bot's subscription survive Fly rolling deploys.
+  // TELEGRAM_PUBLIC_URL is set to the canonical fly.dev host; falls
+  // back to a sensible default.
+  const publicUrl = process.env.TELEGRAM_PUBLIC_URL ?? 'https://shukajpes-api.fly.dev';
+  void registerTelegramWebhook(publicUrl, app.log);
   try {
     await app.listen({ port: PORT, host: HOST });
   } catch (err) {

@@ -86,6 +86,9 @@ const plugin: FastifyPluginAsync = async (app) => {
     if (path === '/health' || path === '/health/deep') return;
     if (path === '/stats') return;
     if (path?.startsWith('/admin/')) return;
+    // Telegram webhook is authenticated by its own secret token
+    // header (see routes/telegram.ts), not by our app's auth.
+    if (path === '/telegram/webhook') return;
 
     // Prefer Telegram initData when present — it's a stronger
     // identity (signed by Telegram with our bot token) and lets a
