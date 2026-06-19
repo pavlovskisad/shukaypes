@@ -303,7 +303,8 @@ export default function ChatScreen() {
   // insets.bottom covers iOS PWA standalone — the tab bar grows to
   // include the home-indicator safe-area, so the last bubble must sit
   // above (TAB_BAR_HEIGHT + safe-area + input band) to scroll free.
-  const bottomPad = TAB_BAR_HEIGHT + insets.bottom + INPUT_BAND_HEIGHT + 8;
+  const bottomPad =
+    TAB_BAR_HEIGHT + insets.bottom + INPUT_GAP_ABOVE_TABS + INPUT_BAND_HEIGHT + 8;
 
   return (
     <View style={styles.root}>
@@ -345,11 +346,17 @@ export default function ChatScreen() {
           on web Safari handles its own viewport adjustment. The
           insets.bottom term covers iOS PWA standalone, where the tab
           bar's visible height = TAB_BAR_HEIGHT + safe-area-inset to
-          clear the home indicator. Without it, the input slides under
-          the dashboard. */}
+          clear the home indicator. INPUT_GAP_ABOVE_TABS guarantees a
+          breathing strip between input + dashboard even when the
+          safe-area inset is 0 (e.g. inside TG Mini App, where TG owns
+          the home-indicator strip). Without it, the input sits flush
+          against the tab bar. */}
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-        style={[styles.bottomBandWrap, { bottom: TAB_BAR_HEIGHT + insets.bottom }]}
+        style={[
+          styles.bottomBandWrap,
+          { bottom: TAB_BAR_HEIGHT + insets.bottom + INPUT_GAP_ABOVE_TABS },
+        ]}
         pointerEvents="box-none"
       >
         <View style={styles.bottomBand} pointerEvents="box-none">
@@ -441,6 +448,9 @@ const CARD_SHADOW = {
 const HEADER_BAND_HEIGHT = 56;   // compact pill + its top/bottom margins
 const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 const TAB_BAR_HEIGHT = 60;       // matches _layout.tsx tabBarStyle
+// Breathing room between input wrap and the tab bar — used in addition
+// to safe-area inset because TG Mini App reports inset.bottom=0.
+const INPUT_GAP_ABOVE_TABS = 10;
 const styles = StyleSheet.create({
   root: {
     flex: 1,
