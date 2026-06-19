@@ -13,12 +13,20 @@ import type { FastifyPluginAsync } from 'fastify';
 
 const TG_API = 'https://api.telegram.org';
 
+interface TgPhoto {
+  file_id: string;
+  width: number;
+  height: number;
+}
+
 interface TgUpdate {
   message?: {
     message_id: number;
-    chat: { id: number; type: 'private' | 'group' | 'supergroup' | 'channel' };
+    chat: { id: number; type: 'private' | 'group' | 'supergroup' | 'channel'; title?: string };
     from?: { id: number; first_name?: string; username?: string };
     text?: string;
+    caption?: string;
+    photo?: TgPhoto[];
   };
 }
 
@@ -86,6 +94,38 @@ async function handleOtherDm(chatId: number): Promise<void> {
   );
 }
 
+// Heuristic: does this group message look like a lost-pet post?
+// Ukrainian, Russian, English keywords + needs at least a photo or a
+// substantial caption so we don't bark at every chat message.
+const LOST_PET_RE =
+  /\b(загубив(ся|ся|сь|ся)|загубилася|зник|зникла|пропав|пропала|пропал[ао]?|потерялся|потерялась|потерян|ищу собаку|ищу кота|ищу пса|шукаю собак|шукаю кота|lost|missing|reward|винагорода|нагорода)\b/i;
+
+function looksLikeLostPet(msg: NonNullable<TgUpdate['message']>): boolean {
+  const text = `${msg.text ?? ''} ${msg.caption ?? ''}`.trim();
+  if (text.length < 20) return false;
+  if (!LOST_PET_RE.test(text)) return false;
+  // Photo isn't strictly required (some posts are text-only) but a
+  // photo + keyword combo is the strongest signal. Allow text-only
+  // when caption is long enough to look like a real description.
+  if (!msg.photo && text.length < 60) return false;
+  return true;
+}
+
+async function handleGroupLostPet(
+  chatId: number,
+  messageId: number,
+): Promise<void> {
+  // Reply to the original post so the thread reads naturally.
+  await sendMessage(
+    chatId,
+    "*sniff sniff* — looks like a lost one. open me to start a search:",
+    {
+      reply_to_message_id: messageId,
+      reply_markup: openAppKeyboard(),
+    },
+  );
+}
+
 const plugin: FastifyPluginAsync = async (app) => {
   app.post<{ Body: TgUpdate }>('/telegram/webhook', async (req, reply) => {
     // Verify Telegram's secret token if we set one. Without this
@@ -101,13 +141,20 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     const update = req.body;
     const msg = update?.message;
-    if (msg && msg.chat?.type === 'private' && typeof msg.text === 'string') {
-      const chatId = msg.chat.id;
-      const firstName = msg.from?.first_name;
-      if (msg.text.startsWith('/start')) {
-        await handleStart(chatId, firstName);
-      } else {
-        await handleOtherDm(chatId);
+    if (msg) {
+      if (msg.chat?.type === 'private' && typeof msg.text === 'string') {
+        const chatId = msg.chat.id;
+        const firstName = msg.from?.first_name;
+        if (msg.text.startsWith('/start')) {
+          await handleStart(chatId, firstName);
+        } else {
+          await handleOtherDm(chatId);
+        }
+      } else if (
+        (msg.chat?.type === 'group' || msg.chat?.type === 'supergroup') &&
+        looksLikeLostPet(msg)
+      ) {
+        await handleGroupLostPet(msg.chat.id, msg.message_id);
       }
     }
     // Always ack — anything other than 200 makes Telegram retry the
@@ -154,13 +201,45 @@ export async function registerTelegramWebhook(
         '[telegram] setWebhook failed',
       );
     }
-    // Also publish a /start command into Telegram's UI so the user
-    // sees it in the bot's menu.
+    // Publish /start so it shows in the bot's command menu.
     await fetch(`${TG_API}/bot${token}/setMyCommands`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         commands: [{ command: 'start', description: 'open шукайпес' }],
+      }),
+    });
+    // Description appears as the 'What can this bot do?' panel
+    // Telegram shows BEFORE the user sends anything — exactly the
+    // 'who's here?' moment we want a hint at.
+    await fetch(`${TG_API}/bot${token}/setMyDescription`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        description:
+          "woof! who's here?! type /start (or tap the button below) and we go sniffin 🐾",
+      }),
+    });
+    // Short description shows on the bot's profile card.
+    await fetch(`${TG_API}/bot${token}/setMyShortDescription`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        short_description: 'every walk has a purpose. 🐾',
+      }),
+    });
+    // Chat menu button — replaces the default '/' menu with a one-tap
+    // shortcut into the Mini App. Persistent at the bottom-left of
+    // the chat input.
+    await fetch(`${TG_API}/bot${token}/setChatMenuButton`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        menu_button: {
+          type: 'web_app',
+          text: 'open шукайпес',
+          web_app: { url: miniAppUrl() },
+        },
       }),
     });
   } catch (err) {
