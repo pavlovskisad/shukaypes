@@ -2,6 +2,7 @@ import {
   pgTable,
   text,
   integer,
+  bigint,
   timestamp,
   doublePrecision,
   boolean,
@@ -10,7 +11,13 @@ import {
   primaryKey,
 } from 'drizzle-orm/pg-core';
 
-// Users — identified by device_id until Firebase auth lands.
+// Users. Identity comes from one of:
+//   - x-device-id header (web/PWA path, anonymous, browser-scoped)
+//   - x-telegram-init-data header (Mini App path, signed by Telegram)
+// A user row is created on first contact via either path. Mini App
+// users get a synthetic device_id ('tg:<telegram_id>') so the column
+// stays NOT NULL + UNIQUE without a schema break. telegram_id +
+// profile fields are nullable for legacy web-only rows.
 export const users = pgTable('users', {
   id: text('id').primaryKey(),
   deviceId: text('device_id').notNull().unique(),
@@ -20,6 +27,13 @@ export const users = pgTable('users', {
   totalDistanceMeters: integer('total_distance_meters').notNull().default(0),
   homeLat: doublePrecision('home_lat'),
   homeLng: doublePrecision('home_lng'),
+  // Telegram identity — populated when the session arrives with a
+  // valid Mini App initData payload. Partial unique index in the
+  // migration enforces one app user per Telegram id.
+  telegramId: bigint('telegram_id', { mode: 'number' }),
+  telegramUsername: text('telegram_username'),
+  telegramFirstName: text('telegram_first_name'),
+  telegramPhotoUrl: text('telegram_photo_url'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
 });

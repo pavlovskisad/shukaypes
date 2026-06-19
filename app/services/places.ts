@@ -1,6 +1,7 @@
 import type { LatLng } from '@shukajpes/shared';
 import { env } from '../constants/env';
 import { getDeviceId } from './deviceId';
+import { getTelegramInitData } from './telegram';
 
 // Nearby places — all queries now go through our backend's
 // /places/* endpoints, which proxy + cache Google Places (see
@@ -52,16 +53,20 @@ interface CachedPlace {
   icon?: string;
 }
 
-// Auth-aware fetch — auth plugin rejects anything without
-// `x-device-id` with a 401, which the spots tab silently rendered as
-// an empty list. Matches the header shape services/api.ts uses for
-// every other authed call.
+// Auth-aware fetch — prefer Telegram initData when running in the
+// Mini App, fall back to device-id otherwise. Matches the recipe in
+// services/api.ts so a 401 here means real auth failure, not a stale
+// helper missing the new header.
 async function getJSON<T>(path: string): Promise<T | null> {
   try {
+    const tgInitData = getTelegramInitData();
+    const authHeaders: Record<string, string> = tgInitData
+      ? { 'x-telegram-init-data': tgInitData }
+      : { 'x-device-id': getDeviceId() };
     const resp = await fetch(`${env.apiUrl}${path}`, {
       headers: {
         'content-type': 'application/json',
-        'x-device-id': getDeviceId(),
+        ...authHeaders,
       },
     });
     if (!resp.ok) return null;

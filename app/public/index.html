@@ -22,6 +22,15 @@
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#ffffff" />
 
+    <!-- Telegram Mini App SDK. When the page is opened inside Telegram
+         (Mini App), `window.Telegram.WebApp.initData` is a signed
+         payload our server verifies for auth — no login screen, the
+         user is already known. Outside Telegram (regular browser /
+         PWA), `window.Telegram` is undefined and we fall back to the
+         existing device-id flow. Script is cheap (~10 KB) and loads
+         on every page even outside TG, but it's a no-op there. -->
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+
     <!-- Preload the brand font alongside the HTML so the browser
          starts fetching before CSS parses @font-face. crossorigin is
          required by the spec for font preloads even on same-origin. -->

@@ -1,6 +1,7 @@
 import type { ChatMessage, FoodItem, LatLng, Quest, Token, UrgencyLevel } from '@shukajpes/shared';
 import { env } from '../constants/env';
 import { getDeviceId } from './deviceId';
+import { getTelegramInitData } from './telegram';
 
 // Projection returned by /dogs/nearby — narrower than the full LostDog type
 // (no description, source, status, reportedBy). Radius is named with the
@@ -50,11 +51,20 @@ export interface NearbyLostDog {
 }
 
 async function req<T>(path: string, init?: RequestInit): Promise<T> {
+  // Prefer Telegram Mini App auth when running inside Telegram —
+  // server validates the signature with our bot token and resolves
+  // (or creates) the user keyed on telegram_id. Outside Telegram
+  // (regular browser / PWA) we send the existing device-id header
+  // and the user stays anonymous + browser-scoped.
+  const tgInitData = getTelegramInitData();
+  const authHeaders: Record<string, string> = tgInitData
+    ? { 'x-telegram-init-data': tgInitData }
+    : { 'x-device-id': getDeviceId() };
   const res = await fetch(`${env.apiUrl}${path}`, {
     ...init,
     headers: {
       'content-type': 'application/json',
-      'x-device-id': getDeviceId(),
+      ...authHeaders,
       ...(init?.headers ?? {}),
     },
   });
