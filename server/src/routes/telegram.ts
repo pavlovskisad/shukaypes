@@ -95,20 +95,61 @@ async function handleOtherDm(chatId: number): Promise<void> {
 }
 
 // Heuristic: does this group message look like a lost-pet post?
-// Ukrainian, Russian, English keywords + needs at least a photo or a
-// substantial caption so we don't bark at every chat message.
-const LOST_PET_RE =
-  /\b(загубив(ся|ся|сь|ся)|загубилася|зник|зникла|пропав|пропала|пропал[ао]?|потерялся|потерялась|потерян|ищу собаку|ищу кота|ищу пса|шукаю собак|шукаю кота|lost|missing|reward|винагорода|нагорода)\b/i;
+// Two-stage match: a verb/state keyword (lost/missing/etc) plus enough
+// signal to avoid barking at every chat. Strongest signals: a photo
+// (most real lost-pet posts have one), or a pet noun in the same
+// message (so 'lost the dog' fires, 'lost my keys' doesn't).
+//
+// JS `\b` only recognises ASCII word chars, so we use Unicode-aware
+// lookarounds `(?<!\p{L})x(?!\p{L})` with the `u` flag. Without this,
+// every Cyrillic alternative silently never matches.
+const NOT_LETTER = '(?<!\\p{L})';
+const NOT_LETTER_AHEAD = '(?!\\p{L})';
+const W = (alt: string) => `${NOT_LETTER}(?:${alt})${NOT_LETTER_AHEAD}`;
+
+const LOST_PET_RE = new RegExp(
+  [
+    W('загубив(?:ся|сь|ась|ася|ши)?'),
+    W('загубил(?:а|и|ась|ася)?'),
+    W('зник(?:ла|ло|ли)?'),
+    W('пропав'),
+    W('пропала'),
+    W('пропал[ао]?'),
+    W('потеря(?:лся|лась|ли|н|на)'),
+    W('ищу\\s+(?:собаку|кота|пса|щенка|котенка)'),
+    W('шукаю\\s+(?:собак(?:у|и)?|кота|пса|щеня)'),
+    W('винагорода'),
+    W('нагорода'),
+    '\\blost\\b',
+    '\\bmissing\\b',
+    '\\breward\\b',
+  ].join('|'),
+  'iu',
+);
+
+// Pet-noun signal — when present alongside a lost-keyword we trust the
+// match even on short text-only posts. Cyrillic stems need Unicode
+// boundaries for the same reason as above.
+const PET_NOUN_RE = new RegExp(
+  [
+    NOT_LETTER + '(?:собак|пес|пёс|пса|щен|кіт|кот|котен|кошк|кішк)',
+    '\\b(?:cat|dog|puppy|kitten|pet)\\b',
+  ].join('|'),
+  'iu',
+);
 
 function looksLikeLostPet(msg: NonNullable<TgUpdate['message']>): boolean {
   const text = `${msg.text ?? ''} ${msg.caption ?? ''}`.trim();
-  if (text.length < 20) return false;
+  if (text.length < 12) return false;
   if (!LOST_PET_RE.test(text)) return false;
-  // Photo isn't strictly required (some posts are text-only) but a
-  // photo + keyword combo is the strongest signal. Allow text-only
-  // when caption is long enough to look like a real description.
-  if (!msg.photo && text.length < 60) return false;
-  return true;
+  // Strongest signal — a photo with a lost keyword is almost always a
+  // real post; reply immediately.
+  if (msg.photo) return true;
+  // Text-only: pet noun + keyword is a strong combo even short ('загубив
+  // собаку на поштовій'). Without a pet noun fall back to the old length
+  // gate so 'I lost my keys' doesn't trigger.
+  if (PET_NOUN_RE.test(text)) return true;
+  return text.length >= 60;
 }
 
 async function handleGroupLostPet(
@@ -150,11 +191,25 @@ const plugin: FastifyPluginAsync = async (app) => {
         } else {
           await handleOtherDm(chatId);
         }
-      } else if (
-        (msg.chat?.type === 'group' || msg.chat?.type === 'supergroup') &&
-        looksLikeLostPet(msg)
-      ) {
-        await handleGroupLostPet(msg.chat.id, msg.message_id);
+      } else if (msg.chat?.type === 'group' || msg.chat?.type === 'supergroup') {
+        // Log every group msg the bot actually receives — lets us tell
+        // from `fly logs` whether group-privacy is letting updates
+        // through at all, and whether the matcher fired or skipped.
+        const text = `${msg.text ?? ''} ${msg.caption ?? ''}`.trim();
+        const matched = looksLikeLostPet(msg);
+        req.log.info(
+          {
+            kind: 'telegram_group_msg',
+            chat_id: msg.chat.id,
+            chat_title: msg.chat.title,
+            has_photo: !!msg.photo,
+            text_len: text.length,
+            preview: text.slice(0, 80),
+            matched,
+          },
+          '[telegram] group message',
+        );
+        if (matched) await handleGroupLostPet(msg.chat.id, msg.message_id);
       }
     }
     // Always ack — anything other than 200 makes Telegram retry the
