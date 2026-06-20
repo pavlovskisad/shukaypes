@@ -159,6 +159,12 @@ const plugin: FastifyPluginAsync = async (app) => {
       // is high enough — pure bonus, never a penalty. Both the dice
       // roll and the multiplier happen in SQL so it's atomic with the
       // happiness/hunger bump.
+      //
+      // The ::int casts on the CASE branches matter: postgres-js binds
+      // JS numbers as untyped parameters, and pg's planner defaults
+      // CASE branches to TEXT when context doesn't pin a type. Without
+      // the casts, `xp + (text)` throws 'operator does not exist:
+      // integer + text' (42883).
       const base = balance.xp.perPaw;
       const luckyXp = base * balance.xp.luckyPawMultiplier;
       const threshold = balance.xp.luckyPawHappinessThreshold;
@@ -168,7 +174,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         .set({
           hunger: sql`LEAST(${balance.hunger.max}, ${schema.companionState.hunger} + ${balance.token.hunger})`,
           happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${balance.token.happiness})`,
-          xp: sql`${schema.companionState.xp} + CASE WHEN ${schema.companionState.happiness} >= ${threshold} AND random() < ${chance} THEN ${luckyXp} ELSE ${base} END`,
+          xp: sql`${schema.companionState.xp} + CASE WHEN ${schema.companionState.happiness} >= ${threshold} AND random() < ${chance}::float8 THEN ${luckyXp}::int ELSE ${base}::int END`,
           // Reset the decay clock — the user is actively engaged, the
           // companion isn't sitting alone losing happiness. Without
           // this, the first collect after a long idle gap gets clobbered
