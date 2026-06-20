@@ -10,6 +10,11 @@
 //                 Vercel deploy.
 
 import type { FastifyPluginAsync } from 'fastify';
+import {
+  looksLikeLostPet as looksLikeLostPetShared,
+  looksLikeRehoming as looksLikeRehomingShared,
+} from '../pipeline/keywords.js';
+import { ingestFromGroupPost, type IngestOutcome } from '../services/telegramIngest.js';
 
 const TG_API = 'https://api.telegram.org';
 
@@ -124,15 +129,16 @@ function openAppKeyboard() {
 
 // Group-safe variant — `url` button instead of `web_app`. Tapping
 // opens the Mini App via TG's deep-link handler. The startapp param
-// lets us tell the app it was opened from a lost-pet thread (future:
-// could prefill a 'sniff this post' flow).
-function openAppGroupKeyboard() {
+// passes through to the Mini App as initDataUnsafe.start_param, which
+// the client can use to route straight to the relevant lost-pet
+// search (handler not yet wired client-side, but the link is stable).
+function openAppGroupKeyboard(startParam: string = 'lostpet') {
   return {
     inline_keyboard: [
       [
         {
           text: '🐾 open шукайпес',
-          url: miniAppDeepLink('lostpet'),
+          url: miniAppDeepLink(startParam),
         },
       ],
     ],
@@ -161,77 +167,72 @@ async function handleOtherDm(chatId: number): Promise<void> {
   );
 }
 
-// Heuristic: does this group message look like a lost-pet post?
-// Two-stage match: a verb/state keyword (lost/missing/etc) plus enough
-// signal to avoid barking at every chat. Strongest signals: a photo
-// (most real lost-pet posts have one), or a pet noun in the same
-// message (so 'lost the dog' fires, 'lost my keys' doesn't).
-//
-// JS `\b` only recognises ASCII word chars, so we use Unicode-aware
-// lookarounds `(?<!\p{L})x(?!\p{L})` with the `u` flag. Without this,
-// every Cyrillic alternative silently never matches.
-const NOT_LETTER = '(?<!\\p{L})';
-const NOT_LETTER_AHEAD = '(?!\\p{L})';
-const W = (alt: string) => `${NOT_LETTER}(?:${alt})${NOT_LETTER_AHEAD}`;
-
-const LOST_PET_RE = new RegExp(
-  [
-    W('загубив(?:ся|сь|ась|ася|ши)?'),
-    W('загубил(?:а|и|ась|ася)?'),
-    W('зник(?:ла|ло|ли)?'),
-    W('пропав'),
-    W('пропала'),
-    W('пропал[ао]?'),
-    W('потеря(?:лся|лась|ли|н|на)'),
-    W('ищу\\s+(?:собаку|кота|пса|щенка|котенка)'),
-    W('шукаю\\s+(?:собак(?:у|и)?|кота|пса|щеня)'),
-    W('винагорода'),
-    W('нагорода'),
-    '\\blost\\b',
-    '\\bmissing\\b',
-    '\\breward\\b',
-  ].join('|'),
-  'iu',
-);
-
-// Pet-noun signal — when present alongside a lost-keyword we trust the
-// match even on short text-only posts. Cyrillic stems need Unicode
-// boundaries for the same reason as above.
-const PET_NOUN_RE = new RegExp(
-  [
-    NOT_LETTER + '(?:собак|пес|пёс|пса|щен|кіт|кот|котен|кошк|кішк)',
-    '\\b(?:cat|dog|puppy|kitten|pet)\\b',
-  ].join('|'),
-  'iu',
-);
-
-function looksLikeLostPet(msg: NonNullable<TgUpdate['message']>): boolean {
+// Pre-parse gate: cheap regex filter so we don't burn a Haiku call on
+// every chat message. Reuses the same keyword sets the scrape pipeline
+// uses — substring stems, not word-boundary regex, so Cyrillic
+// inflections match without JS's ASCII-only \b problem.
+function looksLikeLostPetMessage(msg: NonNullable<TgUpdate['message']>): boolean {
   const text = `${msg.text ?? ''} ${msg.caption ?? ''}`.trim();
   if (text.length < 12) return false;
-  if (!LOST_PET_RE.test(text)) return false;
-  // Strongest signal — a photo with a lost keyword is almost always a
-  // real post; reply immediately.
+  // Rehoming posts (offering a pet for adoption) read superficially
+  // similar to lost-pet posts — short-circuit before keyword check so
+  // we don't reply 'sniff sniff' on an adoption ad.
+  if (looksLikeRehomingShared(text)) return false;
+  if (!looksLikeLostPetShared(text)) return false;
+  // Photo + keyword = high signal, reply immediately.
   if (msg.photo) return true;
-  // Text-only: pet noun + keyword is a strong combo even short ('загубив
-  // собаку на поштовій'). Without a pet noun fall back to the old length
-  // gate so 'I lost my keys' doesn't trigger.
-  if (PET_NOUN_RE.test(text)) return true;
-  return text.length >= 60;
+  // Text-only: keep the post if it's long enough to be a real
+  // description, OR mentions a pet noun explicitly (the shared
+  // PET_KEYWORDS already require this — looksLikeLostPetShared
+  // returns true only when both pet AND lost-keyword hit).
+  return text.length >= 30;
+}
+
+// Reply text + deep-link param vary by ingest outcome so the bot's
+// message reflects what actually happened (added vs already-known vs
+// generic 'sniff sniff' when we couldn't parse).
+function buildGroupReply(outcome: IngestOutcome | null): { text: string; startParam: string } {
+  if (!outcome) {
+    return {
+      text: "*sniff sniff* — looks like a lost one. open me to start a search:",
+      startParam: 'lostpet',
+    };
+  }
+  switch (outcome.kind) {
+    case 'inserted': {
+      const name = outcome.parsed.name;
+      const emoji = outcome.parsed.emoji;
+      return {
+        text: `*sniff sniff* ${emoji}\n\nadded ${name} to the map — tap below to start the search:`,
+        startParam: `lost-${outcome.dogId}`,
+      };
+    }
+    case 'updated':
+    case 'duplicate':
+    case 'already-ingested': {
+      return {
+        text: "*sniff sniff* — i've sniffed this one before. already on the map:",
+        startParam: outcome.dogId ? `lost-${outcome.dogId}` : 'lostpet',
+      };
+    }
+    default:
+      return {
+        text: "*sniff sniff* — looks like a lost one. open me to start a search:",
+        startParam: 'lostpet',
+      };
+  }
 }
 
 async function handleGroupLostPet(
   chatId: number,
   messageId: number,
+  outcome: IngestOutcome | null,
 ): Promise<void> {
-  // Reply to the original post so the thread reads naturally.
-  await sendMessage(
-    chatId,
-    "*sniff sniff* — looks like a lost one. open me to start a search:",
-    {
-      reply_to_message_id: messageId,
-      reply_markup: openAppGroupKeyboard(),
-    },
-  );
+  const { text, startParam } = buildGroupReply(outcome);
+  await sendMessage(chatId, text, {
+    reply_to_message_id: messageId,
+    reply_markup: openAppGroupKeyboard(startParam),
+  });
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
@@ -269,7 +270,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         // from `fly logs` whether group-privacy is letting updates
         // through at all, and whether the matcher fired or skipped.
         const text = `${msg.text ?? ''} ${msg.caption ?? ''}`.trim();
-        const matched = looksLikeLostPet(msg);
+        const matched = looksLikeLostPetMessage(msg);
         req.log.info(
           {
             kind: 'telegram_group_msg',
@@ -282,7 +283,33 @@ const plugin: FastifyPluginAsync = async (app) => {
           },
           '[telegram] group message',
         );
-        if (matched) await handleGroupLostPet(msg.chat.id, msg.message_id);
+        if (matched) {
+          // Parse + ingest synchronously — Haiku is ~2-3s, well inside
+          // TG's webhook timeout. Errors here must NOT propagate; the
+          // ingestFromGroupPost helper catches its own and returns an
+          // outcome we map to a generic reply.
+          let outcome: IngestOutcome | null = null;
+          try {
+            outcome = await ingestFromGroupPost(msg, req.log);
+            req.log.info(
+              {
+                kind: 'telegram_ingest',
+                chat_id: msg.chat.id,
+                message_id: msg.message_id,
+                outcome: outcome.kind,
+                dog_id:
+                  'dogId' in outcome ? outcome.dogId : undefined,
+              },
+              '[telegram] ingest result',
+            );
+          } catch (err) {
+            req.log.warn(
+              { kind: 'telegram_ingest', err: (err as Error).message },
+              '[telegram] ingest threw',
+            );
+          }
+          await handleGroupLostPet(msg.chat.id, msg.message_id, outcome);
+        }
       }
     }
     // Always ack — anything other than 200 makes Telegram retry the
