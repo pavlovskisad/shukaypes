@@ -53,6 +53,23 @@ export function isInTelegram(): boolean {
   return getTelegramInitData() !== null;
 }
 
+// Captured at module-init time, BEFORE expo-router has a chance to
+// process the initial route and potentially strip query parameters.
+// The bot's DM web_app button opens the Mini App at
+// ${miniAppUrl()}?dog=<id>, and we need that query to survive any
+// router-driven URL rewrites that happen between page load and the
+// first MapView mount (which is when we actually read it).
+const INITIAL_URL_DOG_ID = (() => {
+  if (typeof window === 'undefined' || !window.location) return null;
+  try {
+    const url = new URL(window.location.href);
+    const dog = url.searchParams.get('dog');
+    return dog && dog.length > 0 ? dog : null;
+  } catch {
+    return null;
+  }
+})();
+
 // Mini App was opened via t.me/<bot>?startapp=<param>. The bot uses
 // this to deep-link into a specific lost-pet pin (e.g. 'lost-<id>').
 // Returns null outside Telegram, or when the app was opened cold.
@@ -66,10 +83,14 @@ export function getTelegramStartParam(): string | null {
 // channels in priority order:
 //   1. Telegram's start_param ('lost-<id>') — fires when the Mini App
 //      was opened via a registered Main Mini App (?startapp= URL).
-//   2. The URL's ?dog=<id> query — set by the bot's in-DM web_app
-//      button. This is the path that works WITHOUT a Main Mini App
-//      registration; the bot's /start handler bakes ?dog=<id> into
-//      the Mini App URL so the app can still find the right pet.
+//   2. The URL's ?dog=<id> query, captured at module init — set by
+//      the bot's in-DM web_app button. This is the path that works
+//      WITHOUT a Main Mini App registration; the bot's /start handler
+//      bakes ?dog=<id> into the Mini App URL so the app can still
+//      find the right pet. Reading it live from window.location is
+//      unreliable because expo-router can rewrite the URL during its
+//      initial route resolution, dropping the query — hence the
+//      INITIAL_URL_DOG_ID snapshot taken when this module first loads.
 //
 // Returns the bare dog id (no 'lost-' prefix) or null.
 export function getDeepLinkDogId(): string | null {
@@ -78,16 +99,7 @@ export function getDeepLinkDogId(): string | null {
     const id = param.slice('lost-'.length);
     if (id) return id;
   }
-  if (typeof window !== 'undefined' && window.location) {
-    try {
-      const url = new URL(window.location.href);
-      const dog = url.searchParams.get('dog');
-      if (dog && dog.length > 0) return dog;
-    } catch {
-      /* malformed URL — give up silently */
-    }
-  }
-  return null;
+  return INITIAL_URL_DOG_ID;
 }
 
 // Safe-area inset Telegram reports for the Mini App sheet. Differs
