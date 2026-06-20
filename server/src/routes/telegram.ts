@@ -92,8 +92,23 @@ function miniAppUrl(): string {
   return process.env.TELEGRAM_MINI_APP_URL ?? 'https://shukaypes.vercel.app';
 }
 
+function botUsername(): string {
+  return process.env.TELEGRAM_BOT_USERNAME ?? 'shukaypes_bot';
+}
+
+// Deep-link that opens the bot's main Mini App from anywhere in
+// Telegram (groups included). The `web_app` inline-button type only
+// works in private chats — sending it to a group yields TG's
+// BUTTON_TYPE_INVALID 400. A regular `url` button pointing at this
+// t.me/<bot>?startapp link sidesteps the restriction and still opens
+// the Mini App as a Mini App (not the external browser).
+function miniAppDeepLink(startParam = 'lostpet'): string {
+  return `https://t.me/${botUsername()}?startapp=${startParam}`;
+}
+
 // Inline keyboard with a web_app button — tapping opens the Mini App
-// inside Telegram, no browser switch, auth via initData.
+// inside Telegram, no browser switch, auth via initData. ONLY valid
+// in private chats; for groups use openAppGroupKeyboard().
 function openAppKeyboard() {
   return {
     inline_keyboard: [
@@ -101,6 +116,23 @@ function openAppKeyboard() {
         {
           text: '🐾 open шукайпес',
           web_app: { url: miniAppUrl() },
+        },
+      ],
+    ],
+  };
+}
+
+// Group-safe variant — `url` button instead of `web_app`. Tapping
+// opens the Mini App via TG's deep-link handler. The startapp param
+// lets us tell the app it was opened from a lost-pet thread (future:
+// could prefill a 'sniff this post' flow).
+function openAppGroupKeyboard() {
+  return {
+    inline_keyboard: [
+      [
+        {
+          text: '🐾 open шукайпес',
+          url: miniAppDeepLink('lostpet'),
         },
       ],
     ],
@@ -197,7 +229,7 @@ async function handleGroupLostPet(
     "*sniff sniff* — looks like a lost one. open me to start a search:",
     {
       reply_to_message_id: messageId,
-      reply_markup: openAppKeyboard(),
+      reply_markup: openAppGroupKeyboard(),
     },
   );
 }
