@@ -163,6 +163,13 @@ export const api = {
       `/dogs/nearby?lat=${pos.lat}&lng=${pos.lng}&radius=${radiusM}`,
     ),
 
+  // Single-dog lookup by id. /dogs/nearby is GPS-bounded, so when the
+  // user opens a Telegram deep-link (?startapp=lost-<id>) we can't
+  // assume the pet is in their current radius — this fetches it
+  // directly so the map can fly to it from anywhere.
+  getLostDogById: (id: string) =>
+    req<{ dog: NearbyLostDog }>(`/dogs/${encodeURIComponent(id)}`),
+
   // Bulk variant of the four /tokens/nearby + /food/nearby +
   // /dogs/nearby + /state calls. One round-trip instead of four; the
   // client store can also collapse the resulting state into a single

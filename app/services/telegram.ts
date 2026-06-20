@@ -13,7 +13,14 @@ interface TelegramSafeAreaInset {
 
 interface TelegramWebApp {
   initData: string;
-  initDataUnsafe?: { user?: { id?: number; first_name?: string; username?: string } };
+  // start_param comes from the t.me/<bot>?startapp=<param> deep link —
+  // the bot's lost-pet reply embeds 'lost-<id>' there so the app can
+  // open straight to that dog's pin instead of dropping the user on
+  // the generic map.
+  initDataUnsafe?: {
+    user?: { id?: number; first_name?: string; username?: string };
+    start_param?: string;
+  };
   ready: () => void;
   expand: () => void;
   // Layout helpers — present on TG WebApp SDK ≥ 7.x. We feature-detect
@@ -44,6 +51,15 @@ export function getTelegramInitData(): string | null {
 
 export function isInTelegram(): boolean {
   return getTelegramInitData() !== null;
+}
+
+// Mini App was opened via t.me/<bot>?startapp=<param>. The bot uses
+// this to deep-link into a specific lost-pet pin (e.g. 'lost-<id>').
+// Returns null outside Telegram, or when the app was opened cold.
+export function getTelegramStartParam(): string | null {
+  const wa = getTelegramWebApp();
+  const raw = wa?.initDataUnsafe?.start_param;
+  return raw && raw.length > 0 ? raw : null;
 }
 
 // Safe-area inset Telegram reports for the Mini App sheet. Differs

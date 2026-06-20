@@ -77,6 +77,53 @@ const plugin: FastifyPluginAsync = async (app) => {
       })),
     };
   });
+
+  // Single-dog lookup. /dogs/nearby is GPS-bounded, so a deep-link
+  // (?startapp=lost-<id>) opened from Telegram can't rely on it —
+  // the user might be standing far from the pet's last-seen pin.
+  // This endpoint returns the same projection shape as /dogs/nearby's
+  // array items so the client can drop it straight into the same
+  // store list and reuse the existing modal/marker code.
+  app.get<{ Params: { id: string } }>('/dogs/:id', async (req, reply) => {
+    const [row] = await db
+      .select({
+        id: schema.lostDogs.id,
+        name: schema.lostDogs.name,
+        species: schema.lostDogs.species,
+        breed: schema.lostDogs.breed,
+        emoji: schema.lostDogs.emoji,
+        photoUrl: schema.lostDogs.photoUrl,
+        lat: schema.lostDogs.lastSeenLat,
+        lng: schema.lostDogs.lastSeenLng,
+        at: schema.lostDogs.lastSeenAt,
+        urgency: schema.lostDogs.urgency,
+        zoneRadiusM: schema.lostDogs.searchZoneRadiusM,
+        rewardPoints: schema.lostDogs.rewardPoints,
+        status: schema.lostDogs.status,
+      })
+      .from(schema.lostDogs)
+      .where(eq(schema.lostDogs.id, req.params.id))
+      .limit(1);
+    if (!row) {
+      reply.code(404);
+      return { error: 'not found' };
+    }
+    return {
+      dog: {
+        id: row.id,
+        name: row.name,
+        species: row.species,
+        breed: row.breed,
+        emoji: row.emoji,
+        photoUrl: row.photoUrl,
+        urgency: row.urgency,
+        rewardPoints: row.rewardPoints,
+        searchZoneRadiusM: row.zoneRadiusM,
+        lastSeen: { position: { lat: row.lat, lng: row.lng }, at: row.at.toISOString() },
+        status: row.status,
+      },
+    };
+  });
 };
 
 export default plugin;

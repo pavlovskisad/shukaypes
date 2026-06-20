@@ -200,6 +200,11 @@ interface GameState {
   syncTokens: (pos: LatLng) => Promise<void>;
   syncFood: (pos: LatLng) => Promise<void>;
   syncLostDogs: (pos: LatLng) => Promise<void>;
+  // Fetch a single lost dog by id (used by the Telegram deep-link
+  // path — the user might be anywhere when they tap the bot's button).
+  // Inserts it into the lostDogs list if not already there so the
+  // existing modal/marker code can find it.
+  fetchLostDog: (id: string) => Promise<NearbyLostDog | null>;
   // Bulk equivalent of syncTokens + syncFood + syncLostDogs +
   // syncState in a single round-trip. MapView calls this on focus +
   // every 15s; the per-resource actions stay around for callers that
@@ -587,6 +592,23 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ lostDogs: dogs });
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
+    }
+  },
+
+  fetchLostDog: async (id) => {
+    try {
+      const { dog } = await api.getLostDogById(id);
+      // Merge into the current list (replace if a stale copy exists,
+      // append otherwise) so MapView's marker + LostDogModal can find
+      // it via the same lostDogs.find(d => d.id === selectedDogId)
+      // path they use for nearby fetches.
+      set((s) => {
+        const without = s.lostDogs.filter((d) => d.id !== dog.id);
+        return { lostDogs: [...without, dog] };
+      });
+      return dog;
+    } catch {
+      return null;
     }
   },
 

@@ -34,6 +34,7 @@ import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
 import { SpotModal } from '../ui/SpotModal';
+import { getTelegramStartParam } from '../../services/telegram';
 import { fetchWalkingRoute } from '../../services/directions';
 import { PoiMarker } from './PoiMarker';
 import { PoiCluster } from './PoiCluster';
@@ -192,6 +193,7 @@ export default function MapViewWeb() {
   const setViewportCenter = useGameStore((s) => s.setViewportCenter);
   const collectPath = useGameStore((s) => s.collectPath);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
+  const fetchLostDog = useGameStore((s) => s.fetchLostDog);
   const activeQuest = useGameStore((s) => s.activeQuest);
   const syncActiveQuest = useGameStore((s) => s.syncActiveQuest);
   const advanceQuestIfNear = useGameStore((s) => s.advanceQuestIfNear);
@@ -263,6 +265,34 @@ export default function MapViewWeb() {
       duration: 700,
     });
   }, [activeQuest?.id]);
+
+  // Telegram deep-link: when the Mini App opens via
+  // t.me/<bot>?startapp=lost-<id>, fetch that dog (it may be far from
+  // the user's GPS so /dogs/nearby wouldn't catch it), drop it into
+  // the store list, ease the map to its pin, and pop the modal. Runs
+  // once per app session — the ref gate guards against re-fires when
+  // mapBounds ticks on every idle.
+  const deepLinkAppliedRef = useRef(false);
+  useEffect(() => {
+    if (deepLinkAppliedRef.current) return;
+    if (!mapBounds) return; // wait until the map has rendered at least once
+    const param = getTelegramStartParam();
+    if (!param || !param.startsWith('lost-')) return;
+    const id = param.slice('lost-'.length);
+    if (!id) return;
+    deepLinkAppliedRef.current = true;
+    void (async () => {
+      const dog = await fetchLostDog(id);
+      if (!dog) return;
+      setSelectedDog(dog.id);
+      mapRef.current?.easeTo({
+        center: [dog.lastSeen.position.lng, dog.lastSeen.position.lat],
+        zoom: 16,
+        padding: { top: 110, bottom: 130, left: 20, right: 20 },
+        duration: 700,
+      });
+    })();
+  }, [mapBounds, fetchLostDog, setSelectedDog]);
 
   const showBubble = useCallback((msg: string, duration?: number) => {
     setBubble(msg);
