@@ -12,7 +12,12 @@
 
 import { anthropic } from '../services/anthropic.js';
 import { snapToLandIfInRiver } from '../utils/geo.js';
+import { lookupBestPlace } from '../services/gazetteer.js';
 import type { ParsedDog, Species, Urgency } from './types.js';
+
+const FALLBACK_LAT = 50.4501;
+const FALLBACK_LNG = 30.5234;
+const FALLBACK_TOLERANCE = 0.0005; // ≈55m — Haiku sometimes nudges the fallback by a hair
 
 const PARSER_MODEL = 'claude-haiku-4-5';
 
@@ -77,6 +82,7 @@ const OUTPUT_SCHEMA = `OUTPUT: a single JSON object with these fields, no prose,
     "emoji": string           // one emoji that fits the species. dogs: 🐕 default, 🐺 husky/malamute, 🐶 small/cute, 🐕‍🦺 shepherd/working, 🦊 shiba, 🦮 guide/lab. cats: 🐈 default, 🐈‍⬛ black cat, 😺 playful, 🐱 kitten. never emit a cat emoji for a dog or vice versa.
     "lastSeenLat": number     // decimal degrees, must be inside Kyiv (49.9..50.6, 30.2..30.9)
     "lastSeenLng": number
+    "locationMentions": string[]  // EVERY place name mentioned in the post, in the original ukrainian/russian — squares, streets, metro stations, parks, neighbourhoods, intersections, addresses. each as a separate string, no prepositions ("на Львівській площі" → "Львівська площа"). best-effort restored to nominative case. empty array if none. these get resolved against our OSM gazetteer, so include them even when you also resolved lat/lng yourself — they're a backstop, not a replacement.
     "lastSeenDescription": string   // 1 short english sentence about where and how seen — for the companion to quote. keep under 140 chars. no phone numbers, no personal contact info.
     "lastSeenAt": string      // ISO8601. if post gives a date use that. if it says "today/сьогодні/сегодня" use NOW. if vague ("this week"), use NOW minus 2 days.
     "urgency": "urgent" | "medium" | "resolved" | "rehoming"
@@ -107,31 +113,31 @@ INPUT:
 Пропав пес! Бусинка, маленька рудa дворняга, нашийник червоний. Вчора ввечері біля Контрактової вирвалась з рук. Дуже боїться людей, ховається у під'їздах. Нагорода 2000 грн. Телефон 067-555-1234
 
 OUTPUT:
-{"name":"Бусинка","species":"dog","breed":"mixed / дворняга","emoji":"🐕","lastSeenLat":50.4612,"lastSeenLng":30.5172,"lastSeenDescription":"small tan mix, red collar, slipped leash near Kontraktova yesterday evening, scared of strangers","lastSeenAt":"{{NOW_MINUS_1D}}","urgency":"urgent","searchZoneRadiusM":600,"rewardPoints":200,"photoUrl":null,"parseConfidence":0.9,"parseNotes":""}
+{"name":"Бусинка","species":"dog","breed":"mixed / дворняга","emoji":"🐕","lastSeenLat":50.4612,"lastSeenLng":30.5172,"locationMentions":["Контрактова площа"],"lastSeenDescription":"small tan mix, red collar, slipped leash near Kontraktova yesterday evening, scared of strangers","lastSeenAt":"{{NOW_MINUS_1D}}","urgency":"urgent","searchZoneRadiusM":600,"rewardPoints":200,"photoUrl":null,"parseConfidence":0.9,"parseNotes":""}
 
 INPUT:
 Lost dog in Troieshchyna area! Lora, yellow labrador, ~4yo, no collar, answers to name. Last seen near the river embankment 3 days ago. Please call if you see her.
 
 OUTPUT:
-{"name":"Лора","species":"dog","breed":"labrador","emoji":"🦮","lastSeenLat":50.5167,"lastSeenLng":30.6083,"lastSeenDescription":"yellow lab, ~4yo, no collar, answers to name, near Troieshchyna river embankment 3 days ago","lastSeenAt":"{{NOW_MINUS_3D}}","urgency":"medium","searchZoneRadiusM":800,"rewardPoints":100,"photoUrl":null,"parseConfidence":0.85,"parseNotes":""}
+{"name":"Лора","species":"dog","breed":"labrador","emoji":"🦮","lastSeenLat":50.5167,"lastSeenLng":30.6083,"locationMentions":["Троєщина"],"lastSeenDescription":"yellow lab, ~4yo, no collar, answers to name, near Troieshchyna river embankment 3 days ago","lastSeenAt":"{{NOW_MINUS_3D}}","urgency":"medium","searchZoneRadiusM":800,"rewardPoints":100,"photoUrl":null,"parseConfidence":0.85,"parseNotes":""}
 
 INPUT:
 Зник кіт, чорно-білий, на Печерську біля клоВської. Мурзик, 3 роки, нашийник червоний. Дуже лякливий. Якщо побачите — не ловіть самі, подзвоніть. Винагорода.
 
 OUTPUT:
-{"name":"Мурзик","species":"cat","breed":"mixed","emoji":"🐈‍⬛","lastSeenLat":50.4442,"lastSeenLng":30.5459,"lastSeenDescription":"black-and-white cat, 3yo, red collar, near Klovska on Pechersk, very skittish — call instead of chasing","lastSeenAt":"{{NOW}}","urgency":"urgent","searchZoneRadiusM":500,"rewardPoints":200,"photoUrl":null,"parseConfidence":0.9,"parseNotes":"reward offered so urgency bumped to urgent. cats have smaller search zones than dogs — they hide close."}
+{"name":"Мурзик","species":"cat","breed":"mixed","emoji":"🐈‍⬛","lastSeenLat":50.4442,"lastSeenLng":30.5459,"locationMentions":["Кловська","Печерськ"],"lastSeenDescription":"black-and-white cat, 3yo, red collar, near Klovska on Pechersk, very skittish — call instead of chasing","lastSeenAt":"{{NOW}}","urgency":"urgent","searchZoneRadiusM":500,"rewardPoints":200,"photoUrl":null,"parseConfidence":0.9,"parseNotes":"reward offered so urgency bumped to urgent. cats have smaller search zones than dogs — they hide close."}
 
 INPUT:
 ЗНАЙШЛИ! дякуємо всім, Арчі вдома 🙏
 
 OUTPUT:
-{"name":"Арчі","species":"dog","breed":"unknown","emoji":"🐕","lastSeenLat":50.4501,"lastSeenLng":30.5234,"lastSeenDescription":"reported as found and reunited with family","lastSeenAt":"{{NOW}}","urgency":"resolved","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.4,"parseNotes":"post is a resolution notice, no last-seen data — coordinates fallback to city center"}
+{"name":"Арчі","species":"dog","breed":"unknown","emoji":"🐕","lastSeenLat":50.4501,"lastSeenLng":30.5234,"locationMentions":[],"lastSeenDescription":"reported as found and reunited with family","lastSeenAt":"{{NOW}}","urgency":"resolved","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.4,"parseNotes":"post is a resolution notice, no last-seen data — coordinates fallback to city center"}
 
 INPUT:
 Цуценя хлопчик ТЕРМІНОВО шукає дім! 3 місяці, здоровий, ігривий, привчений до повідця. Віддамо в добрі руки, бажано в приватний будинок.
 
 OUTPUT:
-{"name":"цуценя хлопчик","species":"dog","breed":"mixed","emoji":"🐶","lastSeenLat":50.4501,"lastSeenLng":30.5234,"lastSeenDescription":"healthy 3-month puppy being offered for adoption, not lost","lastSeenAt":"{{NOW}}","urgency":"rehoming","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.95,"parseNotes":"rehoming / adoption post — 'шукає дім' and 'віддамо в добрі руки' are unambiguous offer-for-adoption phrases. the word ТЕРМІНОВО does not make this a lost dog."}`;
+{"name":"цуценя хлопчик","species":"dog","breed":"mixed","emoji":"🐶","lastSeenLat":50.4501,"lastSeenLng":30.5234,"locationMentions":[],"lastSeenDescription":"healthy 3-month puppy being offered for adoption, not lost","lastSeenAt":"{{NOW}}","urgency":"rehoming","searchZoneRadiusM":500,"rewardPoints":0,"photoUrl":null,"parseConfidence":0.95,"parseNotes":"rehoming / adoption post — 'шукає дім' and 'віддамо в добрі руки' are unambiguous offer-for-adoption phrases. the word ТЕРМІНОВО does not make this a lost dog."}`;
 
 function buildSystemPrompt(): string {
   return [
@@ -212,17 +218,43 @@ export async function parseDogPost(input: ParseDogPostInput): Promise<ParsedDog>
     throw new Error(`parser returned invalid JSON: ${(err as Error).message} — text was: ${firstText.text.slice(0, 200)}`);
   }
 
-  const lat = typeof raw.lastSeenLat === 'number' ? raw.lastSeenLat : 50.4501;
-  const lng = typeof raw.lastSeenLng === 'number' ? raw.lastSeenLng : 30.5234;
+  let lat = typeof raw.lastSeenLat === 'number' ? raw.lastSeenLat : FALLBACK_LAT;
+  let lng = typeof raw.lastSeenLng === 'number' ? raw.lastSeenLng : FALLBACK_LNG;
+  let confidence =
+    typeof raw.parseConfidence === 'number' ? Math.max(0, Math.min(1, raw.parseConfidence)) : 0.5;
+
+  // Gazetteer rescue: Haiku falls back to city center (50.4501,
+  // 30.5234) when it can't geocode from its KYIV_GEO_HINTS table.
+  // Before accepting that fallback, try resolving the post's
+  // location mentions against our OSM-derived gazetteer — covers
+  // streets / metro / parks / squares Haiku doesn't know.
+  const mentions = Array.isArray(raw.locationMentions)
+    ? (raw.locationMentions as unknown[]).filter(
+        (m): m is string => typeof m === 'string' && m.trim().length > 0,
+      )
+    : [];
+  const haikuFellBack =
+    Math.abs(lat - FALLBACK_LAT) < FALLBACK_TOLERANCE &&
+    Math.abs(lng - FALLBACK_LNG) < FALLBACK_TOLERANCE;
+  if (haikuFellBack && mentions.length > 0) {
+    const hit = await lookupBestPlace(mentions).catch(() => null);
+    if (hit) {
+      lat = hit.lat;
+      lng = hit.lng;
+      // Gazetteer hit means we have real coords; never let the
+      // earlier fallback-driven confidence punish us. Floor at 0.6.
+      confidence = Math.max(confidence, 0.6);
+    }
+  }
+
   const inKyiv = isInsideKyiv(lat, lng);
   // Listings mentioning the embankment / "near the river" routinely
   // make the LLM emit coords mid-channel. Snap to land here so the
   // stored row is already clean — the client also snaps on display
   // as a backstop for older rows already in the DB.
-  const snapped = inKyiv ? snapToLandIfInRiver({ lat, lng }) : { lat: 50.4501, lng: 30.5234 };
+  const snapped = inKyiv ? snapToLandIfInRiver({ lat, lng }) : { lat: FALLBACK_LAT, lng: FALLBACK_LNG };
   const safeLat = snapped.lat;
   const safeLng = snapped.lng;
-  const confidence = typeof raw.parseConfidence === 'number' ? Math.max(0, Math.min(1, raw.parseConfidence)) : 0.5;
   const degradedConfidence = inKyiv ? confidence : Math.min(confidence, 0.2);
 
   const lastSeenAtRaw = typeof raw.lastSeenAt === 'string' ? raw.lastSeenAt : new Date().toISOString();
