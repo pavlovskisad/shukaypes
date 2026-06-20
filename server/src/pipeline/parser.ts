@@ -22,12 +22,19 @@ const PARSER_MODEL = 'claude-haiku-4-5';
 // parsed reports.
 const KYIV_GEO_HINTS = `KYIV GEO HINTS (lat, lng — use the closest match, or interpolate between two nearby ones)
 right bank / центр:
-  Maidan / Хрещатик: 50.4503, 30.5234
-  Palats Sportu / Бессарабка: 50.4360, 30.5212
-  Podil / Kontraktova / Поділ: 50.4612, 30.5172
+  Maidan / Хрещатик / Майдан Незалежності: 50.4503, 30.5234
+  Bessarabska sq. / Бессарабська площа / Палац Спорту: 50.4416, 30.5226
+  Lvivska sq. / Львівська площа: 50.4517, 30.5102
+  Sofiivska sq. / Софійська площа / Софія Київська: 50.4528, 30.5147
+  Mykhailivska sq. / Михайлівська площа: 50.4540, 30.5232
+  Poshtova sq. / Поштова площа: 50.4583, 30.5260
+  Andriivskyi uzviz / Андріївський узвіз: 50.4584, 30.5189
+  Kontraktova sq. / Контрактова площа: 50.4631, 30.5174
+  Zoloti Vorota / Золоті ворота: 50.4486, 30.5135
+  Podil / Поділ: 50.4612, 30.5172
   Pechersk / Печерськ: 50.4363, 30.5421
   Arsenalna / Арсенальна: 50.4442, 30.5459
-  Lva Tolstoho / Толстого: 50.4407, 30.5176
+  Lva Tolstoho / Толстого / Льва Толстого: 50.4407, 30.5176
   Olimpiiska / Олімпійська: 50.4320, 30.5217
 right bank / north:
   Obolon / Оболонь / набережна: 50.5094, 30.4981

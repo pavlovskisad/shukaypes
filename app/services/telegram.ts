@@ -62,6 +62,34 @@ export function getTelegramStartParam(): string | null {
   return raw && raw.length > 0 ? raw : null;
 }
 
+// Resolve the lost-pet id the app should deep-link to, if any. Two
+// channels in priority order:
+//   1. Telegram's start_param ('lost-<id>') — fires when the Mini App
+//      was opened via a registered Main Mini App (?startapp= URL).
+//   2. The URL's ?dog=<id> query — set by the bot's in-DM web_app
+//      button. This is the path that works WITHOUT a Main Mini App
+//      registration; the bot's /start handler bakes ?dog=<id> into
+//      the Mini App URL so the app can still find the right pet.
+//
+// Returns the bare dog id (no 'lost-' prefix) or null.
+export function getDeepLinkDogId(): string | null {
+  const param = getTelegramStartParam();
+  if (param && param.startsWith('lost-')) {
+    const id = param.slice('lost-'.length);
+    if (id) return id;
+  }
+  if (typeof window !== 'undefined' && window.location) {
+    try {
+      const url = new URL(window.location.href);
+      const dog = url.searchParams.get('dog');
+      if (dog && dog.length > 0) return dog;
+    } catch {
+      /* malformed URL — give up silently */
+    }
+  }
+  return null;
+}
+
 // Safe-area inset Telegram reports for the Mini App sheet. Differs
 // from iOS's CSS env(safe-area-inset-*) because TG's own chrome eats
 // part of the top. We layer this on top of insets we already read

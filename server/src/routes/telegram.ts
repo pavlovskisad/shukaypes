@@ -105,10 +105,32 @@ function botUsername(): string {
 // Telegram (groups included). The `web_app` inline-button type only
 // works in private chats — sending it to a group yields TG's
 // BUTTON_TYPE_INVALID 400. A regular `url` button pointing at this
-// t.me/<bot>?startapp link sidesteps the restriction and still opens
-// the Mini App as a Mini App (not the external browser).
+// t.me/<bot>?start=... link is the most reliable fallback:
+//
+//   - ?startapp= opens the Main Mini App directly, BUT only if one
+//     has been registered for the bot via BotFather → Configure
+//     Mini App. Without that, TG falls back to opening the bot chat
+//     and the param is silently dropped — so the user lands in DM
+//     with nothing pre-filled.
+//   - ?start= always opens the bot chat with /start <param> auto-
+//     primed (sent on first contact, surfaced as a START button on
+//     return visits). Our DM /start handler detects the lost-<id>
+//     prefix and replies with a web_app button that does the actual
+//     Mini App launch — works for every user regardless of bot
+//     configuration.
+//
+// Future improvement: if the user registers a Main Mini App in
+// BotFather, switch this back to ?startapp= for one-tap launch.
 function miniAppDeepLink(startParam = 'lostpet'): string {
-  return `https://t.me/${botUsername()}?startapp=${startParam}`;
+  return `https://t.me/${botUsername()}?start=${startParam}`;
+}
+
+// Mini App URL with an embedded dog id — used by the web_app button
+// the DM /start handler sends when it detects a `lost-<id>` param.
+// The app reads `?dog=<id>` from window.location.search and routes
+// the same way it does for Telegram.WebApp.initDataUnsafe.start_param.
+function miniAppDogUrl(dogId: string): string {
+  return `${miniAppUrl()}?dog=${encodeURIComponent(dogId)}`;
 }
 
 // Inline keyboard with a web_app button — tapping opens the Mini App
@@ -145,7 +167,32 @@ function openAppGroupKeyboard(startParam: string = 'lostpet') {
   };
 }
 
-async function handleStart(chatId: number, firstName?: string): Promise<void> {
+async function handleStart(
+  chatId: number,
+  firstName?: string,
+  startParam?: string,
+): Promise<void> {
+  // Deep-link continuation: the group/DM share link uses
+  // ?start=lost-<id>. When TG opens our DM with that param, we land
+  // here. Reply with a focused web_app button that drops the user
+  // straight onto the dog's pin (Mini App reads ?dog= from the URL).
+  if (startParam && startParam.startsWith('lost-')) {
+    const dogId = startParam.slice('lost-'.length);
+    if (dogId) {
+      await sendMessage(
+        chatId,
+        "🐾 tap below to open the search — i'll take you straight to the pin.",
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '🐾 open the search', web_app: { url: miniAppDogUrl(dogId) } }],
+            ],
+          },
+        },
+      );
+      return;
+    }
+  }
   const hi = firstName ? `привіт, ${firstName}!` : 'привіт!';
   const text = [
     `${hi} i'm <b>шукайпес</b> — your kyiv walking companion.`,
@@ -318,7 +365,11 @@ const plugin: FastifyPluginAsync = async (app) => {
         const firstName = msg.from?.first_name;
         const cmd = typeof msg.text === 'string' ? msg.text : '';
         if (cmd.startsWith('/start')) {
-          await handleStart(chatId, firstName);
+          // /start <param> — strip the command + leading whitespace
+          // and pass the rest through. Telegram delivers the param
+          // separated by exactly one space; trim defensively.
+          const startParam = cmd.slice('/start'.length).trim() || undefined;
+          await handleStart(chatId, firstName, startParam);
         } else if (cmd.startsWith('/lost')) {
           await handleLostCommand(chatId);
         } else if (looksLikeLostPetMessage(msg)) {

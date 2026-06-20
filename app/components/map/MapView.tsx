@@ -34,7 +34,7 @@ import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
 import { SpotModal } from '../ui/SpotModal';
-import { getTelegramStartParam } from '../../services/telegram';
+import { getDeepLinkDogId } from '../../services/telegram';
 import { fetchWalkingRoute } from '../../services/directions';
 import { PoiMarker } from './PoiMarker';
 import { PoiCluster } from './PoiCluster';
@@ -266,19 +266,18 @@ export default function MapViewWeb() {
     });
   }, [activeQuest?.id]);
 
-  // Telegram deep-link: when the Mini App opens via
-  // t.me/<bot>?startapp=lost-<id>, fetch that dog (it may be far from
-  // the user's GPS so /dogs/nearby wouldn't catch it), drop it into
-  // the store list, ease the map to its pin, and pop the modal. Runs
-  // once per app session — the ref gate guards against re-fires when
-  // mapBounds ticks on every idle.
+  // Bot deep-link: the Mini App can be opened pointing at a specific
+  // lost pet via either Telegram start_param ('lost-<id>') or a
+  // ?dog=<id> URL param the in-DM web_app button supplies. Fetch the
+  // dog (it may be far from the user's GPS so /dogs/nearby wouldn't
+  // catch it), drop it into the store list, ease the map to its pin,
+  // and pop the modal. Runs once per app session — the ref gate
+  // guards against re-fires when mapBounds ticks on every idle.
   const deepLinkAppliedRef = useRef(false);
   useEffect(() => {
     if (deepLinkAppliedRef.current) return;
     if (!mapBounds) return; // wait until the map has rendered at least once
-    const param = getTelegramStartParam();
-    if (!param || !param.startsWith('lost-')) return;
-    const id = param.slice('lost-'.length);
+    const id = getDeepLinkDogId();
     if (!id) return;
     deepLinkAppliedRef.current = true;
     void (async () => {
