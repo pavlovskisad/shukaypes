@@ -78,6 +78,20 @@
       "when": 1777200000000,
       "tag": "0010_telegram_auth",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1777210000000,
+      "tag": "0011_kyiv_gazetteer",
+      "breakpoints": true
+    },
+    {
+      "idx": 12,
+      "version": "7",
+      "when": 1777220000000,
+      "tag": "0012_kyiv_gazetteer_trgm_idx",
+      "breakpoints": true
     }
   ]
 }

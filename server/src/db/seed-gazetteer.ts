@@ -76,10 +76,12 @@ out center tags;`.trim(),
     body: `
 [out:json][timeout:60];
 (
-  node["railway"="station"]["station"="subway"](${KYIV_BBOX.join(',')});
-  node["public_transport"="station"]["subway"="yes"](${KYIV_BBOX.join(',')});
+  node["station"="subway"]["name"](${KYIV_BBOX.join(',')});
+  node["subway"="yes"]["name"](${KYIV_BBOX.join(',')});
+  way["station"="subway"]["name"](${KYIV_BBOX.join(',')});
+  relation["station"="subway"]["name"](${KYIV_BBOX.join(',')});
 );
-out tags;`.trim(),
+out center tags;`.trim(),
   },
   {
     label: 'parks',
