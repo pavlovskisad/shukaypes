@@ -285,6 +285,43 @@ export const kyivLore = pgTable(
   }),
 );
 
+// Kyiv place-name index. Built from OSM (Overpass API) — streets,
+// squares, metro stations, parks, neighbourhoods, districts. Powers
+// the lost-pet parser: when Haiku extracts a location mention like
+// "Львівська площа" or "вул. Артема", we fuzzy-match it against this
+// table to resolve real coordinates instead of falling back to a
+// hard-coded ~30-landmark hints table.
+//
+// kyivLore is a parallel table — narrower (cultural landmarks only,
+// with stories) and lookup-by-radius only. Kept separate because the
+// lore use-case wants curated POIs with prose, not exhaustive street
+// geometry. Same source (OSM), different shape.
+//
+// search_key is the canonical name lowercased + diacritics stripped,
+// for fast trigram fuzzy match (pg_trgm index added in a follow-up
+// migration). aliases is a hand-curated + extracted-from-OSM list of
+// alternate spellings/inflections (e.g. "Khreshchatyk" for "Хрещатик").
+export const kyivGazetteer = pgTable(
+  'kyiv_gazetteer',
+  {
+    id: text('id').primaryKey(), // osm:<type>:<id>
+    nameUk: text('name_uk').notNull(),
+    nameEn: text('name_en'),
+    aliases: text('aliases').array().notNull().default([]),
+    searchKey: text('search_key').notNull(), // normalised: lowercase, no diacritics
+    category: text('category').notNull(), // street | square | metro | park | neighbourhood | district | building
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    osmType: text('osm_type').notNull(), // node | way | relation
+    osmId: text('osm_id').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    searchIdx: index('kyiv_gazetteer_search_idx').on(t.searchKey),
+    categoryIdx: index('kyiv_gazetteer_category_idx').on(t.category),
+  }),
+);
+
 // Places API cache. The client used to call Google Places directly
 // from every device per pan, which burned ~$100 in days because each
 // fetch is 5 Places calls. Server now proxies + caches by a coarse

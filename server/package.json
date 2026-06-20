@@ -14,6 +14,7 @@
     "db:studio": "drizzle-kit studio",
     "db:seed-dogs": "tsx src/db/seed-dogs.ts",
     "seed:lore": "tsx src/db/seed-lore.ts",
+    "seed:gazetteer": "tsx src/db/seed-gazetteer.ts",
     "backfill:landmarks": "tsx src/db/backfill-landmark-jitter.ts",
     "wipe:stats": "tsx src/db/wipe-stats.ts"
   },
