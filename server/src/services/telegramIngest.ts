@@ -91,7 +91,7 @@ async function resolvePhotoUrl(photos: TgPhotoSize[]): Promise<string | null> {
   }
 }
 
-export async function ingestFromGroupPost(
+export async function ingestFromTelegramPost(
   msg: TgMessageLike,
   log: FastifyBaseLogger,
 ): Promise<IngestOutcome> {

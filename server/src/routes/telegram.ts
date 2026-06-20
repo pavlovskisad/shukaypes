@@ -14,7 +14,7 @@ import {
   looksLikeLostPet as looksLikeLostPetShared,
   looksLikeRehoming as looksLikeRehomingShared,
 } from '../pipeline/keywords.js';
-import { ingestFromGroupPost, type IngestOutcome } from '../services/telegramIngest.js';
+import { ingestFromTelegramPost, type IngestOutcome } from '../services/telegramIngest.js';
 
 const TG_API = 'https://api.telegram.org';
 
@@ -152,9 +152,26 @@ async function handleStart(chatId: number, firstName?: string): Promise<void> {
     '',
     'we walk, we sniff, we find lost pets, we learn the city paw by paw.',
     '',
+    "🆘 <b>lost a pet?</b> just tell me here — say their name, where you last saw them, what they look like (a photo helps). i'll add them to the map so helpers nearby can spot them.",
+    '',
     'tap below to open the map. 🐾',
   ].join('\n');
   await sendMessage(chatId, text, { reply_markup: openAppKeyboard() });
+}
+
+// /lost prompt — no conversation state, just nudges the user toward
+// the format the parser handles cleanest. The very next DM they send
+// will hit the looksLikeLostPetMessage gate and route through
+// ingestFromTelegramPost the same as a description sent without /lost.
+async function handleLostCommand(chatId: number): Promise<void> {
+  const text = [
+    "tell me about your missing pet 🐾",
+    '',
+    "the more detail the better — name, where + when last seen, what they look like, any reward. a photo helps a lot.",
+    '',
+    "<i>example: «загубив пса Барсика на Поштовій вчора ввечері, чорний з білою лапою, нашийник червоний, нагорода 2000»</i>",
+  ].join('\n');
+  await sendMessage(chatId, text);
 }
 
 // Catch-all reply for any other DM text — friendly nudge to the
@@ -162,7 +179,50 @@ async function handleStart(chatId: number, firstName?: string): Promise<void> {
 async function handleOtherDm(chatId: number): Promise<void> {
   await sendMessage(
     chatId,
-    "i'm just a dog with a map — tap below and we walk together.",
+    "i'm just a dog with a map — tap below and we walk together. (lost a pet? tell me right here and i'll add them to the map.)",
+    { reply_markup: openAppKeyboard() },
+  );
+}
+
+// Bot's reply to a DM that looks like the user is reporting their own
+// missing pet. Tone is more personal than the group reply — the user
+// IS the OP here — and the deep link is front-and-centre so they can
+// forward it to neighbours / share to other groups themselves.
+async function handleDmLostPet(
+  chatId: number,
+  outcome: IngestOutcome | null,
+): Promise<void> {
+  if (outcome?.kind === 'inserted' || outcome?.kind === 'updated') {
+    const { name, emoji } = outcome.parsed;
+    const verb = outcome.kind === 'inserted' ? 'added' : 'updated';
+    const link = miniAppDeepLink(`lost-${outcome.dogId}`);
+    const text = [
+      `${emoji} got it — ${verb} ${name} on the map.`,
+      '',
+      "tap the button to open the search. share this link with neighbours so helpers nearby can spot them too:",
+      '',
+      link,
+    ].join('\n');
+    await sendMessage(chatId, text, { reply_markup: openAppKeyboard() });
+    return;
+  }
+  if (outcome?.kind === 'duplicate' || outcome?.kind === 'already-ingested') {
+    const link = outcome.dogId ? miniAppDeepLink(`lost-${outcome.dogId}`) : miniAppDeepLink('lostpet');
+    const text = [
+      "i already had this one on the map 🐾",
+      '',
+      "share this link with neighbours so helpers nearby can spot them:",
+      '',
+      link,
+    ].join('\n');
+    await sendMessage(chatId, text, { reply_markup: openAppKeyboard() });
+    return;
+  }
+  // Low-confidence / parse-error / rehoming / skipped — fall back to
+  // a friendly nudge for more detail rather than silently failing.
+  await sendMessage(
+    chatId,
+    "hmm, i couldn't catch enough detail. try again like «загубив пса Барсика на Поштовій вчора, чорний з білою лапою, винагорода» — i'll add them right away.",
     { reply_markup: openAppKeyboard() },
   );
 }
@@ -253,11 +313,46 @@ const plugin: FastifyPluginAsync = async (app) => {
     const update = req.body;
     const msg = update?.message;
     if (msg) {
-      if (msg.chat?.type === 'private' && typeof msg.text === 'string') {
+      if (msg.chat?.type === 'private') {
         const chatId = msg.chat.id;
         const firstName = msg.from?.first_name;
-        if (msg.text.startsWith('/start')) {
+        const cmd = typeof msg.text === 'string' ? msg.text : '';
+        if (cmd.startsWith('/start')) {
           await handleStart(chatId, firstName);
+        } else if (cmd.startsWith('/lost')) {
+          await handleLostCommand(chatId);
+        } else if (looksLikeLostPetMessage(msg)) {
+          // User is reporting their own missing pet via DM — runs
+          // through the same parser + upsert path the group listener
+          // uses. Errors must NOT propagate; we always answer.
+          let outcome: IngestOutcome | null = null;
+          try {
+            outcome = await ingestFromTelegramPost(msg, req.log);
+            req.log.info(
+              {
+                kind: 'telegram_ingest',
+                chat_id: chatId,
+                message_id: msg.message_id,
+                via: 'dm',
+                outcome: outcome.kind,
+                dog_id: 'dogId' in outcome ? outcome.dogId : undefined,
+              },
+              '[telegram] dm ingest result',
+            );
+          } catch (err) {
+            req.log.warn(
+              { kind: 'telegram_ingest', via: 'dm', err: (err as Error).message },
+              '[telegram] dm ingest threw',
+            );
+          }
+          await handleDmLostPet(chatId, outcome);
+        } else if (msg.photo && !cmd && !msg.caption) {
+          // Photo-only with no caption — prompt for the description
+          // we need to parse anything useful.
+          await sendMessage(
+            chatId,
+            "thanks for the photo 🐾 — could you also send me your pet's name and where you last saw them?",
+          );
         } else {
           await handleOtherDm(chatId);
         }
@@ -286,7 +381,7 @@ const plugin: FastifyPluginAsync = async (app) => {
           // outcome we map to a generic reply.
           let outcome: IngestOutcome | null = null;
           try {
-            outcome = await ingestFromGroupPost(msg, req.log);
+            outcome = await ingestFromTelegramPost(msg, req.log);
             req.log.info(
               {
                 kind: 'telegram_ingest',
@@ -352,12 +447,15 @@ export async function registerTelegramWebhook(
         '[telegram] setWebhook failed',
       );
     }
-    // Publish /start so it shows in the bot's command menu.
+    // Publish /start + /lost so both show in the bot's command menu.
     await fetch(`${TG_API}/bot${token}/setMyCommands`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
-        commands: [{ command: 'start', description: 'open шукайпес' }],
+        commands: [
+          { command: 'start', description: 'open шукайпес' },
+          { command: 'lost', description: 'report a missing pet' },
+        ],
       }),
     });
     // Description appears as the 'What can this bot do?' panel
@@ -368,7 +466,7 @@ export async function registerTelegramWebhook(
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({
         description:
-          "woof! who's here?! type /start (or tap the button below) and we go sniffin 🐾",
+          "woof! lost a pet? tell me here and i'll add them to the map. or /start to walk and sniff with me 🐾",
       }),
     });
     // Short description shows on the bot's profile card.
