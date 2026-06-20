@@ -147,6 +147,7 @@ interface Candidate {
   nameUk: string;
   nameEn: string | null;
   aliases: string[];
+  aliasesText: string;
   searchKey: string;
   category: string;
 }
@@ -267,6 +268,12 @@ function buildCandidate(el: OverpassElement, category: string): Candidate | null
     aliasSet.add(`метро ${nameUk}`);
     aliasSet.add(`м. ${nameUk}`);
   }
+  const aliases = [...aliasSet];
+  // Pre-joined + normalised: one trigram-indexed text blob per row.
+  // Lookup probes this directly instead of a runtime
+  // array_to_string(aliases, ' ') call, which Postgres rejects in
+  // an index expression (array_to_string isn't IMMUTABLE).
+  const aliasesText = aliases.map(normaliseName).join(' ');
   return {
     id: `osm:${el.type}:${el.id}`,
     osmType: el.type,
@@ -275,7 +282,8 @@ function buildCandidate(el: OverpassElement, category: string): Candidate | null
     lng,
     nameUk,
     nameEn,
-    aliases: [...aliasSet],
+    aliases,
+    aliasesText,
     searchKey: normaliseName(nameUk),
     category,
   };
@@ -345,6 +353,7 @@ async function main() {
           nameUk: c.nameUk,
           nameEn: c.nameEn,
           aliases: c.aliases,
+          aliasesText: c.aliasesText,
           searchKey: c.searchKey,
           category: c.category,
           lat: c.lat,
@@ -359,6 +368,7 @@ async function main() {
           nameUk: sql`excluded.name_uk`,
           nameEn: sql`excluded.name_en`,
           aliases: sql`excluded.aliases`,
+          aliasesText: sql`excluded.aliases_text`,
           searchKey: sql`excluded.search_key`,
           category: sql`excluded.category`,
           lat: sql`excluded.lat`,

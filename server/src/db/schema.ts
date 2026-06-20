@@ -308,6 +308,12 @@ export const kyivGazetteer = pgTable(
     nameUk: text('name_uk').notNull(),
     nameEn: text('name_en'),
     aliases: text('aliases').array().notNull().default([]),
+    // Pre-joined + normalised concatenation of every alias for the
+    // GIN trigram index. We can't index `lower(array_to_string(aliases,
+    // ' '))` directly because array_to_string isn't IMMUTABLE in
+    // Postgres, and index expressions require IMMUTABLE functions.
+    // Materialising the blob at seed time costs one .join() per row.
+    aliasesText: text('aliases_text').notNull().default(''),
     searchKey: text('search_key').notNull(), // normalised: lowercase, no diacritics
     category: text('category').notNull(), // street | square | metro | park | neighbourhood | district | building
     lat: doublePrecision('lat').notNull(),

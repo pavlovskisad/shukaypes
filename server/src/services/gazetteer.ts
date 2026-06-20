@@ -12,7 +12,9 @@
 //     symmetric similarity() for short user queries vs long alias
 //     blobs.
 //   - We probe two indexed sources: search_key (canonical normalised
-//     name) and the joined aliases text. Both backed by GIN trigram
+//     name) and aliases_text (pre-joined alias blob, materialised at
+//     seed time because array_to_string isn't IMMUTABLE and so can't
+//     live inside an index expression). Both backed by GIN trigram
 //     indexes (migration 0012). The lookup takes the max of both
 //     scores so a hit on either path wins.
 //   - normaliseQuery mirrors normaliseName in seed-gazetteer.ts so
@@ -69,10 +71,10 @@ export async function lookupPlace(query: string): Promise<GazetteerHit | null> {
     SELECT id, name_uk, name_en, category, lat, lng,
       GREATEST(
         word_similarity(${q}, search_key),
-        word_similarity(${q}, lower(array_to_string(aliases, ' ')))
+        word_similarity(${q}, aliases_text)
       ) AS sim
     FROM kyiv_gazetteer
-    WHERE ${q} <% search_key OR ${q} <% lower(array_to_string(aliases, ' '))
+    WHERE ${q} <% search_key OR ${q} <% aliases_text
     ORDER BY sim DESC
     LIMIT 1
   `)) as unknown as GazetteerRow[];
