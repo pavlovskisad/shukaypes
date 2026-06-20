@@ -173,19 +173,15 @@ async function handleOtherDm(chatId: number): Promise<void> {
 // inflections match without JS's ASCII-only \b problem.
 function looksLikeLostPetMessage(msg: NonNullable<TgUpdate['message']>): boolean {
   const text = `${msg.text ?? ''} ${msg.caption ?? ''}`.trim();
-  if (text.length < 12) return false;
+  // looksLikeLostPetShared already requires BOTH a pet noun AND a
+  // lost-keyword — "загубив пса" (11 chars) is enough signal on its
+  // own. The minimum length here just rejects single-word noise.
+  if (text.length < 8) return false;
   // Rehoming posts (offering a pet for adoption) read superficially
   // similar to lost-pet posts — short-circuit before keyword check so
   // we don't reply 'sniff sniff' on an adoption ad.
   if (looksLikeRehomingShared(text)) return false;
-  if (!looksLikeLostPetShared(text)) return false;
-  // Photo + keyword = high signal, reply immediately.
-  if (msg.photo) return true;
-  // Text-only: keep the post if it's long enough to be a real
-  // description, OR mentions a pet noun explicitly (the shared
-  // PET_KEYWORDS already require this — looksLikeLostPetShared
-  // returns true only when both pet AND lost-keyword hit).
-  return text.length >= 30;
+  return looksLikeLostPetShared(text);
 }
 
 // Reply text + deep-link param vary by ingest outcome so the bot's

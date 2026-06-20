@@ -10,10 +10,13 @@
 //   - LOST allows знайт|знайш|знайд but NOT знайо (знайомий = acquaintance).
 //   - PET stem stays "такса" not "такс" — taxi/таксофон would otherwise hit.
 //   - PET stem "киц" picks up киця/киці/кисуня — separate root from кіт/кот.
+//   - "пес"/"пёс" lose the vowel in oblique cases (genitive "пса",
+//     dative "псу", etc) so we list those forms explicitly — the bare
+//     "пс" root would overmatch "псих" / "псувати".
 //   - REHOMING starts with шука|знайт so "Допоможіть знайти дім" lands
 //     here even though it also passes the LOST filter.
 
-export const PET_KEYWORDS = /(собак|пес|пёс|щен|цуцен|dog|puppy|hound|шпіц|хаск|ретрівер|бульдог|лабрад|пудель|такса|вівчарк|джек-?\s?рассел|чихуахуа|корг|шарпей|шиба|боксер|кіт|кот|кошен|киц|cat|kitten|tabby|британ|мейн-?кун|перс|сфінкс|сиам|сіам|рагдол|бенгал)/i;
+export const PET_KEYWORDS = /(собак|пес|пёс|пса|псу|псі|псом|псах|псів|щен|цуцен|dog|puppy|hound|шпіц|хаск|ретрівер|бульдог|лабрад|пудель|такса|вівчарк|джек-?\s?рассел|чихуахуа|корг|шарпей|шиба|боксер|кіт|кот|кошен|киц|cat|kitten|tabby|британ|мейн-?кун|перс|сфінкс|сиам|сіам|рагдол|бенгал)/i;
 
 export const LOST_KEYWORDS = /(пропа|лост|загуб|зник|знайд|знайт|знайш|найден|нашли|сбеж|втеч|потер|розшук|lost|found|missing)/i;
 
