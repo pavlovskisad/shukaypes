@@ -15,6 +15,7 @@ import {
   looksLikeRehoming as looksLikeRehomingShared,
 } from '../pipeline/keywords.js';
 import { ingestFromTelegramPost, type IngestOutcome } from '../services/telegramIngest.js';
+import { messages, pickLang, type Lang } from '../i18n/botMessages.js';
 
 const TG_API = 'https://api.telegram.org';
 
@@ -28,7 +29,7 @@ interface TgUpdate {
   message?: {
     message_id: number;
     chat: { id: number; type: 'private' | 'group' | 'supergroup' | 'channel'; title?: string };
-    from?: { id: number; first_name?: string; username?: string };
+    from?: { id: number; first_name?: string; username?: string; language_code?: string };
     text?: string;
     caption?: string;
     photo?: TgPhoto[];
@@ -136,12 +137,12 @@ function miniAppDogUrl(dogId: string): string {
 // Inline keyboard with a web_app button — tapping opens the Mini App
 // inside Telegram, no browser switch, auth via initData. ONLY valid
 // in private chats; for groups use openAppGroupKeyboard().
-function openAppKeyboard() {
+function openAppKeyboard(lang: Lang) {
   return {
     inline_keyboard: [
       [
         {
-          text: '🐾 open шукайпес',
+          text: messages[lang].buttonOpenApp,
           web_app: { url: miniAppUrl() },
         },
       ],
@@ -153,13 +154,13 @@ function openAppKeyboard() {
 // opens the Mini App via TG's deep-link handler. The startapp param
 // passes through to the Mini App as initDataUnsafe.start_param, which
 // the client can use to route straight to the relevant lost-pet
-// search (handler not yet wired client-side, but the link is stable).
-function openAppGroupKeyboard(startParam: string = 'lostpet') {
+// search.
+function openAppGroupKeyboard(lang: Lang, startParam: string = 'lostpet') {
   return {
     inline_keyboard: [
       [
         {
-          text: '🐾 open шукайпес',
+          text: messages[lang].buttonOpenApp,
           url: miniAppDeepLink(startParam),
         },
       ],
@@ -169,6 +170,7 @@ function openAppGroupKeyboard(startParam: string = 'lostpet') {
 
 async function handleStart(
   chatId: number,
+  lang: Lang,
   firstName?: string,
   startParam?: string,
 ): Promise<void> {
@@ -179,56 +181,40 @@ async function handleStart(
   if (startParam && startParam.startsWith('lost-')) {
     const dogId = startParam.slice('lost-'.length);
     if (dogId) {
-      await sendMessage(
-        chatId,
-        "🐾 tap below to open the search — i'll take you straight to the pin.",
-        {
-          reply_markup: {
-            inline_keyboard: [
-              [{ text: '🐾 open the search', web_app: { url: miniAppDogUrl(dogId) } }],
+      await sendMessage(chatId, messages[lang].deepLinkPrompt, {
+        reply_markup: {
+          inline_keyboard: [
+            [
+              {
+                text: messages[lang].buttonOpenSearch,
+                web_app: { url: miniAppDogUrl(dogId) },
+              },
             ],
-          },
+          ],
         },
-      );
+      });
       return;
     }
   }
-  const hi = firstName ? `привіт, ${firstName}!` : 'привіт!';
-  const text = [
-    `${hi} i'm <b>шукайпес</b> — your kyiv walking companion.`,
-    '',
-    'we walk, we sniff, we find lost pets, we learn the city paw by paw.',
-    '',
-    "🆘 <b>lost a pet?</b> just tell me here — say their name, where you last saw them, what they look like (a photo helps). i'll add them to the map so helpers nearby can spot them.",
-    '',
-    'tap below to open the map. 🐾',
-  ].join('\n');
-  await sendMessage(chatId, text, { reply_markup: openAppKeyboard() });
+  await sendMessage(chatId, messages[lang].welcome(firstName), {
+    reply_markup: openAppKeyboard(lang),
+  });
 }
 
 // /lost prompt — no conversation state, just nudges the user toward
 // the format the parser handles cleanest. The very next DM they send
 // will hit the looksLikeLostPetMessage gate and route through
 // ingestFromTelegramPost the same as a description sent without /lost.
-async function handleLostCommand(chatId: number): Promise<void> {
-  const text = [
-    "tell me about your missing pet 🐾",
-    '',
-    "the more detail the better — name, where + when last seen, what they look like, any reward. a photo helps a lot.",
-    '',
-    "<i>example: «загубив пса Барсика на Поштовій вчора ввечері, чорний з білою лапою, нашийник червоний, нагорода 2000»</i>",
-  ].join('\n');
-  await sendMessage(chatId, text);
+async function handleLostCommand(chatId: number, lang: Lang): Promise<void> {
+  await sendMessage(chatId, messages[lang].lostCommandHint);
 }
 
 // Catch-all reply for any other DM text — friendly nudge to the
 // same button so users don't bounce on a wall of silence.
-async function handleOtherDm(chatId: number): Promise<void> {
-  await sendMessage(
-    chatId,
-    "i'm just a dog with a map — tap below and we walk together. (lost a pet? tell me right here and i'll add them to the map.)",
-    { reply_markup: openAppKeyboard() },
-  );
+async function handleOtherDm(chatId: number, lang: Lang): Promise<void> {
+  await sendMessage(chatId, messages[lang].otherDm, {
+    reply_markup: openAppKeyboard(lang),
+  });
 }
 
 // Bot's reply to a DM that looks like the user is reporting their own
@@ -237,41 +223,41 @@ async function handleOtherDm(chatId: number): Promise<void> {
 // forward it to neighbours / share to other groups themselves.
 async function handleDmLostPet(
   chatId: number,
+  lang: Lang,
   outcome: IngestOutcome | null,
 ): Promise<void> {
-  if (outcome?.kind === 'inserted' || outcome?.kind === 'updated') {
+  const m = messages[lang];
+  if (outcome?.kind === 'inserted') {
     const { name, emoji } = outcome.parsed;
-    const verb = outcome.kind === 'inserted' ? 'added' : 'updated';
     const link = miniAppDeepLink(`lost-${outcome.dogId}`);
-    const text = [
-      `${emoji} got it — ${verb} ${name} on the map.`,
-      '',
-      "tap the button to open the search. share this link with neighbours so helpers nearby can spot them too:",
-      '',
-      link,
-    ].join('\n');
-    await sendMessage(chatId, text, { reply_markup: openAppKeyboard() });
+    await sendMessage(chatId, m.dmInserted({ name, emoji, link }), {
+      reply_markup: openAppKeyboard(lang),
+    });
+    return;
+  }
+  if (outcome?.kind === 'updated') {
+    const { name, emoji } = outcome.parsed;
+    const link = miniAppDeepLink(`lost-${outcome.dogId}`);
+    await sendMessage(chatId, m.dmUpdated({ name, emoji, link }), {
+      reply_markup: openAppKeyboard(lang),
+    });
     return;
   }
   if (outcome?.kind === 'duplicate' || outcome?.kind === 'already-ingested') {
-    const link = outcome.dogId ? miniAppDeepLink(`lost-${outcome.dogId}`) : miniAppDeepLink('lostpet');
-    const text = [
-      "i already had this one on the map 🐾",
-      '',
-      "share this link with neighbours so helpers nearby can spot them:",
-      '',
-      link,
-    ].join('\n');
-    await sendMessage(chatId, text, { reply_markup: openAppKeyboard() });
+    const link = outcome.dogId
+      ? miniAppDeepLink(`lost-${outcome.dogId}`)
+      : miniAppDeepLink('lostpet');
+    const name = outcome.kind === 'duplicate' ? outcome.parsed.name : undefined;
+    await sendMessage(chatId, m.dmDuplicate({ name, link }), {
+      reply_markup: openAppKeyboard(lang),
+    });
     return;
   }
   // Low-confidence / parse-error / rehoming / skipped — fall back to
   // a friendly nudge for more detail rather than silently failing.
-  await sendMessage(
-    chatId,
-    "hmm, i couldn't catch enough detail. try again like «загубив пса Барсика на Поштовій вчора, чорний з білою лапою, винагорода» — i'll add them right away.",
-    { reply_markup: openAppKeyboard() },
-  );
+  await sendMessage(chatId, m.dmFallback, {
+    reply_markup: openAppKeyboard(lang),
+  });
 }
 
 // Pre-parse gate: cheap regex filter so we don't burn a Haiku call on
@@ -294,19 +280,18 @@ function looksLikeLostPetMessage(msg: NonNullable<TgUpdate['message']>): boolean
 // Reply text + deep-link param vary by ingest outcome so the bot's
 // message reflects what actually happened (added vs already-known vs
 // generic 'sniff sniff' when we couldn't parse).
-function buildGroupReply(outcome: IngestOutcome | null): { text: string; startParam: string } {
+function buildGroupReply(
+  lang: Lang,
+  outcome: IngestOutcome | null,
+): { text: string; startParam: string } {
+  const m = messages[lang];
   if (!outcome) {
-    return {
-      text: "*sniff sniff* — looks like a lost one. open me to start a search:",
-      startParam: 'lostpet',
-    };
+    return { text: m.groupFallback, startParam: 'lostpet' };
   }
   switch (outcome.kind) {
     case 'inserted': {
-      const name = outcome.parsed.name;
-      const emoji = outcome.parsed.emoji;
       return {
-        text: `*sniff sniff* ${emoji}\n\nadded ${name} to the map — tap below to start the search:`,
+        text: m.groupInserted({ name: outcome.parsed.name, emoji: outcome.parsed.emoji }),
         startParam: `lost-${outcome.dogId}`,
       };
     }
@@ -314,27 +299,25 @@ function buildGroupReply(outcome: IngestOutcome | null): { text: string; startPa
     case 'duplicate':
     case 'already-ingested': {
       return {
-        text: "*sniff sniff* — i've sniffed this one before. already on the map:",
+        text: m.groupDuplicate,
         startParam: outcome.dogId ? `lost-${outcome.dogId}` : 'lostpet',
       };
     }
     default:
-      return {
-        text: "*sniff sniff* — looks like a lost one. open me to start a search:",
-        startParam: 'lostpet',
-      };
+      return { text: m.groupFallback, startParam: 'lostpet' };
   }
 }
 
 async function handleGroupLostPet(
   chatId: number,
   messageId: number,
+  lang: Lang,
   outcome: IngestOutcome | null,
 ): Promise<void> {
-  const { text, startParam } = buildGroupReply(outcome);
+  const { text, startParam } = buildGroupReply(lang, outcome);
   await sendMessage(chatId, text, {
     reply_to_message_id: messageId,
-    reply_markup: openAppGroupKeyboard(startParam),
+    reply_markup: openAppGroupKeyboard(lang, startParam),
   });
 }
 
@@ -360,6 +343,10 @@ const plugin: FastifyPluginAsync = async (app) => {
     const update = req.body;
     const msg = update?.message;
     if (msg) {
+      // Pick a language per-message from the TG client's language_code.
+      // Kyiv pilot: UK is default, only EN-tagged clients see EN. This
+      // also drives the button text + bot reply tone.
+      const lang = pickLang(msg.from?.language_code);
       if (msg.chat?.type === 'private') {
         const chatId = msg.chat.id;
         const firstName = msg.from?.first_name;
@@ -369,9 +356,9 @@ const plugin: FastifyPluginAsync = async (app) => {
           // and pass the rest through. Telegram delivers the param
           // separated by exactly one space; trim defensively.
           const startParam = cmd.slice('/start'.length).trim() || undefined;
-          await handleStart(chatId, firstName, startParam);
+          await handleStart(chatId, lang, firstName, startParam);
         } else if (cmd.startsWith('/lost')) {
-          await handleLostCommand(chatId);
+          await handleLostCommand(chatId, lang);
         } else if (looksLikeLostPetMessage(msg)) {
           // User is reporting their own missing pet via DM — runs
           // through the same parser + upsert path the group listener
@@ -396,16 +383,13 @@ const plugin: FastifyPluginAsync = async (app) => {
               '[telegram] dm ingest threw',
             );
           }
-          await handleDmLostPet(chatId, outcome);
+          await handleDmLostPet(chatId, lang, outcome);
         } else if (msg.photo && !cmd && !msg.caption) {
           // Photo-only with no caption — prompt for the description
           // we need to parse anything useful.
-          await sendMessage(
-            chatId,
-            "thanks for the photo 🐾 — could you also send me your pet's name and where you last saw them?",
-          );
+          await sendMessage(chatId, messages[lang].dmPhotoOnly);
         } else {
-          await handleOtherDm(chatId);
+          await handleOtherDm(chatId, lang);
         }
       } else if (msg.chat?.type === 'group' || msg.chat?.type === 'supergroup') {
         // Log every group msg the bot actually receives — lets us tell
@@ -450,7 +434,7 @@ const plugin: FastifyPluginAsync = async (app) => {
               '[telegram] ingest threw',
             );
           }
-          await handleGroupLostPet(msg.chat.id, msg.message_id, outcome);
+          await handleGroupLostPet(msg.chat.id, msg.message_id, lang, outcome);
         }
       }
     }
@@ -498,50 +482,51 @@ export async function registerTelegramWebhook(
         '[telegram] setWebhook failed',
       );
     }
-    // Publish /start + /lost so both show in the bot's command menu.
-    await fetch(`${TG_API}/bot${token}/setMyCommands`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        commands: [
-          { command: 'start', description: 'open шукайпес' },
-          { command: 'lost', description: 'report a missing pet' },
-        ],
-      }),
+    // Bot meta (commands menu, "What can this bot do?" panel, short
+    // bio, chat menu button) is set per language. Telegram lets us
+    // upload one default plus per-language overrides via the
+    // `language_code` parameter. Default = UK (Kyiv pilot), EN
+    // override fires for users whose TG client is English.
+    const setMeta = async (
+      endpoint: string,
+      payload: Record<string, unknown>,
+      languageCode?: string,
+    ) => {
+      await fetch(`${TG_API}/bot${token}/${endpoint}`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...payload, ...(languageCode ? { language_code: languageCode } : {}) }),
+      });
+    };
+
+    // Defaults (UK).
+    await setMeta('setMyCommands', { commands: messages.uk.meta.commands });
+    await setMeta('setMyDescription', { description: messages.uk.meta.description });
+    await setMeta('setMyShortDescription', {
+      short_description: messages.uk.meta.shortDescription,
     });
-    // Description appears as the 'What can this bot do?' panel
-    // Telegram shows BEFORE the user sends anything — exactly the
-    // 'who's here?' moment we want a hint at.
-    await fetch(`${TG_API}/bot${token}/setMyDescription`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        description:
-          "woof! lost a pet? tell me here and i'll add them to the map. or /start to walk and sniff with me 🐾",
-      }),
-    });
-    // Short description shows on the bot's profile card.
-    await fetch(`${TG_API}/bot${token}/setMyShortDescription`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
-        short_description: 'every walk has a purpose. 🐾',
-      }),
-    });
-    // Chat menu button — replaces the default '/' menu with a one-tap
-    // shortcut into the Mini App. Persistent at the bottom-left of
-    // the chat input.
-    await fetch(`${TG_API}/bot${token}/setChatMenuButton`, {
-      method: 'POST',
-      headers: { 'content-type': 'application/json' },
-      body: JSON.stringify({
+    await setMeta(
+      'setChatMenuButton',
+      {
         menu_button: {
           type: 'web_app',
-          text: 'open шукайпес',
+          text: messages.uk.meta.menuButtonText,
           web_app: { url: miniAppUrl() },
         },
-      }),
-    });
+      },
+    );
+
+    // EN overrides for the per-language endpoints. Telegram's
+    // setChatMenuButton intentionally has no language_code — the
+    // menu button is per-chat, not per-locale — so the UK label
+    // above is what every user sees there.
+    await setMeta('setMyCommands', { commands: messages.en.meta.commands }, 'en');
+    await setMeta('setMyDescription', { description: messages.en.meta.description }, 'en');
+    await setMeta(
+      'setMyShortDescription',
+      { short_description: messages.en.meta.shortDescription },
+      'en',
+    );
   } catch (err) {
     log.warn(
       { kind: 'telegram_webhook', err: (err as Error).message },
