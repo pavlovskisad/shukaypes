@@ -135,4 +135,22 @@ export const balance = {
     maxRadiusM: 2500,
     intervalMs: 60 * 60 * 1000,
   },
+  // Daily janitor for lostDogs. Two sweeps so noisy parses and
+  // long-abandoned posts auto-leave the active map without us
+  // touching anything by hand:
+  //   - low-confidence sweep: anything ingested with parseConfidence
+  //     below the threshold and untouched for the grace window goes
+  //     to status='expired'. Keeps the floor as our safety net even
+  //     if the parser drifts.
+  //   - stale-active sweep: anything with no last_seen update in
+  //     staleAfterMs (and no sighting in sightingsGraceMs) is
+  //     presumed found-and-not-reported and expires. Recoverable —
+  //     we mark expired, not delete.
+  lostDogCleanup: {
+    intervalMs: 24 * 60 * 60 * 1000,
+    lowConfidenceThreshold: 0.6,
+    lowConfidenceGraceMs: 24 * 60 * 60 * 1000,
+    staleAfterMs: 90 * 24 * 60 * 60 * 1000,
+    sightingsGraceMs: 30 * 24 * 60 * 60 * 1000,
+  },
 } as const;

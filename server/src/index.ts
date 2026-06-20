@@ -23,6 +23,7 @@ import { startDecayCron } from './services/decay.js';
 import { startZoneExpansionCron } from './services/searchZoneExpansion.js';
 import { runMemoryCleanupOnce } from './services/memoryCleanup.js';
 import { startScrapeCron } from './services/scrape.js';
+import { startLostDogCleanupCron } from './services/lostDogCleanup.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
 import { redis } from './db/redis.js';
@@ -97,6 +98,7 @@ async function main() {
   const stopDecay = startDecayCron(app.log);
   const stopScrape = startScrapeCron(app.log);
   const stopZoneExpansion = startZoneExpansionCron(app.log);
+  const stopLostDogCleanup = startLostDogCleanupCron(app.log);
   // One-shot retrofit: strip transcript prefixes from any existing
   // memory notes written before PR #158 added the filter to new
   // writes. Fire-and-forget so it doesn't delay listen().
@@ -114,12 +116,14 @@ async function main() {
     stopDecay();
     stopScrape();
     stopZoneExpansion();
+    stopLostDogCleanup();
     process.exit(1);
   }
 
   const shutdown = async () => {
     stopDecay();
     stopScrape();
+    stopLostDogCleanup();
     stopZoneExpansion();
     await app.close();
     process.exit(0);
