@@ -14,6 +14,7 @@ import { useGameStore } from '../../stores/gameStore';
 import type { Spot, SpotCategory } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Icon, iconForCategory, type IconName } from '../../components/ui/Icon';
+import { CHIP, MAP_MARKER } from '../../constants/sizing';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 
@@ -115,7 +116,7 @@ export default function SpotsScreen() {
                   ]}
                 >
                   {opt.iconName ? (
-                    <Icon name={opt.iconName} size={32} opacity={muted ? 0.55 : 1} />
+                    <Icon name={opt.iconName} size={CHIP.icon} opacity={muted ? 0.55 : 1} />
                   ) : (
                     <Text style={[styles.filterChipIcon, muted && styles.filterChipMutedText]}>
                       {opt.icon}
@@ -192,7 +193,7 @@ export default function SpotsScreen() {
                   {(() => {
                     const slot = iconForCategory(s.category);
                     return slot ? (
-                      <Icon name={slot} size={45} />
+                      <Icon name={slot} size={MAP_MARKER.card} />
                     ) : (
                       <Text style={styles.iconText}>{s.icon}</Text>
                     );
@@ -257,9 +258,9 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 6,
-    paddingHorizontal: 12,
-    height: 34,
-    borderRadius: 17,
+    paddingHorizontal: CHIP.paddingHoriz,
+    height: CHIP.height,
+    borderRadius: CHIP.radius,
     backgroundColor: '#ffffff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
+import { INLINE_ICON, MAP_MARKER } from '../../constants/sizing';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -146,7 +147,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           >
             {(() => {
               const slot = iconForCategory(renderSpot.category);
-              return slot ? <Icon name={slot} size={70} /> : (renderSpot.icon ?? '📍');
+              return slot ? <Icon name={slot} size={MAP_MARKER.spotHero} /> : (renderSpot.icon ?? '📍');
             })()}
           </div>
           <div style={{ flex: 1, minWidth: 0 }}>
@@ -195,7 +196,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             gap: 10,
           }}
         >
-          <Icon name="walk" size={38} inverted />
+          <Icon name="walk" size={INLINE_ICON.cta} inverted />
           <span>{t.modals.spot.walkHere}</span>
         </button>
 
@@ -219,7 +220,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             gap: 10,
           }}
         >
-          <Icon name="roundtrip" size={34} />
+          <Icon name="roundtrip" size={INLINE_ICON.cta} />
           <span>{t.modals.spot.roundtrip}</span>
         </button>
 

@@ -9,6 +9,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { api } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import { Icon } from '../../components/ui/Icon';
+import { INLINE_ICON } from '../../constants/sizing';
 import { useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
 
@@ -163,17 +164,17 @@ export default function ProfileScreen() {
           ) : null}
           <View style={styles.meterRow}>
             <View style={styles.meterPill}>
-              <Icon name="sun" size={27} />
+              <Icon name="sun" size={INLINE_ICON.stat} />
               <Text style={styles.meterValue}>
                 {Math.round(data?.companion.happiness ?? 0)}%
               </Text>
             </View>
             <View style={styles.meterPill}>
-              <Icon name="bone" size={27} />
+              <Icon name="bone" size={INLINE_ICON.stat} />
               <Text style={styles.meterValue}>{Math.round(data?.companion.hunger ?? 0)}%</Text>
             </View>
             <View style={styles.meterPill}>
-              <Icon name="paws" size={27} />
+              <Icon name="paws" size={INLINE_ICON.stat} />
               <Text style={styles.meterValue}>{data?.stats.pawsCollected ?? 0}</Text>
             </View>
           </View>

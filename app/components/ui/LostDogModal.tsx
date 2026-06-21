@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
+import { INLINE_ICON } from '../../constants/sizing';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
@@ -300,7 +301,7 @@ export function LostDogModal({
               gap: 6,
             }}
           >
-            <Icon name={badgeIcon} size={22} />
+            <Icon name={badgeIcon} size={INLINE_ICON.badge} />
             {badgeText}
           </span>
           <button
@@ -358,7 +359,7 @@ export function LostDogModal({
                 marginTop: 4,
               }}
             >
-              <Icon name="paws" size={25} />
+              <Icon name="paws" size={INLINE_ICON.secondary} />
               {t.modals.lostDog.questCta(renderDog.rewardPoints)}
             </div>
           </div>
@@ -389,7 +390,7 @@ export function LostDogModal({
                 gap: 8,
               }}
             >
-              <Icon name="eyes" size={28} />
+              <Icon name="eyes" size={INLINE_ICON.cta} />
               {t.modals.lostDog.iveSeen}
             </button>
 
@@ -416,7 +417,7 @@ export function LostDogModal({
                 gap: 8,
               }}
             >
-              <Icon name="search" size={32} />
+              <Icon name="search" size={INLINE_ICON.cta} />
               {searchActive ? t.modals.lostDog.searchingCta : t.modals.lostDog.startSearch}
             </button>
           </div>

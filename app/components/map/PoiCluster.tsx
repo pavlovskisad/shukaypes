@@ -3,6 +3,7 @@ import { MapLibreMarker } from './MapLibreMarker';
 import type { LatLng } from '@shukajpes/shared';
 import { Icon, iconForCategory } from '../ui/Icon';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { MAP_MARKER } from '../../constants/sizing';
 
 // Stacked badge shown when 2+ spots of the same category sit close
 // enough that rendering each one as its own pin makes the map a
@@ -53,7 +54,7 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
           userSelect: 'none',
         }}
       >
-        {slot ? <Icon name={slot} size={54} /> : emoji}
+        {slot ? <Icon name={slot} size={MAP_MARKER.poiCluster} /> : emoji}
         {/* Count chip — top-right of the badge, blue so it reads as
             "this group has N" rather than as part of the icon. */}
         <div

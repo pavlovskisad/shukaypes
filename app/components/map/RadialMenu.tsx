@@ -1,4 +1,5 @@
 import { balance } from '../../constants/balance';
+import { BUTTON } from '../../constants/sizing';
 import { Icon, type IconName } from '../../components/ui/Icon';
 
 export interface RadialAction {
@@ -125,9 +126,9 @@ export function RadialMenu({
                 onSelect(a.id);
               }}
               style={{
-                width: 56,
-                height: 56,
-                borderRadius: 28,
+                width: BUTTON.size,
+                height: BUTTON.size,
+                borderRadius: BUTTON.radius,
                 border: 'none',
                 background: bg,
                 color: fg,
@@ -143,11 +144,10 @@ export function RadialMenu({
               }}
               aria-label={a.label}
             >
-              {/* Icon is 38px inside a 56px button → ~0.68 ratio, the
-                  same breathing room AboutModal rows + LostDog modal
-                  buttons use. 47px was too cramped against the dark
-                  glass disc. */}
-              {a.iconName ? <Icon name={a.iconName} size={38} inverted={inverted} /> : a.icon}
+              {/* Icon sized via the shared BUTTON token — 0.79 ratio
+                  reads calm against the dark glass disc without
+                  feeling sparse like the 0.68 we tried last pass. */}
+              {a.iconName ? <Icon name={a.iconName} size={BUTTON.icon} inverted={inverted} /> : a.icon}
             </button>
             {showLabels ? (
               <span

@@ -1,6 +1,7 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
+import { CHIP } from '../../constants/sizing';
 import { useStrings } from '../../i18n/useStrings';
 
 // Active-quest indicator. Renders nothing when no quest is live; when
@@ -57,8 +58,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    height: 38,
-    borderRadius: 19,
+    height: CHIP.height,
+    borderRadius: CHIP.radius,
     paddingLeft: 14,
     paddingRight: 6,
     backgroundColor: GLASS_BG,

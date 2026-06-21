@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
+import { HERO } from '../../constants/sizing';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import { pickBottomInset } from '../../services/telegram';
 import { useStrings } from '../../i18n/useStrings';
@@ -21,7 +22,7 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
         opacity: focused ? 1 : 0.32,
       }}
     >
-      <Icon name={name} size={52} />
+      <Icon name={name} size={HERO.icon} />
     </View>
   );
 }
@@ -78,7 +79,7 @@ export default function TabsLayout() {
           // ~50, leaving a visible empty strip between the input and
           // the dashboard in the TG Mini App). Locking it here pairs
           // with TAB_BAR_HEIGHT in chat.tsx — keep them in sync.
-          height: 64 + insets.bottom,
+          height: HERO.size + insets.bottom,
           paddingBottom: insets.bottom,
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,

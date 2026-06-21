@@ -1,6 +1,7 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
+import { CHIP } from '../../constants/sizing';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -10,7 +11,7 @@ import { useStrings } from '../../i18n/useStrings';
 // progress fill; the paw pill is a lifetime count. The rightmost is a
 // tap-to-toggle visibility switch for the spots layer.
 
-const PILL_HEIGHT = 38;
+const PILL_HEIGHT = CHIP.height;
 // Minimum so a 1-char value doesn't collapse the pill awkwardly; beyond
 // that, each pill sizes to its content and grows when the number widens.
 const PILL_MIN_WIDTH = 50;
@@ -21,7 +22,7 @@ const GLASS_SHADOW_COLOR = '#000';
 // HUD icons are pixel-art SVGs (see components/ui/Icon.tsx). 18px
 // renders crisp at the 38px pill height; smaller (the previous emoji
 // fontSize 14) read as cramped against the value text.
-const ICON_SIZE = 32;
+const ICON_SIZE = CHIP.icon;
 
 function MeterPill({
   icon,

@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
+import { INLINE_ICON } from '../../constants/sizing';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -166,7 +167,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                   flexShrink: 0,
                 }}
               >
-                <Icon name={ROW_ICONS[i] ?? 'logo'} size={38} />
+                <Icon name={ROW_ICONS[i] ?? 'logo'} size={INLINE_ICON.about} />
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div
