@@ -181,7 +181,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                 <div
                   style={{
                     fontFamily: SYSTEM_FONT,
-                    fontSize: 15,
+                    fontSize: 16,
                     fontWeight: 700,
                     color: '#1a1a1a',
                   }}
@@ -190,10 +190,10 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                 </div>
                 <div
                   style={{
-                    fontSize: 13,
+                    fontSize: 14,
                     color: '#555',
-                    marginTop: 2,
-                    lineHeight: 1.45,
+                    marginTop: 3,
+                    lineHeight: 1.5,
                   }}
                 >
                   {r.body}

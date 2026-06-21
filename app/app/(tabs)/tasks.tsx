@@ -445,7 +445,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    padding: 18,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
@@ -492,8 +492,12 @@ const styles = StyleSheet.create({
     borderRadius: 4,
     backgroundColor: 'rgba(0,60,255,0.85)',
   },
+  // Roomier task row: padding 12 → 16, gap 10 → 14, icon column
+  // 22 → 44 to actually fit the 34px pixel icon (was being clipped
+  // by the narrow wrap). Label + count bumped a notch to match the
+  // spacious-list tone everything else just moved to.
   task: {
-    paddingVertical: 12,
+    paddingVertical: 16,
   },
   taskDivider: {
     borderTopWidth: 1,
@@ -502,16 +506,14 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 8,
-    gap: 10,
+    marginBottom: 10,
+    gap: 14,
   },
-  icon: { fontSize: 18 },
-  // Width matches the natural footprint of the emoji glyph above so
-  // both code paths align horizontally with the row's label column.
-  iconWrap: { width: 22, alignItems: 'center' },
-  label: { flex: 1, fontSize: 14, color: colors.black },
+  icon: { fontSize: 28 },
+  iconWrap: { width: 44, alignItems: 'center' },
+  label: { flex: 1, fontSize: 16, color: colors.black },
   labelDone: { color: '#aaa', textDecorationLine: 'line-through' },
-  count: { fontSize: 12, color: '#777', fontWeight: '700' },
+  count: { fontSize: 14, color: '#777', fontWeight: '700' },
   countDone: { color: '#666' },
   barTrack: {
     height: 6,
@@ -608,17 +610,17 @@ const styles = StyleSheet.create({
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 12,
+    gap: 14,
+    paddingVertical: 14,
   },
   historyBody: { flex: 1, minWidth: 0 },
   historyName: {
-    fontSize: 14,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.black,
   },
   historyMeta: {
-    fontSize: 12,
+    fontSize: 13,
     color: '#777',
     marginTop: 2,
   },

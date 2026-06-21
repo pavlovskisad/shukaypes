@@ -290,7 +290,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    padding: 18,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
@@ -380,17 +380,20 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: colors.black,
   },
+  // Roomier stat rows with stronger value/label hierarchy — values
+  // pop, labels stay quiet at the same hue.
   statRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
-    paddingVertical: 6,
+    alignItems: 'center',
+    paddingVertical: 10,
   },
   statLabel: {
-    fontSize: 14,
+    fontSize: 16,
     color: '#555',
   },
   statValue: {
-    fontSize: 14,
+    fontSize: 20,
     fontWeight: '700',
     color: colors.black,
   },

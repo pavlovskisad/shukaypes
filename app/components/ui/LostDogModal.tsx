@@ -375,11 +375,11 @@ export function LostDogModal({
           }}
         >
           <div style={{ marginBottom: 12 }}>
-            <div style={{ fontFamily: SYSTEM_FONT, fontSize: 24, fontWeight: 700, lineHeight: 1.15 }}>
+            <div style={{ fontFamily: SYSTEM_FONT, fontSize: 28, fontWeight: 700, lineHeight: 1.15 }}>
               {renderDog.name}
             </div>
-            <div style={{ fontSize: 13, color: '#777', marginTop: 2 }}>{renderDog.breed}</div>
-            <div style={{ fontSize: 12, color: '#777', marginTop: 2 }}>
+            <div style={{ fontSize: 15, color: '#777', marginTop: 4 }}>{renderDog.breed}</div>
+            <div style={{ fontSize: 14, color: '#777', marginTop: 3 }}>
               {t.modals.lostDog.lastSeen(relativeTime(renderDog.lastSeen.at, t))}
             </div>
             {/* Reward hint — replaces the chunky 200pts pill that

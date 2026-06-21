@@ -69,5 +69,6 @@ export const MAP_MARKER = {
   poi: 47,
   poiCluster: 54,
   spotHero: 70,       // SpotModal opening hero icon
-  card: 45,           // spots screen list-row icon
+  card: 52,           // spots screen list-row icon — sits inside
+                      // the 60px white chip with a comfortable rim.
 } as const;

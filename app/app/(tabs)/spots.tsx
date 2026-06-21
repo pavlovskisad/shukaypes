@@ -232,7 +232,7 @@ const styles = StyleSheet.create({
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    padding: 18,
+    padding: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,
@@ -288,23 +288,23 @@ const styles = StyleSheet.create({
   },
   filterChipCountActive: { color: 'rgba(255,255,255,0.85)' },
   filterChipMutedText: { color: '#bbb' },
+  // Roomier list row: pulled padding 10 → 14 + gap 12 → 14 so the
+  // bigger icon chip + name typography breathe. Same vibe as the
+  // tasks-tab "lost pets nearby" rows we calibrated against.
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 12,
-    paddingVertical: 10,
+    gap: 14,
+    paddingVertical: 14,
   },
   rowDivider: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.05)',
   },
   icon: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    // White with a soft shadow — same chip recipe used in
-    // SpotModal hero icon + category label so list rows feel
-    // consistent with the modal that opens from them.
+    width: 60,
+    height: 60,
+    borderRadius: 30,
     backgroundColor: '#ffffff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -316,10 +316,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  iconText: { fontSize: 20 },
+  iconText: { fontSize: 26 },
   body: { flex: 1, minWidth: 0 },
-  name: { fontSize: 15, fontWeight: '700', color: colors.black },
-  metaRow: { flexDirection: 'row', gap: 6, marginTop: 2 },
-  meta: { fontSize: 12, color: '#777' },
-  addr: { fontSize: 12, color: '#999', marginTop: 4 },
+  name: { fontSize: 17, fontWeight: '700', color: colors.black },
+  metaRow: { flexDirection: 'row', gap: 6, marginTop: 3 },
+  meta: { fontSize: 14, color: '#777' },
+  addr: { fontSize: 13, color: '#999', marginTop: 4 },
 });

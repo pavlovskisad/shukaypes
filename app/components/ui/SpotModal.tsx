@@ -165,7 +165,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             <div
               style={{
                 fontFamily: SYSTEM_FONT,
-                fontSize: 22,
+                fontSize: 24,
                 fontWeight: 700,
                 lineHeight: 1.2,
               }}
@@ -173,15 +173,15 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               {renderSpot.name}
             </div>
             {stars ? (
-              <div style={{ fontSize: 13, color: '#d9a030', marginTop: 4 }}>
+              <div style={{ fontSize: 14, color: '#d9a030', marginTop: 5 }}>
                 {stars}{' '}
-                <span style={{ color: '#777', fontSize: 12 }}>
+                <span style={{ color: '#777', fontSize: 13 }}>
                   {typeof renderSpot.rating === 'number' ? renderSpot.rating.toFixed(1) : ''}
                 </span>
               </div>
             ) : null}
             {renderSpot.address ? (
-              <div style={{ fontSize: 12, color: '#777', marginTop: 4 }}>
+              <div style={{ fontSize: 13, color: '#777', marginTop: 5 }}>
                 {renderSpot.address}
               </div>
             ) : null}
