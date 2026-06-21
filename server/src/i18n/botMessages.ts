@@ -1,9 +1,8 @@
-// Bot copy in UK + EN. Kyiv pilot ships UK as default; EN only fires
-// when the user's Telegram client reports `language_code` starting
-// with 'en' (their TG UI language, not their content language). RU
-// and other locales see UK — for Kyiv that's the correct neutral
-// fallback. A /lang command + per-user persistence can land later
-// when we see real demand.
+// Bot copy in UK + EN. Kyiv pilot ships UK as default for every
+// user regardless of their Telegram client locale — that's the
+// pilot's whole reason for existing (the dog should sound like he's
+// from Kyiv, not auto-translated from English). EN is opt-in via
+// the /lang command, persisted per user in Redis.
 //
 // Voice spec (see Pidmohylny "Місто" reference in repo root):
 //   - modern Kyiv UK, no 1928 archaisms (sets that feel "literary"
@@ -19,13 +18,15 @@ export type Lang = 'uk' | 'en';
 
 export const DEFAULT_LANG: Lang = 'uk';
 
-// TG sends language_code like 'uk', 'ru', 'en', 'en-US', 'pl-PL'.
-// Kyiv-pilot policy: only flip to EN when client is explicitly
-// English (any en-* variant). Everything else gets UK.
-export function pickLang(languageCode?: string | null): Lang {
-  if (!languageCode) return DEFAULT_LANG;
-  if (languageCode.toLowerCase().startsWith('en')) return 'en';
-  return DEFAULT_LANG;
+// Parse a /lang command's argument into a Lang or null. Accepts a
+// few obvious variants ("en", "english", "англ", "ua", "uk",
+// "укр") so the command is tolerant of natural typing.
+export function parseLangArg(raw: string): Lang | null {
+  const v = raw.trim().toLowerCase();
+  if (!v) return null;
+  if (v.startsWith('en') || v.startsWith('англ') || v === 'eng') return 'en';
+  if (v.startsWith('uk') || v.startsWith('ua') || v.startsWith('укр') || v.startsWith('укра')) return 'uk';
+  return null;
 }
 
 interface TgCommand {
@@ -46,6 +47,8 @@ export interface BotMessages {
   groupInserted: (args: { name: string; emoji: string }) => string;
   groupDuplicate: string;
   groupFallback: string;
+  langSwitched: string;
+  langHint: string;
   buttonOpenApp: string;
   buttonOpenSearch: string;
   meta: {
@@ -115,6 +118,9 @@ const uk: BotMessages = {
   groupDuplicate: '*ніс у пост* — цього вже занюхав. на мапі є:',
   groupFallback:
     '*ніс у пост* — здається, хтось пропав. відкрий мене — разом понюхаємо:',
+  langSwitched: '*кивнув* добре, говоримо українською.',
+  langHint:
+    "*вухом* можу англійською, якщо зручніше — напиши <code>/lang en</code>. або <code>/lang uk</code>, щоб повернутись.",
   buttonOpenApp: '🐾 відкрити шукайпеса',
   buttonOpenSearch: '🐾 відкрити пошук',
   meta: {
@@ -124,6 +130,7 @@ const uk: BotMessages = {
     commands: [
       { command: 'start', description: 'відкрити шукайпеса' },
       { command: 'lost', description: 'повідомити про пропажу' },
+      { command: 'lang', description: 'мова бота (uk / en)' },
     ],
     menuButtonText: 'відкрити шукайпеса',
   },
@@ -188,6 +195,9 @@ const en: BotMessages = {
   groupDuplicate: '*sniff sniff* — sniffed this one before. on the map already:',
   groupFallback:
     "*sniff sniff* — looks like a lost one. open me, let's sniff together:",
+  langSwitched: '*nod* alright, switching to english.',
+  langHint:
+    "*ear flick* i can switch to ukrainian — say <code>/lang uk</code>. or <code>/lang en</code> to stay in english.",
   buttonOpenApp: '🐾 open шукайпес',
   buttonOpenSearch: '🐾 open the search',
   meta: {
@@ -197,6 +207,7 @@ const en: BotMessages = {
     commands: [
       { command: 'start', description: 'open шукайпес' },
       { command: 'lost', description: 'report a missing pet' },
+      { command: 'lang', description: 'bot language (uk / en)' },
     ],
     menuButtonText: 'open шукайпес',
   },

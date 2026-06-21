@@ -562,10 +562,17 @@ export default function MapViewWeb() {
   const visibleLostDogs = useMemo(() => {
     if (!userPos) return lostDogs;
     return lostDogs.filter(
-      (d) => distanceMeters(userPos, d.lastSeen.position) <= MAP_RENDER_RADIUS_M,
+      (d) =>
+        // Always keep the currently-selected dog visible — when a
+        // user opens via the bot deep-link, they might be far from
+        // the pet's lastSeen pin (e.g. dog at Lukianivka, user in
+        // Pechersk). Without this carve-out the modal opens but the
+        // marker is filtered out by the GPS-radius gate below.
+        d.id === selectedDogId ||
+        distanceMeters(userPos, d.lastSeen.position) <= MAP_RENDER_RADIUS_M,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos on purpose; see comment above
-  }, [lostDogs, userLatBucket, userLngBucket]);
+  }, [lostDogs, userLatBucket, userLngBucket, selectedDogId]);
   const visibleTokens = useMemo(() => {
     const uncollected = tokens.filter((t) => !t.collectedAt);
     if (!userPos) return uncollected;

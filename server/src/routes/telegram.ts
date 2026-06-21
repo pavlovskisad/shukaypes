@@ -15,7 +15,8 @@ import {
   looksLikeRehoming as looksLikeRehomingShared,
 } from '../pipeline/keywords.js';
 import { ingestFromTelegramPost, type IngestOutcome } from '../services/telegramIngest.js';
-import { messages, pickLang, type Lang } from '../i18n/botMessages.js';
+import { messages, parseLangArg, type Lang } from '../i18n/botMessages.js';
+import { getUserLang, setUserLang } from '../services/userLang.js';
 
 const TG_API = 'https://api.telegram.org';
 
@@ -343,10 +344,12 @@ const plugin: FastifyPluginAsync = async (app) => {
     const update = req.body;
     const msg = update?.message;
     if (msg) {
-      // Pick a language per-message from the TG client's language_code.
-      // Kyiv pilot: UK is default, only EN-tagged clients see EN. This
-      // also drives the button text + bot reply tone.
-      const lang = pickLang(msg.from?.language_code);
+      // Per-user language preference. Stored in Redis (60-day sliding
+      // TTL) — UK is the pilot default, EN is opt-in via /lang.
+      // Telegram's reported language_code is intentionally NOT used:
+      // a Kyiv pilot wants the dog to feel Kyiv-native by default,
+      // even for users whose TG UI is English.
+      const lang = await getUserLang(msg.from?.id);
       if (msg.chat?.type === 'private') {
         const chatId = msg.chat.id;
         const firstName = msg.from?.first_name;
@@ -359,6 +362,21 @@ const plugin: FastifyPluginAsync = async (app) => {
           await handleStart(chatId, lang, firstName, startParam);
         } else if (cmd.startsWith('/lost')) {
           await handleLostCommand(chatId, lang);
+        } else if (cmd.startsWith('/lang')) {
+          // /lang <uk|en> sets the user's preference; /lang alone
+          // returns the hint with the two options. Uses the
+          // requested target lang for the reply so the user sees
+          // confirmation in the language they just asked for.
+          const arg = cmd.slice('/lang'.length).trim();
+          const target = parseLangArg(arg);
+          if (target && msg.from?.id) {
+            await setUserLang(msg.from.id, target);
+            await sendMessage(chatId, messages[target].langSwitched, {
+              reply_markup: openAppKeyboard(target),
+            });
+          } else {
+            await sendMessage(chatId, messages[lang].langHint);
+          }
         } else if (looksLikeLostPetMessage(msg)) {
           // User is reporting their own missing pet via DM — runs
           // through the same parser + upsert path the group listener

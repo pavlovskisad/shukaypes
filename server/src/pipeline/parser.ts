@@ -262,12 +262,24 @@ export async function parseDogPost(input: ParseDogPostInput): Promise<ParsedDog>
 
   const species = normalizeSpecies(raw.species);
   const defaultEmoji = species === 'cat' ? '🐈' : '🐕';
+  // Haiku occasionally hands back a species-mismatched emoji
+  // (a 🐈 cat icon on a доберман post, for instance). Sanity-
+  // check: if the emoji belongs to the wrong species, fall back
+  // to the species default so the UI doesn't lie about what
+  // animal the post is about.
+  const CAT_EMOJI = new Set(['🐈', '🐈‍⬛', '😺', '🐱', '😸', '😹', '😻', '🙀']);
+  const DOG_EMOJI = new Set(['🐕', '🐺', '🐶', '🐕‍🦺', '🦊', '🦮']);
+  const rawEmoji =
+    typeof raw.emoji === 'string' && raw.emoji.trim() ? raw.emoji.trim().slice(0, 8) : '';
+  let emoji = rawEmoji || defaultEmoji;
+  if (species === 'dog' && CAT_EMOJI.has(emoji)) emoji = defaultEmoji;
+  if (species === 'cat' && DOG_EMOJI.has(emoji)) emoji = defaultEmoji;
 
   return {
     name: typeof raw.name === 'string' && raw.name.trim() ? raw.name.trim().slice(0, 80) : 'безіменний',
     species,
     breed: typeof raw.breed === 'string' && raw.breed.trim() ? raw.breed.trim().slice(0, 80) : 'unknown',
-    emoji: typeof raw.emoji === 'string' && raw.emoji.trim() ? raw.emoji.trim().slice(0, 8) : defaultEmoji,
+    emoji,
     lastSeenLat: safeLat,
     lastSeenLng: safeLng,
     lastSeenDescription:
