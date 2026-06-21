@@ -227,15 +227,20 @@ export default function TasksScreen() {
     let lastDominant: Element | null = null;
 
     const playPop = (el: HTMLElement) => {
+      // Soft pleasant pop — gentler than the previous spring.
+      // Rise phase uses a smooth ease-out (quick but soft lift);
+      // settle phase uses a slower ease-out (relaxed landing,
+      // no overshoot). Half the lift + half the scale of the
+      // first attempt and ~200ms longer so the whole motion
+      // reads as a "breath" rather than a snap.
       el.animate(
         [
-          { transform: 'translateY(0) scale(1)', offset: 0 },
-          { transform: 'translateY(-14px) scale(1.07)', offset: 0.28 },
-          { transform: 'translateY(0) scale(1)', offset: 1 },
+          { transform: 'translateY(0) scale(1)',         offset: 0,    easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' },
+          { transform: 'translateY(-6px) scale(1.025)',  offset: 0.4,  easing: 'cubic-bezier(0.33, 1, 0.68, 1)'    },
+          { transform: 'translateY(0) scale(1)',         offset: 1 },
         ],
         {
-          duration: 620,
-          easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+          duration: 820,
           fill: 'none',
         },
       );
@@ -575,21 +580,17 @@ const styles = StyleSheet.create({
   scroller: {
     flex: 1,
     scrollSnapType: 'y mandatory',
-    // Match the contentContainer's paddingTop so the mandatory snap
-    // doesn't force-align the first card's top with the viewport
-    // top — which was eating ALL the padding above the lost-pets
-    // card and made every iteration of padding bumps invisible to
-    // the user. With scroll-padding-top set, snap aligns the card
-    // 140px below the viewport top, leaving the breathing room
-    // actually visible.
-    scrollPaddingTop: 140,
+    // Match contentContainer paddingTop so mandatory snap doesn't
+    // force-align the first card's top with the viewport top and
+    // eat the breathing room. Keep these two in sync.
+    scrollPaddingTop: 60,
   } as unknown as object,
-  // Aggressive paddingTop — Safari iOS sets safe-area-inset-top to
-  // 0 when not in standalone PWA mode, so all the breathing room
-  // has to come from this single value. 140 lands the lost-pets
-  // card visibly in the middle-upper of the viewport with real
-  // air above it.
-  content: { paddingHorizontal: 16, paddingTop: 140, paddingBottom: 120, gap: 12 },
+  // Modest paddingTop — 140 looked like real breathing room in
+  // theory but felt like a third of the screen empty in practice.
+  // 60 leaves comfortable air above the lost-pets card without
+  // wasting viewport. scroll-padding-top below matches so snap
+  // actually respects this gap.
+  content: { paddingHorizontal: 16, paddingTop: 60, paddingBottom: 120, gap: 12 },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
