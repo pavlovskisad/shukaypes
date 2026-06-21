@@ -61,6 +61,12 @@ interface Props<T> {
   // the per-card content (stat rows) doesn't need the full height
   // of a photo/icon card. Width stays CARD_W.
   cardHeight?: number;
+  // Multiplier on the peek ty offsets — < 1 tightens the stack
+  // (peeks closer to the top card), > 1 spreads it out. Default
+  // 1 keeps the calibration set against the default 280-tall
+  // card. Smaller card heights want a smaller peek so the stack
+  // doesn't dominate the card's footprint visually.
+  peekScale?: number;
 }
 
 export function CardStack<T>({
@@ -71,6 +77,7 @@ export function CardStack<T>({
   getPhotoUrl,
   showCounter = true,
   cardHeight = CARD_H,
+  peekScale = 1,
 }: Props<T>) {
   const [index, setIndex] = useState(0);
   const tx = useSharedValue(0);
@@ -233,27 +240,24 @@ export function CardStack<T>({
   // backward range. Buffer also drives opacity (invisible at rest
   // and below, fades in only above 0 — backward doesn't reveal a
   // new bottom card, the deck just sinks).
-  // Bigger ty + smaller scale at rest so the deck peek reads as
-  // a distinct card behind the top one (was too subtle — the
-  // grey rectangles read like a tinted edge of the top card
-  // rather than a stacked card behind it). Peek 1 now sticks
-  // out 40px below the top and is 92% scale; peek 2 sticks out
-  // 75px at 85%.
+  // Peek poses — ty values multiplied by peekScale so callers
+  // with smaller cardHeights (profile) can tighten the stack
+  // without affecting the photo-card stacks (tasks / spots).
   const SLOT_POSES = {
     middle: {
-      demoted:  { scale: 0.85, ty: 75 },
-      rest:     { scale: 0.92, ty: 40 },
-      promoted: { scale: 1.0,  ty: 0  },
+      demoted:  { scale: 0.85, ty: 75 * peekScale },
+      rest:     { scale: 0.92, ty: 40 * peekScale },
+      promoted: { scale: 1.0,  ty: 0 },
     },
     bottom: {
-      demoted:  { scale: 0.78, ty: 110 },
-      rest:     { scale: 0.85, ty: 75 },
-      promoted: { scale: 0.92, ty: 40 },
+      demoted:  { scale: 0.78, ty: 110 * peekScale },
+      rest:     { scale: 0.85, ty: 75 * peekScale },
+      promoted: { scale: 0.92, ty: 40 * peekScale },
     },
     buffer: {
-      demoted:  { scale: 0.72, ty: 145 },
-      rest:     { scale: 0.78, ty: 110 },
-      promoted: { scale: 0.85, ty: 75 },
+      demoted:  { scale: 0.72, ty: 145 * peekScale },
+      rest:     { scale: 0.78, ty: 110 * peekScale },
+      promoted: { scale: 0.85, ty: 75 * peekScale },
     },
   } as const;
 
@@ -286,7 +290,7 @@ export function CardStack<T>({
   const slotSize = { width: CARD_W, height: cardHeight };
   return (
     <View style={styles.wrap}>
-      <View style={[styles.deck, slotSize]}>
+      <View style={[styles.deck, slotSize, { marginBottom: 80 * peekScale }]}>
         {next3 ? (
           <Animated.View
             key="buffer"
@@ -390,18 +394,12 @@ const styles = StyleSheet.create({
   },
   deck: {
     // Width / height come from the slotSize override (cardHeight
-    // prop) so this style only carries the layout concerns. See
-    // the slotSize const inside CardStack.
+    // prop). marginBottom set inline scaled by peekScale so the
+    // reserve-below-the-deck stays proportional to the peek size
+    // — tighter peek (profile) gets less reserve, default peek
+    // (tasks / spots) gets the full 80.
     alignItems: 'center',
     justifyContent: 'center',
-    // Reserve room for the bottom card's peek (ty:60 + tail) AND
-    // breathing room before the counter — was 26 in the first
-    // pass, felt glued. Also keeps the counter from getting
-    // clipped when the next snap-card slides in above.
-    // Bumped from 50 → 80 to accommodate the deeper peek positions
-    // (bottom slot now sits at ty:75, was 60). Keeps the bottom
-    // peek clear of the counter / next stacked element.
-    marginBottom: 80,
   },
   cardSlot: {
     position: 'absolute',

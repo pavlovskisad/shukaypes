@@ -246,13 +246,19 @@ export default function ProfileScreen() {
           top of the floating dashboard. SVG layers stretch with
           preserveAspectRatio="none" so the horizon lands around
           the middle of the screen. */}
-      <View style={[styles.sceneFullBleed, { bottom: HERO.size + insets.bottom }]}>
+      <View style={styles.sceneFullBleed}>
         {sceneActive ? (
-          // dogBottomInset lifts the dog ~260 px up from the scene's
-          // bottom edge — puts the dog's paws just below the horizon
-          // line on a typical viewport, with the stat deck sitting
-          // on the lower lawn underneath.
-          <ProfileDogScene onModeChange={setSceneMode} dogBottomInset={260} />
+          // Scene extends ALL the way to the viewport bottom (behind
+          // the tab bar) so the lawn colour bleeds under the
+          // dashboard's rounded top corners — otherwise the page bg
+          // shows through there as a visible band of mismatched
+          // colour. dogBottomInset compensates for the extra height
+          // so the dog still walks just below the horizon (260 +
+          // tab-bar inset).
+          <ProfileDogScene
+            onModeChange={setSceneMode}
+            dogBottomInset={260 + HERO.size + insets.bottom}
+          />
         ) : null}
       </View>
 
@@ -285,15 +291,17 @@ export default function ProfileScreen() {
       </View>
 
       {/* Stat deck — on the lower lawn, right above the tab bar
-          and below the dog. Smaller per-card height (150) +
-          tightened layout so the deck doesn't crowd the dog
-          walking on the horizon above. */}
+          and below the dog. peekScale tightens the stacked-card
+          peek so the deck doesn't visually dominate the smaller
+          150-tall slot (the default scale was calibrated for the
+          280-tall photo cards on tasks / spots). */}
       <View style={[styles.deckHolder, { bottom: HERO.size + insets.bottom }]}>
         <CardStack
           items={sections}
           getId={(s) => s.id}
           renderCard={(s) => s.content}
           cardHeight={150}
+          peekScale={0.55}
           showCounter={false}
         />
       </View>
@@ -342,15 +350,17 @@ const styles = StyleSheet.create({
     flex: 1,
     // Sky bg set inline based on scene mode.
   },
-  // Full-bleed scene: fills from top of safe-area down to the
-  // top of the floating dashboard. The dog ambles along the
-  // bottom edge of this area (just above the tab bar).
+  // Full-bleed scene — fills the entire SafeAreaView area, INCLUDING
+  // behind the floating tab bar. The lawn colour shows through the
+  // bar's rounded top corners instead of mismatching against the
+  // page bg. Dog positioning is compensated via dogBottomInset so
+  // the dog still walks above the bar.
   sceneFullBleed: {
     position: 'absolute',
     top: 0,
     left: 0,
     right: 0,
-    // bottom set inline via HERO.size + insets.bottom
+    bottom: 0,
   },
   // HUD row at the top — meters on the left, language toggle
   // on the right. Same horizontal-padding rhythm as the map's
