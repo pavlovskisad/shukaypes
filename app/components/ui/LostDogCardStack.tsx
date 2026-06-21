@@ -90,17 +90,19 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     });
   }, [index, dogs]);
 
-  // Reveal progress for the deck overlay (the grey placeholder on
-  // middle / bottom / ghost). Decoupled from `tx` so a backward
-  // slide-in (which uses negative tx as the slot animates back from
-  // off-screen-left) doesn't accidentally reveal the deck content.
-  //   - forward drag (tx < 0): driven by drag distance — overlay
-  //     fades smoothly as the user pulls.
-  //   - backward drag (tx > 0): stays at 0 — deck stays grey.
-  //   - aborted gestures: spring back to 0.
-  //   - forward commit: snaps to 0 inside `advance` (along with
-  //     the rest of the state) so the new middle is covered.
+  // Reveal progress is GONE in this iteration — deck slots stay
+  // permanently grey, the next dog's photo never leaks under the
+  // cover. Top-card fade-in handles the "new top appearing" feel
+  // instead, isolated to the single slot that's actually changing.
+  // (Kept the variable so the spring-back in onEnd has a no-op
+  // target without restructuring further.)
   const revealProgress = useSharedValue(0);
+
+  // Drives a quick fade-in on the top slot after `advance` (in
+  // either direction). 1 at rest, snaps to 0 inside advance, then
+  // ramps back to 1 — gives the new dog's photo a soft arrival
+  // instead of teleporting into the slot at the end of the fly-off.
+  const topAppearOpacity = useSharedValue(1);
 
   const advance = useCallback(
     (delta: number) => {
@@ -111,11 +113,15 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
       // the old dog at centre.
       requestAnimationFrame(() => {
         ty.value = 0;
-        // Reset reveal to 0 either way: forward commit just rolled
-        // the deck → the new middle/bottom/ghost should be back
-        // under their grey covers. Backward never lifted them in
-        // the first place.
         revealProgress.value = 0;
+        // Top slot is about to show a different dog. Fade it in so
+        // the new content arrives softly rather than popping into
+        // the centre after the fly-off completes.
+        topAppearOpacity.value = 0;
+        topAppearOpacity.value = withTiming(1, {
+          duration: REVEAL_MS,
+          easing: SLIDE_EASE,
+        });
         if (delta < 0) {
           // BACKWARD: teleport the top slot to off-screen LEFT (the
           // OPPOSITE side of where the old top flew to), then animate
@@ -124,13 +130,13 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
           tx.value = -(CARD_W + 100);
           tx.value = withTiming(0, { duration: SLIDE_IN_MS, easing: SLIDE_EASE });
         } else {
-          // FORWARD: deck shift already played during the pan, snap
-          // tx back to centre.
+          // FORWARD: snap tx back; the fade-in carries the visual
+          // transition since the deck slots are static grey blanks.
           tx.value = 0;
         }
       });
     },
-    [tx, ty, revealProgress],
+    [tx, ty, revealProgress, topAppearOpacity],
   );
 
   // Index mirrored as a shared value so the worklet can read it
@@ -224,13 +230,8 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
       }
     });
 
-  // Top card: full pan-driven transform. NOT fading the opacity on
-  // exit on purpose — the slot's content swaps during the deck
-  // advance, and any opacity change in the same frame as the swap
-  // looks like a flash. Keeping opacity at 1 throughout means the
-  // only thing changing visually on advance is the photo src, and
-  // the rAF defer in `advance` makes that happen before the
-  // transform resets.
+  // Top card: full pan-driven transform + a fade-in opacity that
+  // ramps after each `advance`. Drag rotation maxes ±12° at ±200px.
   const topStyle = useAnimatedStyle(() => {
     const rotate = interpolate(tx.value, [-200, 0, 200], [-12, 0, 12], Extrapolation.CLAMP);
     return {
@@ -239,8 +240,20 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
         { translateY: ty.value },
         { rotate: `${rotate}deg` },
       ],
+      opacity: topAppearOpacity.value,
     };
   });
+
+  // Deck-card poses. STATIC at peek positions — no scale/translate
+  // animation during drag. The deck reads as a clean stack of
+  // grey rectangles behind the active card; only the top card
+  // moves. Pushed lower than the first prototype so each peek
+  // strip is visibly wider.
+  const STACK_POSES = [
+    { scale: 0.94, ty: 30 },  // middle
+    { scale: 0.88, ty: 60 },  // bottom
+    { scale: 0.82, ty: 90 },  // third
+  ];
 
   // Deck-shift progress: only animates on FORWARD swipes (left,
   // negative tx). Backward (right) swipes go to the previous dog
@@ -265,50 +278,10 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
   // at full opacity) so the cover doesn't move with the user's
   // first few pixels of drag; then a smooth roll to 0 over the
   // remainder. Feels deliberate.
-  const REST_OVERLAY = 1;
-  function overlayOpacity(reveal: number): number {
-    'worklet';
-    return interpolate(reveal, [0, 0.35, 1], [REST_OVERLAY, REST_OVERLAY, 0], Extrapolation.CLAMP);
-  }
-
-  // Second card pops forward as the top card flies away. Tighter
-  // base scale + bigger peek so the deck reads as a deck, not a
-  // single floating card.
-  const middleStyle = useAnimatedStyle(() => {
-    const progress = forwardProgress(tx.value);
-    const scale = interpolate(progress, [0, 1], [0.92, 1], Extrapolation.CLAMP);
-    const translateY = interpolate(progress, [0, 1], [22, 0], Extrapolation.CLAMP);
-    return { transform: [{ scale }, { translateY }] };
-  });
-  const middleOverlayStyle = useAnimatedStyle(() => ({
-    opacity: overlayOpacity(revealProgress.value),
-  }));
-
-  // Third card stays mostly still; bigger offset so the third-tier
-  // peek is visible too. (Two visible cards behind reads as "more
-  // to come", one was ambiguous.)
-  const bottomStyle = useAnimatedStyle(() => {
-    const progress = forwardProgress(tx.value);
-    const scale = interpolate(progress, [0, 1], [0.84, 0.92], Extrapolation.CLAMP);
-    const translateY = interpolate(progress, [0, 1], [44, 22], Extrapolation.CLAMP);
-    return { transform: [{ scale }, { translateY }] };
-  });
-  const bottomOverlayStyle = useAnimatedStyle(() => ({
-    opacity: overlayOpacity(revealProgress.value),
-  }));
-
-  // Hidden ghost at index+3 — invisible at rest, fades into the
-  // bottom-slot pose as the top card is dragged forward.
-  const ghostStyle = useAnimatedStyle(() => {
-    const progress = forwardProgress(tx.value);
-    const scale = interpolate(progress, [0, 1], [0.76, 0.84], Extrapolation.CLAMP);
-    const translateY = interpolate(progress, [0, 1], [66, 44], Extrapolation.CLAMP);
-    const opacity = interpolate(progress, [0, 1], [0, 1], Extrapolation.CLAMP);
-    return { transform: [{ scale }, { translateY }], opacity };
-  });
-  const ghostOverlayStyle = useAnimatedStyle(() => ({
-    opacity: overlayOpacity(revealProgress.value),
-  }));
+  // (Reveal / deck-shift logic removed in favour of static grey
+  // deck slots — see STACK_POSES above. revealProgress kept as a
+  // no-op shared value so the spring-back in pan.onEnd has a
+  // target without a structural rewrite.)
 
   if (!topDog) {
     // End of the deck.
@@ -325,29 +298,38 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     );
   }
 
+  // Render the three deck cards in deepest-first order so the top
+  // paints last. Each is a STATIC grey rectangle — no Image, no
+  // content — sized + positioned via its STACK_POSES pose. Only
+  // mounted if there's a corresponding upcoming dog (so the deck
+  // visibly thins out near the end of the list).
+  const deckPeeks = [
+    { hasDog: !!next3, pose: STACK_POSES[2]! },
+    { hasDog: !!next2, pose: STACK_POSES[1]! },
+    { hasDog: !!next1, pose: STACK_POSES[0]! },
+  ];
+
   return (
     <View style={styles.wrap}>
       <View style={styles.deck}>
-        {next3 ? (
-          <Animated.View style={[styles.cardSlot, ghostStyle]}>
-            {renderCard(next3, t)}
-            <Animated.View style={[styles.greyCover, ghostOverlayStyle]} pointerEvents="none" />
-          </Animated.View>
-        ) : null}
-        {next2 ? (
-          <Animated.View style={[styles.cardSlot, bottomStyle]}>
-            {renderCard(next2, t)}
-            <Animated.View style={[styles.greyCover, bottomOverlayStyle]} pointerEvents="none" />
-          </Animated.View>
-        ) : null}
-        {next1 ? (
-          <Animated.View style={[styles.cardSlot, middleStyle]}>
-            {renderCard(next1, t)}
-            <Animated.View style={[styles.greyCover, middleOverlayStyle]} pointerEvents="none" />
-          </Animated.View>
-        ) : null}
+        {deckPeeks.map((peek, i) =>
+          peek.hasDog ? (
+            <View
+              key={`peek-${i}`}
+              style={[
+                styles.cardSlot,
+                styles.greyDeckCard,
+                {
+                  transform: [{ scale: peek.pose.scale }, { translateY: peek.pose.ty }],
+                },
+              ]}
+            />
+          ) : null,
+        )}
         <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.cardSlot, topStyle]}>{renderCard(topDog, t)}</Animated.View>
+          <Animated.View style={[styles.cardSlot, topStyle]}>
+            {renderCard(topDog, t)}
+          </Animated.View>
         </GestureDetector>
       </View>
       <Text style={styles.counter}>
@@ -404,30 +386,28 @@ const styles = StyleSheet.create({
     height: CARD_H,
     alignItems: 'center',
     justifyContent: 'center',
-    // Reserve room for the bottom card's offset so the deck doesn't
-    // clip its own peek.
-    marginBottom: 14,
+    // Reserve room for the third card's peek (ty:90 + card-bottom
+    // tail) so the deepest deck card isn't clipped at the bottom.
+    marginBottom: 56,
   },
   cardSlot: {
     position: 'absolute',
     width: CARD_W,
     height: CARD_H,
   },
-  // Semi-transparent grey card sitting on top of each deck slot's
-  // real content. At rest, REST_OVERLAY in the worklet sets this
-  // ~0.88 — content visibly under but mostly grey, reads as a
-  // "more cards back here" hint. On forward drag the overlay
-  // fades to 0 with a small delay (overlayOpacity worklet) so the
-  // next dog's photo gradually emerges. Backward drag leaves it
-  // alone — the deck stays grey when going back.
-  greyCover: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    bottom: 0,
-    borderRadius: 24,
+  // Deck slot — plain grey rounded rectangle, no content. Three
+  // of these stack behind the top card at fixed peek poses. The
+  // shadow is softer than the top card's so the deck reads as
+  // "background paper", not floating discs competing with the
+  // active card.
+  greyDeckCard: {
     backgroundColor: '#e6e6e6',
+    borderRadius: 24,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 12,
+    elevation: 2,
   },
   card: {
     width: '100%',
