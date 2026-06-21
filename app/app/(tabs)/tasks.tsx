@@ -221,12 +221,12 @@ export default function TasksScreen() {
     el.id = 'tasks-snap-pop-style';
     el.textContent = `
       @keyframes tasks-snap-pop {
-        0%   { transform: translateY(0)    scale(1);     }
-        35%  { transform: translateY(-5px) scale(1.045); }
-        100% { transform: translateY(0)    scale(1);     }
+        0%   { transform: translateY(0)     scale(1);    }
+        28%  { transform: translateY(-14px) scale(1.07); }
+        100% { transform: translateY(0)     scale(1);    }
       }
       .tasks-snap-pop {
-        animation: tasks-snap-pop 480ms cubic-bezier(0.32, 0.72, 0, 1) both;
+        animation: tasks-snap-pop 620ms cubic-bezier(0.32, 0.72, 0, 1) both;
       }
     `;
     document.head.appendChild(el);
@@ -246,28 +246,37 @@ export default function TasksScreen() {
     let timer: ReturnType<typeof setTimeout> | null = null;
     let lastSnapped: HTMLElement | null = null;
 
-    const handleSettle = () => {
+    const findNearestCard = (): { card: HTMLElement | null; dist: number } => {
       const cards = node.querySelectorAll<HTMLElement>('[data-snap-card]');
       const nodeTop = node.getBoundingClientRect().top;
-      let snapped: HTMLElement | null = null;
+      let nearest: HTMLElement | null = null;
       let minDist = Infinity;
       cards.forEach((c) => {
         const dist = Math.abs(c.getBoundingClientRect().top - nodeTop);
         if (dist < minDist) {
           minDist = dist;
-          snapped = c;
+          nearest = c;
         }
       });
-      if (snapped && snapped !== lastSnapped && minDist < 40) {
-        // First detection only records — no pop on initial landing.
-        if (lastSnapped !== null) {
-          const target = snapped as HTMLElement;
-          target.classList.remove('tasks-snap-pop');
-          // Force reflow so the animation restarts even if the
-          // class was just removed.
-          void target.offsetWidth;
-          target.classList.add('tasks-snap-pop');
-        }
+      return { card: nearest, dist: minDist };
+    };
+
+    // Pre-seed lastSnapped to whatever card is at the top on mount —
+    // without this, the very first user-driven snap transition can't
+    // pop (the change-detection treats null → first-card as "initial
+    // landing" and bails). Delay one frame so the DOM is in place.
+    const initId = setTimeout(() => {
+      lastSnapped = findNearestCard().card;
+    }, 200);
+
+    const handleSettle = () => {
+      const { card: snapped, dist } = findNearestCard();
+      if (snapped && snapped !== lastSnapped && dist < 40) {
+        snapped.classList.remove('tasks-snap-pop');
+        // Force reflow so the animation restarts even if the class
+        // was just removed.
+        void snapped.offsetWidth;
+        snapped.classList.add('tasks-snap-pop');
         lastSnapped = snapped;
       }
     };
@@ -280,6 +289,7 @@ export default function TasksScreen() {
     node.addEventListener('scroll', onScroll, { passive: true });
     return () => {
       node.removeEventListener('scroll', onScroll);
+      clearTimeout(initId);
       if (timer) clearTimeout(timer);
     };
   }, []);
@@ -565,9 +575,10 @@ const styles = StyleSheet.create({
     flex: 1,
     scrollSnapType: 'y mandatory',
   } as unknown as object,
-  // Bumped paddingTop so the first card sits well below the status
-  // bar (was 28 — still felt glued in Safari iOS).
-  content: { paddingHorizontal: 16, paddingTop: 48, paddingBottom: 120, gap: 12 },
+  // Big paddingTop — the lost-pets card kept reading as "glued to
+  // the status bar" in Safari iOS even at 48; 80 lands the card
+  // visibly lower on the screen, well clear of the status pills.
+  content: { paddingHorizontal: 16, paddingTop: 80, paddingBottom: 120, gap: 12 },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
