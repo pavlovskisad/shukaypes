@@ -90,53 +90,61 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     });
   }, [index, dogs]);
 
-  // Reveal progress is GONE in this iteration — deck slots stay
-  // permanently grey, the next dog's photo never leaks under the
-  // cover. Top-card fade-in handles the "new top appearing" feel
-  // instead, isolated to the single slot that's actually changing.
-  // (Kept the variable so the spring-back in onEnd has a no-op
-  // target without restructuring further.)
-  const revealProgress = useSharedValue(0);
+  // Deck-shift progress: drives the four deck slots from their rest
+  // pose (peek positions behind the top) to their PROMOTED pose
+  // (each card one step closer to the top). The 4th slot is
+  // invisible at rest and fades into the third's peek position as
+  // the shift progresses, so the deck always reads as having a
+  // "next" card behind. After a forward commit the value retreats
+  // 1 → 0 in lockstep with the new top's fade-in, so the deck
+  // visibly settles back into the stack rather than snapping.
+  const deckShift = useSharedValue(0);
 
   // Drives a quick fade-in on the top slot after `advance` (in
   // either direction). 1 at rest, snaps to 0 inside advance, then
-  // ramps back to 1 — gives the new dog's photo a soft arrival
-  // instead of teleporting into the slot at the end of the fly-off.
+  // ramps back to 1.
   const topAppearOpacity = useSharedValue(1);
+
+  // Kept for backward-compat with the spring-back in pan.onEnd —
+  // referenced but not visually consumed anywhere now.
+  const revealProgress = useSharedValue(0);
 
   const advance = useCallback(
     (delta: number) => {
       setIndex((i) => Math.max(0, i + delta));
-      // Defer the transform reset to the NEXT animation frame so React
-      // commits the index change first — otherwise the transform
-      // snaps before the slot's photo src updates, briefly showing
-      // the old dog at centre.
       requestAnimationFrame(() => {
         ty.value = 0;
         revealProgress.value = 0;
-        // Top slot is about to show a different dog. Fade it in so
-        // the new content arrives softly rather than popping into
-        // the centre after the fly-off completes.
+        // Top slot fades in with the new dog after either kind of
+        // advance — soft arrival vs a teleport at the end of the
+        // fly-off.
         topAppearOpacity.value = 0;
         topAppearOpacity.value = withTiming(1, {
           duration: REVEAL_MS,
           easing: SLIDE_EASE,
         });
         if (delta < 0) {
-          // BACKWARD: teleport the top slot to off-screen LEFT (the
-          // OPPOSITE side of where the old top flew to), then animate
-          // it back to centre — the previous dog "swings in" from
-          // the left, mirroring the "going back" intent.
+          // BACKWARD: top swings in from off-screen LEFT. Deck did
+          // not shift on the way out (deckShift stayed at 0 during
+          // the backward drag), so nothing to retreat here.
           tx.value = -(CARD_W + 100);
           tx.value = withTiming(0, { duration: SLIDE_IN_MS, easing: SLIDE_EASE });
         } else {
-          // FORWARD: snap tx back; the fade-in carries the visual
-          // transition since the deck slots are static grey blanks.
+          // FORWARD: snap tx back. Retreat the deck from its fully-
+          // shifted pose to rest over the same window as the top
+          // fade-in. The slots that had promoted up (middle → top,
+          // bottom → middle, …) now smoothly settle into the
+          // positions of their NEW content slot. No snap — the
+          // deck reads as continuously alive.
           tx.value = 0;
+          deckShift.value = withTiming(0, {
+            duration: REVEAL_MS,
+            easing: SLIDE_EASE,
+          });
         }
       });
     },
-    [tx, ty, revealProgress, topAppearOpacity],
+    [tx, ty, revealProgress, topAppearOpacity, deckShift],
   );
 
   // Index mirrored as a shared value so the worklet can read it
@@ -157,25 +165,28 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
   const topDog = dogs[index];
   const next1 = dogs[index + 1];
   const next2 = dogs[index + 2];
-  // Hidden "ghost" at index+3 — pre-rendered so when the top card
-  // flies off and the deck shifts forward, the new bottom slot
-  // already has content in place. Without this, the new bottom
-  // pops into view on every advance (the "blink"). Ghost animates
-  // from opacity 0 + small scale → bottom-slot pose as the top
-  // card is dragged, so by commit it IS the new bottom — visually
-  // continuous, no jump.
   const next3 = dogs[index + 3];
+  // Buffer slot: invisible at rest, fades into the deepest peek
+  // position as deckShift advances. Means the deck never visibly
+  // "thins out" mid-swipe — there's always a backmost card coming
+  // into view as the front card leaves.
+  const next4 = dogs[index + 4];
 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
       tx.value = e.translationX;
       ty.value = e.translationY * 0.3;
-      // Forward drag (left, negative tx) lifts the grey overlay on
-      // the deck cards — the next dog's photo reveals as the user
-      // pulls. Backward drag leaves the deck alone (it stays grey).
+      // Forward drag (left, negative tx) progressively promotes the
+      // deck: middle scales up toward top, bottom toward middle,
+      // third toward bottom, buffer fades in toward third. Backward
+      // drag leaves the deck still — the prev card is going to slide
+      // in over it from the left, no need to false-promote.
       if (e.translationX < 0) {
-        revealProgress.value = Math.min(Math.abs(e.translationX) / CARD_W, 1);
+        const p = Math.min(Math.abs(e.translationX) / CARD_W, 1);
+        deckShift.value = p;
+        revealProgress.value = p;
       } else {
+        deckShift.value = 0;
         revealProgress.value = 0;
       }
     })
@@ -188,6 +199,7 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
         runOnJS(handleTap)(topDog);
         tx.value = withSpring(0);
         ty.value = withSpring(0);
+        deckShift.value = withSpring(0);
         revealProgress.value = withSpring(0);
         return;
       }
@@ -201,14 +213,22 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
         if (!isForward && indexSV.value === 0) {
           tx.value = withSpring(0);
           ty.value = withSpring(0);
+          deckShift.value = withSpring(0);
           return;
         }
         const dir = isForward ? -1 : 1;
         const delta = isForward ? 1 : -1;
-        // Forward commit: keep reveal at 1 through the fly-off so
-        // the deck stays revealed under the leaving top card; it
-        // snaps back to 0 inside `advance` once index has moved.
+        // Forward commit: drive the deck fully promoted over the
+        // fly-off window so by the time the top card has flown out,
+        // the deck slots are at their promoted poses (middle now
+        // sits at top, buffer is fully visible at third). `advance`
+        // then retreats deckShift back to 0 in lockstep with the
+        // new top fading in — the deck visibly settles.
         if (isForward) {
+          deckShift.value = withTiming(1, {
+            duration: FLY_OFF_MS,
+            easing: FLY_EASE,
+          });
           revealProgress.value = withTiming(1, {
             duration: REVEAL_MS,
             easing: SLIDE_EASE,
@@ -223,9 +243,10 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
         );
         ty.value = withTiming(ty.value + 40, { duration: FLY_OFF_MS, easing: FLY_EASE });
       } else {
-        // No commit — spring back, restore deck cover.
+        // No commit — spring back, restore deck.
         tx.value = withSpring(0);
         ty.value = withSpring(0);
+        deckShift.value = withSpring(0);
         revealProgress.value = withSpring(0);
       }
     });
@@ -244,44 +265,44 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     };
   });
 
-  // Deck-card poses. STATIC at peek positions — no scale/translate
-  // animation during drag. The deck reads as a clean stack of
-  // grey rectangles behind the active card; only the top card
-  // moves. Pushed lower than the first prototype so each peek
-  // strip is visibly wider.
-  const STACK_POSES = [
-    { scale: 0.94, ty: 30 },  // middle
-    { scale: 0.88, ty: 60 },  // bottom
-    { scale: 0.82, ty: 90 },  // third
-  ];
-
-  // Deck-shift progress: only animates on FORWARD swipes (left,
-  // negative tx). Backward (right) swipes go to the previous dog
-  // and the deck doesn't actually shift forward — so the middle /
-  // bottom / ghost shouldn't false-promote during that gesture.
-  // Reads tx.value once per worklet run, clamps non-forward to 0.
-  function forwardProgress(t: number): number {
-    'worklet';
-    if (t >= 0) return 0;
-    return Math.min(Math.abs(t) / CARD_W, 1);
-  }
-
-  // Deck-card grey-cover opacity. At rest the cover is FULLY opaque
-  // so the deck slots read as plain grey rectangles — no peek of
-  // the real photos behind. Critical for the backward-swipe case:
-  // when the index decrements, the deck slots' content shifts down
-  // (new middle = old top, etc.) — if the cover were translucent
-  // we'd briefly see the OLD top photo through the new middle.
-  // Opaque cover hides it entirely.
+  // Deck slot poses — each slot has a REST pose (where it sits in
+  // the stack at rest) and a PROMOTED pose (one step closer to the
+  // top, where it ends up at deckShift === 1). The buffer also
+  // fades opacity from 0 → 1 so the deck always reveals a new
+  // backmost card as the user pulls. Driven by deckShift (0..1).
   //
-  // Reveal curve: longer initial delay (0 → 0.35 of progress holds
-  // at full opacity) so the cover doesn't move with the user's
-  // first few pixels of drag; then a smooth roll to 0 over the
-  // remainder. Feels deliberate.
-  // (Reveal / deck-shift logic removed in favour of static grey
-  // deck slots — see STACK_POSES above. revealProgress kept as a
-  // no-op shared value so the spring-back in pan.onEnd has a
-  // target without a structural rewrite.)
+  // Order: deepest (buffer) → shallowest (middle). The top card is
+  // the GestureDetector's Animated.View — not part of this list.
+  const SLOT_POSES = {
+    middle: { rest: { scale: 0.94, ty: 30 }, promoted: { scale: 1.0,  ty: 0  } },
+    bottom: { rest: { scale: 0.88, ty: 60 }, promoted: { scale: 0.94, ty: 30 } },
+    third:  { rest: { scale: 0.82, ty: 90 }, promoted: { scale: 0.88, ty: 60 } },
+    buffer: { rest: { scale: 0.76, ty: 120 }, promoted: { scale: 0.82, ty: 90 } },
+  } as const;
+
+  const middleStyle = useAnimatedStyle(() => {
+    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.middle.rest.scale, SLOT_POSES.middle.promoted.scale]);
+    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.middle.rest.ty, SLOT_POSES.middle.promoted.ty]);
+    return { transform: [{ scale: s }, { translateY: y }] };
+  });
+  const bottomStyle = useAnimatedStyle(() => {
+    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.bottom.rest.scale, SLOT_POSES.bottom.promoted.scale]);
+    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.bottom.rest.ty, SLOT_POSES.bottom.promoted.ty]);
+    return { transform: [{ scale: s }, { translateY: y }] };
+  });
+  const thirdStyle = useAnimatedStyle(() => {
+    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.third.rest.scale, SLOT_POSES.third.promoted.scale]);
+    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.third.rest.ty, SLOT_POSES.third.promoted.ty]);
+    return { transform: [{ scale: s }, { translateY: y }] };
+  });
+  const bufferStyle = useAnimatedStyle(() => {
+    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.buffer.rest.scale, SLOT_POSES.buffer.promoted.scale]);
+    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.buffer.rest.ty, SLOT_POSES.buffer.promoted.ty]);
+    // Buffer fades in as the deck promotes — invisible at rest so
+    // the deck never reads as 4-deep, only ever 3 + a ghost.
+    const o = interpolate(deckShift.value, [0, 1], [0, 1], Extrapolation.CLAMP);
+    return { transform: [{ scale: s }, { translateY: y }], opacity: o };
+  });
 
   if (!topDog) {
     // End of the deck.
@@ -298,34 +319,39 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     );
   }
 
-  // Render the three deck cards in deepest-first order so the top
-  // paints last. Each is a STATIC grey rectangle — no Image, no
-  // content — sized + positioned via its STACK_POSES pose. Only
-  // mounted if there's a corresponding upcoming dog (so the deck
-  // visibly thins out near the end of the list).
-  const deckPeeks = [
-    { hasDog: !!next3, pose: STACK_POSES[2]! },
-    { hasDog: !!next2, pose: STACK_POSES[1]! },
-    { hasDog: !!next1, pose: STACK_POSES[0]! },
-  ];
-
+  // Deck slots in deepest-first paint order: buffer → third →
+  // bottom → middle → top. Each is a plain grey rectangle (no
+  // photo, no content) so backward swipes never leak the next
+  // dog's image through. Slots are mounted only when there's a
+  // corresponding upcoming dog so the deck visibly thins at the
+  // end of the list (last card has no buffer behind it).
   return (
     <View style={styles.wrap}>
       <View style={styles.deck}>
-        {deckPeeks.map((peek, i) =>
-          peek.hasDog ? (
-            <View
-              key={`peek-${i}`}
-              style={[
-                styles.cardSlot,
-                styles.greyDeckCard,
-                {
-                  transform: [{ scale: peek.pose.scale }, { translateY: peek.pose.ty }],
-                },
-              ]}
-            />
-          ) : null,
-        )}
+        {next4 ? (
+          <Animated.View
+            key="buffer"
+            style={[styles.cardSlot, styles.greyDeckCard, bufferStyle]}
+          />
+        ) : null}
+        {next3 ? (
+          <Animated.View
+            key="third"
+            style={[styles.cardSlot, styles.greyDeckCard, thirdStyle]}
+          />
+        ) : null}
+        {next2 ? (
+          <Animated.View
+            key="bottom"
+            style={[styles.cardSlot, styles.greyDeckCard, bottomStyle]}
+          />
+        ) : null}
+        {next1 ? (
+          <Animated.View
+            key="middle"
+            style={[styles.cardSlot, styles.greyDeckCard, middleStyle]}
+          />
+        ) : null}
         <GestureDetector gesture={pan}>
           <Animated.View style={[styles.cardSlot, topStyle]}>
             {renderCard(topDog, t)}
