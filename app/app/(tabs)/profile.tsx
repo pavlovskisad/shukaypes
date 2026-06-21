@@ -360,7 +360,17 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     height: 34,
     borderRadius: 17,
-    backgroundColor: 'rgba(0,0,255,0.06)',
+    // White with shadow + hairline border — same chip family the
+    // spots rows / modal category tag / lang toggle use. Was a
+    // pale-blue tint that competed with the white card bg.
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
   },
   meterEmoji: {
     fontSize: 14,

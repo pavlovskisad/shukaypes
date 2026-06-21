@@ -1512,7 +1512,14 @@ export default function MapViewWeb() {
             onTap={() => {
               companionTappedAtRef.current = Date.now();
             }}
-            onTapCompanion={() => showBubble(t.bubbles.simpleWoof, 4000)}
+            onTapCompanion={() => {
+              showBubble(t.bubbles.simpleWoof, 4000);
+              // Snap the camera back to the dog whenever the user
+              // taps him — same easeTo recipe recenterOnCompanion
+              // uses, so distant pans don't leave him orphaned in
+              // the corner.
+              recenterOnCompanion();
+            }}
           />
         ) : null}
       </MapContext.Provider>

@@ -4,6 +4,11 @@ import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { INLINE_ICON } from '../../constants/sizing';
+import {
+  MODAL_PILL_DARK,
+  MODAL_PILL_BLUE,
+  MODAL_PILL_DISABLED,
+} from '../../constants/buttons';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
@@ -42,39 +47,6 @@ const PHOTO_HEIGHT_PX = 300;
 // landed right under the HUD instead of leaving a map gap.
 const TOP_RESERVE_PX = 90;
 
-// Modal action button — a tight pill, sized after the "let's go
-// here →" CTA that appears at the end of a sniff hold (the user
-// pointed at it as the reference look). 10×18 padding, 13px text,
-// full pill radius, subtle shadow. Variants compose via spread.
-const MODAL_PILL_BUTTON_BASE: CSSProperties = {
-  flex: 1,
-  padding: '10px 18px',
-  borderRadius: 999,
-  border: 'none',
-  fontFamily: SYSTEM_FONT,
-  fontSize: 13,
-  fontWeight: 700,
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 8,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
-};
-const MODAL_PILL_BUTTON_DARK: CSSProperties = {
-  background: '#1a1a1a',
-  color: '#ffffff',
-};
-const MODAL_PILL_BUTTON_BLUE: CSSProperties = {
-  background: 'rgb(0,60,255)',
-  color: '#ffffff',
-};
-const MODAL_PILL_BUTTON_DISABLED: CSSProperties = {
-  background: '#e8e8f2',
-  color: '#777',
-};
-
 // Modal photo-overlay nav buttons (close X + prev/next chevrons).
 // White frosted glass with a dark glyph so they sit lightly over
 // the photo instead of stamping a dark disc on top of it. Shared
@@ -100,15 +72,18 @@ const NAV_BUTTON_STYLE_CLOSE: CSSProperties = {
   position: 'absolute',
   top: 10,
   right: 10,
+  // Unicode × — the icon-set's `close` SVG turned out to be the
+  // walk-distance "close" glyph (a different word), not an X. Big
+  // line-height-1 number font reads as a clean modal-close X.
+  fontSize: 26,
+  lineHeight: 1,
 };
 const NAV_BUTTON_STYLE_SIDE: CSSProperties = {
   ...NAV_BUTTON_BASE,
   position: 'absolute',
   top: '50%',
   transform: 'translateY(-50%)',
-  // Chevrons use unicode so we keep font-driven; size lets the
-  // glyph fill the disc with the flex-center recipe.
-  fontSize: 24,
+  fontSize: 26,
   lineHeight: 1,
 };
 
@@ -206,8 +181,13 @@ export function LostDogModal({
   // 'searching' state — reads literally and stays in the designer set.
   const badgeIcon: IconName = urgent ? 'urgent' : 'search';
   const badgeText = urgent ? t.modals.lostDog.badgeUrgent : t.modals.lostDog.badgeSearching;
-  const badgeBg = urgent ? '#fde8e8' : '#fdf3e0';
+  // Badges: white pill with the urgency colour on the text + icon
+  // (was a soft tinted bg that read muddy). Matches the white-with-
+  // shadow chip family the rest of the modals now use.
+  const badgeBg = '#ffffff';
   const badgeFg = urgent ? '#e84040' : '#d9a030';
+  const badgeShadow = '0 2px 8px rgba(0,0,0,0.15)';
+  const badgeBorder = '1px solid rgba(0,0,0,0.05)';
 
   return (
     <div
@@ -380,7 +360,7 @@ export function LostDogModal({
             aria-label={t.modals.common.close}
             style={NAV_BUTTON_STYLE_CLOSE}
           >
-            <Icon name="close" size={INLINE_ICON.navGlyph} />
+            ×
           </button>
         </div>
 
@@ -432,7 +412,7 @@ export function LostDogModal({
           <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
             <button
               onClick={() => onReportSighting?.(renderDog)}
-              style={{ ...MODAL_PILL_BUTTON_BASE, ...MODAL_PILL_BUTTON_DARK }}
+              style={MODAL_PILL_DARK}
             >
               <Icon name="eyes" size={INLINE_ICON.cta} inverted />
               {t.modals.lostDog.iveSeen}
@@ -440,11 +420,7 @@ export function LostDogModal({
             <button
               onClick={() => onStartSearch?.(renderDog)}
               disabled={searchActive}
-              style={{
-                ...MODAL_PILL_BUTTON_BASE,
-                ...(searchActive ? MODAL_PILL_BUTTON_DISABLED : MODAL_PILL_BUTTON_BLUE),
-                cursor: searchActive ? 'default' : 'pointer',
-              }}
+              style={searchActive ? MODAL_PILL_DISABLED : MODAL_PILL_BLUE}
             >
               <Icon name="search" size={INLINE_ICON.cta} inverted={!searchActive} />
               {searchActive ? t.modals.lostDog.searchingCta : t.modals.lostDog.startSearch}

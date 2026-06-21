@@ -1,40 +1,11 @@
-import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { INLINE_ICON, MAP_MARKER } from '../../constants/sizing';
+import { MODAL_PILL_DARK, MODAL_PILL_BLUE } from '../../constants/buttons';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
-
-// Full-width pill CTAs — same recipe as the LostDog action buttons,
-// just width:100% because SpotModal stacks them vertically rather
-// than splitting flex:1 side by side.
-const MODAL_PILL_FULL_BASE: CSSProperties = {
-  width: '100%',
-  padding: '10px 18px',
-  borderRadius: 999,
-  border: 'none',
-  fontFamily: SYSTEM_FONT,
-  fontSize: 13,
-  fontWeight: 700,
-  cursor: 'pointer',
-  display: 'flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: 8,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
-};
-const MODAL_PILL_FULL_DARK: CSSProperties = {
-  ...MODAL_PILL_FULL_BASE,
-  background: '#1a1a1a',
-  color: '#ffffff',
-};
-const MODAL_PILL_FULL_BLUE: CSSProperties = {
-  ...MODAL_PILL_FULL_BASE,
-  background: 'rgb(0,60,255)',
-  color: '#ffffff',
-};
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -217,25 +188,25 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           </div>
         </div>
 
-        {/* Two tight pill CTAs — same style + size family as the
-            LostDog modal so modal buttons land consistently across
-            the app. Stacked (full width) here because the SpotModal
-            uses width-100 buttons; LostDog uses two side-by-side. */}
-        <button
-          onClick={() => onWalkHere?.(renderSpot, 'oneway')}
-          style={MODAL_PILL_FULL_DARK}
-        >
-          <Icon name="walk" size={INLINE_ICON.cta} inverted />
-          <span>{t.modals.spot.walkHere}</span>
-        </button>
-
-        <button
-          onClick={() => onWalkHere?.(renderSpot, 'roundtrip')}
-          style={{ ...MODAL_PILL_FULL_BLUE, marginTop: 10 }}
-        >
-          <Icon name="roundtrip" size={INLINE_ICON.cta} inverted />
-          <span>{t.modals.spot.roundtrip}</span>
-        </button>
+        {/* Two pills side-by-side via flex:1 (shared MODAL_PILL_*)
+            — matches the LostDog action layout. Was a full-width
+            stack that felt overwide for the modal's short CTAs. */}
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button
+            onClick={() => onWalkHere?.(renderSpot, 'oneway')}
+            style={MODAL_PILL_DARK}
+          >
+            <Icon name="walk" size={INLINE_ICON.cta} inverted />
+            <span>{t.modals.spot.walkHere}</span>
+          </button>
+          <button
+            onClick={() => onWalkHere?.(renderSpot, 'roundtrip')}
+            style={MODAL_PILL_BLUE}
+          >
+            <Icon name="roundtrip" size={INLINE_ICON.cta} inverted />
+            <span>{t.modals.spot.roundtrip}</span>
+          </button>
+        </div>
 
         <style>{`
           @keyframes sheet-up {
