@@ -35,6 +35,7 @@ import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
 import { SpotModal } from '../ui/SpotModal';
 import { getDeepLinkDogId } from '../../services/telegram';
+import { useStrings } from '../../i18n/useStrings';
 import { fetchWalkingRoute } from '../../services/directions';
 import { PoiMarker } from './PoiMarker';
 import { PoiCluster } from './PoiCluster';
@@ -93,6 +94,7 @@ export default function MapViewWeb() {
   // overlays render in a different subtree so we read the same inset
   // from the hook here.
   const insets = useSafeAreaInsets();
+  const t = useStrings();
   const [bubble, setBubble] = useState<string | null>(null);
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -313,11 +315,8 @@ export default function MapViewWeb() {
       sniffBubbleInitRef.current = false;
       return;
     }
-    showBubble(
-      sniffMode ? '*deep sniff* supersniff mode 👀' : 'okay, back to walks 🐾',
-      3500,
-    );
-  }, [sniffMode, showBubble]);
+    showBubble(sniffMode ? t.bubbles.sniffOn : t.bubbles.sniffOff, 3500);
+  }, [sniffMode, showBubble, t]);
 
   // Greet on every map-tab focus — pick a random "woof" so it doesn't
   // get repetitive. Same energy as Claude Code's *percolating* /
@@ -328,32 +327,13 @@ export default function MapViewWeb() {
     useCallback(() => {
       if (!hasGreetedThisSession) {
         hasGreetedThisSession = true;
-        showBubble("woof! tap me to learn what's what 🐾", 5500);
+        showBubble(t.bubbles.greeting, 5500);
         return;
       }
-      const woofs = [
-        'woof 🐾',
-        '*sniff sniff*',
-        'ruff ruff 🐶',
-        'bork bork',
-        '*tail wag*',
-        '*ears perk*',
-        '*zoomies* 💨',
-        '*butt wiggle*',
-        '*play bow*',
-        'arf arf!',
-        '*nose boop*',
-        '*happy pant*',
-        'yip yip!',
-        '*floof shake*',
-        '*scout mode* 🔍',
-        '*sploot*',
-        '*boof*',
-        '*mlem*',
-      ];
-      const pick = woofs[Math.floor(Math.random() * woofs.length)] ?? 'woof 🐾';
+      const { woofs } = t.bubbles;
+      const pick = woofs[Math.floor(Math.random() * woofs.length)] ?? t.bubbles.simpleWoof;
       showBubble(pick, 4000);
-    }, [showBubble]),
+    }, [showBubble, t]),
   );
 
   // Preload neighbour photos on the FIRST modal open per session so
@@ -442,13 +422,13 @@ export default function MapViewWeb() {
       if (!pos) return;
       const { advanced, completed, narration } = await advanceQuestIfNear(pos);
       if (completed) {
-        showBubble(narration ?? `found something! quest complete 🎉`, 6000);
+        showBubble(narration ?? t.bubbles.questComplete, 6000);
       } else if (advanced) {
-        showBubble(narration ?? `paw print here — let's keep going 🐾`, 5000);
+        showBubble(narration ?? t.bubbles.questAdvance, 5000);
       }
     }, balance.roamTick);
     return () => clearInterval(id);
-  }, [activeQuest?.id, activeQuest?.currentWaypoint, advanceQuestIfNear, showBubble]);
+  }, [activeQuest?.id, activeQuest?.currentWaypoint, advanceQuestIfNear, showBubble, t]);
 
   // Auto-collect tokens. Uses min(user, companion) distance — the
   // companion orbits the walker at ~110m, so paws right at the user's
@@ -1180,8 +1160,8 @@ export default function MapViewWeb() {
   if (!userPos) {
     return (
       <View style={styles.msg}>
-        <Text style={styles.t}>locating…</Text>
-        {location.usingFallback ? <Text style={styles.s}>using kyiv fallback</Text> : null}
+        <Text style={styles.t}>{t.hud.locating}</Text>
+        {location.usingFallback ? <Text style={styles.s}>{t.hud.usingKyivFallback}</Text> : null}
       </View>
     );
   }
@@ -1485,12 +1465,12 @@ export default function MapViewWeb() {
                             await forceAdvanceActiveWaypoint();
                           if (completed) {
                             showBubble(
-                              narration ?? `found something! quest complete 🎉`,
+                              narration ?? t.bubbles.questComplete,
                               6000,
                             );
                           } else if (advanced) {
                             showBubble(
-                              narration ?? `paw print here — let's keep going 🐾`,
+                              narration ?? t.bubbles.questAdvance,
                               5000,
                             );
                           }
@@ -1527,7 +1507,7 @@ export default function MapViewWeb() {
             onTap={() => {
               companionTappedAtRef.current = Date.now();
             }}
-            onTapCompanion={() => showBubble('woof 🐾', 4000)}
+            onTapCompanion={() => showBubble(t.bubbles.simpleWoof, 4000)}
           />
         ) : null}
       </MapContext.Provider>
@@ -1554,7 +1534,7 @@ export default function MapViewWeb() {
           {walkRoute ? (
             <div
               role="button"
-              aria-label="cancel walk"
+              aria-label={t.hud.cancelWalk}
               onClick={() => setWalkRoute(null, null)}
               style={{
                 pointerEvents: 'auto',
@@ -1571,13 +1551,13 @@ export default function MapViewWeb() {
                 userSelect: 'none',
               }}
             >
-              × cancel walk
+              × {t.hud.cancelWalk}
             </div>
           ) : null}
           {activeQuest ? (
             <div
               role="button"
-              aria-label="abandon quest"
+              aria-label={t.hud.abandonQuest}
               onClick={() => {
                 void abandonActiveQuest();
               }}
@@ -1596,7 +1576,7 @@ export default function MapViewWeb() {
                 userSelect: 'none',
               }}
             >
-              × abandon quest
+              × {t.hud.abandonQuest}
             </div>
           ) : null}
         </div>
@@ -1612,7 +1592,7 @@ export default function MapViewWeb() {
         <div
           onClick={recenterOnCompanion}
           role="button"
-          aria-label="recenter on companion"
+          aria-label={t.hud.recenterOnCompanion}
           style={{
             position: 'absolute',
             left: offscreenIndicator.left,

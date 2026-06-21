@@ -8,6 +8,7 @@ import { fetchWalkingRoute } from '../../services/directions';
 import { useGameStore } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
+import { useStrings } from '../../i18n/useStrings';
 import { VOICE } from '../../constants/voice';
 
 // Long-press "sniff this place" gesture.
@@ -88,6 +89,7 @@ async function fetchWikipediaExtract(
 
 export function SniffPress() {
   const map = useMaplibreMap();
+  const t = useStrings();
   const uid = useId().replace(/[:]/g, '');
   const sourceId = useMemo(() => `sniff-${uid}`, [uid]);
   const fillId = `${sourceId}-fill`;
@@ -464,10 +466,10 @@ export function SniffPress() {
               }}
             >
               {moreLoading
-                ? 'opening…'
+                ? t.sniff.opening
                 : moreOpen
-                  ? 'less ▴'
-                  : 'more ▾'}
+                  ? t.sniff.less
+                  : t.sniff.more}
             </div>
           ) : null}
         </div>
@@ -492,7 +494,7 @@ export function SniffPress() {
               opacity: routing ? 0.6 : 1,
             }}
           >
-            {routing ? 'sniffing route…' : "let's go here →"}
+            {routing ? t.sniff.sniffingRoute : t.sniff.letsGoHere}
           </div>
         ) : null}
         {/* Small dot anchoring the bubble to the lat/lng. Round so it
@@ -517,11 +519,15 @@ export function SniffPress() {
 // across surfaces.
 function SniffingBubble({ position }: { position: LatLng }) {
   const [dots, setDots] = useState('.');
+  const t = useStrings();
+  // Strip any static trailing ellipsis from the i18n label so the
+  // animated "." → ".." → "..." cycle doesn't double up.
+  const sniffingBase = t.sniff.sniffing.replace(/[.…]+$/, '');
   useEffect(() => {
-    const t = setInterval(() => {
+    const id = setInterval(() => {
       setDots((d) => (d.length >= 3 ? '.' : d + '.'));
     }, 380);
-    return () => clearInterval(t);
+    return () => clearInterval(id);
   }, []);
   return (
     <MapLibreMarker
@@ -548,7 +554,7 @@ function SniffingBubble({ position }: { position: LatLng }) {
           pointerEvents: 'none',
         }}
       >
-        sniffing{dots}
+        {sniffingBase}{dots}
       </div>
     </MapLibreMarker>
   );

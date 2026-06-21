@@ -2,6 +2,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
 import { Icon, type IconName } from './Icon';
+import { useStrings } from '../../i18n/useStrings';
 
 // Four white-frosted-glass pills laid out identically: icon + value with
 // a consistent gap so happiness / hunger / tokens / spots-toggle read
@@ -83,12 +84,13 @@ function CounterPill({
 function SpotsTogglePill() {
   const visible = useGameStore((s) => s.spotsVisible);
   const setVisible = useGameStore((s) => s.setSpotsVisible);
+  const t = useStrings();
   return (
     <Pressable
       onPress={() => setVisible(!visible)}
       accessibilityRole="switch"
       accessibilityState={{ checked: visible }}
-      accessibilityLabel={`spots ${visible ? 'visible' : 'hidden'}`}
+      accessibilityLabel={visible ? t.hud.spotsVisible : t.hud.spotsHidden}
       style={({ pressed }) => [
         styles.pill,
         styles.togglePill,
@@ -105,6 +107,7 @@ export function StatusBar() {
   const hunger = useGameStore((s) => s.hunger);
   const happiness = useGameStore((s) => s.happiness);
   const tokensCollected = useGameStore((s) => s.tokensCollected);
+  const t = useStrings();
 
   return (
     // box-none so the toggle pill receives taps while the wrap itself
@@ -113,9 +116,9 @@ export function StatusBar() {
     // is obviously "+20% fed", not "I ate 20 bones". Paw pill keeps
     // the lifetime collected count.
     <View style={styles.wrap} pointerEvents="box-none">
-      <MeterPill icon="sun" value={happiness} label="happiness" />
-      <MeterPill icon="bone" value={hunger} label="hunger" />
-      <CounterPill icon="paws" value={tokensCollected} label="paws" />
+      <MeterPill icon="sun" value={happiness} label={t.hud.happiness} />
+      <MeterPill icon="bone" value={hunger} label={t.hud.hunger} />
+      <CounterPill icon="paws" value={tokensCollected} label={t.hud.paws} />
       <SpotsTogglePill />
     </View>
   );

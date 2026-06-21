@@ -28,6 +28,38 @@ export interface AppStrings {
     spots: string;
     home: string;
   };
+  hud: {
+    happiness: string;
+    hunger: string;
+    paws: string;
+    spotsVisible: string;
+    spotsHidden: string;
+    findingPet: (name: string) => string;
+    abandonSearch: string;
+    cancelWalk: string;
+    abandonQuest: string;
+    recenterOnCompanion: string;
+    locating: string;
+    usingKyivFallback: string;
+  };
+  bubbles: {
+    greeting: string;
+    sniffOn: string;
+    sniffOff: string;
+    questComplete: string;
+    questAdvance: string;
+    simpleWoof: string;
+    // Random ambient barks the companion mutters on focus / tap.
+    woofs: string[];
+  };
+  sniff: {
+    sniffing: string;
+    opening: string;
+    more: string;
+    less: string;
+    sniffingRoute: string;
+    letsGoHere: string;
+  };
 }
 
 const uk: AppStrings = {
@@ -38,6 +70,56 @@ const uk: AppStrings = {
     spots: 'місця',
     home: 'дім',
   },
+  hud: {
+    happiness: 'радість',
+    hunger: 'голод',
+    paws: 'лапки',
+    spotsVisible: 'місця видно',
+    spotsHidden: 'місця сховано',
+    findingPet: (name) => `шукаємо ${name}`,
+    abandonSearch: 'припинити пошук',
+    cancelWalk: 'припинити прогулянку',
+    abandonQuest: 'припинити пошук',
+    recenterOnCompanion: 'повернутись до пса',
+    locating: 'шукаю себе…',
+    usingKyivFallback: 'опускаюсь на Київ',
+  },
+  bubbles: {
+    greeting: 'гав! натисни на мене — розкажу, що до чого 🐾',
+    sniffOn: '*глибокий вдих* супернюх увімкнено 👀',
+    sniffOff: 'добре, повертаємось гуляти 🐾',
+    questComplete: 'знайшли! квест виконано 🎉',
+    questAdvance: 'слід тут — рухаємось далі 🐾',
+    simpleWoof: 'гав 🐾',
+    woofs: [
+      'гав 🐾',
+      '*нюхає*',
+      'ваф-ваф 🐶',
+      '*ніс у землю*',
+      '*хвостом*',
+      '*вуха догори*',
+      '*зумує* 💨',
+      '*витрушується*',
+      '*пригинається до гри*',
+      'ав-ав!',
+      '*ніс ткнув*',
+      '*щасливо сапає*',
+      'тяф-тяф!',
+      '*пухнастий струс*',
+      '*розвідник* 🔍',
+      '*сплот*',
+      '*буф*',
+      '*мхм*',
+    ],
+  },
+  sniff: {
+    sniffing: 'нюхаю…',
+    opening: 'відкриваю…',
+    more: 'ще ▾',
+    less: 'менше ▴',
+    sniffingRoute: 'нюхаю шлях…',
+    letsGoHere: 'ходімо сюди →',
+  },
 };
 
 const en: AppStrings = {
@@ -47,6 +129,56 @@ const en: AppStrings = {
     chat: 'chat',
     spots: 'spots',
     home: 'home',
+  },
+  hud: {
+    happiness: 'happiness',
+    hunger: 'hunger',
+    paws: 'paws',
+    spotsVisible: 'spots visible',
+    spotsHidden: 'spots hidden',
+    findingPet: (name) => `finding ${name}`,
+    abandonSearch: 'abandon search',
+    cancelWalk: 'cancel walk',
+    abandonQuest: 'abandon quest',
+    recenterOnCompanion: 'recenter on companion',
+    locating: 'locating…',
+    usingKyivFallback: 'using kyiv fallback',
+  },
+  bubbles: {
+    greeting: "woof! tap me to learn what's what 🐾",
+    sniffOn: '*deep sniff* supersniff mode 👀',
+    sniffOff: 'okay, back to walks 🐾',
+    questComplete: 'found something! quest complete 🎉',
+    questAdvance: "paw print here — let's keep going 🐾",
+    simpleWoof: 'woof 🐾',
+    woofs: [
+      'woof 🐾',
+      '*sniff sniff*',
+      'ruff ruff 🐶',
+      'bork bork',
+      '*tail wag*',
+      '*ears perk*',
+      '*zoomies* 💨',
+      '*butt wiggle*',
+      '*play bow*',
+      'arf arf!',
+      '*nose boop*',
+      '*happy pant*',
+      'yip yip!',
+      '*floof shake*',
+      '*scout mode* 🔍',
+      '*sploot*',
+      '*boof*',
+      '*mlem*',
+    ],
+  },
+  sniff: {
+    sniffing: 'sniffing…',
+    opening: 'opening…',
+    more: 'more ▾',
+    less: 'less ▴',
+    sniffingRoute: 'sniffing route…',
+    letsGoHere: "let's go here →",
   },
 };
 

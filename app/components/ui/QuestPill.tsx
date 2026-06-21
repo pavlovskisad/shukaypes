@@ -1,6 +1,7 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
+import { useStrings } from '../../i18n/useStrings';
 
 // Active-quest indicator. Renders nothing when no quest is live; when
 // one is, shows a pill with pet name + progress (2/3) + an X to abandon.
@@ -14,12 +15,14 @@ export function QuestPill() {
   const lostDogs = useGameStore((s) => s.lostDogs);
   const abandon = useGameStore((s) => s.abandonActiveQuest);
 
+  const t = useStrings();
+
   if (!activeQuest) return null;
 
   const dog = activeQuest.dogId
     ? lostDogs.find((d) => d.id === activeQuest.dogId)
     : null;
-  const name = dog?.name ?? 'this one';
+  const name = dog?.name ?? '';
   const total = activeQuest.waypoints.length;
   const done = Math.min(activeQuest.currentWaypoint, total);
 
@@ -27,14 +30,14 @@ export function QuestPill() {
     <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.pill}>
         <Text style={styles.emoji}>🔍</Text>
-        <Text style={styles.label}>finding {name}</Text>
+        <Text style={styles.label}>{t.hud.findingPet(name)}</Text>
         <Text style={styles.progress}>
           {done}/{total}
         </Text>
         <Pressable
           onPress={abandon}
           hitSlop={8}
-          accessibilityLabel="abandon search"
+          accessibilityLabel={t.hud.abandonSearch}
           style={styles.close}
         >
           <Text style={styles.closeTxt}>×</Text>
