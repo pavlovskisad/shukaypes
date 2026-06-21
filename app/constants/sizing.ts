@@ -51,13 +51,17 @@ export const HERO = {
 } as const;
 
 export const INLINE_ICON = {
-  cta: 28,            // primary modal-button icon next to label
-                      // ("i've seen them" eye, "start search" lens)
-  secondary: 24,      // secondary action icon (roundtrip glyph)
+  cta: 34,            // primary modal-button icon next to label
+                      // ("i've seen them" eye, "start search" lens,
+                      // "ходімо сюди" walk). Sized ~2.3× the
+                      // surrounding 15px button label so the icon
+                      // carries glance-weight, not just punctuation.
+  secondary: 24,      // secondary action icon
   badge: 22,          // status badge icon (urgent/searching crown)
   stat: 27,           // stat-row label icon in profile
-  about: 28,          // about-modal row icons in the 36px circle —
-                      // 0.78 ratio inside the row's grey disc.
+  about: 44,          // about-modal row icons (no chip anymore, bare
+                      // icon next to 15px title — ~2.9× ratio matches
+                      // the spots-screen card rows).
 } as const;
 
 export const MAP_MARKER = {

@@ -204,9 +204,13 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           onClick={() => onWalkHere?.(renderSpot, 'roundtrip')}
           style={{
             width: '100%',
-            background: 'rgba(0,0,255,0.06)',
-            color: 'rgba(0,0,255,0.85)',
-            border: '1px solid rgba(0,0,255,0.3)',
+            // Solid brand blue + white text/icon — matches the
+            // LostDog modal's "start search" button so blue is a
+            // single coherent affordance across modals (not the
+            // pale outline tint it used to be).
+            background: 'rgb(0,60,255)',
+            color: '#ffffff',
+            border: 'none',
             borderRadius: 16,
             padding: '12px 18px',
             marginTop: 10,
@@ -220,7 +224,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             gap: 10,
           }}
         >
-          <Icon name="roundtrip" size={INLINE_ICON.cta} />
+          <Icon name="roundtrip" size={INLINE_ICON.cta} inverted />
           <span>{t.modals.spot.roundtrip}</span>
         </button>
 

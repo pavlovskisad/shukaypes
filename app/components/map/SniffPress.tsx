@@ -221,19 +221,17 @@ export function SniffPress() {
       }
     };
 
-    // Lock the map's own pan / zoom gestures while a press is alive.
-    // MapLibre's dragstart fires on tiny finger jitter and was
-    // cancelling holds before our own MOVE_CANCEL_PX check could
-    // adjudicate. Re-enabled on finishHold / cancelHold.
+    // Lock the map's single-finger pan during a press so MapLibre's
+    // dragstart (which fires on tiny finger jitter) can't cancel the
+    // hold before our own MOVE_CANCEL_PX check adjudicates. Pinch
+    // (touchZoomRotate) and wheel-zoom (scrollZoom) are LEFT enabled
+    // — disabling them broke two-finger zoom entirely. Pinch starts
+    // are caught separately in startHold via the touch-count guard.
     const lockMapGestures = () => {
       map.dragPan.disable();
-      map.touchZoomRotate.disable();
-      map.scrollZoom.disable();
     };
     const unlockMapGestures = () => {
       map.dragPan.enable();
-      map.touchZoomRotate.enable();
-      map.scrollZoom.enable();
     };
 
     const finishHold = async () => {
@@ -299,9 +297,16 @@ export function SniffPress() {
     };
 
     const startHold = (e: maplibregl.MapMouseEvent | maplibregl.MapTouchEvent) => {
+      // Multi-touch (a pinch-zoom starting) must NOT trigger a hold —
+      // the second finger landing should let MapLibre's pinch handler
+      // take over. Bail out early for any touch event with > 1 finger.
+      const oe = e.originalEvent;
+      if ('touches' in oe && oe.touches.length > 1) {
+        return;
+      }
       // Only press on the BARE canvas. If the underlying DOM target
       // is a marker or any other overlay, ignore.
-      const target = e.originalEvent.target as HTMLElement | null;
+      const target = oe.target as HTMLElement | null;
       if (target && !target.classList.contains('maplibregl-canvas')) {
         return;
       }
@@ -340,6 +345,13 @@ export function SniffPress() {
     const onMove = (e: maplibregl.MapMouseEvent | maplibregl.MapTouchEvent) => {
       const start = startPxRef.current;
       if (!start) return;
+      // Second finger arrived → user wants to pinch-zoom, not sniff.
+      // Cancel cleanly so MapLibre's touchZoomRotate can take over.
+      const oe = e.originalEvent;
+      if ('touches' in oe && oe.touches.length > 1) {
+        cancelHold();
+        return;
+      }
       const dx = e.point.x - start.x;
       const dy = e.point.y - start.y;
       if (dx * dx + dy * dy > MOVE_CANCEL_PX * MOVE_CANCEL_PX) cancelHold();

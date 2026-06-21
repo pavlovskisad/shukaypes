@@ -153,18 +153,21 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           }}
         >
           {t.modals.about.rows.map((r, i) => (
-            <div key={r.title} style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+            <div key={r.title} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+              {/* Bare icon — no surrounding chip. Sized at 44px against
+                  the row's 15px title so the icon dominates the
+                  silhouette (~2.9× ratio, matching the spots-screen
+                  card rows the user pointed at as reference). The
+                  fixed-width wrapper keeps the rest of the rows
+                  vertically aligned even when icon glyphs differ. */}
               <div
                 style={{
-                  width: 36,
-                  height: 36,
-                  borderRadius: 18,
-                  background: '#f5f5f5',
+                  width: INLINE_ICON.about,
+                  flexShrink: 0,
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 18,
-                  flexShrink: 0,
+                  paddingTop: 2,
                 }}
               >
                 <Icon name={ROW_ICONS[i] ?? 'logo'} size={INLINE_ICON.about} />

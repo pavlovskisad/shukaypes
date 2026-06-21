@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -40,6 +41,44 @@ const PHOTO_HEIGHT_PX = 300;
 // room). Without this, on browser viewports the modal's top edge
 // landed right under the HUD instead of leaving a map gap.
 const TOP_RESERVE_PX = 90;
+
+// Shared style for the modal's three nav buttons (close X + prev/next
+// chevrons). One size (40×40), one background, one centering recipe —
+// dropping lineHeight in favour of flex so the unicode glyphs sit
+// truly centred regardless of font metrics. The two prev/next
+// variants merge `left`/`right` over the base via spread.
+const NAV_BUTTON_BASE: CSSProperties = {
+  width: 40,
+  height: 40,
+  borderRadius: 20,
+  border: 'none',
+  background: 'rgba(0,0,0,0.55)',
+  color: '#ffffff',
+  padding: 0,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+};
+const NAV_BUTTON_STYLE_CLOSE: CSSProperties = {
+  ...NAV_BUTTON_BASE,
+  position: 'absolute',
+  top: 10,
+  right: 10,
+  // Slightly larger glyph for the close × since its visual weight is
+  // narrower than the chevrons.
+  fontSize: 26,
+  lineHeight: 1,
+};
+const NAV_BUTTON_STYLE_SIDE: CSSProperties = {
+  ...NAV_BUTTON_BASE,
+  position: 'absolute',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  fontSize: 28,
+  lineHeight: 1,
+};
 
 function relativeTime(iso: string, t: AppStrings): string {
   const then = new Date(iso).getTime();
@@ -307,21 +346,7 @@ export function LostDogModal({
           <button
             onClick={onClose}
             aria-label={t.modals.common.close}
-            style={{
-              position: 'absolute',
-              top: 10,
-              right: 10,
-              width: 32,
-              height: 32,
-              borderRadius: 16,
-              border: 'none',
-              background: 'rgba(0,0,0,0.55)',
-              color: '#ffffff',
-              fontSize: 22,
-              lineHeight: '32px',
-              cursor: 'pointer',
-              padding: 0,
-            }}
+            style={NAV_BUTTON_STYLE_CLOSE}
           >
             ×
           </button>
@@ -390,22 +415,27 @@ export function LostDogModal({
                 gap: 8,
               }}
             >
-              <Icon name="eyes" size={INLINE_ICON.cta} />
+              {/* `inverted` flips the eye icon to white so it shows
+                  on the dark button bg — was rendering as black-on-
+                  near-black and invisible. */}
+              <Icon name="eyes" size={INLINE_ICON.cta} inverted />
               {t.modals.lostDog.iveSeen}
             </button>
 
+            {/* Solid blue when active (was outline / pale tint that
+                read weak next to the dark primary button). White
+                text + white icon. Muted variant stays the soft tint
+                so the disabled state reads inactive. */}
             <button
               onClick={() => onStartSearch?.(renderDog)}
               disabled={searchActive}
               style={{
                 flex: 1,
-                background: searchActive ? '#e8e8f2' : 'rgba(0,0,255,0.06)',
-                color: searchActive ? '#777' : 'rgba(0,0,255,0.85)',
-                border: searchActive
-                  ? '1px solid #d4d4dc'
-                  : '1px solid rgba(0,0,255,0.3)',
+                background: searchActive ? '#e8e8f2' : 'rgb(0,60,255)',
+                color: searchActive ? '#777' : '#ffffff',
+                border: searchActive ? '1px solid #d4d4dc' : 'none',
                 borderRadius: 22,
-                padding: '10px 14px',
+                padding: '11px 14px',
                 fontFamily: SYSTEM_FONT,
                 fontSize: 15,
                 fontWeight: 700,
@@ -417,7 +447,7 @@ export function LostDogModal({
                 gap: 8,
               }}
             >
-              <Icon name="search" size={INLINE_ICON.cta} />
+              <Icon name="search" size={INLINE_ICON.cta} inverted={!searchActive} />
               {searchActive ? t.modals.lostDog.searchingCta : t.modals.lostDog.startSearch}
             </button>
           </div>
@@ -436,23 +466,7 @@ export function LostDogModal({
               handlePrev();
             }}
             aria-label={t.modals.lostDog.previousPet}
-            style={{
-              position: 'absolute',
-              left: 10,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              border: 'none',
-              background: 'rgba(0,0,0,0.55)',
-              color: '#ffffff',
-              fontSize: 26,
-              lineHeight: '44px',
-              padding: 0,
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-            }}
+            style={{ ...NAV_BUTTON_STYLE_SIDE, left: 10 }}
           >
             ‹
           </button>
@@ -464,23 +478,7 @@ export function LostDogModal({
               handleNext();
             }}
             aria-label={t.modals.lostDog.nextPet}
-            style={{
-              position: 'absolute',
-              right: 10,
-              top: '50%',
-              transform: 'translateY(-50%)',
-              width: 44,
-              height: 44,
-              borderRadius: 22,
-              border: 'none',
-              background: 'rgba(0,0,0,0.55)',
-              color: '#ffffff',
-              fontSize: 26,
-              lineHeight: '44px',
-              padding: 0,
-              cursor: 'pointer',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
-            }}
+            style={{ ...NAV_BUTTON_STYLE_SIDE, right: 10 }}
           >
             ›
           </button>
