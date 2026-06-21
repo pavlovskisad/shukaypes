@@ -55,10 +55,37 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     ty.value = 0;
   }, [dogIds]);
 
+  // Pre-warm the next few photos so they're already decoded by the
+  // time the deck shifts and they need to render. Browser caches by
+  // URL; Image.prefetch hands it the URL and the decoder picks up.
+  useEffect(() => {
+    const upcoming = [
+      dogs[index + 1],
+      dogs[index + 2],
+      dogs[index + 3],
+      dogs[index + 4],
+    ];
+    upcoming.forEach((d) => {
+      if (d?.photoUrl) {
+        Image.prefetch(d.photoUrl).catch(() => {
+          /* swallow — best-effort */
+        });
+      }
+    });
+  }, [index, dogs]);
+
   const advance = useCallback(() => {
     setIndex((i) => i + 1);
-    tx.value = 0;
-    ty.value = 0;
+    // Defer the transform reset to the NEXT animation frame so React
+    // commits the index change first. Otherwise the transform snaps
+    // to center while the slot still has the old photo src, and the
+    // user sees the previous dog briefly at the centre before the
+    // re-render swaps it. One rAF is enough — React's commit happens
+    // synchronously inside setIndex's queued microtask.
+    requestAnimationFrame(() => {
+      tx.value = 0;
+      ty.value = 0;
+    });
   }, [tx, ty]);
 
   const handleTap = useCallback(
@@ -108,22 +135,21 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
       }
     });
 
-  // Top card: full pan-driven transform.
+  // Top card: full pan-driven transform. NOT fading the opacity on
+  // exit on purpose — the slot's content swaps during the deck
+  // advance, and any opacity change in the same frame as the swap
+  // looks like a flash. Keeping opacity at 1 throughout means the
+  // only thing changing visually on advance is the photo src, and
+  // the rAF defer in `advance` makes that happen before the
+  // transform resets.
   const topStyle = useAnimatedStyle(() => {
     const rotate = interpolate(tx.value, [-200, 0, 200], [-12, 0, 12], Extrapolation.CLAMP);
-    const opacity = interpolate(
-      Math.abs(tx.value),
-      [0, CARD_W * 0.9],
-      [1, 0.4],
-      Extrapolation.CLAMP,
-    );
     return {
       transform: [
         { translateX: tx.value },
         { translateY: ty.value },
         { rotate: `${rotate}deg` },
       ],
-      opacity,
     };
   });
 
