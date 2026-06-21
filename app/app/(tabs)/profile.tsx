@@ -1,15 +1,16 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
 import { api } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
+import type { SceneMode } from '../../components/profile/ProfileSceneBackdrop';
 import { Icon } from '../../components/ui/Icon';
-import { INLINE_ICON } from '../../constants/sizing';
+import { INLINE_ICON, HERO } from '../../constants/sizing';
 import { useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
 import { CardStack, CARD_W } from '../../components/ui/CardStack';
@@ -118,6 +119,13 @@ export default function ProfileScreen() {
   }, []);
   const sceneActive = isFocused && docVisible;
 
+  // Mirror the dog scene's day / night mode so the page bg colour
+  // matches its sky — gives the full-bleed look where the scene's
+  // landscape sits inside one continuous sky instead of a tiny
+  // 200-px strip glued to a flat-coloured page.
+  const [sceneMode, setSceneMode] = useState<SceneMode>('day');
+  const insets = useSafeAreaInsets();
+
   const refetch = useCallback(async () => {
     try {
       const fresh = (await api.getProfile()) as ProfileData | { error: string };
@@ -161,7 +169,6 @@ export default function ProfileScreen() {
             />
             <StatRow label={t.profile.stats.pawsCollected} value={data?.stats.pawsCollected} />
             <StatRow label={t.profile.stats.bonesEaten} value={data?.stats.bonesEaten} />
-            <StatRow label={t.profile.stats.points} value={data?.user.points} />
           </View>
         ),
       },
@@ -186,115 +193,140 @@ export default function ProfileScreen() {
     [t, data],
   );
 
-  return (
-    <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
-        {/* Hero card — scene at top with corners clipping cleanly
-            (zero padding around it so it fills edge to edge), then
-            a compact content strip below with name + level + xp
-            bar + meters. Tiny UA/EN language toggle anchored top-
-            right so the setting is present without spending a
-            whole section card on it. */}
-        <View style={styles.heroCard}>
-          {sceneActive ? <ProfileDogScene /> : <View style={styles.scenePlaceholder} />}
-          <View style={styles.langTinyRow}>
-            <Pressable
-              onPress={() => setLang('uk')}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: lang === 'uk' }}
-              style={({ pressed }) => [
-                styles.langTinyPill,
-                lang === 'uk' && styles.langTinyPillActive,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={[styles.langTinyText, lang === 'uk' && styles.langTinyTextActive]}>
-                UA
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setLang('en')}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: lang === 'en' }}
-              style={({ pressed }) => [
-                styles.langTinyPill,
-                lang === 'en' && styles.langTinyPillActive,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={[styles.langTinyText, lang === 'en' && styles.langTinyTextActive]}>
-                EN
-              </Text>
-            </Pressable>
-          </View>
-          <View style={styles.heroContent}>
-            <Text style={styles.heroName}>{data?.companion.name ?? companionName}</Text>
-            <Text style={styles.heroMeta}>
-              {t.profile.level(data?.companion.level ?? 1)}
-              {data && data.companion.level < data.companion.maxLevel
-                ? ` · ${t.profile.xpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)}`
-                : data?.companion.level === data?.companion.maxLevel
-                  ? ` · ${t.profile.max}`
-                  : ''}
-            </Text>
-            {data ? (
-              <View
-                style={styles.xpBarTrack}
-                accessibilityLabel={
-                  data.companion.level >= data.companion.maxLevel
-                    ? t.profile.a11yMaxLevel
-                    : t.profile.a11yXpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)
-                }
-              >
-                <View
-                  style={[
-                    styles.xpBarFill,
-                    {
-                      width: `${
-                        data.companion.level >= data.companion.maxLevel
-                          ? 100
-                          : Math.round(
-                              (data.companion.xpInLevel /
-                                Math.max(1, data.companion.xpForNextLevel)) *
-                                100,
-                            )
-                      }%` as unknown as number,
-                    },
-                  ]}
-                />
-              </View>
-            ) : null}
-            <View style={styles.meterRow}>
-              <View style={styles.meterPill}>
-                <Icon name="sun" size={INLINE_ICON.stat} />
-                <Text style={styles.meterValue}>
-                  {Math.round(data?.companion.happiness ?? 0)}%
-                </Text>
-              </View>
-              <View style={styles.meterPill}>
-                <Icon name="bone" size={INLINE_ICON.stat} />
-                <Text style={styles.meterValue}>{Math.round(data?.companion.hunger ?? 0)}%</Text>
-              </View>
-              <View style={styles.meterPill}>
-                <Icon name="paws" size={INLINE_ICON.stat} />
-                <Text style={styles.meterValue}>{data?.stats.pawsCollected ?? 0}</Text>
-              </View>
-            </View>
-          </View>
-        </View>
+  const skyColor = sceneMode === 'day' ? '#dbeaf4' : '#1c2a44';
+  const onDark = sceneMode === 'night';
 
-        {/* Section deck — denser CARD_H so two stat cards fit
-            comfortably under the hero without overflowing the
-            viewport. */}
+  return (
+    // Full-bleed sky background — the dog scene's landscape sits
+    // at the bottom of the screen, the rest is one continuous sky
+    // tinted to match the scene's mode. All UI elements (name,
+    // meters, stat deck, lang toggle) float on top as overlays
+    // like the HUD pills on the map tab.
+    <SafeAreaView style={[styles.root, { backgroundColor: skyColor }]} edges={['top']}>
+      {/* Top overlay row — companion name + level on the left, UA/
+          EN toggle on the right. Sits above the sky with text
+          colour adapting to day / night for contrast. */}
+      <View style={styles.topRow}>
+        <View style={styles.nameBlock}>
+          <Text style={[styles.heroName, onDark && styles.heroNameDark]}>
+            {data?.companion.name ?? companionName}
+          </Text>
+          <Text style={[styles.heroMeta, onDark && styles.heroMetaDark]}>
+            {t.profile.level(data?.companion.level ?? 1)}
+            {data && data.companion.level < data.companion.maxLevel
+              ? ` · ${t.profile.xpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)}`
+              : data?.companion.level === data?.companion.maxLevel
+                ? ` · ${t.profile.max}`
+                : ''}
+          </Text>
+          {data ? (
+            <View
+              style={[
+                styles.xpBarTrack,
+                onDark && { backgroundColor: 'rgba(255,255,255,0.18)' },
+              ]}
+              accessibilityLabel={
+                data.companion.level >= data.companion.maxLevel
+                  ? t.profile.a11yMaxLevel
+                  : t.profile.a11yXpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)
+              }
+            >
+              <View
+                style={[
+                  styles.xpBarFill,
+                  {
+                    width: `${
+                      data.companion.level >= data.companion.maxLevel
+                        ? 100
+                        : Math.round(
+                            (data.companion.xpInLevel /
+                              Math.max(1, data.companion.xpForNextLevel)) *
+                              100,
+                          )
+                    }%` as unknown as number,
+                  },
+                ]}
+              />
+            </View>
+          ) : null}
+        </View>
+        <View style={styles.langTinyRow}>
+          <Pressable
+            onPress={() => setLang('uk')}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: lang === 'uk' }}
+            style={({ pressed }) => [
+              styles.langTinyPill,
+              lang === 'uk' && styles.langTinyPillActive,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={[styles.langTinyText, lang === 'uk' && styles.langTinyTextActive]}>
+              UA
+            </Text>
+          </Pressable>
+          <Pressable
+            onPress={() => setLang('en')}
+            accessibilityRole="switch"
+            accessibilityState={{ checked: lang === 'en' }}
+            style={({ pressed }) => [
+              styles.langTinyPill,
+              lang === 'en' && styles.langTinyPillActive,
+              pressed && { opacity: 0.7 },
+            ]}
+          >
+            <Text style={[styles.langTinyText, lang === 'en' && styles.langTinyTextActive]}>
+              EN
+            </Text>
+          </Pressable>
+        </View>
+      </View>
+
+      {/* Meters row — three floating pills directly below the name
+          block. White-with-shadow chips read against any sky tint. */}
+      <View style={styles.metersRow}>
+        <View style={styles.meterPill}>
+          <Icon name="sun" size={INLINE_ICON.stat} />
+          <Text style={styles.meterValue}>
+            {Math.round(data?.companion.happiness ?? 0)}%
+          </Text>
+        </View>
+        <View style={styles.meterPill}>
+          <Icon name="bone" size={INLINE_ICON.stat} />
+          <Text style={styles.meterValue}>{Math.round(data?.companion.hunger ?? 0)}%</Text>
+        </View>
+        <View style={styles.meterPill}>
+          <Icon name="paws" size={INLINE_ICON.stat} />
+          <Text style={styles.meterValue}>{data?.stats.pawsCollected ?? 0}</Text>
+        </View>
+      </View>
+
+      {/* Stat deck — centred between the meters and the scene's
+          horizon line. No counter (kills the "2 / 2" noise — the
+          stack peek already signals there's another card). */}
+      <View style={styles.deckHolder}>
         <CardStack
           items={sections}
           getId={(s) => s.id}
           renderCard={(s) => s.content}
-          cardHeight={200}
+          cardHeight={180}
+          showCounter={false}
         />
+      </View>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
-      </ScrollView>
+      {/* Dog scene anchored at the bottom of the viewport, above
+          the floating dashboard. onModeChange syncs the page bg
+          to the scene's day / night mode so the sky reads as one
+          continuous environment. */}
+      <View style={[styles.sceneHolder, { bottom: HERO.size + insets.bottom }]}>
+        {sceneActive ? (
+          <ProfileDogScene onModeChange={setSceneMode} />
+        ) : (
+          <View style={styles.scenePlaceholder} />
+        )}
+      </View>
+
+      {error ? <Text style={styles.error}>{error}</Text> : null}
     </SafeAreaView>
   );
 }
@@ -304,41 +336,47 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.greyBg,
   },
-  content: {
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 100,
-    alignItems: 'center',
-    gap: 12,
+  // Top overlay row — name+level on the left, lang toggle on
+  // the right. Lives in the upper sky portion of the page.
+  topRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'flex-start',
+    paddingHorizontal: 20,
+    paddingTop: 16,
   },
-  // Hero card — same width as the section deck so the two stack
-  // cleanly under each other. Zero padding around the scene so it
-  // bleeds to the rounded corners with no white strip; the bottom
-  // content area gets its own padding inside heroContent.
-  heroCard: {
-    width: CARD_W,
-    backgroundColor: '#ffffff',
-    borderRadius: 24,
-    overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.08,
-    shadowRadius: 14,
-    elevation: 2,
+  nameBlock: {
+    flex: 1,
+    paddingRight: 16,
   },
-  heroContent: {
-    paddingTop: 8,
-    paddingBottom: 12,
-    paddingHorizontal: 14,
+  // Floating meters row directly below the name block.
+  metersRow: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    gap: 8,
+    marginTop: 18,
+  },
+  // Holds the stat deck. Centred horizontally, with a top
+  // margin that pushes it below the meters and a bottom margin
+  // that keeps it clear of the scene's horizon line.
+  deckHolder: {
     alignItems: 'center',
+    marginTop: 28,
+  },
+  // Anchors the scene at the bottom of the viewport, above the
+  // floating dashboard. bottom offset is dashboard height +
+  // safe-area inset (passed inline via insets.bottom).
+  sceneHolder: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 200,
   },
   // Empty box that takes the scene's footprint while the scene
-  // is unmounted on background tabs — same width / height so the
-  // card layout doesn't shift on tab switch.
+  // is unmounted on background tabs.
   scenePlaceholder: {
     width: '100%',
     height: 200,
-    backgroundColor: '#dbeaf4',
   },
   // Section cards inside the deck. Width matches the hero. Padding
   // tighter than the hero's content padding since the rows have
@@ -365,16 +403,12 @@ const styles = StyleSheet.create({
     textTransform: 'lowercase',
     letterSpacing: 0.3,
   },
-  // Tiny UA/EN toggle anchored top-right of the hero. Sits over
-  // the scene's sky portion — z-index above so the dog can still
-  // amble underneath without covering the pills.
+  // Tiny UA/EN toggle in the top-right of the page (right side of
+  // the topRow flex). Stays visible against any sky tint via the
+  // semi-opaque white pill background.
   langTinyRow: {
-    position: 'absolute',
-    top: 10,
-    right: 10,
     flexDirection: 'row',
     gap: 4,
-    zIndex: 2,
   },
   langTinyPill: {
     paddingHorizontal: 8,
@@ -400,35 +434,40 @@ const styles = StyleSheet.create({
   },
   heroName: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 18,
-    fontWeight: '700',
-    textAlign: 'center',
-    marginTop: 2,
+    fontSize: 22,
+    fontWeight: '800',
+    color: colors.black,
+  },
+  // Inverted name colour for the night-mode sky.
+  heroNameDark: {
+    color: '#ffffff',
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 4,
   },
   heroMeta: {
-    fontSize: 12,
-    color: '#777',
-    textAlign: 'center',
-    marginTop: 1,
-    marginBottom: 6,
+    fontSize: 13,
+    color: '#555',
+    marginTop: 2,
+    marginBottom: 8,
+  },
+  heroMetaDark: {
+    color: 'rgba(255,255,255,0.85)',
+    textShadowColor: 'rgba(0,0,0,0.4)',
+    textShadowOffset: { width: 0, height: 1 },
+    textShadowRadius: 3,
   },
   xpBarTrack: {
     height: 4,
     borderRadius: 2,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    width: '70%',
-    marginBottom: 10,
+    backgroundColor: 'rgba(0,0,0,0.1)',
+    width: 180,
     overflow: 'hidden',
   },
   xpBarFill: {
     height: '100%',
     backgroundColor: 'rgba(0,60,255,0.85)',
     borderRadius: 2,
-  },
-  meterRow: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    gap: 6,
   },
   meterPill: {
     flexDirection: 'row',

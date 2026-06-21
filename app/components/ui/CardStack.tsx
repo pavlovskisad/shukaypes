@@ -233,21 +233,27 @@ export function CardStack<T>({
   // backward range. Buffer also drives opacity (invisible at rest
   // and below, fades in only above 0 — backward doesn't reveal a
   // new bottom card, the deck just sinks).
+  // Bigger ty + smaller scale at rest so the deck peek reads as
+  // a distinct card behind the top one (was too subtle — the
+  // grey rectangles read like a tinted edge of the top card
+  // rather than a stacked card behind it). Peek 1 now sticks
+  // out 40px below the top and is 92% scale; peek 2 sticks out
+  // 75px at 85%.
   const SLOT_POSES = {
     middle: {
-      demoted:  { scale: 0.88, ty: 60 },
-      rest:     { scale: 0.94, ty: 30 },
+      demoted:  { scale: 0.85, ty: 75 },
+      rest:     { scale: 0.92, ty: 40 },
       promoted: { scale: 1.0,  ty: 0  },
     },
     bottom: {
-      demoted:  { scale: 0.82, ty: 90 },
-      rest:     { scale: 0.88, ty: 60 },
-      promoted: { scale: 0.94, ty: 30 },
+      demoted:  { scale: 0.78, ty: 110 },
+      rest:     { scale: 0.85, ty: 75 },
+      promoted: { scale: 0.92, ty: 40 },
     },
     buffer: {
-      demoted:  { scale: 0.76, ty: 120 },
-      rest:     { scale: 0.82, ty: 90 },
-      promoted: { scale: 0.88, ty: 60 },
+      demoted:  { scale: 0.72, ty: 145 },
+      rest:     { scale: 0.78, ty: 110 },
+      promoted: { scale: 0.85, ty: 75 },
     },
   } as const;
 
@@ -392,7 +398,10 @@ const styles = StyleSheet.create({
     // breathing room before the counter — was 26 in the first
     // pass, felt glued. Also keeps the counter from getting
     // clipped when the next snap-card slides in above.
-    marginBottom: 50,
+    // Bumped from 50 → 80 to accommodate the deeper peek positions
+    // (bottom slot now sits at ty:75, was 60). Keeps the bottom
+    // peek clear of the counter / next stacked element.
+    marginBottom: 80,
   },
   cardSlot: {
     position: 'absolute',

@@ -118,7 +118,16 @@ function isDayHour(): boolean {
   return h >= 7 && h < 19;
 }
 
-export function ProfileDogScene() {
+export function ProfileDogScene({
+  onModeChange,
+}: {
+  // Called whenever the scene's day/night mode flips (either from
+  // the time-based auto-derive or a tap-to-toggle on the sky).
+  // The profile tab wires this to its page background so the sky
+  // colour stays in sync with the scene's mood without lifting
+  // the entire mode state up.
+  onModeChange?: (mode: SceneMode) => void;
+} = {}) {
   const t = useStrings();
   const [anim, setAnim] = useState<DogAnim>('sitting');
   const [facingLeft, setFacingLeft] = useState(false);
@@ -133,6 +142,9 @@ export function ProfileDogScene() {
   );
   const [manualMode, setManualMode] = useState<SceneMode | null>(null);
   const mode: SceneMode = manualMode ?? autoMode;
+  useEffect(() => {
+    onModeChange?.(mode);
+  }, [mode, onModeChange]);
   const [bark, setBark] = useState<string | null>(null);
   const barkTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // State-machine timer + last-anim need to be refs so the on-tap
