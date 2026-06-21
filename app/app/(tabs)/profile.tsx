@@ -272,16 +272,19 @@ export default function ProfileScreen() {
             icon="sun"
             value={data?.companion.happiness ?? 0}
             label={t.hud.happiness}
+            solid
           />
           <MeterPill
             icon="bone"
             value={data?.companion.hunger ?? 0}
             label={t.hud.hunger}
+            solid
           />
           <CounterPill
             icon="paws"
             value={data?.stats.pawsCollected ?? 0}
             label={t.hud.paws}
+            solid
           />
         </View>
         <View style={styles.langPills}>
@@ -381,23 +384,22 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
   },
-  // Lang pill — frosted-glass family matching the HUD MeterPill /
-  // CounterPill. Square-ish so two letters fit naturally.
+  // Lang pill — solid white, same shape as the HUD MeterPill /
+  // CounterPill in solid mode. The dark night sky behind would
+  // tint a translucent pill, so plain white is cleaner.
   langPill: {
     height: CHIP.height,
     minWidth: CHIP.height,
     paddingHorizontal: 10,
     borderRadius: CHIP.height / 2,
-    backgroundColor: 'rgba(255,255,255,0.85)',
-    backdropFilter: 'blur(14px) saturate(160%)',
-    WebkitBackdropFilter: 'blur(14px) saturate(160%)',
+    backgroundColor: '#ffffff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
     shadowRadius: 16,
     alignItems: 'center',
     justifyContent: 'center',
-  } as unknown as object,
+  },
   langPillActive: {
     backgroundColor: colors.black,
   },

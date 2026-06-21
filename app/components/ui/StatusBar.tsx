@@ -28,14 +28,19 @@ export function MeterPill({
   icon,
   value,
   label,
+  solid,
 }: {
   icon: IconName;
   value: number;
   label: string;
+  // Drops the frosted-glass treatment for a plain-white pill —
+  // used on the profile tab where the dark night sky behind makes
+  // the translucent default read as greyish.
+  solid?: boolean;
 }) {
   const fillPct = Math.max(0, Math.min(100, Math.round(value)));
   return (
-    <View style={[styles.pill, styles.meterPill]}>
+    <View style={[styles.pill, styles.meterPill, solid && styles.pillSolid]}>
       <View
         style={[
           styles.fill,
@@ -61,14 +66,16 @@ export function CounterPill({
   value,
   label,
   suffix,
+  solid,
 }: {
   icon: IconName;
   value: number;
   label: string;
   suffix?: string;
+  solid?: boolean;
 }) {
   return (
-    <View style={[styles.pill, styles.counterPill]}>
+    <View style={[styles.pill, styles.counterPill, solid && styles.pillSolid]}>
       <Icon name={icon} size={ICON_SIZE} />
       <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
         {Math.round(value)}
@@ -152,6 +159,14 @@ const styles = StyleSheet.create({
   meterPill: {
     minWidth: PILL_MIN_WIDTH,
   },
+  // Solid-white variant — overrides the frosted-glass treatment
+  // for tabs (profile) where the background behind the pill is
+  // dark / coloured and the translucent default looks tinted.
+  pillSolid: {
+    backgroundColor: '#ffffff',
+    backdropFilter: 'none',
+    WebkitBackdropFilter: 'none',
+  } as unknown as object,
   counterPill: {
     minWidth: PILL_MIN_WIDTH,
   },

@@ -83,10 +83,12 @@ export default function TabsLayout() {
           paddingBottom: insets.bottom,
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,
-          backgroundColor: 'rgba(255,255,255,0.85)',
-          backdropFilter: 'blur(18px) saturate(160%)',
-          // @ts-expect-error — safari prefix not in RN style types
-          WebkitBackdropFilter: 'blur(18px) saturate(160%)',
+          // Plain white — the previous frosted-glass treatment
+          // picked up tints from whatever was behind the bar
+          // (dark night sky on profile, map colours on home) and
+          // read as greyish. Solid white is cleaner across all
+          // tabs.
+          backgroundColor: '#ffffff',
           borderTopWidth: 0,
           shadowColor: '#000',
           shadowOffset: { width: 0, height: -2 },

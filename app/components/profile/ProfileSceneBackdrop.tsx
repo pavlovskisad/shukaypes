@@ -28,21 +28,19 @@ interface BackdropProps {
 }
 
 const VIEW_W = 360;
-// Bumped from 200 → 480 to be closer to the phone-viewport aspect
+// Bumped 200 → 480 → 700 to match a typical phone-viewport aspect
 // ratio (360:700). With preserveAspectRatio="none" stretching the
-// SVG to fill the full-bleed scene container, a 480-tall viewBox
-// only stretches y by ~1.5× (vs ~3.5× at the old 200) so pixel
-// art elements (sun, moon, trees, lamppost) stay close to their
-// designed shape instead of becoming spikes / vertical ovals.
-const VIEW_H = 480;
+// SVG to fill the full-bleed scene container, a 700-tall viewBox
+// renders at ~1:1 on phone screens so pixel-art elements (sun,
+// moon, trees, lamppost) keep their designed shape — no visible
+// vertical elongation. Equivalent to "more sky and lawn area"
+// instead of stretched pixel art.
+const VIEW_H = 700;
 
-// Horizon — trees + lamppost + bench stand on this line. Moved
-// from 110 of 200 (55%) down to 240 of 480 (50%) so the horizon
-// lands at the vertical centre of the scene container (and thus
-// the screen).
-// Horizon a bit above center (42% of 480) so the lawn portion has
-// room for the dog AND the stat deck on top of it.
-const GROUND_Y = 200;
+// Horizon — trees + lamppost + bench stand on this line. 290 of
+// 700 = 42% from top, so the horizon sits a bit above centre and
+// leaves room for the dog + stat deck on the lawn below.
+const GROUND_Y = 290;
 
 // Per-mode colour palettes.
 const PALETTE = {
@@ -159,10 +157,10 @@ function Moon({ cx, cy }: { cx: number; cy: number }) {
 
 // Stars — a few scattered 1×1 white dots. Night only.
 function Stars() {
-  // Scattered through the upper half of the sky (y < 150 of the
-  // 480-tall viewBox) so they don't crowd the moon at y=90.
+  // Scattered through the sky portion (y < 290 of the 700-tall
+  // viewBox) so they don't crowd the moon at y=130.
   const positions: [number, number][] = [
-    [50, 60], [82, 110], [124, 40], [200, 80], [248, 130], [296, 50], [332, 100],
+    [50, 80], [82, 150], [124, 50], [200, 110], [248, 180], [296, 70], [332, 140],
   ];
   return (
     <g fill="#fff7e0">
@@ -251,14 +249,14 @@ export function ProfileSceneBackdrop({
           @keyframes cloud-d { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-22px); } }
         `}</style>
         {mode === 'night' ? <Stars /> : null}
-        {/* Sky elements (sun, moon, clouds) moved down from y≈20
-            to y≈90 now that VIEW_H is 480 — keeps them in the
-            upper third of the sky instead of glued to the very
-            top edge of the screen. */}
-        {mode === 'day' ? <Sun cx={290} cy={90} /> : <Moon cx={290} cy={90} />}
+        {/* Sky elements scattered across the upper half of the
+            now-taller 700 viewBox so they fill the sky area
+            instead of clustering at the very top. Horizon is at
+            y=290, so the sky spans y=0 to y=290. */}
+        {mode === 'day' ? <Sun cx={290} cy={130} /> : <Moon cx={290} cy={130} />}
         <Cloud
           x={20}
-          y={80}
+          y={110}
           scale={1.2}
           fill={p.cloud}
           shadow={p.cloudShadow}
@@ -266,7 +264,7 @@ export function ProfileSceneBackdrop({
         />
         <Cloud
           x={108}
-          y={60}
+          y={80}
           scale={1}
           fill={p.cloud}
           shadow={p.cloudShadow}
@@ -274,7 +272,7 @@ export function ProfileSceneBackdrop({
         />
         <Cloud
           x={172}
-          y={100}
+          y={150}
           scale={0.85}
           fill={p.cloud}
           shadow={p.cloudShadow}
@@ -282,7 +280,7 @@ export function ProfileSceneBackdrop({
         />
         <Cloud
           x={236}
-          y={70}
+          y={95}
           scale={1.15}
           fill={p.cloud}
           shadow={p.cloudShadow}
