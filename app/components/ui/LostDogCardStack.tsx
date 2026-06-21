@@ -74,19 +74,30 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     });
   }, [index, dogs]);
 
-  const advance = useCallback(() => {
-    setIndex((i) => i + 1);
-    // Defer the transform reset to the NEXT animation frame so React
-    // commits the index change first. Otherwise the transform snaps
-    // to center while the slot still has the old photo src, and the
-    // user sees the previous dog briefly at the centre before the
-    // re-render swaps it. One rAF is enough — React's commit happens
-    // synchronously inside setIndex's queued microtask.
-    requestAnimationFrame(() => {
-      tx.value = 0;
-      ty.value = 0;
-    });
-  }, [tx, ty]);
+  const advance = useCallback(
+    (delta: number) => {
+      setIndex((i) => Math.max(0, i + delta));
+      // Defer the transform reset to the NEXT animation frame so React
+      // commits the index change first. Otherwise the transform snaps
+      // to center while the slot still has the old photo src, and the
+      // user sees the previous dog briefly at the centre before the
+      // re-render swaps it. One rAF is enough — React's commit happens
+      // synchronously inside setIndex's queued microtask.
+      requestAnimationFrame(() => {
+        tx.value = 0;
+        ty.value = 0;
+      });
+    },
+    [tx, ty],
+  );
+
+  // Index mirrored as a shared value so the worklet can read it
+  // synchronously when deciding whether a backward swipe is allowed
+  // (clamped at 0 → spring back instead of letting the card commit).
+  const indexSV = useSharedValue(index);
+  useEffect(() => {
+    indexSV.value = index;
+  }, [index, indexSV]);
 
   const handleTap = useCallback(
     (dog: NearbyLostDog) => {
@@ -124,9 +135,21 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
         return;
       }
       if (passedPx || passedVel) {
-        const dir = e.translationX > 0 ? 1 : -1;
+        // Carousel convention: swipe LEFT → forward (next dog),
+        // swipe RIGHT → backward (previous dog). The card flies in
+        // the drag direction either way. On a backward swipe while
+        // already at the start of the deck, spring back instead of
+        // committing (no dog before index 0).
+        const isForward = e.translationX < 0;
+        if (!isForward && indexSV.value === 0) {
+          tx.value = withSpring(0);
+          ty.value = withSpring(0);
+          return;
+        }
+        const dir = isForward ? -1 : 1;
+        const delta = isForward ? 1 : -1;
         tx.value = withTiming(dir * (CARD_W + 100), { duration: 220 }, () => {
-          runOnJS(advance)();
+          runOnJS(advance)(delta);
         });
         ty.value = withTiming(ty.value + 40, { duration: 220 });
       } else {
@@ -153,11 +176,22 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     };
   });
 
+  // Deck-shift progress: only animates on FORWARD swipes (left,
+  // negative tx). Backward (right) swipes go to the previous dog
+  // and the deck doesn't actually shift forward — so the middle /
+  // bottom / ghost shouldn't false-promote during that gesture.
+  // Reads tx.value once per worklet run, clamps non-forward to 0.
+  function forwardProgress(t: number): number {
+    'worklet';
+    if (t >= 0) return 0;
+    return Math.min(Math.abs(t) / CARD_W, 1);
+  }
+
   // Second card pops forward as the top card flies away. Tighter
   // base scale + bigger peek so the deck reads as a deck, not a
   // single floating card.
   const middleStyle = useAnimatedStyle(() => {
-    const progress = Math.min(Math.abs(tx.value) / CARD_W, 1);
+    const progress = forwardProgress(tx.value);
     const scale = interpolate(progress, [0, 1], [0.92, 1], Extrapolation.CLAMP);
     const translateY = interpolate(progress, [0, 1], [22, 0], Extrapolation.CLAMP);
     return { transform: [{ scale }, { translateY }] };
@@ -167,18 +201,17 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
   // peek is visible too. (Two visible cards behind reads as "more
   // to come", one was ambiguous.)
   const bottomStyle = useAnimatedStyle(() => {
-    const progress = Math.min(Math.abs(tx.value) / CARD_W, 1);
+    const progress = forwardProgress(tx.value);
     const scale = interpolate(progress, [0, 1], [0.84, 0.92], Extrapolation.CLAMP);
     const translateY = interpolate(progress, [0, 1], [44, 22], Extrapolation.CLAMP);
     return { transform: [{ scale }, { translateY }] };
   });
 
   // Hidden ghost at index+3 — invisible at rest, fades into the
-  // bottom-slot pose as the top card is dragged. By the time the
-  // top card flies off and we advance, this ghost IS the new
-  // bottom slot — no visual pop on the deck advance.
+  // bottom-slot pose as the top card is dragged forward. Stays
+  // invisible on backward swipes (no deck shift in that direction).
   const ghostStyle = useAnimatedStyle(() => {
-    const progress = Math.min(Math.abs(tx.value) / CARD_W, 1);
+    const progress = forwardProgress(tx.value);
     const scale = interpolate(progress, [0, 1], [0.76, 0.84], Extrapolation.CLAMP);
     const translateY = interpolate(progress, [0, 1], [66, 44], Extrapolation.CLAMP);
     const opacity = interpolate(progress, [0, 1], [0, 1], Extrapolation.CLAMP);
