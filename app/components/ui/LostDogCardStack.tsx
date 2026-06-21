@@ -91,17 +91,27 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     (delta: number) => {
       setIndex((i) => Math.max(0, i + delta));
       // Defer the transform reset to the NEXT animation frame so React
-      // commits the index change first. Otherwise the transform snaps
-      // to center while the slot still has the old photo src, and the
-      // user sees the previous dog briefly at the centre before the
-      // re-render swaps it. One rAF is enough — React's commit happens
-      // synchronously inside setIndex's queued microtask.
+      // commits the index change first — otherwise the transform
+      // snaps before the slot's photo src updates, briefly showing
+      // the old dog at centre.
       requestAnimationFrame(() => {
-        tx.value = 0;
         ty.value = 0;
         if (delta < 0) {
+          // BACKWARD: teleport the top slot to off-screen LEFT (the
+          // OPPOSITE side of where the old top flew to), then animate
+          // it back to centre — the previous dog "swings in" from the
+          // left, mirroring the "going back" intent. revealAfter
+          // ramps in parallel so the blurred deck behind un-blurs
+          // smoothly as the new top lands.
+          tx.value = -(CARD_W + 100);
+          tx.value = withTiming(0, { duration: 260 });
           revealAfter.value = 0;
-          revealAfter.value = withTiming(1, { duration: 220 });
+          revealAfter.value = withTiming(1, { duration: 260 });
+        } else {
+          // FORWARD: deck shift already played during the pan, snap
+          // tx back to centre. revealAfter stays at 1 (no fade-in
+          // needed; deck cards were always visible during forward).
+          tx.value = 0;
         }
       });
     },
@@ -204,22 +214,25 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     return Math.min(Math.abs(t) / CARD_W, 1);
   }
 
-  // Opacity for the middle / bottom slots through the gesture:
-  //   - forward drag (tx < 0): stay fully visible (the slots are
-  //     promoting up; that's the deck animation).
-  //   - backward drag (tx > 0): fade out — the content here is the
-  //     forward-next dog, which would flash incorrectly while the
-  //     user is going BACK.
-  //   - at rest, after a forward commit: 1 (default).
-  //   - after a backward commit: revealAfter ramps 0 → 1 (220ms),
-  //     so the now-shifted-down content fades in smoothly instead
-  //     of popping back to opaque.
-  function deckOpacity(t: number, reveal: number): number {
+  // Blur for the deck behind the top card. We blur (instead of
+  // fading) on a backward gesture so the user never sees a stark
+  // white moment — the cards stay there, just unreadable, then
+  // sharpen back as the previous card slides into place.
+  //   - forward drag (tx < 0): blur 0 (deck is meant to be seen).
+  //   - backward drag (tx > 0): blur ramps 0 → MAX_BLUR over the
+  //     first ~60px so by the time the top card commits, the deck
+  //     behind is firmly unreadable.
+  //   - at rest / forward commit: blur 0.
+  //   - during the backward-commit slide-in: blur driven by
+  //     revealAfter — starts at MAX_BLUR, eases to 0 over 260ms in
+  //     sync with the new top sliding in from the left.
+  const MAX_BLUR = 16;
+  function deckBlur(t: number, reveal: number): number {
     'worklet';
     if (t > 4) {
-      return interpolate(t, [4, 40], [1, 0], Extrapolation.CLAMP);
+      return interpolate(t, [4, 60], [0, MAX_BLUR], Extrapolation.CLAMP);
     }
-    return reveal;
+    return interpolate(reveal, [0, 1], [MAX_BLUR, 0], Extrapolation.CLAMP);
   }
 
   // Second card pops forward as the top card flies away. Tighter
@@ -229,9 +242,12 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     const progress = forwardProgress(tx.value);
     const scale = interpolate(progress, [0, 1], [0.92, 1], Extrapolation.CLAMP);
     const translateY = interpolate(progress, [0, 1], [22, 0], Extrapolation.CLAMP);
+    const blur = deckBlur(tx.value, revealAfter.value);
     return {
       transform: [{ scale }, { translateY }],
-      opacity: deckOpacity(tx.value, revealAfter.value),
+      // CSS filter; RN-Web passes it through. Native targets would
+      // need a different renderer but we're web-only for now.
+      filter: blur > 0.1 ? `blur(${blur}px)` : 'none',
     };
   });
 
@@ -242,27 +258,30 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     const progress = forwardProgress(tx.value);
     const scale = interpolate(progress, [0, 1], [0.84, 0.92], Extrapolation.CLAMP);
     const translateY = interpolate(progress, [0, 1], [44, 22], Extrapolation.CLAMP);
+    const blur = deckBlur(tx.value, revealAfter.value);
     return {
       transform: [{ scale }, { translateY }],
-      opacity: deckOpacity(tx.value, revealAfter.value),
+      filter: blur > 0.1 ? `blur(${blur}px)` : 'none',
     };
   });
 
   // Hidden ghost at index+3 — invisible at rest, fades into the
   // bottom-slot pose as the top card is dragged forward. Stays
-  // invisible on backward swipes (no deck shift in that direction).
-  // After a backward commit it follows revealAfter too, so when
-  // it's now the "bottom" slot's content it fades in with the rest.
+  // invisible on backward swipes; on backward commit it follows
+  // revealAfter (so the slot's new content doesn't flash in
+  // alongside the deck un-blurring).
   const ghostStyle = useAnimatedStyle(() => {
     const progress = forwardProgress(tx.value);
     const scale = interpolate(progress, [0, 1], [0.76, 0.84], Extrapolation.CLAMP);
     const translateY = interpolate(progress, [0, 1], [66, 44], Extrapolation.CLAMP);
-    // Forward-driven opacity (0 → 1) AND revealAfter ramp on
-    // backward commit so the slot's new content (was the bottom
-    // pre-advance) doesn't flash to visible.
     const fwdOpacity = interpolate(progress, [0, 1], [0, 1], Extrapolation.CLAMP);
     const opacity = tx.value > 4 ? 0 : Math.min(fwdOpacity, revealAfter.value);
-    return { transform: [{ scale }, { translateY }], opacity };
+    const blur = deckBlur(tx.value, revealAfter.value);
+    return {
+      transform: [{ scale }, { translateY }],
+      opacity,
+      filter: blur > 0.1 ? `blur(${blur}px)` : 'none',
+    };
   });
 
   if (!topDog) {
