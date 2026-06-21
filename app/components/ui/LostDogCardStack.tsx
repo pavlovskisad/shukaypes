@@ -31,7 +31,11 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { useStrings } from '../../i18n/useStrings';
 
 const CARD_W = 320;
-const CARD_H = 420;
+// Dropped from 420 — the lost-pets card was eating the whole
+// viewport in Safari's small-window layout, hiding the daily-
+// quests card behind it. 320 square keeps the photo readable
+// while leaving real peek room for the next snap target.
+const CARD_H = 320;
 const SWIPE_COMMIT_PX = 100;
 const VELOCITY_COMMIT = 600;
 const TAP_TRAVEL_MAX = 6;

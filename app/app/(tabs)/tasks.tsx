@@ -221,12 +221,12 @@ export default function TasksScreen() {
     el.id = 'tasks-snap-pop-style';
     el.textContent = `
       @keyframes tasks-snap-pop {
-        0% { transform: scale(0.985); }
-        55% { transform: scale(1.018); }
-        100% { transform: scale(1); }
+        0%   { transform: translateY(0)    scale(1);     }
+        35%  { transform: translateY(-5px) scale(1.045); }
+        100% { transform: translateY(0)    scale(1);     }
       }
       .tasks-snap-pop {
-        animation: tasks-snap-pop 380ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+        animation: tasks-snap-pop 480ms cubic-bezier(0.32, 0.72, 0, 1) both;
       }
     `;
     document.head.appendChild(el);
@@ -565,10 +565,9 @@ const styles = StyleSheet.create({
     flex: 1,
     scrollSnapType: 'y mandatory',
   } as unknown as object,
-  // Bumped paddingTop to give the first card real breathing room
-  // from the screen edge (was 12 — felt glued to the top in
-  // Safari's small-viewport layout).
-  content: { paddingHorizontal: 16, paddingTop: 28, paddingBottom: 120, gap: 12 },
+  // Bumped paddingTop so the first card sits well below the status
+  // bar (was 28 — still felt glued in Safari iOS).
+  content: { paddingHorizontal: 16, paddingTop: 48, paddingBottom: 120, gap: 12 },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
