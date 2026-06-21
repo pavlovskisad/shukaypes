@@ -4,6 +4,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import { pickBottomInset } from '../../services/telegram';
+import { useStrings } from '../../i18n/useStrings';
 
 // Tab icons are pixel-art SVGs (see components/ui/Icon.tsx). Inactive
 // tabs read as desaturated/dimmed via a wrapper View — RN-Web passes
@@ -26,6 +27,7 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
 }
 
 export default function TabsLayout() {
+  const t = useStrings();
   // Read the actual bottom safe-area inset (iOS home-indicator
   // height) so we can extend the tab bar's bg into that strip
   // and pad the icons up by the same amount. The previous
@@ -91,35 +93,35 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'map',
+          title: t.tabs.map,
           tabBarIcon: ({ focused }) => <TabIcon name="map" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="tasks"
         options={{
-          title: 'quests',
+          title: t.tabs.quests,
           tabBarIcon: ({ focused }) => <TabIcon name="task" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="chat"
         options={{
-          title: 'chat',
+          title: t.tabs.chat,
           tabBarIcon: ({ focused }) => <TabIcon name="chat" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="spots"
         options={{
-          title: 'spots',
+          title: t.tabs.spots,
           tabBarIcon: ({ focused }) => <TabIcon name="pin" focused={focused} />,
         }}
       />
       <Tabs.Screen
         name="profile"
         options={{
-          title: 'home',
+          title: t.tabs.home,
           tabBarIcon: ({ focused }) => <TabIcon name="house" focused={focused} />,
         }}
       />
