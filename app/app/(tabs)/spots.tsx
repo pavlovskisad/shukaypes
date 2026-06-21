@@ -36,7 +36,9 @@ const CATEGORY_TITLE_KEY: Record<SpotCategory, keyof AppStrings['spots']['filter
 };
 
 function cardTitle(t: ReturnType<typeof useStrings>, cat: SpotCategory): string {
-  return t.spots.nearbyCategory(t.spots.filters[CATEGORY_TITLE_KEY[cat]]);
+  // Just the category label — "поряд" is implied by the screen
+  // context, no need to repeat it on every card title.
+  return t.spots.filters[CATEGORY_TITLE_KEY[cat]];
 }
 
 export default function SpotsScreen() {
