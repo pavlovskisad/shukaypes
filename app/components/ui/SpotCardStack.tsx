@@ -289,11 +289,11 @@ function renderCard(spot: Spot, t: ReturnType<typeof useStrings>) {
         </View>
       ) : null}
       <View style={styles.cardBody}>
-        <Text style={styles.cardName} numberOfLines={1}>
+        <Text style={styles.cardName} numberOfLines={2}>
           {spot.name}
         </Text>
         {spot.address ? (
-          <Text style={styles.cardMeta} numberOfLines={1}>
+          <Text style={styles.cardMeta} numberOfLines={2}>
             {spot.address}
           </Text>
         ) : null}
@@ -406,7 +406,10 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    bottom: 80,
+    // Pushed up to leave room for 2-line names + 2-line addresses
+    // below without the text crashing into the icon. Was 80 when
+    // name + address were truncated to 1 line each.
+    bottom: 120,
     alignItems: 'center',
     justifyContent: 'center',
   },
