@@ -71,6 +71,14 @@ export default function TabsLayout() {
           // adding paddingBottom alone just made the bar taller upward
           // and left the strip below uncovered.
           bottom: -insets.bottom,
+          // Explicit height. Default Expo BottomTab shrinks when
+          // `tabBarShowLabel: false` is set, which broke the chat
+          // input's `bottom: TAB_BAR_HEIGHT + insets.bottom + …`
+          // offset (chat constant is 64; the bar was rendering at
+          // ~50, leaving a visible empty strip between the input and
+          // the dashboard in the TG Mini App). Locking it here pairs
+          // with TAB_BAR_HEIGHT in chat.tsx — keep them in sync.
+          height: 64 + insets.bottom,
           paddingBottom: insets.bottom,
           borderTopLeftRadius: 24,
           borderTopRightRadius: 24,

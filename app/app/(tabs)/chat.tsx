@@ -453,7 +453,7 @@ const CARD_SHADOW = {
 // without ever sitting flush against it.
 const HEADER_BAND_HEIGHT = 56;   // compact pill + its top/bottom margins
 const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
-const TAB_BAR_HEIGHT = 60;       // matches _layout.tsx tabBarStyle
+const TAB_BAR_HEIGHT = 64;       // matches _layout.tsx tabBarStyle.height
 // Breathing room between input wrap and the tab bar — used in addition
 // to safe-area inset because TG Mini App reports inset.bottom=0.
 const INPUT_GAP_ABOVE_TABS = 10;

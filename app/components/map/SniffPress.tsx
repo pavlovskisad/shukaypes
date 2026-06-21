@@ -26,7 +26,12 @@ import { VOICE } from '../../constants/voice';
 // previous one too (single discovery on screen at a time).
 
 const HOLD_MS = 2400;
-const MOVE_CANCEL_PX = 8;
+// Finger-jitter tolerance: the press only cancels if the touch
+// travels more than this many pixels from where it started. Was 8 —
+// felt too sensitive in practice (a small unintended drift breaks
+// the gesture), bumped to 16 (~3-4mm on most screens, comfortably
+// inside finger-jitter range).
+const MOVE_CANCEL_PX = 16;
 const RADIUS_SEGMENTS = 48;
 const EARTH_R = 6371000;
 const MAX_RADIUS_M = 280;
@@ -216,12 +221,28 @@ export function SniffPress() {
       }
     };
 
+    // Lock the map's own pan / zoom gestures while a press is alive.
+    // MapLibre's dragstart fires on tiny finger jitter and was
+    // cancelling holds before our own MOVE_CANCEL_PX check could
+    // adjudicate. Re-enabled on finishHold / cancelHold.
+    const lockMapGestures = () => {
+      map.dragPan.disable();
+      map.touchZoomRotate.disable();
+      map.scrollZoom.disable();
+    };
+    const unlockMapGestures = () => {
+      map.dragPan.enable();
+      map.touchZoomRotate.enable();
+      map.scrollZoom.enable();
+    };
+
     const finishHold = async () => {
       const ll = pressLatLngRef.current;
       pressLatLngRef.current = null;
       startPxRef.current = null;
       cancelAnim();
       clearBubbleTimer();
+      unlockMapGestures();
       // Tween the fill out and shrink slightly so the moment of
       // discovery reads as "found".
       clearVisuals();
@@ -274,6 +295,7 @@ export function SniffPress() {
       clearBubbleTimer();
       clearVisuals();
       setSniffingAt(null);
+      unlockMapGestures();
     };
 
     const startHold = (e: maplibregl.MapMouseEvent | maplibregl.MapTouchEvent) => {
@@ -289,6 +311,7 @@ export function SniffPress() {
       pressLatLngRef.current = ll;
       startPxRef.current = { x: e.point.x, y: e.point.y };
       startTRef.current = performance.now();
+      lockMapGestures();
       // Delay the "sniffing…" bubble so quick taps + the first frames
       // of a pan don't flash a bubble. If the press is still alive
       // after the grace window, show it.
@@ -348,6 +371,9 @@ export function SniffPress() {
       map.off('zoomstart', cancelHold);
       cancelAnim();
       clearBubbleTimer();
+      // Guard against unmounting mid-press leaving the map's drag /
+      // zoom gestures permanently disabled.
+      unlockMapGestures();
     };
   }, [map, sourceId, fillId, lineId]);
 

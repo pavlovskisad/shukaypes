@@ -143,7 +143,11 @@ export function RadialMenu({
               }}
               aria-label={a.label}
             >
-              {a.iconName ? <Icon name={a.iconName} size={47} inverted={inverted} /> : a.icon}
+              {/* Icon is 38px inside a 56px button → ~0.68 ratio, the
+                  same breathing room AboutModal rows + LostDog modal
+                  buttons use. 47px was too cramped against the dark
+                  glass disc. */}
+              {a.iconName ? <Icon name={a.iconName} size={38} inverted={inverted} /> : a.icon}
             </button>
             {showLabels ? (
               <span
