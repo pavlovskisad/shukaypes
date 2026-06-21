@@ -589,7 +589,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   syncLostDogs: async (pos) => {
     try {
       const { dogs } = await api.getLostDogsNearby(pos);
-      set({ lostDogs: dogs });
+      // Preserve the currently-selected dog across the sync — if the
+      // user opened a deep-link to a pet outside the synced radius
+      // (e.g. Lukianivka pin while GPS sits on Maidan), wholesale
+      // replacement would drop it from lostDogs and the marker would
+      // disappear mid-session. Carve it back in if missing.
+      set((s) => {
+        if (!s.selectedDogId || dogs.find((d) => d.id === s.selectedDogId)) {
+          return { lostDogs: dogs };
+        }
+        const stillThere = s.lostDogs.find((d) => d.id === s.selectedDogId);
+        return { lostDogs: stillThere ? [...dogs, stillThere] : dogs };
+      });
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
     }
@@ -647,17 +658,28 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Single set() so all four pieces of state land in one render
       // pass. Previously the four parallel sync* calls each fired
       // their own set, producing up to four re-renders per tick.
-      set((prev) => ({
-        tokens: filteredTokens,
-        foodItems: res.food,
-        lostDogs: res.dogs,
-        points: res.state.user.points,
-        tokensCollected: Math.max(prev.tokensCollected, res.state.user.totalTokens),
-        hunger: res.state.companion.hunger,
-        happiness: res.state.companion.happiness,
-        companionName: res.state.companion.name,
-        lastSyncError: null,
-      }));
+      set((prev) => {
+        // Same selectedDogId carve-out as syncLostDogs — a deep-
+        // linked pin outside this sync's radius must survive the
+        // wholesale replacement, otherwise the marker vanishes on
+        // the next 15s tick.
+        const dogs = res.dogs;
+        const keepSelected =
+          prev.selectedDogId && !dogs.find((d) => d.id === prev.selectedDogId)
+            ? prev.lostDogs.find((d) => d.id === prev.selectedDogId)
+            : null;
+        return {
+          tokens: filteredTokens,
+          foodItems: res.food,
+          lostDogs: keepSelected ? [...dogs, keepSelected] : dogs,
+          points: res.state.user.points,
+          tokensCollected: Math.max(prev.tokensCollected, res.state.user.totalTokens),
+          hunger: res.state.companion.hunger,
+          happiness: res.state.companion.happiness,
+          companionName: res.state.companion.name,
+          lastSyncError: null,
+        };
+      });
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
     }
