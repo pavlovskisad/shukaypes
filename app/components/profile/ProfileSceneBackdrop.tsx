@@ -28,12 +28,19 @@ interface BackdropProps {
 }
 
 const VIEW_W = 360;
-const VIEW_H = 200;
+// Bumped from 200 → 480 to be closer to the phone-viewport aspect
+// ratio (360:700). With preserveAspectRatio="none" stretching the
+// SVG to fill the full-bleed scene container, a 480-tall viewBox
+// only stretches y by ~1.5× (vs ~3.5× at the old 200) so pixel
+// art elements (sun, moon, trees, lamppost) stay close to their
+// designed shape instead of becoming spikes / vertical ovals.
+const VIEW_H = 480;
 
-// Where trees + lamppost + bench stand. Upper-middle of the viewBox
-// so the dog (paws at container y≈190) walks visibly BELOW this
-// line.
-const GROUND_Y = 110;
+// Horizon — trees + lamppost + bench stand on this line. Moved
+// from 110 of 200 (55%) down to 240 of 480 (50%) so the horizon
+// lands at the vertical centre of the scene container (and thus
+// the screen).
+const GROUND_Y = 240;
 
 // Per-mode colour palettes.
 const PALETTE = {
@@ -150,8 +157,10 @@ function Moon({ cx, cy }: { cx: number; cy: number }) {
 
 // Stars — a few scattered 1×1 white dots. Night only.
 function Stars() {
+  // Scattered through the upper half of the sky (y < 150 of the
+  // 480-tall viewBox) so they don't crowd the moon at y=90.
   const positions: [number, number][] = [
-    [50, 18], [82, 30], [124, 12], [200, 24], [248, 38], [296, 16], [332, 32],
+    [50, 60], [82, 110], [124, 40], [200, 80], [248, 130], [296, 50], [332, 100],
   ];
   return (
     <g fill="#fff7e0">
@@ -240,10 +249,14 @@ export function ProfileSceneBackdrop({
           @keyframes cloud-d { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-22px); } }
         `}</style>
         {mode === 'night' ? <Stars /> : null}
-        {mode === 'day' ? <Sun cx={290} cy={28} /> : <Moon cx={290} cy={28} />}
+        {/* Sky elements (sun, moon, clouds) moved down from y≈20
+            to y≈90 now that VIEW_H is 480 — keeps them in the
+            upper third of the sky instead of glued to the very
+            top edge of the screen. */}
+        {mode === 'day' ? <Sun cx={290} cy={90} /> : <Moon cx={290} cy={90} />}
         <Cloud
           x={20}
-          y={18}
+          y={80}
           scale={1.2}
           fill={p.cloud}
           shadow={p.cloudShadow}
@@ -251,7 +264,7 @@ export function ProfileSceneBackdrop({
         />
         <Cloud
           x={108}
-          y={8}
+          y={60}
           scale={1}
           fill={p.cloud}
           shadow={p.cloudShadow}
@@ -259,7 +272,7 @@ export function ProfileSceneBackdrop({
         />
         <Cloud
           x={172}
-          y={28}
+          y={100}
           scale={0.85}
           fill={p.cloud}
           shadow={p.cloudShadow}
@@ -267,7 +280,7 @@ export function ProfileSceneBackdrop({
         />
         <Cloud
           x={236}
-          y={14}
+          y={70}
           scale={1.15}
           fill={p.cloud}
           shadow={p.cloudShadow}

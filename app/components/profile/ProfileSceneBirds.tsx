@@ -204,7 +204,11 @@ function BirdGlyph({
 function BirdFlock({ event, cardWidth }: { event: ActiveEvent; cardWidth: number }) {
   // 2-4 birds at staggered offsets, all moving in the same direction.
   const count = 2 + Math.floor(event.seed * 3);
-  const baseY = 14 + event.yOffset * 30;
+  // Bumped from 14+x*30 to 90+x*40 — the full-bleed profile scene
+  // means y=14 lands right under the top safe-area, where the
+  // HUD pills float. 90 puts the birds in the upper sky proper,
+  // visibly below the HUD and above the horizon line.
+  const baseY = 90 + event.yOffset * 40;
   const startX = event.reverse ? cardWidth + 80 : -80;
   const endX = event.reverse ? -80 : cardWidth + 80;
   const animName = `birds-${event.id.toString().slice(2, 8)}`;
