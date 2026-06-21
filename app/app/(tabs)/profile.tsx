@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
@@ -12,6 +12,7 @@ import { Icon } from '../../components/ui/Icon';
 import { INLINE_ICON } from '../../constants/sizing';
 import { useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
+import { CardStack, CARD_W, CARD_H } from '../../components/ui/CardStack';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
 // aggregate counts from /profile/me on focus, with the live game
@@ -53,11 +54,39 @@ function formatDistance(m: number): string {
   return `${(m / 1000).toFixed(1)} km`;
 }
 
-function StatRow({ label, value }: { label: string; value: string | number }) {
+// Small shimmer bar used in place of a stat value while the
+// profile fetch is in flight. Reuses the same lost-dog-shimmer
+// keyframe injected once on mount below so only one stylesheet
+// is in <head> regardless of which tab the user lands on first.
+function ShimmerBar({ width = 56 }: { width?: number }) {
+  return (
+    <View
+      style={
+        {
+          width,
+          height: 14,
+          borderRadius: 7,
+          backgroundColor: '#e6e6e6',
+          backgroundImage:
+            'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.75) 50%, transparent 70%)',
+          backgroundSize: '200% 100%',
+          backgroundRepeat: 'no-repeat',
+          animation: 'lost-dog-shimmer 1.8s ease-in-out infinite',
+        } as unknown as object
+      }
+    />
+  );
+}
+
+function StatRow({ label, value }: { label: string; value: string | number | undefined }) {
   return (
     <View style={styles.statRow}>
       <Text style={styles.statLabel}>{label}</Text>
-      <Text style={styles.statValue}>{value}</Text>
+      {value === undefined || value === null ? (
+        <ShimmerBar width={50} />
+      ) : (
+        <Text style={styles.statValue}>{value}</Text>
+      )}
     </View>
   );
 }
@@ -113,6 +142,87 @@ export default function ProfileScreen() {
   useEffect(() => {
     void refetch();
   }, [refetch]);
+
+  // Three swipeable sections below the hero. Each is its own card,
+  // sized to fit the CardStack's CARD_W × CARD_H slot. The deck
+  // cycles between them in either direction with the same swipe
+  // mechanics as the tasks / spots stacks.
+  const sections = useMemo(
+    () => [
+      {
+        id: 'walks',
+        content: (
+          <View style={styles.sectionCard}>
+            <Text style={styles.cardTitle}>{t.profile.stats.walksTogether}</Text>
+            <StatRow label={t.profile.stats.daysPlayed} value={data?.stats.daysPlayed} />
+            <StatRow
+              label={t.profile.stats.distanceWalked}
+              value={data ? formatDistance(data.user.totalDistanceMeters) : undefined}
+            />
+            <StatRow label={t.profile.stats.pawsCollected} value={data?.stats.pawsCollected} />
+            <StatRow label={t.profile.stats.bonesEaten} value={data?.stats.bonesEaten} />
+            <StatRow label={t.profile.stats.points} value={data?.user.points} />
+          </View>
+        ),
+      },
+      {
+        id: 'helping',
+        content: (
+          <View style={styles.sectionCard}>
+            <Text style={styles.cardTitle}>{t.profile.stats.helpingPets}</Text>
+            <StatRow label={t.profile.stats.petsSearched} value={data?.stats.petsSearched} />
+            <StatRow
+              label={t.profile.stats.searchesCompleted}
+              value={data?.stats.questsCompleted}
+            />
+            <StatRow
+              label={t.profile.stats.sightingsReported}
+              value={data?.stats.sightingsReported}
+            />
+          </View>
+        ),
+      },
+      {
+        id: 'language',
+        content: (
+          <View style={styles.sectionCard}>
+            <Text style={styles.cardTitle}>{t.profile.language.label}</Text>
+            <View style={styles.langRow}>
+              <Pressable
+                onPress={() => setLang('uk')}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: lang === 'uk' }}
+                style={({ pressed }) => [
+                  styles.langPill,
+                  lang === 'uk' && styles.langPillActive,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={[styles.langPillText, lang === 'uk' && styles.langPillTextActive]}>
+                  {t.profile.language.uk}
+                </Text>
+              </Pressable>
+              <Pressable
+                onPress={() => setLang('en')}
+                accessibilityRole="switch"
+                accessibilityState={{ checked: lang === 'en' }}
+                style={({ pressed }) => [
+                  styles.langPill,
+                  lang === 'en' && styles.langPillActive,
+                  pressed && { opacity: 0.7 },
+                ]}
+              >
+                <Text style={[styles.langPillText, lang === 'en' && styles.langPillTextActive]}>
+                  {t.profile.language.en}
+                </Text>
+              </Pressable>
+            </View>
+          </View>
+        ),
+      },
+    ],
+    [t, data, lang, setLang],
+  );
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -180,61 +290,16 @@ export default function ProfileScreen() {
           </View>
         </View>
 
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.profile.stats.walksTogether}</Text>
-          <StatRow label={t.profile.stats.daysPlayed} value={data?.stats.daysPlayed ?? '—'} />
-          <StatRow
-            label={t.profile.stats.distanceWalked}
-            value={data ? formatDistance(data.user.totalDistanceMeters) : '—'}
-          />
-          <StatRow label={t.profile.stats.pawsCollected} value={data?.stats.pawsCollected ?? '—'} />
-          <StatRow label={t.profile.stats.bonesEaten} value={data?.stats.bonesEaten ?? '—'} />
-          <StatRow label={t.profile.stats.points} value={data?.user.points ?? '—'} />
-        </View>
-
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.profile.stats.helpingPets}</Text>
-          <StatRow label={t.profile.stats.petsSearched} value={data?.stats.petsSearched ?? '—'} />
-          <StatRow label={t.profile.stats.searchesCompleted} value={data?.stats.questsCompleted ?? '—'} />
-          <StatRow label={t.profile.stats.sightingsReported} value={data?.stats.sightingsReported ?? '—'} />
-        </View>
-
-        {/* Language toggle. Two pill buttons in a single card row,
-            mirrors the StatusBar / SpotsTogglePill family. Default is
-            UK; tap EN to flip. Persists to localStorage via langStore. */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.profile.language.label}</Text>
-          <View style={styles.langRow}>
-            <Pressable
-              onPress={() => setLang('uk')}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: lang === 'uk' }}
-              style={({ pressed }) => [
-                styles.langPill,
-                lang === 'uk' && styles.langPillActive,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={[styles.langPillText, lang === 'uk' && styles.langPillTextActive]}>
-                {t.profile.language.uk}
-              </Text>
-            </Pressable>
-            <Pressable
-              onPress={() => setLang('en')}
-              accessibilityRole="switch"
-              accessibilityState={{ checked: lang === 'en' }}
-              style={({ pressed }) => [
-                styles.langPill,
-                lang === 'en' && styles.langPillActive,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
-              <Text style={[styles.langPillText, lang === 'en' && styles.langPillTextActive]}>
-                {t.profile.language.en}
-              </Text>
-            </Pressable>
-          </View>
-        </View>
+        {/* Section deck — swipeable Tinder-style stack of the
+            "walks together", "helping pets" and "language" sub-
+            cards. Sits below the always-visible companion hero so
+            the user discovers other sections by swiping left /
+            right instead of scrolling down a long list. */}
+        <CardStack
+          items={sections}
+          getId={(s) => s.id}
+          renderCard={(s) => s.content}
+        />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
       </ScrollView>
@@ -299,6 +364,24 @@ const styles = StyleSheet.create({
     // Clip the profile scene's full-bleed sky to the rounded
     // corners — otherwise the sky bleeds past the rounded top edges.
     overflow: 'hidden',
+  },
+  // One section card inside the deck below the hero. Fixed
+  // dimensions matching CARD_W × CARD_H so each section fills its
+  // slot exactly. Same visual shadow/radius/bg family as the
+  // hero card and the dog / spot cards on other tabs.
+  sectionCard: {
+    width: CARD_W,
+    height: CARD_H,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingTop: 16,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 8 },
+    shadowOpacity: 0.18,
+    shadowRadius: 20,
+    elevation: 6,
   },
   cardTitle: {
     fontFamily: SYSTEM_FONT,
