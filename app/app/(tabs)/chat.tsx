@@ -371,7 +371,7 @@ export default function ChatScreen() {
               style={styles.input}
               value={draft}
               onChangeText={setDraft}
-              placeholder={t.chat.inputPlaceholder(header)}
+              placeholder={t.chat.inputPlaceholder}
               placeholderTextColor="#999"
               onSubmitEditing={send}
               editable={!sending}

@@ -88,6 +88,13 @@ export default function TabsLayout() {
         tabBarItemStyle: {
           paddingVertical: 6,
         },
+        // Hide the text labels under each tab icon — Expo Router /
+        // RN-Web's BottomTab renderer keeps them on by default on
+        // some platforms (visible in the Telegram Mini App, hidden in
+        // Safari), which made the bar feel inconsistent across
+        // surfaces. Icons are large enough to carry meaning on their
+        // own; `title` still drives screen titles + a11y.
+        tabBarShowLabel: false,
       }}
     >
       <Tabs.Screen

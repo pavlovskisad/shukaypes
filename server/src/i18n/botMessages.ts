@@ -121,18 +121,18 @@ const uk: BotMessages = {
   langSwitched: '*кивнув* добре, говоримо українською.',
   langHint:
     "*вухом* можу англійською, якщо зручніше — напиши <code>/lang en</code>. або <code>/lang uk</code>, щоб повернутись.",
-  buttonOpenApp: '🐾 відкрити шукайпеса',
+  buttonOpenApp: '🐾 відкрити шукайпса',
   buttonOpenSearch: '🐾 відкрити пошук',
   meta: {
     description:
       "гав! загубив когось? кажи мені просто сюди — додам на мапу. або /start, щоб ходити Києвом разом 🐾",
     shortDescription: 'кожна прогулянка має сенс 🐾',
     commands: [
-      { command: 'start', description: 'відкрити шукайпеса' },
+      { command: 'start', description: 'відкрити шукайпса' },
       { command: 'lost', description: 'повідомити про пропажу' },
       { command: 'lang', description: 'мова бота (uk / en)' },
     ],
-    menuButtonText: 'відкрити шукайпеса',
+    menuButtonText: 'відкрити шукайпса',
   },
 };
 

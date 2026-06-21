@@ -134,7 +134,7 @@ export interface AppStrings {
     showingSpot: string;
     walkingTo: (name: string) => string;
     cantReachWalk: (err: string) => string;
-    inputPlaceholder: (name: string) => string;
+    inputPlaceholder: string;
   };
   modals: {
     common: { close: string };
@@ -305,7 +305,7 @@ const uk: AppStrings = {
     showingSpot: 'показую місце…',
     walkingTo: (name) => `йдемо до ${name}`,
     cantReachWalk: (err) => `*нюх-нюх* — зараз не дістаємось до маршруту (${err})`,
-    inputPlaceholder: (name) => `говори з ${name}…`,
+    inputPlaceholder: 'скажи що хочеш…',
   },
   modals: {
     common: { close: 'закрити' },
@@ -520,7 +520,7 @@ const en: AppStrings = {
     showingSpot: 'showing spot…',
     walkingTo: (name) => `walking to ${name}`,
     cantReachWalk: (err) => `*sniff sniff* — can't reach the walk right now (${err})`,
-    inputPlaceholder: (name) => `talk to ${name}…`,
+    inputPlaceholder: 'say anything…',
   },
   modals: {
     common: { close: 'close' },
