@@ -165,12 +165,11 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
   const topDog = dogs[index];
   const next1 = dogs[index + 1];
   const next2 = dogs[index + 2];
+  // Buffer slot: invisible at rest, fades into the deepest visible
+  // peek position as deckShift advances. Means the deck never
+  // visibly "thins out" mid-swipe — there's always a backmost
+  // card coming into view as the front card leaves.
   const next3 = dogs[index + 3];
-  // Buffer slot: invisible at rest, fades into the deepest peek
-  // position as deckShift advances. Means the deck never visibly
-  // "thins out" mid-swipe — there's always a backmost card coming
-  // into view as the front card leaves.
-  const next4 = dogs[index + 4];
 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
@@ -273,11 +272,12 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
   //
   // Order: deepest (buffer) → shallowest (middle). The top card is
   // the GestureDetector's Animated.View — not part of this list.
+  // Two visible peeks at rest + one fading buffer feels cleaner
+  // than three peeks once the cards sit lower on the deck.
   const SLOT_POSES = {
     middle: { rest: { scale: 0.94, ty: 30 }, promoted: { scale: 1.0,  ty: 0  } },
     bottom: { rest: { scale: 0.88, ty: 60 }, promoted: { scale: 0.94, ty: 30 } },
-    third:  { rest: { scale: 0.82, ty: 90 }, promoted: { scale: 0.88, ty: 60 } },
-    buffer: { rest: { scale: 0.76, ty: 120 }, promoted: { scale: 0.82, ty: 90 } },
+    buffer: { rest: { scale: 0.82, ty: 90 }, promoted: { scale: 0.88, ty: 60 } },
   } as const;
 
   const middleStyle = useAnimatedStyle(() => {
@@ -290,16 +290,11 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.bottom.rest.ty, SLOT_POSES.bottom.promoted.ty]);
     return { transform: [{ scale: s }, { translateY: y }] };
   });
-  const thirdStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.third.rest.scale, SLOT_POSES.third.promoted.scale]);
-    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.third.rest.ty, SLOT_POSES.third.promoted.ty]);
-    return { transform: [{ scale: s }, { translateY: y }] };
-  });
   const bufferStyle = useAnimatedStyle(() => {
     const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.buffer.rest.scale, SLOT_POSES.buffer.promoted.scale]);
     const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.buffer.rest.ty, SLOT_POSES.buffer.promoted.ty]);
     // Buffer fades in as the deck promotes — invisible at rest so
-    // the deck never reads as 4-deep, only ever 3 + a ghost.
+    // the deck never reads as 3-deep, only ever 2 + a ghost.
     const o = interpolate(deckShift.value, [0, 1], [0, 1], Extrapolation.CLAMP);
     return { transform: [{ scale: s }, { translateY: y }], opacity: o };
   });
@@ -319,25 +314,19 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     );
   }
 
-  // Deck slots in deepest-first paint order: buffer → third →
-  // bottom → middle → top. Each is a plain grey rectangle (no
-  // photo, no content) so backward swipes never leak the next
-  // dog's image through. Slots are mounted only when there's a
-  // corresponding upcoming dog so the deck visibly thins at the
-  // end of the list (last card has no buffer behind it).
+  // Deck slots in deepest-first paint order: buffer → bottom →
+  // middle → top. Each is a plain grey rectangle (no photo, no
+  // content) so backward swipes never leak the next dog's image
+  // through. Slots are mounted only when there's a corresponding
+  // upcoming dog so the deck visibly thins at the end of the list
+  // (last card has no buffer behind it).
   return (
     <View style={styles.wrap}>
       <View style={styles.deck}>
-        {next4 ? (
+        {next3 ? (
           <Animated.View
             key="buffer"
             style={[styles.cardSlot, styles.greyDeckCard, bufferStyle]}
-          />
-        ) : null}
-        {next3 ? (
-          <Animated.View
-            key="third"
-            style={[styles.cardSlot, styles.greyDeckCard, thirdStyle]}
           />
         ) : null}
         {next2 ? (
@@ -412,9 +401,9 @@ const styles = StyleSheet.create({
     height: CARD_H,
     alignItems: 'center',
     justifyContent: 'center',
-    // Reserve room for the third card's peek (ty:90 + card-bottom
+    // Reserve room for the bottom card's peek (ty:60 + card-bottom
     // tail) so the deepest deck card isn't clipped at the bottom.
-    marginBottom: 56,
+    marginBottom: 26,
   },
   cardSlot: {
     position: 'absolute',
