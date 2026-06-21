@@ -16,9 +16,27 @@ const MAX_INPUT_CHARS = 2000;
 
 interface Pos { lat?: number; lng?: number }
 
+type Lang = 'uk' | 'en';
+
+function normaliseLang(raw: unknown): Lang {
+  return raw === 'en' ? 'en' : 'uk';
+}
+
+// Tail system block — per-request, never cached. Tells the model
+// which language to default to. CORE_SYSTEM's VOICE rule references
+// this block by name so the priority is unambiguous (LANG wins over
+// inferred-from-input on the first turn; user can still flip by
+// writing back in another language).
+function langBlock(lang: Lang): string {
+  return lang === 'uk'
+    ? 'LANG: uk\nThe human prefers ukrainian. default to ukrainian on every reply. switch only if they write back clearly in another language.'
+    : 'LANG: en\nThe human prefers english. default to english on every reply. switch only if they write back clearly in another language.';
+}
+
 async function assembleSystem(
   userId: string,
   pos: Pos,
+  lang: Lang,
   spots?: NearbySpot[],
   viewport?: Pos | null,
 ): Promise<Anthropic.TextBlockParam[]> {
@@ -41,8 +59,16 @@ async function assembleSystem(
     { type: 'text', text: ACTIONS_SYSTEM, cache_control: { type: 'ephemeral' } },
     { type: 'text', text: memory },
     { type: 'text', text: context },
+    // LANG tail block — uncached on purpose. Two short strings, no
+    // cache value, and per-user state.
+    { type: 'text', text: langBlock(lang) },
   ];
 }
+
+const GREET_PROMPT: Record<Lang, string> = {
+  uk: '*user just opened chat and has not said anything yet. greet them warmly in ukrainian — short, dog-voice, sensory, one sentence. no stacked questions. no offer of help. just hello-in-dog. examples: "*хвостом* нарешті — пахне дощем, ходімо?", "*ніс угору* — ти. ходімо нюхати київ", "*вухом* привіт. куди сьогодні?". do not greet in english.*',
+  en: '*user just opened chat and has not said anything yet. greet them warmly in english — short, dog-voice, sensory, one sentence. no stacked questions. no offer of help. just hello-in-dog. examples: "*tail wag* finally. let\'s go before that pigeon gets ideas.", "*nose up* — you. ready to walk?".*',
+};
 
 async function recentHistory(userId: string): Promise<Anthropic.MessageParam[]> {
   const rows = await db
@@ -100,6 +126,9 @@ const plugin: FastifyPluginAsync = async (app) => {
       // spots the human names. Optional — chat still works without it,
       // just without the spot-routing capability.
       spots?: NearbySpot[];
+      // App-side language preference (set in profile language toggle,
+      // persisted in localStorage). Defaults to UK when omitted.
+      lang?: Lang;
     };
   }>(
     '/chat',
@@ -107,15 +136,14 @@ const plugin: FastifyPluginAsync = async (app) => {
     async (req, reply) => {
       const body = req.body ?? ({} as any);
       const greet = body.greet === true;
+      const lang = normaliseLang(body.lang);
       const rawText = typeof body.text === 'string' ? body.text.slice(0, MAX_INPUT_CHARS).trim() : '';
       if (!greet && !rawText) {
         reply.code(400);
         return { error: 'text required' };
       }
 
-      const userText = greet
-        ? '*user just opened chat and has not said anything yet. you have no language signal from them. greet warmly in english with one short ukrainian phrase alongside (e.g. "hi / привіт") so they can pick the language with their reply. one short sentence, dog voice, no stacked questions.*'
-        : rawText;
+      const userText = greet ? GREET_PROMPT[lang] : rawText;
       const pos: Pos = { lat: body.lat, lng: body.lng };
       const viewport: Pos | null =
         body.vLat != null && body.vLng != null
@@ -136,7 +164,7 @@ const plugin: FastifyPluginAsync = async (app) => {
 
       const spots = Array.isArray(body.spots) ? (body.spots as NearbySpot[]) : undefined;
       const [system, history] = await Promise.all([
-        assembleSystem(req.userId, pos, spots, viewport),
+        assembleSystem(req.userId, pos, lang, spots, viewport),
         recentHistory(req.userId),
       ]);
       const last = history[history.length - 1];
@@ -163,7 +191,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         const text = (final.content.filter((b) => b.type === 'text') as Anthropic.TextBlock[])
           .map((b) => b.text)
           .join(' ')
-          .trim() || 'woof...';
+          .trim() || (lang === 'uk' ? 'гав...' : 'woof...');
         const { visible, action } = parseActionTag(text);
         const usage = final.usage;
 
@@ -207,18 +235,24 @@ const plugin: FastifyPluginAsync = async (app) => {
       } catch (err) {
         req.log.error({ err }, 'chat active failed');
         reply.code(502);
-        return { error: 'companion is sniffing, try again in a sec' };
+        return {
+          error:
+            lang === 'uk'
+              ? 'я нюхаю, спробуй за секунду'
+              : 'companion is sniffing, try again in a sec',
+        };
       }
     },
   );
 
-  app.post<{ Body: { lat?: number; lng?: number } }>(
+  app.post<{ Body: { lat?: number; lng?: number; lang?: Lang } }>(
     '/chat/ambient',
     { config: { rateLimit: { max: 60, timeWindow: '1 minute' } } },
     async (req, reply) => {
       const body = req.body ?? {};
+      const lang = normaliseLang(body.lang);
       const pos: Pos = { lat: body.lat, lng: body.lng };
-      const system = await assembleSystem(req.userId, pos);
+      const system = await assembleSystem(req.userId, pos, lang);
 
       try {
         const stream = anthropic().messages.stream({
@@ -229,7 +263,7 @@ const plugin: FastifyPluginAsync = async (app) => {
             {
               role: 'user',
               content:
-                '*ambient beat — you see or smell something on the walk right now. say one short thing to the human. max 6 words, lowercase, like a bubble on the map.*',
+                '*ambient beat — you see or smell something on the walk right now. say one short thing to the human. max 6 words, lowercase, like a bubble on the map. honour the LANG tail block.*',
             },
           ],
           // Same belt-and-braces fake-turn guard as the active chat.
@@ -239,7 +273,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         const text = (final.content.filter((b) => b.type === 'text') as Anthropic.TextBlock[])
           .map((b) => b.text)
           .join(' ')
-          .trim() || '*sniff sniff*';
+          .trim() || (lang === 'uk' ? '*нюх-нюх*' : '*sniff sniff*');
         // Ambient bubbles are short — strip any stray action tag the
         // model might have appended; we don't dispatch from ambient.
         const { visible } = parseActionTag(text);

@@ -29,6 +29,7 @@ import { api, type CompanionAction, type ChatNearbySpot } from '../../services/a
 import { distanceMeters } from '../../utils/geo';
 import type { ChatMessage } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
+import { useLangStore } from '../../stores/langStore';
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 
@@ -49,6 +50,7 @@ function linkify(text: string): Array<{ kind: 'text' | 'link'; value: string }> 
 
 export default function ChatScreen() {
   const t = useStrings();
+  const lang = useLangStore((s) => s.lang);
   const router = useRouter();
   const userPosition = useGameStore((s) => s.userPosition);
   const companionName = useGameStore((s) => s.companionName);
@@ -194,6 +196,7 @@ export default function ChatScreen() {
             buildSpotsPayload(),
             true,
             useGameStore.getState().viewportCenter,
+            lang,
           );
           if (cancelled) return;
           setMessages([
@@ -215,7 +218,7 @@ export default function ChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [userPosition]);
+  }, [userPosition, lang]);
 
   useEffect(() => {
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
@@ -242,6 +245,7 @@ export default function ChatScreen() {
         buildSpotsPayload(),
         false,
         useGameStore.getState().viewportCenter,
+        lang,
       );
       setMessages((m) => [
         ...m,
@@ -287,7 +291,7 @@ export default function ChatScreen() {
       setSending(false);
       setTyping(false);
     }
-  }, [draft, sending, userPosition, dispatchAction, t]);
+  }, [draft, sending, userPosition, dispatchAction, t, lang]);
 
   const header = useMemo(() => companionName || 'шукайпес', [companionName]);
 

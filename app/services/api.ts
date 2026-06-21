@@ -226,6 +226,7 @@ export const api = {
     spots: ChatNearbySpot[] | null,
     greet = false,
     viewport: LatLng | null = null,
+    lang: 'uk' | 'en' = 'uk',
   ) =>
     req<{
       id: string;
@@ -248,13 +249,17 @@ export const api = {
         // server-side when null.
         vLat: viewport?.lat,
         vLng: viewport?.lng,
+        // App-side preference from langStore. Server defaults to UK
+        // (Kyiv pilot) when omitted, but we pass it explicitly so
+        // an EN-toggled user gets EN replies on the first turn.
+        lang,
       }),
     }),
 
-  ambientChat: (pos: LatLng | null) =>
+  ambientChat: (pos: LatLng | null, lang: 'uk' | 'en' = 'uk') =>
     req<{ text: string }>('/chat/ambient', {
       method: 'POST',
-      body: JSON.stringify({ lat: pos?.lat, lng: pos?.lng }),
+      body: JSON.stringify({ lat: pos?.lat, lng: pos?.lng, lang }),
     }),
 
   reportSighting: (dogId: string, pos: LatLng, note?: string) =>
