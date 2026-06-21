@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -204,15 +204,100 @@ export default function TasksScreen() {
 
   const doneCount = TASKS.filter((row) => dailyTasks[row.key] >= row.target).length;
 
+  // Ref to the ScrollView so we can attach a native DOM scroll
+  // listener on web — RN's onScroll is throttled and we need
+  // scrollend-style detection to pop the snapped card after the
+  // user releases.
+  const scrollRef = useRef<ScrollView | null>(null);
+
+  // Inject the snap-pop keyframes once into <head>. The class is
+  // added programmatically to whichever card just snapped (see the
+  // scroll-settle effect below). Web-only — guards the document
+  // access so SSR / native bundlers don't trip.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (document.getElementById('tasks-snap-pop-style')) return;
+    const el = document.createElement('style');
+    el.id = 'tasks-snap-pop-style';
+    el.textContent = `
+      @keyframes tasks-snap-pop {
+        0% { transform: scale(0.985); }
+        55% { transform: scale(1.018); }
+        100% { transform: scale(1); }
+      }
+      .tasks-snap-pop {
+        animation: tasks-snap-pop 380ms cubic-bezier(0.34, 1.4, 0.64, 1) both;
+      }
+    `;
+    document.head.appendChild(el);
+  }, []);
+
+  // Detect when scroll settles on a new snap target and pop that
+  // card. Uses a debounced scroll listener — fires ~120ms after
+  // the user stops scrolling. The first detection just records
+  // the resting card without popping (so the initial landing on
+  // the lost-pets card doesn't trigger a pop).
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    const node = (scrollRef.current as unknown as { getScrollableNode?: () => HTMLElement })
+      ?.getScrollableNode?.();
+    if (!node) return;
+
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    let lastSnapped: HTMLElement | null = null;
+
+    const handleSettle = () => {
+      const cards = node.querySelectorAll<HTMLElement>('[data-snap-card]');
+      const nodeTop = node.getBoundingClientRect().top;
+      let snapped: HTMLElement | null = null;
+      let minDist = Infinity;
+      cards.forEach((c) => {
+        const dist = Math.abs(c.getBoundingClientRect().top - nodeTop);
+        if (dist < minDist) {
+          minDist = dist;
+          snapped = c;
+        }
+      });
+      if (snapped && snapped !== lastSnapped && minDist < 40) {
+        // First detection only records — no pop on initial landing.
+        if (lastSnapped !== null) {
+          const target = snapped as HTMLElement;
+          target.classList.remove('tasks-snap-pop');
+          // Force reflow so the animation restarts even if the
+          // class was just removed.
+          void target.offsetWidth;
+          target.classList.add('tasks-snap-pop');
+        }
+        lastSnapped = snapped;
+      }
+    };
+
+    const onScroll = () => {
+      if (timer) clearTimeout(timer);
+      timer = setTimeout(handleSettle, 120);
+    };
+
+    node.addEventListener('scroll', onScroll, { passive: true });
+    return () => {
+      node.removeEventListener('scroll', onScroll);
+      if (timer) clearTimeout(timer);
+    };
+  }, []);
+
+  // dataSet typing isn't on RN's View but RN-Web forwards it to
+  // data-* attributes at runtime. Cast through unknown to avoid
+  // an inline @ts-expect-error on every card.
+  const snapCardProps = { dataSet: { snapCard: 'true' } } as unknown as object;
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} style={styles.scroller}>
+      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} style={styles.scroller}>
         {/* Lost pets nearby — promoted to the top of the tab so the
             most actionable thing on the screen is the first thing
             the user sees. Stack is the default view; list is a tap
             away via the header toggle. */}
         {sortedDogs.length > 0 ? (
-          <View style={styles.card}>
+          <View {...snapCardProps} style={styles.card}>
             <View style={styles.lostHeaderRow}>
               <Text style={styles.cardTitle}>{t.tasks.lostPetsNearby}</Text>
               <View style={styles.viewToggle}>
@@ -331,7 +416,7 @@ export default function TasksScreen() {
             card above this one — collapsed in since the per-row
             bars already visualise progress and the duplication
             hurt vertical hierarchy. */}
-        <View style={styles.card}>
+        <View {...snapCardProps} style={styles.card}>
           <View style={styles.dailyHeader}>
             <Text style={[styles.cardTitle, styles.cardTitleInline]}>
               {t.tasks.dailyTasks}
@@ -384,7 +469,7 @@ export default function TasksScreen() {
             first. Only renders the card when there's something to
             show so a brand-new account doesn't see an empty rail. */}
         {history.length > 0 ? (
-          <View style={styles.card}>
+          <View {...snapCardProps} style={styles.card}>
             <Pressable
               onPress={() => setHistoryOpen((v) => !v)}
               style={({ pressed }) => [
@@ -480,11 +565,19 @@ const styles = StyleSheet.create({
     flex: 1,
     scrollSnapType: 'y mandatory',
   } as unknown as object,
-  content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 120, gap: 12 },
+  // Bumped paddingTop to give the first card real breathing room
+  // from the screen edge (was 12 — felt glued to the top in
+  // Safari's small-viewport layout).
+  content: { paddingHorizontal: 16, paddingTop: 28, paddingBottom: 120, gap: 12 },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
-    padding: 20,
+    // Split padding — top is tighter so the card title sits high
+    // and is visible when the card peeks at the top or bottom of
+    // the viewport after a snap. Horizontal + bottom stay roomy.
+    paddingTop: 14,
+    paddingBottom: 20,
+    paddingHorizontal: 20,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.06,

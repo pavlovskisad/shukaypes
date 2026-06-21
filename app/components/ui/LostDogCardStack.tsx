@@ -402,8 +402,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     // Reserve room for the bottom card's peek (ty:60 + card-bottom
-    // tail) so the deepest deck card isn't clipped at the bottom.
-    marginBottom: 26,
+    // tail) AND breathing room before the counter — was 26, felt
+    // glued to the deck. Bumping it also keeps the counter from
+    // getting clipped when the next card snaps in over the top.
+    marginBottom: 50,
   },
   cardSlot: {
     position: 'absolute',
