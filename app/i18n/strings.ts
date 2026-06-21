@@ -123,6 +123,7 @@ export interface AppStrings {
       uk: string;
       en: string;
     };
+    sceneA11y: (mode: string) => string;
   };
   chat: {
     needLocation: string;
@@ -294,6 +295,8 @@ const uk: AppStrings = {
       uk: 'українська',
       en: 'english',
     },
+    sceneA11y: (mode) =>
+      `сцена: ${mode}. натисни на тло — змінити час; натисни на пса — гавкне.`,
   },
   chat: {
     needLocation: 'потрібна твоя геолокація',
@@ -509,6 +512,8 @@ const en: AppStrings = {
       uk: 'українська',
       en: 'english',
     },
+    sceneA11y: (mode) =>
+      `scene mode: ${mode}. tap background to toggle, tap dog to bark.`,
   },
   chat: {
     needLocation: 'need your location first',

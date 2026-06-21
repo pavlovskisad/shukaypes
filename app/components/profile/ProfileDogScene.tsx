@@ -3,6 +3,7 @@ import { DogSprite, type DogAnim } from '../map/DogSprite';
 import { SpeechBubble } from '../ui/SpeechBubble';
 import { ProfileSceneBackdrop, type SceneMode } from './ProfileSceneBackdrop';
 import { ProfileSceneBirds } from './ProfileSceneBirds';
+import { useStrings } from '../../i18n/useStrings';
 
 // Ambient dog scene for the profile hero — replaces the 🐶 emoji
 // with the live pixel-art companion. Runs a small state machine that
@@ -39,29 +40,9 @@ const SCENE: SceneEntry[] = [
   { anim: 'running', weight: 1, durMs: [2000, 3200], moves: true },
 ];
 
-// Bark variants shown in the SpeechBubble when the user taps the dog.
-// Mix of literal woofs and *action* notes. Same shared SpeechBubble
+// Bark variants now come from the shared i18n woofs array (UK + EN
+// hand-written under the Pidmohylny voice spec). Same SpeechBubble
 // component as the map companion, so the visual treatment matches.
-const BARKS = [
-  'woof!',
-  'bork!',
-  'arf!',
-  'ruff!',
-  'yip!',
-  'woof woof!',
-  'awoo!',
-  'bark!',
-  'arf arf!',
-  'borf!',
-  'henlo',
-  'mlem',
-  'boop?',
-  '*sniff sniff*',
-  '*tail wag*',
-  '*tilts head*',
-  '*zoomies*',
-  '*sploot*',
-];
 
 // ms — bark stays on screen this long before vanishing. Matches the
 // Companion's localBubble default so on-tap feedback feels the same
@@ -138,6 +119,7 @@ function isDayHour(): boolean {
 }
 
 export function ProfileDogScene() {
+  const t = useStrings();
   const [anim, setAnim] = useState<DogAnim>('sitting');
   const [facingLeft, setFacingLeft] = useState(false);
   // Mode auto-derives from wall-clock time. Manual override takes
@@ -225,7 +207,8 @@ export function ProfileDogScene() {
   // from also firing the background-toggle on the scene container.
   const handleBark = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
-    const text = BARKS[Math.floor(Math.random() * BARKS.length)]!;
+    const woofs = t.bubbles.woofs;
+    const text = woofs[Math.floor(Math.random() * woofs.length)] ?? t.bubbles.simpleWoof;
     setBark(text);
     if (barkTimerRef.current) clearTimeout(barkTimerRef.current);
     barkTimerRef.current = setTimeout(() => setBark(null), BARK_DURATION_MS);
@@ -346,7 +329,7 @@ export function ProfileDogScene() {
       ref={containerRef}
       onClick={toggleMode}
       role="button"
-      aria-label={`Scene mode: ${mode}. Tap background to toggle, tap dog to bark.`}
+      aria-label={t.profile.sceneA11y(mode)}
       style={{
         position: 'relative',
         // Break out of the card's 18px horizontal padding so the dog
