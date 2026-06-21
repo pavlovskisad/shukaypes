@@ -84,7 +84,6 @@ export interface AppStrings {
     finished: string;
     abandoned: string;
     unknownPet: string;
-    footer: string;
   };
   spots: {
     nearbySpots: string;
@@ -256,7 +255,6 @@ const uk: AppStrings = {
     finished: 'завершено',
     abandoned: 'припинено',
     unknownPet: 'невідомий пес',
-    footer: 'оновиться опівночі · прогрес зберігається в твоєму акаунті',
   },
   spots: {
     nearbySpots: 'місця поряд',
@@ -473,7 +471,6 @@ const en: AppStrings = {
     finished: 'finished',
     abandoned: 'abandoned',
     unknownPet: 'unknown pet',
-    footer: 'resets at midnight · progress synced to your account',
   },
   spots: {
     nearbySpots: 'nearby spots',

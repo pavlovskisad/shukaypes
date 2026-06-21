@@ -208,83 +208,12 @@ export default function TasksScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Summary card mirrors the Profile companion card — large
-            headline number, slim progress bar underneath. */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.tasks.dailyTasks}</Text>
-          <Text style={styles.summaryNum}>
-            {doneCount}
-            <Text style={styles.summaryNumDim}> / {TASKS.length}</Text>
-          </Text>
-          <Text style={styles.summaryLabel}>{t.tasks.completedToday}</Text>
-          <View style={styles.summaryBarTrack}>
-            <View
-              style={[
-                styles.summaryBarFill,
-                {
-                  width: `${Math.round(summaryProgress * 100)}%` as unknown as number,
-                },
-              ]}
-            />
-          </View>
-        </View>
-
-        {/* All tasks live in one card, hairline-divided rows. */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.tasks.todaysQuests}</Text>
-          {TASKS.map((row, i) => {
-            const value = Math.min(dailyTasks[row.key], row.target);
-            const progress = Math.min(value / row.target, 1);
-            const complete = value >= row.target;
-            return (
-              <View key={row.key} style={[styles.task, i > 0 && styles.taskDivider]}>
-                <View style={styles.row}>
-                  {row.iconName ? (
-                    <View style={styles.iconWrap}>
-                      <Icon name={row.iconName} size={34} />
-                    </View>
-                  ) : (
-                    <Text style={styles.icon}>{row.icon}</Text>
-                  )}
-                  <Text style={[styles.label, complete && styles.labelDone]}>
-                    {t.tasks.items[row.labelKey]}
-                  </Text>
-                  <Text style={[styles.count, complete && styles.countDone]}>
-                    {value}/{row.target}
-                    {complete ? ' ✓' : ''}
-                  </Text>
-                </View>
-                <View style={styles.barTrack}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      {
-                        width: `${progress * 100}%` as unknown as number,
-                        backgroundColor: complete
-                          ? 'rgba(0,0,0,0.45)'
-                          : 'rgba(0,60,255,0.85)',
-                      },
-                    ]}
-                  />
-                </View>
-              </View>
-            );
-          })}
-        </View>
-
-        {/* Lost pets nearby — promoted card, default-visible so the
-            quests tab feels alive even before tapping anything. Top
-            slice = pets in your search zone (or 3 closest if none),
-            "+ N more" reveals the rest. Each row is a clean tap
-            target → opens the full LostDogModal in place. No
-            inline expansion / chevrons; the modal is the detail
-            view. */}
+        {/* Lost pets nearby — promoted to the top of the tab so the
+            most actionable thing on the screen is the first thing
+            the user sees. Stack is the default view; list is a tap
+            away via the header toggle. */}
         {sortedDogs.length > 0 ? (
           <View style={styles.card}>
-            {/* Header row: title on the left, view-mode toggle on the
-                right. Toggle is a prototype — local state, no persist.
-                If the stack feels right we promote it to default and
-                hide the list behind a "see all" affordance. */}
             <View style={styles.lostHeaderRow}>
               <Text style={styles.cardTitle}>{t.tasks.lostPetsNearby}</Text>
               <View style={styles.viewToggle}>
@@ -397,6 +326,70 @@ export default function TasksScreen() {
           </View>
         ) : null}
 
+        {/* Summary card mirrors the Profile companion card — large
+            headline number, slim progress bar underneath. */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t.tasks.dailyTasks}</Text>
+          <Text style={styles.summaryNum}>
+            {doneCount}
+            <Text style={styles.summaryNumDim}> / {TASKS.length}</Text>
+          </Text>
+          <Text style={styles.summaryLabel}>{t.tasks.completedToday}</Text>
+          <View style={styles.summaryBarTrack}>
+            <View
+              style={[
+                styles.summaryBarFill,
+                {
+                  width: `${Math.round(summaryProgress * 100)}%` as unknown as number,
+                },
+              ]}
+            />
+          </View>
+        </View>
+
+        {/* All tasks live in one card, hairline-divided rows. */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t.tasks.todaysQuests}</Text>
+          {TASKS.map((row, i) => {
+            const value = Math.min(dailyTasks[row.key], row.target);
+            const progress = Math.min(value / row.target, 1);
+            const complete = value >= row.target;
+            return (
+              <View key={row.key} style={[styles.task, i > 0 && styles.taskDivider]}>
+                <View style={styles.row}>
+                  {row.iconName ? (
+                    <View style={styles.iconWrap}>
+                      <Icon name={row.iconName} size={34} />
+                    </View>
+                  ) : (
+                    <Text style={styles.icon}>{row.icon}</Text>
+                  )}
+                  <Text style={[styles.label, complete && styles.labelDone]}>
+                    {t.tasks.items[row.labelKey]}
+                  </Text>
+                  <Text style={[styles.count, complete && styles.countDone]}>
+                    {value}/{row.target}
+                    {complete ? ' ✓' : ''}
+                  </Text>
+                </View>
+                <View style={styles.barTrack}>
+                  <View
+                    style={[
+                      styles.barFill,
+                      {
+                        width: `${progress * 100}%` as unknown as number,
+                        backgroundColor: complete
+                          ? 'rgba(0,0,0,0.45)'
+                          : 'rgba(0,60,255,0.85)',
+                      },
+                    ]}
+                  />
+                </View>
+              </View>
+            );
+          })}
+        </View>
+
         {/* Past searches — completed/abandoned quests, most recent
             first. Only renders the card when there's something to
             show so a brand-new account doesn't see an empty rail. */}
@@ -444,10 +437,6 @@ export default function TasksScreen() {
               : null}
           </View>
         ) : null}
-
-        <Text style={styles.footer}>
-          {t.tasks.footer}
-        </Text>
       </ScrollView>
 
       {/* Same LostDogModal as the map. modalDog comes from local
@@ -720,11 +709,5 @@ const styles = StyleSheet.create({
     fontSize: 18,
     color: '#bbb',
     fontWeight: '700',
-  },
-  footer: {
-    fontSize: 11,
-    color: '#999',
-    marginTop: 4,
-    textAlign: 'center',
   },
 });
