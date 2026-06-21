@@ -40,7 +40,9 @@ const VIEW_H = 480;
 // from 110 of 200 (55%) down to 240 of 480 (50%) so the horizon
 // lands at the vertical centre of the scene container (and thus
 // the screen).
-const GROUND_Y = 240;
+// Horizon a bit above center (42% of 480) so the lawn portion has
+// room for the dog AND the stat deck on top of it.
+const GROUND_Y = 200;
 
 // Per-mode colour palettes.
 const PALETTE = {

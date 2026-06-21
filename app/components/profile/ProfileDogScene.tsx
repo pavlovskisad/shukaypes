@@ -120,6 +120,7 @@ function isDayHour(): boolean {
 
 export function ProfileDogScene({
   onModeChange,
+  dogBottomInset = 0,
 }: {
   // Called whenever the scene's day/night mode flips (either from
   // the time-based auto-derive or a tap-to-toggle on the sky).
@@ -127,6 +128,12 @@ export function ProfileDogScene({
   // colour stays in sync with the scene's mood without lifting
   // the entire mode state up.
   onModeChange?: (mode: SceneMode) => void;
+  // Pushes the dog up from the scene container's bottom edge.
+  // Default 0 keeps the dog at the bottom (original hero-card
+  // behaviour). The full-bleed profile passes a positive value so
+  // the dog walks closer to the horizon instead of along the
+  // viewport bottom under the tab bar.
+  dogBottomInset?: number;
 } = {}) {
   const t = useStrings();
   const [anim, setAnim] = useState<DogAnim>('sitting');
@@ -381,7 +388,10 @@ export function ProfileDogScene({
           // Per-anim downward offset — sitting/lying push the sprite
           // down so empty pixels below the dog body in the sprite
           // frame don't show up as bottom padding inside the card.
-          bottom: ANIM_BOTTOM_OFFSET[anim],
+          // dogBottomInset (parent-controlled) lifts the dog further
+          // up so it can walk on the lawn instead of along the
+          // viewport bottom on the full-bleed profile.
+          bottom: dogBottomInset + ANIM_BOTTOM_OFFSET[anim],
           transform: `translateX(${x}px)`,
           width: SPRITE_PX,
           height: SPRITE_PX,

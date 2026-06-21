@@ -151,11 +151,11 @@ export default function ProfileScreen() {
     void refetch();
   }, [refetch]);
 
-  // Three swipeable sections — first one (companion identity) is
-  // new. Holds the name + level + xp progress + lucky-paw status
-  // so the live hero stats live on a card the user can tap-back
-  // to instead of crowding the HUD overlay at the top.
-  const luckyActive = (data?.companion.happiness ?? 0) >= 70;
+  // Three swipeable sections — first one is the companion
+  // identity card (name + level + xp + days-together). Lucky paw
+  // dropped on user request; days-together moved out of the walks
+  // card so all three cards end up with the same "title + 3 quick
+  // stats" rhythm.
   const sections = useMemo(
     () => [
       {
@@ -194,17 +194,7 @@ export default function ProfileScreen() {
                 />
               </View>
             ) : null}
-            <View style={styles.luckyRow}>
-              <Text style={styles.luckyLabel}>{t.profile.stats.luckyPaw}</Text>
-              <Text
-                style={[
-                  styles.luckyStatus,
-                  luckyActive ? styles.luckyStatusOn : styles.luckyStatusOff,
-                ]}
-              >
-                {luckyActive ? t.profile.luckyActive : t.profile.luckyInactive}
-              </Text>
-            </View>
+            <StatRow label={t.profile.stats.daysPlayed} value={data?.stats.daysPlayed} />
           </View>
         ),
       },
@@ -213,7 +203,6 @@ export default function ProfileScreen() {
         content: (
           <View style={styles.sectionCard}>
             <Text style={styles.sectionTitle}>{t.profile.stats.walksTogether}</Text>
-            <StatRow label={t.profile.stats.daysPlayed} value={data?.stats.daysPlayed} />
             <StatRow
               label={t.profile.stats.distanceWalked}
               value={data ? formatDistance(data.user.totalDistanceMeters) : undefined}
@@ -241,7 +230,7 @@ export default function ProfileScreen() {
         ),
       },
     ],
-    [t, data, companionName, luckyActive],
+    [t, data, companionName],
   );
 
   const skyColor = sceneMode === 'day' ? '#dbeaf4' : '#1c2a44';
@@ -259,7 +248,11 @@ export default function ProfileScreen() {
           the middle of the screen. */}
       <View style={[styles.sceneFullBleed, { bottom: HERO.size + insets.bottom }]}>
         {sceneActive ? (
-          <ProfileDogScene onModeChange={setSceneMode} />
+          // dogBottomInset lifts the dog ~260 px up from the scene's
+          // bottom edge — puts the dog's paws just below the horizon
+          // line on a typical viewport, with the stat deck sitting
+          // on the lower lawn underneath.
+          <ProfileDogScene onModeChange={setSceneMode} dogBottomInset={260} />
         ) : null}
       </View>
 
@@ -291,15 +284,16 @@ export default function ProfileScreen() {
         </View>
       </View>
 
-      {/* Stat deck — on the lawn area (lower portion of the scene,
-          below the horizon). Three swipeable cards: companion
-          identity, walks together, helping pets. */}
-      <View style={[styles.deckHolder, { bottom: HERO.size + insets.bottom + 30 }]}>
+      {/* Stat deck — on the lower lawn, right above the tab bar
+          and below the dog. Smaller per-card height (150) +
+          tightened layout so the deck doesn't crowd the dog
+          walking on the horizon above. */}
+      <View style={[styles.deckHolder, { bottom: HERO.size + insets.bottom }]}>
         <CardStack
           items={sections}
           getId={(s) => s.id}
           renderCard={(s) => s.content}
-          cardHeight={180}
+          cardHeight={150}
           showCounter={false}
         />
       </View>
@@ -416,15 +410,17 @@ const styles = StyleSheet.create({
     right: 0,
     alignItems: 'center',
   },
-  // Section cards inside the deck.
+  // Section cards inside the deck — height matches the deck's
+  // cardHeight prop (150 on profile). Tight paddings since
+  // each card has a title + 3 short lines.
   sectionCard: {
     width: CARD_W,
-    height: 180,
+    height: 150,
     backgroundColor: '#ffffff',
-    borderRadius: 24,
-    paddingTop: 14,
-    paddingBottom: 16,
-    paddingHorizontal: 18,
+    borderRadius: 22,
+    paddingTop: 12,
+    paddingBottom: 12,
+    paddingHorizontal: 16,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18,
@@ -439,51 +435,32 @@ const styles = StyleSheet.create({
     textTransform: 'lowercase',
     letterSpacing: 0.3,
   },
-  // Companion identity card (first in the deck) — bigger name +
-  // level since this card IS the "who's my pet" view.
+  // Companion identity card (first in the deck) — compact name +
+  // level + xp bar + days-together row so the four elements fit
+  // comfortably in the same 150-tall slot as the other 3-row cards.
   companionNameBig: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 22,
+    fontSize: 19,
     fontWeight: '800',
     color: colors.black,
-    marginBottom: 2,
+    marginBottom: 1,
   },
   companionLevel: {
-    fontSize: 13,
+    fontSize: 12,
     color: '#555',
-    marginBottom: 10,
+    marginBottom: 6,
   },
   xpBarTrack: {
-    height: 6,
-    borderRadius: 3,
+    height: 5,
+    borderRadius: 2.5,
     backgroundColor: 'rgba(0,0,0,0.08)',
     overflow: 'hidden',
-    marginBottom: 14,
+    marginBottom: 6,
   },
   xpBarFill: {
     height: '100%',
     backgroundColor: 'rgba(0,60,255,0.85)',
-    borderRadius: 3,
-  },
-  luckyRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  luckyLabel: {
-    fontSize: 13,
-    color: '#555',
-  },
-  luckyStatus: {
-    fontSize: 13,
-    fontWeight: '700',
-    textTransform: 'lowercase',
-  },
-  luckyStatusOn: {
-    color: '#3aa860',
-  },
-  luckyStatusOff: {
-    color: '#aaa',
+    borderRadius: 2.5,
   },
   // Denser stat rows for the walks / helping cards.
   statRow: {
