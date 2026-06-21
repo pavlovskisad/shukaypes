@@ -66,8 +66,6 @@ export interface AppStrings {
   };
   tasks: {
     dailyTasks: string;
-    completedToday: string;
-    todaysQuests: string;
     items: {
       collectTokens: string;
       feedBones: string;
@@ -237,8 +235,6 @@ const uk: AppStrings = {
   },
   tasks: {
     dailyTasks: 'щоденні квести',
-    completedToday: 'виконано сьогодні',
-    todaysQuests: 'сьогоднішні квести',
     items: {
       collectTokens: 'збери 10 лапок',
       feedBones: 'погодуй 3 кістки',
@@ -453,8 +449,6 @@ const en: AppStrings = {
   },
   tasks: {
     dailyTasks: 'daily tasks',
-    completedToday: 'completed today',
-    todaysQuests: "today's quests",
     items: {
       collectTokens: 'collect 10 tokens',
       feedBones: 'feed 3 bones',

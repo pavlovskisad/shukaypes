@@ -203,11 +203,10 @@ export default function TasksScreen() {
   );
 
   const doneCount = TASKS.filter((row) => dailyTasks[row.key] >= row.target).length;
-  const summaryProgress = doneCount / TASKS.length;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content}>
+      <ScrollView contentContainerStyle={styles.content} style={styles.scroller}>
         {/* Lost pets nearby — promoted to the top of the tab so the
             most actionable thing on the screen is the first thing
             the user sees. Stack is the default view; list is a tap
@@ -326,30 +325,21 @@ export default function TasksScreen() {
           </View>
         ) : null}
 
-        {/* Summary card mirrors the Profile companion card — large
-            headline number, slim progress bar underneath. */}
+        {/* Daily tasks — single card with title + slim "X / Y done"
+            subtitle, then the task rows. The headline summary card
+            (giant X/Y number + overall bar) used to be a separate
+            card above this one — collapsed in since the per-row
+            bars already visualise progress and the duplication
+            hurt vertical hierarchy. */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.tasks.dailyTasks}</Text>
-          <Text style={styles.summaryNum}>
-            {doneCount}
-            <Text style={styles.summaryNumDim}> / {TASKS.length}</Text>
-          </Text>
-          <Text style={styles.summaryLabel}>{t.tasks.completedToday}</Text>
-          <View style={styles.summaryBarTrack}>
-            <View
-              style={[
-                styles.summaryBarFill,
-                {
-                  width: `${Math.round(summaryProgress * 100)}%` as unknown as number,
-                },
-              ]}
-            />
+          <View style={styles.dailyHeader}>
+            <Text style={[styles.cardTitle, styles.cardTitleInline]}>
+              {t.tasks.dailyTasks}
+            </Text>
+            <Text style={styles.dailyCount}>
+              {doneCount} / {TASKS.length}
+            </Text>
           </View>
-        </View>
-
-        {/* All tasks live in one card, hairline-divided rows. */}
-        <View style={styles.card}>
-          <Text style={styles.cardTitle}>{t.tasks.todaysQuests}</Text>
           {TASKS.map((row, i) => {
             const value = Math.min(dailyTasks[row.key], row.target);
             const progress = Math.min(value / row.target, 1);
@@ -479,6 +469,17 @@ export default function TasksScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.greyBg },
+  // Vertical snap-scroll on the tab — each card is a snap target,
+  // so a flick from the lost-pets card lands cleanly on the daily-
+  // tasks card (and back). `mandatory` is fine because every card
+  // currently fits in a phone viewport; if a card ever overflows,
+  // switch to `proximity` so the user can free-scroll within it.
+  // RN-Web passes scroll-snap-* straight through to CSS even
+  // though RN typings don't know about them.
+  scroller: {
+    flex: 1,
+    scrollSnapType: 'y mandatory',
+  } as unknown as object,
   content: { paddingHorizontal: 16, paddingTop: 12, paddingBottom: 120, gap: 12 },
   card: {
     backgroundColor: '#ffffff',
@@ -489,7 +490,10 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.06,
     shadowRadius: 12,
     elevation: 2,
-  },
+    // Snap each card's top edge to the top of the scroll viewport.
+    scrollSnapAlign: 'start',
+    scrollSnapStop: 'always',
+  } as unknown as object,
   cardTitle: {
     fontFamily: SYSTEM_FONT,
     fontSize: 14,
@@ -536,37 +540,26 @@ const styles = StyleSheet.create({
   viewToggleTextActive: {
     color: '#1a1a1a',
   },
-  summaryNum: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: 44,
-    fontWeight: '800',
-    color: colors.black,
-    textAlign: 'center',
-    lineHeight: 48,
-    marginTop: 4,
-  },
-  summaryNumDim: {
-    color: '#aaa',
-    fontWeight: '500',
-  },
-  summaryLabel: {
-    fontSize: 13,
-    color: '#777',
-    textAlign: 'center',
-    marginTop: 2,
+  // Daily-tasks card header: title on the left, "X / Y" tally on
+  // the right. Replaces the giant standalone summary card that used
+  // to sit above the task list.
+  dailyHeader: {
+    flexDirection: 'row',
+    alignItems: 'baseline',
+    justifyContent: 'space-between',
     marginBottom: 12,
   },
-  summaryBarTrack: {
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgba(0,0,0,0.06)',
-    marginHorizontal: 24,
-    overflow: 'hidden',
+  // Override cardTitle's own marginBottom when it sits inside a
+  // header row — the row's marginBottom drives the spacing below.
+  cardTitleInline: {
+    marginBottom: 0,
   },
-  summaryBarFill: {
-    height: '100%',
-    borderRadius: 4,
-    backgroundColor: 'rgba(0,60,255,0.85)',
+  dailyCount: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: 14,
+    color: '#777',
+    fontWeight: '700',
+    letterSpacing: 0.3,
   },
   // Roomier task row: padding 12 → 16, gap 10 → 14, icon column
   // 22 → 44 to actually fit the 34px pixel icon (was being clipped
