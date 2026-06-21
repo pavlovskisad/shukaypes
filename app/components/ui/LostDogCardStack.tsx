@@ -13,7 +13,7 @@
 // If the feel lands, the same shape can drop into spots / profile.
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
+import { View, Text, StyleSheet, Image } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -115,49 +115,41 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
 
   const advance = useCallback(
     (delta: number) => {
-      setIndex((i) => Math.max(0, i + delta));
+      setIndex((i) => {
+        const n = dogs.length;
+        if (n === 0) return 0;
+        // Cycle on overflow in either direction (swipe past the end
+        // wraps to the start; swipe back past 0 wraps to the end).
+        // No more "end of deck" empty state — the deck just keeps
+        // going.
+        return ((i + delta) % n + n) % n;
+      });
       requestAnimationFrame(() => {
         ty.value = 0;
         revealProgress.value = 0;
-        // Top slot fades in with the new dog after either kind of
-        // advance — soft arrival vs a teleport at the end of the
-        // fly-off.
         topAppearOpacity.value = 0;
         topAppearOpacity.value = withTiming(1, {
           duration: REVEAL_MS,
           easing: SLIDE_EASE,
         });
+        // Always settle the deck back to rest (deckShift=0). Forward
+        // came from +1 (promoted), backward came from -1 (demoted) —
+        // same settle either way.
+        deckShift.value = withTiming(0, {
+          duration: REVEAL_MS,
+          easing: SLIDE_EASE,
+        });
         if (delta < 0) {
-          // BACKWARD: top swings in from off-screen LEFT. Deck did
-          // not shift on the way out (deckShift stayed at 0 during
-          // the backward drag), so nothing to retreat here.
+          // BACKWARD: top swings in from off-screen LEFT.
           tx.value = -(CARD_W + 100);
           tx.value = withTiming(0, { duration: SLIDE_IN_MS, easing: SLIDE_EASE });
         } else {
-          // FORWARD: snap tx back. Retreat the deck from its fully-
-          // shifted pose to rest over the same window as the top
-          // fade-in. The slots that had promoted up (middle → top,
-          // bottom → middle, …) now smoothly settle into the
-          // positions of their NEW content slot. No snap — the
-          // deck reads as continuously alive.
           tx.value = 0;
-          deckShift.value = withTiming(0, {
-            duration: REVEAL_MS,
-            easing: SLIDE_EASE,
-          });
         }
       });
     },
-    [tx, ty, revealProgress, topAppearOpacity, deckShift],
+    [dogs.length, tx, ty, revealProgress, topAppearOpacity, deckShift],
   );
-
-  // Index mirrored as a shared value so the worklet can read it
-  // synchronously when deciding whether a backward swipe is allowed
-  // (clamped at 0 → spring back instead of letting the card commit).
-  const indexSV = useSharedValue(index);
-  useEffect(() => {
-    indexSV.value = index;
-  }, [index, indexSV]);
 
   const handleTap = useCallback(
     (dog: NearbyLostDog) => {
@@ -167,29 +159,31 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
   );
 
   const topDog = dogs[index];
-  const next1 = dogs[index + 1];
-  const next2 = dogs[index + 2];
-  // Buffer slot: invisible at rest, fades into the deepest visible
-  // peek position as deckShift advances. Means the deck never
-  // visibly "thins out" mid-swipe — there's always a backmost
-  // card coming into view as the front card leaves.
-  const next3 = dogs[index + 3];
+  // Deck slot occupancy via modular indexing — cycling means the
+  // deck always stays full as long as there are at least N+1 dogs
+  // (1 for top + 1 per visible slot). next1 = render middle slot,
+  // next2 = bottom slot, next3 = buffer slot.
+  const N = dogs.length;
+  const next1 = N > 1 ? dogs[(index + 1) % N] : undefined;
+  const next2 = N > 2 ? dogs[(index + 2) % N] : undefined;
+  const next3 = N > 3 ? dogs[(index + 3) % N] : undefined;
 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
       tx.value = e.translationX;
       ty.value = e.translationY * 0.3;
-      // Forward drag (left, negative tx) progressively promotes the
-      // deck: middle scales up toward top, bottom toward middle,
-      // third toward bottom, buffer fades in toward third. Backward
-      // drag leaves the deck still — the prev card is going to slide
-      // in over it from the left, no need to false-promote.
+      // deckShift range is [-1, 1]:
+      //   forward drag (left, negative tx)  → positive (promote)
+      //   backward drag (right, positive tx) → negative (demote)
+      // Each slot's animated style interpolates across the full
+      // range so the deck visibly promotes on forward AND demotes
+      // (cards sink one position deeper) on backward.
+      const p = Math.min(Math.abs(e.translationX) / CARD_W, 1);
       if (e.translationX < 0) {
-        const p = Math.min(Math.abs(e.translationX) / CARD_W, 1);
         deckShift.value = p;
         revealProgress.value = p;
       } else {
-        deckShift.value = 0;
+        deckShift.value = -p;
         revealProgress.value = 0;
       }
     })
@@ -207,31 +201,21 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
         return;
       }
       if (passedPx || passedVel) {
-        // Carousel convention: swipe LEFT → forward (next dog),
-        // swipe RIGHT → backward (previous dog). The card flies in
-        // the drag direction either way. On a backward swipe while
-        // already at the start of the deck, spring back instead of
-        // committing (no dog before index 0).
+        // Carousel convention: swipe LEFT → forward, swipe RIGHT →
+        // backward. The card flies in the drag direction either way.
+        // Both directions cycle (no clamp at 0 — wraps to the end).
         const isForward = e.translationX < 0;
-        if (!isForward && indexSV.value === 0) {
-          tx.value = withSpring(0);
-          ty.value = withSpring(0);
-          deckShift.value = withSpring(0);
-          return;
-        }
         const dir = isForward ? -1 : 1;
         const delta = isForward ? 1 : -1;
-        // Forward commit: drive the deck fully promoted over the
-        // fly-off window so by the time the top card has flown out,
-        // the deck slots are at their promoted poses (middle now
-        // sits at top, buffer is fully visible at third). `advance`
-        // then retreats deckShift back to 0 in lockstep with the
-        // new top fading in — the deck visibly settles.
+        // Drive the deck to its commit-end pose over the fly-off
+        // window — promoted (+1) on forward, demoted (-1) on
+        // backward. `advance` then settles deckShift back to 0
+        // in lockstep with the new top arriving.
+        deckShift.value = withTiming(isForward ? 1 : -1, {
+          duration: FLY_OFF_MS,
+          easing: FLY_EASE,
+        });
         if (isForward) {
-          deckShift.value = withTiming(1, {
-            duration: FLY_OFF_MS,
-            easing: FLY_EASE,
-          });
           revealProgress.value = withTiming(1, {
             duration: REVEAL_MS,
             easing: SLIDE_EASE,
@@ -246,7 +230,7 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
         );
         ty.value = withTiming(ty.value + 40, { duration: FLY_OFF_MS, easing: FLY_EASE });
       } else {
-        // No commit — spring back, restore deck.
+        // No commit — spring everything back to rest.
         tx.value = withSpring(0);
         ty.value = withSpring(0);
         deckShift.value = withSpring(0);
@@ -268,55 +252,56 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     };
   });
 
-  // Deck slot poses — each slot has a REST pose (where it sits in
-  // the stack at rest) and a PROMOTED pose (one step closer to the
-  // top, where it ends up at deckShift === 1). The buffer also
-  // fades opacity from 0 → 1 so the deck always reveals a new
-  // backmost card as the user pulls. Driven by deckShift (0..1).
-  //
-  // Order: deepest (buffer) → shallowest (middle). The top card is
-  // the GestureDetector's Animated.View — not part of this list.
-  // Two visible peeks at rest + one fading buffer feels cleaner
-  // than three peeks once the cards sit lower on the deck.
+  // Deck slot poses — each slot has THREE keyframe poses:
+  //   demoted  (deckShift = -1): one step deeper into the stack
+  //   rest     (deckShift =  0): natural peek position
+  //   promoted (deckShift = +1): one step closer to the top
+  // The buffer also drives opacity (invisible at rest + below,
+  // fades in above 0). Slot styles interpolate over the full
+  // [-1, 0, 1] range so forward swipes promote the deck and
+  // backward swipes demote it — mirror animations on both sides.
   const SLOT_POSES = {
-    middle: { rest: { scale: 0.94, ty: 30 }, promoted: { scale: 1.0,  ty: 0  } },
-    bottom: { rest: { scale: 0.88, ty: 60 }, promoted: { scale: 0.94, ty: 30 } },
-    buffer: { rest: { scale: 0.82, ty: 90 }, promoted: { scale: 0.88, ty: 60 } },
+    middle: {
+      demoted:  { scale: 0.88, ty: 60 },
+      rest:     { scale: 0.94, ty: 30 },
+      promoted: { scale: 1.0,  ty: 0  },
+    },
+    bottom: {
+      demoted:  { scale: 0.82, ty: 90 },
+      rest:     { scale: 0.88, ty: 60 },
+      promoted: { scale: 0.94, ty: 30 },
+    },
+    buffer: {
+      demoted:  { scale: 0.76, ty: 120 },
+      rest:     { scale: 0.82, ty: 90 },
+      promoted: { scale: 0.88, ty: 60 },
+    },
   } as const;
 
   const middleStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.middle.rest.scale, SLOT_POSES.middle.promoted.scale]);
-    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.middle.rest.ty, SLOT_POSES.middle.promoted.ty]);
+    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.middle.demoted.scale, SLOT_POSES.middle.rest.scale, SLOT_POSES.middle.promoted.scale]);
+    const y = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.middle.demoted.ty, SLOT_POSES.middle.rest.ty, SLOT_POSES.middle.promoted.ty]);
     return { transform: [{ scale: s }, { translateY: y }] };
   });
   const bottomStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.bottom.rest.scale, SLOT_POSES.bottom.promoted.scale]);
-    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.bottom.rest.ty, SLOT_POSES.bottom.promoted.ty]);
+    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.bottom.demoted.scale, SLOT_POSES.bottom.rest.scale, SLOT_POSES.bottom.promoted.scale]);
+    const y = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.bottom.demoted.ty, SLOT_POSES.bottom.rest.ty, SLOT_POSES.bottom.promoted.ty]);
     return { transform: [{ scale: s }, { translateY: y }] };
   });
   const bufferStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.buffer.rest.scale, SLOT_POSES.buffer.promoted.scale]);
-    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.buffer.rest.ty, SLOT_POSES.buffer.promoted.ty]);
-    // Buffer fades in as the deck promotes — invisible at rest so
-    // the deck never reads as 3-deep, only ever 2 + a ghost.
-    const o = interpolate(deckShift.value, [0, 1], [0, 1], Extrapolation.CLAMP);
+    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.buffer.demoted.scale, SLOT_POSES.buffer.rest.scale, SLOT_POSES.buffer.promoted.scale]);
+    const y = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.buffer.demoted.ty, SLOT_POSES.buffer.rest.ty, SLOT_POSES.buffer.promoted.ty]);
+    // Buffer fades in only on forward (positive shift). At rest
+    // and on backward it stays invisible — backward doesn't reveal
+    // a new bottom card, the deck just sinks.
+    const o = interpolate(deckShift.value, [-1, 0, 1], [0, 0, 1], Extrapolation.CLAMP);
     return { transform: [{ scale: s }, { translateY: y }], opacity: o };
   });
 
-  if (!topDog) {
-    // End of the deck.
-    return (
-      <View style={styles.emptyWrap}>
-        <Text style={styles.emptyText}>{t.tasks.lostPetsNearby}</Text>
-        <Pressable
-          onPress={() => setIndex(0)}
-          style={({ pressed }) => [styles.resetBtn, pressed && { opacity: 0.7 }]}
-        >
-          <Text style={styles.resetText}>{t.tasks.showFewer}</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  // Defensive only — the parent hides the card frame when
+  // dogs.length === 0, and forward / backward swipes cycle so
+  // we never actually exhaust the deck.
+  if (!topDog) return null;
 
   // Deck slots in deepest-first paint order: buffer → bottom →
   // middle → top. Each is a plain grey rectangle (no photo, no
@@ -596,25 +581,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#777',
     fontWeight: '600',
-  },
-  emptyWrap: {
-    alignItems: 'center',
-    paddingVertical: 30,
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#777',
-  },
-  resetBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 999,
-  },
-  resetText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 13,
   },
 });

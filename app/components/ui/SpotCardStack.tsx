@@ -11,7 +11,7 @@
 // a third stack lands the shared CardStack hook designs itself.
 
 import { useState, useEffect, useMemo, useCallback } from 'react';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -66,7 +66,13 @@ export function SpotCardStack({ spots, onTap }: Props) {
 
   const advance = useCallback(
     (delta: number) => {
-      setIndex((i) => Math.max(0, i + delta));
+      setIndex((i) => {
+        const n = spots.length;
+        if (n === 0) return 0;
+        // Cycle on overflow in either direction — no end-of-deck
+        // empty state; the deck wraps continuously.
+        return ((i + delta) % n + n) % n;
+      });
       requestAnimationFrame(() => {
         ty.value = 0;
         revealProgress.value = 0;
@@ -75,25 +81,22 @@ export function SpotCardStack({ spots, onTap }: Props) {
           duration: REVEAL_MS,
           easing: SLIDE_EASE,
         });
+        // Always settle deck back to rest (deckShift=0). Forward
+        // came from +1, backward from -1 — same settle either way.
+        deckShift.value = withTiming(0, {
+          duration: REVEAL_MS,
+          easing: SLIDE_EASE,
+        });
         if (delta < 0) {
           tx.value = -(CARD_W + 100);
           tx.value = withTiming(0, { duration: SLIDE_IN_MS, easing: SLIDE_EASE });
         } else {
           tx.value = 0;
-          deckShift.value = withTiming(0, {
-            duration: REVEAL_MS,
-            easing: SLIDE_EASE,
-          });
         }
       });
     },
-    [tx, ty, revealProgress, topAppearOpacity, deckShift],
+    [spots.length, tx, ty, revealProgress, topAppearOpacity, deckShift],
   );
-
-  const indexSV = useSharedValue(index);
-  useEffect(() => {
-    indexSV.value = index;
-  }, [index, indexSV]);
 
   const handleTap = useCallback(
     (spot: Spot) => {
@@ -103,20 +106,26 @@ export function SpotCardStack({ spots, onTap }: Props) {
   );
 
   const topSpot = spots[index];
-  const next1 = spots[index + 1];
-  const next2 = spots[index + 2];
-  const next3 = spots[index + 3];
+  // Deck slot occupancy via modular indexing — cycling means the
+  // deck stays full as long as there are at least N+1 spots.
+  const N = spots.length;
+  const next1 = N > 1 ? spots[(index + 1) % N] : undefined;
+  const next2 = N > 2 ? spots[(index + 2) % N] : undefined;
+  const next3 = N > 3 ? spots[(index + 3) % N] : undefined;
 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
       tx.value = e.translationX;
       ty.value = e.translationY * 0.3;
+      // deckShift range is [-1, 1] — forward drag promotes (+),
+      // backward drag demotes (-). See LostDogCardStack for the
+      // longer comment.
+      const p = Math.min(Math.abs(e.translationX) / CARD_W, 1);
       if (e.translationX < 0) {
-        const p = Math.min(Math.abs(e.translationX) / CARD_W, 1);
         deckShift.value = p;
         revealProgress.value = p;
       } else {
-        deckShift.value = 0;
+        deckShift.value = -p;
         revealProgress.value = 0;
       }
     })
@@ -133,20 +142,15 @@ export function SpotCardStack({ spots, onTap }: Props) {
         return;
       }
       if (passedPx || passedVel) {
+        // Both directions cycle — no clamp at 0.
         const isForward = e.translationX < 0;
-        if (!isForward && indexSV.value === 0) {
-          tx.value = withSpring(0);
-          ty.value = withSpring(0);
-          deckShift.value = withSpring(0);
-          return;
-        }
         const dir = isForward ? -1 : 1;
         const delta = isForward ? 1 : -1;
+        deckShift.value = withTiming(isForward ? 1 : -1, {
+          duration: FLY_OFF_MS,
+          easing: FLY_EASE,
+        });
         if (isForward) {
-          deckShift.value = withTiming(1, {
-            duration: FLY_OFF_MS,
-            easing: FLY_EASE,
-          });
           revealProgress.value = withTiming(1, {
             duration: REVEAL_MS,
             easing: SLIDE_EASE,
@@ -180,42 +184,48 @@ export function SpotCardStack({ spots, onTap }: Props) {
     };
   });
 
+  // Three-keyframe poses (demoted at -1, rest at 0, promoted at
+  // +1) so each slot interpolates symmetrically across the
+  // forward / backward range. See LostDogCardStack for details.
   const SLOT_POSES = {
-    middle: { rest: { scale: 0.94, ty: 30 }, promoted: { scale: 1.0,  ty: 0  } },
-    bottom: { rest: { scale: 0.88, ty: 60 }, promoted: { scale: 0.94, ty: 30 } },
-    buffer: { rest: { scale: 0.82, ty: 90 }, promoted: { scale: 0.88, ty: 60 } },
+    middle: {
+      demoted:  { scale: 0.88, ty: 60 },
+      rest:     { scale: 0.94, ty: 30 },
+      promoted: { scale: 1.0,  ty: 0  },
+    },
+    bottom: {
+      demoted:  { scale: 0.82, ty: 90 },
+      rest:     { scale: 0.88, ty: 60 },
+      promoted: { scale: 0.94, ty: 30 },
+    },
+    buffer: {
+      demoted:  { scale: 0.76, ty: 120 },
+      rest:     { scale: 0.82, ty: 90 },
+      promoted: { scale: 0.88, ty: 60 },
+    },
   } as const;
 
   const middleStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.middle.rest.scale, SLOT_POSES.middle.promoted.scale]);
-    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.middle.rest.ty, SLOT_POSES.middle.promoted.ty]);
+    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.middle.demoted.scale, SLOT_POSES.middle.rest.scale, SLOT_POSES.middle.promoted.scale]);
+    const y = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.middle.demoted.ty, SLOT_POSES.middle.rest.ty, SLOT_POSES.middle.promoted.ty]);
     return { transform: [{ scale: s }, { translateY: y }] };
   });
   const bottomStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.bottom.rest.scale, SLOT_POSES.bottom.promoted.scale]);
-    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.bottom.rest.ty, SLOT_POSES.bottom.promoted.ty]);
+    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.bottom.demoted.scale, SLOT_POSES.bottom.rest.scale, SLOT_POSES.bottom.promoted.scale]);
+    const y = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.bottom.demoted.ty, SLOT_POSES.bottom.rest.ty, SLOT_POSES.bottom.promoted.ty]);
     return { transform: [{ scale: s }, { translateY: y }] };
   });
   const bufferStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [0, 1], [SLOT_POSES.buffer.rest.scale, SLOT_POSES.buffer.promoted.scale]);
-    const y = interpolate(deckShift.value, [0, 1], [SLOT_POSES.buffer.rest.ty, SLOT_POSES.buffer.promoted.ty]);
-    const o = interpolate(deckShift.value, [0, 1], [0, 1], Extrapolation.CLAMP);
+    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.buffer.demoted.scale, SLOT_POSES.buffer.rest.scale, SLOT_POSES.buffer.promoted.scale]);
+    const y = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.buffer.demoted.ty, SLOT_POSES.buffer.rest.ty, SLOT_POSES.buffer.promoted.ty]);
+    const o = interpolate(deckShift.value, [-1, 0, 1], [0, 0, 1], Extrapolation.CLAMP);
     return { transform: [{ scale: s }, { translateY: y }], opacity: o };
   });
 
-  if (!topSpot) {
-    return (
-      <View style={styles.emptyWrap}>
-        <Text style={styles.emptyText}>{t.spots.nearbySpots}</Text>
-        <Pressable
-          onPress={() => setIndex(0)}
-          style={({ pressed }) => [styles.resetBtn, pressed && { opacity: 0.7 }]}
-        >
-          <Text style={styles.resetText}>{t.tasks.showFewer}</Text>
-        </Pressable>
-      </View>
-    );
-  }
+  // Defensive only — the parent collapses empty categories so an
+  // empty deck is never actually rendered, and swipes cycle so we
+  // never exhaust it.
+  if (!topSpot) return null;
 
   return (
     <View style={styles.wrap}>
@@ -471,25 +481,5 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#777',
     fontWeight: '600',
-  },
-  emptyWrap: {
-    alignItems: 'center',
-    paddingVertical: 30,
-    gap: 12,
-  },
-  emptyText: {
-    fontSize: 14,
-    color: '#777',
-  },
-  resetBtn: {
-    paddingHorizontal: 18,
-    paddingVertical: 10,
-    backgroundColor: '#1a1a1a',
-    borderRadius: 999,
-  },
-  resetText: {
-    color: '#fff',
-    fontWeight: '700',
-    fontSize: 13,
   },
 });
