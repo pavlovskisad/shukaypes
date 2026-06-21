@@ -51,17 +51,18 @@ export const HERO = {
 } as const;
 
 export const INLINE_ICON = {
-  cta: 34,            // primary modal-button icon next to label
-                      // ("i've seen them" eye, "start search" lens,
-                      // "ходімо сюди" walk). Sized ~2.3× the
-                      // surrounding 15px button label so the icon
-                      // carries glance-weight, not just punctuation.
+  cta: 22,            // primary modal-button icon next to label.
+                      // Buttons themselves are tight pills (10×18
+                      // padding, 13-14px text), so the icon sits
+                      // ~1.6× the label — visible without dominating.
+                      // Modelled on the "let's go here →" pill that
+                      // appears at the end of a sniff hold.
   secondary: 24,      // secondary action icon
   badge: 22,          // status badge icon (urgent/searching crown)
   stat: 27,           // stat-row label icon in profile
-  about: 44,          // about-modal row icons (no chip anymore, bare
-                      // icon next to 15px title — ~2.9× ratio matches
-                      // the spots-screen card rows).
+  about: 44,          // about-modal row icons (no chip, bare icon
+                      // next to 15px title — ~2.9× ratio).
+  navGlyph: 22,       // close/prev/next on modal overlays.
 } as const;
 
 export const MAP_MARKER = {

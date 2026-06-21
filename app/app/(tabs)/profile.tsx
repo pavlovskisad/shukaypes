@@ -256,7 +256,17 @@ const styles = StyleSheet.create({
     flex: 1,
     paddingVertical: 10,
     borderRadius: 16,
-    backgroundColor: '#f0f0f0',
+    // White-with-shadow chip (same family as spots rows + modal
+    // category labels) for the unselected state. Active state
+    // below swaps to dark fill so the selection still reads.
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.08,
+    shadowRadius: 6,
+    elevation: 1,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.04)',
     alignItems: 'center',
   },
   langPillActive: {

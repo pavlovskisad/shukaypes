@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -5,6 +6,35 @@ import { Z } from '../../constants/z';
 import { INLINE_ICON, MAP_MARKER } from '../../constants/sizing';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
+
+// Full-width pill CTAs — same recipe as the LostDog action buttons,
+// just width:100% because SpotModal stacks them vertically rather
+// than splitting flex:1 side by side.
+const MODAL_PILL_FULL_BASE: CSSProperties = {
+  width: '100%',
+  padding: '10px 18px',
+  borderRadius: 999,
+  border: 'none',
+  fontFamily: SYSTEM_FONT,
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
+};
+const MODAL_PILL_FULL_DARK: CSSProperties = {
+  ...MODAL_PILL_FULL_BASE,
+  background: '#1a1a1a',
+  color: '#ffffff',
+};
+const MODAL_PILL_FULL_BLUE: CSSProperties = {
+  ...MODAL_PILL_FULL_BASE,
+  background: 'rgb(0,60,255)',
+  color: '#ffffff',
+};
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -103,7 +133,11 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         >
           <span
             style={{
-              background: '#f0f0f0',
+              // White chip with a soft shadow instead of a grey
+              // fill — separates from the white modal bg via depth
+              // (matches the same chip treatment in spots screen
+              // rows + hero icons).
+              background: '#ffffff',
               color: '#555',
               borderRadius: 12,
               padding: '4px 10px',
@@ -111,6 +145,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               fontWeight: 600,
               letterSpacing: 0.3,
               textTransform: 'lowercase',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+              border: '1px solid rgba(0,0,0,0.04)',
             }}
           >
             {categoryLabel}
@@ -137,7 +173,11 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               width: 68,
               height: 68,
               borderRadius: '50%',
-              background: '#f0f0f0',
+              // White with a soft shadow — was a grey disc that
+              // visually competed with the white modal bg.
+              background: '#ffffff',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
+              border: '1px solid rgba(0,0,0,0.04)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -177,24 +217,13 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           </div>
         </div>
 
+        {/* Two tight pill CTAs — same style + size family as the
+            LostDog modal so modal buttons land consistently across
+            the app. Stacked (full width) here because the SpotModal
+            uses width-100 buttons; LostDog uses two side-by-side. */}
         <button
           onClick={() => onWalkHere?.(renderSpot, 'oneway')}
-          style={{
-            width: '100%',
-            background: '#1a1a1a',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: 16,
-            padding: '14px 18px',
-            fontFamily: SYSTEM_FONT,
-            fontSize: 18,
-            fontWeight: 700,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-          }}
+          style={MODAL_PILL_FULL_DARK}
         >
           <Icon name="walk" size={INLINE_ICON.cta} inverted />
           <span>{t.modals.spot.walkHere}</span>
@@ -202,27 +231,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
 
         <button
           onClick={() => onWalkHere?.(renderSpot, 'roundtrip')}
-          style={{
-            width: '100%',
-            // Solid brand blue + white text/icon — matches the
-            // LostDog modal's "start search" button so blue is a
-            // single coherent affordance across modals (not the
-            // pale outline tint it used to be).
-            background: 'rgb(0,60,255)',
-            color: '#ffffff',
-            border: 'none',
-            borderRadius: 16,
-            padding: '12px 18px',
-            marginTop: 10,
-            fontFamily: SYSTEM_FONT,
-            fontSize: 16,
-            fontWeight: 700,
-            cursor: 'pointer',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            gap: 10,
-          }}
+          style={{ ...MODAL_PILL_FULL_BLUE, marginTop: 10 }}
         >
           <Icon name="roundtrip" size={INLINE_ICON.cta} inverted />
           <span>{t.modals.spot.roundtrip}</span>

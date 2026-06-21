@@ -316,14 +316,19 @@ export function SniffPress() {
       pressLatLngRef.current = ll;
       startPxRef.current = { x: e.point.x, y: e.point.y };
       startTRef.current = performance.now();
-      lockMapGestures();
-      // Delay the "sniffing…" bubble so quick taps + the first frames
-      // of a pan don't flash a bubble. If the press is still alive
-      // after the grace window, show it.
+      // NB: dragPan stays ENABLED during the 0-200ms "is this a
+      // press or a swipe?" window. If the user is swiping, MapLibre's
+      // dragstart fires and our cancelHold listener bows out cleanly.
+      // Only once the bubble timer fires (= commitment threshold)
+      // do we lock dragPan so the visualisation isn't pulled out
+      // from under the user mid-hold.
       clearBubbleTimer();
       bubbleTimerRef.current = setTimeout(() => {
         bubbleTimerRef.current = null;
-        if (pressLatLngRef.current) setSniffingAt(ll);
+        if (pressLatLngRef.current) {
+          setSniffingAt(ll);
+          lockMapGestures();
+        }
       }, SNIFFING_BUBBLE_DELAY_MS);
 
       const tick = (t: number) => {

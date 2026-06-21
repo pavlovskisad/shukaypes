@@ -42,41 +42,73 @@ const PHOTO_HEIGHT_PX = 300;
 // landed right under the HUD instead of leaving a map gap.
 const TOP_RESERVE_PX = 90;
 
-// Shared style for the modal's three nav buttons (close X + prev/next
-// chevrons). One size (40×40), one background, one centering recipe —
-// dropping lineHeight in favour of flex so the unicode glyphs sit
-// truly centred regardless of font metrics. The two prev/next
-// variants merge `left`/`right` over the base via spread.
-const NAV_BUTTON_BASE: CSSProperties = {
-  width: 40,
-  height: 40,
-  borderRadius: 20,
+// Modal action button — a tight pill, sized after the "let's go
+// here →" CTA that appears at the end of a sniff hold (the user
+// pointed at it as the reference look). 10×18 padding, 13px text,
+// full pill radius, subtle shadow. Variants compose via spread.
+const MODAL_PILL_BUTTON_BASE: CSSProperties = {
+  flex: 1,
+  padding: '10px 18px',
+  borderRadius: 999,
   border: 'none',
-  background: 'rgba(0,0,0,0.55)',
+  fontFamily: SYSTEM_FONT,
+  fontSize: 13,
+  fontWeight: 700,
+  cursor: 'pointer',
+  whiteSpace: 'nowrap',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  gap: 8,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
+};
+const MODAL_PILL_BUTTON_DARK: CSSProperties = {
+  background: '#1a1a1a',
   color: '#ffffff',
+};
+const MODAL_PILL_BUTTON_BLUE: CSSProperties = {
+  background: 'rgb(0,60,255)',
+  color: '#ffffff',
+};
+const MODAL_PILL_BUTTON_DISABLED: CSSProperties = {
+  background: '#e8e8f2',
+  color: '#777',
+};
+
+// Modal photo-overlay nav buttons (close X + prev/next chevrons).
+// White frosted glass with a dark glyph so they sit lightly over
+// the photo instead of stamping a dark disc on top of it. Shared
+// across all three so size/feel stays consistent.
+const NAV_BUTTON_BASE: CSSProperties = {
+  width: 36,
+  height: 36,
+  borderRadius: 18,
+  border: '1px solid rgba(0,0,0,0.06)',
+  background: 'rgba(255,255,255,0.92)',
+  backdropFilter: 'blur(8px) saturate(160%)',
+  WebkitBackdropFilter: 'blur(8px) saturate(160%)',
+  color: '#1a1a1a',
   padding: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   cursor: 'pointer',
-  boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
 };
 const NAV_BUTTON_STYLE_CLOSE: CSSProperties = {
   ...NAV_BUTTON_BASE,
   position: 'absolute',
   top: 10,
   right: 10,
-  // Slightly larger glyph for the close × since its visual weight is
-  // narrower than the chevrons.
-  fontSize: 26,
-  lineHeight: 1,
 };
 const NAV_BUTTON_STYLE_SIDE: CSSProperties = {
   ...NAV_BUTTON_BASE,
   position: 'absolute',
   top: '50%',
   transform: 'translateY(-50%)',
-  fontSize: 28,
+  // Chevrons use unicode so we keep font-driven; size lets the
+  // glyph fill the disc with the flex-center recipe.
+  fontSize: 24,
   lineHeight: 1,
 };
 
@@ -348,7 +380,7 @@ export function LostDogModal({
             aria-label={t.modals.common.close}
             style={NAV_BUTTON_STYLE_CLOSE}
           >
-            ×
+            <Icon name="close" size={INLINE_ICON.navGlyph} />
           </button>
         </div>
 
@@ -394,57 +426,24 @@ export function LostDogModal({
               point. Both share equal width via flex: 1; primary
               (i've seen them) keeps the dark fill, secondary (start
               search) the outlined treatment. */}
-          <div style={{ display: 'flex', gap: 8 }}>
+          {/* marginBottom keeps the actions from sitting flush
+              against the modal's bottom edge — felt cramped without
+              a breather strip between the CTAs and the sheet rim. */}
+          <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
             <button
               onClick={() => onReportSighting?.(renderDog)}
-              style={{
-                flex: 1,
-                background: '#1a1a1a',
-                color: '#ffffff',
-                border: 'none',
-                borderRadius: 22,
-                padding: '11px 14px',
-                fontFamily: SYSTEM_FONT,
-                fontSize: 15,
-                fontWeight: 700,
-                cursor: 'pointer',
-                whiteSpace: 'nowrap',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
-              }}
+              style={{ ...MODAL_PILL_BUTTON_BASE, ...MODAL_PILL_BUTTON_DARK }}
             >
-              {/* `inverted` flips the eye icon to white so it shows
-                  on the dark button bg — was rendering as black-on-
-                  near-black and invisible. */}
               <Icon name="eyes" size={INLINE_ICON.cta} inverted />
               {t.modals.lostDog.iveSeen}
             </button>
-
-            {/* Solid blue when active (was outline / pale tint that
-                read weak next to the dark primary button). White
-                text + white icon. Muted variant stays the soft tint
-                so the disabled state reads inactive. */}
             <button
               onClick={() => onStartSearch?.(renderDog)}
               disabled={searchActive}
               style={{
-                flex: 1,
-                background: searchActive ? '#e8e8f2' : 'rgb(0,60,255)',
-                color: searchActive ? '#777' : '#ffffff',
-                border: searchActive ? '1px solid #d4d4dc' : 'none',
-                borderRadius: 22,
-                padding: '11px 14px',
-                fontFamily: SYSTEM_FONT,
-                fontSize: 15,
-                fontWeight: 700,
+                ...MODAL_PILL_BUTTON_BASE,
+                ...(searchActive ? MODAL_PILL_BUTTON_DISABLED : MODAL_PILL_BUTTON_BLUE),
                 cursor: searchActive ? 'default' : 'pointer',
-                whiteSpace: 'nowrap',
-                display: 'inline-flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                gap: 8,
               }}
             >
               <Icon name="search" size={INLINE_ICON.cta} inverted={!searchActive} />

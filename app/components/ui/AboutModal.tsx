@@ -103,7 +103,10 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         >
           <span
             style={{
-              background: '#f0f0f0',
+              // Match the spot-modal category chip: white +
+              // shadow + hairline border. Reads as a "tag" on
+              // the white sheet without the grey muddiness.
+              background: '#ffffff',
               color: '#555',
               borderRadius: 12,
               padding: '4px 10px',
@@ -111,6 +114,8 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               fontWeight: 600,
               letterSpacing: 0.3,
               textTransform: 'lowercase',
+              boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+              border: '1px solid rgba(0,0,0,0.04)',
             }}
           >
             {t.modals.about.badge}
