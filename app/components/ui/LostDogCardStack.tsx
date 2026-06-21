@@ -22,6 +22,7 @@ import Animated, {
   runOnJS,
   interpolate,
   Extrapolation,
+  Easing,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import type { NearbyLostDog } from '../../services/api';
@@ -34,6 +35,17 @@ const CARD_H = 420;
 const SWIPE_COMMIT_PX = 100;
 const VELOCITY_COMMIT = 600;
 const TAP_TRAVEL_MAX = 6;
+
+// Animation timings. Bumped from the first prototype's snappier
+// 220ms to a calmer 320-380ms range — the user wanted "smoother /
+// slower" through the deck and the cubic ease keeps it from
+// feeling sluggish (most of the motion lands quickly, the tail
+// glides into place).
+const FLY_OFF_MS = 320;
+const SLIDE_IN_MS = 380;
+const REVEAL_MS = 280;
+const FLY_EASE = Easing.out(Easing.cubic);
+const SLIDE_EASE = Easing.out(Easing.cubic);
 
 interface Props {
   dogs: NearbyLostDog[];
@@ -110,7 +122,7 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
           // it back to centre — the previous dog "swings in" from
           // the left, mirroring the "going back" intent.
           tx.value = -(CARD_W + 100);
-          tx.value = withTiming(0, { duration: 260 });
+          tx.value = withTiming(0, { duration: SLIDE_IN_MS, easing: SLIDE_EASE });
         } else {
           // FORWARD: deck shift already played during the pan, snap
           // tx back to centre.
@@ -190,11 +202,20 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
         // Forward commit: keep reveal at 1 through the fly-off so
         // the deck stays revealed under the leaving top card; it
         // snaps back to 0 inside `advance` once index has moved.
-        if (isForward) revealProgress.value = withTiming(1, { duration: 200 });
-        tx.value = withTiming(dir * (CARD_W + 100), { duration: 220 }, () => {
-          runOnJS(advance)(delta);
-        });
-        ty.value = withTiming(ty.value + 40, { duration: 220 });
+        if (isForward) {
+          revealProgress.value = withTiming(1, {
+            duration: REVEAL_MS,
+            easing: SLIDE_EASE,
+          });
+        }
+        tx.value = withTiming(
+          dir * (CARD_W + 100),
+          { duration: FLY_OFF_MS, easing: FLY_EASE },
+          () => {
+            runOnJS(advance)(delta);
+          },
+        );
+        ty.value = withTiming(ty.value + 40, { duration: FLY_OFF_MS, easing: FLY_EASE });
       } else {
         // No commit — spring back, restore deck cover.
         tx.value = withSpring(0);
@@ -232,16 +253,22 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     return Math.min(Math.abs(t) / CARD_W, 1);
   }
 
-  // Deck-card grey-cover opacity. Held at REST_OVERLAY at rest so
-  // middle/bottom/ghost read as soft grey placeholders (the user
-  // sees there's MORE coming but not what). Pulls open with the
-  // forward-drag reveal — small initial delay (0 → 0.25 of progress)
-  // before the fade kicks in so it doesn't feel instant, then a
-  // smooth roll to 0.
-  const REST_OVERLAY = 0.88;
+  // Deck-card grey-cover opacity. At rest the cover is FULLY opaque
+  // so the deck slots read as plain grey rectangles — no peek of
+  // the real photos behind. Critical for the backward-swipe case:
+  // when the index decrements, the deck slots' content shifts down
+  // (new middle = old top, etc.) — if the cover were translucent
+  // we'd briefly see the OLD top photo through the new middle.
+  // Opaque cover hides it entirely.
+  //
+  // Reveal curve: longer initial delay (0 → 0.35 of progress holds
+  // at full opacity) so the cover doesn't move with the user's
+  // first few pixels of drag; then a smooth roll to 0 over the
+  // remainder. Feels deliberate.
+  const REST_OVERLAY = 1;
   function overlayOpacity(reveal: number): number {
     'worklet';
-    return interpolate(reveal, [0, 0.25, 1], [REST_OVERLAY, REST_OVERLAY, 0], Extrapolation.CLAMP);
+    return interpolate(reveal, [0, 0.35, 1], [REST_OVERLAY, REST_OVERLAY, 0], Extrapolation.CLAMP);
   }
 
   // Second card pops forward as the top card flies away. Tighter
