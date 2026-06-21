@@ -60,10 +60,14 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
   // URL; Image.prefetch hands it the URL and the decoder picks up.
   useEffect(() => {
     const upcoming = [
+      // Forward — what's next in the deck.
       dogs[index + 1],
       dogs[index + 2],
       dogs[index + 3],
       dogs[index + 4],
+      // Backward — already-visited dogs the user might swipe back to.
+      dogs[index - 1],
+      dogs[index - 2],
     ];
     upcoming.forEach((d) => {
       if (d?.photoUrl) {
@@ -73,6 +77,15 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
       }
     });
   }, [index, dogs]);
+
+  // Reveal-after animation for middle / bottom on a BACKWARD commit.
+  // Background: those slots are pre-rendered with the forward-next
+  // dogs; we fade them out during a backward drag so the wrong
+  // photos don't flash. After the index decrements (delta < 0) the
+  // slot content shifts down — new middle is the old top, etc. —
+  // and we fade them BACK in so they don't snap to opaque with the
+  // new content. Default 1 so the forward path is untouched.
+  const revealAfter = useSharedValue(1);
 
   const advance = useCallback(
     (delta: number) => {
@@ -86,9 +99,13 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
       requestAnimationFrame(() => {
         tx.value = 0;
         ty.value = 0;
+        if (delta < 0) {
+          revealAfter.value = 0;
+          revealAfter.value = withTiming(1, { duration: 220 });
+        }
       });
     },
-    [tx, ty],
+    [tx, ty, revealAfter],
   );
 
   // Index mirrored as a shared value so the worklet can read it
@@ -187,6 +204,24 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     return Math.min(Math.abs(t) / CARD_W, 1);
   }
 
+  // Opacity for the middle / bottom slots through the gesture:
+  //   - forward drag (tx < 0): stay fully visible (the slots are
+  //     promoting up; that's the deck animation).
+  //   - backward drag (tx > 0): fade out — the content here is the
+  //     forward-next dog, which would flash incorrectly while the
+  //     user is going BACK.
+  //   - at rest, after a forward commit: 1 (default).
+  //   - after a backward commit: revealAfter ramps 0 → 1 (220ms),
+  //     so the now-shifted-down content fades in smoothly instead
+  //     of popping back to opaque.
+  function deckOpacity(t: number, reveal: number): number {
+    'worklet';
+    if (t > 4) {
+      return interpolate(t, [4, 40], [1, 0], Extrapolation.CLAMP);
+    }
+    return reveal;
+  }
+
   // Second card pops forward as the top card flies away. Tighter
   // base scale + bigger peek so the deck reads as a deck, not a
   // single floating card.
@@ -194,7 +229,10 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     const progress = forwardProgress(tx.value);
     const scale = interpolate(progress, [0, 1], [0.92, 1], Extrapolation.CLAMP);
     const translateY = interpolate(progress, [0, 1], [22, 0], Extrapolation.CLAMP);
-    return { transform: [{ scale }, { translateY }] };
+    return {
+      transform: [{ scale }, { translateY }],
+      opacity: deckOpacity(tx.value, revealAfter.value),
+    };
   });
 
   // Third card stays mostly still; bigger offset so the third-tier
@@ -204,17 +242,26 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     const progress = forwardProgress(tx.value);
     const scale = interpolate(progress, [0, 1], [0.84, 0.92], Extrapolation.CLAMP);
     const translateY = interpolate(progress, [0, 1], [44, 22], Extrapolation.CLAMP);
-    return { transform: [{ scale }, { translateY }] };
+    return {
+      transform: [{ scale }, { translateY }],
+      opacity: deckOpacity(tx.value, revealAfter.value),
+    };
   });
 
   // Hidden ghost at index+3 — invisible at rest, fades into the
   // bottom-slot pose as the top card is dragged forward. Stays
   // invisible on backward swipes (no deck shift in that direction).
+  // After a backward commit it follows revealAfter too, so when
+  // it's now the "bottom" slot's content it fades in with the rest.
   const ghostStyle = useAnimatedStyle(() => {
     const progress = forwardProgress(tx.value);
     const scale = interpolate(progress, [0, 1], [0.76, 0.84], Extrapolation.CLAMP);
     const translateY = interpolate(progress, [0, 1], [66, 44], Extrapolation.CLAMP);
-    const opacity = interpolate(progress, [0, 1], [0, 1], Extrapolation.CLAMP);
+    // Forward-driven opacity (0 → 1) AND revealAfter ramp on
+    // backward commit so the slot's new content (was the bottom
+    // pre-advance) doesn't flash to visible.
+    const fwdOpacity = interpolate(progress, [0, 1], [0, 1], Extrapolation.CLAMP);
+    const opacity = tx.value > 4 ? 0 : Math.min(fwdOpacity, revealAfter.value);
     return { transform: [{ scale }, { translateY }], opacity };
   });
 
