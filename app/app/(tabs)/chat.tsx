@@ -28,6 +28,7 @@ import { fetchWalkingRoute } from '../../services/directions';
 import { api, type CompanionAction, type ChatNearbySpot } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
 import type { ChatMessage } from '@shukajpes/shared';
+import { useStrings } from '../../i18n/useStrings';
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 
@@ -47,6 +48,7 @@ function linkify(text: string): Array<{ kind: 'text' | 'link'; value: string }> 
 }
 
 export default function ChatScreen() {
+  const t = useStrings();
   const router = useRouter();
   const userPosition = useGameStore((s) => s.userPosition);
   const companionName = useGameStore((s) => s.companionName);
@@ -72,11 +74,11 @@ export default function ChatScreen() {
           case 'start_quest':
             await startQuest(action.args.dogId);
             router.push('/');
-            return '🔍 starting search…';
+            return `🔍 ${t.chat.startingSearch}`;
           case 'highlight_spot':
             setSelectedSpot(action.args.spotId);
             router.push('/');
-            return '📍 showing spot…';
+            return `📍 ${t.chat.showingSpot}`;
           case 'walk': {
             // Same flow the radial menu's walk leaf runs — pick a
             // destination from spots+parks via planWalk, fetch a
@@ -84,16 +86,16 @@ export default function ChatScreen() {
             // to the map so the polyline is visible.
             const { userPosition: pos, spots: ctxSpots, parks: ctxParks } =
               useGameStore.getState();
-            if (!pos) return '🚶 need your location first';
+            if (!pos) return `🚶 ${t.chat.needLocation}`;
             const candidates = buildCandidates(ctxSpots, ctxParks);
-            if (candidates.length === 0) return '🚶 no nearby spots yet';
+            if (candidates.length === 0) return `🚶 ${t.chat.noNearbySpots}`;
             const plan = planWalk({
               candidates,
               origin: pos,
               shape: action.args.shape,
               distance: action.args.distance,
             });
-            if (!plan) return '🚶 nothing at that distance';
+            if (!plan) return `🚶 ${t.chat.nothingAtDistance}`;
             const spotId = plan.primary.isSpot ? plan.primary.id : null;
             const route = await fetchWalkingRoute(pos, plan.waypoints);
             if (!route && plan.hasReturnDetour && plan.waypoints.length === 3) {
@@ -113,10 +115,10 @@ export default function ChatScreen() {
               });
               recordRecentDestination(plan.primary.id);
             } else {
-              return '🚶 couldn\'t plot that route';
+              return `🚶 ${t.chat.couldntPlotRoute}`;
             }
             router.push('/');
-            return `🚶 walking to ${plan.primary.name}`;
+            return `🚶 ${t.chat.walkingTo(plan.primary.name)}`;
           }
           case 'walk_to_spot': {
             // Companion picked a specific spot from the CONTEXT it was
@@ -124,22 +126,22 @@ export default function ChatScreen() {
             // truth that built the request), plot a real walking route
             // there, route the user to the map.
             const { userPosition: pos, spots: ctxSpots } = useGameStore.getState();
-            if (!pos) return '🚶 need your location first';
+            if (!pos) return `🚶 ${t.chat.needLocation}`;
             const target = ctxSpots.find((s) => s.id === action.args.spotId);
-            if (!target) return '🚶 lost track of that spot — try again';
+            if (!target) return `🚶 ${t.chat.lostTrackOfSpot}`;
             const waypoints =
               action.args.shape === 'roundtrip'
                 ? [pos, target.position, pos]
                 : [pos, target.position];
             const route = await fetchWalkingRoute(pos, waypoints);
-            if (!route) return '🚶 couldn\'t plot that route';
+            if (!route) return `🚶 ${t.chat.couldntPlotRoute}`;
             useGameStore.getState().setWalkRoute(route, {
               shape: action.args.shape,
               spotId: target.id,
             });
             recordRecentDestination(target.id);
             router.push('/');
-            return `🚶 walking to ${target.name}`;
+            return `🚶 ${t.chat.walkingTo(target.name)}`;
           }
           default:
             return null;
@@ -148,7 +150,7 @@ export default function ChatScreen() {
         return null;
       }
     },
-    [startQuest, setSelectedSpot, router],
+    [startQuest, setSelectedSpot, router, t],
   );
 
   useFocusEffect(
@@ -220,13 +222,13 @@ export default function ChatScreen() {
   }, [messages.length, typing]);
 
   const send = useCallback(async () => {
-    const t = draft.trim();
-    if (!t || sending) return;
+    const text = draft.trim();
+    if (!text || sending) return;
     setDraft('');
     const optimistic: ChatMessage = {
       id: `local-${Date.now()}`,
       role: 'user',
-      content: t,
+      content: text,
       mode: 'active',
       createdAt: new Date().toISOString(),
     };
@@ -235,7 +237,7 @@ export default function ChatScreen() {
     setTyping(true);
     try {
       const res = await api.sendChat(
-        t,
+        text,
         userPosition,
         buildSpotsPayload(),
         false,
@@ -276,7 +278,7 @@ export default function ChatScreen() {
         {
           id: `err-${Date.now()}`,
           role: 'assistant',
-          content: `*sniff sniff* — can't reach the walk right now (${(err as Error).message})`,
+          content: t.chat.cantReachWalk((err as Error).message),
           mode: 'active',
           createdAt: new Date().toISOString(),
         },
@@ -285,7 +287,7 @@ export default function ChatScreen() {
       setSending(false);
       setTyping(false);
     }
-  }, [draft, sending, userPosition, dispatchAction]);
+  }, [draft, sending, userPosition, dispatchAction, t]);
 
   const header = useMemo(() => companionName || 'шукайпес', [companionName]);
 
@@ -365,7 +367,7 @@ export default function ChatScreen() {
               style={styles.input}
               value={draft}
               onChangeText={setDraft}
-              placeholder={`talk to ${header}…`}
+              placeholder={t.chat.inputPlaceholder(header)}
               placeholderTextColor="#999"
               onSubmitEditing={send}
               editable={!sending}

@@ -10,6 +10,7 @@ import { distanceMeters } from '../../utils/geo';
 import { LostDogModal } from '../../components/ui/LostDogModal';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
+import { useStrings } from '../../i18n/useStrings';
 
 interface QuestHistoryRow {
   id: string;
@@ -55,29 +56,32 @@ interface TaskRow {
   // string fallback for tasks we haven't drawn yet).
   iconName?: IconName;
   icon?: string;
-  label: string;
+  // Key into t.tasks.items so the row label is localised at render
+  // time without dragging the strings table into a top-level const.
+  labelKey: 'collectTokens' | 'feedBones' | 'checkLostPets' | 'visitSpot' | 'reportSighting';
   target: number;
 }
 
 const TASKS: TaskRow[] = [
-  { key: 'tokens', iconName: 'paws', label: 'collect 10 tokens', target: DAILY_TARGETS.tokens },
-  { key: 'bones', iconName: 'bone', label: 'feed 3 bones', target: DAILY_TARGETS.bones },
+  { key: 'tokens', iconName: 'paws', labelKey: 'collectTokens', target: DAILY_TARGETS.tokens },
+  { key: 'bones', iconName: 'bone', labelKey: 'feedBones', target: DAILY_TARGETS.bones },
   {
     key: 'lostPetChecks',
     iconName: 'search',
-    label: 'check 2 lost pets',
+    labelKey: 'checkLostPets',
     target: DAILY_TARGETS.lostPetChecks,
   },
-  { key: 'spotVisits', iconName: 'cafe', label: 'visit a spot', target: DAILY_TARGETS.spotVisits },
+  { key: 'spotVisits', iconName: 'cafe', labelKey: 'visitSpot', target: DAILY_TARGETS.spotVisits },
   {
     key: 'sightings',
     iconName: 'eyes',
-    label: "report you've seen a pet",
+    labelKey: 'reportSighting',
     target: DAILY_TARGETS.sightings,
   },
 ];
 
 export default function TasksScreen() {
+  const t = useStrings();
   const router = useRouter();
   const dailyTasks = useGameStore((s) => s.dailyTasks);
   const refresh = useGameStore((s) => s.refreshDailyTasks);
@@ -192,7 +196,7 @@ export default function TasksScreen() {
     }, []),
   );
 
-  const doneCount = TASKS.filter((t) => dailyTasks[t.key] >= t.target).length;
+  const doneCount = TASKS.filter((row) => dailyTasks[row.key] >= row.target).length;
   const summaryProgress = doneCount / TASKS.length;
 
   return (
@@ -201,12 +205,12 @@ export default function TasksScreen() {
         {/* Summary card mirrors the Profile companion card — large
             headline number, slim progress bar underneath. */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>daily tasks</Text>
+          <Text style={styles.cardTitle}>{t.tasks.dailyTasks}</Text>
           <Text style={styles.summaryNum}>
             {doneCount}
             <Text style={styles.summaryNumDim}> / {TASKS.length}</Text>
           </Text>
-          <Text style={styles.summaryLabel}>completed today</Text>
+          <Text style={styles.summaryLabel}>{t.tasks.completedToday}</Text>
           <View style={styles.summaryBarTrack}>
             <View
               style={[
@@ -221,26 +225,26 @@ export default function TasksScreen() {
 
         {/* All tasks live in one card, hairline-divided rows. */}
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>today's quests</Text>
-          {TASKS.map((t, i) => {
-            const value = Math.min(dailyTasks[t.key], t.target);
-            const progress = Math.min(value / t.target, 1);
-            const complete = value >= t.target;
+          <Text style={styles.cardTitle}>{t.tasks.todaysQuests}</Text>
+          {TASKS.map((row, i) => {
+            const value = Math.min(dailyTasks[row.key], row.target);
+            const progress = Math.min(value / row.target, 1);
+            const complete = value >= row.target;
             return (
-              <View key={t.key} style={[styles.task, i > 0 && styles.taskDivider]}>
+              <View key={row.key} style={[styles.task, i > 0 && styles.taskDivider]}>
                 <View style={styles.row}>
-                  {t.iconName ? (
+                  {row.iconName ? (
                     <View style={styles.iconWrap}>
-                      <Icon name={t.iconName} size={34} />
+                      <Icon name={row.iconName} size={34} />
                     </View>
                   ) : (
-                    <Text style={styles.icon}>{t.icon}</Text>
+                    <Text style={styles.icon}>{row.icon}</Text>
                   )}
                   <Text style={[styles.label, complete && styles.labelDone]}>
-                    {t.label}
+                    {t.tasks.items[row.labelKey]}
                   </Text>
                   <Text style={[styles.count, complete && styles.countDone]}>
-                    {value}/{t.target}
+                    {value}/{row.target}
                     {complete ? ' ✓' : ''}
                   </Text>
                 </View>
@@ -271,7 +275,7 @@ export default function TasksScreen() {
             view. */}
         {sortedDogs.length > 0 ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>lost pets nearby</Text>
+            <Text style={styles.cardTitle}>{t.tasks.lostPetsNearby}</Text>
             {visibleDogs.map((d, i) => {
               const distLabel = formatDistanceToZone(userPos, d);
               const urgent = d.urgency === 'urgent';
@@ -306,7 +310,7 @@ export default function TasksScreen() {
                           urgent ? styles.urgencyUrgent : styles.urgencyMedium,
                         ]}
                       >
-                        {urgent ? 'urgent' : 'searching'}
+                        {urgent ? t.tasks.badgeUrgent : t.tasks.badgeSearching}
                       </Text>
                     </View>
                     <Text style={styles.petMeta}>
@@ -326,7 +330,7 @@ export default function TasksScreen() {
                   pressed && { opacity: 0.6 },
                 ]}
               >
-                <Text style={styles.moreLabel}>+ {hiddenCount} more</Text>
+                <Text style={styles.moreLabel}>{t.tasks.moreCount(hiddenCount)}</Text>
               </Pressable>
             ) : null}
             {showAllPets && restDogs.length > 0 ? (
@@ -338,7 +342,7 @@ export default function TasksScreen() {
                   pressed && { opacity: 0.6 },
                 ]}
               >
-                <Text style={styles.moreLabel}>show fewer</Text>
+                <Text style={styles.moreLabel}>{t.tasks.showFewer}</Text>
               </Pressable>
             ) : null}
           </View>
@@ -356,7 +360,7 @@ export default function TasksScreen() {
                 pressed && { opacity: 0.7 },
               ]}
             >
-              <Text style={styles.cardTitle}>past searches</Text>
+              <Text style={styles.cardTitle}>{t.tasks.pastSearches}</Text>
               <View style={styles.cardHeaderRight}>
                 <Text style={styles.cardHeaderCount}>{history.length}</Text>
                 <Text style={styles.cardHeaderChevron}>
@@ -373,10 +377,10 @@ export default function TasksScreen() {
                     <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
                     <View style={styles.historyBody}>
                       <Text style={styles.historyName} numberOfLines={1}>
-                        {q.dogName ?? 'unknown pet'}
+                        {q.dogName ?? t.tasks.unknownPet}
                       </Text>
                       <Text style={styles.historyMeta}>
-                        {q.status === 'completed' ? 'finished' : 'abandoned'} ·{' '}
+                        {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
                         {relativeWhen(q.endedAt)}
                         {q.status === 'completed' ? ` · +${q.rewardPoints}pts` : ''}
                       </Text>
@@ -393,7 +397,7 @@ export default function TasksScreen() {
         ) : null}
 
         <Text style={styles.footer}>
-          resets at midnight · progress synced to your account
+          {t.tasks.footer}
         </Text>
       </ScrollView>
 

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -9,6 +9,8 @@ import { useGameStore } from '../../stores/gameStore';
 import { api } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import { Icon } from '../../components/ui/Icon';
+import { useStrings } from '../../i18n/useStrings';
+import { useLangStore } from '../../stores/langStore';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
 // aggregate counts from /profile/me on focus, with the live game
@@ -60,6 +62,9 @@ function StatRow({ label, value }: { label: string; value: string | number }) {
 }
 
 export default function ProfileScreen() {
+  const t = useStrings();
+  const lang = useLangStore((s) => s.lang);
+  const setLang = useLangStore((s) => s.setLang);
   const companionName = useGameStore((s) => s.companionName);
   const [data, setData] = useState<ProfileData | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -122,11 +127,11 @@ export default function ProfileScreen() {
           {sceneActive ? <ProfileDogScene /> : <View style={styles.scenePlaceholder} />}
           <Text style={styles.companionName}>{data?.companion.name ?? companionName}</Text>
           <Text style={styles.companionMeta}>
-            level {data?.companion.level ?? 1}
+            {t.profile.level(data?.companion.level ?? 1)}
             {data && data.companion.level < data.companion.maxLevel
-              ? ` · ${data.companion.xpInLevel} / ${data.companion.xpForNextLevel} xp`
+              ? ` · ${t.profile.xpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)}`
               : data?.companion.level === data?.companion.maxLevel
-                ? ' · max'
+                ? ` · ${t.profile.max}`
                 : ''}
           </Text>
           {data ? (
@@ -134,8 +139,8 @@ export default function ProfileScreen() {
               style={styles.xpBarTrack}
               accessibilityLabel={
                 data.companion.level >= data.companion.maxLevel
-                  ? 'max level'
-                  : `${data.companion.xpInLevel} of ${data.companion.xpForNextLevel} experience to next level`
+                  ? t.profile.a11yMaxLevel
+                  : t.profile.a11yXpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)
               }
             >
               <View
@@ -175,22 +180,59 @@ export default function ProfileScreen() {
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>walks together</Text>
-          <StatRow label="days played" value={data?.stats.daysPlayed ?? '—'} />
+          <Text style={styles.cardTitle}>{t.profile.stats.walksTogether}</Text>
+          <StatRow label={t.profile.stats.daysPlayed} value={data?.stats.daysPlayed ?? '—'} />
           <StatRow
-            label="distance walked"
+            label={t.profile.stats.distanceWalked}
             value={data ? formatDistance(data.user.totalDistanceMeters) : '—'}
           />
-          <StatRow label="paws collected" value={data?.stats.pawsCollected ?? '—'} />
-          <StatRow label="bones eaten" value={data?.stats.bonesEaten ?? '—'} />
-          <StatRow label="points" value={data?.user.points ?? '—'} />
+          <StatRow label={t.profile.stats.pawsCollected} value={data?.stats.pawsCollected ?? '—'} />
+          <StatRow label={t.profile.stats.bonesEaten} value={data?.stats.bonesEaten ?? '—'} />
+          <StatRow label={t.profile.stats.points} value={data?.user.points ?? '—'} />
         </View>
 
         <View style={styles.card}>
-          <Text style={styles.cardTitle}>helping pets</Text>
-          <StatRow label="pets searched" value={data?.stats.petsSearched ?? '—'} />
-          <StatRow label="searches completed" value={data?.stats.questsCompleted ?? '—'} />
-          <StatRow label="sightings reported" value={data?.stats.sightingsReported ?? '—'} />
+          <Text style={styles.cardTitle}>{t.profile.stats.helpingPets}</Text>
+          <StatRow label={t.profile.stats.petsSearched} value={data?.stats.petsSearched ?? '—'} />
+          <StatRow label={t.profile.stats.searchesCompleted} value={data?.stats.questsCompleted ?? '—'} />
+          <StatRow label={t.profile.stats.sightingsReported} value={data?.stats.sightingsReported ?? '—'} />
+        </View>
+
+        {/* Language toggle. Two pill buttons in a single card row,
+            mirrors the StatusBar / SpotsTogglePill family. Default is
+            UK; tap EN to flip. Persists to localStorage via langStore. */}
+        <View style={styles.card}>
+          <Text style={styles.cardTitle}>{t.profile.language.label}</Text>
+          <View style={styles.langRow}>
+            <Pressable
+              onPress={() => setLang('uk')}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: lang === 'uk' }}
+              style={({ pressed }) => [
+                styles.langPill,
+                lang === 'uk' && styles.langPillActive,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={[styles.langPillText, lang === 'uk' && styles.langPillTextActive]}>
+                {t.profile.language.uk}
+              </Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setLang('en')}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: lang === 'en' }}
+              style={({ pressed }) => [
+                styles.langPill,
+                lang === 'en' && styles.langPillActive,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={[styles.langPillText, lang === 'en' && styles.langPillTextActive]}>
+                {t.profile.language.en}
+              </Text>
+            </Pressable>
+          </View>
         </View>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -203,6 +245,30 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.greyBg,
+  },
+  langRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginTop: 8,
+  },
+  langPill: {
+    flex: 1,
+    paddingVertical: 10,
+    borderRadius: 16,
+    backgroundColor: '#f0f0f0',
+    alignItems: 'center',
+  },
+  langPillActive: {
+    backgroundColor: colors.black,
+  },
+  langPillText: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: 14,
+    fontWeight: '600',
+    color: '#555',
+  },
+  langPillTextActive: {
+    color: '#fff',
   },
   content: {
     paddingHorizontal: 16,

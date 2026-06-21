@@ -14,22 +14,15 @@ import { useGameStore } from '../../stores/gameStore';
 import type { Spot, SpotCategory } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Icon, iconForCategory, type IconName } from '../../components/ui/Icon';
-
-const CATEGORY_LABEL: Record<string, string> = {
-  cafe: 'cafe',
-  restaurant: 'eat',
-  bar: 'drink',
-  pet_store: 'pet shop',
-  veterinary_care: 'vet',
-};
+import { useStrings } from '../../i18n/useStrings';
+import type { AppStrings } from '../../i18n/strings';
 
 type FilterValue = 'all' | SpotCategory;
+type FilterLabelKey = keyof AppStrings['spots']['filters'];
 
 interface FilterOption {
   value: FilterValue;
-  label: string;
-  // Either iconName for the pixel <Icon> or icon (emoji fallback).
-  // 'all' + 'cafe' don't have custom icons yet.
+  labelKey: FilterLabelKey;
   iconName?: IconName;
   icon: string;
 }
@@ -37,17 +30,19 @@ interface FilterOption {
 // Order + glyphs match VISIT_CATEGORY_ACTIONS / CATEGORY_EMOJI in
 // services/places.ts so the filter chip, the map marker, and the
 // radial menu all use the same glyph for each category. "all" is the
-// only synthetic chip and gets a neutral sparkle.
+// only synthetic chip and gets a neutral sparkle. Labels are looked
+// up per-language in t.spots.filters[labelKey] at render time.
 const FILTERS: FilterOption[] = [
-  { value: 'all', label: 'all', iconName: 'all', icon: '✨' },
-  { value: 'cafe', label: 'cafe', iconName: 'cafe', icon: '☕' },
-  { value: 'restaurant', label: 'eat', iconName: 'restaurant', icon: '🍜' },
-  { value: 'bar', label: 'drink', iconName: 'bar', icon: '🍹' },
-  { value: 'pet_store', label: 'pet shop', iconName: 'pet_store', icon: '🐶' },
-  { value: 'veterinary_care', label: 'vet', iconName: 'vet', icon: '⛑️' },
+  { value: 'all', labelKey: 'all', iconName: 'all', icon: '✨' },
+  { value: 'cafe', labelKey: 'cafe', iconName: 'cafe', icon: '☕' },
+  { value: 'restaurant', labelKey: 'eat', iconName: 'restaurant', icon: '🍜' },
+  { value: 'bar', labelKey: 'drink', iconName: 'bar', icon: '🍹' },
+  { value: 'pet_store', labelKey: 'pet_shop', iconName: 'pet_store', icon: '🐶' },
+  { value: 'veterinary_care', labelKey: 'vet', iconName: 'vet', icon: '⛑️' },
 ];
 
 export default function SpotsScreen() {
+  const t = useStrings();
   const router = useRouter();
   const userPos = useGameStore((s) => s.userPosition);
   const spots = useGameStore((s) => s.spots);
@@ -133,7 +128,7 @@ export default function SpotsScreen() {
                       muted && styles.filterChipMutedText,
                     ]}
                   >
-                    {opt.label}
+                    {t.spots.filters[opt.labelKey]}
                   </Text>
                   <Text
                     style={[
@@ -156,34 +151,32 @@ export default function SpotsScreen() {
             small card so the screen never feels empty. */}
         {!userPos ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>nearby spots</Text>
-            <Text style={styles.placeholder}>locating…</Text>
+            <Text style={styles.cardTitle}>{t.spots.nearbySpots}</Text>
+            <Text style={styles.placeholder}>{t.hud.locating}</Text>
           </View>
         ) : loading && spots.length === 0 ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>nearby spots</Text>
+            <Text style={styles.cardTitle}>{t.spots.nearbySpots}</Text>
             <ActivityIndicator style={{ marginTop: 12 }} />
           </View>
         ) : spots.length === 0 ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>nearby spots</Text>
-            <Text style={styles.placeholder}>
-              nothing nearby yet — pan the map somewhere new and i'll sniff again
-            </Text>
+            <Text style={styles.cardTitle}>{t.spots.nearbySpots}</Text>
+            <Text style={styles.placeholder}>{t.spots.emptyAll}</Text>
           </View>
         ) : visibleSpots.length === 0 ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>nearby spots</Text>
+            <Text style={styles.cardTitle}>{t.spots.nearbySpots}</Text>
             <Text style={styles.placeholder}>
-              no {CATEGORY_LABEL[filter] ?? filter} nearby — try another filter
+              {t.spots.emptyFiltered(t.modals.spot.categories[filter as keyof typeof t.modals.spot.categories] ?? filter)}
             </Text>
           </View>
         ) : (
           <View style={styles.card}>
             <Text style={styles.cardTitle}>
               {filter === 'all'
-                ? 'nearby spots'
-                : `nearby ${CATEGORY_LABEL[filter] ?? filter}`}
+                ? t.spots.nearbySpots
+                : t.spots.nearbyCategory(t.modals.spot.categories[filter as keyof typeof t.modals.spot.categories] ?? filter)}
             </Text>
             {visibleSpots.map((s, i) => (
               <Pressable
@@ -211,7 +204,7 @@ export default function SpotsScreen() {
                   </Text>
                   <View style={styles.metaRow}>
                     <Text style={styles.meta}>
-                      {CATEGORY_LABEL[s.category] ?? s.category}
+                      {t.modals.spot.categories[s.category as keyof typeof t.modals.spot.categories] ?? s.category}
                     </Text>
                     {typeof s.rating === 'number' ? (
                       <Text style={styles.meta}>· ⭐ {s.rating.toFixed(1)}</Text>

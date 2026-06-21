@@ -64,6 +64,78 @@ export interface AppStrings {
     // Compact relative-time label for "last seen": "5хв тому", "3h ago".
     ago: (value: number, unit: 'm' | 'h' | 'd') => string;
   };
+  tasks: {
+    dailyTasks: string;
+    completedToday: string;
+    todaysQuests: string;
+    items: {
+      collectTokens: string;
+      feedBones: string;
+      checkLostPets: string;
+      visitSpot: string;
+      reportSighting: string;
+    };
+    lostPetsNearby: string;
+    moreCount: (n: number) => string;
+    showFewer: string;
+    badgeSearching: string;
+    badgeUrgent: string;
+    pastSearches: string;
+    finished: string;
+    abandoned: string;
+    unknownPet: string;
+    footer: string;
+  };
+  spots: {
+    nearbySpots: string;
+    nearbyCategory: (category: string) => string;
+    emptyAll: string;
+    emptyFiltered: (category: string) => string;
+    filters: {
+      all: string;
+      cafe: string;
+      eat: string;
+      drink: string;
+      pet_shop: string;
+      vet: string;
+    };
+  };
+  profile: {
+    level: (n: number) => string;
+    max: string;
+    xpProgress: (xp: number, nextXp: number) => string;
+    a11yMaxLevel: string;
+    a11yXpProgress: (xp: number, nextXp: number) => string;
+    stats: {
+      walksTogether: string;
+      daysPlayed: string;
+      distanceWalked: string;
+      pawsCollected: string;
+      bonesEaten: string;
+      points: string;
+      helpingPets: string;
+      petsSearched: string;
+      searchesCompleted: string;
+      sightingsReported: string;
+    };
+    language: {
+      label: string;
+      uk: string;
+      en: string;
+    };
+  };
+  chat: {
+    needLocation: string;
+    noNearbySpots: string;
+    nothingAtDistance: string;
+    couldntPlotRoute: string;
+    lostTrackOfSpot: string;
+    startingSearch: string;
+    showingSpot: string;
+    walkingTo: (name: string) => string;
+    cantReachWalk: (err: string) => string;
+    inputPlaceholder: (name: string) => string;
+  };
   modals: {
     common: { close: string };
     lostDog: {
@@ -162,6 +234,78 @@ const uk: AppStrings = {
       if (unit === 'h') return `${value}год тому`;
       return `${value}д тому`;
     },
+  },
+  tasks: {
+    dailyTasks: 'щоденні квести',
+    completedToday: 'виконано сьогодні',
+    todaysQuests: 'сьогоднішні квести',
+    items: {
+      collectTokens: 'збери 10 лапок',
+      feedBones: 'погодуй 3 кістки',
+      checkLostPets: 'переглянь 2 загублених',
+      visitSpot: 'зайди в якесь місце',
+      reportSighting: 'повідом, що бачив пса',
+    },
+    lostPetsNearby: 'загублені поряд',
+    moreCount: (n) => `+ ще ${n}`,
+    showFewer: 'показати менше',
+    badgeSearching: 'шукаємо',
+    badgeUrgent: 'терміново',
+    pastSearches: 'минулі пошуки',
+    finished: 'завершено',
+    abandoned: 'припинено',
+    unknownPet: 'невідомий пес',
+    footer: 'оновиться опівночі · прогрес зберігається в твоєму акаунті',
+  },
+  spots: {
+    nearbySpots: 'місця поряд',
+    nearbyCategory: (category) => `${category} поряд`,
+    emptyAll: 'поки нічого поряд — посунь мапу в нове місце, я понюхаю ще',
+    emptyFiltered: (category) => `${category} поряд немає — спробуй інший фільтр`,
+    filters: {
+      all: 'усі',
+      cafe: "кав'ярні",
+      eat: 'поїсти',
+      drink: 'випити',
+      pet_shop: 'зоомагазин',
+      vet: 'ветеринари',
+    },
+  },
+  profile: {
+    level: (n) => `рівень ${n}`,
+    max: 'макс',
+    xpProgress: (xp, nextXp) => `${xp} / ${nextXp} досвіду`,
+    a11yMaxLevel: 'максимальний рівень',
+    a11yXpProgress: (xp, nextXp) => `${xp} з ${nextXp} досвіду до наступного рівня`,
+    stats: {
+      walksTogether: 'разом гуляли',
+      daysPlayed: 'днів разом',
+      distanceWalked: 'пройдено',
+      pawsCollected: 'лапок назбирано',
+      bonesEaten: "кісток з'їдено",
+      points: 'балів',
+      helpingPets: 'допомагаємо псам',
+      petsSearched: 'псів шукали',
+      searchesCompleted: 'пошуків завершено',
+      sightingsReported: 'повідомлень про знахідки',
+    },
+    language: {
+      label: 'мова',
+      uk: 'українська',
+      en: 'english',
+    },
+  },
+  chat: {
+    needLocation: 'потрібна твоя геолокація',
+    noNearbySpots: 'поряд поки нічого',
+    nothingAtDistance: 'на такій відстані нічого нема',
+    couldntPlotRoute: 'не зміг прокласти маршрут',
+    lostTrackOfSpot: 'загубив це місце — спробуй ще раз',
+    startingSearch: 'починаємо пошук…',
+    showingSpot: 'показую місце…',
+    walkingTo: (name) => `йдемо до ${name}`,
+    cantReachWalk: (err) => `*нюх-нюх* — зараз не дістаємось до маршруту (${err})`,
+    inputPlaceholder: (name) => `говори з ${name}…`,
   },
   modals: {
     common: { close: 'закрити' },
@@ -305,6 +449,78 @@ const en: AppStrings = {
       if (unit === 'h') return `${value}h ago`;
       return `${value}d ago`;
     },
+  },
+  tasks: {
+    dailyTasks: 'daily tasks',
+    completedToday: 'completed today',
+    todaysQuests: "today's quests",
+    items: {
+      collectTokens: 'collect 10 tokens',
+      feedBones: 'feed 3 bones',
+      checkLostPets: 'check 2 lost pets',
+      visitSpot: 'visit a spot',
+      reportSighting: "report you've seen a pet",
+    },
+    lostPetsNearby: 'lost pets nearby',
+    moreCount: (n) => `+ ${n} more`,
+    showFewer: 'show fewer',
+    badgeSearching: 'searching',
+    badgeUrgent: 'urgent',
+    pastSearches: 'past searches',
+    finished: 'finished',
+    abandoned: 'abandoned',
+    unknownPet: 'unknown pet',
+    footer: 'resets at midnight · progress synced to your account',
+  },
+  spots: {
+    nearbySpots: 'nearby spots',
+    nearbyCategory: (category) => `nearby ${category}`,
+    emptyAll: "nothing nearby yet — pan the map somewhere new and i'll sniff again",
+    emptyFiltered: (category) => `no ${category} nearby — try another filter`,
+    filters: {
+      all: 'all',
+      cafe: 'cafe',
+      eat: 'eat',
+      drink: 'drink',
+      pet_shop: 'pet shop',
+      vet: 'vet',
+    },
+  },
+  profile: {
+    level: (n) => `level ${n}`,
+    max: 'max',
+    xpProgress: (xp, nextXp) => `${xp} / ${nextXp} xp`,
+    a11yMaxLevel: 'max level',
+    a11yXpProgress: (xp, nextXp) => `${xp} of ${nextXp} experience to next level`,
+    stats: {
+      walksTogether: 'walks together',
+      daysPlayed: 'days played',
+      distanceWalked: 'distance walked',
+      pawsCollected: 'paws collected',
+      bonesEaten: 'bones eaten',
+      points: 'points',
+      helpingPets: 'helping pets',
+      petsSearched: 'pets searched',
+      searchesCompleted: 'searches completed',
+      sightingsReported: 'sightings reported',
+    },
+    language: {
+      label: 'language',
+      uk: 'українська',
+      en: 'english',
+    },
+  },
+  chat: {
+    needLocation: 'need your location first',
+    noNearbySpots: 'no nearby spots yet',
+    nothingAtDistance: 'nothing at that distance',
+    couldntPlotRoute: "couldn't plot that route",
+    lostTrackOfSpot: 'lost track of that spot — try again',
+    startingSearch: 'starting search…',
+    showingSpot: 'showing spot…',
+    walkingTo: (name) => `walking to ${name}`,
+    cantReachWalk: (err) => `*sniff sniff* — can't reach the walk right now (${err})`,
+    inputPlaceholder: (name) => `talk to ${name}…`,
   },
   modals: {
     common: { close: 'close' },
