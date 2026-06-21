@@ -51,10 +51,12 @@ export const HERO = {
 } as const;
 
 export const INLINE_ICON = {
-  cta: 28,            // primary modal-button icon next to label.
-                      // Buttons are tight pills (11×16 padding, 14px
-                      // text) — icon at 2× the label so it carries
-                      // glance-weight without overpowering.
+  cta: 34,            // primary modal-button icon next to label.
+                      // Buttons are tight pills (8×14 padding, 14px
+                      // text) — icon at ~2.4× the label so it
+                      // dominates the silhouette and the label is
+                      // a quiet confirmation rather than the visual
+                      // anchor.
   secondary: 24,      // secondary action icon
   badge: 22,          // status badge icon (urgent/searching crown)
   stat: 27,           // stat-row label icon in profile
