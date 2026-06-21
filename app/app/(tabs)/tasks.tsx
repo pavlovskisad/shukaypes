@@ -8,6 +8,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { api, type NearbyLostDog } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
 import { LostDogModal } from '../../components/ui/LostDogModal';
+import { LostDogCardStack } from '../../components/ui/LostDogCardStack';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
@@ -93,6 +94,11 @@ export default function TasksScreen() {
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
   const [historyOpen, setHistoryOpen] = useState(false);
   const [showAllPets, setShowAllPets] = useState(false);
+  // View mode for the lost-pets section — 'stack' is the new card
+  // stack prototype, 'list' is the legacy rendering. Local state for
+  // now; if the stack feels right we promote it to the default and
+  // drop the toggle.
+  const [lostView, setLostView] = useState<'stack' | 'list'>('stack');
   const [modalDogId, setModalDogId] = useState<string | null>(null);
   const [startingDogId, setStartingDogId] = useState<string | null>(null);
 
@@ -275,8 +281,51 @@ export default function TasksScreen() {
             view. */}
         {sortedDogs.length > 0 ? (
           <View style={styles.card}>
-            <Text style={styles.cardTitle}>{t.tasks.lostPetsNearby}</Text>
-            {visibleDogs.map((d, i) => {
+            {/* Header row: title on the left, view-mode toggle on the
+                right. Toggle is a prototype — local state, no persist.
+                If the stack feels right we promote it to default and
+                hide the list behind a "see all" affordance. */}
+            <View style={styles.lostHeaderRow}>
+              <Text style={styles.cardTitle}>{t.tasks.lostPetsNearby}</Text>
+              <View style={styles.viewToggle}>
+                <Pressable
+                  onPress={() => setLostView('stack')}
+                  style={[
+                    styles.viewTogglePill,
+                    lostView === 'stack' && styles.viewTogglePillActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.viewToggleText,
+                      lostView === 'stack' && styles.viewToggleTextActive,
+                    ]}
+                  >
+                    стек
+                  </Text>
+                </Pressable>
+                <Pressable
+                  onPress={() => setLostView('list')}
+                  style={[
+                    styles.viewTogglePill,
+                    lostView === 'list' && styles.viewTogglePillActive,
+                  ]}
+                >
+                  <Text
+                    style={[
+                      styles.viewToggleText,
+                      lostView === 'list' && styles.viewToggleTextActive,
+                    ]}
+                  >
+                    список
+                  </Text>
+                </Pressable>
+              </View>
+            </View>
+            {lostView === 'stack' ? (
+              <LostDogCardStack dogs={sortedDogs} onTap={(d) => setModalDogId(d.id)} />
+            ) : null}
+            {lostView === 'list' ? visibleDogs.map((d, i) => {
               const distLabel = formatDistanceToZone(userPos, d);
               const urgent = d.urgency === 'urgent';
               return (
@@ -320,8 +369,8 @@ export default function TasksScreen() {
                   </View>
                 </Pressable>
               );
-            })}
-            {hiddenCount > 0 ? (
+            }) : null}
+            {lostView === 'list' && hiddenCount > 0 ? (
               <Pressable
                 onPress={() => setShowAllPets(true)}
                 style={({ pressed }) => [
@@ -333,7 +382,7 @@ export default function TasksScreen() {
                 <Text style={styles.moreLabel}>{t.tasks.moreCount(hiddenCount)}</Text>
               </Pressable>
             ) : null}
-            {showAllPets && restDogs.length > 0 ? (
+            {lostView === 'list' && showAllPets && restDogs.length > 0 ? (
               <Pressable
                 onPress={() => setShowAllPets(false)}
                 style={({ pressed }) => [
@@ -459,6 +508,44 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     textTransform: 'lowercase',
     letterSpacing: 0.3,
+  },
+  // Title + view-mode toggle on one line. cardTitle's marginBottom
+  // moves to the row wrapper since the title's bottom margin would
+  // otherwise push the toggle out of alignment.
+  lostHeaderRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    marginBottom: 10,
+  },
+  viewToggle: {
+    flexDirection: 'row',
+    gap: 4,
+    backgroundColor: 'rgba(0,0,0,0.05)',
+    borderRadius: 999,
+    padding: 3,
+  },
+  viewTogglePill: {
+    paddingHorizontal: 12,
+    paddingVertical: 5,
+    borderRadius: 999,
+  },
+  viewTogglePillActive: {
+    backgroundColor: '#ffffff',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.1,
+    shadowRadius: 3,
+    elevation: 1,
+  },
+  viewToggleText: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#777',
+    textTransform: 'lowercase',
+  },
+  viewToggleTextActive: {
+    color: '#1a1a1a',
   },
   summaryNum: {
     fontFamily: SYSTEM_FONT,
