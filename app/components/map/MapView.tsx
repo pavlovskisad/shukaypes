@@ -36,6 +36,7 @@ import { LostDogModal } from '../ui/LostDogModal';
 import { SpotModal } from '../ui/SpotModal';
 import { getDeepLinkDogId } from '../../services/telegram';
 import { useStrings } from '../../i18n/useStrings';
+import { useLangStore } from '../../stores/langStore';
 import { fetchWalkingRoute } from '../../services/directions';
 import { PoiMarker } from './PoiMarker';
 import { PoiCluster } from './PoiCluster';
@@ -95,6 +96,7 @@ export default function MapViewWeb() {
   // from the hook here.
   const insets = useSafeAreaInsets();
   const t = useStrings();
+  const lang = useLangStore((s) => s.lang);
   const [bubble, setBubble] = useState<string | null>(null);
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
@@ -913,7 +915,7 @@ export default function MapViewWeb() {
         });
         mapRef.current = map;
         map.on('style.load', () => {
-          applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE);
+          applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
         });
         map.on('idle', () => {
           const b = map.getBounds();
@@ -982,8 +984,11 @@ export default function MapViewWeb() {
     const map = mapRef.current;
     if (!map) return;
     if (!map.isStyleLoaded()) return;
-    applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE);
-  }, [sniffMode]);
+    // Re-apply when sniff palette OR language changes — the override
+    // sets both paint colours AND text-field language, so a lang flip
+    // from the profile toggle re-localises street/place labels live.
+    applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
+  }, [sniffMode, lang]);
 
   // Off-screen lost-pet edge-chip layout. Memoised so the per-pet
   // ray-cast / spread pass doesn't re-run on every companion lerp

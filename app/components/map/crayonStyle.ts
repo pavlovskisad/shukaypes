@@ -296,6 +296,7 @@ function clear(map: maplibregl.Map, id: string, prop: string) {
 export function applyCrayonOverride(
   map: maplibregl.Map,
   palette: Palette,
+  lang: 'uk' | 'en' = 'uk',
 ): void {
   addImg(map, 'crayon-park', parkPattern(palette), 1);
   addImg(map, 'crayon-water', waterPattern(palette), 1);
@@ -475,15 +476,20 @@ export function applyCrayonOverride(
       continue;
     }
 
-    // LABEL TIERS. text-field forced to name:en (with name fallback)
-    // so labels read in English only — was bilingual "Kyiv / Київ"
-    // by default, which felt cluttered with the dog also talking in
-    // Ukrainian. Easy to revert: drop the setLayoutProperty calls
-    // for text-field below.
-    const englishLabel = ['coalesce', ['get', 'name:en'], ['get', 'name']];
+    // LABEL TIERS. text-field is locked to a single language at a
+    // time (vs the bilingual "Kyiv / Київ" the OSM tile ships) — the
+    // dog talks in one language, the map should match. UK is the
+    // Kyiv-pilot default; flip via the in-profile language toggle.
+    // Coalesce chain falls through to whatever variant the tile has
+    // so unlabelled features (or missing :uk on minor streets) still
+    // render with the bare name field.
+    const localisedLabel =
+      lang === 'uk'
+        ? ['coalesce', ['get', 'name:uk'], ['get', 'name'], ['get', 'name:en']]
+        : ['coalesce', ['get', 'name:en'], ['get', 'name']];
     if (sl === 'place' && type === 'symbol') {
       try {
-        map.setLayoutProperty(id, 'text-field', englishLabel);
+        map.setLayoutProperty(id, 'text-field', localisedLabel);
         map.setLayoutProperty(id, 'text-font', [MAP_FONT]);
         map.setPaintProperty(id, 'text-color', palette.labelText);
         map.setPaintProperty(id, 'text-halo-color', palette.labelHalo);
@@ -497,7 +503,7 @@ export function applyCrayonOverride(
     }
     if (sl === 'water_name' && type === 'symbol') {
       try {
-        map.setLayoutProperty(id, 'text-field', englishLabel);
+        map.setLayoutProperty(id, 'text-field', localisedLabel);
         map.setLayoutProperty(id, 'text-font', [MAP_FONT]);
         map.setPaintProperty(id, 'text-color', palette.labelWater);
         map.setPaintProperty(id, 'text-halo-color', palette.labelHalo);
@@ -516,7 +522,7 @@ export function applyCrayonOverride(
             setLayerZoomRange: (id: string, min: number, max: number) => void;
           }
         ).setLayerZoomRange(id, 15, 24);
-        map.setLayoutProperty(id, 'text-field', englishLabel);
+        map.setLayoutProperty(id, 'text-field', localisedLabel);
         map.setLayoutProperty(id, 'text-font', [MAP_FONT]);
         map.setPaintProperty(id, 'text-color', palette.labelStreet);
         map.setPaintProperty(id, 'text-halo-color', palette.labelHalo);
