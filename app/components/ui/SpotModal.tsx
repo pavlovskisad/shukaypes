@@ -3,6 +3,7 @@ import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { Icon, iconForCategory } from './Icon';
+import { useStrings } from '../../i18n/useStrings';
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -13,14 +14,6 @@ interface SpotModalProps {
   // could differentiate later.
   onWalkHere?: (spot: Spot, shape: 'roundtrip' | 'oneway') => void;
 }
-
-const CATEGORY_LABEL: Record<string, string> = {
-  cafe: 'cafe',
-  restaurant: 'restaurant',
-  bar: 'bar',
-  pet_store: 'pet store',
-  veterinary_care: 'vet',
-};
 
 const SHEET_ANIM_MS = 280;
 
@@ -36,6 +29,8 @@ function ratingStars(rating?: number): string {
 // close. Animates in on mount, animates out before unmounting via the
 // closing-state timeout so dismiss feels reversible.
 export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
+  const t = useStrings();
+  const CATEGORY_LABEL: Record<string, string> = t.modals.spot.categories;
   const [renderSpot, setRenderSpot] = useState<Spot | null>(spot);
   const [closing, setClosing] = useState(false);
 
@@ -129,7 +124,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               color: '#777',
               lineHeight: 1,
             }}
-            aria-label="close"
+            aria-label={t.modals.common.close}
           >
             ×
           </button>
@@ -201,7 +196,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           }}
         >
           <Icon name="walk" size={38} inverted />
-          <span>walk here</span>
+          <span>{t.modals.spot.walkHere}</span>
         </button>
 
         <button
@@ -225,7 +220,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           }}
         >
           <Icon name="roundtrip" size={34} />
-          <span>roundtrip</span>
+          <span>{t.modals.spot.roundtrip}</span>
         </button>
 
         <style>{`

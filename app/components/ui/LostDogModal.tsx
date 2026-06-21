@@ -3,6 +3,8 @@ import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { Icon, type IconName } from './Icon';
+import { useStrings } from '../../i18n/useStrings';
+import type { AppStrings } from '../../i18n/strings';
 
 interface LostDogModalProps {
   dog: NearbyLostDog | null;
@@ -38,15 +40,15 @@ const PHOTO_HEIGHT_PX = 300;
 // landed right under the HUD instead of leaving a map gap.
 const TOP_RESERVE_PX = 90;
 
-function relativeTime(iso: string): string {
+function relativeTime(iso: string, t: AppStrings): string {
   const then = new Date(iso).getTime();
   const now = Date.now();
   const diffM = Math.max(0, Math.round((now - then) / 60000));
-  if (diffM < 60) return `${diffM}m ago`;
+  if (diffM < 60) return t.time.ago(diffM, 'm');
   const diffH = Math.round(diffM / 60);
-  if (diffH < 24) return `${diffH}h ago`;
+  if (diffH < 24) return t.time.ago(diffH, 'h');
   const diffD = Math.round(diffH / 24);
-  return `${diffD}d ago`;
+  return t.time.ago(diffD, 'd');
 }
 
 // Slide-up dog detail sheet. Animates in on mount, animates out before
@@ -62,6 +64,7 @@ export function LostDogModal({
   onPrev,
   onNext,
 }: LostDogModalProps) {
+  const t = useStrings();
   const touchStartXRef = useRef<number | null>(null);
   const [renderDog, setRenderDog] = useState<NearbyLostDog | null>(dog);
   const [closing, setClosing] = useState(false);
@@ -130,7 +133,7 @@ export function LostDogModal({
   // 'warning' icon was retired; use 'search' for the non-urgent
   // 'searching' state — reads literally and stays in the designer set.
   const badgeIcon: IconName = urgent ? 'urgent' : 'search';
-  const badgeText = urgent ? 'URGENT' : 'searching';
+  const badgeText = urgent ? t.modals.lostDog.badgeUrgent : t.modals.lostDog.badgeSearching;
   const badgeBg = urgent ? '#fde8e8' : '#fdf3e0';
   const badgeFg = urgent ? '#e84040' : '#d9a030';
 
@@ -302,7 +305,7 @@ export function LostDogModal({
           </span>
           <button
             onClick={onClose}
-            aria-label="close"
+            aria-label={t.modals.common.close}
             style={{
               position: 'absolute',
               top: 10,
@@ -339,7 +342,7 @@ export function LostDogModal({
             </div>
             <div style={{ fontSize: 13, color: '#777', marginTop: 2 }}>{renderDog.breed}</div>
             <div style={{ fontSize: 12, color: '#777', marginTop: 2 }}>
-              last seen {relativeTime(renderDog.lastSeen.at)}
+              {t.modals.lostDog.lastSeen(relativeTime(renderDog.lastSeen.at, t))}
             </div>
             {/* Reward hint — replaces the chunky 200pts pill that
                 used to sit between meta and the action buttons. The
@@ -356,7 +359,7 @@ export function LostDogModal({
               }}
             >
               <Icon name="paws" size={25} />
-              complete search quest for {renderDog.rewardPoints} bonus pts
+              {t.modals.lostDog.questCta(renderDog.rewardPoints)}
             </div>
           </div>
 
@@ -387,7 +390,7 @@ export function LostDogModal({
               }}
             >
               <Icon name="eyes" size={28} />
-              i've seen them
+              {t.modals.lostDog.iveSeen}
             </button>
 
             <button
@@ -414,7 +417,7 @@ export function LostDogModal({
               }}
             >
               <Icon name="search" size={32} />
-              {searchActive ? 'searching…' : 'start search'}
+              {searchActive ? t.modals.lostDog.searchingCta : t.modals.lostDog.startSearch}
             </button>
           </div>
         </div>
@@ -431,7 +434,7 @@ export function LostDogModal({
               e.stopPropagation();
               handlePrev();
             }}
-            aria-label="previous pet"
+            aria-label={t.modals.lostDog.previousPet}
             style={{
               position: 'absolute',
               left: 10,
@@ -459,7 +462,7 @@ export function LostDogModal({
               e.stopPropagation();
               handleNext();
             }}
-            aria-label="next pet"
+            aria-label={t.modals.lostDog.nextPet}
             style={{
               position: 'absolute',
               right: 10,
