@@ -231,16 +231,15 @@ export default function TasksScreen() {
     let lastDominant: Element | null = null;
 
     const playPop = (el: HTMLElement) => {
-      // Soft pleasant pop — gentler than the previous spring.
-      // Rise phase uses a smooth ease-out (quick but soft lift);
-      // settle phase uses a slower ease-out (relaxed landing,
-      // no overshoot). Half the lift + half the scale of the
-      // first attempt and ~200ms longer so the whole motion
+      // Soft pleasant pop — slightly more lift + scale than the
+      // previous pass so the motion actually registers, but kept
+      // on a long arc with asymmetric easing (smooth ease-out on
+      // the rise, slower ease-out on the settle) so it still
       // reads as a "breath" rather than a snap.
       el.animate(
         [
           { transform: 'translateY(0) scale(1)',         offset: 0,    easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' },
-          { transform: 'translateY(-6px) scale(1.025)',  offset: 0.4,  easing: 'cubic-bezier(0.33, 1, 0.68, 1)'    },
+          { transform: 'translateY(-10px) scale(1.04)',  offset: 0.4,  easing: 'cubic-bezier(0.33, 1, 0.68, 1)'    },
           { transform: 'translateY(0) scale(1)',         offset: 1 },
         ],
         {
@@ -597,12 +596,12 @@ const styles = StyleSheet.create({
     // eat the breathing room. Keep these two in sync.
     scrollPaddingTop: 60,
   } as unknown as object,
-  // Modest paddingTop — 140 looked like real breathing room in
-  // theory but felt like a third of the screen empty in practice.
-  // 60 leaves comfortable air above the lost-pets card without
-  // wasting viewport. scroll-padding-top below matches so snap
-  // actually respects this gap.
-  content: { paddingHorizontal: 16, paddingTop: 60, paddingBottom: 120, gap: 12 },
+  // Even vertical rhythm: paddingTop == gap == visible-bottom.
+  // 60 above the first card, 60 between every card, 60 visible
+  // below the last (paddingBottom is 60 + ~80 for the floating
+  // dashboard's overlap, so the last card has the same visual
+  // breathing room as the others).
+  content: { paddingHorizontal: 16, paddingTop: 60, paddingBottom: 140, gap: 60 },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
