@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator, Image } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -204,16 +204,10 @@ export default function TasksScreen() {
 
   const doneCount = TASKS.filter((row) => dailyTasks[row.key] >= row.target).length;
 
-  // Ref to the ScrollView so we can attach a native DOM scroll
-  // listener on web — RN's onScroll is throttled and we need
-  // scrollend-style detection to pop the snapped card after the
-  // user releases.
-  const scrollRef = useRef<ScrollView | null>(null);
-
   // Inject the snap-pop keyframes once into <head>. The class is
   // added programmatically to whichever card just snapped (see the
-  // scroll-settle effect below). Web-only — guards the document
-  // access so SSR / native bundlers don't trip.
+  // IntersectionObserver effect below). Web-only — guards the
+  // document access so SSR / native bundlers don't trip.
   useEffect(() => {
     if (typeof document === 'undefined') return;
     if (document.getElementById('tasks-snap-pop-style')) return;
@@ -232,82 +226,91 @@ export default function TasksScreen() {
     document.head.appendChild(el);
   }, []);
 
-  // Detect when scroll settles on a new snap target and pop that
-  // card. Uses a debounced scroll listener — fires ~120ms after
-  // the user stops scrolling. The first detection just records
-  // the resting card without popping (so the initial landing on
-  // the lost-pets card doesn't trigger a pop).
+  // Pop the dominant snap-card when it changes. Uses
+  // IntersectionObserver against the cards' stable nativeIDs —
+  // way more reliable than the previous scroll-end approach
+  // which silently broke whenever scroll events stopped bubbling
+  // through RN-Web's internal wrapper.
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    const node = (scrollRef.current as unknown as { getScrollableNode?: () => HTMLElement })
-      ?.getScrollableNode?.();
-    if (!node) return;
+    if (typeof IntersectionObserver === 'undefined') return;
 
-    let timer: ReturnType<typeof setTimeout> | null = null;
-    let lastSnapped: HTMLElement | null = null;
+    // Skip pops for the first 600ms so the initial landing on the
+    // lost-pets card doesn't trigger an animation.
+    let isInitial = true;
+    const initTimer = setTimeout(() => {
+      isInitial = false;
+    }, 600);
 
-    const findNearestCard = (): { card: HTMLElement | null; dist: number } => {
-      const cards = node.querySelectorAll<HTMLElement>('[data-snap-card]');
-      const nodeTop = node.getBoundingClientRect().top;
-      let nearest: HTMLElement | null = null;
-      let minDist = Infinity;
-      cards.forEach((c) => {
-        const dist = Math.abs(c.getBoundingClientRect().top - nodeTop);
-        if (dist < minDist) {
-          minDist = dist;
-          nearest = c;
-        }
-      });
-      return { card: nearest, dist: minDist };
+    let observer: IntersectionObserver | null = null;
+    let lastDominant: Element | null = null;
+
+    const setup = () => {
+      const cards = Array.from(document.querySelectorAll<HTMLElement>('[id^="snap-card-"]'));
+      if (cards.length === 0) return false;
+
+      // Per-card intersection ratio cache so we can compare on every
+      // callback fire without re-measuring each card.
+      const ratios = new Map<Element, number>();
+      cards.forEach((c) => ratios.set(c, 0));
+
+      observer = new IntersectionObserver(
+        (entries) => {
+          entries.forEach((e) => ratios.set(e.target, e.intersectionRatio));
+          // Pick the card with the highest visible ratio. That's the
+          // dominant one — i.e. the one snap has settled on.
+          let dominant: Element | null = null;
+          let best = -1;
+          ratios.forEach((r, el) => {
+            if (r > best) {
+              best = r;
+              dominant = el;
+            }
+          });
+          if (dominant && dominant !== lastDominant && best > 0.6) {
+            if (!isInitial) {
+              const target = dominant as HTMLElement;
+              target.classList.remove('tasks-snap-pop');
+              // Force reflow so the animation restarts even if the
+              // class was just removed.
+              void target.offsetWidth;
+              target.classList.add('tasks-snap-pop');
+            }
+            lastDominant = dominant;
+          }
+        },
+        { threshold: [0, 0.3, 0.5, 0.7, 0.9, 1] },
+      );
+
+      cards.forEach((c) => observer!.observe(c));
+      return true;
     };
 
-    // Pre-seed lastSnapped to whatever card is at the top on mount —
-    // without this, the very first user-driven snap transition can't
-    // pop (the change-detection treats null → first-card as "initial
-    // landing" and bails). Delay one frame so the DOM is in place.
-    const initId = setTimeout(() => {
-      lastSnapped = findNearestCard().card;
-    }, 200);
+    // Cards may not be in the DOM yet on first effect tick — retry
+    // until we find at least one.
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
+    if (!setup()) {
+      retryTimer = setTimeout(() => {
+        setup();
+      }, 100);
+    }
 
-    const handleSettle = () => {
-      const { card: snapped, dist } = findNearestCard();
-      if (snapped && snapped !== lastSnapped && dist < 40) {
-        snapped.classList.remove('tasks-snap-pop');
-        // Force reflow so the animation restarts even if the class
-        // was just removed.
-        void snapped.offsetWidth;
-        snapped.classList.add('tasks-snap-pop');
-        lastSnapped = snapped;
-      }
-    };
-
-    const onScroll = () => {
-      if (timer) clearTimeout(timer);
-      timer = setTimeout(handleSettle, 120);
-    };
-
-    node.addEventListener('scroll', onScroll, { passive: true });
     return () => {
-      node.removeEventListener('scroll', onScroll);
-      clearTimeout(initId);
-      if (timer) clearTimeout(timer);
+      if (observer) observer.disconnect();
+      if (retryTimer) clearTimeout(retryTimer);
+      clearTimeout(initTimer);
     };
   }, []);
 
-  // dataSet typing isn't on RN's View but RN-Web forwards it to
-  // data-* attributes at runtime. Cast through unknown to avoid
-  // an inline @ts-expect-error on every card.
-  const snapCardProps = { dataSet: { snapCard: 'true' } } as unknown as object;
-
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView ref={scrollRef} contentContainerStyle={styles.content} style={styles.scroller}>
+      <ScrollView contentContainerStyle={styles.content} style={styles.scroller}>
         {/* Lost pets nearby — promoted to the top of the tab so the
             most actionable thing on the screen is the first thing
             the user sees. Stack is the default view; list is a tap
             away via the header toggle. */}
         {sortedDogs.length > 0 ? (
-          <View {...snapCardProps} style={styles.card}>
+          <View nativeID="snap-card-lost" style={styles.card}>
             <View style={styles.lostHeaderRow}>
               <Text style={styles.cardTitle}>{t.tasks.lostPetsNearby}</Text>
               <View style={styles.viewToggle}>
@@ -426,7 +429,7 @@ export default function TasksScreen() {
             card above this one — collapsed in since the per-row
             bars already visualise progress and the duplication
             hurt vertical hierarchy. */}
-        <View {...snapCardProps} style={styles.card}>
+        <View nativeID="snap-card-daily" style={styles.card}>
           <View style={styles.dailyHeader}>
             <Text style={[styles.cardTitle, styles.cardTitleInline]}>
               {t.tasks.dailyTasks}
@@ -479,7 +482,7 @@ export default function TasksScreen() {
             first. Only renders the card when there's something to
             show so a brand-new account doesn't see an empty rail. */}
         {history.length > 0 ? (
-          <View {...snapCardProps} style={styles.card}>
+          <View nativeID="snap-card-history" style={styles.card}>
             <Pressable
               onPress={() => setHistoryOpen((v) => !v)}
               style={({ pressed }) => [
@@ -575,10 +578,12 @@ const styles = StyleSheet.create({
     flex: 1,
     scrollSnapType: 'y mandatory',
   } as unknown as object,
-  // Big paddingTop — the lost-pets card kept reading as "glued to
-  // the status bar" in Safari iOS even at 48; 80 lands the card
-  // visibly lower on the screen, well clear of the status pills.
-  content: { paddingHorizontal: 16, paddingTop: 80, paddingBottom: 120, gap: 12 },
+  // Aggressive paddingTop — Safari iOS sets safe-area-inset-top to
+  // 0 when not in standalone PWA mode, so all the breathing room
+  // has to come from this single value. 140 lands the lost-pets
+  // card visibly in the middle-upper of the viewport with real
+  // air above it.
+  content: { paddingHorizontal: 16, paddingTop: 140, paddingBottom: 120, gap: 12 },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
