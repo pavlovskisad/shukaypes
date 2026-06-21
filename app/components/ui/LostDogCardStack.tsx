@@ -71,6 +71,14 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
   const topDog = dogs[index];
   const next1 = dogs[index + 1];
   const next2 = dogs[index + 2];
+  // Hidden "ghost" at index+3 — pre-rendered so when the top card
+  // flies off and the deck shifts forward, the new bottom slot
+  // already has content in place. Without this, the new bottom
+  // pops into view on every advance (the "blink"). Ghost animates
+  // from opacity 0 + small scale → bottom-slot pose as the top
+  // card is dragged, so by commit it IS the new bottom — visually
+  // continuous, no jump.
+  const next3 = dogs[index + 3];
 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
@@ -119,21 +127,36 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
     };
   });
 
-  // Second card pops forward as the top card flies away.
+  // Second card pops forward as the top card flies away. Tighter
+  // base scale + bigger peek so the deck reads as a deck, not a
+  // single floating card.
   const middleStyle = useAnimatedStyle(() => {
     const progress = Math.min(Math.abs(tx.value) / CARD_W, 1);
-    const scale = interpolate(progress, [0, 1], [0.94, 1], Extrapolation.CLAMP);
-    const translateY = interpolate(progress, [0, 1], [16, 0], Extrapolation.CLAMP);
+    const scale = interpolate(progress, [0, 1], [0.92, 1], Extrapolation.CLAMP);
+    const translateY = interpolate(progress, [0, 1], [22, 0], Extrapolation.CLAMP);
     return { transform: [{ scale }, { translateY }] };
   });
 
-  // Third card stays mostly still; subtle nudge so the stack reads
-  // as a deck and not two static cards.
+  // Third card stays mostly still; bigger offset so the third-tier
+  // peek is visible too. (Two visible cards behind reads as "more
+  // to come", one was ambiguous.)
   const bottomStyle = useAnimatedStyle(() => {
     const progress = Math.min(Math.abs(tx.value) / CARD_W, 1);
-    const scale = interpolate(progress, [0, 1], [0.88, 0.94], Extrapolation.CLAMP);
-    const translateY = interpolate(progress, [0, 1], [32, 16], Extrapolation.CLAMP);
+    const scale = interpolate(progress, [0, 1], [0.84, 0.92], Extrapolation.CLAMP);
+    const translateY = interpolate(progress, [0, 1], [44, 22], Extrapolation.CLAMP);
     return { transform: [{ scale }, { translateY }] };
+  });
+
+  // Hidden ghost at index+3 — invisible at rest, fades into the
+  // bottom-slot pose as the top card is dragged. By the time the
+  // top card flies off and we advance, this ghost IS the new
+  // bottom slot — no visual pop on the deck advance.
+  const ghostStyle = useAnimatedStyle(() => {
+    const progress = Math.min(Math.abs(tx.value) / CARD_W, 1);
+    const scale = interpolate(progress, [0, 1], [0.76, 0.84], Extrapolation.CLAMP);
+    const translateY = interpolate(progress, [0, 1], [66, 44], Extrapolation.CLAMP);
+    const opacity = interpolate(progress, [0, 1], [0, 1], Extrapolation.CLAMP);
+    return { transform: [{ scale }, { translateY }], opacity };
   });
 
   if (!topDog) {
@@ -154,6 +177,7 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
   return (
     <View style={styles.wrap}>
       <View style={styles.deck}>
+        {next3 ? <Animated.View style={[styles.cardSlot, ghostStyle]}>{renderCard(next3, t)}</Animated.View> : null}
         {next2 ? <Animated.View style={[styles.cardSlot, bottomStyle]}>{renderCard(next2, t)}</Animated.View> : null}
         {next1 ? <Animated.View style={[styles.cardSlot, middleStyle]}>{renderCard(next1, t)}</Animated.View> : null}
         <GestureDetector gesture={pan}>
@@ -234,8 +258,6 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.18,
     shadowRadius: 20,
     elevation: 6,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
   },
   photo: {
     position: 'absolute',
@@ -244,6 +266,11 @@ const styles = StyleSheet.create({
     width: '100%',
     height: '100%',
     backgroundColor: '#f0f0f0',
+    // RN-Web's `overflow: hidden` on a transformed parent doesn't
+    // always clip child <img> tags cleanly — visible as harsh
+    // corners at the top of the photo. Match the card's borderRadius
+    // on the image itself so it self-clips regardless of parent.
+    borderRadius: 24,
   },
   photoFallback: {
     alignItems: 'center',
