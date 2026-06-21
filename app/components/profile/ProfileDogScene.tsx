@@ -344,15 +344,15 @@ export function ProfileDogScene({
       aria-label={t.profile.sceneA11y(mode)}
       style={{
         position: 'relative',
-        // Fill the parent — the new hero card mounts the scene
-        // directly under its borderRadius with no padding, so no
-        // negative-margin bleed-out trick is needed. The parent
-        // sets the available width; the dog slides across it.
+        // Fill the parent — the profile tab mounts the scene as a
+        // full-bleed background so the landscape's horizon line
+        // lands around the screen center. SVG layers stretch with
+        // preserveAspectRatio="none" to fill the same area; some
+        // pixel-art elements (sun, trees) end up vertically
+        // elongated as a result, but `imageRendering: pixelated`
+        // keeps the edges crisp.
         width: '100%',
-        height: HEIGHT_PX,
-        // Hide overflow so a slide that overshoots doesn't leak
-        // past the card edge mid-resize, and so the sprite-top
-        // clip (HEIGHT_PX < SPRITE_PX) cuts cleanly.
+        height: '100%',
         overflow: 'hidden',
         cursor: 'pointer',
       }}

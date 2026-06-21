@@ -24,7 +24,7 @@ const GLASS_SHADOW_COLOR = '#000';
 // fontSize 14) read as cramped against the value text.
 const ICON_SIZE = CHIP.icon;
 
-function MeterPill({
+export function MeterPill({
   icon,
   value,
   label,
@@ -56,7 +56,7 @@ function MeterPill({
   );
 }
 
-function CounterPill({
+export function CounterPill({
   icon,
   value,
   label,

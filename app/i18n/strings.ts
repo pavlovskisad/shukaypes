@@ -114,7 +114,11 @@ export interface AppStrings {
       petsSearched: string;
       searchesCompleted: string;
       sightingsReported: string;
+      companionStats: string;
+      luckyPaw: string;
     };
+    luckyActive: string;
+    luckyInactive: string;
     language: {
       label: string;
       uk: string;
@@ -283,7 +287,11 @@ const uk: AppStrings = {
       petsSearched: 'псів шукали',
       searchesCompleted: 'пошуків завершено',
       sightingsReported: 'повідомлень про знахідки',
+      companionStats: 'твій пес',
+      luckyPaw: 'лапка на удачу',
     },
+    luckyActive: 'активна',
+    luckyInactive: 'щастя ≥ 70%',
     language: {
       label: 'мова',
       uk: 'українська',
@@ -497,7 +505,11 @@ const en: AppStrings = {
       petsSearched: 'pets searched',
       searchesCompleted: 'searches completed',
       sightingsReported: 'sightings reported',
+      companionStats: 'your pet',
+      luckyPaw: 'lucky paw',
     },
+    luckyActive: 'active',
+    luckyInactive: 'happiness ≥ 70%',
     language: {
       label: 'language',
       uk: 'українська',
