@@ -56,6 +56,11 @@ interface Props<T> {
   getPhotoUrl?: (item: T) => string | null | undefined;
   // Show the "1 / N" counter under the deck. Defaults to true.
   showCounter?: boolean;
+  // Override the deck's height. Defaults to CARD_H (280). Lets
+  // callers like the profile section deck use a denser slot when
+  // the per-card content (stat rows) doesn't need the full height
+  // of a photo/icon card. Width stays CARD_W.
+  cardHeight?: number;
 }
 
 export function CardStack<T>({
@@ -65,6 +70,7 @@ export function CardStack<T>({
   onTap,
   getPhotoUrl,
   showCounter = true,
+  cardHeight = CARD_H,
 }: Props<T>) {
   const [index, setIndex] = useState(0);
   const tx = useSharedValue(0);
@@ -268,29 +274,33 @@ export function CardStack<T>({
   // Deck slots in deepest-first paint order: buffer → bottom →
   // middle → top. Each peek is a plain grey rectangle (no content)
   // so backward swipes never leak the next item's content through.
+  // Deck container + slot heights come from the cardHeight prop so
+  // the same component handles both the photo cards (280) and the
+  // denser profile section cards (~200).
+  const slotSize = { width: CARD_W, height: cardHeight };
   return (
     <View style={styles.wrap}>
-      <View style={styles.deck}>
+      <View style={[styles.deck, slotSize]}>
         {next3 ? (
           <Animated.View
             key="buffer"
-            style={[styles.cardSlot, styles.greyDeckCard, bufferStyle]}
+            style={[styles.cardSlot, slotSize, styles.greyDeckCard, bufferStyle]}
           />
         ) : null}
         {next2 ? (
           <Animated.View
             key="bottom"
-            style={[styles.cardSlot, styles.greyDeckCard, bottomStyle]}
+            style={[styles.cardSlot, slotSize, styles.greyDeckCard, bottomStyle]}
           />
         ) : null}
         {next1 ? (
           <Animated.View
             key="middle"
-            style={[styles.cardSlot, styles.greyDeckCard, middleStyle]}
+            style={[styles.cardSlot, slotSize, styles.greyDeckCard, middleStyle]}
           />
         ) : null}
         <GestureDetector gesture={pan}>
-          <Animated.View style={[styles.cardSlot, topStyle]}>
+          <Animated.View style={[styles.cardSlot, slotSize, topStyle]}>
             {renderCard(topItem)}
           </Animated.View>
         </GestureDetector>
@@ -373,8 +383,9 @@ const styles = StyleSheet.create({
     paddingVertical: 6,
   },
   deck: {
-    width: CARD_W,
-    height: CARD_H,
+    // Width / height come from the slotSize override (cardHeight
+    // prop) so this style only carries the layout concerns. See
+    // the slotSize const inside CardStack.
     alignItems: 'center',
     justifyContent: 'center',
     // Reserve room for the bottom card's peek (ty:60 + tail) AND
@@ -385,8 +396,7 @@ const styles = StyleSheet.create({
   },
   cardSlot: {
     position: 'absolute',
-    width: CARD_W,
-    height: CARD_H,
+    // Width / height set per-instance via slotSize.
   },
   greyDeckCard: {
     backgroundColor: '#e6e6e6',

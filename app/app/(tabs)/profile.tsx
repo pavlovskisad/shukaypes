@@ -12,7 +12,7 @@ import { Icon } from '../../components/ui/Icon';
 import { INLINE_ICON } from '../../constants/sizing';
 import { useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
-import { CardStack, CARD_W, CARD_H } from '../../components/ui/CardStack';
+import { CardStack, CARD_W } from '../../components/ui/CardStack';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
 // aggregate counts from /profile/me on focus, with the live game
@@ -143,17 +143,17 @@ export default function ProfileScreen() {
     void refetch();
   }, [refetch]);
 
-  // Three swipeable sections below the hero. Each is its own card,
-  // sized to fit the CardStack's CARD_W × CARD_H slot. The deck
-  // cycles between them in either direction with the same swipe
-  // mechanics as the tasks / spots stacks.
+  // Two swipeable sections below the hero. Language moved out
+  // of the deck into a tiny UA/EN toggle inside the hero — it's
+  // a setting, not a stat group, and the deck reads cleaner with
+  // only homogeneous stat cards.
   const sections = useMemo(
     () => [
       {
         id: 'walks',
         content: (
           <View style={styles.sectionCard}>
-            <Text style={styles.cardTitle}>{t.profile.stats.walksTogether}</Text>
+            <Text style={styles.sectionTitle}>{t.profile.stats.walksTogether}</Text>
             <StatRow label={t.profile.stats.daysPlayed} value={data?.stats.daysPlayed} />
             <StatRow
               label={t.profile.stats.distanceWalked}
@@ -169,7 +169,7 @@ export default function ProfileScreen() {
         id: 'helping',
         content: (
           <View style={styles.sectionCard}>
-            <Text style={styles.cardTitle}>{t.profile.stats.helpingPets}</Text>
+            <Text style={styles.sectionTitle}>{t.profile.stats.helpingPets}</Text>
             <StatRow label={t.profile.stats.petsSearched} value={data?.stats.petsSearched} />
             <StatRow
               label={t.profile.stats.searchesCompleted}
@@ -182,123 +182,115 @@ export default function ProfileScreen() {
           </View>
         ),
       },
-      {
-        id: 'language',
-        content: (
-          <View style={styles.sectionCard}>
-            <Text style={styles.cardTitle}>{t.profile.language.label}</Text>
-            <View style={styles.langRow}>
-              <Pressable
-                onPress={() => setLang('uk')}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: lang === 'uk' }}
-                style={({ pressed }) => [
-                  styles.langPill,
-                  lang === 'uk' && styles.langPillActive,
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <Text style={[styles.langPillText, lang === 'uk' && styles.langPillTextActive]}>
-                  {t.profile.language.uk}
-                </Text>
-              </Pressable>
-              <Pressable
-                onPress={() => setLang('en')}
-                accessibilityRole="switch"
-                accessibilityState={{ checked: lang === 'en' }}
-                style={({ pressed }) => [
-                  styles.langPill,
-                  lang === 'en' && styles.langPillActive,
-                  pressed && { opacity: 0.7 },
-                ]}
-              >
-                <Text style={[styles.langPillText, lang === 'en' && styles.langPillTextActive]}>
-                  {t.profile.language.en}
-                </Text>
-              </Pressable>
-            </View>
-          </View>
-        ),
-      },
     ],
-    [t, data, lang, setLang],
+    [t, data],
   );
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content}>
-        {/* Companion card — name, level, mood. */}
-        <View style={styles.card}>
-          {/* Live pixel-art companion in place of the 🐶 emoji.
-              Cycles sitting / lying / walking / sniffing / running
-              and slides across the card during moving anims.
-              Mounts only while the tab is focused + document visible
-              (see sceneActive above) — unmount tears down all the
-              scene's intervals + keyframe animations cleanly. */}
+        {/* Hero card — scene at top with corners clipping cleanly
+            (zero padding around it so it fills edge to edge), then
+            a compact content strip below with name + level + xp
+            bar + meters. Tiny UA/EN language toggle anchored top-
+            right so the setting is present without spending a
+            whole section card on it. */}
+        <View style={styles.heroCard}>
           {sceneActive ? <ProfileDogScene /> : <View style={styles.scenePlaceholder} />}
-          <Text style={styles.companionName}>{data?.companion.name ?? companionName}</Text>
-          <Text style={styles.companionMeta}>
-            {t.profile.level(data?.companion.level ?? 1)}
-            {data && data.companion.level < data.companion.maxLevel
-              ? ` · ${t.profile.xpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)}`
-              : data?.companion.level === data?.companion.maxLevel
-                ? ` · ${t.profile.max}`
-                : ''}
-          </Text>
-          {data ? (
-            <View
-              style={styles.xpBarTrack}
-              accessibilityLabel={
-                data.companion.level >= data.companion.maxLevel
-                  ? t.profile.a11yMaxLevel
-                  : t.profile.a11yXpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)
-              }
+          <View style={styles.langTinyRow}>
+            <Pressable
+              onPress={() => setLang('uk')}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: lang === 'uk' }}
+              style={({ pressed }) => [
+                styles.langTinyPill,
+                lang === 'uk' && styles.langTinyPillActive,
+                pressed && { opacity: 0.7 },
+              ]}
             >
-              <View
-                style={[
-                  styles.xpBarFill,
-                  {
-                    width: `${
-                      data.companion.level >= data.companion.maxLevel
-                        ? 100
-                        : Math.round(
-                            (data.companion.xpInLevel /
-                              Math.max(1, data.companion.xpForNextLevel)) *
-                              100,
-                          )
-                    }%` as unknown as number,
-                  },
-                ]}
-              />
-            </View>
-          ) : null}
-          <View style={styles.meterRow}>
-            <View style={styles.meterPill}>
-              <Icon name="sun" size={INLINE_ICON.stat} />
-              <Text style={styles.meterValue}>
-                {Math.round(data?.companion.happiness ?? 0)}%
+              <Text style={[styles.langTinyText, lang === 'uk' && styles.langTinyTextActive]}>
+                UA
               </Text>
-            </View>
-            <View style={styles.meterPill}>
-              <Icon name="bone" size={INLINE_ICON.stat} />
-              <Text style={styles.meterValue}>{Math.round(data?.companion.hunger ?? 0)}%</Text>
-            </View>
-            <View style={styles.meterPill}>
-              <Icon name="paws" size={INLINE_ICON.stat} />
-              <Text style={styles.meterValue}>{data?.stats.pawsCollected ?? 0}</Text>
+            </Pressable>
+            <Pressable
+              onPress={() => setLang('en')}
+              accessibilityRole="switch"
+              accessibilityState={{ checked: lang === 'en' }}
+              style={({ pressed }) => [
+                styles.langTinyPill,
+                lang === 'en' && styles.langTinyPillActive,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={[styles.langTinyText, lang === 'en' && styles.langTinyTextActive]}>
+                EN
+              </Text>
+            </Pressable>
+          </View>
+          <View style={styles.heroContent}>
+            <Text style={styles.heroName}>{data?.companion.name ?? companionName}</Text>
+            <Text style={styles.heroMeta}>
+              {t.profile.level(data?.companion.level ?? 1)}
+              {data && data.companion.level < data.companion.maxLevel
+                ? ` · ${t.profile.xpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)}`
+                : data?.companion.level === data?.companion.maxLevel
+                  ? ` · ${t.profile.max}`
+                  : ''}
+            </Text>
+            {data ? (
+              <View
+                style={styles.xpBarTrack}
+                accessibilityLabel={
+                  data.companion.level >= data.companion.maxLevel
+                    ? t.profile.a11yMaxLevel
+                    : t.profile.a11yXpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)
+                }
+              >
+                <View
+                  style={[
+                    styles.xpBarFill,
+                    {
+                      width: `${
+                        data.companion.level >= data.companion.maxLevel
+                          ? 100
+                          : Math.round(
+                              (data.companion.xpInLevel /
+                                Math.max(1, data.companion.xpForNextLevel)) *
+                                100,
+                            )
+                      }%` as unknown as number,
+                    },
+                  ]}
+                />
+              </View>
+            ) : null}
+            <View style={styles.meterRow}>
+              <View style={styles.meterPill}>
+                <Icon name="sun" size={INLINE_ICON.stat} />
+                <Text style={styles.meterValue}>
+                  {Math.round(data?.companion.happiness ?? 0)}%
+                </Text>
+              </View>
+              <View style={styles.meterPill}>
+                <Icon name="bone" size={INLINE_ICON.stat} />
+                <Text style={styles.meterValue}>{Math.round(data?.companion.hunger ?? 0)}%</Text>
+              </View>
+              <View style={styles.meterPill}>
+                <Icon name="paws" size={INLINE_ICON.stat} />
+                <Text style={styles.meterValue}>{data?.stats.pawsCollected ?? 0}</Text>
+              </View>
             </View>
           </View>
         </View>
 
-        {/* Section deck — swipeable Tinder-style stack of the
-            "walks together", "helping pets" and "language" sub-
-            cards. Sits below the always-visible companion hero so
-            the user discovers other sections by swiping left /
-            right instead of scrolling down a long list. */}
+        {/* Section deck — denser CARD_H so two stat cards fit
+            comfortably under the hero without overflowing the
+            viewport. */}
         <CardStack
           items={sections}
           getId={(s) => s.id}
           renderCard={(s) => s.content}
+          cardHeight={200}
         />
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
@@ -312,140 +304,139 @@ const styles = StyleSheet.create({
     flex: 1,
     backgroundColor: colors.greyBg,
   },
-  langRow: {
-    flexDirection: 'row',
-    gap: 8,
-    marginTop: 8,
-  },
-  langPill: {
-    flex: 1,
-    paddingVertical: 10,
-    borderRadius: 16,
-    // White-with-shadow chip (same family as spots rows + modal
-    // category labels) for the unselected state. Active state
-    // below swaps to dark fill so the selection still reads.
-    backgroundColor: '#ffffff',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.08,
-    shadowRadius: 6,
-    elevation: 1,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.04)',
-    alignItems: 'center',
-  },
-  langPillActive: {
-    backgroundColor: colors.black,
-  },
-  langPillText: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: 14,
-    fontWeight: '600',
-    color: '#555',
-  },
-  langPillTextActive: {
-    color: '#fff',
-  },
   content: {
     paddingHorizontal: 16,
     paddingTop: 12,
     paddingBottom: 100,
+    alignItems: 'center',
     gap: 12,
   },
-  card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 20,
-    padding: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
-    // Clip the profile scene's full-bleed sky to the rounded
-    // corners — otherwise the sky bleeds past the rounded top edges.
-    overflow: 'hidden',
-  },
-  // One section card inside the deck below the hero. Fixed
-  // dimensions matching CARD_W × CARD_H so each section fills its
-  // slot exactly. Same visual shadow/radius/bg family as the
-  // hero card and the dog / spot cards on other tabs.
-  sectionCard: {
+  // Hero card — same width as the section deck so the two stack
+  // cleanly under each other. Zero padding around the scene so it
+  // bleeds to the rounded corners with no white strip; the bottom
+  // content area gets its own padding inside heroContent.
+  heroCard: {
     width: CARD_W,
-    height: CARD_H,
     backgroundColor: '#ffffff',
     borderRadius: 24,
-    paddingTop: 16,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
+    overflow: 'hidden',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    elevation: 2,
+  },
+  heroContent: {
+    paddingTop: 8,
+    paddingBottom: 12,
+    paddingHorizontal: 14,
+    alignItems: 'center',
+  },
+  // Empty box that takes the scene's footprint while the scene
+  // is unmounted on background tabs — same width / height so the
+  // card layout doesn't shift on tab switch.
+  scenePlaceholder: {
+    width: '100%',
+    height: 200,
+    backgroundColor: '#dbeaf4',
+  },
+  // Section cards inside the deck. Width matches the hero. Padding
+  // tighter than the hero's content padding since the rows have
+  // their own breathing room.
+  sectionCard: {
+    width: CARD_W,
+    height: 200,
+    backgroundColor: '#ffffff',
+    borderRadius: 24,
+    paddingTop: 14,
+    paddingBottom: 16,
+    paddingHorizontal: 18,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18,
     shadowRadius: 20,
     elevation: 6,
   },
-  cardTitle: {
+  sectionTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 14,
+    fontSize: 13,
     color: '#777',
-    marginBottom: 10,
+    marginBottom: 8,
     textTransform: 'lowercase',
     letterSpacing: 0.3,
   },
-  // Empty box that occupies the same footprint as ProfileDogScene so
-  // the card layout doesn't shift while the scene is unmounted on
-  // background tabs. Numbers mirror the scene's outer container —
-  // height 200, marginTop -18 / marginLeft -18 / marginBottom -4 to
-  // break out of the card's 18px padding and sit flush at the top.
-  scenePlaceholder: {
-    width: 'calc(100% + 36px)' as unknown as number,
-    height: 200,
-    marginTop: -18,
-    marginLeft: -18,
-    marginBottom: -4,
-    backgroundColor: '#dbeaf4',
+  // Tiny UA/EN toggle anchored top-right of the hero. Sits over
+  // the scene's sky portion — z-index above so the dog can still
+  // amble underneath without covering the pills.
+  langTinyRow: {
+    position: 'absolute',
+    top: 10,
+    right: 10,
+    flexDirection: 'row',
+    gap: 4,
+    zIndex: 2,
   },
-  companionName: {
+  langTinyPill: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 999,
+    backgroundColor: 'rgba(255,255,255,0.85)',
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.06)',
+  },
+  langTinyPillActive: {
+    backgroundColor: colors.black,
+    borderColor: colors.black,
+  },
+  langTinyText: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 22,
+    fontSize: 11,
+    fontWeight: '700',
+    letterSpacing: 0.5,
+    color: '#555',
+  },
+  langTinyTextActive: {
+    color: '#fff',
+  },
+  heroName: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: 18,
     fontWeight: '700',
     textAlign: 'center',
-    marginTop: 4,
+    marginTop: 2,
   },
-  companionMeta: {
-    fontSize: 13,
+  heroMeta: {
+    fontSize: 12,
     color: '#777',
     textAlign: 'center',
-    marginTop: 2,
-    marginBottom: 8,
+    marginTop: 1,
+    marginBottom: 6,
   },
   xpBarTrack: {
-    height: 6,
-    borderRadius: 3,
+    height: 4,
+    borderRadius: 2,
     backgroundColor: 'rgba(0,0,0,0.06)',
-    marginHorizontal: 24,
-    marginBottom: 14,
+    width: '70%',
+    marginBottom: 10,
     overflow: 'hidden',
   },
   xpBarFill: {
     height: '100%',
     backgroundColor: 'rgba(0,60,255,0.85)',
-    borderRadius: 3,
+    borderRadius: 2,
   },
   meterRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    gap: 8,
+    gap: 6,
   },
   meterPill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
-    paddingHorizontal: 14,
-    height: 34,
-    borderRadius: 17,
-    // White with shadow + hairline border — same chip family the
-    // spots rows / modal category tag / lang toggle use. Was a
-    // pale-blue tint that competed with the white card bg.
+    gap: 5,
+    paddingHorizontal: 10,
+    height: 26,
+    borderRadius: 13,
     backgroundColor: '#ffffff',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 2 },
@@ -455,28 +446,26 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: 'rgba(0,0,0,0.04)',
   },
-  meterEmoji: {
-    fontSize: 14,
-  },
   meterValue: {
-    fontSize: 13,
+    fontSize: 12,
     fontWeight: '700',
     color: colors.black,
   },
-  // Roomier stat rows with stronger value/label hierarchy — values
-  // pop, labels stay quiet at the same hue.
+  // Denser stat rows — was paddingVertical 10 + fontSize 16/20.
+  // Tighter padding + smaller fonts so 5 rows comfortably fit a
+  // 200-tall section card.
   statRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: 5,
   },
   statLabel: {
-    fontSize: 16,
+    fontSize: 13,
     color: '#555',
   },
   statValue: {
-    fontSize: 20,
+    fontSize: 16,
     fontWeight: '700',
     color: colors.black,
   },

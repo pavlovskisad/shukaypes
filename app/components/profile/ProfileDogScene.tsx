@@ -332,25 +332,15 @@ export function ProfileDogScene() {
       aria-label={t.profile.sceneA11y(mode)}
       style={{
         position: 'relative',
-        // Break out of the card's 18px horizontal padding so the dog
-        // can use the full card width — the natural padding around
-        // the card content was clamping the slide range to ~150 px
-        // on phones, which read as "the dog only moves in a tiny
-        // strip in the middle". Negative margins keep the container
-        // inside the card's white bg + rounded corners (overflow
-        // clips at the corners) but let the dog reach card edges.
-        width: 'calc(100% + 36px)' as unknown as number,
-        marginLeft: -18,
-        // Reach the top of the card too — the card's 18px padding
-        // would otherwise show as a white strip above the sky.
-        marginTop: -18,
+        // Fill the parent — the new hero card mounts the scene
+        // directly under its borderRadius with no padding, so no
+        // negative-margin bleed-out trick is needed. The parent
+        // sets the available width; the dog slides across it.
+        width: '100%',
         height: HEIGHT_PX,
-        // Small negative marginBottom — companion-name follows the
-        // scene closely below, no big air gap.
-        marginBottom: -4,
-        // Hide overflow so a slide that overshoots doesn't leak past
-        // the card edge mid-resize, and so the sprite-top clip
-        // (HEIGHT_PX < SPRITE_PX) cuts cleanly.
+        // Hide overflow so a slide that overshoots doesn't leak
+        // past the card edge mid-resize, and so the sprite-top
+        // clip (HEIGHT_PX < SPRITE_PX) cuts cleanly.
         overflow: 'hidden',
         cursor: 'pointer',
       }}
