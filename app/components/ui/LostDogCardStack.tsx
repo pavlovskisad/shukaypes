@@ -395,6 +395,79 @@ function renderCard(dog: NearbyLostDog, t: ReturnType<typeof useStrings>) {
   );
 }
 
+// Skeleton variant of the card stack — same dimensions + deck
+// layout as the real one so the lost-pets card can render with
+// stable height from the very first paint, before the lostDogs
+// fetch comes back. Shows two stacked grey rectangles + a top
+// card with a shimmer-sweep gradient on repeat. Sits in place
+// of <LostDogCardStack> while sortedDogs is empty so the snap
+// order stays consistent (no late insertion shoves the daily-
+// quests card down once dogs arrive).
+export function LostDogCardStackSkeleton() {
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (document.getElementById('lost-dog-shimmer-style')) return;
+    const el = document.createElement('style');
+    el.id = 'lost-dog-shimmer-style';
+    el.textContent = `
+      @keyframes lost-dog-shimmer {
+        0%   { background-position: -150% 0; }
+        100% { background-position: 250% 0;  }
+      }
+    `;
+    document.head.appendChild(el);
+  }, []);
+
+  return (
+    <View style={styles.wrap}>
+      <View style={styles.deck}>
+        {/* Bottom and middle deck slots — plain grey rectangles
+            matching the real deck's rest poses (see SLOT_POSES). */}
+        <View
+          style={[
+            styles.cardSlot,
+            styles.greyDeckCard,
+            { transform: [{ scale: 0.88 }, { translateY: 60 }] },
+          ]}
+        />
+        <View
+          style={[
+            styles.cardSlot,
+            styles.greyDeckCard,
+            { transform: [{ scale: 0.94 }, { translateY: 30 }] },
+          ]}
+        />
+        {/* Top card — grey base + sweeping light gradient via CSS
+            animation. Inline backgroundImage + animation since
+            RN style typings don't know about them; the runtime
+            forwards them straight through to the underlying div. */}
+        <View
+          style={
+            {
+              ...styles.cardSlot,
+              backgroundColor: '#e6e6e6',
+              backgroundImage:
+                'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.75) 50%, transparent 70%)',
+              backgroundSize: '200% 100%',
+              backgroundRepeat: 'no-repeat',
+              animation: 'lost-dog-shimmer 1.8s ease-in-out infinite',
+              borderRadius: 24,
+              shadowColor: '#000',
+              shadowOffset: { width: 0, height: 8 },
+              shadowOpacity: 0.18,
+              shadowRadius: 20,
+            } as unknown as object
+          }
+        />
+      </View>
+      {/* Placeholder counter so the card's total height matches the
+          real stack's — keeps the snap target the same size before
+          and after data loads. */}
+      <Text style={[styles.counter, { color: 'transparent' }]}>0 / 0</Text>
+    </View>
+  );
+}
+
 const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',

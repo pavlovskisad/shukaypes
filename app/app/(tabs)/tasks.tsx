@@ -8,7 +8,10 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { api, type NearbyLostDog } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
 import { LostDogModal } from '../../components/ui/LostDogModal';
-import { LostDogCardStack } from '../../components/ui/LostDogCardStack';
+import {
+  LostDogCardStack,
+  LostDogCardStackSkeleton,
+} from '../../components/ui/LostDogCardStack';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
@@ -87,6 +90,7 @@ export default function TasksScreen() {
   const dailyTasks = useGameStore((s) => s.dailyTasks);
   const refresh = useGameStore((s) => s.refreshDailyTasks);
   const lostDogs = useGameStore((s) => s.lostDogs);
+  const lostDogsLoaded = useGameStore((s) => s.lostDogsLoaded);
   const userPos = useGameStore((s) => s.userPosition);
   const activeQuest = useGameStore((s) => s.activeQuest);
   const startQuest = useGameStore((s) => s.startQuest);
@@ -297,22 +301,28 @@ export default function TasksScreen() {
       if (retryTimer) clearTimeout(retryTimer);
       clearTimeout(initTimer);
     };
-    // Re-run when the set of snap-cards changes (lost-pets fetches
-    // in after initial mount; history can grow during a session).
-    // Without this the observer would be set up against an older
-    // card list and silently miss any cards that arrived later —
-    // which is exactly why the pop felt broken on the lost-pets
-    // card after a refresh.
-  }, [sortedDogs.length > 0, history.length > 0]);
+    // Re-run only when the SET of rendered snap-cards changes —
+    // i.e. when a card frame disappears (lost-pets hidden after
+    // a load-with-zero, history collapsed) or reappears. The
+    // lost-pets card frame is now always rendered upfront via
+    // the skeleton placeholder, so the dogs fetch settling no
+    // longer flips this — the same DOM node carries the data
+    // swap without needing a fresh observer.
+  }, [lostDogsLoaded && sortedDogs.length === 0, history.length > 0]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} style={styles.scroller}>
         {/* Lost pets nearby — promoted to the top of the tab so the
             most actionable thing on the screen is the first thing
-            the user sees. Stack is the default view; list is a tap
-            away via the header toggle. */}
-        {sortedDogs.length > 0 ? (
+            the user sees. Always rendered (even while the dogs
+            fetch is in flight) with a skeleton placeholder inside
+            so the snap order is stable from first paint — without
+            this the daily-quests card briefly takes the top slot
+            and then shoves itself down once dogs arrive. The
+            card is only hidden when the fetch settled with zero
+            dogs in the user's area. */}
+        {lostDogsLoaded && sortedDogs.length === 0 ? null : (
           <View nativeID="snap-card-lost" style={styles.card}>
             <View style={styles.lostHeaderRow}>
               <Text style={styles.cardTitle}>{t.tasks.lostPetsNearby}</Text>
@@ -351,7 +361,9 @@ export default function TasksScreen() {
                 </Pressable>
               </View>
             </View>
-            {lostView === 'stack' ? (
+            {sortedDogs.length === 0 ? (
+              <LostDogCardStackSkeleton />
+            ) : lostView === 'stack' ? (
               <LostDogCardStack dogs={sortedDogs} onTap={(d) => setModalDogId(d.id)} />
             ) : null}
             {lostView === 'list' ? visibleDogs.map((d, i) => {
@@ -424,7 +436,7 @@ export default function TasksScreen() {
               </Pressable>
             ) : null}
           </View>
-        ) : null}
+        )}
 
         {/* Daily tasks — single card with title + slim "X / Y done"
             subtitle, then the task rows. The headline summary card

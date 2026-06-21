@@ -123,6 +123,12 @@ interface GameState {
   parks: Park[];
   lastParksFetchPos: LatLng | null;
   lostDogs: NearbyLostDog[];
+  // Flips true after the first syncLostDogs call settles (success or
+  // failure). Lets the Tasks tab tell "still waiting for the first
+  // fetch" apart from "fetched but zero nearby" so the lost-pets
+  // card can show a shimmer placeholder up-front instead of popping
+  // into existence later and shoving the daily-quests card down.
+  lostDogsLoaded: boolean;
   selectedDogId: string | null;
   spots: Spot[];
   // Same logic as lastParksFetchPos — Google Places returns spots
@@ -277,6 +283,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   parks: [],
   lastParksFetchPos: null,
   lostDogs: [],
+  lostDogsLoaded: false,
   selectedDogId: null,
   spots: [],
   lastSpotsFetchPos: null,
@@ -603,6 +610,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
+    } finally {
+      set({ lostDogsLoaded: true });
     }
   },
 
