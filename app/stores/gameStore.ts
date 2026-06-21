@@ -136,6 +136,12 @@ interface GameState {
   // window. Re-fetched on the same threshold.
   lastSpotsFetchPos: LatLng | null;
   spotsLoading: boolean;
+  // Flips true after the first syncSpots call settles (success, error,
+  // or fresh-cache short-circuit). Same purpose as lostDogsLoaded —
+  // lets the spots tab tell "still waiting for the first fetch" apart
+  // from "fetched but zero nearby" so the per-category snap cards can
+  // render skeletons up-front instead of popping in and reordering.
+  spotsLoaded: boolean;
   selectedSpotId: string | null;
   // Where the human is currently LOOKING on the map (viewport centre).
   // Set by MapView on map idle. Distinct from userPosition (GPS): used
@@ -288,6 +294,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   spots: [],
   lastSpotsFetchPos: null,
   spotsLoading: false,
+  spotsLoaded: false,
   selectedSpotId: null,
   // Default ON — smart per-category clustering keeps the map clean
   // even with many spots loaded, and surfacing them by default makes
@@ -708,13 +715,22 @@ export const useGameStore = create<GameState>((set, get) => ({
     const movedFar = lastAt
       ? distanceMeters(lastAt, pos) > PLACES_REFRESH_THRESHOLD_M
       : false;
-    if (get().spots.length > 0 && !movedFar) return;
+    if (get().spots.length > 0 && !movedFar) {
+      // Cache hit — still mark loaded so the spots tab knows it can
+      // stop showing skeletons.
+      set({ spotsLoaded: true });
+      return;
+    }
     set({ spotsLoading: true });
     try {
       const spots = await fetchNearbySpots(pos);
-      set({ spots, lastSpotsFetchPos: pos, spotsLoading: false });
+      set({ spots, lastSpotsFetchPos: pos, spotsLoading: false, spotsLoaded: true });
     } catch (err) {
-      set({ spotsLoading: false, lastSyncError: (err as Error).message });
+      set({
+        spotsLoading: false,
+        spotsLoaded: true,
+        lastSyncError: (err as Error).message,
+      });
     }
   },
 
