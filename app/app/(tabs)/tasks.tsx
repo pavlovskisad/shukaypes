@@ -204,33 +204,14 @@ export default function TasksScreen() {
 
   const doneCount = TASKS.filter((row) => dailyTasks[row.key] >= row.target).length;
 
-  // Inject the snap-pop keyframes once into <head>. The class is
-  // added programmatically to whichever card just snapped (see the
-  // IntersectionObserver effect below). Web-only — guards the
-  // document access so SSR / native bundlers don't trip.
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    if (document.getElementById('tasks-snap-pop-style')) return;
-    const el = document.createElement('style');
-    el.id = 'tasks-snap-pop-style';
-    el.textContent = `
-      @keyframes tasks-snap-pop {
-        0%   { transform: translateY(0)     scale(1);    }
-        28%  { transform: translateY(-14px) scale(1.07); }
-        100% { transform: translateY(0)     scale(1);    }
-      }
-      .tasks-snap-pop {
-        animation: tasks-snap-pop 620ms cubic-bezier(0.32, 0.72, 0, 1) both;
-      }
-    `;
-    document.head.appendChild(el);
-  }, []);
-
   // Pop the dominant snap-card when it changes. Uses
-  // IntersectionObserver against the cards' stable nativeIDs —
-  // way more reliable than the previous scroll-end approach
-  // which silently broke whenever scroll events stopped bubbling
-  // through RN-Web's internal wrapper.
+  // IntersectionObserver against the cards' stable nativeIDs to
+  // detect which card is currently dominant, then drives a pop
+  // via the Web Animations API. Previous attempts used a CSS
+  // class toggle with a forced reflow — that worked the first
+  // few times then silently stopped in Safari iOS (class restart
+  // is flaky there). element.animate() creates a fresh Animation
+  // instance every call so it restarts reliably.
   useEffect(() => {
     if (typeof document === 'undefined') return;
     if (typeof IntersectionObserver === 'undefined') return;
@@ -245,12 +226,27 @@ export default function TasksScreen() {
     let observer: IntersectionObserver | null = null;
     let lastDominant: Element | null = null;
 
+    const playPop = (el: HTMLElement) => {
+      el.animate(
+        [
+          { transform: 'translateY(0) scale(1)', offset: 0 },
+          { transform: 'translateY(-14px) scale(1.07)', offset: 0.28 },
+          { transform: 'translateY(0) scale(1)', offset: 1 },
+        ],
+        {
+          duration: 620,
+          easing: 'cubic-bezier(0.32, 0.72, 0, 1)',
+          fill: 'none',
+        },
+      );
+    };
+
     const setup = () => {
       const cards = Array.from(document.querySelectorAll<HTMLElement>('[id^="snap-card-"]'));
       if (cards.length === 0) return false;
 
-      // Per-card intersection ratio cache so we can compare on every
-      // callback fire without re-measuring each card.
+      // Per-card intersection ratio cache so we can compare across
+      // every observer fire without re-measuring each card.
       const ratios = new Map<Element, number>();
       cards.forEach((c) => ratios.set(c, 0));
 
@@ -269,12 +265,7 @@ export default function TasksScreen() {
           });
           if (dominant && dominant !== lastDominant && best > 0.6) {
             if (!isInitial) {
-              const target = dominant as HTMLElement;
-              target.classList.remove('tasks-snap-pop');
-              // Force reflow so the animation restarts even if the
-              // class was just removed.
-              void target.offsetWidth;
-              target.classList.add('tasks-snap-pop');
+              playPop(dominant as HTMLElement);
             }
             lastDominant = dominant;
           }
@@ -287,7 +278,8 @@ export default function TasksScreen() {
     };
 
     // Cards may not be in the DOM yet on first effect tick — retry
-    // until we find at least one.
+    // a couple of times in case the lost-pets data arrives later
+    // and inserts a new card into the snap deck.
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     if (!setup()) {
       retryTimer = setTimeout(() => {
@@ -300,7 +292,13 @@ export default function TasksScreen() {
       if (retryTimer) clearTimeout(retryTimer);
       clearTimeout(initTimer);
     };
-  }, []);
+    // Re-run when the set of snap-cards changes (lost-pets fetches
+    // in after initial mount; history can grow during a session).
+    // Without this the observer would be set up against an older
+    // card list and silently miss any cards that arrived later —
+    // which is exactly why the pop felt broken on the lost-pets
+    // card after a refresh.
+  }, [sortedDogs.length > 0, history.length > 0]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -577,6 +575,14 @@ const styles = StyleSheet.create({
   scroller: {
     flex: 1,
     scrollSnapType: 'y mandatory',
+    // Match the contentContainer's paddingTop so the mandatory snap
+    // doesn't force-align the first card's top with the viewport
+    // top — which was eating ALL the padding above the lost-pets
+    // card and made every iteration of padding bumps invisible to
+    // the user. With scroll-padding-top set, snap aligns the card
+    // 140px below the viewport top, leaving the breathing room
+    // actually visible.
+    scrollPaddingTop: 140,
   } as unknown as object,
   // Aggressive paddingTop — Safari iOS sets safe-area-inset-top to
   // 0 when not in standalone PWA mode, so all the breathing room
