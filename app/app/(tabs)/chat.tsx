@@ -349,7 +349,12 @@ export default function ChatScreen() {
           {
             top: 0,
             height: insets.top + HEADER_BAND_HEIGHT,
-            backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, ${TRANSPARENT_BG} 100%)`,
+            // Solid for the top 60% of the chrome, fade to
+            // transparent over the bottom 40%. More aggressive
+            // than the previous pure-linear so bubbles entering
+            // the chrome get hidden quickly instead of trailing
+            // ghost text most of the way through.
+            backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, ${colors.greyBg} 60%, ${TRANSPARENT_BG} 100%)`,
           } as unknown as object,
         ]}
         pointerEvents="none"
@@ -360,7 +365,9 @@ export default function ChatScreen() {
           {
             bottom: TAB_BAR_HEIGHT + insets.bottom,
             height: INPUT_BAND_HEIGHT + INPUT_GAP_ABOVE_TABS,
-            backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${TRANSPARENT_BG} 100%)`,
+            // Mirror of the top — solid greyBg for the bottom
+            // 60% of the chrome, fade for the top 40%.
+            backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${colors.greyBg} 60%, ${TRANSPARENT_BG} 100%)`,
           } as unknown as object,
         ]}
         pointerEvents="none"

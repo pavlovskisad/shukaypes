@@ -344,7 +344,13 @@ export function CardStack<T>({
 // first paint, before the items fetch comes back. Two stacked
 // grey peeks + a top card with a shimmer-sweep gradient on
 // repeat. Injects the shimmer keyframe once into <head>.
-export function CardStackSkeleton({ showCounter = true }: { showCounter?: boolean }) {
+export function CardStackSkeleton({
+  showCounter = true,
+  cardHeight = CARD_H,
+}: {
+  showCounter?: boolean;
+  cardHeight?: number;
+}) {
   useEffect(() => {
     if (typeof document === 'undefined') return;
     if (document.getElementById('card-stack-shimmer-style')) return;
@@ -359,12 +365,19 @@ export function CardStackSkeleton({ showCounter = true }: { showCounter?: boolea
     document.head.appendChild(el);
   }, []);
 
+  // Same slotSize pattern as the real CardStack — width / height
+  // come from the cardHeight prop (default CARD_H = 280). Without
+  // this the skeleton renders at 0×0 because styles.deck /
+  // styles.cardSlot no longer carry dimensions.
+  const slotSize = { width: CARD_W, height: cardHeight };
+
   return (
     <View style={styles.wrap}>
-      <View style={styles.deck}>
+      <View style={[styles.deck, slotSize, { marginBottom: 80 }]}>
         <View
           style={[
             styles.cardSlot,
+            slotSize,
             styles.greyDeckCard,
             { transform: [{ scale: 0.88 }, { translateY: 60 }] },
           ]}
@@ -372,6 +385,7 @@ export function CardStackSkeleton({ showCounter = true }: { showCounter?: boolea
         <View
           style={[
             styles.cardSlot,
+            slotSize,
             styles.greyDeckCard,
             { transform: [{ scale: 0.94 }, { translateY: 30 }] },
           ]}
@@ -380,6 +394,7 @@ export function CardStackSkeleton({ showCounter = true }: { showCounter?: boolea
           style={
             {
               ...styles.cardSlot,
+              ...slotSize,
               backgroundColor: '#e6e6e6',
               backgroundImage:
                 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.75) 50%, transparent 70%)',
