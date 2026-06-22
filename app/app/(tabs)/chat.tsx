@@ -335,23 +335,21 @@ export default function ChatScreen() {
         {typing ? <TypingIndicator /> : null}
       </ScrollView>
 
-      {/* Fade strips — solid page-bg over the entire chrome
-          area (status bar + header pill, input pill + tab bar
-          gap) with a soft gradient transition into the chat
-          area. Solid section covers any bubble text that ends
-          up beside the narrow pill on either side, instead of
-          the previous thin gradient that left the side text
-          visible-but-faded behind the pill. Below z-5 chrome,
-          above the scroll. */}
+      {/* Fade strips — gradient fully CONTAINED within the
+          chrome zones (no extension into the chat area). Top
+          strip spans status bar + header pill height, fading
+          from greyBg at the screen edge to transparent at the
+          chat-facing edge. Bottom strip mirrors. Bubbles
+          scrolling into the chrome dissolve gradually over the
+          full chrome height; the chat area stays free of any
+          fade overlay. Below z-5 chrome, above the scroll. */}
       <View
         style={[
           styles.fadeStrip,
           {
             top: 0,
-            height: insets.top + HEADER_BAND_HEIGHT + FADE_TRANSITION,
-            backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, ${colors.greyBg} ${
-              ((insets.top + HEADER_BAND_HEIGHT) / (insets.top + HEADER_BAND_HEIGHT + FADE_TRANSITION)) * 100
-            }%, ${TRANSPARENT_BG} 100%)`,
+            height: insets.top + HEADER_BAND_HEIGHT,
+            backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, ${TRANSPARENT_BG} 100%)`,
           } as unknown as object,
         ]}
         pointerEvents="none"
@@ -361,11 +359,8 @@ export default function ChatScreen() {
           styles.fadeStrip,
           {
             bottom: TAB_BAR_HEIGHT + insets.bottom,
-            height: INPUT_BAND_HEIGHT + INPUT_GAP_ABOVE_TABS + FADE_TRANSITION,
-            backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${colors.greyBg} ${
-              ((INPUT_BAND_HEIGHT + INPUT_GAP_ABOVE_TABS) /
-                (INPUT_BAND_HEIGHT + INPUT_GAP_ABOVE_TABS + FADE_TRANSITION)) * 100
-            }%, ${TRANSPARENT_BG} 100%)`,
+            height: INPUT_BAND_HEIGHT + INPUT_GAP_ABOVE_TABS,
+            backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${TRANSPARENT_BG} 100%)`,
           } as unknown as object,
         ]}
         pointerEvents="none"
@@ -506,12 +501,6 @@ const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 // Mirrors HERO.size from constants/sizing.ts (used by tabBarStyle.height).
 // Inlined to avoid importing a tokens file into the styles section.
 const TAB_BAR_HEIGHT = 64;
-// Gradient transition zone height — how many px of soft fade
-// between the solid chrome-covering portion of the fade strip
-// and the fully-transparent chat area below / above it. 40 was
-// too abrupt and left a visible cutoff line where the bubble's
-// text was sharply clipped; 80 gives a more gradual dissolve.
-const FADE_TRANSITION = 80;
 // CSS-friendly transparent value matching colors.greyBg so the
 // gradient interpolates as alpha-only on the same hue (no
 // shift through grey-tinted intermediate values).
