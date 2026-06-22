@@ -172,12 +172,15 @@ export function CardStack<T>({
   );
 
   const topItem = items[index];
-  // Deck slot occupancy via modular indexing — cycling means the
-  // deck stays full as long as there are at least N+1 items.
+  // Two-side carousel — one peek on each side of the top card.
+  // Right peek = next item (slides left to center on forward
+  // swipe). Left peek = previous item (slides right on backward
+  // swipe). Skip the left peek when N === 2 since prev would
+  // equal next and the two sides would show the same card,
+  // looking weird.
   const N = items.length;
   const next1 = N > 1 ? items[(index + 1) % N] : undefined;
-  const next2 = N > 2 ? items[(index + 2) % N] : undefined;
-  const next3 = N > 3 ? items[(index + 3) % N] : undefined;
+  const prev1 = N > 2 ? items[(index - 1 + N) % N] : undefined;
 
   // Dedicated Tap gesture composed with Pan via Race — Pan's
   // onEnd-with-low-travel branch worked for finger drags that
@@ -255,44 +258,36 @@ export function CardStack<T>({
   // backward range. Buffer also drives opacity (invisible at rest
   // and below, fades in only above 0 — backward doesn't reveal a
   // new bottom card, the deck just sinks).
-  // Horizontal stack — peeks sit BESIDE the top card (slightly
-  // to the right, deeper into the deck), not below it. Reads as
-  // a carousel-style stack. Forward swipe (left) promotes; the
-  // peeks slide left into the top position. tx values multiplied
-  // by peekScale so callers can tighten per use case.
+  // Two-side carousel poses — right peek (next card) on the
+  // right, left peek (previous card) on the left. Symmetric.
+  //   deckShift = +1 (forward complete) → right peek promotes
+  //     to top (center), left peek pushed further left + smaller
+  //   deckShift =  0 → both at rest, equidistant from centre
+  //   deckShift = -1 (backward complete) → left peek promotes
+  //     to top, right peek pushed further right + smaller
+  // tx scaled by peekScale so callers can tighten per use case.
   const SLOT_POSES = {
-    middle: {
-      demoted:  { scale: 0.85, tx: 52 * peekScale },
-      rest:     { scale: 0.92, tx: 28 * peekScale },
+    right: {
+      demoted:  { scale: 0.75, tx: 80 * peekScale },
+      rest:     { scale: 0.85, tx: 50 * peekScale },
       promoted: { scale: 1.0,  tx: 0 },
     },
-    bottom: {
-      demoted:  { scale: 0.78, tx: 76 * peekScale },
-      rest:     { scale: 0.85, tx: 52 * peekScale },
-      promoted: { scale: 0.92, tx: 28 * peekScale },
-    },
-    buffer: {
-      demoted:  { scale: 0.72, tx: 100 * peekScale },
-      rest:     { scale: 0.78, tx: 76 * peekScale },
-      promoted: { scale: 0.85, tx: 52 * peekScale },
+    left: {
+      demoted:  { scale: 1.0,  tx: 0 },
+      rest:     { scale: 0.85, tx: -50 * peekScale },
+      promoted: { scale: 0.75, tx: -80 * peekScale },
     },
   } as const;
 
-  const middleStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.middle.demoted.scale, SLOT_POSES.middle.rest.scale, SLOT_POSES.middle.promoted.scale]);
-    const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.middle.demoted.tx, SLOT_POSES.middle.rest.tx, SLOT_POSES.middle.promoted.tx]);
+  const rightStyle = useAnimatedStyle(() => {
+    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.right.demoted.scale, SLOT_POSES.right.rest.scale, SLOT_POSES.right.promoted.scale]);
+    const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.right.demoted.tx, SLOT_POSES.right.rest.tx, SLOT_POSES.right.promoted.tx]);
     return { transform: [{ scale: s }, { translateX: x }] };
   });
-  const bottomStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.bottom.demoted.scale, SLOT_POSES.bottom.rest.scale, SLOT_POSES.bottom.promoted.scale]);
-    const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.bottom.demoted.tx, SLOT_POSES.bottom.rest.tx, SLOT_POSES.bottom.promoted.tx]);
+  const leftStyle = useAnimatedStyle(() => {
+    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.left.demoted.scale, SLOT_POSES.left.rest.scale, SLOT_POSES.left.promoted.scale]);
+    const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.left.demoted.tx, SLOT_POSES.left.rest.tx, SLOT_POSES.left.promoted.tx]);
     return { transform: [{ scale: s }, { translateX: x }] };
-  });
-  const bufferStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.buffer.demoted.scale, SLOT_POSES.buffer.rest.scale, SLOT_POSES.buffer.promoted.scale]);
-    const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.buffer.demoted.tx, SLOT_POSES.buffer.rest.tx, SLOT_POSES.buffer.promoted.tx]);
-    const o = interpolate(deckShift.value, [-1, 0, 1], [0, 0, 1], Extrapolation.CLAMP);
-    return { transform: [{ scale: s }, { translateX: x }], opacity: o };
   });
 
   // Defensive — callers gate empty lists outside the stack.
@@ -308,22 +303,20 @@ export function CardStack<T>({
   return (
     <View style={styles.wrap}>
       <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
-        {next3 ? (
+        {/* Left + right peeks first (paint behind top), then
+            top card last (paints over both). Plain grey
+            rectangles — backward swipes never leak the next
+            item's content through. */}
+        {prev1 ? (
           <Animated.View
-            key="buffer"
-            style={[styles.cardSlot, slotSize, styles.greyDeckCard, bufferStyle]}
-          />
-        ) : null}
-        {next2 ? (
-          <Animated.View
-            key="bottom"
-            style={[styles.cardSlot, slotSize, styles.greyDeckCard, bottomStyle]}
+            key="left"
+            style={[styles.cardSlot, slotSize, styles.greyDeckCard, leftStyle]}
           />
         ) : null}
         {next1 ? (
           <Animated.View
-            key="middle"
-            style={[styles.cardSlot, slotSize, styles.greyDeckCard, middleStyle]}
+            key="right"
+            style={[styles.cardSlot, slotSize, styles.greyDeckCard, rightStyle]}
           />
         ) : null}
         <GestureDetector gesture={Gesture.Race(tap, pan)}>
@@ -376,12 +369,13 @@ export function CardStackSkeleton({
   return (
     <View style={styles.wrap}>
       <View style={[styles.deck, slotSize, { marginBottom: 24 }]}>
+        {/* Symmetric carousel — peek on each side at rest pose. */}
         <View
           style={[
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.85 }, { translateX: 52 }] },
+            { transform: [{ scale: 0.85 }, { translateX: -50 }] },
           ]}
         />
         <View
@@ -389,7 +383,7 @@ export function CardStackSkeleton({
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.92 }, { translateX: 28 }] },
+            { transform: [{ scale: 0.85 }, { translateX: 50 }] },
           ]}
         />
         <View
