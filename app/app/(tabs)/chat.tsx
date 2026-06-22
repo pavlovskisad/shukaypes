@@ -508,8 +508,10 @@ const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 const TAB_BAR_HEIGHT = 64;
 // Gradient transition zone height — how many px of soft fade
 // between the solid chrome-covering portion of the fade strip
-// and the fully-transparent chat area below / above it.
-const FADE_TRANSITION = 40;
+// and the fully-transparent chat area below / above it. 40 was
+// too abrupt and left a visible cutoff line where the bubble's
+// text was sharply clipped; 80 gives a more gradual dissolve.
+const FADE_TRANSITION = 80;
 // CSS-friendly transparent value matching colors.greyBg so the
 // gradient interpolates as alpha-only on the same hue (no
 // shift through grey-tinted intermediate values).
