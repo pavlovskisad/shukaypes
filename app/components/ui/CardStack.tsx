@@ -1,16 +1,15 @@
-// Generic carousel card stack. A virtual window of five items
-// around `index` is rendered on a horizontal track at offsets
-// [-2, -1, 0, +1, +2] * STEP. The whole track translates by
-// `trackShift` during a swipe — top + peeks + buffers all slide
-// together like a real carousel, not a Tinder-style fly-off.
+// Generic carousel card stack. The carousel position is a single
+// shared value (`currentPos`) measured in card-steps; each rendered
+// item has a stable `virtualIdx` and its visual translateX is
+// derived as `(virtualIdx - currentPos) * STEP`. There is no
+// "snap" on advance — the animation settles at currentPos =
+// virtualBase + delta, then virtualBase catches up via setState.
+// Persisting items keep the SAME virtualIdx across the advance,
+// so the worklet doesn't have to be re-uploaded with a new offset
+// and there's no React-vs-UI race that could glitch the position.
 //
-// On commit the track animates by ±STEP (one card-step) then the
-// underlying `index` swaps and trackShift snaps back to 0. Crucially,
-// each item is keyed by its STABLE id (not by slot position), so
-// React reuses the same DOM nodes / images across the index swap —
-// the four items that persist across an advance just animate to
-// their new offsets, no image remount, no blink. Only the newly-
-// arriving farthest item mounts (at an off-screen buffer position).
+// Cycling: virtualBase grows / shrinks without bound; the item to
+// render at each virtualIdx is `items[(virtualIdx mod N + N) mod N]`.
 //
 // Used by:
 //   - LostDogCardStack (NearbyLostDog items, photo cards)
@@ -58,29 +57,28 @@ interface Props<T> {
   peekScale?: number;
 }
 
-// Per-item slot. Owns its own useAnimatedStyle that derives the
-// translateX / scale from the item's current `offset` from the
-// centre and the shared `trackShift`. `offset` is a regular React
-// prop — it changes when the index advances and that item shifts
-// position in the window — but Reanimated re-uploads the worklet
-// with the new captured offset, so the position stays consistent.
+// Per-item slot. `virtualIdx` is the item's stable position on the
+// conceptual infinite carousel track; it does NOT change when the
+// React index advances (persisting items keep the same virtualIdx,
+// the window just shifts which items it includes). visualTx is
+// driven purely by shared values, so position never races React.
 function ItemSlot<T>({
   item,
-  offset,
-  trackShift,
+  virtualIdx,
+  currentPos,
   step,
   slotSize,
   renderCard,
 }: {
   item: T;
-  offset: number;
-  trackShift: SharedValue<number>;
+  virtualIdx: number;
+  currentPos: SharedValue<number>;
   step: number;
   slotSize: { width: number; height: number };
   renderCard: (item: T) => ReactNode;
 }) {
   const animStyle = useAnimatedStyle(() => {
-    const visualTx = offset * step + trackShift.value;
+    const visualTx = (virtualIdx - currentPos.value) * step;
     const scale = interpolate(
       visualTx,
       [-2 * step, -step, 0, step, 2 * step],
@@ -88,9 +86,7 @@ function ItemSlot<T>({
       Extrapolation.CLAMP,
     );
     // zIndex follows distance-to-centre so the slot closest to 0
-    // paints on top of the peeks. Without this, a peek rising into
-    // the centre during a swipe can briefly underlap the outgoing
-    // top card.
+    // paints on top of the peeks during a swipe.
     const z = interpolate(
       Math.abs(visualTx),
       [0, step, 2 * step],
@@ -116,36 +112,42 @@ export function CardStack<T>({
   cardHeight = CARD_H,
   peekScale = 1,
 }: Props<T>) {
-  const [index, setIndex] = useState(0);
-  const trackShift = useSharedValue(0);
+  // virtualBase = the carousel position as an integer index. Grows
+  // without bound (we cycle via modulo when picking which item to
+  // render at each virtualIdx). currentPos is the float version,
+  // animates between integer values, drives the visual translate.
+  const [virtualBase, setVirtualBase] = useState(0);
+  const currentPos = useSharedValue(0);
+  // Worklet-side mirror of virtualBase so the pan handler reads
+  // the freshest value even when React hasn't re-rendered yet
+  // (rare but possible if the user starts a new pan before
+  // setVirtualBase commits).
+  const virtualBaseSV = useSharedValue(0);
 
   // Carousel step — horizontal distance between adjacent slot
   // centres. 290 with TOP_SCALE 0.88 + PEEK_SCALE 0.74 leaves a
   // ~31 px gap between the centre's right edge and the peek's
-  // left edge, ~24 px of visible peek on a 390-wide phone.
+  // left edge.
   const STEP = 290 * peekScale;
 
-  // Reset to start when the underlying list changes (e.g. the
-  // screen refetches and the order shifts).
+  // Reset when the underlying list changes.
   const ids = useMemo(() => items.map(getId).join(','), [items, getId]);
   useEffect(() => {
-    setIndex(0);
-    trackShift.value = 0;
+    setVirtualBase(0);
+    currentPos.value = 0;
+    virtualBaseSV.value = 0;
   }, [ids]);
 
-  // Pre-warm photos for neighbouring items so the next card's
-  // image is already decoded.
+  const N = items.length;
+  const topItemIndex = N > 0 ? ((virtualBase % N) + N) % N : 0;
+  const topItem = N > 0 ? items[topItemIndex] : undefined;
+
+  // Pre-warm photos for upcoming items.
   useEffect(() => {
-    if (!getPhotoUrl) return;
-    const upcoming = [
-      items[index + 1],
-      items[index + 2],
-      items[index + 3],
-      items[index + 4],
-      items[index - 1],
-      items[index - 2],
-    ];
-    upcoming.forEach((item) => {
+    if (!getPhotoUrl || N === 0) return;
+    [1, 2, 3, 4, -1, -2].forEach((o) => {
+      const idx = ((topItemIndex + o) % N + N) % N;
+      const item = items[idx];
       if (!item) return;
       const url = getPhotoUrl(item);
       if (url) {
@@ -154,54 +156,46 @@ export function CardStack<T>({
         });
       }
     });
-  }, [index, items, getPhotoUrl]);
+  }, [topItemIndex, items, N, getPhotoUrl]);
 
-  const N = items.length;
-  const topItem = N > 0 ? items[index] : undefined;
-
-  // Window of 5 items centred on `index`, cycling modulo N. Each
-  // entry carries the item, its offset from centre, and the stable
-  // id used as React key.
+  // Window of 5 items centred on virtualBase. Each entry carries
+  // its virtualIdx (stable per item-in-position) and the resolved
+  // item. Keyed by virtualIdx so React preserves the same DOM
+  // node for persisting items across an advance.
   const window = useMemo(() => {
     if (N === 0) return [];
     return [-2, -1, 0, 1, 2].map((offset) => {
-      const item = items[((index + offset) % N + N) % N];
-      return { id: getId(item), item, offset };
+      const virtualIdx = virtualBase + offset;
+      const item = items[((virtualIdx % N) + N) % N];
+      return { virtualIdx, item };
     });
-  }, [index, items, N, getId]);
+  }, [virtualBase, items, N]);
 
-  const advance = useCallback(
-    (delta: number) => {
-      // Order matters: zero the track first so the worklet's next
-      // frame uses trackShift=0; then setIndex triggers React to
-      // reshuffle offsets. Items keyed by id reuse their slots —
-      // each persisting item's new offset cancels the snap exactly
-      // (offset*step + 0 == old_offset*step + (-step)).
-      trackShift.value = 0;
-      setIndex((i) => {
-        if (N === 0) return 0;
-        return ((i + delta) % N + N) % N;
-      });
-    },
-    [N, trackShift],
-  );
+  // Advance React-side virtualBase after the carousel has visually
+  // settled at the new position. currentPos is already at the new
+  // integer, virtualBaseSV is already updated (worklet did that),
+  // so this is just React catching up — no visual change occurs.
+  const advance = useCallback((delta: number) => {
+    setVirtualBase((b) => b + delta);
+  }, []);
 
   const handleTap = useCallback(() => {
     if (topItem) onTap?.(topItem);
   }, [onTap, topItem]);
 
-  // Deck-level gestures. Pan drives the entire track; tap fires
-  // for any centre-area touch with low travel. Peek taps also
-  // route to onTap(topItem) — peeks aren't independently
-  // interactive in a carousel and the simpler model avoids
-  // hit-testing per slot.
+  // Deck-level gestures — pan drives the carousel, tap fires for
+  // any low-travel release. Peek taps also route to onTap(topItem);
+  // simpler than per-slot hit-testing and matches carousel
+  // expectations ("the centre card is what you interact with").
   const tap = Gesture.Tap().onEnd(() => {
     runOnJS(handleTap)();
   });
 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
-      trackShift.value = e.translationX;
+      // 1:1 finger follow: dragging by STEP pixels shifts the
+      // carousel by exactly one card.
+      currentPos.value = virtualBaseSV.value - e.translationX / STEP;
     })
     .onEnd((e) => {
       const travel = Math.abs(e.translationX) + Math.abs(e.translationY);
@@ -209,39 +203,46 @@ export function CardStack<T>({
       const passedVel = Math.abs(e.velocityX) > VELOCITY_COMMIT;
       if (travel < TAP_TRAVEL_MAX) {
         runOnJS(handleTap)();
-        trackShift.value = withSpring(0);
+        currentPos.value = withSpring(virtualBaseSV.value);
         return;
       }
       if (N > 1 && (passedPx || passedVel)) {
         const isForward = e.translationX < 0;
         const delta = isForward ? 1 : -1;
-        const target = isForward ? -STEP : STEP;
-        trackShift.value = withTiming(
+        const target = virtualBaseSV.value + delta;
+        currentPos.value = withTiming(
           target,
           { duration: SETTLE_MS, easing: SETTLE_EASE },
-          () => {
-            runOnJS(advance)(delta);
+          (finished) => {
+            if (finished) {
+              // Bump the worklet-side base immediately so a
+              // back-to-back pan reads the right value, then ask
+              // React to catch up.
+              virtualBaseSV.value = target;
+              runOnJS(advance)(delta);
+            }
           },
         );
       } else {
-        trackShift.value = withSpring(0);
+        currentPos.value = withSpring(virtualBaseSV.value);
       }
     });
 
   if (!topItem) return null;
 
   const slotSize = { width: CARD_W, height: cardHeight };
+  const counterIndex = topItemIndex + 1;
 
   return (
     <View style={styles.wrap}>
       <GestureDetector gesture={Gesture.Race(tap, pan)}>
         <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
-          {window.map(({ id, item, offset }) => (
+          {window.map(({ virtualIdx, item }) => (
             <ItemSlot
-              key={id}
+              key={virtualIdx}
               item={item}
-              offset={offset}
-              trackShift={trackShift}
+              virtualIdx={virtualIdx}
+              currentPos={currentPos}
               step={STEP}
               slotSize={slotSize}
               renderCard={renderCard}
@@ -251,7 +252,7 @@ export function CardStack<T>({
       </GestureDetector>
       {showCounter ? (
         <Text style={styles.counter}>
-          {index + 1} / {items.length}
+          {counterIndex} / {items.length}
         </Text>
       ) : null}
     </View>
