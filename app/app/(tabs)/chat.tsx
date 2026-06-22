@@ -518,30 +518,32 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     // paddingTop/paddingBottom are set inline so the bands' on-screen
     // heights (incl. safe-area inset) can drive the value at runtime.
-    gap: 8,
+    gap: 12,
   },
+  // Fatter, Gemini-style bubbles — bigger padding, uniform corners
+  // (no more "tail" notch), bigger type. Reads more comfortable on
+  // long replies and matches the chunky-card direction the rest of
+  // the app moved to.
   bubble: {
-    maxWidth: '82%',
-    paddingVertical: 10,
-    paddingHorizontal: 14,
-    borderRadius: 18,
+    maxWidth: '85%',
+    paddingVertical: 14,
+    paddingHorizontal: 18,
+    borderRadius: 24,
   },
   assistantBubble: {
     alignSelf: 'flex-start',
     backgroundColor: '#ffffff',
-    borderBottomLeftRadius: 6,
     ...CARD_SHADOW,
   },
   userBubble: {
     alignSelf: 'flex-end',
     backgroundColor: ACCENT_BLUE,
-    borderBottomRightRadius: 6,
     ...CARD_SHADOW,
   },
   bubbleText: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 15,
-    lineHeight: 22,
+    fontSize: 16,
+    lineHeight: 24,
   },
   assistantText: {
     color: colors.black,
