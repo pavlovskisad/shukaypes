@@ -273,12 +273,14 @@ export default function ProfileScreen() {
             value={data?.companion.happiness ?? 0}
             label={t.hud.happiness}
             solid
+            showValue={false}
           />
           <MeterPill
             icon="bone"
             value={data?.companion.hunger ?? 0}
             label={t.hud.hunger}
             solid
+            showValue={false}
           />
           <CounterPill
             icon="paws"

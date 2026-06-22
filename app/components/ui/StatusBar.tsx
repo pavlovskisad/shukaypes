@@ -29,6 +29,7 @@ export function MeterPill({
   value,
   label,
   solid,
+  showValue = true,
 }: {
   icon: IconName;
   value: number;
@@ -37,6 +38,11 @@ export function MeterPill({
   // used on the profile tab where the dark night sky behind makes
   // the translucent default read as greyish.
   solid?: boolean;
+  // Hide the "%" text and rely on the blue fill alone as the
+  // indicator. Profile uses this so the hunger / happiness pills
+  // read as quiet chips; map HUD keeps the default so the user
+  // gets the exact number while walking.
+  showValue?: boolean;
 }) {
   const fillPct = Math.max(0, Math.min(100, Math.round(value)));
   return (
@@ -51,12 +57,14 @@ export function MeterPill({
         ]}
       />
       <Icon name={icon} size={ICON_SIZE} />
-      <Text
-        style={styles.value}
-        accessibilityLabel={`${label} ${fillPct} percent`}
-      >
-        {fillPct}%
-      </Text>
+      {showValue ? (
+        <Text
+          style={styles.value}
+          accessibilityLabel={`${label} ${fillPct} percent`}
+        >
+          {fillPct}%
+        </Text>
+      ) : null}
     </View>
   );
 }

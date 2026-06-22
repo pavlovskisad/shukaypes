@@ -215,12 +215,12 @@ const styles = StyleSheet.create({
   scroller: {
     flex: 1,
     scrollSnapType: 'y mandatory',
-    scrollPaddingTop: 60,
+    // 60 → 32 to lift the snapped card higher and free up bottom
+    // room for the next card's title to peek above the tab bar.
+    // See tasks.tsx for the longer reasoning.
+    scrollPaddingTop: 32,
   } as unknown as object,
-  // Even vertical rhythm — 60 top, 60 between cards, ~60 visible
-  // below the last (paddingBottom soaks the floating dashboard's
-  // ~80px overlap).
-  content: { paddingHorizontal: 16, paddingTop: 60, paddingBottom: 140, gap: 60 },
+  content: { paddingHorizontal: 16, paddingTop: 32, paddingBottom: 140, gap: 60 },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,

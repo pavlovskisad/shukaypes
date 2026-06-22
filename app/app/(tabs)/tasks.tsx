@@ -445,17 +445,17 @@ const styles = StyleSheet.create({
   scroller: {
     flex: 1,
     scrollSnapType: 'y mandatory',
-    // Match contentContainer paddingTop so mandatory snap doesn't
-    // force-align the first card's top with the viewport top and
-    // eat the breathing room. Keep these two in sync.
-    scrollPaddingTop: 60,
+    // Match contentContainer paddingTop. Bumped 60 → 32 so the
+    // snapped card sits higher in the viewport, leaving more
+    // room at the bottom for the next snap-card's title to peek
+    // above the floating dashboard instead of getting clipped
+    // by it.
+    scrollPaddingTop: 32,
   } as unknown as object,
-  // Even vertical rhythm: paddingTop == gap == visible-bottom.
-  // 60 above the first card, 60 between every card, 60 visible
-  // below the last (paddingBottom is 60 + ~80 for the floating
-  // dashboard's overlap, so the last card has the same visual
-  // breathing room as the others).
-  content: { paddingHorizontal: 16, paddingTop: 60, paddingBottom: 140, gap: 60 },
+  // Tighter top padding so the next card's title peeks above
+  // the tab bar. gap stays 60 so the between-card rhythm
+  // doesn't collapse.
+  content: { paddingHorizontal: 16, paddingTop: 32, paddingBottom: 140, gap: 60 },
   card: {
     backgroundColor: '#ffffff',
     borderRadius: 20,
