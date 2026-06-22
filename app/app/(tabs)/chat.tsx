@@ -305,7 +305,9 @@ export default function ChatScreen() {
   // header + input cards (which sit on top of the scroll view as
   // frosted overlays). Numbers approximate the cards' on-screen
   // heights — generous so multi-line names/inputs don't overlap.
-  const topPad = insets.top + HEADER_BAND_HEIGHT + 8;
+  // Extra +24 at top so the first message sits with real air below
+  // the header pill instead of pressed against it.
+  const topPad = insets.top + HEADER_BAND_HEIGHT + 24;
   // insets.bottom covers iOS PWA standalone — the tab bar grows to
   // include the home-indicator safe-area, so the last bubble must sit
   // above (TAB_BAR_HEIGHT + safe-area + input band) to scroll free.
@@ -563,31 +565,39 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginVertical: 8,
   },
+  // Fatter input card — bigger paddings + radius to match the
+  // chunkier bubble + send-button proportions.
   inputCard: {
     flexDirection: 'row',
     gap: 8,
     alignItems: 'center',
     marginHorizontal: 16,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
+    paddingHorizontal: 10,
+    paddingVertical: 10,
     backgroundColor: '#ffffff',
-    borderRadius: 26,
+    borderRadius: 32,
     ...CARD_SHADOW,
   },
   input: {
     flex: 1,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 12,
     // 16px keeps iOS Safari from auto-zooming on focus. Anything < 16
     // triggers the zoom and never zooms back out cleanly.
     fontSize: 16,
     fontFamily: SYSTEM_FONT,
     color: colors.black,
-  },
+    // RN-Web wires TextInput to <input>, which gets the browser's
+    // default focus ring (a blue rectangle on Safari iOS). Suppress
+    // it so the input reads as part of the white card chrome instead
+    // of a stark form field.
+    outlineStyle: 'none',
+    outlineWidth: 0,
+  } as unknown as object,
   sendBtn: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     backgroundColor: ACCENT_BLUE,
     alignItems: 'center',
     justifyContent: 'center',
