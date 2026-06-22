@@ -221,17 +221,10 @@ const styles = StyleSheet.create({
     scrollPaddingTop: 32,
   } as unknown as object,
   content: { paddingHorizontal: 16, paddingTop: 32, paddingBottom: 140, gap: 60 },
+  // Snap block — no white card frame. Title + category stack
+  // sit straight on the page bg.
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 28,
-    paddingTop: 14,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
+    paddingHorizontal: 4,
     scrollSnapAlign: 'start',
     scrollSnapStop: 'always',
   } as unknown as object,

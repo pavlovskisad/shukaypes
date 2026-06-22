@@ -194,8 +194,9 @@ export function CardStack<T>({
 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
+      // Pure horizontal — no vertical drift on swipe. Carousel
+      // pattern, not Tinder. ty stays 0 the whole time.
       tx.value = e.translationX;
-      ty.value = e.translationY * 0.3;
       const p = Math.min(Math.abs(e.translationX) / CARD_W, 1);
       if (e.translationX < 0) {
         deckShift.value = p;
@@ -232,7 +233,6 @@ export function CardStack<T>({
             runOnJS(advance)(delta);
           },
         );
-        ty.value = withTiming(ty.value + 40, { duration: FLY_OFF_MS, easing: FLY_EASE });
       } else {
         tx.value = withSpring(0);
         ty.value = withSpring(0);
@@ -241,13 +241,18 @@ export function CardStack<T>({
     });
 
   // Top card transform + fade-in opacity.
+  // Top card — translate + scale only, no rotation, no
+  // vertical drift. Carousel pattern: the centre card slides
+  // horizontally and lives at a slightly smaller scale (0.92)
+  // so there's visible margin between it and the side peeks.
+  // The fly-off translate is driven by tx.value during the
+  // pan / commit.
+  const TOP_SCALE = 0.92;
   const topStyle = useAnimatedStyle(() => {
-    const rotate = interpolate(tx.value, [-200, 0, 200], [-12, 0, 12], Extrapolation.CLAMP);
     return {
       transform: [
         { translateX: tx.value },
-        { translateY: ty.value },
-        { rotate: `${rotate}deg` },
+        { scale: TOP_SCALE },
       ],
       opacity: topAppearOpacity.value,
     };
@@ -268,21 +273,25 @@ export function CardStack<T>({
   //   deckShift =  0 → both at rest, edges visible
   //   deckShift = -1 (backward complete) → left peek promotes
   //     to top, right peek slides off-screen right
-  const REST_TX = 290 * peekScale;
+  // tx bumped 290 → 300 so the peek's visual left edge sits
+  // ~12 px to the right of the top card's visual right edge —
+  // a small gap between centre and side cards, matching the
+  // SwiftUI TabView reference. Math: top visual right = 147
+  // (scale 0.92 × CARD_W/2), peek visual left = peek_tx -
+  // peek_scale * CARD_W / 2 = 300 - 141 = 159 → 12 px gap.
+  const REST_TX = 300 * peekScale;
   const OFF_TX = 360 * peekScale;
-  // Side cards sit a bit smaller than the centre top card at
-  // rest (scale 0.88) — distinguishes "the card you're looking
-  // at" from "the cards peeking next to it". Scale animates to
-  // 1.0 as a peek promotes to top, and shrinks further (0.75)
-  // when the OTHER side ducks off-screen.
+  // Promoted scale matches TOP_SCALE so the peek smoothly
+  // becomes the new centre card without a visible size jump
+  // when advance() swaps the index over.
   const SLOT_POSES = {
     right: {
       demoted:  { scale: 0.75, tx: OFF_TX },     // backward swipe → shrinks + off right
       rest:     { scale: 0.88, tx: REST_TX },
-      promoted: { scale: 1.0,  tx: 0 },          // forward swipe → becomes top
+      promoted: { scale: TOP_SCALE, tx: 0 },     // forward swipe → becomes top
     },
     left: {
-      demoted:  { scale: 1.0,  tx: 0 },          // backward swipe → becomes top
+      demoted:  { scale: TOP_SCALE, tx: 0 },     // backward swipe → becomes top
       rest:     { scale: 0.88, tx: -REST_TX },
       promoted: { scale: 0.75, tx: -OFF_TX },    // forward swipe → shrinks + off left
     },
@@ -376,15 +385,14 @@ export function CardStackSkeleton({
   return (
     <View style={styles.wrap}>
       <View style={[styles.deck, slotSize, { marginBottom: 24 }]}>
-        {/* Carousel-style skeleton — peeks slightly smaller than
-            the top card (scale 0.88) at rest, matching the real
-            CardStack. */}
+        {/* Carousel-style skeleton — peeks scale 0.88 at ±300
+            tx, matching the real CardStack rest poses. */}
         <View
           style={[
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.88 }, { translateX: -290 }] },
+            { transform: [{ scale: 0.88 }, { translateX: -300 }] },
           ]}
         />
         <View
@@ -392,7 +400,7 @@ export function CardStackSkeleton({
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.88 }, { translateX: 290 }] },
+            { transform: [{ scale: 0.88 }, { translateX: 300 }] },
           ]}
         />
         <View
@@ -407,6 +415,8 @@ export function CardStackSkeleton({
               backgroundRepeat: 'no-repeat',
               animation: 'card-stack-shimmer 1.8s ease-in-out infinite',
               borderRadius: 28,
+              // Match TOP_SCALE in the real CardStack — 0.92.
+              transform: [{ scale: 0.92 }],
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 8 },
               shadowOpacity: 0.18,

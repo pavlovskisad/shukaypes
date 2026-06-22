@@ -456,21 +456,12 @@ const styles = StyleSheet.create({
   // the tab bar. gap stays 60 so the between-card rhythm
   // doesn't collapse.
   content: { paddingHorizontal: 16, paddingTop: 32, paddingBottom: 140, gap: 60 },
+  // Snap block — no white card frame anymore. Title + content
+  // sit straight on the page bg. Just carries the scroll-snap
+  // alignment + horizontal padding so the inner content has
+  // breathing room from the screen edge.
   card: {
-    backgroundColor: '#ffffff',
-    borderRadius: 28,
-    // Split padding — top is tighter so the card title sits high
-    // and is visible when the card peeks at the top or bottom of
-    // the viewport after a snap. Horizontal + bottom stay roomy.
-    paddingTop: 14,
-    paddingBottom: 20,
-    paddingHorizontal: 20,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.06,
-    shadowRadius: 12,
-    elevation: 2,
-    // Snap each card's top edge to the top of the scroll viewport.
+    paddingHorizontal: 4,
     scrollSnapAlign: 'start',
     scrollSnapStop: 'always',
   } as unknown as object,
