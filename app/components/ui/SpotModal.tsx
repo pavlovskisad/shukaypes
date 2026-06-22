@@ -107,7 +107,10 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             position: 'relative',
             width: '100%',
             height: HERO_HEIGHT_PX,
-            background: 'linear-gradient(180deg, #f5f6f8 0%, #ecedf0 100%)',
+            // Plain white — the previous grey gradient added visual
+            // noise without earning it; the icon + chips already
+            // carry the hero's identity.
+            background: '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
