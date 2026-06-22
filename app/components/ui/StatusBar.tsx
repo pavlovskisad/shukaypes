@@ -155,10 +155,13 @@ const styles = StyleSheet.create({
     // @ts-expect-error — safari prefix not in RN style types
     WebkitBackdropFilter: 'blur(14px) saturate(160%)',
     shadowColor: GLASS_SHADOW_COLOR,
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
-    elevation: 3,
+    // Bumped from { 0, 4 } / 0.1 / 16 to the chat CHROME_SHADOW
+    // values so HUD pills feel like the same family as the chat
+    // header + input cards — visibly lifted off the bg.
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+    elevation: 6,
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 8,

@@ -386,9 +386,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: 6,
   },
-  // Lang pill — solid white, same shape as the HUD MeterPill /
-  // CounterPill in solid mode. The dark night sky behind would
-  // tint a translucent pill, so plain white is cleaner.
+  // Lang pill — solid white, same shape + chat-style CHROME_SHADOW
+  // as the HUD MeterPill / CounterPill in solid mode. The dark
+  // night sky behind would tint a translucent pill, so plain white
+  // is cleaner.
   langPill: {
     height: CHIP.height,
     minWidth: CHIP.height,
@@ -396,9 +397,10 @@ const styles = StyleSheet.create({
     borderRadius: CHIP.height / 2,
     backgroundColor: '#ffffff',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 16,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 20,
+    elevation: 6,
     alignItems: 'center',
     justifyContent: 'center',
   },
