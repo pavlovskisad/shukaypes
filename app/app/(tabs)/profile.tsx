@@ -296,17 +296,16 @@ export default function ProfileScreen() {
       </View>
 
       {/* Stat deck — on the lower lawn, right above the tab bar
-          and below the dog. peekScale tightens the stacked-card
-          peek so the deck doesn't visually dominate the smaller
-          150-tall slot (the default scale was calibrated for the
-          280-tall photo cards on tasks / spots). */}
+          and below the dog. Same horizontal carousel calibration
+          as tasks / spots (peekScale 1) — the cards stay 320 wide
+          here too, so a smaller STEP collapses the peeks under
+          the centre card. */}
       <View style={[styles.deckHolder, { bottom: HERO.size + insets.bottom }]}>
         <CardStack
           items={sections}
           getId={(s) => s.id}
           renderCard={(s) => s.content}
           cardHeight={150}
-          peekScale={0.55}
           showCounter={false}
         />
       </View>
