@@ -6,7 +6,6 @@ import { View, Text, StyleSheet } from 'react-native';
 import type { Spot } from '../../services/places';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { useStrings } from '../../i18n/useStrings';
 import { Icon, iconForCategory } from './Icon';
 import { CardStack, CardStackSkeleton, CARD_W, CARD_H } from './CardStack';
 
@@ -16,13 +15,12 @@ interface Props {
 }
 
 export function SpotCardStack({ spots, onTap }: Props) {
-  const t = useStrings();
   return (
     <CardStack
       items={spots}
       getId={(s) => s.id}
       onTap={onTap}
-      renderCard={(s) => renderCard(s, t)}
+      renderCard={(s) => renderCard(s)}
     />
   );
 }
@@ -30,12 +28,11 @@ export function SpotCardStack({ spots, onTap }: Props) {
 export const SpotCardStackSkeleton = CardStackSkeleton;
 
 // White card, big category icon as the centred hero, name +
-// address at the bottom on dark text. Category chip top-left,
-// optional rating chip top-right.
-function renderCard(spot: Spot, t: ReturnType<typeof useStrings>) {
-  const categoryLabel =
-    t.modals.spot.categories[spot.category as keyof typeof t.modals.spot.categories] ??
-    spot.category;
+// address at the bottom on dark text. Optional rating chip
+// top-right. No category chip — the spots tab already groups
+// cards under a category title ("кав'ярні" etc.), so repeating
+// the singular on every card just doubles up the same info.
+function renderCard(spot: Spot) {
   const iconSlot = iconForCategory(spot.category);
 
   return (
@@ -46,9 +43,6 @@ function renderCard(spot: Spot, t: ReturnType<typeof useStrings>) {
         ) : (
           <Text style={styles.heroEmoji}>{spot.icon ?? '📍'}</Text>
         )}
-      </View>
-      <View style={styles.categoryBadge}>
-        <Text style={styles.categoryBadgeText}>{categoryLabel}</Text>
       </View>
       {typeof spot.rating === 'number' ? (
         <View style={styles.ratingBadge}>
@@ -102,27 +96,6 @@ const styles = StyleSheet.create({
   },
   // Full-pill chip family — matches the HUD pill / chat header
   // shape + shadow, scaled smaller for in-card use.
-  categoryBadge: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  categoryBadgeText: {
-    fontSize: 11,
-    fontWeight: '700',
-    textTransform: 'lowercase',
-    letterSpacing: 0.4,
-    color: '#555',
-  },
   ratingBadge: {
     position: 'absolute',
     top: 14,
