@@ -270,20 +270,21 @@ export function CardStack<T>({
   //     to top, right peek slides off-screen right
   const REST_TX = 290 * peekScale;
   const OFF_TX = 360 * peekScale;
-  // Scale stays 1 at rest + on the way TO becoming top — only
-  // shrinks when the peek is moving AWAY from centre (deck
-  // swiped the OTHER direction). Makes the side card "duck out"
-  // gracefully instead of jumping off at full size.
+  // Side cards sit a bit smaller than the centre top card at
+  // rest (scale 0.88) — distinguishes "the card you're looking
+  // at" from "the cards peeking next to it". Scale animates to
+  // 1.0 as a peek promotes to top, and shrinks further (0.75)
+  // when the OTHER side ducks off-screen.
   const SLOT_POSES = {
     right: {
-      demoted:  { scale: 0.82, tx: OFF_TX },    // backward swipe → shrinks + slides off right
-      rest:     { scale: 1.0,  tx: REST_TX },
-      promoted: { scale: 1.0,  tx: 0 },         // forward swipe → becomes top
+      demoted:  { scale: 0.75, tx: OFF_TX },     // backward swipe → shrinks + off right
+      rest:     { scale: 0.88, tx: REST_TX },
+      promoted: { scale: 1.0,  tx: 0 },          // forward swipe → becomes top
     },
     left: {
-      demoted:  { scale: 1.0,  tx: 0 },         // backward swipe → becomes top
-      rest:     { scale: 1.0,  tx: -REST_TX },
-      promoted: { scale: 0.82, tx: -OFF_TX },   // forward swipe → shrinks + slides off left
+      demoted:  { scale: 1.0,  tx: 0 },          // backward swipe → becomes top
+      rest:     { scale: 0.88, tx: -REST_TX },
+      promoted: { scale: 0.75, tx: -OFF_TX },    // forward swipe → shrinks + off left
     },
   } as const;
 
@@ -375,15 +376,15 @@ export function CardStackSkeleton({
   return (
     <View style={styles.wrap}>
       <View style={[styles.deck, slotSize, { marginBottom: 24 }]}>
-        {/* Carousel-style skeleton — full-size peeks on each
-            side at rest pose, only edges visible past the top
-            card. Matches the real CardStack layout. */}
+        {/* Carousel-style skeleton — peeks slightly smaller than
+            the top card (scale 0.88) at rest, matching the real
+            CardStack. */}
         <View
           style={[
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ translateX: -290 }] },
+            { transform: [{ scale: 0.88 }, { translateX: -290 }] },
           ]}
         />
         <View
@@ -391,7 +392,7 @@ export function CardStackSkeleton({
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ translateX: 290 }] },
+            { transform: [{ scale: 0.88 }, { translateX: 290 }] },
           ]}
         />
         <View
