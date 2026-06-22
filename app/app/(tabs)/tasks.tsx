@@ -458,7 +458,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 32, paddingBottom: 140, gap: 60 },
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderRadius: 28,
     // Split padding — top is tighter so the card title sits high
     // and is visible when the card peeks at the top or bottom of
     // the viewport after a snap. Horizontal + bottom stay roomy.

@@ -81,8 +81,8 @@ export default function TabsLayout() {
           // with TAB_BAR_HEIGHT in chat.tsx — keep them in sync.
           height: HERO.size + insets.bottom,
           paddingBottom: insets.bottom,
-          borderTopLeftRadius: 24,
-          borderTopRightRadius: 24,
+          borderTopLeftRadius: 28,
+          borderTopRightRadius: 28,
           // Plain white — the previous frosted-glass treatment
           // picked up tints from whatever was behind the bar
           // (dark night sky on profile, map colours on home) and

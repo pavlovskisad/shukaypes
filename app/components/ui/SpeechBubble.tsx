@@ -34,8 +34,11 @@ export function SpeechBubble({ text }: SpeechBubbleProps) {
         // remarks (greeting, sniff-on / sniff-off lines) hug
         // their longest line instead of carrying a wide dead
         // strip on either side. Cap maxWidth at 60vw.
-        padding: '12px 10px',
-        borderRadius: '22px 22px 22px 6px',
+        padding: '12px 14px',
+        // Uniform full radius — matches the chat bubble + chip
+        // family. No more "tail" corner; the bubble's position
+        // above the dog is enough direction cue on its own.
+        borderRadius: 24,
         fontSize: 16,
         lineHeight: 1.4,
         fontFamily: VOICE.fontFamily,

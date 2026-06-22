@@ -242,12 +242,14 @@ export function LostDogModal({
               left: 14,
               background: '#ffffff',
               color: badgeFg,
-              borderRadius: 12,
+              // Full-pill + lifted shadow to match the HUD / chat
+              // pill family across the app.
+              borderRadius: 999,
               padding: '6px 12px',
               fontSize: 12,
               fontWeight: 700,
               letterSpacing: 0.5,
-              boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
               display: 'inline-flex',
               alignItems: 'center',
               gap: 6,
@@ -272,13 +274,12 @@ export function LostDogModal({
                 style={{
                   background: '#ffffff',
                   color: '#555',
-                  borderRadius: 12,
+                  borderRadius: 999,
                   padding: '6px 12px',
                   fontSize: 12,
                   fontWeight: 700,
                   letterSpacing: 0.3,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
-                  border: '1px solid rgba(0,0,0,0.04)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
                 }}
               >
                 {distLabel}

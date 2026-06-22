@@ -433,7 +433,7 @@ const styles = StyleSheet.create({
     width: CARD_W,
     height: 150,
     backgroundColor: '#ffffff',
-    borderRadius: 22,
+    borderRadius: 28,
     paddingTop: 12,
     paddingBottom: 12,
     paddingHorizontal: 16,

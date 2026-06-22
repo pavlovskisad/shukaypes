@@ -223,7 +223,7 @@ const styles = StyleSheet.create({
   content: { paddingHorizontal: 16, paddingTop: 32, paddingBottom: 140, gap: 60 },
   card: {
     backgroundColor: '#ffffff',
-    borderRadius: 20,
+    borderRadius: 28,
     paddingTop: 14,
     paddingBottom: 20,
     paddingHorizontal: 20,

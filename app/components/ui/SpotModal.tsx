@@ -124,8 +124,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               {renderSpot.icon ?? '📍'}
             </span>
           )}
-          {/* Category chip top-left — SAFE_TOP clears the notch
-              now that the modal is top-anchored. */}
+          {/* Category chip top-left — full-pill + lifted shadow
+              to match the HUD / chat / card chip family. */}
           <span
             style={{
               position: 'absolute',
@@ -133,14 +133,13 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               left: 14,
               background: '#ffffff',
               color: '#555',
-              borderRadius: 12,
+              borderRadius: 999,
               padding: '6px 12px',
               fontSize: 12,
               fontWeight: 700,
               letterSpacing: 0.4,
               textTransform: 'lowercase',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
-              border: '1px solid rgba(0,0,0,0.04)',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
             }}
           >
             {categoryLabel}
@@ -163,13 +162,12 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 style={{
                   background: '#ffffff',
                   color: '#d9a030',
-                  borderRadius: 12,
+                  borderRadius: 999,
                   padding: '6px 12px',
                   fontSize: 12,
                   fontWeight: 700,
                   letterSpacing: 0.3,
-                  boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
-                  border: '1px solid rgba(0,0,0,0.04)',
+                  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
                 }}
               >
                 ★ {renderSpot.rating!.toFixed(1)}

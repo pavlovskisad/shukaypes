@@ -119,7 +119,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               left: 14,
               background: '#ffffff',
               color: '#555',
-              borderRadius: 12,
+              borderRadius: 999,
               padding: '6px 12px',
               fontSize: 12,
               fontWeight: 700,

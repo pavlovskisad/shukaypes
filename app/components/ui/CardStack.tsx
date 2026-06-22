@@ -401,7 +401,7 @@ export function CardStackSkeleton({
               backgroundSize: '200% 100%',
               backgroundRepeat: 'no-repeat',
               animation: 'card-stack-shimmer 1.8s ease-in-out infinite',
-              borderRadius: 24,
+              borderRadius: 28,
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 8 },
               shadowOpacity: 0.18,
@@ -437,7 +437,7 @@ const styles = StyleSheet.create({
   },
   greyDeckCard: {
     backgroundColor: '#e6e6e6',
-    borderRadius: 24,
+    borderRadius: 28,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,

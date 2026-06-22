@@ -93,7 +93,7 @@ const styles = StyleSheet.create({
   card: {
     width: CARD_W,
     height: CARD_H,
-    borderRadius: 24,
+    borderRadius: 28,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
     shadowColor: '#000',
@@ -114,7 +114,7 @@ const styles = StyleSheet.create({
     // corners at the top of the photo. Match the card's
     // borderRadius on the image itself so it self-clips
     // regardless of parent.
-    borderRadius: 24,
+    borderRadius: 28,
   },
   photoFallback: {
     alignItems: 'center',
@@ -139,16 +139,17 @@ const styles = StyleSheet.create({
     top: 14,
     left: 14,
     backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    // Full-pill radius + lifted shadow so the chip reads as the
+    // same family as the HUD pills / chat header pill (full
+    // round with CHROME_SHADOW). Scaled down for in-card use.
+    borderRadius: 999,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 4,
   },
   badgeText: {
     fontSize: 11,
@@ -157,22 +158,20 @@ const styles = StyleSheet.create({
     letterSpacing: 0.4,
   },
   // Distance chip — mirror of the urgency badge but anchored
-  // top-right. Same white-pill-with-shadow family.
+  // top-right. Same full-pill / lifted-shadow family.
   distChip: {
     position: 'absolute',
     top: 14,
     right: 14,
     backgroundColor: '#ffffff',
-    paddingHorizontal: 10,
-    paddingVertical: 5,
-    borderRadius: 10,
-    borderWidth: 1,
-    borderColor: 'rgba(0,0,0,0.05)',
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 2,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 4,
   },
   distChipText: {
     fontSize: 11,

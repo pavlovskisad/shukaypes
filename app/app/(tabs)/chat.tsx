@@ -589,14 +589,14 @@ const styles = StyleSheet.create({
     gap: 12,
   },
   // Fatter, Gemini-style bubbles — bigger padding, uniform corners
-  // (no more "tail" notch), bigger type. Reads more comfortable on
-  // long replies and matches the chunky-card direction the rest of
-  // the app moved to.
+  // (no more "tail" notch), bigger type. borderRadius bumped 24 →
+  // 28 to match the modal sheets + card radii — same "round form"
+  // family across the app.
   bubble: {
     maxWidth: '85%',
     paddingVertical: 14,
     paddingHorizontal: 18,
-    borderRadius: 24,
+    borderRadius: 28,
   },
   assistantBubble: {
     alignSelf: 'flex-start',

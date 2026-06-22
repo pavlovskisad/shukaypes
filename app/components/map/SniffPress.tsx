@@ -463,7 +463,7 @@ export function SniffPress() {
             padding: '12px 14px',
             background: VOICE.background,
             color: VOICE.color,
-            borderRadius: 22,
+            borderRadius: 24,
             fontFamily: VOICE.fontFamily,
             fontSize: 16,
             lineHeight: 1.4,
