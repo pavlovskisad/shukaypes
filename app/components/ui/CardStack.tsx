@@ -255,42 +255,44 @@ export function CardStack<T>({
   // backward range. Buffer also drives opacity (invisible at rest
   // and below, fades in only above 0 — backward doesn't reveal a
   // new bottom card, the deck just sinks).
-  // Peek poses — ty values multiplied by peekScale so callers
-  // with smaller cardHeights (profile) can tighten the stack
-  // without affecting the photo-card stacks (tasks / spots).
+  // Horizontal stack — peeks sit BESIDE the top card (slightly
+  // to the right, deeper into the deck), not below it. Reads as
+  // a carousel-style stack. Forward swipe (left) promotes; the
+  // peeks slide left into the top position. tx values multiplied
+  // by peekScale so callers can tighten per use case.
   const SLOT_POSES = {
     middle: {
-      demoted:  { scale: 0.85, ty: 75 * peekScale },
-      rest:     { scale: 0.92, ty: 40 * peekScale },
-      promoted: { scale: 1.0,  ty: 0 },
+      demoted:  { scale: 0.85, tx: 52 * peekScale },
+      rest:     { scale: 0.92, tx: 28 * peekScale },
+      promoted: { scale: 1.0,  tx: 0 },
     },
     bottom: {
-      demoted:  { scale: 0.78, ty: 110 * peekScale },
-      rest:     { scale: 0.85, ty: 75 * peekScale },
-      promoted: { scale: 0.92, ty: 40 * peekScale },
+      demoted:  { scale: 0.78, tx: 76 * peekScale },
+      rest:     { scale: 0.85, tx: 52 * peekScale },
+      promoted: { scale: 0.92, tx: 28 * peekScale },
     },
     buffer: {
-      demoted:  { scale: 0.72, ty: 145 * peekScale },
-      rest:     { scale: 0.78, ty: 110 * peekScale },
-      promoted: { scale: 0.85, ty: 75 * peekScale },
+      demoted:  { scale: 0.72, tx: 100 * peekScale },
+      rest:     { scale: 0.78, tx: 76 * peekScale },
+      promoted: { scale: 0.85, tx: 52 * peekScale },
     },
   } as const;
 
   const middleStyle = useAnimatedStyle(() => {
     const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.middle.demoted.scale, SLOT_POSES.middle.rest.scale, SLOT_POSES.middle.promoted.scale]);
-    const y = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.middle.demoted.ty, SLOT_POSES.middle.rest.ty, SLOT_POSES.middle.promoted.ty]);
-    return { transform: [{ scale: s }, { translateY: y }] };
+    const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.middle.demoted.tx, SLOT_POSES.middle.rest.tx, SLOT_POSES.middle.promoted.tx]);
+    return { transform: [{ scale: s }, { translateX: x }] };
   });
   const bottomStyle = useAnimatedStyle(() => {
     const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.bottom.demoted.scale, SLOT_POSES.bottom.rest.scale, SLOT_POSES.bottom.promoted.scale]);
-    const y = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.bottom.demoted.ty, SLOT_POSES.bottom.rest.ty, SLOT_POSES.bottom.promoted.ty]);
-    return { transform: [{ scale: s }, { translateY: y }] };
+    const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.bottom.demoted.tx, SLOT_POSES.bottom.rest.tx, SLOT_POSES.bottom.promoted.tx]);
+    return { transform: [{ scale: s }, { translateX: x }] };
   });
   const bufferStyle = useAnimatedStyle(() => {
     const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.buffer.demoted.scale, SLOT_POSES.buffer.rest.scale, SLOT_POSES.buffer.promoted.scale]);
-    const y = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.buffer.demoted.ty, SLOT_POSES.buffer.rest.ty, SLOT_POSES.buffer.promoted.ty]);
+    const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.buffer.demoted.tx, SLOT_POSES.buffer.rest.tx, SLOT_POSES.buffer.promoted.tx]);
     const o = interpolate(deckShift.value, [-1, 0, 1], [0, 0, 1], Extrapolation.CLAMP);
-    return { transform: [{ scale: s }, { translateY: y }], opacity: o };
+    return { transform: [{ scale: s }, { translateX: x }], opacity: o };
   });
 
   // Defensive — callers gate empty lists outside the stack.
@@ -305,7 +307,7 @@ export function CardStack<T>({
   const slotSize = { width: CARD_W, height: cardHeight };
   return (
     <View style={styles.wrap}>
-      <View style={[styles.deck, slotSize, { marginBottom: 80 * peekScale }]}>
+      <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
         {next3 ? (
           <Animated.View
             key="buffer"
@@ -373,13 +375,13 @@ export function CardStackSkeleton({
 
   return (
     <View style={styles.wrap}>
-      <View style={[styles.deck, slotSize, { marginBottom: 80 }]}>
+      <View style={[styles.deck, slotSize, { marginBottom: 24 }]}>
         <View
           style={[
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.88 }, { translateY: 60 }] },
+            { transform: [{ scale: 0.85 }, { translateX: 52 }] },
           ]}
         />
         <View
@@ -387,7 +389,7 @@ export function CardStackSkeleton({
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.94 }, { translateY: 30 }] },
+            { transform: [{ scale: 0.92 }, { translateX: 28 }] },
           ]}
         />
         <View

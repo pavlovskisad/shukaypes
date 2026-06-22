@@ -1693,7 +1693,7 @@ export default function MapViewWeb() {
               'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
             zIndex: Z.HUD_CHIP_BUBBLE,
             // Same dimensions / type as the in-map SpeechBubble.
-            padding: '12px 14px',
+            padding: '12px 10px',
             background: VOICE.background,
             color: VOICE.color,
             borderRadius: 24,
