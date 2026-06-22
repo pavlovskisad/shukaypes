@@ -30,11 +30,11 @@ export function SpeechBubble({ text }: SpeechBubbleProps) {
         background: VOICE.background,
         color: VOICE.color,
         // Fatter bubble — padding 12 vertical for breathing
-        // room, but only 14 horizontal so wrapping multi-line
-        // remarks (greeting, sniff-on / sniff-off lines) don't
-        // sprawl with 36px of dead space on the sides. Cap
-        // maxWidth at 60vw so it doesn't take the whole screen.
-        padding: '12px 14px',
+        // room, but only 10 horizontal so wrapping multi-line
+        // remarks (greeting, sniff-on / sniff-off lines) hug
+        // their longest line instead of carrying a wide dead
+        // strip on either side. Cap maxWidth at 60vw.
+        padding: '12px 10px',
         borderRadius: '22px 22px 22px 6px',
         fontSize: 16,
         lineHeight: 1.4,

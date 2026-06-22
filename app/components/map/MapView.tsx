@@ -1012,7 +1012,11 @@ export default function MapViewWeb() {
     // - sides: small padding so chips don't graze the screen edges.
     // Not perfectly symmetric, but the asymmetry follows the actual
     // UI footprint instead of being arbitrary.
-    const sideReserve = 0.05;
+    // Bumped 0.05 → 0.02 — chips on left / right edges sat well
+    // inside the viewport before, leaving a visible inset strip
+    // between the chip and the screen edge that read as "wasted"
+    // margin. 2% sits the chips almost flush with the edge.
+    const sideReserve = 0.02;
     // Was 0.04 — chips on the top edge ended up directly under the
     // Chips on the top edge now sit at the actual top of the
     // viewport so 'this pet is far north' reads as far north, not
@@ -1689,9 +1693,10 @@ export default function MapViewWeb() {
               'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
             zIndex: Z.HUD_CHIP_BUBBLE,
             // Same dimensions / type as the in-map SpeechBubble.
-            // Horizontal padding 14 (not 18) so wrapping bubbles
-            // don't get 36px of dead space on the sides.
-            padding: '12px 14px',
+            // Horizontal padding 10 so wrapping bubbles hug their
+            // longest line instead of leaving a dead strip on
+            // each side.
+            padding: '12px 10px',
             background: VOICE.background,
             color: VOICE.color,
             borderRadius: 22,
