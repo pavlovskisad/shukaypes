@@ -29,14 +29,19 @@ export function SpeechBubble({ text }: SpeechBubbleProps) {
         transform: 'translateX(-50%)',
         background: VOICE.background,
         color: VOICE.color,
-        padding: '8px 14px',
-        borderRadius: '18px 18px 18px 4px',
-        fontSize: 14,
-        lineHeight: 1.35,
+        // Fatter bubble — padding 8/14 → 12/18, radius 18 → 22,
+        // type 14 → 16. Cap maxWidth at 60vw per the user's ask so
+        // the bubble doesn't sprawl across the screen on long
+        // remarks; lineHeight bumped to 1.4 to match the chunkier
+        // chat bubble family.
+        padding: '12px 18px',
+        borderRadius: '22px 22px 22px 6px',
+        fontSize: 16,
+        lineHeight: 1.4,
         fontFamily: VOICE.fontFamily,
         whiteSpace: 'pre-line',
         width: 'max-content',
-        maxWidth: 'min(70vw, 340px)',
+        maxWidth: 'min(60vw, 320px)',
         textAlign: 'center',
         boxShadow: VOICE.shadow,
         pointerEvents: 'none',

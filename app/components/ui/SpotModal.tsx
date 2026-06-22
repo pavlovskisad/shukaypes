@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
@@ -50,16 +51,18 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   }, [spot]);
 
   if (!renderSpot) return null;
+  if (typeof document === 'undefined') return null;
 
   const categoryLabel = CATEGORY_LABEL[renderSpot.category] ?? renderSpot.category;
   const iconSlot = iconForCategory(renderSpot.category);
   const hasRating = typeof renderSpot.rating === 'number';
 
-  return (
+  // Portal to document.body — see LostDogModal for the rationale.
+  return createPortal(
     <div
       onClick={onClose}
       style={{
-        position: 'absolute',
+        position: 'fixed',
         inset: 0,
         background: 'rgba(0,0,0,0.3)',
         display: 'flex',
@@ -266,6 +269,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           }
         `}</style>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

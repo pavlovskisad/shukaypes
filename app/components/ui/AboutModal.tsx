@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { Z } from '../../constants/z';
 import { INLINE_ICON } from '../../constants/sizing';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
@@ -11,6 +11,9 @@ interface AboutModalProps {
 }
 
 const SHEET_ANIM_MS = 280;
+// Top-anchored modal — bump the badge / close button down by the
+// safe-area inset so they clear the iPhone notch / status bar.
+const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
 
 // Icon assignment per about-row index. Stays language-neutral so the
 // strings table only carries the translatable title + body — the
@@ -52,25 +55,24 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
   }, [open]);
 
   if (!rendered) return null;
+  if (typeof document === 'undefined') return null;
 
-  return (
+  // Top-sheet modal portaled to document.body so it sits above the
+  // HUD pills and the floating dashboard regardless of where in the
+  // component tree it gets mounted. Same visual family as the
+  // LostDog / Spot modals: full-bleed top edge, rounded bottom only,
+  // slides down from off-screen-top.
+  return createPortal(
     <div
       onClick={onClose}
       style={{
-        position: 'absolute',
+        position: 'fixed',
         inset: 0,
         background: 'rgba(0,0,0,0.3)',
         display: 'flex',
-        alignItems: 'flex-end',
+        alignItems: 'flex-start',
         justifyContent: 'center',
-        // Reserve the top for the HUD pills and the bottom for the
-        // tab dashboard + iPhone home-indicator. Bumped 100→124px
-        // because on PWA users reported the rows list slipping
-        // under the dashboard — the previous gap was just enough to
-        // clear it but visually felt too tight.
-        paddingTop: 80,
-        paddingBottom: 'calc(124px + env(safe-area-inset-bottom))' as unknown as number,
-        zIndex: Z.MODAL_GLOBAL,
+        zIndex: 1000,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
       }}
@@ -79,42 +81,51 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#ffffff',
-          borderRadius: 24,
-          padding: '22px 20px 22px',
+          borderTopLeftRadius: 0,
+          borderTopRightRadius: 0,
+          borderBottomLeftRadius: 28,
+          borderBottomRightRadius: 28,
+          padding: 0,
           width: '100%',
-          maxWidth: 430,
-          // Cap to the available flex content area (overlay padding
-          // already reserves clearance) so the inner rows scroll
-          // instead of the sheet pushing past the HUD.
-          maxHeight: '100%',
+          maxWidth: 460,
+          // Cap so the content scrolls instead of overlapping the
+          // floating dashboard.
+          maxHeight: 'calc(100vh - 110px - env(safe-area-inset-bottom))' as unknown as number,
           display: 'flex',
           flexDirection: 'column',
-          animation: `sheet-${closing ? 'down' : 'up'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
-          boxShadow: '0 -10px 30px rgba(0,0,0,0.12)',
+          position: 'relative',
+          animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+          overflow: 'hidden',
         }}
       >
+        {/* Header strip — badge top-left, close button top-right.
+            Both offset by SAFE_TOP so they clear the iPhone notch
+            on a top-anchored modal. */}
         <div
           style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center',
-            marginBottom: 8,
+            position: 'relative',
+            paddingTop: `calc(${SAFE_TOP} + 36px + 8px)`,
+            paddingLeft: 22,
+            paddingRight: 22,
+            paddingBottom: 6,
+            flexShrink: 0,
           }}
         >
           <span
             style={{
-              // Match the spot-modal category chip: white +
-              // shadow + hairline border. Reads as a "tag" on
-              // the white sheet without the grey muddiness.
+              position: 'absolute',
+              top: SAFE_TOP,
+              left: 14,
               background: '#ffffff',
               color: '#555',
               borderRadius: 12,
-              padding: '4px 10px',
+              padding: '6px 12px',
               fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: 0.3,
+              fontWeight: 700,
+              letterSpacing: 0.4,
               textTransform: 'lowercase',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
               border: '1px solid rgba(0,0,0,0.04)',
             }}
           >
@@ -122,22 +133,31 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           </span>
           <button
             onClick={onClose}
+            aria-label={t.modals.common.close}
             style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: 24,
+              position: 'absolute',
+              top: SAFE_TOP,
+              right: 12,
+              width: 36,
+              height: 36,
+              borderRadius: 18,
+              border: '1px solid rgba(0,0,0,0.06)',
+              background: 'rgba(255,255,255,0.92)',
+              color: '#1a1a1a',
+              padding: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
               cursor: 'pointer',
-              color: '#777',
+              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              fontSize: 26,
               lineHeight: 1,
             }}
-            aria-label={t.modals.common.close}
           >
             ×
           </button>
-        </div>
 
-        <div style={{ marginTop: 4, marginBottom: 14 }}>
-          <div style={{ fontFamily: SYSTEM_FONT, fontSize: 22, fontWeight: 700 }}>
+          <div style={{ fontFamily: SYSTEM_FONT, fontSize: 26, fontWeight: 800 }}>
             {t.modals.about.header}
           </div>
           <div
@@ -148,23 +168,20 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           />
         </div>
 
+        {/* Scrollable rows */}
         <div
           style={{
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
-            gap: 12,
-            paddingRight: 4,
+            gap: 14,
+            padding: '14px 22px 22px',
+            flexGrow: 1,
+            minHeight: 0,
           }}
         >
           {t.modals.about.rows.map((r, i) => (
             <div key={r.title} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
-              {/* Bare icon — no surrounding chip. Sized at 44px against
-                  the row's 15px title so the icon dominates the
-                  silhouette (~2.9× ratio, matching the spots-screen
-                  card rows the user pointed at as reference). The
-                  fixed-width wrapper keeps the rest of the rows
-                  vertically aligned even when icon glyphs differ. */}
               <div
                 style={{
                   width: INLINE_ICON.about,
@@ -216,16 +233,17 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         </div>
 
         <style>{`
-          @keyframes sheet-up {
-            from { transform: translateY(100%); }
+          @keyframes top-sheet-in {
+            from { transform: translateY(-100%); }
             to { transform: translateY(0); }
           }
-          @keyframes sheet-down {
+          @keyframes top-sheet-out {
             from { transform: translateY(0); }
-            to { transform: translateY(100%); }
+            to { transform: translateY(-100%); }
           }
         `}</style>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

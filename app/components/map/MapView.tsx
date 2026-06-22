@@ -1630,8 +1630,11 @@ export default function MapViewWeb() {
             // Matches the corner logo's same-recipe inversion.
             background: sniffMode ? '#ffffff' : '#1a1a1a',
             borderRadius: '50%',
-            width: 44,
-            height: 44,
+            // Bumped 44 → 56 (and logo 30 → 38) per user request —
+            // bigger chip is easier to tap and reads as a clear
+            // "follow the dog" bookmark instead of a tiny dot.
+            width: 56,
+            height: 56,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -1648,14 +1651,14 @@ export default function MapViewWeb() {
           <div
             aria-hidden
             style={{
-              width: 30,
-              height: 30,
+              width: 38,
+              height: 38,
               filter: sniffMode ? undefined : 'invert(1)',
             }}
           >
             <Image
               source={logoNose}
-              style={{ width: 30, height: 30 }}
+              style={{ width: 38, height: 38 }}
               resizeMode="contain"
             />
           </div>

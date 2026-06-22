@@ -1,5 +1,6 @@
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
@@ -101,17 +102,23 @@ export function LostDogModal({
   }, [dog]);
 
   if (!renderDog) return null;
+  if (typeof document === 'undefined') return null;
 
   const urgent = renderDog.urgency === 'urgent';
   const badgeIcon: IconName = urgent ? 'urgent' : 'search';
   const badgeText = urgent ? t.modals.lostDog.badgeUrgent : t.modals.lostDog.badgeSearching;
   const badgeFg = urgent ? '#e84040' : '#d9a030';
 
-  return (
+  // Portal to document.body so the modal escapes the MapView /
+  // tab-page stacking context. Without this, the HUD pills (rendered
+  // as a sibling of MapView with zIndex: HUD_PILLS) paint over the
+  // modal regardless of MODAL_MAP z-index, because the mapLayer
+  // container has no z-index of its own.
+  return createPortal(
     <div
       onClick={onClose}
       style={{
-        position: 'absolute',
+        position: 'fixed',
         inset: 0,
         background: 'rgba(0,0,0,0.3)',
         display: 'flex',
@@ -354,6 +361,7 @@ export function LostDogModal({
           }
         `}</style>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
