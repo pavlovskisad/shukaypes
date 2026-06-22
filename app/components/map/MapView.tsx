@@ -1688,10 +1688,10 @@ export default function MapViewWeb() {
             transition:
               'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
             zIndex: Z.HUD_CHIP_BUBBLE,
-            // Same dimensions / type as the in-map SpeechBubble so
-            // the two read as one voice — padding 12/18, radius 22,
-            // type 16/1.4, maxWidth capped at 60vw.
-            padding: '12px 18px',
+            // Same dimensions / type as the in-map SpeechBubble.
+            // Horizontal padding 14 (not 18) so wrapping bubbles
+            // don't get 36px of dead space on the sides.
+            padding: '12px 14px',
             background: VOICE.background,
             color: VOICE.color,
             borderRadius: 22,

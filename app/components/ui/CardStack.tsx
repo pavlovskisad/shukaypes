@@ -179,6 +179,16 @@ export function CardStack<T>({
   const next2 = N > 2 ? items[(index + 2) % N] : undefined;
   const next3 = N > 3 ? items[(index + 3) % N] : undefined;
 
+  // Dedicated Tap gesture composed with Pan via Race — Pan's
+  // onEnd-with-low-travel branch worked for finger drags that
+  // released near the start point, but very short / still taps
+  // sometimes got eaten because Pan needs a brief activation
+  // window before any events fire. Race(Tap, Pan) lets a clean
+  // tap commit immediately; any real movement defers to Pan.
+  const tap = Gesture.Tap().onEnd(() => {
+    if (topItem) runOnJS(handleTap)(topItem);
+  });
+
   const pan = Gesture.Pan()
     .onUpdate((e) => {
       tx.value = e.translationX;
@@ -314,7 +324,7 @@ export function CardStack<T>({
             style={[styles.cardSlot, slotSize, styles.greyDeckCard, middleStyle]}
           />
         ) : null}
-        <GestureDetector gesture={pan}>
+        <GestureDetector gesture={Gesture.Race(tap, pan)}>
           <Animated.View style={[styles.cardSlot, slotSize, topStyle]}>
             {renderCard(topItem)}
           </Animated.View>

@@ -29,12 +29,12 @@ export function SpeechBubble({ text }: SpeechBubbleProps) {
         transform: 'translateX(-50%)',
         background: VOICE.background,
         color: VOICE.color,
-        // Fatter bubble — padding 8/14 → 12/18, radius 18 → 22,
-        // type 14 → 16. Cap maxWidth at 60vw per the user's ask so
-        // the bubble doesn't sprawl across the screen on long
-        // remarks; lineHeight bumped to 1.4 to match the chunkier
-        // chat bubble family.
-        padding: '12px 18px',
+        // Fatter bubble — padding 12 vertical for breathing
+        // room, but only 14 horizontal so wrapping multi-line
+        // remarks (greeting, sniff-on / sniff-off lines) don't
+        // sprawl with 36px of dead space on the sides. Cap
+        // maxWidth at 60vw so it doesn't take the whole screen.
+        padding: '12px 14px',
         borderRadius: '22px 22px 22px 6px',
         fontSize: 16,
         lineHeight: 1.4,

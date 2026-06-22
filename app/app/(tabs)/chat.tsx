@@ -450,6 +450,18 @@ const CARD_SHADOW = {
   elevation: 2,
 } as const;
 
+// Stronger shadow for the floating header + input cards so they
+// separate cleanly from the grey chat background. Bubbles keep
+// the lighter CARD_SHADOW so they don't all visually compete
+// with the chrome.
+const CHROME_SHADOW = {
+  shadowColor: '#000',
+  shadowOffset: { width: 0, height: 6 },
+  shadowOpacity: 0.14,
+  shadowRadius: 20,
+  elevation: 6,
+} as const;
+
 // Approximate visible heights for the floating pills. Used as scroll
 // content padding so the first/last bubble can scroll past each pill
 // without ever sitting flush against it.
@@ -483,21 +495,21 @@ const styles = StyleSheet.create({
   bottomBand: {
     paddingVertical: 4,
   },
-  // Inverted header pill — dark bg + white name + a white tile
-  // inside the pill carrying the logo (reads as a brand chip on
-  // the dark pill).
+  // White header pill with a stronger CHROME_SHADOW so it
+  // separates cleanly from the chat background and reads as
+  // floating chrome rather than melting into the bubbles below.
   headerCard: {
     alignSelf: 'center',
     marginTop: 10,
     marginBottom: 8,
-    backgroundColor: colors.black,
+    backgroundColor: '#ffffff',
     borderRadius: 999,
     paddingVertical: 8,
     paddingHorizontal: 14,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 8,
-    ...CARD_SHADOW,
+    ...CHROME_SHADOW,
   },
   headerLogoPill: {
     width: 36,
@@ -515,7 +527,7 @@ const styles = StyleSheet.create({
     fontFamily: SYSTEM_FONT,
     fontSize: 15,
     fontWeight: '700',
-    color: '#ffffff',
+    color: colors.black,
   },
   listContent: {
     paddingHorizontal: 16,
@@ -567,7 +579,9 @@ const styles = StyleSheet.create({
     marginVertical: 8,
   },
   // Fatter input card — bigger paddings + radius to match the
-  // chunkier bubble + send-button proportions.
+  // chunkier bubble + send-button proportions. CHROME_SHADOW so
+  // it floats clearly above the chat background instead of
+  // melting into the last bubble above.
   inputCard: {
     flexDirection: 'row',
     gap: 8,
@@ -577,7 +591,7 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     backgroundColor: '#ffffff',
     borderRadius: 32,
-    ...CARD_SHADOW,
+    ...CHROME_SHADOW,
   },
   input: {
     flex: 1,
