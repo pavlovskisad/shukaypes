@@ -22,8 +22,11 @@ export const Z = {
   MARKER_DEFAULT: 10,
   // The dog. Sits above other markers in dense areas — when the
   // map's covered in POI clusters the companion should still be
-  // the visual anchor.
-  MARKER_COMPANION: 15,
+  // the visual anchor. Bumped 15 → 42 so it (and the SpeechBubble
+  // inside its marker container) paints ABOVE the off-screen
+  // lost-pet chips (HUD_CHIPS = 35) when the dog speaks near the
+  // viewport edge. Still well below MODAL_MAP (60).
+  MARKER_COMPANION: 42,
   // Spiderified children of an expanded cluster — local to the
   // cluster's stacking context, but bumped here so they paint
   // above other map markers while expanded.

@@ -335,6 +335,22 @@ export default function ChatScreen() {
         {typing ? <TypingIndicator /> : null}
       </ScrollView>
 
+      {/* Fade strips — gradient from the page-bg colour at the
+          chrome edge to transparent toward the chat area. Bubbles
+          melt into the chrome instead of sliding past with a hard
+          edge. Sit ABOVE the scroll but BELOW the chrome cards. */}
+      <View
+        style={[styles.fadeTop, { top: insets.top + HEADER_BAND_HEIGHT - 8 }]}
+        pointerEvents="none"
+      />
+      <View
+        style={[
+          styles.fadeBottom,
+          { bottom: TAB_BAR_HEIGHT + insets.bottom + INPUT_GAP_ABOVE_TABS + INPUT_BAND_HEIGHT - 8 },
+        ]}
+        pointerEvents="none"
+      />
+
       {/* Top pill — compact companion-handle so it reads as "who
           you're talking to" rather than a hero card. */}
       <View
@@ -495,6 +511,25 @@ const styles = StyleSheet.create({
   bottomBand: {
     paddingVertical: 4,
   },
+  // Fade strips — gradient bands at the edges of the scroll area
+  // so messages dissolve into the chrome instead of cutting hard.
+  // Sit between the scroll (z auto) and the chrome cards (z 5).
+  fadeTop: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 32,
+    zIndex: 3,
+    backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, rgba(240,240,240,0) 100%)`,
+  } as unknown as object,
+  fadeBottom: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    height: 32,
+    zIndex: 3,
+    backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, rgba(240,240,240,0) 100%)`,
+  } as unknown as object,
   // White header pill with a stronger CHROME_SHADOW so it
   // separates cleanly from the chat background and reads as
   // floating chrome rather than melting into the bubbles below.
