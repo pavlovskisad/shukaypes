@@ -258,24 +258,32 @@ export function CardStack<T>({
   // backward range. Buffer also drives opacity (invisible at rest
   // and below, fades in only above 0 — backward doesn't reveal a
   // new bottom card, the deck just sinks).
-  // Two-side carousel poses — right peek (next card) on the
-  // right, left peek (previous card) on the left. Symmetric.
+  // Two-side carousel — full-size peeks on each side, only the
+  // EDGE of the next / previous card visible past the top card.
+  // Like SwiftUI's TabView page carousel. Visible strip width =
+  // viewport_width - (deck_center + CARD_W/2) — about 20-50 px
+  // depending on viewport.
   //   deckShift = +1 (forward complete) → right peek promotes
-  //     to top (center), left peek pushed further left + smaller
-  //   deckShift =  0 → both at rest, equidistant from centre
+  //     to top (center), left peek slides off-screen left
+  //   deckShift =  0 → both at rest, edges visible
   //   deckShift = -1 (backward complete) → left peek promotes
-  //     to top, right peek pushed further right + smaller
-  // tx scaled by peekScale so callers can tighten per use case.
+  //     to top, right peek slides off-screen right
+  const REST_TX = 290 * peekScale;
+  const OFF_TX = 360 * peekScale;
+  // Scale stays 1 at rest + on the way TO becoming top — only
+  // shrinks when the peek is moving AWAY from centre (deck
+  // swiped the OTHER direction). Makes the side card "duck out"
+  // gracefully instead of jumping off at full size.
   const SLOT_POSES = {
     right: {
-      demoted:  { scale: 0.75, tx: 80 * peekScale },
-      rest:     { scale: 0.85, tx: 50 * peekScale },
-      promoted: { scale: 1.0,  tx: 0 },
+      demoted:  { scale: 0.82, tx: OFF_TX },    // backward swipe → shrinks + slides off right
+      rest:     { scale: 1.0,  tx: REST_TX },
+      promoted: { scale: 1.0,  tx: 0 },         // forward swipe → becomes top
     },
     left: {
-      demoted:  { scale: 1.0,  tx: 0 },
-      rest:     { scale: 0.85, tx: -50 * peekScale },
-      promoted: { scale: 0.75, tx: -80 * peekScale },
+      demoted:  { scale: 1.0,  tx: 0 },         // backward swipe → becomes top
+      rest:     { scale: 1.0,  tx: -REST_TX },
+      promoted: { scale: 0.82, tx: -OFF_TX },   // forward swipe → shrinks + slides off left
     },
   } as const;
 
@@ -303,21 +311,19 @@ export function CardStack<T>({
   return (
     <View style={styles.wrap}>
       <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
-        {/* Left + right peeks first (paint behind top), then
-            top card last (paints over both). Plain grey
-            rectangles — backward swipes never leak the next
-            item's content through. */}
+        {/* Left + right peeks render the actual prev / next card
+            content (not grey rectangles) — user sees a sliver of
+            the real upcoming photo / icon poking past the top
+            card's edge. Paint behind the top via render order. */}
         {prev1 ? (
-          <Animated.View
-            key="left"
-            style={[styles.cardSlot, slotSize, styles.greyDeckCard, leftStyle]}
-          />
+          <Animated.View key="left" style={[styles.cardSlot, slotSize, leftStyle]}>
+            {renderCard(prev1)}
+          </Animated.View>
         ) : null}
         {next1 ? (
-          <Animated.View
-            key="right"
-            style={[styles.cardSlot, slotSize, styles.greyDeckCard, rightStyle]}
-          />
+          <Animated.View key="right" style={[styles.cardSlot, slotSize, rightStyle]}>
+            {renderCard(next1)}
+          </Animated.View>
         ) : null}
         <GestureDetector gesture={Gesture.Race(tap, pan)}>
           <Animated.View style={[styles.cardSlot, slotSize, topStyle]}>
@@ -369,13 +375,15 @@ export function CardStackSkeleton({
   return (
     <View style={styles.wrap}>
       <View style={[styles.deck, slotSize, { marginBottom: 24 }]}>
-        {/* Symmetric carousel — peek on each side at rest pose. */}
+        {/* Carousel-style skeleton — full-size peeks on each
+            side at rest pose, only edges visible past the top
+            card. Matches the real CardStack layout. */}
         <View
           style={[
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.85 }, { translateX: -50 }] },
+            { transform: [{ translateX: -290 }] },
           ]}
         />
         <View
@@ -383,7 +391,7 @@ export function CardStackSkeleton({
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.85 }, { translateX: 50 }] },
+            { transform: [{ translateX: 290 }] },
           ]}
         />
         <View
