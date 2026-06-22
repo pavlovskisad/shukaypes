@@ -1,19 +1,22 @@
-// Generic Tinder-style swipeable card stack. One big card at a
-// time, two grey peeks behind, a third fading-in buffer behind
-// those. Forward swipe (left) cycles to the next item with the
-// deck promoting up; backward swipe (right) cycles to the
-// previous with the deck demoting (sinking) one position. Tap
-// the top card to fire onTap. Both directions wrap.
+// Generic carousel card stack. Five slots laid out on a single
+// horizontal track [-2*STEP, -STEP, 0, +STEP, +2*STEP]. The whole
+// track translates by `trackShift` during a swipe — top + peeks +
+// off-screen buffers all slide together like a real carousel, not
+// a Tinder-style fly-off-then-settle.
+//
+// On commit, trackShift animates by ±STEP (one card-step left or
+// right) then the underlying `index` swaps and trackShift snaps
+// back to 0. The slot that animated into the centre re-binds to
+// the new index's centre item — same pixel, same item, no jump.
+// Two off-screen buffers are why this is seamless: they pre-render
+// the next-next / prev-prev items so nothing pops in.
 //
 // Used by:
 //   - LostDogCardStack (NearbyLostDog items, photo cards)
 //   - SpotCardStack    (Spot items, icon cards)
 //   - profile.tsx      ({id, content} sections — heterogeneous)
 //
-// Built on react-native-reanimated v3 + gesture-handler v2. The
-// deck-shift / advance / gesture mechanics moved here from
-// LostDogCardStack after the third use case made the duplication
-// hard to justify.
+// Built on react-native-reanimated v3 + gesture-handler v2.
 
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
@@ -33,18 +36,26 @@ export const CARD_W = 320;
 export const CARD_H = 280;
 const SWIPE_COMMIT_PX = 100;
 const VELOCITY_COMMIT = 600;
-// Bumped 6 → 16 — the previous threshold was so tight that a normal
-// finger-tap (which always wiggles a few px) registered as a swipe
-// or got eaten by the pan handler. 16px combined travel still
-// leaves the swipe commit (100px) plenty of headroom while making
-// "tap the card" a forgiving target across the whole card area.
+// Tap tolerance — pan handlers always wiggle a few px even on a
+// clean finger-tap; 16 keeps "tap the card" forgiving without
+// eating into the 100-px swipe threshold.
 const TAP_TRAVEL_MAX = 16;
 
-const FLY_OFF_MS = 320;
-const SLIDE_IN_MS = 380;
-const REVEAL_MS = 280;
-const FLY_EASE = Easing.out(Easing.cubic);
-const SLIDE_EASE = Easing.out(Easing.cubic);
+// One easing for both committed advance and rebound — keeps the
+// motion family consistent whether the user completes a swipe or
+// just nudges.
+const SETTLE_MS = 360;
+const SETTLE_EASE = Easing.out(Easing.cubic);
+
+// Scale ladder for the track.
+//   TOP_SCALE   — slot at visual tx 0 (the centre / interactive card)
+//   PEEK_SCALE  — slot at visual tx ±STEP (left / right peek)
+//   OFF_SCALE   — slot at visual tx ±2*STEP (off-screen buffer)
+// Interpolated continuously: a slot mid-swipe smoothly grows /
+// shrinks as it crosses between positions.
+const TOP_SCALE = 0.88;
+const PEEK_SCALE = 0.74;
+const OFF_SCALE = 0.62;
 
 interface Props<T> {
   items: T[];
@@ -56,7 +67,7 @@ interface Props<T> {
   onTap?: (item: T) => void;
   // Optional photo URL extractor. If provided, the stack pre-warms
   // Image.prefetch on neighbouring items so the next card's photo
-  // is already decoded by the time the deck shifts and renders it.
+  // is already decoded by the time the track shifts and renders it.
   // Spots / profile sections skip this — no photos to prefetch.
   getPhotoUrl?: (item: T) => string | null | undefined;
   // Show the "1 / N" counter under the deck. Defaults to true.
@@ -66,11 +77,12 @@ interface Props<T> {
   // the per-card content (stat rows) doesn't need the full height
   // of a photo/icon card. Width stays CARD_W.
   cardHeight?: number;
-  // Multiplier on the peek ty offsets — < 1 tightens the stack
-  // (peeks closer to the top card), > 1 spreads it out. Default
-  // 1 keeps the calibration set against the default 280-tall
-  // card. Smaller card heights want a smaller peek so the stack
-  // doesn't dominate the card's footprint visually.
+  // Multiplier on the carousel step (centre→peek distance) and
+  // the marginBottom reserve. < 1 tightens the deck (peeks closer
+  // to the centre), > 1 spreads it out. Default 1 keeps the
+  // calibration set against the default 280-tall card. Profile's
+  // smaller deck wants a tighter step so the layout doesn't dwarf
+  // the dog scene around it.
   peekScale?: number;
 }
 
@@ -85,16 +97,22 @@ export function CardStack<T>({
   peekScale = 1,
 }: Props<T>) {
   const [index, setIndex] = useState(0);
-  const tx = useSharedValue(0);
-  const ty = useSharedValue(0);
+  const trackShift = useSharedValue(0);
+
+  // Carousel step — horizontal distance between adjacent slot
+  // centres. At 290 with TOP_SCALE 0.88 + PEEK_SCALE 0.74:
+  //   top visual right edge   = 0.88 * 160 = 140.8
+  //   peek visual left edge   = 290 - 0.74 * 160 = 171.6
+  //   gap between centre/peek = ~31 px (clear breathing room)
+  //   peek visible strip      = ~24 px on a 390 phone
+  const STEP = 290 * peekScale;
 
   // Reset to start when the underlying list changes (e.g. the
   // screen refetches and the order shifts).
   const ids = useMemo(() => items.map(getId).join(','), [items, getId]);
   useEffect(() => {
     setIndex(0);
-    tx.value = 0;
-    ty.value = 0;
+    trackShift.value = 0;
   }, [ids]);
 
   // Pre-warm photos for neighbouring items so the next card's
@@ -121,65 +139,59 @@ export function CardStack<T>({
     });
   }, [index, items, getPhotoUrl]);
 
-  // deckShift range [-1, 1]:
-  //   forward drag (left, negative tx)  → positive (promote)
-  //   backward drag (right, positive tx) → negative (demote)
-  // Drives each slot's transform symmetrically across the range.
-  const deckShift = useSharedValue(0);
+  const N = items.length;
 
-  // Fade-in on the top slot after `advance` (in either direction).
-  // 1 at rest, snaps to 0 inside advance, then ramps back to 1.
-  const topAppearOpacity = useSharedValue(1);
+  // Per-slot animated style. Each slot has a fixed base position
+  // on the track; visual position = base + trackShift. Scale is a
+  // pure function of visual position so any slot at tx=0 gets
+  // TOP_SCALE, at ±STEP gets PEEK_SCALE, at ±2*STEP gets OFF_SCALE.
+  // CLAMP at the edges so over-drag past the buffer doesn't grow
+  // the slot back.
+  const makeSlotStyle = (base: number) =>
+    useAnimatedStyle(() => {
+      const visualTx = base + trackShift.value;
+      const scale = interpolate(
+        visualTx,
+        [-2 * STEP, -STEP, 0, STEP, 2 * STEP],
+        [OFF_SCALE, PEEK_SCALE, TOP_SCALE, PEEK_SCALE, OFF_SCALE],
+        Extrapolation.CLAMP,
+      );
+      return { transform: [{ translateX: visualTx }, { scale }] };
+    });
 
-  // Extra horizontal offset applied to BOTH peeks post-advance so
-  // the freshly-rotated-in content slides in from off-screen
-  // instead of blinking into existence at the centre. Applied as
-  // +entryOffset on the right peek and -entryOffset on the left
-  // (signed, so both visually slide outward → in). Snapped to a
-  // large positive number right after the index swap, then timed
-  // back to 0 over REVEAL_MS.
-  const entryOffset = useSharedValue(0);
+  // Five fixed-position slots. Declared explicitly (not in a loop)
+  // to keep `react-hooks/rules-of-hooks` happy.
+  const slot0Style = makeSlotStyle(-2 * STEP);
+  const slot1Style = makeSlotStyle(-STEP);
+  const slot2Style = makeSlotStyle(0);
+  const slot3Style = makeSlotStyle(STEP);
+  const slot4Style = makeSlotStyle(2 * STEP);
+  const slotStyles = [slot0Style, slot1Style, slot2Style, slot3Style, slot4Style];
 
+  // Items bound to each slot — cycles modulo N so the deck wraps
+  // forever. With N < 5 the same item can appear in two slots,
+  // but the duplicates land at the off-screen buffer positions
+  // so the user never sees them at rest.
+  const itemAt = (offset: number): T | undefined => {
+    if (N === 0) return undefined;
+    return items[((index + offset) % N + N) % N];
+  };
+  const slotItems = [itemAt(-2), itemAt(-1), itemAt(0), itemAt(1), itemAt(2)];
+  const topItem = slotItems[2];
+
+  // Advance the index after a committed swipe. trackShift snaps
+  // to 0 in the same frame — the slot that animated into the
+  // centre position re-binds to the new index's centre item, so
+  // the snap is invisible at the pixel level.
   const advance = useCallback(
     (delta: number) => {
       setIndex((i) => {
-        const n = items.length;
-        if (n === 0) return 0;
-        // Cycle in either direction.
-        return ((i + delta) % n + n) % n;
+        if (N === 0) return 0;
+        return ((i + delta) % N + N) % N;
       });
-      requestAnimationFrame(() => {
-        ty.value = 0;
-        topAppearOpacity.value = 0;
-        topAppearOpacity.value = withTiming(1, {
-          duration: REVEAL_MS,
-          easing: SLIDE_EASE,
-        });
-        // Snap the deck back to rest instantly — the visual
-        // "slide-in" of the new peeks is driven by entryOffset
-        // below so we don't get a half-frame of NEW peek content
-        // at the centre slot before it slides out to rest.
-        deckShift.value = 0;
-        // Both peeks now hold their NEW content. Push them
-        // outward past their rest positions so the new content
-        // is off-screen, then time the offset back to 0 — peeks
-        // visibly slide IN from the outside rather than blinking
-        // into existence at the deck centre.
-        entryOffset.value = 220;
-        entryOffset.value = withTiming(0, {
-          duration: REVEAL_MS,
-          easing: SLIDE_EASE,
-        });
-        if (delta < 0) {
-          // BACKWARD: top swings in from off-screen LEFT.
-          tx.value = -(CARD_W + 100);
-          tx.value = withTiming(0, { duration: SLIDE_IN_MS, easing: SLIDE_EASE });
-        } else {
-          tx.value = 0;
-        }
-      });
+      trackShift.value = 0;
     },
-    [items.length, tx, ty, topAppearOpacity, deckShift, entryOffset],
+    [N, trackShift],
   );
 
   const handleTap = useCallback(
@@ -189,38 +201,19 @@ export function CardStack<T>({
     [onTap],
   );
 
-  const topItem = items[index];
-  // Two-side carousel — one peek on each side of the top card.
-  // Right peek = next item (slides left to center on forward
-  // swipe). Left peek = previous item (slides right on backward
-  // swipe). Skip the left peek when N === 2 since prev would
-  // equal next and the two sides would show the same card,
-  // looking weird.
-  const N = items.length;
-  const next1 = N > 1 ? items[(index + 1) % N] : undefined;
-  const prev1 = N > 2 ? items[(index - 1 + N) % N] : undefined;
-
-  // Dedicated Tap gesture composed with Pan via Race — Pan's
-  // onEnd-with-low-travel branch worked for finger drags that
-  // released near the start point, but very short / still taps
-  // sometimes got eaten because Pan needs a brief activation
-  // window before any events fire. Race(Tap, Pan) lets a clean
-  // tap commit immediately; any real movement defers to Pan.
+  // Race(Tap, Pan) so a clean finger-tap commits immediately; any
+  // real movement (> TAP_TRAVEL_MAX) defers to Pan and drives the
+  // carousel.
   const tap = Gesture.Tap().onEnd(() => {
     if (topItem) runOnJS(handleTap)(topItem);
   });
 
   const pan = Gesture.Pan()
     .onUpdate((e) => {
-      // Pure horizontal — no vertical drift on swipe. Carousel
-      // pattern, not Tinder. ty stays 0 the whole time.
-      tx.value = e.translationX;
-      const p = Math.min(Math.abs(e.translationX) / CARD_W, 1);
-      if (e.translationX < 0) {
-        deckShift.value = p;
-      } else {
-        deckShift.value = -p;
-      }
+      // 1:1 finger follow — the entire track moves with the
+      // drag. Carousel feel: user is dragging the whole strip,
+      // not just the top card.
+      trackShift.value = e.translationX;
     })
     .onEnd((e) => {
       const travel = Math.abs(e.translationX) + Math.abs(e.translationY);
@@ -228,141 +221,63 @@ export function CardStack<T>({
       const passedVel = Math.abs(e.velocityX) > VELOCITY_COMMIT;
       if (travel < TAP_TRAVEL_MAX && topItem) {
         runOnJS(handleTap)(topItem);
-        tx.value = withSpring(0);
-        ty.value = withSpring(0);
-        deckShift.value = withSpring(0);
+        trackShift.value = withSpring(0);
         return;
       }
-      if (passedPx || passedVel) {
+      if (N > 1 && (passedPx || passedVel)) {
         const isForward = e.translationX < 0;
-        const dir = isForward ? -1 : 1;
         const delta = isForward ? 1 : -1;
-        // Drive the deck to its commit-end pose over the fly-off
-        // window — promoted (+1) on forward, demoted (-1) on
-        // backward. `advance` then settles it back to 0.
-        deckShift.value = withTiming(isForward ? 1 : -1, {
-          duration: FLY_OFF_MS,
-          easing: FLY_EASE,
-        });
-        tx.value = withTiming(
-          dir * (CARD_W + 100),
-          { duration: FLY_OFF_MS, easing: FLY_EASE },
+        const target = isForward ? -STEP : STEP;
+        // Settle to the next snap position (one card-step over),
+        // then advance the index and zero the track — visually
+        // continuous because the slot that arrives at centre is
+        // already showing what becomes the new top item.
+        trackShift.value = withTiming(
+          target,
+          { duration: SETTLE_MS, easing: SETTLE_EASE },
           () => {
             runOnJS(advance)(delta);
           },
         );
       } else {
-        tx.value = withSpring(0);
-        ty.value = withSpring(0);
-        deckShift.value = withSpring(0);
+        trackShift.value = withSpring(0);
       }
     });
-
-  // Top card transform + fade-in opacity.
-  // Top card — translate + scale only, no rotation, no
-  // vertical drift. Carousel pattern: the centre card slides
-  // horizontally and lives at a slightly smaller scale (0.90)
-  // so there's visible margin between it and the side peeks.
-  // The fly-off translate is driven by tx.value during the
-  // pan / commit.
-  const TOP_SCALE = 0.90;
-  const topStyle = useAnimatedStyle(() => {
-    return {
-      transform: [
-        { translateX: tx.value },
-        { scale: TOP_SCALE },
-      ],
-      opacity: topAppearOpacity.value,
-    };
-  });
-
-  // Three-keyframe poses (demoted at -1, rest at 0, promoted at +1)
-  // so each slot interpolates symmetrically across the forward /
-  // backward range. Buffer also drives opacity (invisible at rest
-  // and below, fades in only above 0 — backward doesn't reveal a
-  // new bottom card, the deck just sinks).
-  // Two-side carousel — full-size peeks on each side, only the
-  // EDGE of the next / previous card visible past the top card.
-  // Like SwiftUI's TabView page carousel. Visible strip width =
-  // viewport_width - (deck_center + CARD_W/2) — about 20-50 px
-  // depending on viewport.
-  //   deckShift = +1 (forward complete) → right peek promotes
-  //     to top (center), left peek slides off-screen left
-  //   deckShift =  0 → both at rest, edges visible
-  //   deckShift = -1 (backward complete) → left peek promotes
-  //     to top, right peek slides off-screen right
-  // Tighter peeks — small visible sliver only, leaving a clear
-  // gap between the centre card and each side peek. Math: top
-  // visual right edge = 144 (TOP_SCALE 0.90 × CARD_W/2). Peek
-  // visual left edge = REST_TX − PEEK_REST_SCALE × CARD_W/2 =
-  // 280 − 128 = 152 → ~8 px clean gap.
-  const PEEK_REST_SCALE = 0.80;
-  const REST_TX = 280 * peekScale;
-  const OFF_TX = 340 * peekScale;
-  // Promoted scale matches TOP_SCALE so the peek smoothly
-  // becomes the new centre card without a visible size jump
-  // when advance() swaps the index over.
-  const SLOT_POSES = {
-    right: {
-      demoted:  { scale: 0.70, tx: OFF_TX },           // backward swipe → shrinks + off right
-      rest:     { scale: PEEK_REST_SCALE, tx: REST_TX },
-      promoted: { scale: TOP_SCALE, tx: 0 },           // forward swipe → becomes top
-    },
-    left: {
-      demoted:  { scale: TOP_SCALE, tx: 0 },           // backward swipe → becomes top
-      rest:     { scale: PEEK_REST_SCALE, tx: -REST_TX },
-      promoted: { scale: 0.70, tx: -OFF_TX },          // forward swipe → shrinks + off left
-    },
-  } as const;
-
-  const rightStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.right.demoted.scale, SLOT_POSES.right.rest.scale, SLOT_POSES.right.promoted.scale]);
-    const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.right.demoted.tx, SLOT_POSES.right.rest.tx, SLOT_POSES.right.promoted.tx]);
-    // entryOffset slides the right peek IN from off-screen
-    // right after advance() so the new content doesn't blink
-    // into the centre. Positive value pushes further right.
-    return { transform: [{ scale: s }, { translateX: x + entryOffset.value }] };
-  });
-  const leftStyle = useAnimatedStyle(() => {
-    const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.left.demoted.scale, SLOT_POSES.left.rest.scale, SLOT_POSES.left.promoted.scale]);
-    const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.left.demoted.tx, SLOT_POSES.left.rest.tx, SLOT_POSES.left.promoted.tx]);
-    // Mirror — negative entryOffset slides the left peek IN
-    // from off-screen left.
-    return { transform: [{ scale: s }, { translateX: x - entryOffset.value }] };
-  });
 
   // Defensive — callers gate empty lists outside the stack.
   if (!topItem) return null;
 
-  // Deck slots in deepest-first paint order: buffer → bottom →
-  // middle → top. Each peek is a plain grey rectangle (no content)
-  // so backward swipes never leak the next item's content through.
-  // Deck container + slot heights come from the cardHeight prop so
-  // the same component handles both the photo cards (280) and the
-  // denser profile section cards (~200).
   const slotSize = { width: CARD_W, height: cardHeight };
+
+  // Paint order: deepest first so the centre card sits on top of
+  // overlapping peeks during a swipe. [0, 4, 1, 3, 2] = far buffers,
+  // peeks, then centre last.
+  const paintOrder = [0, 4, 1, 3, 2];
+
   return (
     <View style={styles.wrap}>
       <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
-        {/* Left + right peeks render the actual prev / next card
-            content (not grey rectangles) — user sees a sliver of
-            the real upcoming photo / icon poking past the top
-            card's edge. Paint behind the top via render order. */}
-        {prev1 ? (
-          <Animated.View key="left" style={[styles.cardSlot, slotSize, leftStyle]}>
-            {renderCard(prev1)}
-          </Animated.View>
-        ) : null}
-        {next1 ? (
-          <Animated.View key="right" style={[styles.cardSlot, slotSize, rightStyle]}>
-            {renderCard(next1)}
-          </Animated.View>
-        ) : null}
-        <GestureDetector gesture={Gesture.Race(tap, pan)}>
-          <Animated.View style={[styles.cardSlot, slotSize, topStyle]}>
-            {renderCard(topItem)}
-          </Animated.View>
-        </GestureDetector>
+        {paintOrder.map((slotIdx) => {
+          const item = slotItems[slotIdx];
+          if (!item) return null;
+          const animStyle = slotStyles[slotIdx];
+          if (slotIdx === 2) {
+            // Centre slot — interactive. Pan drives the track,
+            // tap fires the row-level callback.
+            return (
+              <GestureDetector key="center" gesture={Gesture.Race(tap, pan)}>
+                <Animated.View style={[styles.cardSlot, slotSize, animStyle]}>
+                  {renderCard(item)}
+                </Animated.View>
+              </GestureDetector>
+            );
+          }
+          return (
+            <Animated.View key={slotIdx} style={[styles.cardSlot, slotSize, animStyle]}>
+              {renderCard(item)}
+            </Animated.View>
+          );
+        })}
       </View>
       {showCounter ? (
         <Text style={styles.counter}>
@@ -375,15 +290,17 @@ export function CardStack<T>({
 
 // Skeleton variant — same dimensions + deck layout as the real
 // stack so callers can render with stable height from the very
-// first paint, before the items fetch comes back. Two stacked
-// grey peeks + a top card with a shimmer-sweep gradient on
-// repeat. Injects the shimmer keyframe once into <head>.
+// first paint, before the items fetch comes back. Three grey
+// rects (left peek, right peek, centre with shimmer) matching
+// the real CardStack's rest pose.
 export function CardStackSkeleton({
   showCounter = true,
   cardHeight = CARD_H,
+  peekScale = 1,
 }: {
   showCounter?: boolean;
   cardHeight?: number;
+  peekScale?: number;
 }) {
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -399,23 +316,19 @@ export function CardStackSkeleton({
     document.head.appendChild(el);
   }, []);
 
-  // Same slotSize pattern as the real CardStack — width / height
-  // come from the cardHeight prop (default CARD_H = 280). Without
-  // this the skeleton renders at 0×0 because styles.deck /
-  // styles.cardSlot no longer carry dimensions.
   const slotSize = { width: CARD_W, height: cardHeight };
+  const STEP = 290 * peekScale;
 
   return (
     <View style={styles.wrap}>
-      <View style={[styles.deck, slotSize, { marginBottom: 24 }]}>
-        {/* Carousel-style skeleton — peeks scale 0.80 at ±280
-            tx, matching the real CardStack rest poses. */}
+      <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
+        {/* Peeks — same scale + tx as the real CardStack's rest pose. */}
         <View
           style={[
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.80 }, { translateX: -280 }] },
+            { transform: [{ translateX: -STEP }, { scale: PEEK_SCALE }] },
           ]}
         />
         <View
@@ -423,7 +336,7 @@ export function CardStackSkeleton({
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.80 }, { translateX: 280 }] },
+            { transform: [{ translateX: STEP }, { scale: PEEK_SCALE }] },
           ]}
         />
         <View
@@ -438,8 +351,7 @@ export function CardStackSkeleton({
               backgroundRepeat: 'no-repeat',
               animation: 'card-stack-shimmer 1.8s ease-in-out infinite',
               borderRadius: 28,
-              // Match TOP_SCALE in the real CardStack — 0.90.
-              transform: [{ scale: 0.90 }],
+              transform: [{ scale: TOP_SCALE }],
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 8 },
               shadowOpacity: 0.18,
@@ -463,9 +375,7 @@ const styles = StyleSheet.create({
   deck: {
     // Width / height come from the slotSize override (cardHeight
     // prop). marginBottom set inline scaled by peekScale so the
-    // reserve-below-the-deck stays proportional to the peek size
-    // — tighter peek (profile) gets less reserve, default peek
-    // (tasks / spots) gets the full 80.
+    // reserve below the deck stays proportional to the peek size.
     alignItems: 'center',
     justifyContent: 'center',
   },
