@@ -335,18 +335,38 @@ export default function ChatScreen() {
         {typing ? <TypingIndicator /> : null}
       </ScrollView>
 
-      {/* Fade strips — gradient from the page-bg colour at the
-          chrome edge to transparent toward the chat area. Bubbles
-          melt into the chrome instead of sliding past with a hard
-          edge. Sit ABOVE the scroll but BELOW the chrome cards. */}
+      {/* Fade strips — solid page-bg over the entire chrome
+          area (status bar + header pill, input pill + tab bar
+          gap) with a soft gradient transition into the chat
+          area. Solid section covers any bubble text that ends
+          up beside the narrow pill on either side, instead of
+          the previous thin gradient that left the side text
+          visible-but-faded behind the pill. Below z-5 chrome,
+          above the scroll. */}
       <View
-        style={[styles.fadeTop, { top: insets.top + HEADER_BAND_HEIGHT - 8 }]}
+        style={[
+          styles.fadeStrip,
+          {
+            top: 0,
+            height: insets.top + HEADER_BAND_HEIGHT + FADE_TRANSITION,
+            backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, ${colors.greyBg} ${
+              ((insets.top + HEADER_BAND_HEIGHT) / (insets.top + HEADER_BAND_HEIGHT + FADE_TRANSITION)) * 100
+            }%, ${TRANSPARENT_BG} 100%)`,
+          } as unknown as object,
+        ]}
         pointerEvents="none"
       />
       <View
         style={[
-          styles.fadeBottom,
-          { bottom: TAB_BAR_HEIGHT + insets.bottom + INPUT_GAP_ABOVE_TABS + INPUT_BAND_HEIGHT - 8 },
+          styles.fadeStrip,
+          {
+            bottom: TAB_BAR_HEIGHT + insets.bottom,
+            height: INPUT_BAND_HEIGHT + INPUT_GAP_ABOVE_TABS + FADE_TRANSITION,
+            backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${colors.greyBg} ${
+              ((INPUT_BAND_HEIGHT + INPUT_GAP_ABOVE_TABS) /
+                (INPUT_BAND_HEIGHT + INPUT_GAP_ABOVE_TABS + FADE_TRANSITION)) * 100
+            }%, ${TRANSPARENT_BG} 100%)`,
+          } as unknown as object,
         ]}
         pointerEvents="none"
       />
@@ -486,6 +506,14 @@ const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 // Mirrors HERO.size from constants/sizing.ts (used by tabBarStyle.height).
 // Inlined to avoid importing a tokens file into the styles section.
 const TAB_BAR_HEIGHT = 64;
+// Gradient transition zone height — how many px of soft fade
+// between the solid chrome-covering portion of the fade strip
+// and the fully-transparent chat area below / above it.
+const FADE_TRANSITION = 40;
+// CSS-friendly transparent value matching colors.greyBg so the
+// gradient interpolates as alpha-only on the same hue (no
+// shift through grey-tinted intermediate values).
+const TRANSPARENT_BG = 'rgba(240,240,240,0)';
 // Breathing room between input wrap and the tab bar — used in addition
 // to safe-area inset because TG Mini App reports inset.bottom=0.
 const INPUT_GAP_ABOVE_TABS = 10;
@@ -511,25 +539,17 @@ const styles = StyleSheet.create({
   bottomBand: {
     paddingVertical: 4,
   },
-  // Fade strips — gradient bands at the edges of the scroll area
-  // so messages dissolve into the chrome instead of cutting hard.
-  // Sit between the scroll (z auto) and the chrome cards (z 5).
-  fadeTop: {
+  // Fade strip — solid page-bg over the chrome area + a soft
+  // gradient zone where bubbles dissolve into the chrome. Sits
+  // BELOW the chrome cards (z 5) and ABOVE the scroll content.
+  // top / bottom / height / backgroundImage all set inline so the
+  // gradient stops can scale with the actual insets.
+  fadeStrip: {
     position: 'absolute',
     left: 0,
     right: 0,
-    height: 32,
     zIndex: 3,
-    backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, rgba(240,240,240,0) 100%)`,
-  } as unknown as object,
-  fadeBottom: {
-    position: 'absolute',
-    left: 0,
-    right: 0,
-    height: 32,
-    zIndex: 3,
-    backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, rgba(240,240,240,0) 100%)`,
-  } as unknown as object,
+  },
   // White header pill with a stronger CHROME_SHADOW so it
   // separates cleanly from the chat background and reads as
   // floating chrome rather than melting into the bubbles below.
