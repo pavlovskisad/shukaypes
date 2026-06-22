@@ -88,8 +88,11 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     // Pushed up to leave room for 2-line names + 2-line addresses
-    // below without the text crashing into the icon.
+    // below without the text crashing into the icon. paddingTop
+    // shifts the icon down inside the hero region so it sits
+    // closer to the card centre rather than hugging the badges.
     bottom: 120,
+    paddingTop: 40,
     alignItems: 'center',
     justifyContent: 'center',
   },
