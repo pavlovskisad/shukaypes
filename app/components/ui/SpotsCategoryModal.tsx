@@ -118,16 +118,21 @@ export function SpotsCategoryModal({ title, spots, onClose, onPick }: Props) {
         </button>
       </div>
 
-      {/* Snap-scroll list of full SpotCardViews. Each snap target
-          is the full available height minus the header, so cards
-          land centred on screen one at a time. */}
+      {/* Plain vertical scroll — cards span the viewport width
+          minus a fixed side gutter and sit one after another with
+          the same gutter between them. No snap, the user just
+          scrolls the feed.  */}
       <div
         style={
           {
             flex: 1,
             overflowY: 'auto',
-            scrollSnapType: 'y mandatory',
             WebkitOverflowScrolling: 'touch',
+            padding: '20px',
+            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: '20px',
           } as React.CSSProperties
         }
       >
@@ -136,14 +141,9 @@ export function SpotsCategoryModal({ title, spots, onClose, onPick }: Props) {
             key={spot.id}
             onClick={() => onPick(spot)}
             style={{
-              minHeight: '100%',
-              height: 'calc(100vh - 120px - env(safe-area-inset-top, 0px))',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: '24px',
-              scrollSnapAlign: 'center',
-              scrollSnapStop: 'always',
+              width: '100%',
+              height: 320,
+              flexShrink: 0,
               cursor: 'pointer',
             }}
           >

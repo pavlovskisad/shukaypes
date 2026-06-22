@@ -14,7 +14,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
 import { Icon, iconForCategory } from './Icon';
-import { CardStack, CardStackSkeleton, CARD_W, CARD_H } from './CardStack';
+import { CardStack, CardStackSkeleton } from './CardStack';
 
 interface Props {
   spots: Spot[];
@@ -97,9 +97,14 @@ export function SpotCardView({
 }
 
 const styles = StyleSheet.create({
+  // Card fills its parent — in the carousel that's the 320×280
+  // CardStack slot, in the "see all" modal it's a wider wrapper.
+  // Internal absolute-positioned bits (iconHero, cardBody) stay
+  // anchored from the bottom, so the icon stays centred above
+  // the title even when the card grows taller.
   card: {
-    width: CARD_W,
-    height: CARD_H,
+    width: '100%',
+    height: '100%',
     borderRadius: 28,
     overflow: 'hidden',
     backgroundColor: '#ffffff',

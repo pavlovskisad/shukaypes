@@ -261,7 +261,7 @@ export function CardStack<T>({
           <Pressable onPress={onCounterTap} hitSlop={12}>
             {({ pressed }) => (
               <Text style={[styles.counter, styles.counterLink, pressed && styles.counterPressed]}>
-                {counterIndex} / {items.length} ›
+                {counterIndex} / {items.length}
               </Text>
             )}
           </Pressable>
@@ -377,11 +377,11 @@ const styles = StyleSheet.create({
     color: '#777',
     fontWeight: '600',
   },
-  // When the counter is tappable, bump it to colours.black and
-  // append a chevron — same visual family as the rest of the
-  // app's "tap to expand" hints (modal headers, chat header pill).
+  // Classic web hyperlink — same blue + underline used in the
+  // rest of the app (xp bars, sniff toggle, chat accent).
   counterLink: {
-    color: '#1a1a1a',
+    color: 'rgba(0,60,255,0.85)',
+    textDecorationLine: 'underline',
   },
   counterPressed: {
     opacity: 0.55,
