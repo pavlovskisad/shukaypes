@@ -19,7 +19,7 @@
 // Built on react-native-reanimated v3 + gesture-handler v2.
 
 import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -55,6 +55,11 @@ interface Props<T> {
   showCounter?: boolean;
   cardHeight?: number;
   peekScale?: number;
+  // Optional callback fired when the user taps the "N / M" counter.
+  // Used by the spots tab to open a fullscreen list of the whole
+  // category in big-card form. When provided, the counter renders
+  // as a Pressable with a chevron hint; otherwise it's plain text.
+  onCounterTap?: () => void;
 }
 
 // Per-item slot. `virtualIdx` is the item's stable position on the
@@ -111,6 +116,7 @@ export function CardStack<T>({
   showCounter = true,
   cardHeight = CARD_H,
   peekScale = 1,
+  onCounterTap,
 }: Props<T>) {
   // virtualBase = the carousel position as an integer index. Grows
   // without bound (we cycle via modulo when picking which item to
@@ -251,9 +257,19 @@ export function CardStack<T>({
         </View>
       </GestureDetector>
       {showCounter ? (
-        <Text style={styles.counter}>
-          {counterIndex} / {items.length}
-        </Text>
+        onCounterTap ? (
+          <Pressable onPress={onCounterTap} hitSlop={12}>
+            {({ pressed }) => (
+              <Text style={[styles.counter, styles.counterLink, pressed && styles.counterPressed]}>
+                {counterIndex} / {items.length} ›
+              </Text>
+            )}
+          </Pressable>
+        ) : (
+          <Text style={styles.counter}>
+            {counterIndex} / {items.length}
+          </Text>
+        )
       ) : null}
     </View>
   );
@@ -360,5 +376,14 @@ const styles = StyleSheet.create({
     fontSize: 13,
     color: '#777',
     fontWeight: '600',
+  },
+  // When the counter is tappable, bump it to colours.black and
+  // append a chevron — same visual family as the rest of the
+  // app's "tap to expand" hints (modal headers, chat header pill).
+  counterLink: {
+    color: '#1a1a1a',
+  },
+  counterPressed: {
+    opacity: 0.55,
   },
 });

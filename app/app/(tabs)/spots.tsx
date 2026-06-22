@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { SpotCardStack, SpotCardStackSkeleton } from '../../components/ui/SpotCardStack';
+import { SpotsCategoryModal } from '../../components/ui/SpotsCategoryModal';
 
 // Fixed display order — matches the FILTERS chip order from the
 // previous tab layout so users coming from older sessions land on
@@ -49,6 +50,9 @@ export default function SpotsScreen() {
   const spotsLoaded = useGameStore((s) => s.spotsLoaded);
   const syncSpots = useGameStore((s) => s.syncSpots);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
+  // Category whose "see all" fullscreen modal is currently open.
+  // null when no modal is showing.
+  const [expandedCategory, setExpandedCategory] = useState<SpotCategory | null>(null);
 
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('spots');
@@ -197,12 +201,26 @@ export default function SpotsScreen() {
               return (
                 <View key={cat} nativeID={`snap-card-spots-${cat}`} style={styles.card}>
                   <Text style={styles.cardTitle}>{cardTitle(t, cat)}</Text>
-                  <SpotCardStack spots={list} onTap={onPickSpot} />
+                  <SpotCardStack
+                    spots={list}
+                    onTap={onPickSpot}
+                    onCounterTap={() => setExpandedCategory(cat)}
+                  />
                 </View>
               );
             })
           : null}
       </ScrollView>
+
+      <SpotsCategoryModal
+        title={expandedCategory ? cardTitle(t, expandedCategory) : null}
+        spots={expandedCategory ? byCategory.get(expandedCategory) ?? [] : []}
+        onClose={() => setExpandedCategory(null)}
+        onPick={(spot) => {
+          setExpandedCategory(null);
+          onPickSpot(spot);
+        }}
+      />
     </SafeAreaView>
   );
 }
