@@ -407,7 +407,7 @@ const styles = StyleSheet.create({
   },
   langPillText: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 13,
+    fontSize: 14,
     fontWeight: '700',
     color: colors.black,
     letterSpacing: 0.5,

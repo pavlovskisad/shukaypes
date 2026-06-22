@@ -193,7 +193,7 @@ const styles = StyleSheet.create({
   },
   value: {
     color: colors.black,
-    fontSize: 13,
+    fontSize: 15,
     fontWeight: '700',
   },
 });

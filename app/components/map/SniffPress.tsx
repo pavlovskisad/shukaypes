@@ -457,13 +457,16 @@ export function SniffPress() {
       >
         <div
           style={{
-            padding: '8px 12px',
+            // Bumped to match the chunkier SpeechBubble family —
+            // padding 8/12 → 12/14, radius 14 → 22, type 13/1.35
+            // → 16/1.4.
+            padding: '12px 14px',
             background: VOICE.background,
             color: VOICE.color,
-            borderRadius: 14,
+            borderRadius: 22,
             fontFamily: VOICE.fontFamily,
-            fontSize: 13,
-            lineHeight: 1.35,
+            fontSize: 16,
+            lineHeight: 1.4,
             boxShadow: VOICE.shadow,
             border: VOICE.border,
             textAlign: 'center',
@@ -525,12 +528,15 @@ export function SniffPress() {
             }}
             style={{
               cursor: 'pointer',
-              padding: '6px 14px',
+              // Bigger CTA pill to match the rest of the action
+              // buttons across the app — padding 6/14 → 10/18,
+              // type 12 → 14.
+              padding: '10px 18px',
               background: SNIFF_COLOR,
               color: '#ffffff',
               borderRadius: 999,
               fontFamily: SYSTEM_FONT,
-              fontSize: 12,
+              fontSize: 14,
               fontWeight: 700,
               boxShadow: '0 4px 12px rgba(47,107,255,0.35)',
               userSelect: 'none',
@@ -585,12 +591,14 @@ function SniffingBubble({ position }: { position: LatLng }) {
     >
       <div
         style={{
-          padding: '6px 12px',
+          // Sniffing indicator — same family as the discovery
+          // bubble above (12/14 padding, 22 radius, 16 type).
+          padding: '12px 14px',
           background: VOICE.background,
           color: VOICE.color,
-          borderRadius: 14,
+          borderRadius: 22,
           fontFamily: VOICE.fontFamily,
-          fontSize: 13,
+          fontSize: 16,
           fontStyle: 'italic',
           boxShadow: VOICE.shadow,
           border: VOICE.border,

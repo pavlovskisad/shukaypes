@@ -349,13 +349,13 @@ export default function ChatScreen() {
           {
             top: 0,
             height: insets.top + HEADER_BAND_HEIGHT,
-            // Multi-stop ease curve — solid greyBg for the top
-            // ~40% (status bar + just past the pill bottom),
-            // then fading through 80% / 50% / 20% alpha stops
-            // for a smooth dissolve into the chat area. No
-            // harsh solid→gradient transition line; the curve
-            // hides it.
-            backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, ${colors.greyBg} 40%, rgba(240,240,240,0.8) 58%, rgba(240,240,240,0.5) 75%, rgba(240,240,240,0.2) 90%, ${TRANSPARENT_BG} 100%)`,
+            // Multi-stop ease curve weighted toward the end —
+            // extra near-transparent stops (0.08 at 95%) so the
+            // last segment fades to nothing without a visible
+            // cutoff line. Solid greyBg 0-35%, then 0.85 →
+            // 0.55 → 0.25 → 0.08 → 0 with the slope decreasing
+            // toward 100%.
+            backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, ${colors.greyBg} 35%, rgba(240,240,240,0.85) 50%, rgba(240,240,240,0.55) 68%, rgba(240,240,240,0.25) 83%, rgba(240,240,240,0.08) 95%, ${TRANSPARENT_BG} 100%)`,
           } as unknown as object,
         ]}
         pointerEvents="none"
@@ -366,8 +366,8 @@ export default function ChatScreen() {
           {
             bottom: TAB_BAR_HEIGHT + insets.bottom,
             height: INPUT_BAND_HEIGHT + INPUT_GAP_ABOVE_TABS,
-            // Mirror of the top — same multi-stop ease curve.
-            backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${colors.greyBg} 40%, rgba(240,240,240,0.8) 58%, rgba(240,240,240,0.5) 75%, rgba(240,240,240,0.2) 90%, ${TRANSPARENT_BG} 100%)`,
+            // Mirror of the top — same eased curve.
+            backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${colors.greyBg} 35%, rgba(240,240,240,0.85) 50%, rgba(240,240,240,0.55) 68%, rgba(240,240,240,0.25) 83%, rgba(240,240,240,0.08) 95%, ${TRANSPARENT_BG} 100%)`,
           } as unknown as object,
         ]}
         pointerEvents="none"

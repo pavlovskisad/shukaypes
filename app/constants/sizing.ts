@@ -30,11 +30,14 @@
 //   14-18 against the OFM tile backdrop.
 
 export const CHIP = {
-  height: 38,
-  icon: 32,           // 0.84 — beside-label density that reads
-                      // crisp on HUD + filter chips.
-  radius: 19,         // height / 2 — full pill
-  paddingHoriz: 12,
+  // Bumped 38 → 48 to match the chunkier card / button / bubble
+  // family across the app. Off-screen companion bookmark is 56,
+  // radial button 68 — HUD pills at 48 read as part of the same
+  // family instead of looking dinky.
+  height: 48,
+  icon: 40,           // 0.83 — same ratio as before.
+  radius: 24,         // height / 2 — full pill
+  paddingHoriz: 14,
 } as const;
 
 export const BUTTON = {
