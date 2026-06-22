@@ -439,13 +439,17 @@ const styles = StyleSheet.create({
     shadowRadius: 20,
     elevation: 6,
   },
+  // Section titles bumped to match the tasks / spots tabs —
+  // 13 → 16, weight 800, colours.black. Were too quiet for the
+  // smaller 150-tall section cards.
   sectionTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 13,
-    color: '#777',
-    marginBottom: 8,
+    fontSize: 16,
+    fontWeight: '800',
+    color: colors.black,
+    marginBottom: 10,
     textTransform: 'lowercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   // Companion identity card (first in the deck) — compact name +
   // level + xp bar + days-together row so the four elements fit

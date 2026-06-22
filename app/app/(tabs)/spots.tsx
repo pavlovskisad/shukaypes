@@ -235,13 +235,16 @@ const styles = StyleSheet.create({
     scrollSnapAlign: 'start',
     scrollSnapStop: 'always',
   } as unknown as object,
+  // Card titles bumped to match the tasks-tab cardTitle — 17pt,
+  // weight 800, colours.black. Were too quiet at 14/grey.
   cardTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 14,
-    color: '#777',
-    marginBottom: 10,
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.black,
+    marginBottom: 12,
     textTransform: 'lowercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   placeholder: { fontSize: 13, color: '#777', paddingVertical: 8 },
 });

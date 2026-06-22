@@ -474,13 +474,18 @@ const styles = StyleSheet.create({
     scrollSnapAlign: 'start',
     scrollSnapStop: 'always',
   } as unknown as object,
+  // Card titles — bumped 14 → 17, weight to 800, colour to
+  // colors.black so they actually catch the eye at the top of
+  // each card instead of disappearing into the grey rhythm of
+  // the rest of the page.
   cardTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 14,
-    color: '#777',
-    marginBottom: 10,
+    fontSize: 17,
+    fontWeight: '800',
+    color: colors.black,
+    marginBottom: 12,
     textTransform: 'lowercase',
-    letterSpacing: 0.3,
+    letterSpacing: 0.2,
   },
   // Daily-tasks card header: title on the left, "X / Y" tally on
   // the right. Replaces the giant standalone summary card that used
