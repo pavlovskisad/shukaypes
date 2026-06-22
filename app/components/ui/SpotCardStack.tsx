@@ -42,7 +42,7 @@ function renderCard(spot: Spot, t: ReturnType<typeof useStrings>) {
     <View style={styles.card}>
       <View style={styles.iconHero}>
         {iconSlot ? (
-          <Icon name={iconSlot} size={110} />
+          <Icon name={iconSlot} size={220} />
         ) : (
           <Text style={styles.heroEmoji}>{spot.icon ?? '📍'}</Text>
         )}
@@ -94,7 +94,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heroEmoji: {
-    fontSize: 90,
+    fontSize: 180,
     opacity: 0.85,
   },
   // Full-pill chip family — matches the HUD pill / chat header
