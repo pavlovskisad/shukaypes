@@ -131,6 +131,15 @@ export function CardStack<T>({
   // 1 at rest, snaps to 0 inside advance, then ramps back to 1.
   const topAppearOpacity = useSharedValue(1);
 
+  // Extra horizontal offset applied to BOTH peeks post-advance so
+  // the freshly-rotated-in content slides in from off-screen
+  // instead of blinking into existence at the centre. Applied as
+  // +entryOffset on the right peek and -entryOffset on the left
+  // (signed, so both visually slide outward → in). Snapped to a
+  // large positive number right after the index swap, then timed
+  // back to 0 over REVEAL_MS.
+  const entryOffset = useSharedValue(0);
+
   const advance = useCallback(
     (delta: number) => {
       setIndex((i) => {
@@ -146,9 +155,18 @@ export function CardStack<T>({
           duration: REVEAL_MS,
           easing: SLIDE_EASE,
         });
-        // Always settle the deck back to rest. Forward came from +1
-        // (promoted), backward from -1 (demoted) — same settle.
-        deckShift.value = withTiming(0, {
+        // Snap the deck back to rest instantly — the visual
+        // "slide-in" of the new peeks is driven by entryOffset
+        // below so we don't get a half-frame of NEW peek content
+        // at the centre slot before it slides out to rest.
+        deckShift.value = 0;
+        // Both peeks now hold their NEW content. Push them
+        // outward past their rest positions so the new content
+        // is off-screen, then time the offset back to 0 — peeks
+        // visibly slide IN from the outside rather than blinking
+        // into existence at the deck centre.
+        entryOffset.value = 220;
+        entryOffset.value = withTiming(0, {
           duration: REVEAL_MS,
           easing: SLIDE_EASE,
         });
@@ -161,7 +179,7 @@ export function CardStack<T>({
         }
       });
     },
-    [items.length, tx, ty, topAppearOpacity, deckShift],
+    [items.length, tx, ty, topAppearOpacity, deckShift, entryOffset],
   );
 
   const handleTap = useCallback(
@@ -243,11 +261,11 @@ export function CardStack<T>({
   // Top card transform + fade-in opacity.
   // Top card — translate + scale only, no rotation, no
   // vertical drift. Carousel pattern: the centre card slides
-  // horizontally and lives at a slightly smaller scale (0.92)
+  // horizontally and lives at a slightly smaller scale (0.90)
   // so there's visible margin between it and the side peeks.
   // The fly-off translate is driven by tx.value during the
   // pan / commit.
-  const TOP_SCALE = 0.92;
+  const TOP_SCALE = 0.90;
   const topStyle = useAnimatedStyle(() => {
     return {
       transform: [
@@ -273,39 +291,44 @@ export function CardStack<T>({
   //   deckShift =  0 → both at rest, edges visible
   //   deckShift = -1 (backward complete) → left peek promotes
   //     to top, right peek slides off-screen right
-  // tx bumped 290 → 300 so the peek's visual left edge sits
-  // ~12 px to the right of the top card's visual right edge —
-  // a small gap between centre and side cards, matching the
-  // SwiftUI TabView reference. Math: top visual right = 147
-  // (scale 0.92 × CARD_W/2), peek visual left = peek_tx -
-  // peek_scale * CARD_W / 2 = 300 - 141 = 159 → 12 px gap.
-  const REST_TX = 300 * peekScale;
-  const OFF_TX = 360 * peekScale;
+  // Tighter peeks — small visible sliver only, leaving a clear
+  // gap between the centre card and each side peek. Math: top
+  // visual right edge = 144 (TOP_SCALE 0.90 × CARD_W/2). Peek
+  // visual left edge = REST_TX − PEEK_REST_SCALE × CARD_W/2 =
+  // 280 − 128 = 152 → ~8 px clean gap.
+  const PEEK_REST_SCALE = 0.80;
+  const REST_TX = 280 * peekScale;
+  const OFF_TX = 340 * peekScale;
   // Promoted scale matches TOP_SCALE so the peek smoothly
   // becomes the new centre card without a visible size jump
   // when advance() swaps the index over.
   const SLOT_POSES = {
     right: {
-      demoted:  { scale: 0.75, tx: OFF_TX },     // backward swipe → shrinks + off right
-      rest:     { scale: 0.88, tx: REST_TX },
-      promoted: { scale: TOP_SCALE, tx: 0 },     // forward swipe → becomes top
+      demoted:  { scale: 0.70, tx: OFF_TX },           // backward swipe → shrinks + off right
+      rest:     { scale: PEEK_REST_SCALE, tx: REST_TX },
+      promoted: { scale: TOP_SCALE, tx: 0 },           // forward swipe → becomes top
     },
     left: {
-      demoted:  { scale: TOP_SCALE, tx: 0 },     // backward swipe → becomes top
-      rest:     { scale: 0.88, tx: -REST_TX },
-      promoted: { scale: 0.75, tx: -OFF_TX },    // forward swipe → shrinks + off left
+      demoted:  { scale: TOP_SCALE, tx: 0 },           // backward swipe → becomes top
+      rest:     { scale: PEEK_REST_SCALE, tx: -REST_TX },
+      promoted: { scale: 0.70, tx: -OFF_TX },          // forward swipe → shrinks + off left
     },
   } as const;
 
   const rightStyle = useAnimatedStyle(() => {
     const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.right.demoted.scale, SLOT_POSES.right.rest.scale, SLOT_POSES.right.promoted.scale]);
     const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.right.demoted.tx, SLOT_POSES.right.rest.tx, SLOT_POSES.right.promoted.tx]);
-    return { transform: [{ scale: s }, { translateX: x }] };
+    // entryOffset slides the right peek IN from off-screen
+    // right after advance() so the new content doesn't blink
+    // into the centre. Positive value pushes further right.
+    return { transform: [{ scale: s }, { translateX: x + entryOffset.value }] };
   });
   const leftStyle = useAnimatedStyle(() => {
     const s = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.left.demoted.scale, SLOT_POSES.left.rest.scale, SLOT_POSES.left.promoted.scale]);
     const x = interpolate(deckShift.value, [-1, 0, 1], [SLOT_POSES.left.demoted.tx, SLOT_POSES.left.rest.tx, SLOT_POSES.left.promoted.tx]);
-    return { transform: [{ scale: s }, { translateX: x }] };
+    // Mirror — negative entryOffset slides the left peek IN
+    // from off-screen left.
+    return { transform: [{ scale: s }, { translateX: x - entryOffset.value }] };
   });
 
   // Defensive — callers gate empty lists outside the stack.
@@ -385,14 +408,14 @@ export function CardStackSkeleton({
   return (
     <View style={styles.wrap}>
       <View style={[styles.deck, slotSize, { marginBottom: 24 }]}>
-        {/* Carousel-style skeleton — peeks scale 0.88 at ±300
+        {/* Carousel-style skeleton — peeks scale 0.80 at ±280
             tx, matching the real CardStack rest poses. */}
         <View
           style={[
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.88 }, { translateX: -300 }] },
+            { transform: [{ scale: 0.80 }, { translateX: -280 }] },
           ]}
         />
         <View
@@ -400,7 +423,7 @@ export function CardStackSkeleton({
             styles.cardSlot,
             slotSize,
             styles.greyDeckCard,
-            { transform: [{ scale: 0.88 }, { translateX: 300 }] },
+            { transform: [{ scale: 0.80 }, { translateX: 280 }] },
           ]}
         />
         <View
@@ -415,8 +438,8 @@ export function CardStackSkeleton({
               backgroundRepeat: 'no-repeat',
               animation: 'card-stack-shimmer 1.8s ease-in-out infinite',
               borderRadius: 28,
-              // Match TOP_SCALE in the real CardStack — 0.92.
-              transform: [{ scale: 0.92 }],
+              // Match TOP_SCALE in the real CardStack — 0.90.
+              transform: [{ scale: 0.90 }],
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 8 },
               shadowOpacity: 0.18,

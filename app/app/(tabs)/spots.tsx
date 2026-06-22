@@ -208,7 +208,7 @@ export default function SpotsScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.greyBg },
+  root: { flex: 1, backgroundColor: '#ffffff' },
   // Same snap-scroll setup as the tasks tab — see tasks.tsx for the
   // longer explanation of why scrollPaddingTop has to match the
   // contentContainer's paddingTop.

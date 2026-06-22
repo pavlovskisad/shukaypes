@@ -434,7 +434,7 @@ export default function TasksScreen() {
 }
 
 const styles = StyleSheet.create({
-  root: { flex: 1, backgroundColor: colors.greyBg },
+  root: { flex: 1, backgroundColor: '#ffffff' },
   // Vertical snap-scroll on the tab — each card is a snap target,
   // so a flick from the lost-pets card lands cleanly on the daily-
   // tasks card (and back). `mandatory` is fine because every card
