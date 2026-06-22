@@ -33,7 +33,12 @@ export const CARD_W = 320;
 export const CARD_H = 280;
 const SWIPE_COMMIT_PX = 100;
 const VELOCITY_COMMIT = 600;
-const TAP_TRAVEL_MAX = 6;
+// Bumped 6 → 16 — the previous threshold was so tight that a normal
+// finger-tap (which always wiggles a few px) registered as a swipe
+// or got eaten by the pan handler. 16px combined travel still
+// leaves the swipe commit (100px) plenty of headroom while making
+// "tap the card" a forgiving target across the whole card area.
+const TAP_TRAVEL_MAX = 16;
 
 const FLY_OFF_MS = 320;
 const SLIDE_IN_MS = 380;

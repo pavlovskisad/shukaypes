@@ -74,12 +74,12 @@ export function RadialMenu({
   // size. Size is 2*radius + button + buffer so rim buttons fit.
   const CONTAINER = radius * 2 + 80;
   const CENTER = CONTAINER / 2;
-  // `inverted` flips the menu to a dark theme so it stays readable on
-  // the LIGHT map style. Sniff mode (dark map) keeps the original
-  // light frosted-glass theme since dark icons read fine on the
-  // pale frosted disc. Caller passes `inverted={!sniffMode}`.
-  const bg = inverted ? 'rgba(26,26,26,0.65)' : 'rgba(255,255,255,0.55)';
-  const fg = inverted ? '#f5f5f5' : '#1a1a1a';
+  // Plain black-and-white pills — no frosted glass / translucency.
+  // Sniff mode (dark map) uses the dark variant so the buttons stay
+  // legible against the white-on-dark theme; normal map uses the
+  // light variant. Caller passes `inverted={!sniffMode}`.
+  const bg = inverted ? '#1a1a1a' : '#ffffff';
+  const fg = inverted ? '#ffffff' : '#1a1a1a';
   const labelColor = inverted ? '#f5f5f5' : '#1a1a1a';
   const labelShadow = inverted
     ? '0 1px 4px rgba(0,0,0,0.95)'
@@ -134,9 +134,7 @@ export function RadialMenu({
                 color: fg,
                 fontSize: 22,
                 cursor: 'pointer',
-                boxShadow: '0 6px 20px rgba(0,0,0,0.08), 0 2px 6px rgba(0,0,0,0.05)',
-                backdropFilter: 'blur(8px) saturate(120%)',
-                WebkitBackdropFilter: 'blur(8px) saturate(120%)',
+                boxShadow: '0 6px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',

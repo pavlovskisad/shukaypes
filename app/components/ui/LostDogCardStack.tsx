@@ -7,6 +7,9 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { useStrings } from '../../i18n/useStrings';
+import { useGameStore } from '../../stores/gameStore';
+import { distanceMeters } from '../../utils/geo';
+import type { LatLng } from '@shukajpes/shared';
 import { CardStack, CardStackSkeleton, CARD_W, CARD_H } from './CardStack';
 
 interface Props {
@@ -14,15 +17,23 @@ interface Props {
   onTap: (dog: NearbyLostDog) => void;
 }
 
+// "X m" for sub-1km, "X.X km" beyond. Snapped to 50m below 1km so
+// the chip doesn't jitter on small GPS drift.
+function formatDistance(m: number): string {
+  if (m < 1000) return `${Math.round(m / 50) * 50} m`;
+  return `${(m / 1000).toFixed(1)} km`;
+}
+
 export function LostDogCardStack({ dogs, onTap }: Props) {
   const t = useStrings();
+  const userPos = useGameStore((s) => s.userPosition);
   return (
     <CardStack
       items={dogs}
       getId={(d) => d.id}
       onTap={onTap}
       getPhotoUrl={(d) => d.photoUrl}
-      renderCard={(d) => renderCard(d, t)}
+      renderCard={(d) => renderCard(d, t, userPos)}
     />
   );
 }
@@ -33,12 +44,19 @@ export const LostDogCardStackSkeleton = CardStackSkeleton;
 
 // Photo full-bleed top, dark-to-transparent gradient mask
 // carrying name + meta over the bottom of the photo. Urgency
-// badge top-left. No photo → soft grey card with the emoji
-// centred.
-function renderCard(dog: NearbyLostDog, t: ReturnType<typeof useStrings>) {
+// badge top-left, distance chip top-right. No photo → soft grey
+// card with the emoji centred.
+function renderCard(
+  dog: NearbyLostDog,
+  t: ReturnType<typeof useStrings>,
+  userPos: LatLng | null,
+) {
   const urgent = dog.urgency === 'urgent';
   const badgeText = urgent ? t.tasks.badgeUrgent : t.tasks.badgeSearching;
   const badgeFg = urgent ? '#e84040' : '#d9a030';
+  const distLabel = userPos
+    ? formatDistance(distanceMeters(userPos, dog.lastSeen.position))
+    : null;
   return (
     <View style={styles.card}>
       {dog.photoUrl ? (
@@ -52,6 +70,11 @@ function renderCard(dog: NearbyLostDog, t: ReturnType<typeof useStrings>) {
       <View style={styles.badge}>
         <Text style={[styles.badgeText, { color: badgeFg }]}>{badgeText}</Text>
       </View>
+      {distLabel ? (
+        <View style={styles.distChip}>
+          <Text style={styles.distChipText}>{distLabel}</Text>
+        </View>
+      ) : null}
       <View style={styles.cardBody}>
         <Text style={styles.cardName} numberOfLines={1}>
           {dog.name}
@@ -132,6 +155,30 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textTransform: 'lowercase',
     letterSpacing: 0.4,
+  },
+  // Distance chip — mirror of the urgency badge but anchored
+  // top-right. Same white-pill-with-shadow family.
+  distChip: {
+    position: 'absolute',
+    top: 14,
+    right: 14,
+    backgroundColor: '#ffffff',
+    paddingHorizontal: 10,
+    paddingVertical: 5,
+    borderRadius: 10,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.05)',
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 6,
+    elevation: 2,
+  },
+  distChipText: {
+    fontSize: 11,
+    fontWeight: '700',
+    color: '#555',
+    letterSpacing: 0.3,
   },
   cardBody: {
     position: 'absolute',

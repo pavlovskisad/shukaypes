@@ -13,6 +13,13 @@ import {
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
+import { useGameStore } from '../../stores/gameStore';
+import { distanceMeters } from '../../utils/geo';
+
+function formatDistance(m: number): string {
+  if (m < 1000) return `${Math.round(m / 50) * 50} m`;
+  return `${(m / 1000).toFixed(1)} km`;
+}
 
 interface LostDogModalProps {
   dog: NearbyLostDog | null;
@@ -33,10 +40,9 @@ const PHOTO_HEIGHT_PX = 380;
 // PWA on notched iPhones.
 const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
 
-const CLOSE_BUTTON_STYLE: CSSProperties = {
-  position: 'absolute',
-  top: SAFE_TOP,
-  right: 12,
+// Close button without the absolute positioning — now sits inside
+// a flex row with the distance chip in the top-right cluster.
+const CLOSE_BUTTON_STYLE_NOABS: CSSProperties = {
   width: 36,
   height: 36,
   borderRadius: 18,
@@ -78,6 +84,7 @@ export function LostDogModal({
   searchActive,
 }: LostDogModalProps) {
   const t = useStrings();
+  const userPos = useGameStore((s) => s.userPosition);
   const [renderDog, setRenderDog] = useState<NearbyLostDog | null>(dog);
   const [closing, setClosing] = useState(false);
 
@@ -108,6 +115,9 @@ export function LostDogModal({
   const badgeIcon: IconName = urgent ? 'urgent' : 'search';
   const badgeText = urgent ? t.modals.lostDog.badgeUrgent : t.modals.lostDog.badgeSearching;
   const badgeFg = urgent ? '#e84040' : '#d9a030';
+  const distLabel = userPos
+    ? formatDistance(distanceMeters(userPos, renderDog.lastSeen.position))
+    : null;
 
   // Portal to document.body so the modal escapes the MapView /
   // tab-page stacking context. Without this, the HUD pills (rendered
@@ -246,13 +256,42 @@ export function LostDogModal({
             <Icon name={badgeIcon} size={INLINE_ICON.badge} />
             {badgeText}
           </span>
-          <button
-            onClick={onClose}
-            aria-label={t.modals.common.close}
-            style={CLOSE_BUTTON_STYLE}
+          {/* Top-right cluster — distance chip + close button. */}
+          <div
+            style={{
+              position: 'absolute',
+              top: SAFE_TOP,
+              right: 12,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 8,
+            }}
           >
-            ×
-          </button>
+            {distLabel ? (
+              <span
+                style={{
+                  background: '#ffffff',
+                  color: '#555',
+                  borderRadius: 12,
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: 0.3,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.18)',
+                  border: '1px solid rgba(0,0,0,0.04)',
+                }}
+              >
+                {distLabel}
+              </span>
+            ) : null}
+            <button
+              onClick={onClose}
+              aria-label={t.modals.common.close}
+              style={CLOSE_BUTTON_STYLE_NOABS}
+            >
+              ×
+            </button>
+          </div>
           {/* Name + breed overlay on the gradient */}
           <div
             style={{

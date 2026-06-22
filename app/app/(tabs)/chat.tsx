@@ -483,11 +483,14 @@ const styles = StyleSheet.create({
   bottomBand: {
     paddingVertical: 4,
   },
+  // Inverted header pill — dark bg + white name + a white tile
+  // inside the pill carrying the logo (reads as a brand chip on
+  // the dark pill).
   headerCard: {
     alignSelf: 'center',
     marginTop: 10,
     marginBottom: 8,
-    backgroundColor: '#ffffff',
+    backgroundColor: colors.black,
     borderRadius: 999,
     paddingVertical: 8,
     paddingHorizontal: 14,
@@ -496,8 +499,6 @@ const styles = StyleSheet.create({
     gap: 8,
     ...CARD_SHADOW,
   },
-  // Logo lives inside a small white pill so it reads as a brand
-  // chip distinct from the companion-name text.
   headerLogoPill: {
     width: 36,
     height: 36,
@@ -514,7 +515,7 @@ const styles = StyleSheet.create({
     fontFamily: SYSTEM_FONT,
     fontSize: 15,
     fontWeight: '700',
-    color: colors.black,
+    color: '#ffffff',
   },
   listContent: {
     paddingHorizontal: 16,

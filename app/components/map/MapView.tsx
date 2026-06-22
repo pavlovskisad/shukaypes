@@ -1679,29 +1679,30 @@ export default function MapViewWeb() {
             top: offscreenIndicator.top,
             transform:
               offscreenIndicator.edge === 'top'
-                ? 'translate(-50%, 48px)'
+                ? 'translate(-50%, 60px)'
                 : offscreenIndicator.edge === 'bottom'
-                  ? 'translate(-50%, calc(-100% - 48px))'
+                  ? 'translate(-50%, calc(-100% - 60px))'
                   : offscreenIndicator.edge === 'left'
-                    ? 'translate(54px, -50%)'
-                    : 'translate(calc(-100% - 54px), -50%)',
+                    ? 'translate(66px, -50%)'
+                    : 'translate(calc(-100% - 66px), -50%)',
             transition:
               'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
             zIndex: Z.HUD_CHIP_BUBBLE,
-            maxWidth: 220,
-            padding: '8px 12px',
-            // Dog's voice — uses the shared VOICE token so all
-            // "talking right now" surfaces (in-map bubble, off-screen
-            // mirror, sniff indicators, lore stories) read as one.
+            // Same dimensions / type as the in-map SpeechBubble so
+            // the two read as one voice — padding 12/18, radius 22,
+            // type 16/1.4, maxWidth capped at 60vw.
+            padding: '12px 18px',
             background: VOICE.background,
             color: VOICE.color,
-            borderRadius: 14,
+            borderRadius: 22,
             fontFamily: VOICE.fontFamily,
-            fontSize: 13,
-            lineHeight: 1.35,
+            fontSize: 16,
+            lineHeight: 1.4,
             boxShadow: VOICE.shadow,
             border: VOICE.border,
             pointerEvents: 'none',
+            maxWidth: 'min(60vw, 320px)' as unknown as number,
+            whiteSpace: 'pre-line',
           }}
         >
           {bubble}
