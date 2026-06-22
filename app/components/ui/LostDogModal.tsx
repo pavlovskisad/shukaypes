@@ -25,18 +25,16 @@ interface LostDogModalProps {
 }
 
 const SHEET_ANIM_MS = 280;
-// Big-photo hero. Photo dominates the modal — name + breed sit on a
-// dark-to-transparent gradient over the bottom of it, like the
-// LostDogCardStack design. Bumped 300 → 380 once we dropped the
-// name + breed from the body section.
 const PHOTO_HEIGHT_PX = 380;
-const TOP_RESERVE_PX = 90;
+// Modal is anchored to the viewport top now, so the close button +
+// badge need to clear the OS status-bar / notch area. env() lookup
+// falls back to 0 in non-PWA Safari (no inset), 12 in standalone
+// PWA on notched iPhones.
+const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
 
-// Close button (top-right of the photo). Frosted-glass white pill so
-// it reads against any photo without stamping a dark disc.
 const CLOSE_BUTTON_STYLE: CSSProperties = {
   position: 'absolute',
-  top: 12,
+  top: SAFE_TOP,
   right: 12,
   width: 36,
   height: 36,
@@ -117,10 +115,14 @@ export function LostDogModal({
         inset: 0,
         background: 'rgba(0,0,0,0.3)',
         display: 'flex',
-        alignItems: 'flex-end',
+        // Anchored at the TOP — sheet slides down from off-screen-
+        // top and covers the HUD area like a dashboard / system-
+        // notification panel.
+        alignItems: 'flex-start',
         justifyContent: 'center',
-        paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' as unknown as number,
-        paddingTop: TOP_RESERVE_PX,
+        // Tab bar at the bottom is visible behind the modal's
+        // dimmed overlay; no padding needed at top (sheet bleeds
+        // to viewport edge).
         zIndex: Z.MODAL_MAP,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
@@ -130,16 +132,24 @@ export function LostDogModal({
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#ffffff',
-          borderRadius: 28,
+          // Full-bleed top edge (no rounded corners), rounded
+          // bottom only — reads as a card hanging from the top
+          // of the screen.
+          borderTopLeftRadius: 0,
+          borderTopRightRadius: 0,
+          borderBottomLeftRadius: 28,
+          borderBottomRightRadius: 28,
           padding: 0,
           width: '100%',
           maxWidth: 460,
-          maxHeight: '100%',
+          // Cap height so the action pills always stay above the
+          // tab bar. 100vh - tab-bar-area - small breather.
+          maxHeight: 'calc(100vh - 110px - env(safe-area-inset-bottom))' as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
-          animation: `sheet-${closing ? 'down' : 'up'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
-          boxShadow: '0 -10px 30px rgba(0,0,0,0.15)',
+          animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
           overflow: 'hidden',
         }}
       >
@@ -205,11 +215,13 @@ export function LostDogModal({
               pointerEvents: 'none',
             }}
           />
-          {/* Urgency badge */}
+          {/* Urgency badge — top: SAFE_TOP so it clears the iPhone
+              notch / status bar with the modal anchored at viewport
+              top. */}
           <span
             style={{
               position: 'absolute',
-              top: 14,
+              top: SAFE_TOP,
               left: 14,
               background: '#ffffff',
               color: badgeFg,
@@ -272,25 +284,18 @@ export function LostDogModal({
           </div>
         </div>
 
-        {/* Info + actions — last-seen meta, reward hint, then the
-            two action pills. Compact since the photo carries the
-            identity now. */}
+        {/* Info section — last-seen meta + reward hint. Scrolls
+            internally if the viewport is so short that even after
+            photo + actions there's no room for it. */}
         <div
           style={{
-            padding: '18px 22px 20px',
+            padding: '16px 22px 8px',
             overflowY: 'auto',
             flexGrow: 1,
             minHeight: 0,
           }}
         >
-          <div
-            style={{
-              display: 'flex',
-              flexDirection: 'column',
-              gap: 4,
-              marginBottom: 16,
-            }}
-          >
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
             <div style={{ fontSize: 14, color: '#555' }}>
               {t.modals.lostDog.lastSeen(relativeTime(renderDog.lastSeen.at, t))}
             </div>
@@ -307,34 +312,45 @@ export function LostDogModal({
               {t.modals.lostDog.questCta(renderDog.rewardPoints)}
             </div>
           </div>
+        </div>
 
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => onReportSighting?.(renderDog)}
-              style={MODAL_PILL_DARK}
-            >
-              <Icon name="eyes" size={INLINE_ICON.cta} inverted />
-              {t.modals.lostDog.iveSeen}
-            </button>
-            <button
-              onClick={() => onStartSearch?.(renderDog)}
-              disabled={searchActive}
-              style={searchActive ? MODAL_PILL_DISABLED : MODAL_PILL_BLUE}
-            >
-              <Icon name="search" size={INLINE_ICON.cta} inverted={!searchActive} />
-              {searchActive ? t.modals.lostDog.searchingCta : t.modals.lostDog.startSearch}
-            </button>
-          </div>
+        {/* Action pills — fixed at the bottom of the modal so they
+            never scroll out of view. flexShrink: 0 keeps them at
+            their natural height regardless of the info section's
+            content above. */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            padding: '12px 22px 20px',
+            flexShrink: 0,
+          }}
+        >
+          <button
+            onClick={() => onReportSighting?.(renderDog)}
+            style={MODAL_PILL_DARK}
+          >
+            <Icon name="eyes" size={INLINE_ICON.cta} inverted />
+            {t.modals.lostDog.iveSeen}
+          </button>
+          <button
+            onClick={() => onStartSearch?.(renderDog)}
+            disabled={searchActive}
+            style={searchActive ? MODAL_PILL_DISABLED : MODAL_PILL_BLUE}
+          >
+            <Icon name="search" size={INLINE_ICON.cta} inverted={!searchActive} />
+            {searchActive ? t.modals.lostDog.searchingCta : t.modals.lostDog.startSearch}
+          </button>
         </div>
 
         <style>{`
-          @keyframes sheet-up {
-            from { transform: translateY(100%); }
+          @keyframes top-sheet-in {
+            from { transform: translateY(-100%); }
             to { transform: translateY(0); }
           }
-          @keyframes sheet-down {
+          @keyframes top-sheet-out {
             from { transform: translateY(0); }
-            to { transform: translateY(100%); }
+            to { transform: translateY(-100%); }
           }
         `}</style>
       </div>

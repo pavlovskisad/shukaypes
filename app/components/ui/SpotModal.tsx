@@ -18,7 +18,10 @@ interface SpotModalProps {
 }
 
 const SHEET_ANIM_MS = 280;
-const HERO_HEIGHT_PX = 200;
+const HERO_HEIGHT_PX = 220;
+// Top-anchored modal — bump the badge / close button down by the
+// safe-area inset so they clear the iPhone notch / status bar.
+const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
 
 // Slide-up POI sheet. Mirrors LostDogModal's hero-on-top layout but
 // with a giant category icon instead of a photo — same visual family,
@@ -60,12 +63,10 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         inset: 0,
         background: 'rgba(0,0,0,0.3)',
         display: 'flex',
-        alignItems: 'flex-end',
+        // Anchored at the TOP — same dashboard-card-from-above
+        // shape as the LostDogModal so the two read as one family.
+        alignItems: 'flex-start',
         justifyContent: 'center',
-        // Lift the sheet above the bottom dashboard so the primary
-        // action isn't covered. env(safe-area-inset-bottom) gives
-        // notched-iPhone PWA the same breathing room as the rest.
-        paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' as unknown as number,
         zIndex: Z.MODAL_MAP,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
@@ -75,14 +76,21 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#ffffff',
-          borderRadius: 28,
+          // Full-bleed top edge, rounded bottom only.
+          borderTopLeftRadius: 0,
+          borderTopRightRadius: 0,
+          borderBottomLeftRadius: 28,
+          borderBottomRightRadius: 28,
           padding: 0,
           width: '100%',
           maxWidth: 460,
+          // Cap so the action pills stay above the tab bar even on
+          // short viewports.
+          maxHeight: 'calc(100vh - 110px - env(safe-area-inset-bottom))' as unknown as number,
           display: 'flex',
           flexDirection: 'column',
-          animation: `sheet-${closing ? 'down' : 'up'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
-          boxShadow: '0 -10px 30px rgba(0,0,0,0.15)',
+          animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
+          boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
           overflow: 'hidden',
         }}
       >
@@ -110,11 +118,12 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               {renderSpot.icon ?? '📍'}
             </span>
           )}
-          {/* Category chip top-left */}
+          {/* Category chip top-left — SAFE_TOP clears the notch
+              now that the modal is top-anchored. */}
           <span
             style={{
               position: 'absolute',
-              top: 14,
+              top: SAFE_TOP,
               left: 14,
               background: '#ffffff',
               color: '#555',
@@ -136,7 +145,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           <div
             style={{
               position: 'absolute',
-              top: 12,
+              top: SAFE_TOP,
               right: 12,
               display: 'flex',
               alignItems: 'center',
@@ -187,8 +196,15 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           </div>
         </div>
 
-        {/* Info + actions — name + address, then two action pills. */}
-        <div style={{ padding: '20px 22px 22px' }}>
+        {/* Info section — name + address. Scrolls if needed. */}
+        <div
+          style={{
+            padding: '20px 22px 8px',
+            overflowY: 'auto',
+            flexGrow: 1,
+            minHeight: 0,
+          }}
+        >
           <div
             style={{
               fontFamily: SYSTEM_FONT,
@@ -206,42 +222,47 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 fontSize: 14,
                 color: '#777',
                 marginTop: 6,
-                marginBottom: 18,
               }}
             >
               {renderSpot.address}
             </div>
-          ) : (
-            <div style={{ height: 18 }} />
-          )}
+          ) : null}
+        </div>
 
-          {/* Two pills side-by-side via flex:1 (shared MODAL_PILL_*) */}
-          <div style={{ display: 'flex', gap: 8 }}>
-            <button
-              onClick={() => onWalkHere?.(renderSpot, 'oneway')}
-              style={MODAL_PILL_DARK}
-            >
-              <Icon name="walk" size={INLINE_ICON.cta} inverted />
-              <span>{t.modals.spot.walkHere}</span>
-            </button>
-            <button
-              onClick={() => onWalkHere?.(renderSpot, 'roundtrip')}
-              style={MODAL_PILL_BLUE}
-            >
-              <Icon name="roundtrip" size={INLINE_ICON.cta} inverted />
-              <span>{t.modals.spot.roundtrip}</span>
-            </button>
-          </div>
+        {/* Action pills — fixed at the bottom of the modal so they
+            never scroll out of view. */}
+        <div
+          style={{
+            display: 'flex',
+            gap: 8,
+            padding: '12px 22px 20px',
+            flexShrink: 0,
+          }}
+        >
+          <button
+            onClick={() => onWalkHere?.(renderSpot, 'oneway')}
+            style={MODAL_PILL_DARK}
+          >
+            <Icon name="walk" size={INLINE_ICON.cta} inverted />
+            <span>{t.modals.spot.walkHere}</span>
+          </button>
+          <button
+            onClick={() => onWalkHere?.(renderSpot, 'roundtrip')}
+            style={MODAL_PILL_BLUE}
+          >
+            <Icon name="roundtrip" size={INLINE_ICON.cta} inverted />
+            <span>{t.modals.spot.roundtrip}</span>
+          </button>
         </div>
 
         <style>{`
-          @keyframes sheet-up {
-            from { transform: translateY(100%); }
+          @keyframes top-sheet-in {
+            from { transform: translateY(-100%); }
             to { transform: translateY(0); }
           }
-          @keyframes sheet-down {
+          @keyframes top-sheet-out {
             from { transform: translateY(0); }
-            to { transform: translateY(100%); }
+            to { transform: translateY(-100%); }
           }
         `}</style>
       </div>
