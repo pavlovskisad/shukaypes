@@ -132,8 +132,8 @@ export function StatusBar() {
     // is obviously "+20% fed", not "I ate 20 bones". Paw pill keeps
     // the lifetime collected count.
     <View style={styles.wrap} pointerEvents="box-none">
-      <MeterPill icon="sun" value={happiness} label={t.hud.happiness} />
-      <MeterPill icon="bone" value={hunger} label={t.hud.hunger} />
+      <MeterPill icon="sun" value={happiness} label={t.hud.happiness} showValue={false} />
+      <MeterPill icon="bone" value={hunger} label={t.hud.hunger} showValue={false} />
       <CounterPill icon="paws" value={tokensCollected} label={t.hud.paws} />
       <SpotsTogglePill />
     </View>
