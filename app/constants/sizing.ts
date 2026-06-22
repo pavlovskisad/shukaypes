@@ -38,11 +38,13 @@ export const CHIP = {
 } as const;
 
 export const BUTTON = {
-  size: 56,
-  icon: 44,           // 0.79 — splits the difference between the
-                      // original 47 (too dense against dark glass)
-                      // and the 38 we tried last pass (too sparse).
-  radius: 28,         // size / 2 — full round
+  // Radial-menu button — bumped 56 → 68 for a chunkier feel that
+  // matches the chunkier cards / pills / bubbles family across the
+  // rest of the app. Only consumed by RadialMenu; tab-bar icons
+  // use the HERO token below.
+  size: 68,
+  icon: 54,           // 0.79 — same ratio as before.
+  radius: 34,         // size / 2 — full round
 } as const;
 
 export const HERO = {

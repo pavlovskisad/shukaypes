@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
-import { INLINE_ICON, MAP_MARKER } from '../../constants/sizing';
+import { INLINE_ICON } from '../../constants/sizing';
 import { MODAL_PILL_DARK, MODAL_PILL_BLUE } from '../../constants/buttons';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
@@ -18,28 +18,18 @@ interface SpotModalProps {
 }
 
 const SHEET_ANIM_MS = 280;
+const HERO_HEIGHT_PX = 200;
 
-function ratingStars(rating?: number): string {
-  if (typeof rating !== 'number') return '';
-  const full = Math.floor(rating);
-  const half = rating - full >= 0.5;
-  return '★'.repeat(full) + (half ? '½' : '') + '☆'.repeat(Math.max(0, 5 - full - (half ? 1 : 0)));
-}
-
-// Slide-up POI sheet. Mirrors LostDogModal's shape so the two read as
-// one family — frosted-corner card, big primary action button, ✕ to
-// close. Animates in on mount, animates out before unmounting via the
-// closing-state timeout so dismiss feels reversible.
+// Slide-up POI sheet. Mirrors LostDogModal's hero-on-top layout but
+// with a giant category icon instead of a photo — same visual family,
+// different content type. Animates in on mount; closing-state
+// timeout runs the slide-down before unmounting.
 export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   const t = useStrings();
   const CATEGORY_LABEL: Record<string, string> = t.modals.spot.categories;
   const [renderSpot, setRenderSpot] = useState<Spot | null>(spot);
   const [closing, setClosing] = useState(false);
 
-  // Three transitions matter:
-  //   prop spot: A   →  prop spot: B    (swap content, no animation)
-  //   prop spot: A   →  null            (start closing → unmount after MS)
-  //   prop spot: null → A               (mount, enter animation runs)
   useEffect(() => {
     if (spot) {
       setRenderSpot(spot);
@@ -59,7 +49,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   if (!renderSpot) return null;
 
   const categoryLabel = CATEGORY_LABEL[renderSpot.category] ?? renderSpot.category;
-  const stars = ratingStars(renderSpot.rating);
+  const iconSlot = iconForCategory(renderSpot.category);
+  const hasRating = typeof renderSpot.rating === 'number';
 
   return (
     <div
@@ -72,10 +63,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         alignItems: 'flex-end',
         justifyContent: 'center',
         // Lift the sheet above the bottom dashboard so the primary
-        // action isn't covered. Adds env(safe-area-inset-bottom) so
-        // PWA on notched iPhones (where the tab bar sits behind a
-        // ~34px home-indicator strip) gets the same visual breathing
-        // room as Android/desktop.
+        // action isn't covered. env(safe-area-inset-bottom) gives
+        // notched-iPhone PWA the same breathing room as the rest.
         paddingBottom: 'calc(100px + env(safe-area-inset-bottom))' as unknown as number,
         zIndex: Z.MODAL_MAP,
         opacity: closing ? 0 : 1,
@@ -86,126 +75,163 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#ffffff',
-          borderRadius: 24,
-          padding: '22px 20px 22px',
+          borderRadius: 28,
+          padding: 0,
           width: '100%',
-          maxWidth: 430,
+          maxWidth: 460,
+          display: 'flex',
+          flexDirection: 'column',
           animation: `sheet-${closing ? 'down' : 'up'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
-          boxShadow: '0 -10px 30px rgba(0,0,0,0.12)',
+          boxShadow: '0 -10px 30px rgba(0,0,0,0.15)',
+          overflow: 'hidden',
         }}
       >
+        {/* Hero block — soft-grey tinted band carrying a big centred
+            category icon. Category chip top-left, rating chip +
+            close button top-right. Same "hero on top of card" shape
+            as the LostDogModal photo header so the two read as one
+            family. */}
         <div
           style={{
+            position: 'relative',
+            width: '100%',
+            height: HERO_HEIGHT_PX,
+            background: 'linear-gradient(180deg, #f5f6f8 0%, #ecedf0 100%)',
             display: 'flex',
-            justifyContent: 'space-between',
             alignItems: 'center',
-            marginBottom: 14,
+            justifyContent: 'center',
+            flexShrink: 0,
           }}
         >
+          {iconSlot ? (
+            <Icon name={iconSlot} size={120} />
+          ) : (
+            <span style={{ fontSize: 96, opacity: 0.85 }}>
+              {renderSpot.icon ?? '📍'}
+            </span>
+          )}
+          {/* Category chip top-left */}
           <span
             style={{
-              // White chip with a soft shadow instead of a grey
-              // fill — separates from the white modal bg via depth
-              // (matches the same chip treatment in spots screen
-              // rows + hero icons).
+              position: 'absolute',
+              top: 14,
+              left: 14,
               background: '#ffffff',
               color: '#555',
               borderRadius: 12,
-              padding: '4px 10px',
+              padding: '6px 12px',
               fontSize: 12,
-              fontWeight: 600,
-              letterSpacing: 0.3,
+              fontWeight: 700,
+              letterSpacing: 0.4,
               textTransform: 'lowercase',
-              boxShadow: '0 2px 6px rgba(0,0,0,0.08)',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
               border: '1px solid rgba(0,0,0,0.04)',
             }}
           >
             {categoryLabel}
           </span>
-          <button
-            onClick={onClose}
-            style={{
-              background: 'transparent',
-              border: 'none',
-              fontSize: 24,
-              cursor: 'pointer',
-              color: '#777',
-              lineHeight: 1,
-            }}
-            aria-label={t.modals.common.close}
-          >
-            ×
-          </button>
-        </div>
-
-        <div style={{ display: 'flex', gap: 14, marginBottom: 18, alignItems: 'center' }}>
+          {/* Top-right cluster — rating chip (if available) + close
+              button. Rating uses the same white-pill family as the
+              category chip but with gold star + value. */}
           <div
             style={{
-              width: 68,
-              height: 68,
-              borderRadius: '50%',
-              // White with a soft shadow — was a grey disc that
-              // visually competed with the white modal bg.
-              background: '#ffffff',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
-              border: '1px solid rgba(0,0,0,0.04)',
+              position: 'absolute',
+              top: 12,
+              right: 12,
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 30,
-              flexShrink: 0,
+              gap: 8,
             }}
           >
-            {(() => {
-              const slot = iconForCategory(renderSpot.category);
-              return slot ? <Icon name={slot} size={MAP_MARKER.spotHero} /> : (renderSpot.icon ?? '📍');
-            })()}
-          </div>
-          <div style={{ flex: 1, minWidth: 0 }}>
-            <div
+            {hasRating ? (
+              <span
+                style={{
+                  background: '#ffffff',
+                  color: '#d9a030',
+                  borderRadius: 12,
+                  padding: '6px 12px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  letterSpacing: 0.3,
+                  boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+                  border: '1px solid rgba(0,0,0,0.04)',
+                }}
+              >
+                ★ {renderSpot.rating!.toFixed(1)}
+              </span>
+            ) : null}
+            <button
+              onClick={onClose}
+              aria-label={t.modals.common.close}
               style={{
-                fontFamily: SYSTEM_FONT,
-                fontSize: 24,
-                fontWeight: 700,
-                lineHeight: 1.2,
+                width: 36,
+                height: 36,
+                borderRadius: 18,
+                border: '1px solid rgba(0,0,0,0.06)',
+                background: 'rgba(255,255,255,0.92)',
+                backdropFilter: 'blur(8px) saturate(160%)',
+                WebkitBackdropFilter: 'blur(8px) saturate(160%)',
+                color: '#1a1a1a',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                fontSize: 26,
+                lineHeight: 1,
               }}
             >
-              {renderSpot.name}
-            </div>
-            {stars ? (
-              <div style={{ fontSize: 14, color: '#d9a030', marginTop: 5 }}>
-                {stars}{' '}
-                <span style={{ color: '#777', fontSize: 13 }}>
-                  {typeof renderSpot.rating === 'number' ? renderSpot.rating.toFixed(1) : ''}
-                </span>
-              </div>
-            ) : null}
-            {renderSpot.address ? (
-              <div style={{ fontSize: 13, color: '#777', marginTop: 5 }}>
-                {renderSpot.address}
-              </div>
-            ) : null}
+              ×
+            </button>
           </div>
         </div>
 
-        {/* Two pills side-by-side via flex:1 (shared MODAL_PILL_*)
-            — matches the LostDog action layout. Was a full-width
-            stack that felt overwide for the modal's short CTAs. */}
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            onClick={() => onWalkHere?.(renderSpot, 'oneway')}
-            style={MODAL_PILL_DARK}
+        {/* Info + actions — name + address, then two action pills. */}
+        <div style={{ padding: '20px 22px 22px' }}>
+          <div
+            style={{
+              fontFamily: SYSTEM_FONT,
+              fontSize: 26,
+              fontWeight: 800,
+              lineHeight: 1.15,
+              color: '#1a1a1a',
+            }}
           >
-            <Icon name="walk" size={INLINE_ICON.cta} inverted />
-            <span>{t.modals.spot.walkHere}</span>
-          </button>
-          <button
-            onClick={() => onWalkHere?.(renderSpot, 'roundtrip')}
-            style={MODAL_PILL_BLUE}
-          >
-            <Icon name="roundtrip" size={INLINE_ICON.cta} inverted />
-            <span>{t.modals.spot.roundtrip}</span>
-          </button>
+            {renderSpot.name}
+          </div>
+          {renderSpot.address ? (
+            <div
+              style={{
+                fontSize: 14,
+                color: '#777',
+                marginTop: 6,
+                marginBottom: 18,
+              }}
+            >
+              {renderSpot.address}
+            </div>
+          ) : (
+            <div style={{ height: 18 }} />
+          )}
+
+          {/* Two pills side-by-side via flex:1 (shared MODAL_PILL_*) */}
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button
+              onClick={() => onWalkHere?.(renderSpot, 'oneway')}
+              style={MODAL_PILL_DARK}
+            >
+              <Icon name="walk" size={INLINE_ICON.cta} inverted />
+              <span>{t.modals.spot.walkHere}</span>
+            </button>
+            <button
+              onClick={() => onWalkHere?.(renderSpot, 'roundtrip')}
+              style={MODAL_PILL_BLUE}
+            >
+              <Icon name="roundtrip" size={INLINE_ICON.cta} inverted />
+              <span>{t.modals.spot.roundtrip}</span>
+            </button>
+          </div>
         </div>
 
         <style>{`

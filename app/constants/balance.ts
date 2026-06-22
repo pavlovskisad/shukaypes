@@ -32,8 +32,11 @@ export const balance = {
   ambientChance: 0.25,
   ambientMax: 10,
   bubbleDuration: 7000,
-  menuRadius: 60,
-  subMenuRadius: 100,
+  // Radial menu rim — bumped 60 → 78 (and submenu 100 → 124) to
+  // match the bigger BUTTON.size, so the buttons still have a
+  // breathing gap from the companion's centre instead of crowding it.
+  menuRadius: 78,
+  subMenuRadius: 124,
   mapZoomMin: 12,
   mapZoomMax: 19,
   mapZoomDefault: 17,

@@ -1935,33 +1935,6 @@ export default function MapViewWeb() {
         dog={lostDogs.find((d) => d.id === selectedDogId) ?? null}
         onClose={() => setSelectedDog(null)}
         searchActive={!!activeQuest && activeQuest.dogId === selectedDogId}
-        onPrev={selectedDogId ? (() => {
-          // Cycle by distance from user — pressing ‹ walks through the
-          // nearby list in order so the closest pet comes first, the
-          // farthest last. Wraps at the ends.
-          if (!userPos || !selectedDogId) return;
-          const sorted = [...lostDogs].sort(
-            (a, b) =>
-              distanceMeters(userPos, a.lastSeen.position) -
-              distanceMeters(userPos, b.lastSeen.position),
-          );
-          const idx = sorted.findIndex((d) => d.id === selectedDogId);
-          if (idx < 0) return;
-          const prev = sorted[(idx - 1 + sorted.length) % sorted.length]!;
-          setSelectedDog(prev.id);
-        }) : undefined}
-        onNext={selectedDogId ? (() => {
-          if (!userPos || !selectedDogId) return;
-          const sorted = [...lostDogs].sort(
-            (a, b) =>
-              distanceMeters(userPos, a.lastSeen.position) -
-              distanceMeters(userPos, b.lastSeen.position),
-          );
-          const idx = sorted.findIndex((d) => d.id === selectedDogId);
-          if (idx < 0) return;
-          const next = sorted[(idx + 1) % sorted.length]!;
-          setSelectedDog(next.id);
-        }) : undefined}
         onReportSighting={async (d) => {
           setSelectedDog(null);
           const res = await useGameStore.getState().reportSighting(d.id);
