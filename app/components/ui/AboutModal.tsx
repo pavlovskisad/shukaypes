@@ -142,7 +142,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               height: 36,
               borderRadius: 18,
               border: '1px solid rgba(0,0,0,0.06)',
-              background: 'rgba(255,255,255,0.92)',
+              background: '#ffffff',
               color: '#1a1a1a',
               padding: 0,
               display: 'flex',

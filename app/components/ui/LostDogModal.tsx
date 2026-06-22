@@ -42,14 +42,14 @@ const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
 
 // Close button without the absolute positioning — now sits inside
 // a flex row with the distance chip in the top-right cluster.
+// Plain white (no rgba / backdrop blur) so it matches the rest of
+// the chip family — every modal / card chip is solid white now.
 const CLOSE_BUTTON_STYLE_NOABS: CSSProperties = {
   width: 36,
   height: 36,
   borderRadius: 18,
   border: '1px solid rgba(0,0,0,0.06)',
-  background: 'rgba(255,255,255,0.92)',
-  backdropFilter: 'blur(8px) saturate(160%)',
-  WebkitBackdropFilter: 'blur(8px) saturate(160%)',
+  background: '#ffffff',
   color: '#1a1a1a',
   padding: 0,
   display: 'flex',

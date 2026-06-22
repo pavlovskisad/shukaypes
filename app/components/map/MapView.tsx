@@ -1556,7 +1556,7 @@ export default function MapViewWeb() {
                 pointerEvents: 'auto',
                 cursor: 'pointer',
                 padding: '8px 16px',
-                background: 'rgba(255,255,255,0.92)',
+                background: '#ffffff',
                 color: '#1a1a1a',
                 borderRadius: 999,
                 fontFamily: SYSTEM_FONT,
@@ -1581,7 +1581,7 @@ export default function MapViewWeb() {
                 pointerEvents: 'auto',
                 cursor: 'pointer',
                 padding: '8px 16px',
-                background: 'rgba(255,255,255,0.92)',
+                background: '#ffffff',
                 color: '#1a1a1a',
                 borderRadius: 999,
                 fontFamily: SYSTEM_FONT,
@@ -1734,20 +1734,24 @@ export default function MapViewWeb() {
         // — same "warning" bucket but doesn't read as a gold rim.
         // The disc's GLOW stays amber so the on-screen ↔ off-screen
         // urgency cue still ties together.
+        // Solid badge fills — no rgba alpha so urgent / medium /
+        // low all read as plain coloured pills rather than tinted
+        // translucent ones. Low-urgency uses black instead of grey
+        // per the "no grey backgrounds" rule.
         const halo =
           d.urgency === 'urgent'
             ? {
                 glow: '0 0 14px rgba(232,64,64,0.45), 0 2px 8px rgba(0,0,0,0.12)',
-                badge: 'rgba(232,64,64,0.95)',
+                badge: '#e84040',
               }
             : d.urgency === 'medium'
               ? {
                   glow: '0 0 14px rgba(217,160,48,0.45), 0 2px 8px rgba(0,0,0,0.12)',
-                  badge: 'rgba(255,140,0,0.95)',
+                  badge: '#ff8c00',
                 }
               : {
                   glow: '0 0 10px rgba(160,160,160,0.3), 0 2px 6px rgba(0,0,0,0.1)',
-                  badge: 'rgba(120,120,120,0.92)',
+                  badge: '#1a1a1a',
                 };
         const edgeTransform =
           d.edge === 'top'
@@ -1914,9 +1918,7 @@ export default function MapViewWeb() {
             // it reliably stacks above the HUD on web/PWA.
             zIndex: Z.HUD_PILLS_OVERLAY,
             cursor: 'pointer',
-            background: 'rgba(255,255,255,0.92)',
-            backdropFilter: 'blur(14px) saturate(160%)',
-            WebkitBackdropFilter: 'blur(14px) saturate(160%)',
+            background: '#ffffff',
             // Round on the LEFT side only so it reads as docked to
             // the screen edge.
             borderTopLeftRadius: 28,
