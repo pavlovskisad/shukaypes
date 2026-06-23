@@ -80,7 +80,6 @@ export default function TasksScreen() {
   const startQuest = useGameStore((s) => s.startQuest);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
-  const [historyOpen, setHistoryOpen] = useState(false);
   const [modalDogId, setModalDogId] = useState<string | null>(null);
   const [startingDogId, setStartingDogId] = useState<string | null>(null);
   // Open the "see all" fullscreen list when truthy.
@@ -379,49 +378,39 @@ export default function TasksScreen() {
 
         {/* Past searches — completed/abandoned quests, most recent
             first. Only renders the card when there's something to
-            show so a brand-new account doesn't see an empty rail. */}
+            show so a brand-new account doesn't see an empty rail.
+            Always rendered expanded: a collapsing "+ / −" header
+            existed previously but was too easy to miss (people
+            scrolled hunting for the rows that were a tap away).  */}
         {history.length > 0 ? (
           <View nativeID="snap-card-history" style={styles.card}>
-            <Pressable
-              onPress={() => setHistoryOpen((v) => !v)}
-              style={({ pressed }) => [
-                styles.cardHeaderRow,
-                pressed && { opacity: 0.7 },
-              ]}
-            >
+            <View style={styles.cardHeaderRow}>
               <Text style={styles.cardTitle}>{t.tasks.pastSearches}</Text>
-              <View style={styles.cardHeaderRight}>
-                <Text style={styles.cardHeaderCount}>{history.length}</Text>
-                <Text style={styles.cardHeaderChevron}>
-                  {historyOpen ? '−' : '+'}
-                </Text>
+              <Text style={styles.cardHeaderCount}>{history.length}</Text>
+            </View>
+            {history.map((q, i) => (
+              <View
+                key={q.id}
+                style={[styles.historyRow, i > 0 && styles.taskDivider]}
+              >
+                <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
+                <View style={styles.historyBody}>
+                  <Text style={styles.historyName} numberOfLines={1}>
+                    {q.dogName ?? t.tasks.unknownPet}
+                  </Text>
+                  <Text style={styles.historyMeta}>
+                    {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
+                    {relativeWhen(q.endedAt)}
+                    {q.status === 'completed' ? ` · +${q.rewardPoints}pts` : ''}
+                  </Text>
+                </View>
+                {q.status === 'completed' ? (
+                  <Text style={styles.historyTickDone}>✓</Text>
+                ) : (
+                  <Text style={styles.historyTickAbandon}>×</Text>
+                )}
               </View>
-            </Pressable>
-            {historyOpen
-              ? history.map((q, i) => (
-                  <View
-                    key={q.id}
-                    style={[styles.historyRow, i > 0 && styles.taskDivider]}
-                  >
-                    <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
-                    <View style={styles.historyBody}>
-                      <Text style={styles.historyName} numberOfLines={1}>
-                        {q.dogName ?? t.tasks.unknownPet}
-                      </Text>
-                      <Text style={styles.historyMeta}>
-                        {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
-                        {relativeWhen(q.endedAt)}
-                        {q.status === 'completed' ? ` · +${q.rewardPoints}pts` : ''}
-                      </Text>
-                    </View>
-                    {q.status === 'completed' ? (
-                      <Text style={styles.historyTickDone}>✓</Text>
-                    ) : (
-                      <Text style={styles.historyTickAbandon}>×</Text>
-                    )}
-                  </View>
-                ))
-              : null}
+            ))}
           </View>
         ) : null}
       </ScrollView>
@@ -566,22 +555,11 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
   },
-  cardHeaderRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 6,
-    marginBottom: 10, // align with cardTitle's marginBottom
-  },
   cardHeaderCount: {
     fontSize: 12,
     fontWeight: '700',
     color: '#999',
-  },
-  cardHeaderChevron: {
-    fontSize: 18,
-    color: '#aaa',
-    fontWeight: '500',
-    paddingHorizontal: 4,
+    marginBottom: 10, // align with cardTitle's marginBottom
   },
   historyRow: {
     flexDirection: 'row',
