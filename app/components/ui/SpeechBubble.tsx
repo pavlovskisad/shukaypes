@@ -1,4 +1,5 @@
 import { VOICE } from '../../constants/voice';
+import { TYPE } from '../../constants/type';
 
 interface SpeechBubbleProps {
   text: string | null;
@@ -41,7 +42,7 @@ export function SpeechBubble({ text }: SpeechBubbleProps) {
         // family. No more "tail" corner; the bubble's position
         // above the dog is enough direction cue on its own.
         borderRadius: 24,
-        fontSize: 16,
+        fontSize: TYPE.body,
         lineHeight: 1.4,
         fontFamily: VOICE.fontFamily,
         whiteSpace: 'pre-line',

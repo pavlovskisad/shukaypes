@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { MapLibreMarker } from './MapLibreMarker';
 
 // Urgency drives the glow color: red = urgent (act now), amber =
@@ -186,7 +187,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 27,
+            fontSize: TYPE.display,
             overflow: 'hidden',
             boxShadow: halo.glow,
           }}
@@ -220,7 +221,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
         <div
           style={{
             fontFamily: SYSTEM_FONT,
-            fontSize: 16,
+            fontSize: TYPE.body,
             fontWeight: 700,
             color: inverted ? NAME_COLOUR_NIGHT : NAME_COLOUR_DAY,
             textShadow: inverted ? NAME_SHADOW_NIGHT : NAME_SHADOW_DAY,

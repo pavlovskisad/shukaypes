@@ -9,6 +9,7 @@ import { View, StyleSheet, Text, Pressable } from 'react-native';
 import { router } from 'expo-router';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
+import { TYPE } from '../constants/type';
 
 import {
   LIGHT_PALETTE,
@@ -119,12 +120,12 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     gap: 8,
   },
-  bannerText: { fontSize: 12, color: '#3a352a', flex: 1 },
+  bannerText: { fontSize: TYPE.small, color: '#3a352a', flex: 1 },
   backBtn: {
     backgroundColor: LIGHT_PALETTE.crayon,
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 999,
   },
-  backText: { color: '#fff', fontSize: 12, fontWeight: '700' },
+  backText: { color: '#fff', fontSize: TYPE.small, fontWeight: '700' },
 });

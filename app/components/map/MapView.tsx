@@ -8,6 +8,7 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
+import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { MapContext } from './MapContext';
 import {
@@ -1562,7 +1563,7 @@ export default function MapViewWeb() {
                 color: '#1a1a1a',
                 borderRadius: 999,
                 fontFamily: SYSTEM_FONT,
-                fontSize: 13,
+                fontSize: TYPE.small,
                 fontWeight: 600,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                 border: '1px solid rgba(0,0,0,0.06)',
@@ -1587,7 +1588,7 @@ export default function MapViewWeb() {
                 color: '#1a1a1a',
                 borderRadius: 999,
                 fontFamily: SYSTEM_FONT,
-                fontSize: 13,
+                fontSize: TYPE.small,
                 fontWeight: 600,
                 boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
                 border: '1px solid rgba(0,0,0,0.06)',
@@ -1700,7 +1701,7 @@ export default function MapViewWeb() {
             color: VOICE.color,
             borderRadius: 24,
             fontFamily: VOICE.fontFamily,
-            fontSize: 16,
+            fontSize: TYPE.body,
             lineHeight: 1.4,
             boxShadow: VOICE.shadow,
             border: VOICE.border,
@@ -1822,7 +1823,7 @@ export default function MapViewWeb() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'center',
-                  fontSize: 27,
+                  fontSize: TYPE.display,
                 }}
               >
                 <span style={{ position: 'absolute' }}>{d.emoji}</span>
@@ -1863,7 +1864,7 @@ export default function MapViewWeb() {
                   background: halo.badge,
                   color: '#ffffff',
                   fontFamily: SYSTEM_FONT,
-                  fontSize: 10,
+                  fontSize: TYPE.caption,
                   fontWeight: 700,
                   display: 'flex',
                   alignItems: 'center',
@@ -2012,6 +2013,6 @@ const styles = StyleSheet.create({
     backgroundColor: colors.greyBg,
     padding: 20,
   },
-  t: { fontSize: 16, color: colors.black },
-  s: { fontSize: 12, color: colors.grey, marginTop: 6, textAlign: 'center' },
+  t: { fontSize: TYPE.body, color: colors.black },
+  s: { fontSize: TYPE.small, color: colors.grey, marginTop: 6, textAlign: 'center' },
 });

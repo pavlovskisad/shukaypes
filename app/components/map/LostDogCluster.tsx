@@ -3,6 +3,7 @@ import { MapLibreMarker } from './MapLibreMarker';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 
 // Dominant-urgency wins the glow color. Urgent beats medium beats resolved
@@ -104,11 +105,11 @@ function LostDogClusterImpl({
           }}
         >
           {expanded ? (
-            <span style={{ fontSize: 22, fontWeight: 700, color: '#1a1a1a' }}>…</span>
+            <span style={{ fontSize: TYPE.hero, fontWeight: 700, color: '#1a1a1a' }}>…</span>
           ) : (
             <>
-              <span style={{ fontSize: 14 }}>{emojiHint}</span>
-              <span style={{ fontSize: 15, fontWeight: 700, color: '#1a1a1a', marginTop: 1 }}>
+              <span style={{ fontSize: TYPE.small }}>{emojiHint}</span>
+              <span style={{ fontSize: TYPE.body, fontWeight: 700, color: '#1a1a1a', marginTop: 1 }}>
                 {count}
               </span>
             </>
@@ -124,7 +125,7 @@ function LostDogClusterImpl({
               top: CONTAINER_CENTER + 24,
               textAlign: 'center',
               fontFamily: SYSTEM_FONT,
-              fontSize: 12,
+              fontSize: TYPE.small,
               fontWeight: 600,
               color: '#1a1a1a',
               textShadow: '0 1px 4px rgba(255,255,255,0.95)',
@@ -160,7 +161,7 @@ function LostDogClusterImpl({
                 borderRadius: '50%',
                 border: 'none',
                 background: '#ffffff',
-                fontSize: 20,
+                fontSize: TYPE.hero,
                 cursor: 'pointer',
                 opacity: expanded ? 1 : 0,
                 transform: expanded ? 'scale(1)' : 'scale(0.4)',

@@ -33,6 +33,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { TYPE } from '../../constants/type';
 
 export const CARD_W = 320;
 export const CARD_H = 280;
@@ -409,7 +410,7 @@ const styles = StyleSheet.create({
     elevation: 2,
   },
   counter: {
-    fontSize: 13,
+    fontSize: TYPE.small,
     color: '#777',
     fontWeight: '600',
   },

@@ -7,6 +7,7 @@ import { api } from '../../services/api';
 import { fetchWalkingRoute } from '../../services/directions';
 import { useGameStore } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { useStrings } from '../../i18n/useStrings';
 import { VOICE } from '../../constants/voice';
@@ -465,7 +466,7 @@ export function SniffPress() {
             color: VOICE.color,
             borderRadius: 24,
             fontFamily: VOICE.fontFamily,
-            fontSize: 16,
+            fontSize: TYPE.body,
             lineHeight: 1.4,
             boxShadow: VOICE.shadow,
             border: VOICE.border,
@@ -480,7 +481,7 @@ export function SniffPress() {
                 marginTop: 8,
                 paddingTop: 8,
                 borderTop: '1px solid rgba(255,255,255,0.12)',
-                fontSize: 12,
+                fontSize: TYPE.small,
                 lineHeight: 1.45,
                 opacity: 0.85,
                 textAlign: 'left',
@@ -503,7 +504,7 @@ export function SniffPress() {
               }}
               style={{
                 marginTop: 6,
-                fontSize: 11,
+                fontSize: TYPE.caption,
                 fontWeight: 700,
                 opacity: 0.7,
                 textTransform: 'lowercase',
@@ -536,7 +537,7 @@ export function SniffPress() {
               color: '#ffffff',
               borderRadius: 999,
               fontFamily: SYSTEM_FONT,
-              fontSize: 14,
+              fontSize: TYPE.small,
               fontWeight: 700,
               boxShadow: '0 4px 12px rgba(47,107,255,0.35)',
               userSelect: 'none',
@@ -598,7 +599,7 @@ function SniffingBubble({ position }: { position: LatLng }) {
           color: VOICE.color,
           borderRadius: 22,
           fontFamily: VOICE.fontFamily,
-          fontSize: 16,
+          fontSize: TYPE.body,
           fontStyle: 'italic',
           boxShadow: VOICE.shadow,
           border: VOICE.border,

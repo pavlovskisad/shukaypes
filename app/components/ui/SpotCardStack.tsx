@@ -11,6 +11,7 @@ import type { Spot } from '../../services/places';
 import type { LatLng } from '@shukajpes/shared';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
 import { Icon, iconForCategory } from './Icon';
@@ -149,7 +150,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   distChipText: {
-    fontSize: 11,
+    fontSize: TYPE.caption,
     fontWeight: '700',
     color: '#555',
     letterSpacing: 0.3,
@@ -169,7 +170,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   ratingBadgeText: {
-    fontSize: 12,
+    fontSize: TYPE.small,
     fontWeight: '700',
     color: '#d9a030',
     letterSpacing: 0.3,
@@ -182,13 +183,13 @@ const styles = StyleSheet.create({
   },
   cardName: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 22,
+    fontSize: TYPE.hero,
     fontWeight: '800',
     color: colors.black,
   },
   cardMeta: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 13,
+    fontSize: TYPE.small,
     color: '#777',
     marginTop: 4,
   },

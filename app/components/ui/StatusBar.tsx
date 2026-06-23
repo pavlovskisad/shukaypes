@@ -2,6 +2,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
 import { CHIP } from '../../constants/sizing';
+import { TYPE } from '../../constants/type';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -196,7 +197,7 @@ const styles = StyleSheet.create({
   },
   value: {
     color: colors.black,
-    fontSize: 15,
+    fontSize: TYPE.body,
     fontWeight: '700',
   },
 });

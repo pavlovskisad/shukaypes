@@ -4,6 +4,7 @@ import type { LatLng } from '@shukajpes/shared';
 import { Icon, iconForCategory } from '../ui/Icon';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { MAP_MARKER } from '../../constants/sizing';
+import { TYPE } from '../../constants/type';
 
 // Stacked badge shown when 2+ spots of the same category sit close
 // enough that rendering each one as its own pin makes the map a
@@ -70,7 +71,7 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
             background: 'rgba(0,60,255,0.92)',
             color: '#ffffff',
             fontFamily: SYSTEM_FONT,
-            fontSize: 11,
+            fontSize: TYPE.caption,
             fontWeight: 700,
             display: 'flex',
             alignItems: 'center',

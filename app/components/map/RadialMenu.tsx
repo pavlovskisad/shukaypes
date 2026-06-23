@@ -1,5 +1,6 @@
 import { balance } from '../../constants/balance';
 import { BUTTON } from '../../constants/sizing';
+import { TYPE } from '../../constants/type';
 import { Icon, type IconName } from '../../components/ui/Icon';
 
 export interface RadialAction {
@@ -132,7 +133,7 @@ export function RadialMenu({
                 border: 'none',
                 background: bg,
                 color: fg,
-                fontSize: 22,
+                fontSize: TYPE.hero,
                 cursor: 'pointer',
                 boxShadow: '0 6px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
                 display: 'flex',
@@ -151,7 +152,7 @@ export function RadialMenu({
               <span
                 style={{
                   marginTop: 4,
-                  fontSize: 11,
+                  fontSize: TYPE.caption,
                   fontWeight: 700,
                   color: labelColor,
                   textShadow: labelShadow,

@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { MapLibreMarker } from './MapLibreMarker';
 
 // Numbered waypoint pin for detective quests. Three states:
@@ -36,7 +37,7 @@ function WaypointMarkerImpl({ position, index, state, onTap }: WaypointMarkerPro
           boxShadow: active ? ACTIVE_GLOW : '0 1px 4px rgba(0,0,0,0.08)',
           color: reached ? '#888' : '#1a1a1a',
           fontFamily: SYSTEM_FONT,
-          fontSize: 13,
+          fontSize: TYPE.small,
           fontWeight: 700,
           display: 'flex',
           alignItems: 'center',

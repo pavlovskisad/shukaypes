@@ -2,6 +2,7 @@ import { memo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { MAP_MARKER } from '../../constants/sizing';
+import { TYPE } from '../../constants/type';
 import { Icon, iconForCategory } from '../ui/Icon';
 import { MapLibreMarker } from './MapLibreMarker';
 
@@ -50,7 +51,7 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: 22,
+            fontSize: TYPE.hero,
             boxShadow: selected
               ? '0 3px 10px rgba(0,0,0,0.18), 0 1px 2px rgba(0,0,0,0.10)'
               : '0 2px 6px rgba(0,0,0,0.12), 0 1px 1px rgba(0,0,0,0.06)',
@@ -64,7 +65,7 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
             <div
               style={{
                 fontFamily: SYSTEM_FONT,
-                fontSize: 14,
+                fontSize: TYPE.small,
                 fontWeight: 700,
                 color: '#1a1a1a',
                 textShadow: '0 1px 4px rgba(255,255,255,0.95)',

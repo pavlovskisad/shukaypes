@@ -2,6 +2,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
 import { CHIP } from '../../constants/sizing';
+import { TYPE } from '../../constants/type';
 import { useStrings } from '../../i18n/useStrings';
 
 // Active-quest indicator. Renders nothing when no quest is live; when
@@ -73,16 +74,16 @@ const styles = StyleSheet.create({
     elevation: 3,
   },
   emoji: {
-    fontSize: 14,
+    fontSize: TYPE.small,
   },
   label: {
     color: colors.black,
-    fontSize: 13,
+    fontSize: TYPE.small,
     fontWeight: '600',
   },
   progress: {
     color: colors.black,
-    fontSize: 13,
+    fontSize: TYPE.small,
     fontWeight: '800',
     marginLeft: 2,
   },
@@ -96,7 +97,7 @@ const styles = StyleSheet.create({
   },
   closeTxt: {
     color: '#666',
-    fontSize: 20,
+    fontSize: TYPE.hero,
     lineHeight: 22,
     fontWeight: '400',
   },

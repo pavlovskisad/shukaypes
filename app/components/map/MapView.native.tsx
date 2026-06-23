@@ -1,5 +1,6 @@
 import { View, Text, StyleSheet } from 'react-native';
 import { colors } from '../../constants/colors';
+import { TYPE } from '../../constants/type';
 
 // Native map lands in Phase 2.5 via react-native-maps.
 // Web target ships first per the plan.
@@ -14,6 +15,6 @@ export default function MapView() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.greyBg },
-  t: { fontSize: 16, color: colors.black },
-  s: { fontSize: 12, color: colors.grey, marginTop: 4 },
+  t: { fontSize: TYPE.body, color: colors.black },
+  s: { fontSize: TYPE.small, color: colors.grey, marginTop: 4 },
 });

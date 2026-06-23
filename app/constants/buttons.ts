@@ -14,6 +14,7 @@
 
 import type { CSSProperties } from 'react';
 import { SYSTEM_FONT } from './fonts';
+import { TYPE } from './type';
 
 export const MODAL_PILL_BASE: CSSProperties = {
   flex: 1,
@@ -24,7 +25,7 @@ export const MODAL_PILL_BASE: CSSProperties = {
   borderRadius: 999,
   border: 'none',
   fontFamily: SYSTEM_FONT,
-  fontSize: 14,
+  fontSize: TYPE.small,
   fontWeight: 700,
   cursor: 'pointer',
   whiteSpace: 'nowrap',

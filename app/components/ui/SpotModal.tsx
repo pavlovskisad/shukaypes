@@ -4,6 +4,7 @@ import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { INLINE_ICON } from '../../constants/sizing';
+import { TYPE } from '../../constants/type';
 import { MODAL_PILL_DARK, MODAL_PILL_BLUE } from '../../constants/buttons';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
@@ -135,7 +136,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               color: '#555',
               borderRadius: 999,
               padding: '6px 12px',
-              fontSize: 12,
+              fontSize: TYPE.small,
               fontWeight: 700,
               letterSpacing: 0.4,
               textTransform: 'lowercase',
@@ -164,7 +165,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                   color: '#d9a030',
                   borderRadius: 999,
                   padding: '6px 12px',
-                  fontSize: 12,
+                  fontSize: TYPE.small,
                   fontWeight: 700,
                   letterSpacing: 0.3,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
@@ -189,7 +190,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 justifyContent: 'center',
                 cursor: 'pointer',
                 boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-                fontSize: 26,
+                fontSize: TYPE.display,
                 lineHeight: 1,
               }}
             >
@@ -210,7 +211,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           <div
             style={{
               fontFamily: SYSTEM_FONT,
-              fontSize: 26,
+              fontSize: TYPE.display,
               fontWeight: 800,
               lineHeight: 1.15,
               color: '#1a1a1a',
@@ -221,7 +222,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           {renderSpot.address ? (
             <div
               style={{
-                fontSize: 14,
+                fontSize: TYPE.small,
                 color: '#777',
                 marginTop: 6,
               }}

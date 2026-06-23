@@ -6,6 +6,7 @@ import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
 import type { Spot, SpotCategory } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { SpotCardStack, SpotCardStackSkeleton } from '../../components/ui/SpotCardStack';
@@ -262,12 +263,12 @@ const styles = StyleSheet.create({
   // weight 800, colours.black. Were too quiet at 14/grey.
   cardTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 17,
+    fontSize: TYPE.title,
     fontWeight: '800',
     color: colors.black,
     marginBottom: 12,
     textTransform: 'lowercase',
     letterSpacing: 0.2,
   },
-  placeholder: { fontSize: 13, color: '#777', paddingVertical: 8 },
+  placeholder: { fontSize: TYPE.small, color: '#777', paddingVertical: 8 },
 });

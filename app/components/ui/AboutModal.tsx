@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { INLINE_ICON } from '../../constants/sizing';
+import { TYPE } from '../../constants/type';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -121,7 +122,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               color: '#555',
               borderRadius: 999,
               padding: '6px 12px',
-              fontSize: 12,
+              fontSize: TYPE.small,
               fontWeight: 700,
               letterSpacing: 0.4,
               textTransform: 'lowercase',
@@ -150,18 +151,18 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               justifyContent: 'center',
               cursor: 'pointer',
               boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-              fontSize: 26,
+              fontSize: TYPE.display,
               lineHeight: 1,
             }}
           >
             ×
           </button>
 
-          <div style={{ fontFamily: SYSTEM_FONT, fontSize: 26, fontWeight: 800 }}>
+          <div style={{ fontFamily: SYSTEM_FONT, fontSize: TYPE.display, fontWeight: 800 }}>
             {t.modals.about.header}
           </div>
           <div
-            style={{ fontSize: 14, color: '#444', marginTop: 6, lineHeight: 1.45 }}
+            style={{ fontSize: TYPE.small, color: '#444', marginTop: 6, lineHeight: 1.45 }}
             // Intro contains a <strong> tag for the bot name; render the
             // i18n string as HTML so the markup survives translation.
             dangerouslySetInnerHTML={{ __html: t.modals.about.intro }}
@@ -198,7 +199,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                 <div
                   style={{
                     fontFamily: SYSTEM_FONT,
-                    fontSize: 16,
+                    fontSize: TYPE.body,
                     fontWeight: 700,
                     color: '#1a1a1a',
                   }}
@@ -207,7 +208,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                 </div>
                 <div
                   style={{
-                    fontSize: 14,
+                    fontSize: TYPE.small,
                     color: '#555',
                     marginTop: 3,
                     lineHeight: 1.5,
@@ -220,7 +221,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           ))}
           <div
             style={{
-              fontSize: 13,
+              fontSize: TYPE.small,
               color: '#777',
               textAlign: 'center',
               marginTop: 6,

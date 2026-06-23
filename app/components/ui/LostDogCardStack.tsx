@@ -6,6 +6,7 @@
 import { View, Text, StyleSheet, Image } from 'react-native';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
@@ -163,7 +164,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   badgeText: {
-    fontSize: 11,
+    fontSize: TYPE.caption,
     fontWeight: '700',
     textTransform: 'lowercase',
     letterSpacing: 0.4,
@@ -185,7 +186,7 @@ const styles = StyleSheet.create({
     elevation: 4,
   },
   distChipText: {
-    fontSize: 11,
+    fontSize: TYPE.caption,
     fontWeight: '700',
     color: '#555',
     letterSpacing: 0.3,
@@ -198,7 +199,7 @@ const styles = StyleSheet.create({
   },
   cardName: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 28,
+    fontSize: TYPE.display,
     fontWeight: '800',
     color: '#ffffff',
     textShadowColor: 'rgba(0,0,0,0.4)',
@@ -207,7 +208,7 @@ const styles = StyleSheet.create({
   },
   cardMeta: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 14,
+    fontSize: TYPE.small,
     color: 'rgba(255,255,255,0.92)',
     marginTop: 4,
     textShadowColor: 'rgba(0,0,0,0.4)',

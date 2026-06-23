@@ -5,6 +5,7 @@ import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { INLINE_ICON } from '../../constants/sizing';
+import { TYPE } from '../../constants/type';
 import {
   MODAL_PILL_DARK,
   MODAL_PILL_BLUE,
@@ -57,7 +58,7 @@ const CLOSE_BUTTON_STYLE_NOABS: CSSProperties = {
   justifyContent: 'center',
   cursor: 'pointer',
   boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
-  fontSize: 26,
+  fontSize: TYPE.display,
   lineHeight: 1,
 };
 
@@ -246,7 +247,7 @@ export function LostDogModal({
               // pill family across the app.
               borderRadius: 999,
               padding: '6px 12px',
-              fontSize: 12,
+              fontSize: TYPE.small,
               fontWeight: 700,
               letterSpacing: 0.5,
               boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
@@ -276,7 +277,7 @@ export function LostDogModal({
                   color: '#555',
                   borderRadius: 999,
                   padding: '6px 12px',
-                  fontSize: 12,
+                  fontSize: TYPE.small,
                   fontWeight: 700,
                   letterSpacing: 0.3,
                   boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
@@ -306,7 +307,7 @@ export function LostDogModal({
             <div
               style={{
                 fontFamily: SYSTEM_FONT,
-                fontSize: 32,
+                fontSize: TYPE.display,
                 fontWeight: 800,
                 lineHeight: 1.1,
                 color: '#ffffff',
@@ -319,7 +320,7 @@ export function LostDogModal({
               <div
                 style={{
                   fontFamily: SYSTEM_FONT,
-                  fontSize: 15,
+                  fontSize: TYPE.body,
                   color: 'rgba(255,255,255,0.92)',
                   marginTop: 4,
                   textShadow: '0 1px 4px rgba(0,0,0,0.4)',
@@ -343,7 +344,7 @@ export function LostDogModal({
           }}
         >
           <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
-            <div style={{ fontSize: 14, color: '#555' }}>
+            <div style={{ fontSize: TYPE.small, color: '#555' }}>
               {t.modals.lostDog.lastSeen(relativeTime(renderDog.lastSeen.at, t))}
             </div>
             <div
@@ -351,7 +352,7 @@ export function LostDogModal({
                 display: 'flex',
                 alignItems: 'center',
                 gap: 6,
-                fontSize: 13,
+                fontSize: TYPE.small,
                 color: '#777',
               }}
             >

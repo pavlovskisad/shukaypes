@@ -17,6 +17,7 @@ import logoNose from '../../assets/logo-nose.png';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { pickBottomInset } from '../../services/telegram';
 import { useGameStore } from '../../stores/gameStore';
 import {
@@ -578,7 +579,7 @@ const styles = StyleSheet.create({
   },
   headerTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 15,
+    fontSize: TYPE.body,
     fontWeight: '700',
     color: colors.black,
   },
@@ -610,7 +611,7 @@ const styles = StyleSheet.create({
   },
   bubbleText: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 16,
+    fontSize: TYPE.body,
     lineHeight: 24,
   },
   assistantText: {
@@ -627,7 +628,7 @@ const styles = StyleSheet.create({
   },
   error: {
     color: '#a33',
-    fontSize: 12,
+    fontSize: TYPE.small,
     alignSelf: 'center',
     marginVertical: 8,
   },
@@ -651,7 +652,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     // 16px keeps iOS Safari from auto-zooming on focus. Anything < 16
-    // triggers the zoom and never zooms back out cleanly.
+    // triggers the zoom and never zooms back out cleanly. Intentional
+    // off-scale value — DO NOT migrate to TYPE.body (15).
     fontSize: 16,
     fontFamily: SYSTEM_FONT,
     color: colors.black,
@@ -672,7 +674,7 @@ const styles = StyleSheet.create({
   },
   sendBtnText: {
     color: '#ffffff',
-    fontSize: 18,
+    fontSize: TYPE.title,
     fontWeight: '700',
   },
 });

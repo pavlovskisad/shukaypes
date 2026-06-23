@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { api, type NearbyLostDog } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
 import { LostDogModal } from '../../components/ui/LostDogModal';
@@ -478,7 +479,7 @@ const styles = StyleSheet.create({
   // the rest of the page.
   cardTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 17,
+    fontSize: TYPE.title,
     fontWeight: '800',
     color: colors.black,
     marginBottom: 12,
@@ -501,7 +502,7 @@ const styles = StyleSheet.create({
   },
   dailyCount: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 14,
+    fontSize: TYPE.small,
     color: '#777',
     fontWeight: '700',
     letterSpacing: 0.3,
@@ -537,11 +538,11 @@ const styles = StyleSheet.create({
     marginBottom: 10,
     gap: 14,
   },
-  icon: { fontSize: 28 },
+  icon: { fontSize: TYPE.display },
   iconWrap: { width: 44, alignItems: 'center' },
-  label: { flex: 1, fontSize: 16, color: colors.black },
+  label: { flex: 1, fontSize: TYPE.body, color: colors.black },
   labelDone: { color: '#aaa', textDecorationLine: 'line-through' },
-  count: { fontSize: 14, color: '#777', fontWeight: '700' },
+  count: { fontSize: TYPE.small, color: '#777', fontWeight: '700' },
   countDone: { color: '#666' },
   barTrack: {
     height: 6,
@@ -556,7 +557,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
   },
   cardHeaderCount: {
-    fontSize: 12,
+    fontSize: TYPE.small,
     fontWeight: '700',
     color: '#999',
     marginBottom: 10, // align with cardTitle's marginBottom
@@ -569,22 +570,22 @@ const styles = StyleSheet.create({
   },
   historyBody: { flex: 1, minWidth: 0 },
   historyName: {
-    fontSize: 16,
+    fontSize: TYPE.body,
     fontWeight: '700',
     color: colors.black,
   },
   historyMeta: {
-    fontSize: 13,
+    fontSize: TYPE.small,
     color: '#777',
     marginTop: 2,
   },
   historyTickDone: {
-    fontSize: 16,
+    fontSize: TYPE.body,
     color: 'rgba(0,60,255,0.85)',
     fontWeight: '700',
   },
   historyTickAbandon: {
-    fontSize: 18,
+    fontSize: TYPE.title,
     color: '#bbb',
     fontWeight: '700',
   },

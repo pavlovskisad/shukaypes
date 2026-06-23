@@ -5,6 +5,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { api } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
@@ -408,7 +409,7 @@ const styles = StyleSheet.create({
   },
   langPillText: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 14,
+    fontSize: TYPE.small,
     fontWeight: '700',
     color: colors.black,
     letterSpacing: 0.5,
@@ -447,7 +448,7 @@ const styles = StyleSheet.create({
   // smaller 150-tall section cards.
   sectionTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 16,
+    fontSize: TYPE.body,
     fontWeight: '800',
     color: colors.black,
     marginBottom: 10,
@@ -459,13 +460,13 @@ const styles = StyleSheet.create({
   // comfortably in the same 150-tall slot as the other 3-row cards.
   companionNameBig: {
     fontFamily: SYSTEM_FONT,
-    fontSize: 19,
+    fontSize: TYPE.title,
     fontWeight: '800',
     color: colors.black,
     marginBottom: 1,
   },
   companionLevel: {
-    fontSize: 12,
+    fontSize: TYPE.small,
     color: '#555',
     marginBottom: 6,
   },
@@ -489,16 +490,16 @@ const styles = StyleSheet.create({
     paddingVertical: 5,
   },
   statLabel: {
-    fontSize: 13,
+    fontSize: TYPE.small,
     color: '#555',
   },
   statValue: {
-    fontSize: 16,
+    fontSize: TYPE.body,
     fontWeight: '700',
     color: colors.black,
   },
   error: {
-    fontSize: 12,
+    fontSize: TYPE.small,
     color: '#a33',
     textAlign: 'center',
     marginTop: 8,

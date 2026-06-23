@@ -12,6 +12,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Spot } from '../../services/places';
 import { Z } from '../../constants/z';
+import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { SpotCardView } from './SpotCardStack';
 
@@ -125,7 +126,7 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
           justifyContent: 'center',
           cursor: 'pointer',
           boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
-          fontSize: 26,
+          fontSize: TYPE.display,
           lineHeight: 1,
           zIndex: 1,
         }}
