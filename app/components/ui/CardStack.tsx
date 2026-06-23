@@ -277,13 +277,18 @@ export function CardStack<T>({
       const travel = Math.abs(e.translationX) + Math.abs(e.translationY);
       const passedPx = Math.abs(e.translationX) > SWIPE_COMMIT_PX;
       const passedVel = Math.abs(e.velocityX) > VELOCITY_COMMIT;
-      if (travel < TAP_TRAVEL_MAX) {
-        runOnJS(handleTap)();
-        currentPos.value = withSpring(virtualBaseSV.value);
-        return;
-      }
+      // Commit BEFORE the tap fallback: a fast flick has high
+      // velocity but tiny travel (finger barely moves before
+      // leaving the screen). If we tap-check first, those flicks
+      // get classified as taps and the carousel springs back to
+      // the same card — the "swipe fast → returns to previous"
+      // bug. Velocity wins over the tap threshold.
       if (N > 1 && (passedPx || passedVel)) {
-        const isForward = e.translationX < 0;
+        // Prefer velocity for direction when the flick was the
+        // dominant signal (low travel, high velocity, possibly
+        // even a brief direction-reversal mid-gesture). Falls
+        // back to translation direction for plain drags.
+        const isForward = passedVel ? e.velocityX < 0 : e.translationX < 0;
         const delta = isForward ? 1 : -1;
         const target = virtualBaseSV.value + delta;
         // Kick the pop NOW (alongside the settle) instead of
@@ -311,9 +316,18 @@ export function CardStack<T>({
             }
           },
         );
-      } else {
-        currentPos.value = withSpring(virtualBaseSV.value);
+        return;
       }
+      // No commit and the finger barely moved → treat as a tap
+      // on the centre card. Spring whatever drift currentPos
+      // picked up back to rest.
+      if (travel < TAP_TRAVEL_MAX) {
+        runOnJS(handleTap)();
+        currentPos.value = withSpring(virtualBaseSV.value);
+        return;
+      }
+      // Real drag but not enough to commit → rebound.
+      currentPos.value = withSpring(virtualBaseSV.value);
     });
 
   // Stable reference so the memoed ItemSlot doesn't see a "new"
