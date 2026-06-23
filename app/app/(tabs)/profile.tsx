@@ -6,6 +6,7 @@ import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context'
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { api } from '../../services/api';
@@ -376,16 +377,16 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'flex-start',
-    paddingHorizontal: 12,
-    paddingTop: 12,
+    paddingHorizontal: S.m,
+    paddingTop: S.m,
   },
   hudPills: {
     flexDirection: 'row',
-    gap: 6,
+    gap: S.s,
   },
   langPills: {
     flexDirection: 'row',
-    gap: 6,
+    gap: S.s,
   },
   // Lang pill — solid white, same shape + chat-style CHROME_SHADOW
   // as the HUD MeterPill / CounterPill in solid mode. The dark
@@ -394,7 +395,7 @@ const styles = StyleSheet.create({
   langPill: {
     height: CHIP.height,
     minWidth: CHIP.height,
-    paddingHorizontal: 10,
+    paddingHorizontal: S.m,
     borderRadius: CHIP.height / 2,
     backgroundColor: '#ffffff',
     shadowColor: '#000',
@@ -435,9 +436,9 @@ const styles = StyleSheet.create({
     height: 150,
     backgroundColor: '#ffffff',
     borderRadius: R.card,
-    paddingTop: 12,
-    paddingBottom: 12,
-    paddingHorizontal: 16,
+    paddingTop: S.m,
+    paddingBottom: S.m,
+    paddingHorizontal: S.l,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 8 },
     shadowOpacity: 0.18,
@@ -452,7 +453,7 @@ const styles = StyleSheet.create({
     fontSize: TYPE.body,
     fontWeight: '800',
     color: colors.black,
-    marginBottom: 10,
+    marginBottom: S.m,
     textTransform: 'lowercase',
     letterSpacing: 0.2,
   },
@@ -469,14 +470,14 @@ const styles = StyleSheet.create({
   companionLevel: {
     fontSize: TYPE.small,
     color: '#555',
-    marginBottom: 6,
+    marginBottom: S.s,
   },
   xpBarTrack: {
     height: 5,
     borderRadius: R.sm,
     backgroundColor: 'rgba(0,0,0,0.08)',
     overflow: 'hidden',
-    marginBottom: 6,
+    marginBottom: S.s,
   },
   xpBarFill: {
     height: '100%',
@@ -488,7 +489,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    paddingVertical: 5,
+    paddingVertical: S.xs,
   },
   statLabel: {
     fontSize: TYPE.small,
@@ -503,6 +504,6 @@ const styles = StyleSheet.create({
     fontSize: TYPE.small,
     color: '#a33',
     textAlign: 'center',
-    marginTop: 8,
+    marginTop: S.s,
   },
 });

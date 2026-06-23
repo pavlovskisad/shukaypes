@@ -1,5 +1,6 @@
 import { balance } from '../../constants/balance';
 import { BUTTON } from '../../constants/sizing';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { Icon, type IconName } from '../../components/ui/Icon';
 
@@ -151,7 +152,7 @@ export function RadialMenu({
             {showLabels ? (
               <span
                 style={{
-                  marginTop: 4,
+                  marginTop: S.xs,
                   fontSize: TYPE.caption,
                   fontWeight: 700,
                   color: labelColor,

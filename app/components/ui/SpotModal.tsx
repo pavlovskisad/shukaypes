@@ -5,6 +5,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { INLINE_ICON } from '../../constants/sizing';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { MODAL_PILL_DARK, MODAL_PILL_BLUE } from '../../constants/buttons';
 import { Icon, iconForCategory } from './Icon';
@@ -156,7 +157,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               right: 12,
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
+              gap: S.s,
             }}
           >
             {hasRating ? (
@@ -225,7 +226,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               style={{
                 fontSize: TYPE.small,
                 color: '#777',
-                marginTop: 6,
+                marginTop: S.s,
               }}
             >
               {renderSpot.address}
@@ -238,7 +239,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         <div
           style={{
             display: 'flex',
-            gap: 8,
+            gap: S.s,
             padding: '12px 22px 20px',
             flexShrink: 0,
           }}

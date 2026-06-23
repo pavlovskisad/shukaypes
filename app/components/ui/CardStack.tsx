@@ -34,6 +34,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 
 export const CARD_W = 320;
@@ -392,7 +393,7 @@ export function CardStackSkeleton({
 const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
-    paddingVertical: 6,
+    paddingVertical: S.s,
   },
   deck: {
     alignItems: 'center',

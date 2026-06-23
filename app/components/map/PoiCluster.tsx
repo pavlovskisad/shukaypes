@@ -5,6 +5,7 @@ import { Icon, iconForCategory } from '../ui/Icon';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { MAP_MARKER } from '../../constants/sizing';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 
 // Stacked badge shown when 2+ spots of the same category sit close
@@ -66,8 +67,8 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
             right: -4,
             minWidth: 20,
             height: 20,
-            paddingLeft: 5,
-            paddingRight: 5,
+            paddingLeft: S.xs,
+            paddingRight: S.xs,
             borderRadius: R.md,
             background: 'rgba(0,60,255,0.92)',
             color: '#ffffff',

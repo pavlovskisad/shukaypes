@@ -8,6 +8,7 @@ import { fetchWalkingRoute } from '../../services/directions';
 import { useGameStore } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { useStrings } from '../../i18n/useStrings';
@@ -453,7 +454,7 @@ export function SniffPress() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          gap: 6,
+          gap: S.s,
           maxWidth: 260,
         }}
       >
@@ -479,8 +480,8 @@ export function SniffPress() {
           {moreOpen && moreText ? (
             <div
               style={{
-                marginTop: 8,
-                paddingTop: 8,
+                marginTop: S.s,
+                paddingTop: S.s,
                 borderTop: '1px solid rgba(255,255,255,0.12)',
                 fontSize: TYPE.small,
                 lineHeight: 1.45,
@@ -504,7 +505,7 @@ export function SniffPress() {
                 void expandMore();
               }}
               style={{
-                marginTop: 6,
+                marginTop: S.s,
                 fontSize: TYPE.caption,
                 fontWeight: 700,
                 opacity: 0.7,

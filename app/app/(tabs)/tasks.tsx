@@ -6,6 +6,7 @@ import { colors } from '../../constants/colors';
 import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { api, type NearbyLostDog } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
@@ -464,13 +465,13 @@ const styles = StyleSheet.create({
   // Tighter top padding so the next card's title peeks above
   // the tab bar. gap stays 60 so the between-card rhythm
   // doesn't collapse.
-  content: { paddingHorizontal: 16, paddingTop: 32, paddingBottom: 140, gap: 60 },
+  content: { paddingHorizontal: S.l, paddingTop: S.xxxl, paddingBottom: 140, gap: 60 },
   // Snap block — no white card frame anymore. Title + content
   // sit straight on the page bg. Just carries the scroll-snap
   // alignment + horizontal padding so the inner content has
   // breathing room from the screen edge.
   card: {
-    paddingHorizontal: 4,
+    paddingHorizontal: S.xs,
     scrollSnapAlign: 'start',
     scrollSnapStop: 'always',
   } as unknown as object,
@@ -483,7 +484,7 @@ const styles = StyleSheet.create({
     fontSize: TYPE.title,
     fontWeight: '800',
     color: colors.black,
-    marginBottom: 12,
+    marginBottom: S.m,
     textTransform: 'lowercase',
     letterSpacing: 0.2,
   },
@@ -494,7 +495,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'baseline',
     justifyContent: 'space-between',
-    marginBottom: 12,
+    marginBottom: S.m,
   },
   // Override cardTitle's own marginBottom when it sits inside a
   // header row — the row's marginBottom drives the spacing below.
@@ -515,7 +516,7 @@ const styles = StyleSheet.create({
     borderRadius: R.sm,
     backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
-    marginBottom: 6,
+    marginBottom: S.s,
   },
   summaryBarFill: {
     height: '100%',
@@ -527,7 +528,7 @@ const styles = StyleSheet.create({
   // by the narrow wrap). Label + count bumped a notch to match the
   // spacious-list tone everything else just moved to.
   task: {
-    paddingVertical: 16,
+    paddingVertical: S.l,
   },
   taskDivider: {
     borderTopWidth: 1,
@@ -536,8 +537,8 @@ const styles = StyleSheet.create({
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 10,
-    gap: 14,
+    marginBottom: S.m,
+    gap: S.l,
   },
   icon: { fontSize: TYPE.display },
   iconWrap: { width: 44, alignItems: 'center' },
@@ -561,13 +562,13 @@ const styles = StyleSheet.create({
     fontSize: TYPE.small,
     fontWeight: '700',
     color: '#999',
-    marginBottom: 10, // align with cardTitle's marginBottom
+    marginBottom: S.m, // align with cardTitle's marginBottom
   },
   historyRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 14,
-    paddingVertical: 14,
+    gap: S.l,
+    paddingVertical: S.l,
   },
   historyBody: { flex: 1, minWidth: 0 },
   historyName: {

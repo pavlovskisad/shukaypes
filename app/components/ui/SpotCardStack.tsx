@@ -12,6 +12,7 @@ import type { LatLng } from '@shukajpes/shared';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
@@ -126,7 +127,7 @@ const styles = StyleSheet.create({
     // shifts the icon down inside the hero region so it sits
     // closer to the card centre rather than hugging the badges.
     bottom: 120,
-    paddingTop: 40,
+    paddingTop: S.xxxl,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -141,8 +142,8 @@ const styles = StyleSheet.create({
     top: 14,
     left: 14,
     backgroundColor: '#ffffff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: S.m,
+    paddingVertical: S.s,
     borderRadius: R.pill,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -161,8 +162,8 @@ const styles = StyleSheet.create({
     top: 14,
     right: 14,
     backgroundColor: '#ffffff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: S.m,
+    paddingVertical: S.s,
     borderRadius: R.pill,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -192,6 +193,6 @@ const styles = StyleSheet.create({
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.small,
     color: '#777',
-    marginTop: 4,
+    marginTop: S.xs,
   },
 });

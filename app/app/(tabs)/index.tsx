@@ -7,6 +7,7 @@ import { StatusBar } from '../../components/ui/StatusBar';
 import { QuestPill } from '../../components/ui/QuestPill';
 import { AboutModal } from '../../components/ui/AboutModal';
 import { Z } from '../../constants/z';
+import { S } from '../../constants/spacing';
 import { useGameStore } from '../../stores/gameStore';
 
 // Logo is the brand anchor in the top-left. Prototype has it roughly
@@ -195,16 +196,16 @@ const styles = StyleSheet.create({
     // inset (we want map + HUD to reach the very top of the screen),
     // so this is the only top-spacing the HUD has.
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: S.m,
     // Middle ground between the original 32 and the brought-up 12 —
     // header elements sit comfortably under the OS status bar without
     // crowding it.
-    paddingTop: 22,
+    paddingTop: S.xxl,
   },
   questRow: {
     flexDirection: 'row',
     justifyContent: 'center',
-    marginTop: 8,
-    paddingHorizontal: 12,
+    marginTop: S.s,
+    paddingHorizontal: S.m,
   },
 });

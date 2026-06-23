@@ -3,6 +3,7 @@ import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { HERO } from '../../constants/sizing';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import { pickBottomInset } from '../../services/telegram';
@@ -98,7 +99,7 @@ export default function TabsLayout() {
           elevation: 4,
         },
         tabBarItemStyle: {
-          paddingVertical: 6,
+          paddingVertical: S.s,
         },
         // Hide the text labels under each tab icon — Expo Router /
         // RN-Web's BottomTab renderer keeps them on by default on

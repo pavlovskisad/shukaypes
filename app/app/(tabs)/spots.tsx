@@ -6,6 +6,7 @@ import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
 import type { Spot, SpotCategory } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
@@ -251,11 +252,11 @@ const styles = StyleSheet.create({
     // See tasks.tsx for the longer reasoning.
     scrollPaddingTop: 32,
   } as unknown as object,
-  content: { paddingHorizontal: 16, paddingTop: 32, paddingBottom: 140, gap: 60 },
+  content: { paddingHorizontal: S.l, paddingTop: S.xxxl, paddingBottom: 140, gap: 60 },
   // Snap block — no white card frame. Title + category stack
   // sit straight on the page bg.
   card: {
-    paddingHorizontal: 4,
+    paddingHorizontal: S.xs,
     scrollSnapAlign: 'start',
     scrollSnapStop: 'always',
   } as unknown as object,
@@ -266,9 +267,9 @@ const styles = StyleSheet.create({
     fontSize: TYPE.title,
     fontWeight: '800',
     color: colors.black,
-    marginBottom: 12,
+    marginBottom: S.m,
     textTransform: 'lowercase',
     letterSpacing: 0.2,
   },
-  placeholder: { fontSize: TYPE.small, color: '#777', paddingVertical: 8 },
+  placeholder: { fontSize: TYPE.small, color: '#777', paddingVertical: S.s },
 });

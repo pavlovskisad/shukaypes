@@ -18,6 +18,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { pickBottomInset } from '../../services/telegram';
 import { useGameStore } from '../../stores/gameStore';
@@ -537,7 +538,7 @@ const styles = StyleSheet.create({
     zIndex: 5,
   },
   bottomBand: {
-    paddingVertical: 4,
+    paddingVertical: S.xs,
   },
   // Fade strip — solid page-bg over the chrome area + a soft
   // gradient zone where bubbles dissolve into the chrome. Sits
@@ -555,15 +556,15 @@ const styles = StyleSheet.create({
   // floating chrome rather than melting into the bubbles below.
   headerCard: {
     alignSelf: 'center',
-    marginTop: 10,
-    marginBottom: 8,
+    marginTop: S.m,
+    marginBottom: S.s,
     backgroundColor: '#ffffff',
     borderRadius: R.pill,
-    paddingVertical: 8,
-    paddingHorizontal: 14,
+    paddingVertical: S.s,
+    paddingHorizontal: S.l,
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: S.s,
     ...CHROME_SHADOW,
   },
   headerLogoPill: {
@@ -585,10 +586,10 @@ const styles = StyleSheet.create({
     color: colors.black,
   },
   listContent: {
-    paddingHorizontal: 16,
+    paddingHorizontal: S.l,
     // paddingTop/paddingBottom are set inline so the bands' on-screen
     // heights (incl. safe-area inset) can drive the value at runtime.
-    gap: 12,
+    gap: S.m,
   },
   // Fatter, Gemini-style bubbles — bigger padding, uniform corners
   // (no more "tail" notch), bigger type. borderRadius bumped 24 →
@@ -596,8 +597,8 @@ const styles = StyleSheet.create({
   // family across the app.
   bubble: {
     maxWidth: '85%',
-    paddingVertical: 14,
-    paddingHorizontal: 18,
+    paddingVertical: S.l,
+    paddingHorizontal: S.xl,
     borderRadius: R.card,
   },
   assistantBubble: {
@@ -631,7 +632,7 @@ const styles = StyleSheet.create({
     color: '#a33',
     fontSize: TYPE.small,
     alignSelf: 'center',
-    marginVertical: 8,
+    marginVertical: S.s,
   },
   // Fatter input card — bigger paddings + radius to match the
   // chunkier bubble + send-button proportions. CHROME_SHADOW so
@@ -639,19 +640,19 @@ const styles = StyleSheet.create({
   // melting into the last bubble above.
   inputCard: {
     flexDirection: 'row',
-    gap: 8,
+    gap: S.s,
     alignItems: 'center',
-    marginHorizontal: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 10,
+    marginHorizontal: S.l,
+    paddingHorizontal: S.m,
+    paddingVertical: S.m,
     backgroundColor: '#ffffff',
     borderRadius: R.card,
     ...CHROME_SHADOW,
   },
   input: {
     flex: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingHorizontal: S.l,
+    paddingVertical: S.m,
     // 16px keeps iOS Safari from auto-zooming on focus. Anything < 16
     // triggers the zoom and never zooms back out cleanly. Intentional
     // off-scale value — DO NOT migrate to TYPE.body (15).

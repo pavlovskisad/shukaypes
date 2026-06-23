@@ -9,6 +9,7 @@ import type { UrgencyLevel } from '@shukajpes/shared';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { MapContext } from './MapContext';
@@ -1546,7 +1547,7 @@ export default function MapViewWeb() {
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            gap: 8,
+            gap: S.s,
             zIndex: Z.HUD_PILLS_OVERLAY,
             pointerEvents: 'none',
           }}
@@ -1859,8 +1860,8 @@ export default function MapViewWeb() {
                   right: -6,
                   minWidth: 22,
                   height: 18,
-                  paddingLeft: 5,
-                  paddingRight: 5,
+                  paddingLeft: S.xs,
+                  paddingRight: S.xs,
                   borderRadius: R.sm,
                   background: halo.badge,
                   color: '#ffffff',
@@ -1930,7 +1931,7 @@ export default function MapViewWeb() {
             flexDirection: 'column',
             alignItems: 'center',
             justifyContent: 'center',
-            gap: 3,
+            gap: S.xs,
             boxShadow: '0 6px 20px rgba(0,0,0,0.14), 0 2px 6px rgba(0,0,0,0.08)',
             userSelect: 'none',
           }}
@@ -2012,7 +2013,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     backgroundColor: colors.greyBg,
-    padding: 20,
+    padding: S.xl,
   },
   t: { fontSize: TYPE.body, color: colors.black },
   s: { fontSize: TYPE.small, color: colors.grey, marginTop: 6, textAlign: 'center' },

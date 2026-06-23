@@ -2,6 +2,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
 import { CHIP } from '../../constants/sizing';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
@@ -145,7 +146,7 @@ const styles = StyleSheet.create({
   wrap: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 6,
+    gap: S.s,
   },
   pill: {
     height: PILL_HEIGHT,
@@ -165,8 +166,8 @@ const styles = StyleSheet.create({
     elevation: 6,
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 8,
-    gap: 4,
+    paddingHorizontal: S.s,
+    gap: S.xs,
   },
   meterPill: {
     minWidth: PILL_MIN_WIDTH,
@@ -183,7 +184,7 @@ const styles = StyleSheet.create({
     minWidth: PILL_MIN_WIDTH,
   },
   togglePill: {
-    paddingHorizontal: 12,
+    paddingHorizontal: S.m,
   },
   togglePillOff: {
     backgroundColor: 'rgba(255,255,255,0.55)',

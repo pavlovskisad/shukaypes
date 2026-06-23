@@ -7,6 +7,7 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
@@ -152,8 +153,8 @@ const styles = StyleSheet.create({
     top: 14,
     left: 14,
     backgroundColor: '#ffffff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: S.m,
+    paddingVertical: S.s,
     // Full-pill radius + lifted shadow so the chip reads as the
     // same family as the HUD pills / chat header pill (full
     // round with CHROME_SHADOW). Scaled down for in-card use.
@@ -177,8 +178,8 @@ const styles = StyleSheet.create({
     top: 14,
     right: 14,
     backgroundColor: '#ffffff',
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: S.m,
+    paddingVertical: S.s,
     borderRadius: R.pill,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
@@ -211,7 +212,7 @@ const styles = StyleSheet.create({
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.small,
     color: 'rgba(255,255,255,0.92)',
-    marginTop: 4,
+    marginTop: S.xs,
     textShadowColor: 'rgba(0,0,0,0.4)',
     textShadowOffset: { width: 0, height: 1 },
     textShadowRadius: 4,

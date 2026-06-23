@@ -15,6 +15,7 @@
 import type { CSSProperties } from 'react';
 import { SYSTEM_FONT } from './fonts';
 import { R } from './radius';
+import { S } from './spacing';
 import { TYPE } from './type';
 
 export const MODAL_PILL_BASE: CSSProperties = {
@@ -33,7 +34,7 @@ export const MODAL_PILL_BASE: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
-  gap: 8,
+  gap: S.s,
   boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
 };
 

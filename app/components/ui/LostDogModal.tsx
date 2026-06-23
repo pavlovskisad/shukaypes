@@ -6,6 +6,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { INLINE_ICON } from '../../constants/sizing';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import {
   MODAL_PILL_DARK,
@@ -254,7 +255,7 @@ export function LostDogModal({
               boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 6,
+              gap: S.s,
             }}
           >
             <Icon name={badgeIcon} size={INLINE_ICON.badge} />
@@ -268,7 +269,7 @@ export function LostDogModal({
               right: 12,
               display: 'flex',
               alignItems: 'center',
-              gap: 8,
+              gap: S.s,
             }}
           >
             {distLabel ? (
@@ -323,7 +324,7 @@ export function LostDogModal({
                   fontFamily: SYSTEM_FONT,
                   fontSize: TYPE.body,
                   color: 'rgba(255,255,255,0.92)',
-                  marginTop: 4,
+                  marginTop: S.xs,
                   textShadow: '0 1px 4px rgba(0,0,0,0.4)',
                 }}
               >
@@ -344,7 +345,7 @@ export function LostDogModal({
             minHeight: 0,
           }}
         >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 4 }}>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: S.xs }}>
             <div style={{ fontSize: TYPE.small, color: '#555' }}>
               {t.modals.lostDog.lastSeen(relativeTime(renderDog.lastSeen.at, t))}
             </div>
@@ -352,7 +353,7 @@ export function LostDogModal({
               style={{
                 display: 'flex',
                 alignItems: 'center',
-                gap: 6,
+                gap: S.s,
                 fontSize: TYPE.small,
                 color: '#777',
               }}
@@ -370,7 +371,7 @@ export function LostDogModal({
         <div
           style={{
             display: 'flex',
-            gap: 8,
+            gap: S.s,
             padding: '12px 22px 20px',
             flexShrink: 0,
           }}

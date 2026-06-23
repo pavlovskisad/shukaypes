@@ -10,6 +10,7 @@ import { router } from 'expo-router';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { R } from '../constants/radius';
+import { S } from '../constants/spacing';
 import { TYPE } from '../constants/type';
 
 import {
@@ -108,24 +109,24 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    paddingTop: 12,
-    paddingHorizontal: 12,
+    paddingTop: S.m,
+    paddingHorizontal: S.m,
   },
   bannerInner: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     backgroundColor: 'rgba(255,255,255,0.88)',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
+    paddingHorizontal: S.m,
+    paddingVertical: S.s,
     borderRadius: R.md,
-    gap: 8,
+    gap: S.s,
   },
   bannerText: { fontSize: TYPE.small, color: '#3a352a', flex: 1 },
   backBtn: {
     backgroundColor: LIGHT_PALETTE.crayon,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
+    paddingHorizontal: S.m,
+    paddingVertical: S.s,
     borderRadius: R.pill,
   },
   backText: { color: '#fff', fontSize: TYPE.small, fontWeight: '700' },

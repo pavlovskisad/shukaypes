@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { INLINE_ICON } from '../../constants/sizing';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
@@ -108,9 +109,9 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           style={{
             position: 'relative',
             paddingTop: `calc(${SAFE_TOP} + 36px + 8px)`,
-            paddingLeft: 22,
-            paddingRight: 22,
-            paddingBottom: 6,
+            paddingLeft: S.xxl,
+            paddingRight: S.xxl,
+            paddingBottom: S.s,
             flexShrink: 0,
           }}
         >
@@ -176,7 +177,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             overflowY: 'auto',
             display: 'flex',
             flexDirection: 'column',
-            gap: 14,
+            gap: S.l,
             padding: '14px 22px 22px',
             flexGrow: 1,
             minHeight: 0,
@@ -211,7 +212,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                   style={{
                     fontSize: TYPE.small,
                     color: '#555',
-                    marginTop: 3,
+                    marginTop: S.xs,
                     lineHeight: 1.5,
                   }}
                 >
@@ -225,8 +226,8 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               fontSize: TYPE.small,
               color: '#777',
               textAlign: 'center',
-              marginTop: 6,
-              marginBottom: 4,
+              marginTop: S.s,
+              marginBottom: S.xs,
               fontStyle: 'italic',
             }}
           >

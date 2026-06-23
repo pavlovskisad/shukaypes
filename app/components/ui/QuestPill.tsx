@@ -3,6 +3,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
 import { CHIP } from '../../constants/sizing';
 import { R } from '../../constants/radius';
+import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -59,11 +60,11 @@ const styles = StyleSheet.create({
   pill: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: S.s,
     height: CHIP.height,
     borderRadius: CHIP.radius,
-    paddingLeft: 14,
-    paddingRight: 6,
+    paddingLeft: S.l,
+    paddingRight: S.s,
     backgroundColor: GLASS_BG,
     backdropFilter: 'blur(14px) saturate(160%)',
     // @ts-expect-error — safari prefix not in RN style types
@@ -94,7 +95,7 @@ const styles = StyleSheet.create({
     borderRadius: R.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: 4,
+    marginLeft: S.xs,
   },
   closeTxt: {
     color: '#666',
