@@ -12,7 +12,7 @@ import { useStrings } from '../../i18n/useStrings';
 // Matches the frosted-glass recipe used on the status bar so it reads
 // as part of the same HUD family.
 
-const GLASS_BG = 'rgba(255,255,255,0.85)';
+const GLASS_BG = '#ffffff';
 
 export function QuestPill() {
   const activeQuest = useGameStore((s) => s.activeQuest);
@@ -66,9 +66,6 @@ const styles = StyleSheet.create({
     paddingLeft: S.l,
     paddingRight: S.s,
     backgroundColor: GLASS_BG,
-    backdropFilter: 'blur(14px) saturate(160%)',
-    // @ts-expect-error — safari prefix not in RN style types
-    WebkitBackdropFilter: 'blur(14px) saturate(160%)',
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,

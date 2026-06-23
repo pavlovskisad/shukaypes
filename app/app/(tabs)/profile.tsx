@@ -475,13 +475,13 @@ const styles = StyleSheet.create({
   xpBarTrack: {
     height: 5,
     borderRadius: R.sm,
-    backgroundColor: 'rgba(0,0,0,0.08)',
+    backgroundColor: '#f0f0f0',
     overflow: 'hidden',
     marginBottom: S.s,
   },
   xpBarFill: {
     height: '100%',
-    backgroundColor: 'rgba(0,60,255,0.85)',
+    backgroundColor: 'rgb(0,60,255)',
     borderRadius: R.sm,
   },
   // Denser stat rows for the walks / helping cards.

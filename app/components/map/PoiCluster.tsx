@@ -70,7 +70,7 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
             paddingLeft: S.xs,
             paddingRight: S.xs,
             borderRadius: R.md,
-            background: 'rgba(0,60,255,0.92)',
+            background: 'rgb(0,60,255)',
             color: '#ffffff',
             fontFamily: SYSTEM_FONT,
             fontSize: TYPE.caption,

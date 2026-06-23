@@ -116,7 +116,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: 'rgba(255,255,255,0.88)',
+    backgroundColor: '#ffffff',
     paddingHorizontal: S.m,
     paddingVertical: S.s,
     borderRadius: R.md,

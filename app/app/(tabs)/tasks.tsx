@@ -514,14 +514,14 @@ const styles = StyleSheet.create({
   summaryBarTrack: {
     height: 6,
     borderRadius: R.sm,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: '#f0f0f0',
     overflow: 'hidden',
     marginBottom: S.s,
   },
   summaryBarFill: {
     height: '100%',
     borderRadius: R.sm,
-    backgroundColor: 'rgba(0,60,255,0.85)',
+    backgroundColor: 'rgb(0,60,255)',
   },
   // Roomier task row: padding 12 → 16, gap 10 → 14, icon column
   // 22 → 44 to actually fit the 34px pixel icon (was being clipped
@@ -548,7 +548,7 @@ const styles = StyleSheet.create({
   countDone: { color: '#666' },
   barTrack: {
     height: 6,
-    backgroundColor: 'rgba(0,0,0,0.06)',
+    backgroundColor: '#f0f0f0',
     borderRadius: R.sm,
     overflow: 'hidden',
   },

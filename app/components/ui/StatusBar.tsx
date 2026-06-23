@@ -18,8 +18,8 @@ const PILL_HEIGHT = CHIP.height;
 // that, each pill sizes to its content and grows when the number widens.
 const PILL_MIN_WIDTH = 50;
 
-const PROGRESS_BLUE = 'rgba(0,60,255,0.85)';
-const GLASS_BG = 'rgba(255,255,255,0.85)';
+const PROGRESS_BLUE = 'rgb(0,60,255)';
+const GLASS_BG = '#ffffff';
 const GLASS_SHADOW_COLOR = '#000';
 // HUD icons are pixel-art SVGs (see components/ui/Icon.tsx). 18px
 // renders crisp at the 38px pill height; smaller (the previous emoji
@@ -153,9 +153,6 @@ const styles = StyleSheet.create({
     borderRadius: PILL_HEIGHT / 2,
     overflow: 'hidden',
     backgroundColor: GLASS_BG,
-    backdropFilter: 'blur(14px) saturate(160%)',
-    // @ts-expect-error — safari prefix not in RN style types
-    WebkitBackdropFilter: 'blur(14px) saturate(160%)',
     shadowColor: GLASS_SHADOW_COLOR,
     // Bumped from { 0, 4 } / 0.1 / 16 to the chat CHROME_SHADOW
     // values so HUD pills feel like the same family as the chat
@@ -172,22 +169,22 @@ const styles = StyleSheet.create({
   meterPill: {
     minWidth: PILL_MIN_WIDTH,
   },
-  // Solid-white variant — overrides the frosted-glass treatment
-  // for tabs (profile) where the background behind the pill is
-  // dark / coloured and the translucent default looks tinted.
-  pillSolid: {
-    backgroundColor: '#ffffff',
-    backdropFilter: 'none',
-    WebkitBackdropFilter: 'none',
-  } as unknown as object,
+  // Kept as an alias of `pill` — used to be the opt-in solid-white
+  // override when the default was translucent glass. Defaults are
+  // now solid; this stays as a no-op so existing `solid` props on
+  // MeterPill / CounterPill don't need a churning rename.
+  pillSolid: {},
   counterPill: {
     minWidth: PILL_MIN_WIDTH,
   },
   togglePill: {
     paddingHorizontal: S.m,
   },
+  // Sniff toggle's OFF state — solid muted grey so the toggle
+  // still reads as inactive vs the white ON state, without
+  // relying on transparency to communicate "muted".
   togglePillOff: {
-    backgroundColor: 'rgba(255,255,255,0.55)',
+    backgroundColor: '#f0f0f0',
   },
   fill: {
     position: 'absolute',
