@@ -211,21 +211,14 @@ export function CardStack<T>({
   // settled at the new position. currentPos is already at the new
   // integer, virtualBaseSV is already updated (worklet did that),
   // so this is just React catching up — no visual change occurs.
-  // Also kicks the pop animation so the freshly-settled centre
-  // card lifts + scales briefly. Timing + bezier curves match the
-  // snap-pop on the tab scroll cards (820 ms total, peak at 40 %,
-  // soft ease-out on the rise / smoother ease-out on the settle)
-  // so the two motions feel like the same family.
+  // The pop animation is fired at the START of the settle (in
+  // pan.onEnd) so it builds during the slide instead of starting
+  // after — see the comment on the popPhase trigger there.
   const advance = useCallback(
     (delta: number) => {
       setVirtualBase((b) => b + delta);
-      popPhase.value = 0;
-      popPhase.value = withSequence(
-        withTiming(1, { duration: 328, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }),
-        withTiming(0, { duration: 492, easing: Easing.bezier(0.33, 1, 0.68, 1) }),
-      );
     },
-    [popPhase],
+    [],
   );
 
   const handleTap = useCallback(() => {
@@ -259,6 +252,18 @@ export function CardStack<T>({
         const isForward = e.translationX < 0;
         const delta = isForward ? 1 : -1;
         const target = virtualBaseSV.value + delta;
+        // Kick the pop NOW (alongside the settle) instead of
+        // after — that way the lift + scale build during the
+        // last leg of the slide and the pop feels like a
+        // continuation of the snap, not a separate event after
+        // it. Magnitudes scale by per-slot centrality so only
+        // the slot currently arriving at the centre actually
+        // rises; everything else stays put.
+        popPhase.value = 0;
+        popPhase.value = withSequence(
+          withTiming(1, { duration: 328, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }),
+          withTiming(0, { duration: 492, easing: Easing.bezier(0.33, 1, 0.68, 1) }),
+        );
         currentPos.value = withTiming(
           target,
           { duration: SETTLE_MS, easing: SETTLE_EASE },
