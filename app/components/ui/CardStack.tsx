@@ -18,7 +18,7 @@
 //
 // Built on react-native-reanimated v3 + gesture-handler v2.
 
-import { useState, useEffect, useMemo, useCallback, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useCallback, memo, type ReactNode } from 'react';
 import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -71,7 +71,13 @@ interface Props<T> {
 // React index advances (persisting items keep the same virtualIdx,
 // the window just shifts which items it includes). visualTx is
 // driven purely by shared values, so position never races React.
-function ItemSlot<T>({
+//
+// Wrapped in React.memo so a CardStack re-render (which happens on
+// every advance) doesn't re-run useAnimatedStyle for the four
+// slots whose props haven't changed — just the newly-mounting
+// far buffer rebuilds. Cuts the per-advance worklet upload cost
+// down to a single slot.
+function ItemSlotImpl<T>({
   item,
   virtualIdx,
   currentPos,
@@ -131,6 +137,10 @@ function ItemSlot<T>({
     </Animated.View>
   );
 }
+
+// `memo` keeps the generic — the cast preserves <T> inference at
+// the call site (React.memo strips generics by default).
+const ItemSlot = memo(ItemSlotImpl) as typeof ItemSlotImpl;
 
 export function CardStack<T>({
   items,
@@ -306,9 +316,15 @@ export function CardStack<T>({
       }
     });
 
+  // Stable reference so the memoed ItemSlot doesn't see a "new"
+  // slotSize object every render and discard the memo.
+  const slotSize = useMemo(
+    () => ({ width: CARD_W, height: cardHeight }),
+    [cardHeight],
+  );
+
   if (!topItem) return null;
 
-  const slotSize = { width: CARD_W, height: cardHeight };
   const counterIndex = topItemIndex + 1;
 
   return (

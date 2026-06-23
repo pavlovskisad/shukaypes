@@ -3,6 +3,7 @@
 // hint. All the deck animation / gesture / cycling lives in
 // ../CardStack — this file is just the lost-pets visual.
 
+import { useCallback } from 'react';
 import { View, Text, StyleSheet, Image } from 'react-native';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -31,6 +32,13 @@ function formatDistance(m: number): string {
 export function LostDogCardStack({ dogs, onTap, onCounterTap }: Props) {
   const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
+  // useCallback-stable so CardStack's memoed ItemSlot doesn't see
+  // a "new" renderCard prop on every parent render and discard
+  // the memo. Deps cover everything the closure actually reads.
+  const renderCard = useCallback(
+    (d: NearbyLostDog) => <LostDogCardView dog={d} t={t} userPos={userPos} />,
+    [t, userPos],
+  );
   return (
     <CardStack
       items={dogs}
@@ -38,7 +46,7 @@ export function LostDogCardStack({ dogs, onTap, onCounterTap }: Props) {
       onTap={onTap}
       onCounterTap={onCounterTap}
       getPhotoUrl={(d) => d.photoUrl}
-      renderCard={(d) => <LostDogCardView dog={d} t={t} userPos={userPos} />}
+      renderCard={renderCard}
     />
   );
 }

@@ -851,10 +851,20 @@ export default function MapViewWeb() {
   // and the tab bar — that's where the eye expects "the spot you
   // tapped" to be, not buried under the modal.
   useEffect(() => {
-    if (!selectedSpotId) return;
-    const spot = spots.find((s) => s.id === selectedSpotId);
     const map = mapRef.current;
-    if (!spot || !map) return;
+    if (!map) return;
+    if (!selectedSpotId) {
+      // Modal closed — restore zero padding on the camera so a
+      // subsequent panTo / easeTo (companion tap, dog tap, etc.)
+      // centres on the geometric viewport instead of the spot-
+      // modal-padded region we set below. MapLibre persists
+      // `padding` across calls, so leaving 460/110 in place
+      // would visibly bias every later recenter low and right.
+      map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      return;
+    }
+    const spot = spots.find((s) => s.id === selectedSpotId);
+    if (!spot) return;
     const current = map.getZoom() ?? balance.mapZoomDefault;
     map.easeTo({
       center: [spot.position.lng, spot.position.lat],

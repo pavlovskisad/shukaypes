@@ -6,6 +6,7 @@
 // expand modal) can reuse the exact same card visual without
 // duplicating the layout.
 
+import { useCallback } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import type { Spot } from '../../services/places';
 import type { LatLng } from '@shukajpes/shared';
@@ -28,13 +29,19 @@ interface Props {
 
 export function SpotCardStack({ spots, onTap, onCounterTap }: Props) {
   const userPos = useGameStore((s) => s.userPosition);
+  // useCallback-stable so CardStack's memoed ItemSlot doesn't see
+  // a "new" renderCard prop on every parent render.
+  const renderCard = useCallback(
+    (s: Spot) => <SpotCardView spot={s} userPos={userPos} />,
+    [userPos],
+  );
   return (
     <CardStack
       items={spots}
       getId={(s) => s.id}
       onTap={onTap}
       onCounterTap={onCounterTap}
-      renderCard={(s) => <SpotCardView spot={s} userPos={userPos} />}
+      renderCard={renderCard}
     />
   );
 }
