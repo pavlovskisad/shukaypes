@@ -840,11 +840,13 @@ export default function MapViewWeb() {
   }, [clusters, setSelectedDog]);
 
   // When the Spots tab routes the user here with a selection, ease to
-  // that spot in ONE coordinated tween. Padding biases the visual
-  // centre away from the top HUD pills and the bottom tab bar so the
-  // selected spot lands where the eye is actually looking, not under a
-  // glass pill. Previously panTo + setZoom fired separately and the
-  // second animation occasionally clobbered the first's centre.
+  // that spot in ONE coordinated tween. SpotModal covers roughly the
+  // top ~460 px (hero 220 + name + address + action pills); the tab
+  // bar steals the bottom ~110 px (with safe-area). Padding here
+  // biases the camera so the selected spot lands in the vertical
+  // centre of the visible map strip between the modal's bottom edge
+  // and the tab bar — that's where the eye expects "the spot you
+  // tapped" to be, not buried under the modal.
   useEffect(() => {
     if (!selectedSpotId) return;
     const spot = spots.find((s) => s.id === selectedSpotId);
@@ -854,7 +856,7 @@ export default function MapViewWeb() {
     map.easeTo({
       center: [spot.position.lng, spot.position.lat],
       zoom: Math.max(current, 17),
-      padding: { top: 110, bottom: 130, left: 20, right: 20 },
+      padding: { top: 460, bottom: 110, left: 20, right: 20 },
       duration: 500,
     });
   }, [selectedSpotId, spots]);
