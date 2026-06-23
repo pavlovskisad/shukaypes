@@ -178,17 +178,37 @@ export function CardStack<T>({
   const topItemIndex = N > 0 ? ((virtualBase % N) + N) % N : 0;
   const topItem = N > 0 ? items[topItemIndex] : undefined;
 
-  // Pre-warm photos for upcoming items.
+  // Pre-warm photos for upcoming items. On web we use
+  // HTMLImageElement.decode() instead of RN's Image.prefetch:
+  // decode() forces the browser to decode the bitmap off-main-
+  // thread, so by the time the slot mounts the photo is GPU-ready
+  // and the first paint of the new card doesn't stall on decode.
+  // Native falls back to Image.prefetch (cache warm only — RN
+  // doesn't expose a decode API).
   useEffect(() => {
     if (!getPhotoUrl || N === 0) return;
+    const canDecode =
+      typeof window !== 'undefined' &&
+      typeof HTMLImageElement !== 'undefined' &&
+      'decode' in HTMLImageElement.prototype;
     [1, 2, 3, 4, -1, -2].forEach((o) => {
       const idx = ((topItemIndex + o) % N + N) % N;
       const item = items[idx];
       if (!item) return;
       const url = getPhotoUrl(item);
-      if (url) {
+      if (!url) return;
+      if (canDecode) {
+        const img = new window.Image();
+        img.decoding = 'async';
+        img.src = url;
+        // .decode() returns a promise; both branches swallow —
+        // best-effort prefetch, never user-facing.
+        img.decode().catch(() => {
+          /* swallow */
+        });
+      } else {
         Image.prefetch(url).catch(() => {
-          /* swallow — best-effort */
+          /* swallow */
         });
       }
     });
@@ -198,7 +218,11 @@ export function CardStack<T>({
   // its virtualIdx (stable per item-in-position) and the resolved
   // item. Keyed by virtualIdx so React preserves the same DOM
   // node for persisting items across an advance.
-  const window = useMemo(() => {
+  //
+  // Named `slotWindow` (not `window`) so it doesn't shadow the
+  // browser's global `window` — the prefetch effect above relies
+  // on `new window.Image()` for the off-thread decode path.
+  const slotWindow = useMemo(() => {
     if (N === 0) return [];
     return [-2, -1, 0, 1, 2].map((offset) => {
       const virtualIdx = virtualBase + offset;
@@ -291,7 +315,7 @@ export function CardStack<T>({
     <View style={styles.wrap}>
       <GestureDetector gesture={Gesture.Race(tap, pan)}>
         <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
-          {window.map(({ virtualIdx, item }) => (
+          {slotWindow.map(({ virtualIdx, item }) => (
             <ItemSlot
               key={virtualIdx}
               item={item}
@@ -411,7 +435,13 @@ const styles = StyleSheet.create({
   },
   cardSlot: {
     position: 'absolute',
-  },
+    // Web-only: promote each slot to its own compositing layer
+    // so the per-frame transform / scale during a swipe is a
+    // cheap GPU blit rather than a full repaint with shadow
+    // re-rasterization. RN ignores this property on native;
+    // browsers that don't support `will-change` ignore it too.
+    willChange: 'transform, opacity',
+  } as unknown as object,
   greyDeckCard: {
     backgroundColor: '#e6e6e6',
     borderRadius: R.card,
