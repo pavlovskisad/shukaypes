@@ -108,6 +108,9 @@ function ItemSlot<T>({
     // brief lift + scale bump driven by popPhase (0 → 1 → 0
     // around the moment of advance). `centrality` falls off
     // quickly past STEP/2 so adjacent peeks barely participate.
+    // Magnitudes (translateY -10, scale +4%) match the snap-pop
+    // on the tab scroll cards so the two motions feel like the
+    // same family.
     const centrality = interpolate(
       Math.abs(visualTx),
       [0, step * 0.5],
@@ -115,8 +118,8 @@ function ItemSlot<T>({
       Extrapolation.CLAMP,
     );
     const pop = centrality * popPhase.value;
-    const ty = -8 * pop;
-    const scale = baseScale * (1 + 0.05 * pop);
+    const ty = -10 * pop;
+    const scale = baseScale * (1 + 0.04 * pop);
     return {
       transform: [{ translateX: visualTx }, { translateY: ty }, { scale }],
       zIndex: z,
@@ -209,15 +212,17 @@ export function CardStack<T>({
   // integer, virtualBaseSV is already updated (worklet did that),
   // so this is just React catching up — no visual change occurs.
   // Also kicks the pop animation so the freshly-settled centre
-  // card lifts + scales briefly, like the snap-pop on the tab
-  // scroll cards.
+  // card lifts + scales briefly. Timing + bezier curves match the
+  // snap-pop on the tab scroll cards (820 ms total, peak at 40 %,
+  // soft ease-out on the rise / smoother ease-out on the settle)
+  // so the two motions feel like the same family.
   const advance = useCallback(
     (delta: number) => {
       setVirtualBase((b) => b + delta);
       popPhase.value = 0;
       popPhase.value = withSequence(
-        withTiming(1, { duration: 180, easing: Easing.out(Easing.cubic) }),
-        withTiming(0, { duration: 280, easing: Easing.in(Easing.cubic) }),
+        withTiming(1, { duration: 328, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }),
+        withTiming(0, { duration: 492, easing: Easing.bezier(0.33, 1, 0.68, 1) }),
       );
     },
     [popPhase],
