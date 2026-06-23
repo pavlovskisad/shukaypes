@@ -7,6 +7,7 @@ import { api } from '../../services/api';
 import { fetchWalkingRoute } from '../../services/directions';
 import { useGameStore } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { useStrings } from '../../i18n/useStrings';
@@ -464,7 +465,7 @@ export function SniffPress() {
             padding: '12px 14px',
             background: VOICE.background,
             color: VOICE.color,
-            borderRadius: 24,
+            borderRadius: R.chip,
             fontFamily: VOICE.fontFamily,
             fontSize: TYPE.body,
             lineHeight: 1.4,
@@ -535,7 +536,7 @@ export function SniffPress() {
               padding: '10px 18px',
               background: SNIFF_COLOR,
               color: '#ffffff',
-              borderRadius: 999,
+              borderRadius: R.pill,
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.small,
               fontWeight: 700,
@@ -553,7 +554,7 @@ export function SniffPress() {
           style={{
             width: 10,
             height: 10,
-            borderRadius: 5,
+            borderRadius: R.pill,
             background: SNIFF_COLOR,
             boxShadow: '0 2px 6px rgba(0,0,0,0.2)',
           }}
@@ -597,7 +598,7 @@ function SniffingBubble({ position }: { position: LatLng }) {
           padding: '12px 14px',
           background: VOICE.background,
           color: VOICE.color,
-          borderRadius: 22,
+          borderRadius: R.chip,
           fontFamily: VOICE.fontFamily,
           fontSize: TYPE.body,
           fontStyle: 'italic',

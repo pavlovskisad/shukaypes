@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { MapLibreMarker } from './MapLibreMarker';
 
@@ -146,7 +147,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
                 width: 54,
                 height: 54,
                 marginLeft: -27,
-                borderRadius: '50%',
+                borderRadius: R.pill,
                 border: `1.5px solid ${halo.ring}`,
                 animation: `sos-pulse ${BEEP_DURATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1) forwards`,
                 pointerEvents: 'none',
@@ -160,7 +161,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
                 width: 54,
                 height: 54,
                 marginLeft: -27,
-                borderRadius: '50%',
+                borderRadius: R.pill,
                 border: `1.5px solid ${halo.ring}`,
                 animation: `sos-pulse ${BEEP_DURATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1) ${BEEP_DURATION_MS / 2}ms forwards`,
                 pointerEvents: 'none',
@@ -182,7 +183,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
             position: 'relative',
             width: 54,
             height: 54,
-            borderRadius: '50%',
+            borderRadius: R.pill,
             background: '#ffffff',
             display: 'flex',
             alignItems: 'center',

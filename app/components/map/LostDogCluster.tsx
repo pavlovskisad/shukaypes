@@ -3,6 +3,7 @@ import { MapLibreMarker } from './MapLibreMarker';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 
@@ -89,7 +90,7 @@ function LostDogClusterImpl({
             top: CONTAINER_CENTER - 22,
             width: 44,
             height: 44,
-            borderRadius: '50%',
+            borderRadius: R.pill,
             background: '#ffffff',
             display: 'flex',
             flexDirection: 'column',
@@ -158,7 +159,7 @@ function LostDogClusterImpl({
                 top: by - BUTTON_SIZE / 2,
                 width: BUTTON_SIZE,
                 height: BUTTON_SIZE,
-                borderRadius: '50%',
+                borderRadius: R.pill,
                 border: 'none',
                 background: '#ffffff',
                 fontSize: TYPE.hero,

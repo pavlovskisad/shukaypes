@@ -2,6 +2,7 @@ import { Tabs } from 'expo-router';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
+import { R } from '../../constants/radius';
 import { HERO } from '../../constants/sizing';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import { pickBottomInset } from '../../services/telegram';
@@ -81,8 +82,8 @@ export default function TabsLayout() {
           // with TAB_BAR_HEIGHT in chat.tsx — keep them in sync.
           height: HERO.size + insets.bottom,
           paddingBottom: insets.bottom,
-          borderTopLeftRadius: 28,
-          borderTopRightRadius: 28,
+          borderTopLeftRadius: R.card,
+          borderTopRightRadius: R.card,
           // Plain white — the previous frosted-glass treatment
           // picked up tints from whatever was behind the bar
           // (dark night sky on profile, map colours on home) and

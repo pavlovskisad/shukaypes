@@ -8,6 +8,7 @@ import { View, Text, StyleSheet, Image } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { MapContext } from './MapContext';
@@ -1561,7 +1562,7 @@ export default function MapViewWeb() {
                 padding: '8px 16px',
                 background: '#ffffff',
                 color: '#1a1a1a',
-                borderRadius: 999,
+                borderRadius: R.pill,
                 fontFamily: SYSTEM_FONT,
                 fontSize: TYPE.small,
                 fontWeight: 600,
@@ -1586,7 +1587,7 @@ export default function MapViewWeb() {
                 padding: '8px 16px',
                 background: '#ffffff',
                 color: '#1a1a1a',
-                borderRadius: 999,
+                borderRadius: R.pill,
                 fontFamily: SYSTEM_FONT,
                 fontSize: TYPE.small,
                 fontWeight: 600,
@@ -1636,7 +1637,7 @@ export default function MapViewWeb() {
             // + black logo on sniff mode (pops against the dark bg).
             // Matches the corner logo's same-recipe inversion.
             background: sniffMode ? '#ffffff' : '#1a1a1a',
-            borderRadius: '50%',
+            borderRadius: R.pill,
             // Bumped 44 → 56 (and logo 30 → 38) per user request —
             // bigger chip is easier to tap and reads as a clear
             // "follow the dog" bookmark instead of a tiny dot.
@@ -1699,7 +1700,7 @@ export default function MapViewWeb() {
             padding: '12px 10px',
             background: VOICE.background,
             color: VOICE.color,
-            borderRadius: 24,
+            borderRadius: R.chip,
             fontFamily: VOICE.fontFamily,
             fontSize: TYPE.body,
             lineHeight: 1.4,
@@ -1811,7 +1812,7 @@ export default function MapViewWeb() {
                 style={{
                   position: 'absolute',
                   inset: 0,
-                  borderRadius: '50%',
+                  borderRadius: R.pill,
                   background: '#ffffff',
                   // No urgency-coloured ring border — that read as a
                   // gold rim around medium-urgency chips and dominated
@@ -1860,7 +1861,7 @@ export default function MapViewWeb() {
                   height: 18,
                   paddingLeft: 5,
                   paddingRight: 5,
-                  borderRadius: 9,
+                  borderRadius: R.sm,
                   background: halo.badge,
                   color: '#ffffff',
                   fontFamily: SYSTEM_FONT,
@@ -1921,8 +1922,8 @@ export default function MapViewWeb() {
             background: '#ffffff',
             // Round on the LEFT side only so it reads as docked to
             // the screen edge.
-            borderTopLeftRadius: 28,
-            borderBottomLeftRadius: 28,
+            borderTopLeftRadius: R.card,
+            borderBottomLeftRadius: R.card,
             width: 56,
             height: 56,
             display: 'flex',
@@ -1936,9 +1937,9 @@ export default function MapViewWeb() {
         >
           {/* Three stacked bars — the longer bottom bar reads as
               "stack" the way a hamburger-but-tapered glyph does. */}
-          <div style={{ width: 18, height: 3, background: '#1a1a1a', borderRadius: 2 }} />
-          <div style={{ width: 22, height: 3, background: '#1a1a1a', borderRadius: 2 }} />
-          <div style={{ width: 26, height: 3, background: '#1a1a1a', borderRadius: 2 }} />
+          <div style={{ width: 18, height: 3, background: '#1a1a1a', borderRadius: R.sm }} />
+          <div style={{ width: 22, height: 3, background: '#1a1a1a', borderRadius: R.sm }} />
+          <div style={{ width: 26, height: 3, background: '#1a1a1a', borderRadius: R.sm }} />
         </div>
       ) : null}
 

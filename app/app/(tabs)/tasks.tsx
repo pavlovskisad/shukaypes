@@ -5,6 +5,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { api, type NearbyLostDog } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
@@ -511,14 +512,14 @@ const styles = StyleSheet.create({
   // anchors the X / Y tally to a quick "how done?" glance.
   summaryBarTrack: {
     height: 6,
-    borderRadius: 3,
+    borderRadius: R.sm,
     backgroundColor: 'rgba(0,0,0,0.06)',
     overflow: 'hidden',
     marginBottom: 6,
   },
   summaryBarFill: {
     height: '100%',
-    borderRadius: 3,
+    borderRadius: R.sm,
     backgroundColor: 'rgba(0,60,255,0.85)',
   },
   // Roomier task row: padding 12 → 16, gap 10 → 14, icon column
@@ -547,10 +548,10 @@ const styles = StyleSheet.create({
   barTrack: {
     height: 6,
     backgroundColor: 'rgba(0,0,0,0.06)',
-    borderRadius: 3,
+    borderRadius: R.sm,
     overflow: 'hidden',
   },
-  barFill: { height: '100%', borderRadius: 3 },
+  barFill: { height: '100%', borderRadius: R.sm },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

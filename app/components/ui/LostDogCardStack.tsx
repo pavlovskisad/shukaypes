@@ -6,6 +6,7 @@
 import { View, Text, StyleSheet, Image } from 'react-native';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
@@ -105,7 +106,7 @@ const styles = StyleSheet.create({
   card: {
     width: '100%',
     height: '100%',
-    borderRadius: 28,
+    borderRadius: R.card,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
     shadowColor: '#000',
@@ -126,7 +127,7 @@ const styles = StyleSheet.create({
     // corners at the top of the photo. Match the card's
     // borderRadius on the image itself so it self-clips
     // regardless of parent.
-    borderRadius: 28,
+    borderRadius: R.card,
   },
   photoFallback: {
     alignItems: 'center',
@@ -156,7 +157,7 @@ const styles = StyleSheet.create({
     // Full-pill radius + lifted shadow so the chip reads as the
     // same family as the HUD pills / chat header pill (full
     // round with CHROME_SHADOW). Scaled down for in-card use.
-    borderRadius: 999,
+    borderRadius: R.pill,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.14,
@@ -178,7 +179,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: 12,
     paddingVertical: 6,
-    borderRadius: 999,
+    borderRadius: R.pill,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.14,

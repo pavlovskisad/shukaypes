@@ -5,6 +5,7 @@ import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { INLINE_ICON } from '../../constants/sizing';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import {
   MODAL_PILL_DARK,
@@ -48,7 +49,7 @@ const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
 const CLOSE_BUTTON_STYLE_NOABS: CSSProperties = {
   width: 36,
   height: 36,
-  borderRadius: 18,
+  borderRadius: R.pill,
   border: '1px solid rgba(0,0,0,0.06)',
   background: '#ffffff',
   color: '#1a1a1a',
@@ -155,8 +156,8 @@ export function LostDogModal({
           // of the screen.
           borderTopLeftRadius: 0,
           borderTopRightRadius: 0,
-          borderBottomLeftRadius: 28,
-          borderBottomRightRadius: 28,
+          borderBottomLeftRadius: R.card,
+          borderBottomRightRadius: R.card,
           padding: 0,
           width: '100%',
           maxWidth: 460,
@@ -245,7 +246,7 @@ export function LostDogModal({
               color: badgeFg,
               // Full-pill + lifted shadow to match the HUD / chat
               // pill family across the app.
-              borderRadius: 999,
+              borderRadius: R.pill,
               padding: '6px 12px',
               fontSize: TYPE.small,
               fontWeight: 700,
@@ -275,7 +276,7 @@ export function LostDogModal({
                 style={{
                   background: '#ffffff',
                   color: '#555',
-                  borderRadius: 999,
+                  borderRadius: R.pill,
                   padding: '6px 12px',
                   fontSize: TYPE.small,
                   fontWeight: 700,

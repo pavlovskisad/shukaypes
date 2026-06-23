@@ -17,6 +17,7 @@ import logoNose from '../../assets/logo-nose.png';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { pickBottomInset } from '../../services/telegram';
 import { useGameStore } from '../../stores/gameStore';
@@ -557,7 +558,7 @@ const styles = StyleSheet.create({
     marginTop: 10,
     marginBottom: 8,
     backgroundColor: '#ffffff',
-    borderRadius: 999,
+    borderRadius: R.pill,
     paddingVertical: 8,
     paddingHorizontal: 14,
     flexDirection: 'row',
@@ -568,7 +569,7 @@ const styles = StyleSheet.create({
   headerLogoPill: {
     width: 36,
     height: 36,
-    borderRadius: 18,
+    borderRadius: R.pill,
     backgroundColor: '#ffffff',
     alignItems: 'center',
     justifyContent: 'center',
@@ -597,7 +598,7 @@ const styles = StyleSheet.create({
     maxWidth: '85%',
     paddingVertical: 14,
     paddingHorizontal: 18,
-    borderRadius: 28,
+    borderRadius: R.card,
   },
   assistantBubble: {
     alignSelf: 'flex-start',
@@ -644,7 +645,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 10,
     backgroundColor: '#ffffff',
-    borderRadius: 32,
+    borderRadius: R.card,
     ...CHROME_SHADOW,
   },
   input: {
@@ -667,7 +668,7 @@ const styles = StyleSheet.create({
   sendBtn: {
     width: 44,
     height: 44,
-    borderRadius: 22,
+    borderRadius: R.pill,
     backgroundColor: ACCENT_BLUE,
     alignItems: 'center',
     justifyContent: 'center',

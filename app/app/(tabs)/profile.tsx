@@ -5,6 +5,7 @@ import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { api } from '../../services/api';
@@ -67,7 +68,7 @@ function ShimmerBar({ width = 56 }: { width?: number }) {
         {
           width,
           height: 14,
-          borderRadius: 7,
+          borderRadius: R.sm,
           backgroundColor: '#e6e6e6',
           backgroundImage:
             'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.75) 50%, transparent 70%)',
@@ -433,7 +434,7 @@ const styles = StyleSheet.create({
     width: CARD_W,
     height: 150,
     backgroundColor: '#ffffff',
-    borderRadius: 28,
+    borderRadius: R.card,
     paddingTop: 12,
     paddingBottom: 12,
     paddingHorizontal: 16,
@@ -472,7 +473,7 @@ const styles = StyleSheet.create({
   },
   xpBarTrack: {
     height: 5,
-    borderRadius: 2.5,
+    borderRadius: R.sm,
     backgroundColor: 'rgba(0,0,0,0.08)',
     overflow: 'hidden',
     marginBottom: 6,
@@ -480,7 +481,7 @@ const styles = StyleSheet.create({
   xpBarFill: {
     height: '100%',
     backgroundColor: 'rgba(0,60,255,0.85)',
-    borderRadius: 2.5,
+    borderRadius: R.sm,
   },
   // Denser stat rows for the walks / helping cards.
   statRow: {

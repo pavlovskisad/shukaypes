@@ -2,6 +2,7 @@ import { memo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { MAP_MARKER } from '../../constants/sizing';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { Icon, iconForCategory } from '../ui/Icon';
 import { MapLibreMarker } from './MapLibreMarker';
@@ -43,7 +44,7 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
           style={{
             width: 44,
             height: 44,
-            borderRadius: '50%',
+            borderRadius: R.pill,
             // Solid white disc (not semi-transparent glass) so the
             // marker reads cleanly against the soft pastel map. Subtle
             // natural drop shadow instead of the blue glow.

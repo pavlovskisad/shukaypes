@@ -10,6 +10,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { NearbyLostDog } from '../../services/api';
 import { Z } from '../../constants/z';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { useStrings } from '../../i18n/useStrings';
@@ -101,7 +102,7 @@ export function LostDogsModal({ dogs, onClose, onPick }: Props) {
           right: 18,
           width: 36,
           height: 36,
-          borderRadius: 18,
+          borderRadius: R.pill,
           border: '1px solid rgba(0,0,0,0.06)',
           background: '#ffffff',
           color: '#1a1a1a',

@@ -33,6 +33,7 @@ import Animated, {
   type SharedValue,
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 
 export const CARD_W = 320;
@@ -371,7 +372,7 @@ export function CardStackSkeleton({
               backgroundSize: '200% 100%',
               backgroundRepeat: 'no-repeat',
               animation: 'card-stack-shimmer 1.8s ease-in-out infinite',
-              borderRadius: 28,
+              borderRadius: R.card,
               transform: [{ scale: TOP_SCALE }],
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 8 },
@@ -402,7 +403,7 @@ const styles = StyleSheet.create({
   },
   greyDeckCard: {
     backgroundColor: '#e6e6e6',
-    borderRadius: 28,
+    borderRadius: R.card,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,

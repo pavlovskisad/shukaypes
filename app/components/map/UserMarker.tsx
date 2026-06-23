@@ -1,5 +1,6 @@
 import { memo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
+import { R } from '../../constants/radius';
 import { MapLibreMarker } from './MapLibreMarker';
 
 // Black dot with a subtle breathing ring (demo lines 172-177). Memoized so
@@ -15,7 +16,7 @@ function UserMarkerImpl({ position }: { position: LatLng }) {
             top: -54,
             width: 120,
             height: 120,
-            borderRadius: '50%',
+            borderRadius: R.pill,
             background: 'rgba(160,160,160,0.1)',
             animation: 'u-breathe 8s ease-in-out infinite',
           }}
@@ -27,7 +28,7 @@ function UserMarkerImpl({ position }: { position: LatLng }) {
             top: 0,
             width: 12,
             height: 12,
-            borderRadius: '50%',
+            borderRadius: R.pill,
             background: '#1a1a1a',
             border: '2px solid #ffffff',
             boxShadow: '0 0 4px rgba(0,0,0,0.3)',

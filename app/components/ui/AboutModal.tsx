@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { INLINE_ICON } from '../../constants/sizing';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
@@ -84,8 +85,8 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           background: '#ffffff',
           borderTopLeftRadius: 0,
           borderTopRightRadius: 0,
-          borderBottomLeftRadius: 28,
-          borderBottomRightRadius: 28,
+          borderBottomLeftRadius: R.card,
+          borderBottomRightRadius: R.card,
           padding: 0,
           width: '100%',
           maxWidth: 460,
@@ -120,7 +121,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               left: 14,
               background: '#ffffff',
               color: '#555',
-              borderRadius: 999,
+              borderRadius: R.pill,
               padding: '6px 12px',
               fontSize: TYPE.small,
               fontWeight: 700,
@@ -141,7 +142,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               right: 12,
               width: 36,
               height: 36,
-              borderRadius: 18,
+              borderRadius: R.pill,
               border: '1px solid rgba(0,0,0,0.06)',
               background: '#ffffff',
               color: '#1a1a1a',

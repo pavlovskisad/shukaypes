@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { MapLibreMarker } from './MapLibreMarker';
 
@@ -31,7 +32,7 @@ function WaypointMarkerImpl({ position, index, state, onTap }: WaypointMarkerPro
         style={{
           width: 28,
           height: 28,
-          borderRadius: '50%',
+          borderRadius: R.pill,
           background: reached ? 'rgba(200,200,200,0.85)' : 'rgba(255,255,255,0.95)',
           border: active ? '2px solid rgba(0,0,255,0.85)' : '1px solid rgba(0,0,0,0.08)',
           boxShadow: active ? ACTIVE_GLOW : '0 1px 4px rgba(0,0,0,0.08)',

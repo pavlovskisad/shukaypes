@@ -2,6 +2,7 @@ import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
 import { CHIP } from '../../constants/sizing';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -90,7 +91,7 @@ const styles = StyleSheet.create({
   close: {
     width: 26,
     height: 26,
-    borderRadius: 13,
+    borderRadius: R.pill,
     alignItems: 'center',
     justifyContent: 'center',
     marginLeft: 4,

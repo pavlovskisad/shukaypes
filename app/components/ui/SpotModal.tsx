@@ -4,6 +4,7 @@ import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { INLINE_ICON } from '../../constants/sizing';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { MODAL_PILL_DARK, MODAL_PILL_BLUE } from '../../constants/buttons';
 import { Icon, iconForCategory } from './Icon';
@@ -83,8 +84,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           // Full-bleed top edge, rounded bottom only.
           borderTopLeftRadius: 0,
           borderTopRightRadius: 0,
-          borderBottomLeftRadius: 28,
-          borderBottomRightRadius: 28,
+          borderBottomLeftRadius: R.card,
+          borderBottomRightRadius: R.card,
           padding: 0,
           width: '100%',
           maxWidth: 460,
@@ -134,7 +135,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               left: 14,
               background: '#ffffff',
               color: '#555',
-              borderRadius: 999,
+              borderRadius: R.pill,
               padding: '6px 12px',
               fontSize: TYPE.small,
               fontWeight: 700,
@@ -163,7 +164,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 style={{
                   background: '#ffffff',
                   color: '#d9a030',
-                  borderRadius: 999,
+                  borderRadius: R.pill,
                   padding: '6px 12px',
                   fontSize: TYPE.small,
                   fontWeight: 700,
@@ -180,7 +181,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               style={{
                 width: 36,
                 height: 36,
-                borderRadius: 18,
+                borderRadius: R.pill,
                 border: '1px solid rgba(0,0,0,0.06)',
                 background: '#ffffff',
                 color: '#1a1a1a',

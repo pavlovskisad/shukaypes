@@ -1,4 +1,5 @@
 import { VOICE } from '../../constants/voice';
+import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 
 interface SpeechBubbleProps {
@@ -41,7 +42,7 @@ export function SpeechBubble({ text }: SpeechBubbleProps) {
         // Uniform full radius — matches the chat bubble + chip
         // family. No more "tail" corner; the bubble's position
         // above the dog is enough direction cue on its own.
-        borderRadius: 24,
+        borderRadius: R.chip,
         fontSize: TYPE.body,
         lineHeight: 1.4,
         fontFamily: VOICE.fontFamily,
