@@ -10,11 +10,12 @@ import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
 import type { LatLng } from '@shukajpes/shared';
-import { CardStack, CardStackSkeleton, CARD_W, CARD_H } from './CardStack';
+import { CardStack, CardStackSkeleton } from './CardStack';
 
 interface Props {
   dogs: NearbyLostDog[];
   onTap: (dog: NearbyLostDog) => void;
+  onCounterTap?: () => void;
 }
 
 // "X m" for sub-1km, "X.X km" beyond. Snapped to 50m below 1km so
@@ -24,7 +25,7 @@ function formatDistance(m: number): string {
   return `${(m / 1000).toFixed(1)} km`;
 }
 
-export function LostDogCardStack({ dogs, onTap }: Props) {
+export function LostDogCardStack({ dogs, onTap, onCounterTap }: Props) {
   const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
   return (
@@ -32,8 +33,9 @@ export function LostDogCardStack({ dogs, onTap }: Props) {
       items={dogs}
       getId={(d) => d.id}
       onTap={onTap}
+      onCounterTap={onCounterTap}
       getPhotoUrl={(d) => d.photoUrl}
-      renderCard={(d) => renderCard(d, t, userPos)}
+      renderCard={(d) => <LostDogCardView dog={d} t={t} userPos={userPos} />}
     />
   );
 }
@@ -45,12 +47,17 @@ export const LostDogCardStackSkeleton = CardStackSkeleton;
 // Photo full-bleed top, dark-to-transparent gradient mask
 // carrying name + meta over the bottom of the photo. Urgency
 // badge top-left, distance chip top-right. No photo → soft grey
-// card with the emoji centred.
-function renderCard(
-  dog: NearbyLostDog,
-  t: ReturnType<typeof useStrings>,
-  userPos: LatLng | null,
-) {
+// card with the emoji centred. Exported so the "see all" modal
+// can render the same visual at a wider size.
+export function LostDogCardView({
+  dog,
+  t,
+  userPos,
+}: {
+  dog: NearbyLostDog;
+  t: ReturnType<typeof useStrings>;
+  userPos: LatLng | null;
+}) {
   const urgent = dog.urgency === 'urgent';
   const badgeText = urgent ? t.tasks.badgeUrgent : t.tasks.badgeSearching;
   const badgeFg = urgent ? '#e84040' : '#d9a030';
@@ -90,9 +97,13 @@ function renderCard(
 }
 
 const styles = StyleSheet.create({
+  // Card fills its parent — the carousel slot is 320×280, the
+  // "see all" modal row is full-width × 320. Photo + gradient +
+  // chip layout stays anchored from the bottom edges so the
+  // composition still reads at either size.
   card: {
-    width: CARD_W,
-    height: CARD_H,
+    width: '100%',
+    height: '100%',
     borderRadius: 28,
     overflow: 'hidden',
     backgroundColor: '#ffffff',

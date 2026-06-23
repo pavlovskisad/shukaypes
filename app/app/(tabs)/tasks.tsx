@@ -12,6 +12,7 @@ import {
   LostDogCardStack,
   LostDogCardStackSkeleton,
 } from '../../components/ui/LostDogCardStack';
+import { LostDogsModal } from '../../components/ui/LostDogsModal';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
@@ -87,6 +88,8 @@ export default function TasksScreen() {
   const [historyOpen, setHistoryOpen] = useState(false);
   const [modalDogId, setModalDogId] = useState<string | null>(null);
   const [startingDogId, setStartingDogId] = useState<string | null>(null);
+  // Open the "see all" fullscreen list when truthy.
+  const [seeAllDogsOpen, setSeeAllDogsOpen] = useState(false);
 
   // Sort by distance-to-zone-edge so the closest pet (most walkable
   // search) sits at the top. In-zone pets bubble to the very top.
@@ -294,7 +297,11 @@ export default function TasksScreen() {
             {sortedDogs.length === 0 ? (
               <LostDogCardStackSkeleton />
             ) : (
-              <LostDogCardStack dogs={sortedDogs} onTap={(d) => setModalDogId(d.id)} />
+              <LostDogCardStack
+                dogs={sortedDogs}
+                onTap={(d) => setModalDogId(d.id)}
+                onCounterTap={() => setSeeAllDogsOpen(true)}
+              />
             )}
           </View>
         )}
@@ -428,6 +435,15 @@ export default function TasksScreen() {
         onClose={() => setModalDogId(null)}
         searchActive={!!activeQuest && activeQuest.dogId === modalDogId}
         onStartSearch={(d) => handleStartSearch(d)}
+      />
+
+      <LostDogsModal
+        dogs={seeAllDogsOpen ? sortedDogs : null}
+        onClose={() => setSeeAllDogsOpen(false)}
+        onPick={(d) => {
+          setSeeAllDogsOpen(false);
+          setModalDogId(d.id);
+        }}
       />
     </SafeAreaView>
   );
