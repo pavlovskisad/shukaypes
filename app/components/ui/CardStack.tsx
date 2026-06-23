@@ -25,6 +25,7 @@ import Animated, {
   useAnimatedStyle,
   withSpring,
   withTiming,
+  withSequence,
   runOnJS,
   interpolate,
   Extrapolation,
@@ -71,6 +72,7 @@ function ItemSlot<T>({
   item,
   virtualIdx,
   currentPos,
+  popPhase,
   step,
   slotSize,
   renderCard,
@@ -78,13 +80,14 @@ function ItemSlot<T>({
   item: T;
   virtualIdx: number;
   currentPos: SharedValue<number>;
+  popPhase: SharedValue<number>;
   step: number;
   slotSize: { width: number; height: number };
   renderCard: (item: T) => ReactNode;
 }) {
   const animStyle = useAnimatedStyle(() => {
     const visualTx = (virtualIdx - currentPos.value) * step;
-    const scale = interpolate(
+    const baseScale = interpolate(
       visualTx,
       [-2 * step, -step, 0, step, 2 * step],
       [OFF_SCALE, PEEK_SCALE, TOP_SCALE, PEEK_SCALE, OFF_SCALE],
@@ -98,7 +101,23 @@ function ItemSlot<T>({
       [3, 2, 1],
       Extrapolation.CLAMP,
     );
-    return { transform: [{ translateX: visualTx }, { scale }], zIndex: z };
+    // Pop on settle — the item closest to the centre gets a
+    // brief lift + scale bump driven by popPhase (0 → 1 → 0
+    // around the moment of advance). `centrality` falls off
+    // quickly past STEP/2 so adjacent peeks barely participate.
+    const centrality = interpolate(
+      Math.abs(visualTx),
+      [0, step * 0.5],
+      [1, 0],
+      Extrapolation.CLAMP,
+    );
+    const pop = centrality * popPhase.value;
+    const ty = -8 * pop;
+    const scale = baseScale * (1 + 0.05 * pop);
+    return {
+      transform: [{ translateX: visualTx }, { translateY: ty }, { scale }],
+      zIndex: z,
+    };
   });
   return (
     <Animated.View style={[styles.cardSlot, slotSize, animStyle]}>
@@ -129,6 +148,11 @@ export function CardStack<T>({
   // (rare but possible if the user starts a new pan before
   // setVirtualBase commits).
   const virtualBaseSV = useSharedValue(0);
+  // Drives the centre-card pop on every committed advance —
+  // 0 at rest, jumps to 1 right after settle, then eases back
+  // to 0. ItemSlot multiplies by per-item centrality so only
+  // the new centre actually moves.
+  const popPhase = useSharedValue(0);
 
   // Carousel step — horizontal distance between adjacent slot
   // centres. 290 with TOP_SCALE 0.88 + PEEK_SCALE 0.74 leaves a
@@ -181,9 +205,20 @@ export function CardStack<T>({
   // settled at the new position. currentPos is already at the new
   // integer, virtualBaseSV is already updated (worklet did that),
   // so this is just React catching up — no visual change occurs.
-  const advance = useCallback((delta: number) => {
-    setVirtualBase((b) => b + delta);
-  }, []);
+  // Also kicks the pop animation so the freshly-settled centre
+  // card lifts + scales briefly, like the snap-pop on the tab
+  // scroll cards.
+  const advance = useCallback(
+    (delta: number) => {
+      setVirtualBase((b) => b + delta);
+      popPhase.value = 0;
+      popPhase.value = withSequence(
+        withTiming(1, { duration: 180, easing: Easing.out(Easing.cubic) }),
+        withTiming(0, { duration: 280, easing: Easing.in(Easing.cubic) }),
+      );
+    },
+    [popPhase],
+  );
 
   const handleTap = useCallback(() => {
     if (topItem) onTap?.(topItem);
@@ -249,6 +284,7 @@ export function CardStack<T>({
               item={item}
               virtualIdx={virtualIdx}
               currentPos={currentPos}
+              popPhase={popPhase}
               step={STEP}
               slotSize={slotSize}
               renderCard={renderCard}
