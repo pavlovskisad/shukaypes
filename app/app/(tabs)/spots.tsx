@@ -10,6 +10,7 @@ import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { SpotCardStack, SpotCardStackSkeleton } from '../../components/ui/SpotCardStack';
 import { SpotsCategoryModal } from '../../components/ui/SpotsCategoryModal';
+import { distanceMeters } from '../../utils/geo';
 
 // Fixed display order — matches the FILTERS chip order from the
 // previous tab layout so users coming from older sessions land on
@@ -66,9 +67,12 @@ export default function SpotsScreen() {
     if (spots.length === 0) syncSpots(userPos);
   }, [userPos?.lat, userPos?.lng, spots.length, syncSpots]);
 
-  // Group spots by category once per change. Map preserves insertion
-  // order so we feed it CATEGORY_ORDER and the render walks it in
-  // the same fixed sequence.
+  // Group spots by category, then sort each list by distance from
+  // the user so the closest spot is the first card in the carousel
+  // (and the top of the "see all" modal feed). No GPS yet → keep
+  // server order. Map preserves insertion order so we feed it
+  // CATEGORY_ORDER and the render walks it in the same fixed
+  // sequence.
   const byCategory = useMemo(() => {
     const map = new Map<SpotCategory, Spot[]>();
     for (const cat of CATEGORY_ORDER) map.set(cat, []);
@@ -76,8 +80,17 @@ export default function SpotsScreen() {
       const list = map.get(s.category);
       if (list) list.push(s);
     }
+    if (userPos) {
+      for (const list of map.values()) {
+        list.sort(
+          (a, b) =>
+            distanceMeters(userPos, a.position) -
+            distanceMeters(userPos, b.position),
+        );
+      }
+    }
     return map;
-  }, [spots]);
+  }, [spots, userPos?.lat, userPos?.lng]);
 
   const onPickSpot = useCallback(
     (s: Spot) => {
