@@ -121,9 +121,9 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           }}
         >
           {iconSlot ? (
-            <Icon name={iconSlot} size={120} />
+            <Icon name={iconSlot} size={180} />
           ) : (
-            <span style={{ fontSize: 96, opacity: 0.85 }}>
+            <span style={{ fontSize: 140, opacity: 0.85 }}>
               {renderSpot.icon ?? '📍'}
             </span>
           )}
