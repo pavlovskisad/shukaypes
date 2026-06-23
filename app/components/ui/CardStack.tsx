@@ -39,16 +39,17 @@ import { TYPE } from '../../constants/type';
 
 export const CARD_W = 320;
 export const CARD_H = 280;
-// Lowered 100 → 60. Half a card-step (~145 px) is plenty for a
-// deliberate drag commit, but a quick light flick that travels
-// 70-90 px also clearly reads as "I'm swiping to the next one".
-const SWIPE_COMMIT_PX = 60;
-// Lowered 600 → 300. Real flick velocities on web are routinely
-// 1500+ px/s, but short "tap-flicks" (tiny movement that ends
-// fast) come back from gesture-handler at 200-400 px/s. 300 keeps
-// the threshold above incidental drift while catching them.
-const VELOCITY_COMMIT = 300;
 const TAP_TRAVEL_MAX = 16;
+// Projection-based commit (iOS-style paged scroll). At onEnd we
+// project where the swipe would naturally land if its release
+// velocity decelerated over ~PROJECTION_MS ms — basically
+// "if you let go, where does the carousel end up under inertia".
+// Commit if that projected endpoint crosses COMMIT_RATIO * STEP
+// from the start. Catches both heavy slow drags AND quick light
+// flicks with one rule, without juggling separate px / velocity
+// thresholds that always misclassified one or the other.
+const PROJECTION_MS = 0.15;     // 150 ms of inertia, iOS-ish
+const COMMIT_RATIO = 0.25;      // commit if projection > 25 % of a card-step
 
 const SETTLE_MS = 360;
 const SETTLE_EASE = Easing.out(Easing.cubic);
@@ -291,20 +292,19 @@ export function CardStack<T>({
     })
     .onEnd((e) => {
       const travel = Math.abs(e.translationX) + Math.abs(e.translationY);
-      const passedPx = Math.abs(e.translationX) > SWIPE_COMMIT_PX;
-      const passedVel = Math.abs(e.velocityX) > VELOCITY_COMMIT;
-      // Commit BEFORE the tap fallback: a fast flick has high
-      // velocity but tiny travel (finger barely moves before
-      // leaving the screen). If we tap-check first, those flicks
-      // get classified as taps and the carousel springs back to
-      // the same card — the "swipe fast → returns to previous"
-      // bug. Velocity wins over the tap threshold.
-      if (N > 1 && (passedPx || passedVel)) {
-        // Prefer velocity for direction when the flick was the
-        // dominant signal (low travel, high velocity, possibly
-        // even a brief direction-reversal mid-gesture). Falls
-        // back to translation direction for plain drags.
-        const isForward = passedVel ? e.velocityX < 0 : e.translationX < 0;
+      // Project where the swipe would land if its release
+      // velocity decelerated naturally over ~150 ms. This single
+      // rule catches deliberate drags (translation dominates)
+      // AND quick flicks (velocity dominates) without needing
+      // separate px / velocity thresholds that always
+      // misclassified one or the other. Direction comes from
+      // the sign of the projection — so a flick that reversed
+      // mid-gesture goes the way the finger was actually heading
+      // at release.
+      const projection = e.translationX + e.velocityX * PROJECTION_MS;
+      const shouldCommit = N > 1 && Math.abs(projection) > STEP * COMMIT_RATIO;
+      if (shouldCommit) {
+        const isForward = projection < 0;
         const delta = isForward ? 1 : -1;
         const target = virtualBaseSV.value + delta;
         // Kick the pop NOW (alongside the settle) instead of
