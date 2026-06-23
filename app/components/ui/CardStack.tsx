@@ -39,8 +39,15 @@ import { TYPE } from '../../constants/type';
 
 export const CARD_W = 320;
 export const CARD_H = 280;
-const SWIPE_COMMIT_PX = 100;
-const VELOCITY_COMMIT = 600;
+// Lowered 100 → 60. Half a card-step (~145 px) is plenty for a
+// deliberate drag commit, but a quick light flick that travels
+// 70-90 px also clearly reads as "I'm swiping to the next one".
+const SWIPE_COMMIT_PX = 60;
+// Lowered 600 → 300. Real flick velocities on web are routinely
+// 1500+ px/s, but short "tap-flicks" (tiny movement that ends
+// fast) come back from gesture-handler at 200-400 px/s. 300 keeps
+// the threshold above incidental drift while catching them.
+const VELOCITY_COMMIT = 300;
 const TAP_TRAVEL_MAX = 16;
 
 const SETTLE_MS = 360;
@@ -268,6 +275,15 @@ export function CardStack<T>({
   });
 
   const pan = Gesture.Pan()
+    // Activate on as little as 5 px of horizontal travel. The
+    // gesture is racing the Tap, and gesture-handler's default
+    // activation can be late enough on web that a quick flick
+    // ends before Pan claims the touch — Tap wins, the flick is
+    // misread as a tap, and the carousel springs back to the
+    // same card. 5 px is well above incidental finger jitter
+    // and well below TAP_TRAVEL_MAX so the two intents stay
+    // mutually exclusive.
+    .activeOffsetX([-5, 5])
     .onUpdate((e) => {
       // 1:1 finger follow: dragging by STEP pixels shifts the
       // carousel by exactly one card.
