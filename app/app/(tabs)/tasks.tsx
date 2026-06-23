@@ -36,11 +36,6 @@ function relativeWhen(iso: string): string {
   return `${diffD}d ago`;
 }
 
-function distanceToZoneEdge(userPos: LatLng | null, dog: NearbyLostDog): number {
-  if (!userPos) return Infinity;
-  return Math.max(0, distanceMeters(userPos, dog.lastSeen.position) - dog.searchZoneRadiusM);
-}
-
 type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings';
 
 interface TaskRow {
@@ -91,13 +86,20 @@ export default function TasksScreen() {
   // Open the "see all" fullscreen list when truthy.
   const [seeAllDogsOpen, setSeeAllDogsOpen] = useState(false);
 
-  // Sort by distance-to-zone-edge so the closest pet (most walkable
-  // search) sits at the top. In-zone pets bubble to the very top.
+  // Sort by straight-line distance to the dog's last-seen position
+  // so the closest pet is the first card in the carousel (and the
+  // top of the "see all" modal feed) — matches the spots tab's
+  // sort and is the most intuitive reading of "by proximity". No
+  // GPS yet → keep server order.
   const sortedDogs = useMemo(
-    () =>
-      [...lostDogs].sort(
-        (a, b) => distanceToZoneEdge(userPos, a) - distanceToZoneEdge(userPos, b),
-      ),
+    () => {
+      if (!userPos) return lostDogs;
+      return [...lostDogs].sort(
+        (a, b) =>
+          distanceMeters(userPos, a.lastSeen.position) -
+          distanceMeters(userPos, b.lastSeen.position),
+      );
+    },
     [lostDogs, userPos?.lat, userPos?.lng],
   );
 
