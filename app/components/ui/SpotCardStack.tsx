@@ -12,6 +12,7 @@ import type { LatLng } from '@shukajpes/shared';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
+import { ICON_HERO, EMOJI_HERO } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
@@ -70,7 +71,7 @@ export function SpotCardView({
     <View style={styles.card}>
       <View style={styles.iconHero}>
         {iconSlot ? (
-          <Icon name={iconSlot} size={220} />
+          <Icon name={iconSlot} size={ICON_HERO.card} />
         ) : (
           <Text style={styles.heroEmoji}>{spot.icon ?? '📍'}</Text>
         )}
@@ -132,7 +133,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   heroEmoji: {
-    fontSize: 180,
+    fontSize: EMOJI_HERO.card,
     opacity: 0.85,
   },
   // Full-pill chip family — matches the HUD pill / chat header

@@ -1,7 +1,7 @@
 import { memo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { MAP_MARKER } from '../../constants/sizing';
+import { ICON_HERO } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { Icon, iconForCategory } from '../ui/Icon';
@@ -58,7 +58,7 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
               : '0 2px 6px rgba(0,0,0,0.12), 0 1px 1px rgba(0,0,0,0.06)',
           }}
         >
-          {slot ? <Icon name={slot} size={MAP_MARKER.poi} /> : emoji}
+          {slot ? <Icon name={slot} size={ICON_HERO.marker} /> : emoji}
         </div>
         {selected ? (
           <>

@@ -3,7 +3,7 @@ import { MapLibreMarker } from './MapLibreMarker';
 import type { LatLng } from '@shukajpes/shared';
 import { Icon, iconForCategory } from '../ui/Icon';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { MAP_MARKER } from '../../constants/sizing';
+import { ICON_HERO } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
@@ -57,7 +57,7 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
           userSelect: 'none',
         }}
       >
-        {slot ? <Icon name={slot} size={MAP_MARKER.poiCluster} /> : emoji}
+        {slot ? <Icon name={slot} size={ICON_HERO.markerCluster} /> : emoji}
         {/* Count chip — top-right of the badge, blue so it reads as
             "this group has N" rather than as part of the icon. */}
         <div

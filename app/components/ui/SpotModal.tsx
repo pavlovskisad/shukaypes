@@ -3,7 +3,7 @@ import { createPortal } from 'react-dom';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
-import { INLINE_ICON } from '../../constants/sizing';
+import { INLINE_ICON, ICON_HERO, EMOJI_HERO } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
@@ -121,9 +121,9 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           }}
         >
           {iconSlot ? (
-            <Icon name={iconSlot} size={180} />
+            <Icon name={iconSlot} size={ICON_HERO.modal} />
           ) : (
-            <span style={{ fontSize: 140, opacity: 0.85 }}>
+            <span style={{ fontSize: EMOJI_HERO.modal, opacity: 0.85 }}>
               {renderSpot.icon ?? '📍'}
             </span>
           )}
