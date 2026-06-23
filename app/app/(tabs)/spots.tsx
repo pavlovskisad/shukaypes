@@ -213,8 +213,7 @@ export default function SpotsScreen() {
       </ScrollView>
 
       <SpotsCategoryModal
-        title={expandedCategory ? cardTitle(t, expandedCategory) : null}
-        spots={expandedCategory ? byCategory.get(expandedCategory) ?? [] : []}
+        spots={expandedCategory ? byCategory.get(expandedCategory) ?? [] : null}
         onClose={() => setExpandedCategory(null)}
         onPick={(spot) => {
           setExpandedCategory(null);
