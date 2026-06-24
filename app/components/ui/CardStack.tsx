@@ -310,25 +310,22 @@ export function CardStack<T>({
     })
     .onUpdate((e) => {
       // 1:1 finger follow up to ±1 card-step from the drag
-      // origin, then rubber-band resistance past that. Matches
-      // the ±1 per-gesture commit clamp — without this, a hard
-      // flick can pull currentPos past base+1, the projection
-      // still targets base+1 (correctly, one card per gesture),
-      // and the settle has to animate BACKWARD from where the
-      // finger left things → visible "bumps back" the user
-      // reported. With rubber-band the finger feels the limit
-      // and currentPos never goes past, so the settle is
-      // always a forward motion to target.
+      // origin, then HARD CLAMP past that. The previous
+      // rubber-band (0.25 multiplier) still let currentPos
+      // overshoot the +1 target by 5-15 % on hard drags, and
+      // the commit's settle had to animate BACKWARD to land
+      // on target — that's the "bump-back" the user kept
+      // feeling even on mid-strength swipes. Hard clamp
+      // means currentPos can NEVER exceed dragStartPos ± 1,
+      // so the settle is guaranteed forward (or no-op).
+      // Finger going past the edge just doesn't move the
+      // carousel further; the gesture is still committed on
+      // release based on the projected velocity, so a fast
+      // flick still advances cleanly.
       const desired = dragStartPos.value - e.translationX / STEP;
       const min = dragStartPos.value - 1;
       const max = dragStartPos.value + 1;
-      if (desired > max) {
-        currentPos.value = max + (desired - max) * 0.25;
-      } else if (desired < min) {
-        currentPos.value = min + (desired - min) * 0.25;
-      } else {
-        currentPos.value = desired;
-      }
+      currentPos.value = Math.max(min, Math.min(max, desired));
     })
     .onEnd((e) => {
       const travel = Math.abs(e.translationX) + Math.abs(e.translationY);
