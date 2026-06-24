@@ -72,9 +72,9 @@ export default function TabsLayout() {
           // indicator; the extra S.s puts a breathing gap between
           // the pill and the indicator (or screen edge on
           // Android / TG Mini App where insets.bottom is 0).
-          // Hovers 8 px above the home indicator so the pill
-          // reads as floating, not docked.
-          bottom: insets.bottom + S.s,
+          // Bottom margin matches side margins (S.l) so the pill
+          // has even breathing room on all three visible sides.
+          bottom: insets.bottom + S.l,
           // 10 % shorter than HERO.size (64 → 58). Explicit
           // pixel value — TAB_BAR_HEIGHT in chat.tsx pairs with
           // this + the bottom inset, keep them in sync.
