@@ -78,26 +78,22 @@ export function LostDogCardView({
   return (
     <View style={styles.card}>
       {dog.photoUrl ? (
-        // Native <img> with explicit object-fit: cover so photos
-        // with any aspect ratio fill the card cleanly (the
-        // previous RN <Image source={{uri}} resizeMode="cover">
-        // rendered as a div with backgroundImage on RN-Web and
-        // intermittently left grey letterbox borders around
-        // non-matching ratios). decoding="async" lets the
-        // browser decode off-main-thread before paint.
-        <img
-          src={dog.photoUrl}
-          alt={dog.name}
-          decoding="async"
+        // <div> with background-image:cover instead of <img>:
+        // CSS-level guaranteed fill regardless of the photo's
+        // intrinsic aspect ratio. The <img> + object-fit
+        // approach was leaving grey borders on some ratios on
+        // RN-Web, possibly because the intrinsic-aspect-ratio
+        // CSS the browser auto-attaches to <img> was fighting
+        // the width / height: 100 % sizing. backgroundImage on
+        // a div has no intrinsic sizing — it just fills.
+        <div
           style={{
             position: 'absolute',
-            top: 0,
-            left: 0,
-            width: '100%',
-            height: '100%',
-            objectFit: 'cover',
-            objectPosition: 'center center',
-            display: 'block',
+            inset: 0,
+            backgroundImage: `url("${dog.photoUrl}")`,
+            backgroundSize: 'cover',
+            backgroundPosition: 'center center',
+            backgroundRepeat: 'no-repeat',
             borderRadius: R.card,
           }}
         />

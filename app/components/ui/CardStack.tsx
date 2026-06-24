@@ -276,15 +276,22 @@ export function CardStack<T>({
   });
 
   const pan = Gesture.Pan()
-    // Activate on as little as 5 px of horizontal travel. The
-    // gesture is racing the Tap, and gesture-handler's default
-    // activation can be late enough on web that a quick flick
-    // ends before Pan claims the touch — Tap wins, the flick is
-    // misread as a tap, and the carousel springs back to the
-    // same card. 5 px is well above incidental finger jitter
-    // and well below TAP_TRAVEL_MAX so the two intents stay
-    // mutually exclusive.
+    // The horizontal/vertical gesture mediation that lets a
+    // carousel coexist with a vertical scroll container.
+    //   activeOffsetX([-5, 5]) — claim the touch as soon as
+    //     horizontal travel exceeds 5 px (well above jitter,
+    //     well below TAP_TRAVEL_MAX 16).
+    //   failOffsetY([-15, 15]) — give the touch BACK to the
+    //     browser if vertical travel exceeds 15 px before
+    //     horizontal does. Without this, gesture-handler sets
+    //     touch-action: none on the deck and captures every
+    //     touch — which can starve fast flicks of velocity
+    //     samples (the browser's touch listeners get nothing
+    //     to compare against). Letting Pan fail on vertical
+    //     intent restores normal browser sampling and the
+    //     velocity comes back clean on horizontal flicks.
     .activeOffsetX([-5, 5])
+    .failOffsetY([-15, 15])
     .onUpdate((e) => {
       // 1:1 finger follow: dragging by STEP pixels shifts the
       // carousel by exactly one card.
@@ -292,19 +299,30 @@ export function CardStack<T>({
     })
     .onEnd((e) => {
       const travel = Math.abs(e.translationX) + Math.abs(e.translationY);
-      // Project where the swipe would land if its release
-      // velocity decelerated naturally over ~150 ms. This single
-      // rule catches deliberate drags (translation dominates)
-      // AND quick flicks (velocity dominates) without needing
-      // separate px / velocity thresholds that always
-      // misclassified one or the other. Direction comes from
-      // the sign of the projection — so a flick that reversed
-      // mid-gesture goes the way the finger was actually heading
-      // at release.
+      // Three commit paths — any one is enough. Belt and braces
+      // because velocity readings on web are sometimes 0 / NaN
+      // for very fast flicks where the system didn't sample
+      // enough frames to compute one.
+      //   1) Clear drag — translation crosses 40 px (~14 % of
+      //      a card-step). User clearly nudged the deck.
+      //   2) Clear flick — velocity exceeds 200 px/s in any
+      //      direction. Even tiny travel commits.
+      //   3) Projection — combined translation + 150 ms of
+      //      inertia crosses 20 % of a card-step. Catches
+      //      mid-range gestures.
+      // Direction from projection sign, falling back to
+      // translation sign when projection is zero (e.g. velocity
+      // 0 + no translation, but that's the no-commit case
+      // anyway so direction is moot).
       const projection = e.translationX + e.velocityX * PROJECTION_MS;
-      const shouldCommit = N > 1 && Math.abs(projection) > STEP * COMMIT_RATIO;
+      const shouldCommit =
+        N > 1 &&
+        (Math.abs(e.translationX) > 40 ||
+          Math.abs(e.velocityX) > 200 ||
+          Math.abs(projection) > STEP * COMMIT_RATIO);
       if (shouldCommit) {
-        const isForward = projection < 0;
+        const dirSource = projection !== 0 ? projection : e.translationX;
+        const isForward = dirSource < 0;
         const delta = isForward ? 1 : -1;
         const target = virtualBaseSV.value + delta;
         // Kick the pop NOW (alongside the settle) instead of
