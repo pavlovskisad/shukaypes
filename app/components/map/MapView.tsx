@@ -26,6 +26,7 @@ import { useLocation } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
 import { useGameLoop } from '../../hooks/useGameLoop';
 import { distanceMeters } from '../../utils/geo';
+import { playPop } from '../../utils/popOnTap';
 import { Companion } from './Companion';
 import { CrayonRoute } from './CrayonRoute';
 import logoNose from '../../assets/logo-nose.png';
@@ -1627,15 +1628,7 @@ export default function MapViewWeb() {
         // doesn't get clobbered.
         <div
           onClick={(e) => {
-            const chip = e.currentTarget.firstElementChild as HTMLElement | null;
-            chip?.animate(
-              [
-                { transform: 'scale(0.92)', offset: 0, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' },
-                { transform: 'scale(1.12)', offset: 0.4, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' },
-                { transform: 'scale(1)', offset: 1 },
-              ],
-              { duration: 460, fill: 'none' },
-            );
+            playPop(e.currentTarget.firstElementChild as HTMLElement | null);
             recenterOnCompanion();
           }}
           role="button"
@@ -1654,10 +1647,12 @@ export default function MapViewWeb() {
                     : 'translate(-100%, -50%)',
             transition:
               'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-            // Bumped to clear the HUD overlay reliably even in
-            // PWA/iOS Safari where DOM-order tie-breaks were leaving
-            // the bookmark un-tappable behind the corner logo zone.
-            zIndex: Z.HUD_CHIP_COMPANION,
+            // Sits above ALL HUD layers (sniff bubble = 45, pills
+            // overlay = 40). When the dog wanders north and the
+            // chip pins to the top edge it must paint over the
+            // StatusBar pills — otherwise the user can see it
+            // get nudged behind them.
+            zIndex: 50,
             cursor: 'pointer',
           }}
         >

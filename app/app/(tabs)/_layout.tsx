@@ -1,4 +1,5 @@
 import { Tabs } from 'expo-router';
+import { useEffect, useRef } from 'react';
 import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
@@ -8,14 +9,30 @@ import { HERO } from '../../constants/sizing';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import { pickBottomInset } from '../../services/telegram';
 import { useStrings } from '../../i18n/useStrings';
+import { playPop } from '../../utils/popOnTap';
 
 // Tab icons are pixel-art SVGs (see components/ui/Icon.tsx). Inactive
 // tabs read as desaturated/dimmed via a wrapper View — RN-Web passes
 // `filter` through to CSS, so the same grayscale recipe we used on
 // emoji glyphs still works on the SVG-backed Icon.
 function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
+  // Pop the icon the moment this tab gets focused. Focus only
+  // flips true on tap (or on programmatic navigation), so the
+  // user-visible effect is "tap → pop on the icon you just
+  // hit". Skips the initial mount so the home-screen icon
+  // doesn't fire a stray pop on app boot.
+  const wrapRef = useRef<HTMLDivElement | null>(null);
+  const mounted = useRef(false);
+  useEffect(() => {
+    if (!mounted.current) {
+      mounted.current = true;
+      return;
+    }
+    if (focused) playPop(wrapRef.current);
+  }, [focused]);
   return (
     <View
+      ref={wrapRef as unknown as React.Ref<View>}
       style={{
         // Pulled inactive opacity 0.55 → 0.32 so the focused tab
         // dominates more obviously. Grayscale stays for the colour

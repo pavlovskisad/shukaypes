@@ -37,6 +37,7 @@ import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { popPressableEvent } from '../../utils/popOnTap';
 
 export const CARD_W = 320;
 export const CARD_H = 280;
@@ -422,7 +423,11 @@ export function CardStack<T>({
       </GestureDetector>
       {showCounter ? (
         onCounterTap ? (
-          <Pressable onPress={onCounterTap} hitSlop={12}>
+          <Pressable
+            onPress={onCounterTap}
+            onPressIn={popPressableEvent}
+            hitSlop={12}
+          >
             {({ pressed }) => (
               <Text style={[styles.counter, styles.counterLink, pressed && styles.counterPressed]}>
                 {counterIndex} / {items.length}

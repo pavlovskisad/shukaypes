@@ -14,6 +14,7 @@ import type { Spot } from '../../services/places';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
+import { playPop } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { SpotCardView } from './SpotCardStack';
 
@@ -109,7 +110,10 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
           to the top-right with safe-area inset. Same white pill
           + lifted shadow family as the in-card chips. */}
       <button
-        onClick={onClose}
+        onClick={(e) => {
+          playPop(e.currentTarget);
+          onClose();
+        }}
         aria-label="Close"
         style={{
           position: 'absolute',
