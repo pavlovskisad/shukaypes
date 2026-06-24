@@ -36,7 +36,7 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
           alignItems: 'center',
           cursor: 'pointer',
           userSelect: 'none',
-          transform: selected ? 'scale(1.15)' : 'scale(1)',
+          transform: selected ? 'scale(1.25)' : 'scale(1)',
           transition: 'transform 200ms ease-out',
         }}
       >
@@ -45,20 +45,24 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
             width: 44,
             height: 44,
             borderRadius: R.pill,
-            // Solid white disc (not semi-transparent glass) so the
-            // marker reads cleanly against the soft pastel map. Subtle
-            // natural drop shadow instead of the blue glow.
-            background: '#ffffff',
+            // Selected: solid brand blue with an inverted (white)
+            // icon so the chosen spot reads instantly against the
+            // grid of plain-white markers, even at the small
+            // marker scale on a busy map. Unselected stays the
+            // calm white disc.
+            background: selected ? 'rgb(0,60,255)' : '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
             fontSize: TYPE.hero,
+            // Selected lifts harder with a tinted shadow so the
+            // pin reads as "raised + active".
             boxShadow: selected
-              ? '0 3px 10px rgba(0,0,0,0.18), 0 1px 2px rgba(0,0,0,0.10)'
+              ? '0 6px 18px rgba(0,60,255,0.35), 0 2px 4px rgba(0,0,0,0.15)'
               : '0 2px 6px rgba(0,0,0,0.12), 0 1px 1px rgba(0,0,0,0.06)',
           }}
         >
-          {slot ? <Icon name={slot} size={ICON_HERO.marker} /> : emoji}
+          {slot ? <Icon name={slot} size={ICON_HERO.marker} inverted={selected} /> : emoji}
         </div>
         {selected ? (
           <>
