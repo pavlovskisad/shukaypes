@@ -4,7 +4,7 @@
 // ../CardStack — this file is just the lost-pets visual.
 
 import { useCallback } from 'react';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
@@ -78,7 +78,29 @@ export function LostDogCardView({
   return (
     <View style={styles.card}>
       {dog.photoUrl ? (
-        <Image source={{ uri: dog.photoUrl }} style={styles.photo} resizeMode="cover" />
+        // Native <img> with explicit object-fit: cover so photos
+        // with any aspect ratio fill the card cleanly (the
+        // previous RN <Image source={{uri}} resizeMode="cover">
+        // rendered as a div with backgroundImage on RN-Web and
+        // intermittently left grey letterbox borders around
+        // non-matching ratios). decoding="async" lets the
+        // browser decode off-main-thread before paint.
+        <img
+          src={dog.photoUrl}
+          alt={dog.name}
+          decoding="async"
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            objectFit: 'cover',
+            objectPosition: 'center center',
+            display: 'block',
+            borderRadius: R.card,
+          }}
+        />
       ) : (
         <View style={[styles.photo, styles.photoFallback]}>
           <Text style={styles.photoEmoji}>{dog.emoji ?? '🐶'}</Text>

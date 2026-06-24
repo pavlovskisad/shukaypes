@@ -474,7 +474,17 @@ const styles = StyleSheet.create({
   wrap: {
     alignItems: 'center',
     paddingVertical: S.s,
-  },
+    // Critical for web: tell the browser "vertical pan is yours
+    // (scroll the snap container), horizontal pan is JS's
+    // (carousel)". Without this, the browser's touch-action
+    // default (`auto`) lets it claim fast horizontal flicks as
+    // scroll candidates BEFORE gesture-handler can read them —
+    // and no amount of activeOffset / threshold tuning on the
+    // Pan gesture matters because the events never reach it.
+    // This is the actual root cause of "swipe fast → returns
+    // to previous card".
+    touchAction: 'pan-y',
+  } as unknown as object,
   deck: {
     alignItems: 'center',
     justifyContent: 'center',
