@@ -1114,6 +1114,45 @@ export default function MapViewWeb() {
     chips.sort((a, b) => a.distanceM - b.distanceM);
     const limited = chips.slice(0, 8);
 
+    // Companion bookmark's edge + along position (if it's also
+    // off-screen). Treated below as a "no-fly zone" so dog chips
+    // don't visually pile on top of the bookmark on a shared
+    // edge — they get nudged left or right of it along the edge.
+    // Inline computation rather than reading offscreenIndicator
+    // because that's an IIFE that runs LATER in the render.
+    let companionEdgeAlong: { edge: EdgeName; along: number } | null = null;
+    if (
+      companionPos &&
+      (companionPos.lat > n ||
+        companionPos.lat < s ||
+        companionPos.lng > e ||
+        companionPos.lng < w)
+    ) {
+      const cnx = (companionPos.lng - w) / (e - w);
+      const cny = (n - companionPos.lat) / (n - s);
+      const cdx = cnx - 0.5;
+      const cdy = cny - 0.5;
+      // Companion's own reserves (matches the IIFE below).
+      const cSide = 0.01;
+      const cTop = 0.02;
+      const cBottom = 0.08;
+      const cxBound = cdx > 0 ? 1 - cSide - 0.5 : 0.5 - cSide;
+      const cyBound = cdy > 0 ? 1 - cBottom - 0.5 : 0.5 - cTop;
+      const ctx = Math.abs(cxBound / Math.max(Math.abs(cdx), 1e-6));
+      const cty = Math.abs(cyBound / Math.max(Math.abs(cdy), 1e-6));
+      if (ctx < cty) {
+        companionEdgeAlong = {
+          edge: cdx > 0 ? 'right' : 'left',
+          along: 0.5 + cdy * ctx,
+        };
+      } else {
+        companionEdgeAlong = {
+          edge: cdy > 0 ? 'bottom' : 'top',
+          along: 0.5 + cdx * cty,
+        };
+      }
+    }
+
     const groups: Record<EdgeName, Chip[]> = {
       top: [], right: [], bottom: [], left: [],
     };
@@ -1133,6 +1172,24 @@ export default function MapViewWeb() {
         edgeName === 'left' || edgeName === 'right'
           ? 1 - bottomReserve - chipHalfPct
           : 1 - sideReserve - chipHalfPct;
+      // No-fly zone around the companion bookmark on this edge.
+      // Dog chips inside the zone are pushed to the nearer side
+      // of it; the regular SPACING_ALONG cascade below then
+      // re-spaces them so two chips never overlap each other
+      // either.
+      if (companionEdgeAlong && companionEdgeAlong.edge === edgeName) {
+        const COMPANION_NOFLY = SPACING_ALONG; // one slot wide
+        const ca = companionEdgeAlong.along;
+        for (const c of g) {
+          const delta = c.along - ca;
+          if (Math.abs(delta) < COMPANION_NOFLY) {
+            c.along = delta < 0 ? ca - COMPANION_NOFLY : ca + COMPANION_NOFLY;
+          }
+        }
+        // Re-sort after the shifts so the spacing cascade below
+        // walks them in their new along-order.
+        g.sort((a, b) => a.along - b.along);
+      }
       for (let i = 1; i < g.length; i++) {
         g[i]!.along = Math.max(g[i]!.along, g[i - 1]!.along + SPACING_ALONG);
       }
@@ -1181,6 +1238,11 @@ export default function MapViewWeb() {
     displayPositions,
     sniffMode,
     sniffJustChanged,
+    // companionPos so the no-fly zone follows the companion
+    // bookmark when the dog wanders along an edge.
+    companionPos?.lat,
+    companionPos?.lng,
+    insets.top,
   ]);
 
   if (!userPos) {
