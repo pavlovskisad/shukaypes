@@ -34,7 +34,15 @@ export function QuestPill() {
     <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.pill}>
         <Text style={styles.emoji}>🔍</Text>
-        <Text style={styles.label}>{t.hud.findingPet(name)}</Text>
+        {/* Truncate long pet names / descriptions with an
+            ellipsis so the close X stays on-screen. Without
+            numberOfLines + the flexShrink/minWidth-0 trick,
+            a long name like "білий кіт з чорними плямами без
+            хвоста" pushes the close button past the viewport
+            edge — quest can't be abandoned. */}
+        <Text style={styles.label} numberOfLines={1} ellipsizeMode="tail">
+          {t.hud.findingPet(name)}
+        </Text>
         <Text style={styles.progress}>
           {done}/{total}
         </Text>
@@ -56,6 +64,10 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    // Side gutters so the pill can never extend to the
+    // viewport edge — combined with the label's truncation,
+    // the close X always stays inside the touch area.
+    paddingHorizontal: S.l,
   },
   pill: {
     flexDirection: 'row',
@@ -66,6 +78,11 @@ const styles = StyleSheet.create({
     paddingLeft: S.l,
     paddingRight: S.s,
     backgroundColor: GLASS_BG,
+    // Cap the pill width so a long pet name can't push the
+    // close button off-screen. flex-shrink lets the label
+    // inside ellipsize within the cap.
+    maxWidth: '100%',
+    flexShrink: 1,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.1,
@@ -79,6 +96,12 @@ const styles = StyleSheet.create({
     color: colors.black,
     fontSize: TYPE.small,
     fontWeight: '600',
+    // flexShrink + minWidth 0 is the standard "let me
+    // ellipsize inside a flex row" trick. Without minWidth 0
+    // the label refuses to shrink below its content's
+    // natural width.
+    flexShrink: 1,
+    minWidth: 0,
   },
   progress: {
     color: colors.black,
