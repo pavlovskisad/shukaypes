@@ -170,6 +170,13 @@ export interface AppStrings {
       rows: Array<{ title: string; body: string }>;
     };
   };
+  // One-shot user-facing hints. Each appears once per device
+  // (gated by useHint) and never repeats. Keep them short — they
+  // ride in the dog's SpeechBubble or a tiny callout, not a
+  // tutorial modal.
+  hints: {
+    longPressToSniff: string;
+  };
 }
 
 const uk: AppStrings = {
@@ -388,6 +395,9 @@ const uk: AppStrings = {
       ],
     },
   },
+  hints: {
+    longPressToSniff: 'затисни карту щоб понюхати 🐾',
+  },
 };
 
 const en: AppStrings = {
@@ -604,6 +614,9 @@ const en: AppStrings = {
         },
       ],
     },
+  },
+  hints: {
+    longPressToSniff: 'hold the map and i\'ll have a sniff 🐾',
   },
 };
 

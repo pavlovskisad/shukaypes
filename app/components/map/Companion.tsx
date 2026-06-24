@@ -5,6 +5,8 @@ import { useGameStore } from '../../stores/gameStore';
 import { Z } from '../../constants/z';
 import { iconForCategory } from '../ui/Icon';
 import { SpeechBubble } from '../ui/SpeechBubble';
+import { useHint } from '../../hooks/useHint';
+import { useStrings } from '../../i18n/useStrings';
 import {
   RadialMenu,
   PRIMARY_ACTIONS,
@@ -96,6 +98,7 @@ interface CompanionProps {
 // (demo's floatPane pattern). The expanding aura rings were a bit much —
 // we'll revisit that animation later when we have the right sensor metaphor.
 export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap }: CompanionProps) {
+  const t = useStrings();
   const router = useRouter();
   const menuOpen = useGameStore((s) => s.menuOpen);
   const setMenuOpen = useGameStore((s) => s.setMenuOpen);
@@ -497,7 +500,23 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
   // hideBubble: parent (MapView) is mirroring the bubble next to the
   // off-screen edge chip, so we suppress the in-map version to avoid
   // double-render.
-  const activeBubble = menuOpen || hideBubble ? null : bubble ?? localBubble;
+  //
+  // One-shot hint: long-pressing anywhere on the map triggers the
+  // sniff-press flow, which is the most-missed gesture in the app
+  // because nothing in the UI suggests it exists. First map view
+  // shows a brief bubble from the dog explaining it; auto-dismisses
+  // after 5 s OR on first sniff-press. Persists "seen" in
+  // localStorage so it never fires again.
+  const longPressHint = useHint('map:long-press-to-sniff', {
+    showDelayMs: 1500,
+    autoDismissMs: 6000,
+  });
+  // Hint loses to any real bubble — the dog's actual lines (greeting,
+  // sniff feedback, narration) always win over a tutorial nudge.
+  const activeBubble = menuOpen || hideBubble
+    ? null
+    : (bubble ?? localBubble) ??
+      (longPressHint.visible ? t.hints.longPressToSniff : null);
 
   return (
     <MapLibreMarker position={position} zIndex={Z.MARKER_COMPANION}>
