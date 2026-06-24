@@ -1763,21 +1763,25 @@ export default function MapViewWeb() {
         // low all read as plain coloured pills rather than tinted
         // translucent ones. Low-urgency uses black instead of grey
         // per the "no grey backgrounds" rule.
-        const halo =
-          d.urgency === 'urgent'
-            ? {
-                glow: '0 0 14px rgba(232,64,64,0.45), 0 2px 8px rgba(0,0,0,0.12)',
-                badge: '#e84040',
-              }
-            : d.urgency === 'medium'
-              ? {
-                  glow: '0 0 14px rgba(217,160,48,0.45), 0 2px 8px rgba(0,0,0,0.12)',
-                  badge: '#ff8c00',
-                }
-              : {
-                  glow: '0 0 10px rgba(160,160,160,0.3), 0 2px 6px rgba(0,0,0,0.1)',
-                  badge: '#1a1a1a',
-                };
+        // Per-urgency badge fill stays (red / orange / black) —
+        // that's the actual urgency signal. The shadow / glow
+        // dropped its urgency tint per user request: every chip
+        // now uses the same neutral shadow recipe — dark drop
+        // shadow on the light map, inverse white halo in
+        // supersniff (dark) mode so the chip still lifts off
+        // the bg. Family-consistent with companion chip + card
+        // shadows across the rest of the app.
+        const halo = {
+          glow: sniffMode
+            ? '0 0 14px rgba(255,255,255,0.35), 0 2px 6px rgba(255,255,255,0.10)'
+            : '0 4px 14px rgba(0,0,0,0.22)',
+          badge:
+            d.urgency === 'urgent'
+              ? '#e84040'
+              : d.urgency === 'medium'
+                ? '#ff8c00'
+                : '#1a1a1a',
+        };
         const edgeTransform =
           d.edge === 'top'
             ? 'translate(-50%, 0)'
@@ -1790,7 +1794,12 @@ export default function MapViewWeb() {
           <div
             key={`offscreen-dog-${d.id}`}
             onClick={(e) => {
-              playPop(e.currentTarget);
+              // Pop the FIRST CHILD (the visual wrapper) not the
+              // outer — outer holds the position transform
+              // (translate(-50%, -100%) etc. for edge anchoring)
+              // and a scale on it would teleport the chip to the
+              // anchor point. Same pattern as MapLibreMarker.
+              playPop(e.currentTarget.firstElementChild as HTMLElement | null);
               panToDog(d.target);
             }}
             role="button"

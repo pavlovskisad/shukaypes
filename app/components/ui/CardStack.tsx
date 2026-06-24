@@ -275,8 +275,17 @@ export function CardStack<T>({
   );
 
   const handleTap = useCallback(() => {
+    // Pop the centre card on tap — same Reanimated popPhase
+    // mechanism used on settle, just kicked from the tap
+    // handler. Each ItemSlot's animStyle reads popPhase and
+    // scales the slot at visualTx≈0 (centre) by ~4 %.
+    popPhase.value = 0;
+    popPhase.value = withSequence(
+      withTiming(1, { duration: 96, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }),
+      withTiming(0, { duration: 144, easing: Easing.bezier(0.33, 1, 0.68, 1) }),
+    );
     if (topItem) onTap?.(topItem);
-  }, [onTap, topItem]);
+  }, [onTap, topItem, popPhase]);
 
   // Deck-level gestures — pan drives the carousel, tap fires for
   // any low-travel release. Peek taps also route to onTap(topItem);
