@@ -309,12 +309,26 @@ export function CardStack<T>({
       dragStartPos.value = currentPos.value;
     })
     .onUpdate((e) => {
-      // 1:1 finger follow: dragging by STEP px shifts the
-      // carousel by one card. Relative to dragStartPos, NOT
-      // virtualBaseSV, so a touch that lands mid-settle (or
-      // any phantom touch event during a fast flick) doesn't
-      // jump the carousel back to the resting position.
-      currentPos.value = dragStartPos.value - e.translationX / STEP;
+      // 1:1 finger follow up to ±1 card-step from the drag
+      // origin, then rubber-band resistance past that. Matches
+      // the ±1 per-gesture commit clamp — without this, a hard
+      // flick can pull currentPos past base+1, the projection
+      // still targets base+1 (correctly, one card per gesture),
+      // and the settle has to animate BACKWARD from where the
+      // finger left things → visible "bumps back" the user
+      // reported. With rubber-band the finger feels the limit
+      // and currentPos never goes past, so the settle is
+      // always a forward motion to target.
+      const desired = dragStartPos.value - e.translationX / STEP;
+      const min = dragStartPos.value - 1;
+      const max = dragStartPos.value + 1;
+      if (desired > max) {
+        currentPos.value = max + (desired - max) * 0.25;
+      } else if (desired < min) {
+        currentPos.value = min + (desired - min) * 0.25;
+      } else {
+        currentPos.value = desired;
+      }
     })
     .onEnd((e) => {
       const travel = Math.abs(e.translationX) + Math.abs(e.translationY);
