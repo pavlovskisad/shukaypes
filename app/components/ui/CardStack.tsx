@@ -321,17 +321,21 @@ export function CardStack<T>({
       // Where does the carousel naturally land if released
       // here with current velocity, in floating-point card
       // units? Snap to the nearest integer and that's the
-      // target index. Delta against virtualBaseSV gives us
-      // forward / no-op / backward.
+      // raw target. Then clamp delta to ±1 so a single
+      // gesture never advances more than one card — without
+      // this, a hard flick projects 5+ cards out and the
+      // carousel either skips visibly or renders blank while
+      // it scrolls through items it never had a chance to
+      // mount. One-card-per-gesture matches the iOS / Android
+      // paged-scroll convention and stops the "+10 cards
+      // away, then white screen" the user reported.
       const projectedPx =
         dragStartPos.value * STEP - e.translationX - e.velocityX * PROJECTION_MS;
       const releaseUnits = projectedPx / STEP;
-      const target = Math.round(releaseUnits);
-      const delta = target - virtualBaseSV.value;
-      // Commit when the projected landing is a different card
-      // than the resting one. Includes the case where the
-      // user grabbed mid-settle and let go without dragging
-      // back — we still finish the original advance.
+      const rawTarget = Math.round(releaseUnits);
+      const rawDelta = rawTarget - virtualBaseSV.value;
+      const delta = Math.max(-1, Math.min(1, rawDelta));
+      const target = virtualBaseSV.value + delta;
       const shouldCommit = N > 1 && delta !== 0;
       if (shouldCommit) {
         // Kick the pop NOW (alongside the settle) instead of
