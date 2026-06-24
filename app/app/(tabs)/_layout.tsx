@@ -64,18 +64,24 @@ export default function TabsLayout() {
         // all-around lift instead of an upward-only top shadow.
         tabBarStyle: {
           position: 'absolute',
-          left: S.m,
-          right: S.m,
+          // 10 px sides instead of 12 — ~1 % more width.
+          left: 10,
+          right: 10,
           // Hover the bar above the home-indicator strip with a
           // small visual gap so it reads as a floating pill, not
           // a docked bar. insets.bottom respects the iOS home
           // indicator; the extra S.s puts a breathing gap between
           // the pill and the indicator (or screen edge on
           // Android / TG Mini App where insets.bottom is 0).
-          bottom: insets.bottom + S.s,
-          // Explicit height pairs with TAB_BAR_HEIGHT in chat.tsx
-          // — keep them in sync.
-          height: HERO.size,
+          // Pushed lower (~6 px) to match the 10 % height
+          // reduction below — the pill keeps its visual mass
+          // close to the screen edge instead of floating in
+          // mid-strip after shrinking.
+          bottom: insets.bottom + 2,
+          // 10 % shorter than HERO.size (64 → 58). Explicit
+          // pixel value — TAB_BAR_HEIGHT in chat.tsx pairs with
+          // this + the bottom inset, keep them in sync.
+          height: 58,
           paddingBottom: 0,
           // Full pill radius (capsule) — matches the canonical
           // chip family across the app (HUD pills, chips, etc.).
