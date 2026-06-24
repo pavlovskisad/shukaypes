@@ -510,11 +510,11 @@ const CHROME_SHADOW = {
 const HEADER_BAND_HEIGHT = 56;   // compact pill + its top/bottom margins
 const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 // Visible reserved bottom space = the floating dashboard pill
-// (58 px, post-trim) plus the 2 px gap it hovers above the
+// (58 px, post-trim) plus the 8 px gap it hovers above the
 // home indicator. Inlined to avoid importing a tokens file
 // into the styles section; keep in sync with _layout.tsx's
-// tabBarStyle.height (58) + bottom: insets.bottom + 2.
-const TAB_BAR_HEIGHT = 60;
+// tabBarStyle.height (58) + bottom: insets.bottom + S.s (8).
+const TAB_BAR_HEIGHT = 66;
 // CSS-friendly transparent value matching colors.greyBg so the
 // gradient interpolates as alpha-only on the same hue (no
 // shift through grey-tinted intermediate values).
