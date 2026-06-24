@@ -67,7 +67,13 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.3)',
+        // Transparent overlay: the modal anchored at the top
+        // provides plenty of visual modal context on its own,
+        // and dimming the visible map strip beneath it just
+        // washes out the highlighted POI marker the user is
+        // here to see. Click handler still catches taps outside
+        // the modal to close.
+        background: 'transparent',
         display: 'flex',
         // Anchored at the TOP — same dashboard-card-from-above
         // shape as the LostDogModal so the two read as one family.

@@ -1,4 +1,4 @@
-import { memo } from 'react';
+import { memo, useEffect, useRef } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { ICON_HERO } from '../../constants/sizing';
@@ -25,9 +25,31 @@ interface PoiMarkerProps {
 
 function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: PoiMarkerProps) {
   const slot = iconForCategory(category);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  // Fire a pop animation on the moment of selection — same
+  // recipe as the snap-pop on the tab scroll cards (820 ms,
+  // peak ~40 %, soft ease-out on the rise / smoother
+  // ease-out on the settle). The static `transform:
+  // scale(1.25)` below is the resting state once the pop
+  // resolves; the Web Animation overlays a brief
+  // 0.9 → 1.45 → 1.25 lift on top.
+  useEffect(() => {
+    if (!selected) return;
+    const el = wrapRef.current;
+    if (!el) return;
+    el.animate(
+      [
+        { transform: 'scale(0.9)', offset: 0, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' },
+        { transform: 'scale(1.45)', offset: 0.4, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' },
+        { transform: 'scale(1.25)', offset: 1 },
+      ],
+      { duration: 820, fill: 'none' },
+    );
+  }, [selected]);
   return (
     <MapLibreMarker position={position} anchor="bottom" onClick={onTap}>
       <div
+        ref={wrapRef}
         role="button"
         tabIndex={0}
         style={{
