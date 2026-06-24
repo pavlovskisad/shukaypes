@@ -64,8 +64,8 @@ export default function TabsLayout() {
         // all-around lift instead of an upward-only top shadow.
         tabBarStyle: {
           position: 'absolute',
-          left: S.l,
-          right: S.l,
+          left: S.m,
+          right: S.m,
           // Hover the bar above the home-indicator strip with a
           // small visual gap so it reads as a floating pill, not
           // a docked bar. insets.bottom respects the iOS home
