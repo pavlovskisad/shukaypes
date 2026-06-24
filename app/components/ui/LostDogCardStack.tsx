@@ -80,12 +80,16 @@ export function LostDogCardView({
       {dog.photoUrl ? (
         // <div> with background-image:cover instead of <img>:
         // CSS-level guaranteed fill regardless of the photo's
-        // intrinsic aspect ratio. The <img> + object-fit
-        // approach was leaving grey borders on some ratios on
-        // RN-Web, possibly because the intrinsic-aspect-ratio
-        // CSS the browser auto-attaches to <img> was fighting
-        // the width / height: 100 % sizing. backgroundImage on
-        // a div has no intrinsic sizing — it just fills.
+        // intrinsic aspect ratio.
+        //
+        // NO borderRadius here — the parent card already has
+        // borderRadius + overflow:hidden which clips this div
+        // to the card's rounded shape. Adding a second
+        // borderRadius on the div itself was leaving 1-2 px
+        // white slivers along the right / bottom edges from
+        // the two rounded paths not aligning perfectly at the
+        // sub-pixel level. Trusting the parent's clip is
+        // pixel-perfect.
         <div
           style={{
             position: 'absolute',
@@ -94,7 +98,6 @@ export function LostDogCardView({
             backgroundSize: 'cover',
             backgroundPosition: 'center center',
             backgroundRepeat: 'no-repeat',
-            borderRadius: R.card,
           }}
         />
       ) : (
