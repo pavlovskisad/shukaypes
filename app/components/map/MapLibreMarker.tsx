@@ -91,10 +91,16 @@ export function MapLibreMarker({
   // tap-feedback to EVERY marker (POIs, dog markers,
   // waypoints, food, tokens, clusters) without each component
   // having to wire it individually.
+  //
+  // Pop the FIRST CHILD of el (the React-rendered content),
+  // not el itself: MapLibre writes `transform: translate(...)`
+  // on el to position the marker, and our pop's `transform:
+  // scale(...)` would override it — the marker would teleport
+  // to the map's origin on every tap.
   useEffect(() => {
     if (!el || !onClick) return;
     const handler = () => {
-      playPop(el);
+      playPop(el.firstElementChild as HTMLElement | null);
       onClick();
     };
     el.addEventListener('click', handler);

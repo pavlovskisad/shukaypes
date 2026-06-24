@@ -18,7 +18,7 @@ import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
-import { playPop } from '../../utils/popOnTap';
+import { playPopThen } from '../../utils/popOnTap';
 
 function formatDistance(m: number): string {
   if (m < 1000) return `${Math.round(m / 50) * 50} m`;
@@ -290,10 +290,7 @@ export function LostDogModal({
               </span>
             ) : null}
             <button
-              onClick={(e) => {
-                playPop(e.currentTarget);
-                onClose();
-              }}
+              onClick={(e) => playPopThen(e.currentTarget, onClose)}
               aria-label={t.modals.common.close}
               style={CLOSE_BUTTON_STYLE_NOABS}
             >
@@ -381,20 +378,18 @@ export function LostDogModal({
           }}
         >
           <button
-            onClick={(e) => {
-              playPop(e.currentTarget);
-              onReportSighting?.(renderDog);
-            }}
+            onClick={(e) =>
+              playPopThen(e.currentTarget, () => onReportSighting?.(renderDog))
+            }
             style={MODAL_PILL_DARK}
           >
             <Icon name="eyes" size={INLINE_ICON.cta} inverted />
             {t.modals.lostDog.iveSeen}
           </button>
           <button
-            onClick={(e) => {
-              playPop(e.currentTarget);
-              onStartSearch?.(renderDog);
-            }}
+            onClick={(e) =>
+              playPopThen(e.currentTarget, () => onStartSearch?.(renderDog))
+            }
             disabled={searchActive}
             style={searchActive ? MODAL_PILL_DISABLED : MODAL_PILL_BLUE}
           >

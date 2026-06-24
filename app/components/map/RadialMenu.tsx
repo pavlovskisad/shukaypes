@@ -2,7 +2,7 @@ import { balance } from '../../constants/balance';
 import { BUTTON } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
-import { playPop } from '../../utils/popOnTap';
+import { playPopThen } from '../../utils/popOnTap';
 import { Icon, type IconName } from '../../components/ui/Icon';
 
 export interface RadialAction {
@@ -126,8 +126,7 @@ export function RadialMenu({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                playPop(e.currentTarget);
-                onSelect(a.id);
+                playPopThen(e.currentTarget, () => onSelect(a.id));
               }}
               style={{
                 width: BUTTON.size,

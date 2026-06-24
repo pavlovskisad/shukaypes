@@ -6,7 +6,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
-import { playPop } from '../../utils/popOnTap';
+import { playPopThen } from '../../utils/popOnTap';
 
 // Dominant-urgency wins the glow color. Urgent beats medium beats resolved
 // so the cluster reads "there's an urgent pet in here" at a glance.
@@ -152,8 +152,7 @@ function LostDogClusterImpl({
               type="button"
               onClick={(e) => {
                 e.stopPropagation();
-                playPop(e.currentTarget);
-                onSelectItem(d.id);
+                playPopThen(e.currentTarget, () => onSelectItem(d.id));
               }}
               style={{
                 position: 'absolute',

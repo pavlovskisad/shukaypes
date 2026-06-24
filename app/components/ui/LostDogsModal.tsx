@@ -12,7 +12,7 @@ import type { NearbyLostDog } from '../../services/api';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
-import { playPop } from '../../utils/popOnTap';
+import { playPopThen } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { useStrings } from '../../i18n/useStrings';
 import { LostDogCardView } from './LostDogCardStack';
@@ -81,10 +81,7 @@ export function LostDogsModal({ dogs, onClose, onPick }: Props) {
         {renderDogs.map((dog) => (
           <div
             key={dog.id}
-            onClick={(e) => {
-              playPop(e.currentTarget);
-              onPick(dog);
-            }}
+            onClick={(e) => playPopThen(e.currentTarget, () => onPick(dog))}
             style={{
               width: '100%',
               height: 320,
@@ -98,10 +95,7 @@ export function LostDogsModal({ dogs, onClose, onPick }: Props) {
       </div>
 
       <button
-        onClick={(e) => {
-          playPop(e.currentTarget);
-          onClose();
-        }}
+        onClick={(e) => playPopThen(e.currentTarget, onClose)}
         aria-label="Close"
         style={{
           position: 'absolute',

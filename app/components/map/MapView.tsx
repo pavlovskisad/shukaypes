@@ -1789,7 +1789,10 @@ export default function MapViewWeb() {
         return (
           <div
             key={`offscreen-dog-${d.id}`}
-            onClick={() => panToDog(d.target)}
+            onClick={(e) => {
+              playPop(e.currentTarget);
+              panToDog(d.target);
+            }}
             role="button"
             aria-label={`pan to ${d.name}, ${formatDistance(d.distanceM)} away`}
             style={{

@@ -385,10 +385,10 @@ export function ProfileDogScene({
       <ProfileSceneBirds cardWidth={width} mode={mode} />
       <div
         ref={dogWrapperRef}
-        onClick={(e) => {
-          playPop(e.currentTarget);
-          handleBark(e);
-        }}
+        // No pop on the dog itself — the wrapper's transform is
+        // its position along the lawn, and the SpeechBubble that
+        // appears on bark is the feedback the user already gets.
+        onClick={handleBark}
         style={{
           position: 'absolute',
           left: 0,
