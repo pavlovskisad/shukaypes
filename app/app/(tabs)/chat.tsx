@@ -368,8 +368,14 @@ export default function ChatScreen() {
         style={[
           styles.fadeStrip,
           {
-            bottom: TAB_BAR_HEIGHT + insets.bottom,
-            height: INPUT_BAND_HEIGHT + INPUT_GAP_ABOVE_TABS,
+            // Moved DOWN to sit in the dashboard zone (was at
+            // the input level, redundant since the input pill is
+            // already opaque white). Now the fade dissolves
+            // chat bubbles into the dashboard area + home
+            // indicator strip instead of into nothing above the
+            // input. The dashboard pill floats over the fade.
+            bottom: 0,
+            height: TAB_BAR_HEIGHT + insets.bottom,
             // Mirror of the top — same eased curve.
             backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${colors.greyBg} 35%, rgba(240,240,240,0.85) 50%, rgba(240,240,240,0.55) 68%, rgba(240,240,240,0.25) 83%, rgba(240,240,240,0.08) 95%, ${TRANSPARENT_BG} 100%)`,
           } as unknown as object,
