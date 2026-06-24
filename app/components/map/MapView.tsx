@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -1620,7 +1621,15 @@ export default function MapViewWeb() {
           far away. Tap recenters the map. Per-edge transform anchors
           the chip's edge-side to the screen edge so dropping
           topReserve to 0 doesn't clip half the chip. */}
-      {offscreenIndicator ? (
+      {offscreenIndicator && typeof document !== 'undefined' ? createPortal(
+        // Portaled to document.body so the chip's z-index lives
+        // at the page root. Setting zIndex on the chip inside
+        // MapView wasn't enough — the parent stacking contexts
+        // (mapLayer, possibly MapLibre's canvas wrapper) trapped
+        // it below the HUD container despite z=50 > HUD z=30.
+        // Portal lifts it out entirely; z=9999 then guarantees
+        // it sits above everything except true global modals.
+        //
         // Outer wrapper owns positioning + edge transform. Inner
         // wrapper owns the chip's visual (bg / border / shadow /
         // size) and is what we animate the tap-pop on — keeping
@@ -1634,7 +1643,7 @@ export default function MapViewWeb() {
           role="button"
           aria-label={t.hud.recenterOnCompanion}
           style={{
-            position: 'absolute',
+            position: 'fixed',
             left: offscreenIndicator.left,
             top: offscreenIndicator.top,
             transform:
@@ -1647,12 +1656,7 @@ export default function MapViewWeb() {
                     : 'translate(-100%, -50%)',
             transition:
               'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-            // Sits above ALL HUD layers (sniff bubble = 45, pills
-            // overlay = 40). When the dog wanders north and the
-            // chip pins to the top edge it must paint over the
-            // StatusBar pills — otherwise the user can see it
-            // get nudged behind them.
-            zIndex: 50,
+            zIndex: 9999,
             cursor: 'pointer',
           }}
         >
@@ -1694,7 +1698,8 @@ export default function MapViewWeb() {
             />
           </div>
           </div>
-        </div>
+        </div>,
+        document.body,
       ) : null}
 
       {/* When the dog is off-screen we mirror his current bubble next
