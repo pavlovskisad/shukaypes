@@ -34,13 +34,12 @@ export function QuestPill() {
     <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.pill}>
         <Text style={styles.emoji}>🔍</Text>
-        {/* Truncate long pet names / descriptions with an
-            ellipsis so the close X stays on-screen. Without
-            numberOfLines + the flexShrink/minWidth-0 trick,
-            a long name like "білий кіт з чорними плямами без
-            хвоста" pushes the close button past the viewport
-            edge — quest can't be abandoned. */}
-        <Text style={styles.label} numberOfLines={1} ellipsizeMode="tail">
+        {/* Wraps to multiple lines on long pet names instead
+            of truncating — the pill grows vertically and the
+            close X stays inside the row (centred on the
+            text block). flexShrink + minWidth:0 lets the
+            wrap actually kick in inside a flex row. */}
+        <Text style={styles.label}>
           {t.hud.findingPet(name)}
         </Text>
         <Text style={styles.progress}>
@@ -73,14 +72,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: S.s,
-    height: CHIP.height,
+    // Height is content-driven (paddingVertical sets the
+    // single-line floor; multi-line names grow the pill).
+    // CHIP.height (48) was a fixed cap and clashed with
+    // wrapping labels.
+    paddingVertical: S.s,
     borderRadius: CHIP.radius,
     paddingLeft: S.l,
     paddingRight: S.s,
     backgroundColor: GLASS_BG,
-    // Cap the pill width so a long pet name can't push the
-    // close button off-screen. flex-shrink lets the label
-    // inside ellipsize within the cap.
+    // Cap the pill width so a long pet name wraps inside
+    // the cap instead of pushing the close button off-screen.
     maxWidth: '100%',
     flexShrink: 1,
     shadowColor: '#000',
