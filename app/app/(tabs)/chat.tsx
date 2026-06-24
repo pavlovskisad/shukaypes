@@ -430,6 +430,20 @@ export default function ChatScreen() {
               onSubmitEditing={send}
               editable={!sending}
               returnKeyType="send"
+              onFocus={() => {
+                // Force the conversation to the bottom on focus
+                // so when the iOS keyboard raises the input pill,
+                // the last bubble doesn't end up sandwiched
+                // against (or behind) the input. Two raf hops:
+                // first to let the keyboard layout settle, second
+                // to scroll once the new viewport height has
+                // taken effect.
+                requestAnimationFrame(() => {
+                  requestAnimationFrame(() => {
+                    scrollRef.current?.scrollToEnd({ animated: true });
+                  });
+                });
+              }}
             />
             <Pressable style={styles.sendBtn} onPress={send} onPressIn={popPressableEvent} disabled={sending}>
               {sending ? (
