@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom';
 import maplibregl from 'maplibre-gl';
 import type { LatLng } from '@shukajpes/shared';
 import { useMaplibreMap } from './MapContext';
+import { playPop } from '../../utils/popOnTap';
 
 type AnchorOption =
   | 'center'
@@ -85,10 +86,17 @@ export function MapLibreMarker({
     el.style.cursor = onClick ? 'pointer' : '';
   }, [el, zIndex, onClick]);
 
-  // Click handler wiring.
+  // Click handler wiring. Every tappable marker fires the
+  // shared pop animation on tap — one change here gives
+  // tap-feedback to EVERY marker (POIs, dog markers,
+  // waypoints, food, tokens, clusters) without each component
+  // having to wire it individually.
   useEffect(() => {
     if (!el || !onClick) return;
-    const handler = () => onClick();
+    const handler = () => {
+      playPop(el);
+      onClick();
+    };
     el.addEventListener('click', handler);
     return () => el.removeEventListener('click', handler);
   }, [el, onClick]);

@@ -4,6 +4,7 @@ import { colors } from '../../constants/colors';
 import { CHIP } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { popPressableEvent } from '../../utils/popOnTap';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -106,6 +107,7 @@ function SpotsTogglePill() {
   return (
     <Pressable
       onPress={() => setVisible(!visible)}
+      onPressIn={popPressableEvent}
       accessibilityRole="switch"
       accessibilityState={{ checked: visible }}
       accessibilityLabel={visible ? t.hud.spotsVisible : t.hud.spotsHidden}

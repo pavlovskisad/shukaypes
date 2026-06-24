@@ -7,6 +7,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
+import { playPop } from '../../utils/popOnTap';
 
 interface AboutModalProps {
   open: boolean;
@@ -135,7 +136,10 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             {t.modals.about.badge}
           </span>
           <button
-            onClick={onClose}
+            onClick={(e) => {
+              playPop(e.currentTarget);
+              onClose();
+            }}
             aria-label={t.modals.common.close}
             style={{
               position: 'absolute',

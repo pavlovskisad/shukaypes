@@ -8,6 +8,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { MODAL_PILL_DARK, MODAL_PILL_BLUE } from '../../constants/buttons';
+import { playPop } from '../../utils/popOnTap';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -183,7 +184,10 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               </span>
             ) : null}
             <button
-              onClick={onClose}
+              onClick={(e) => {
+                playPop(e.currentTarget);
+                onClose();
+              }}
               aria-label={t.modals.common.close}
               style={{
                 width: 36,
@@ -251,14 +255,20 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           }}
         >
           <button
-            onClick={() => onWalkHere?.(renderSpot, 'oneway')}
+            onClick={(e) => {
+              playPop(e.currentTarget);
+              onWalkHere?.(renderSpot, 'oneway');
+            }}
             style={MODAL_PILL_DARK}
           >
             <Icon name="walk" size={INLINE_ICON.cta} inverted />
             <span>{t.modals.spot.walkHere}</span>
           </button>
           <button
-            onClick={() => onWalkHere?.(renderSpot, 'roundtrip')}
+            onClick={(e) => {
+              playPop(e.currentTarget);
+              onWalkHere?.(renderSpot, 'roundtrip');
+            }}
             style={MODAL_PILL_BLUE}
           >
             <Icon name="roundtrip" size={INLINE_ICON.cta} inverted />

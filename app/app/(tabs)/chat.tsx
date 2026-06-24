@@ -20,6 +20,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { popPressableEvent } from '../../utils/popOnTap';
 import { pickBottomInset } from '../../services/telegram';
 import { useGameStore } from '../../stores/gameStore';
 import {
@@ -420,7 +421,7 @@ export default function ChatScreen() {
               editable={!sending}
               returnKeyType="send"
             />
-            <Pressable style={styles.sendBtn} onPress={send} disabled={sending}>
+            <Pressable style={styles.sendBtn} onPress={send} onPressIn={popPressableEvent} disabled={sending}>
               {sending ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (

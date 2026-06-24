@@ -6,6 +6,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { useStrings } from '../../i18n/useStrings';
+import { popPressableEvent } from '../../utils/popOnTap';
 
 // Active-quest indicator. Renders nothing when no quest is live; when
 // one is, shows a pill with pet name + progress (2/3) + an X to abandon.
@@ -47,6 +48,7 @@ export function QuestPill() {
         </Text>
         <Pressable
           onPress={abandon}
+          onPressIn={popPressableEvent}
           hitSlop={8}
           accessibilityLabel={t.hud.abandonSearch}
           style={styles.close}

@@ -11,6 +11,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
+import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import { VOICE } from '../../constants/voice';
 
@@ -502,6 +503,7 @@ export function SniffPress() {
               role="button"
               onClick={(e) => {
                 e.stopPropagation();
+                playPop(e.currentTarget);
                 void expandMore();
               }}
               style={{
@@ -527,6 +529,7 @@ export function SniffPress() {
             role="button"
             onClick={(e) => {
               e.stopPropagation();
+              playPop(e.currentTarget);
               void goHere();
             }}
             style={{

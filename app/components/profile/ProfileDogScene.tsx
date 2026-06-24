@@ -4,6 +4,7 @@ import { SpeechBubble } from '../ui/SpeechBubble';
 import { ProfileSceneBackdrop, type SceneMode } from './ProfileSceneBackdrop';
 import { ProfileSceneBirds } from './ProfileSceneBirds';
 import { useStrings } from '../../i18n/useStrings';
+import { playPop } from '../../utils/popOnTap';
 
 // Ambient dog scene for the profile hero — replaces the 🐶 emoji
 // with the live pixel-art companion. Runs a small state machine that
@@ -346,7 +347,10 @@ export function ProfileDogScene({
   return (
     <div
       ref={containerRef}
-      onClick={toggleMode}
+      onClick={(e) => {
+        playPop(e.currentTarget);
+        toggleMode();
+      }}
       role="button"
       aria-label={t.profile.sceneA11y(mode)}
       style={{
@@ -381,7 +385,10 @@ export function ProfileDogScene({
       <ProfileSceneBirds cardWidth={width} mode={mode} />
       <div
         ref={dogWrapperRef}
-        onClick={handleBark}
+        onClick={(e) => {
+          playPop(e.currentTarget);
+          handleBark(e);
+        }}
         style={{
           position: 'absolute',
           left: 0,

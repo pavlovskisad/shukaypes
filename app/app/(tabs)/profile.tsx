@@ -8,6 +8,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { api } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
@@ -336,6 +337,7 @@ function LangPill({
   return (
     <Pressable
       onPress={onPress}
+      onPressIn={popPressableEvent}
       accessibilityRole="switch"
       accessibilityState={{ checked: active }}
       accessibilityLabel={code === 'uk' ? 'Ukrainian' : 'English'}

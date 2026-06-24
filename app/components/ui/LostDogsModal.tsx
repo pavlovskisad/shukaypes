@@ -81,7 +81,10 @@ export function LostDogsModal({ dogs, onClose, onPick }: Props) {
         {renderDogs.map((dog) => (
           <div
             key={dog.id}
-            onClick={() => onPick(dog)}
+            onClick={(e) => {
+              playPop(e.currentTarget);
+              onPick(dog);
+            }}
             style={{
               width: '100%',
               height: 320,

@@ -8,6 +8,7 @@ import { QuestPill } from '../../components/ui/QuestPill';
 import { AboutModal } from '../../components/ui/AboutModal';
 import { Z } from '../../constants/z';
 import { S } from '../../constants/spacing';
+import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 
 // Logo is the brand anchor in the top-left. Prototype has it roughly
@@ -93,6 +94,7 @@ export default function MapScreen() {
         <View style={styles.hudRow}>
           <Pressable
             onPress={toggleSniffMode}
+            onPressIn={popPressableEvent}
             accessibilityRole="button"
             accessibilityLabel={
               sniffMode ? 'exit sniff mode' : 'enter sniff mode'

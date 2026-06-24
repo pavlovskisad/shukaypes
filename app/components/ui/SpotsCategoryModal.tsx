@@ -93,7 +93,10 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
         {renderSpots.map((spot) => (
           <div
             key={spot.id}
-            onClick={() => onPick(spot)}
+            onClick={(e) => {
+              playPop(e.currentTarget);
+              onPick(spot);
+            }}
             style={{
               width: '100%',
               height: 320,

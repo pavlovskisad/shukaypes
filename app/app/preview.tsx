@@ -12,6 +12,7 @@ import 'maplibre-gl/dist/maplibre-gl.css';
 import { R } from '../constants/radius';
 import { S } from '../constants/spacing';
 import { TYPE } from '../constants/type';
+import { popPressableEvent } from '../utils/popOnTap';
 
 import {
   LIGHT_PALETTE,
@@ -91,6 +92,7 @@ export default function PhaseTwoPreview() {
           <Text style={styles.bannerText}>Phase 2 preview · crayon base</Text>
           <Pressable
             onPress={() => router.replace('/')}
+            onPressIn={popPressableEvent}
             style={styles.backBtn}
             accessibilityRole="button"
           >
