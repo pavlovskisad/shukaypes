@@ -911,7 +911,13 @@ export default function MapViewWeb() {
           maxZoom: balance.mapZoomMax,
           maxBounds: MAP_MAX_BOUNDS,
           pitch: 55,
-          attributionControl: { compact: true },
+          // Drop both attribution branding + the MapLibre wordmark
+          // logo. Tile/data attribution is a legal requirement for
+          // upstream sources (OFM, OSM, etc.) — those are surfaced
+          // elsewhere (about modal). For this product surface a
+          // clean map without "MapLibre" or "© ..." chrome reads as
+          // a first-class app, not a map embed.
+          attributionControl: false,
           // Drag-pan inertia tuning. The finger-follow phase is always
           // 1:1 — these only shape what happens after the user lifts.
           // Linearity 0.5 (default 0.3) makes a flick carry farther;
