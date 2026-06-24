@@ -5,25 +5,23 @@ import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { MapLibreMarker } from './MapLibreMarker';
 
-// Urgency drives the glow color: red = urgent (act now), amber =
-// searching (still hot), grey = resolved. Toned down from earlier
-// passes — the previous full-saturation halo bled across half the
-// pin and made dense clusters feel chaotic. Softer, smaller halo
-// reads as "beacon" without dominating.
-const URGENCY_HALO: Record<UrgencyLevel, { glow: string; ring: string }> = {
-  urgent: {
-    glow: '0 0 14px rgba(232,64,64,0.45), 0 2px 8px rgba(0,0,0,0.12)',
-    ring: 'rgba(232,64,64,0.6)',
-  },
-  medium: {
-    glow: '0 0 14px rgba(217,160,48,0.45), 0 2px 8px rgba(0,0,0,0.12)',
-    ring: 'rgba(217,160,48,0.6)',
-  },
-  resolved: {
-    glow: '0 0 10px rgba(160,160,160,0.3), 0 2px 6px rgba(0,0,0,0.1)',
-    ring: 'rgba(160,160,160,0.4)',
-  },
-};
+// Neutral halo — every urgency uses the same shadow / ring
+// recipe, matching the off-screen sniff chips. The urgency
+// signal still lives elsewhere (sniff-chip badge fill, on-map
+// pin's own emoji / photo). Light map gets a dark drop shadow;
+// sniff-mode dark map gets an inverse white halo so the pin
+// stays lifted against the bg.
+function getHalo(inverted: boolean) {
+  return inverted
+    ? {
+        glow: '0 0 14px rgba(255,255,255,0.35), 0 2px 6px rgba(255,255,255,0.10)',
+        ring: 'rgba(255,255,255,0.7)',
+      }
+    : {
+        glow: '0 4px 14px rgba(0,0,0,0.22)',
+        ring: 'rgba(0,0,0,0.5)',
+      };
+}
 
 // Wander was removed — pins now sit STATIC at their displayPositions
 // (zone-jittered by dog id). The earlier turtle-pace drift offset the
@@ -84,7 +82,7 @@ const NAME_SHADOW_NIGHT = '0 1px 4px rgba(0,0,0,0.95)';
 function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, active = true, inverted = false }: LostDogMarkerProps) {
   const [beeping, setBeeping] = useState(false);
   const beepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const halo = URGENCY_HALO[urgency];
+  const halo = getHalo(inverted);
 
   // SOS beep. Each pet rolls its own period at mount (inside the
   // min/max band above) so the map doesn't breathe in sync. A random
