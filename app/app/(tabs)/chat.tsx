@@ -316,7 +316,7 @@ export default function ChatScreen() {
   // include the home-indicator safe-area, so the last bubble must sit
   // above (TAB_BAR_HEIGHT + safe-area + input band) to scroll free.
   const bottomPad =
-    TAB_BAR_HEIGHT + insets.bottom + INPUT_GAP_ABOVE_TABS + INPUT_BAND_HEIGHT + 8;
+    TAB_BAR_HEIGHT + insets.bottom + INPUT_GAP_ABOVE_TABS + INPUT_BAND_HEIGHT + 40;
 
   return (
     <View style={styles.root}>
