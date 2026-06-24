@@ -464,8 +464,17 @@ const styles = StyleSheet.create({
   } as unknown as object,
   // Tighter top padding so the next card's title peeks above
   // the tab bar. gap stays 60 so the between-card rhythm
-  // doesn't collapse.
-  content: { paddingHorizontal: S.l, paddingTop: S.xxxl, paddingBottom: 140, gap: 60 },
+  // doesn't collapse. paddingBottom is calc(100vh - 200px) so
+  // even short cards (like "минулі пошуки" with 2 history rows)
+  // have enough room beneath them to snap-scroll all the way to
+  // the top — without this, a small last card was held mid-
+  // screen because the page couldn't scroll any further.
+  content: {
+    paddingHorizontal: S.l,
+    paddingTop: S.xxxl,
+    paddingBottom: 'calc(100vh - 200px)' as unknown as number,
+    gap: 60,
+  },
   // Snap block — no white card frame anymore. Title + content
   // sit straight on the page bg. Just carries the scroll-snap
   // alignment + horizontal padding so the inner content has

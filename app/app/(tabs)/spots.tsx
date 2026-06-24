@@ -252,7 +252,17 @@ const styles = StyleSheet.create({
     // See tasks.tsx for the longer reasoning.
     scrollPaddingTop: 32,
   } as unknown as object,
-  content: { paddingHorizontal: S.l, paddingTop: S.xxxl, paddingBottom: 140, gap: 60 },
+  content: {
+    paddingHorizontal: S.l,
+    paddingTop: S.xxxl,
+    // Generous bottom padding so any last category card can
+    // snap to the top, even if its content is short. Without
+    // this, a small last card (e.g. a category with only 2
+    // spots) couldn't scroll up to the snap position because
+    // the page didn't have enough room below it.
+    paddingBottom: 'calc(100vh - 200px)' as unknown as number,
+    gap: 60,
+  },
   // Snap block — no white card frame. Title + category stack
   // sit straight on the page bg.
   card: {
