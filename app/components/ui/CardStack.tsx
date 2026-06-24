@@ -26,6 +26,7 @@ import Animated, {
   withSpring,
   withTiming,
   withSequence,
+  cancelAnimation,
   runOnJS,
   interpolate,
   Extrapolation,
@@ -177,6 +178,15 @@ export function CardStack<T>({
   // to 0. ItemSlot multiplies by per-item centrality so only
   // the new centre actually moves.
   const popPhase = useSharedValue(0);
+  // Snapshot of currentPos at touch-down. All subsequent
+  // onUpdate deltas are applied to THIS, not to virtualBaseSV
+  // directly — so if the user grabs the carousel mid-settle
+  // (or a phantom touch event lands during settle from a fast
+  // flick), the grab point doesn't jump back to the resting
+  // base. This was the actual cause of "swipe fast → returns
+  // to previous card": the second touch from a flick was
+  // resetting currentPos to virtualBaseSV - 0 inside onUpdate.
+  const dragStartPos = useSharedValue(0);
 
   // Carousel step — horizontal distance between adjacent slot
   // centres. 290 with TOP_SCALE 0.88 + PEEK_SCALE 0.74 leaves a
@@ -276,55 +286,54 @@ export function CardStack<T>({
   });
 
   const pan = Gesture.Pan()
-    // The horizontal/vertical gesture mediation that lets a
-    // carousel coexist with a vertical scroll container.
-    //   activeOffsetX([-5, 5]) — claim the touch as soon as
-    //     horizontal travel exceeds 5 px (well above jitter,
-    //     well below TAP_TRAVEL_MAX 16).
-    //   failOffsetY([-15, 15]) — give the touch BACK to the
-    //     browser if vertical travel exceeds 15 px before
-    //     horizontal does. Without this, gesture-handler sets
-    //     touch-action: none on the deck and captures every
-    //     touch — which can starve fast flicks of velocity
-    //     samples (the browser's touch listeners get nothing
-    //     to compare against). Letting Pan fail on vertical
-    //     intent restores normal browser sampling and the
-    //     velocity comes back clean on horizontal flicks.
+    // Horizontal / vertical gesture mediation so a carousel
+    // can coexist with the tab's vertical scroll-snap container.
+    //   activeOffsetX — claim the touch on >5 px horizontal
+    //   failOffsetY   — release back to browser on >15 px
+    //                   vertical (lets the page scroll)
     .activeOffsetX([-5, 5])
     .failOffsetY([-15, 15])
+    .onBegin(() => {
+      // Cancel any in-progress settle from the previous swipe.
+      // Otherwise the withTiming on currentPos keeps running
+      // alongside our finger-driven updates and the visual
+      // ends up at whichever assignment fired last. Cancel's
+      // completion callback receives finished=false so the
+      // virtualBaseSV / advance() bump inside its `if(finished)`
+      // guard is skipped — no double-advance.
+      cancelAnimation(currentPos);
+      // Snapshot where the carousel actually is at touch-down.
+      // All onUpdate deltas are applied relative to THIS, not
+      // to virtualBaseSV. That way the user can grab a card
+      // mid-settle without it jumping back to the resting base.
+      dragStartPos.value = currentPos.value;
+    })
     .onUpdate((e) => {
-      // 1:1 finger follow: dragging by STEP pixels shifts the
-      // carousel by exactly one card.
-      currentPos.value = virtualBaseSV.value - e.translationX / STEP;
+      // 1:1 finger follow: dragging by STEP px shifts the
+      // carousel by one card. Relative to dragStartPos, NOT
+      // virtualBaseSV, so a touch that lands mid-settle (or
+      // any phantom touch event during a fast flick) doesn't
+      // jump the carousel back to the resting position.
+      currentPos.value = dragStartPos.value - e.translationX / STEP;
     })
     .onEnd((e) => {
       const travel = Math.abs(e.translationX) + Math.abs(e.translationY);
-      // Three commit paths — any one is enough. Belt and braces
-      // because velocity readings on web are sometimes 0 / NaN
-      // for very fast flicks where the system didn't sample
-      // enough frames to compute one.
-      //   1) Clear drag — translation crosses 40 px (~14 % of
-      //      a card-step). User clearly nudged the deck.
-      //   2) Clear flick — velocity exceeds 200 px/s in any
-      //      direction. Even tiny travel commits.
-      //   3) Projection — combined translation + 150 ms of
-      //      inertia crosses 20 % of a card-step. Catches
-      //      mid-range gestures.
-      // Direction from projection sign, falling back to
-      // translation sign when projection is zero (e.g. velocity
-      // 0 + no translation, but that's the no-commit case
-      // anyway so direction is moot).
-      const projection = e.translationX + e.velocityX * PROJECTION_MS;
-      const shouldCommit =
-        N > 1 &&
-        (Math.abs(e.translationX) > 40 ||
-          Math.abs(e.velocityX) > 200 ||
-          Math.abs(projection) > STEP * COMMIT_RATIO);
+      // Where does the carousel naturally land if released
+      // here with current velocity, in floating-point card
+      // units? Snap to the nearest integer and that's the
+      // target index. Delta against virtualBaseSV gives us
+      // forward / no-op / backward.
+      const projectedPx =
+        dragStartPos.value * STEP - e.translationX - e.velocityX * PROJECTION_MS;
+      const releaseUnits = projectedPx / STEP;
+      const target = Math.round(releaseUnits);
+      const delta = target - virtualBaseSV.value;
+      // Commit when the projected landing is a different card
+      // than the resting one. Includes the case where the
+      // user grabbed mid-settle and let go without dragging
+      // back — we still finish the original advance.
+      const shouldCommit = N > 1 && delta !== 0;
       if (shouldCommit) {
-        const dirSource = projection !== 0 ? projection : e.translationX;
-        const isForward = dirSource < 0;
-        const delta = isForward ? 1 : -1;
-        const target = virtualBaseSV.value + delta;
         // Kick the pop NOW (alongside the settle) instead of
         // after — that way the lift + scale build during the
         // last leg of the slide and the pop feels like a

@@ -148,12 +148,6 @@ const styles = StyleSheet.create({
     left: 0,
     width: '100%',
     height: '100%',
-    backgroundColor: '#f0f0f0',
-    // RN-Web's `overflow: hidden` on a transformed parent doesn't
-    // always clip child <img> tags cleanly — visible as harsh
-    // corners at the top of the photo. Match the card's
-    // borderRadius on the image itself so it self-clips
-    // regardless of parent.
     borderRadius: R.card,
   },
   photoFallback: {
