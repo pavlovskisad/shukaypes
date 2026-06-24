@@ -1,5 +1,5 @@
 import { Tabs } from 'expo-router';
-import { Pressable, View, type PressableProps } from 'react-native';
+import { View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { R } from '../../constants/radius';
@@ -8,7 +8,6 @@ import { HERO } from '../../constants/sizing';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import { pickBottomInset } from '../../services/telegram';
 import { useStrings } from '../../i18n/useStrings';
-import { popPressableEvent } from '../../utils/popOnTap';
 
 // Tab icons are pixel-art SVGs (see components/ui/Icon.tsx). Inactive
 // tabs read as desaturated/dimmed via a wrapper View — RN-Web passes
@@ -28,16 +27,6 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
       <Icon name={name} size={HERO.icon} />
     </View>
   );
-}
-
-// Custom tabBarButton: a Pressable that fires the shared pop
-// on press-down. Wraps whatever children React Navigation passed
-// (icon + a11y bits) without touching their behavior. The
-// previous focused-flip-effect approach didn't fire reliably
-// because the View ref didn't resolve to a real DOM node in
-// every render path; a Pressable's onPressIn always fires.
-function PoppingTabButton(props: PressableProps) {
-  return <Pressable {...props} onPressIn={popPressableEvent} />;
 }
 
 export default function TabsLayout() {
@@ -119,10 +108,6 @@ export default function TabsLayout() {
         // surfaces. Icons are large enough to carry meaning on their
         // own; `title` still drives screen titles + a11y.
         tabBarShowLabel: false,
-        // Custom button so every tab tap fires the shared pop on
-        // press-down — applies to all five tabs without per-screen
-        // wiring.
-        tabBarButton: (props) => <PoppingTabButton {...props} />,
       }}
     >
       <Tabs.Screen
