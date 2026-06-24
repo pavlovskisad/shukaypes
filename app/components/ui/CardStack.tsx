@@ -332,51 +332,51 @@ export function CardStack<T>({
     })
     .onEnd((e) => {
       const travel = Math.abs(e.translationX) + Math.abs(e.translationY);
-      // Where does the carousel naturally land if released
-      // here with current velocity, in floating-point card
-      // units? Snap to the nearest integer and that's the
-      // raw target. Then clamp delta to ±1 so a single
-      // gesture never advances more than one card — without
-      // this, a hard flick projects 5+ cards out and the
-      // carousel either skips visibly or renders blank while
-      // it scrolls through items it never had a chance to
-      // mount. One-card-per-gesture matches the iOS / Android
-      // paged-scroll convention and stops the "+10 cards
-      // away, then white screen" the user reported.
-      const projectedPx =
-        dragStartPos.value * STEP - e.translationX - e.velocityX * PROJECTION_MS;
-      const releaseUnits = projectedPx / STEP;
-      const rawTarget = Math.round(releaseUnits);
-      const rawDelta = rawTarget - virtualBaseSV.value;
-      const delta = Math.max(-1, Math.min(1, rawDelta));
-      const target = virtualBaseSV.value + delta;
-      const shouldCommit = N > 1 && delta !== 0;
+      // Intent-based commit: the projection (translation +
+      // velocity × inertia) measures the FORCE / DIRECTION of
+      // this gesture, regardless of where currentPos happens
+      // to be. If the gesture's projected motion crosses 25 %
+      // of a card-step in either direction, commit one card.
+      //
+      // Critically, this works for CHAINED swipes: each
+      // gesture's commit is based purely on its own intent
+      // and advances virtualBaseSV by ±1 from whatever value
+      // virtualBaseSV currently holds. Previous logic used
+      // `Math.round(dragStartPos + drag)` and lived in a world
+      // where virtualBaseSV only updated AFTER the settle
+      // completed — so a second swipe started before the first
+      // settle was reading the OLD base and the projection
+      // rounded back down to the same target. Two soft chained
+      // forwards netted only +1 card. Now we update
+      // virtualBaseSV synchronously on commit, and each
+      // gesture's intent is what decides ±1.
+      const projection = -e.translationX - e.velocityX * PROJECTION_MS;
+      const projUnits = projection / STEP;
+      let delta = 0;
+      if (N > 1) {
+        if (projUnits > COMMIT_RATIO) delta = 1;
+        else if (projUnits < -COMMIT_RATIO) delta = -1;
+      }
+      const shouldCommit = delta !== 0;
       if (shouldCommit) {
-        // Kick the pop NOW (alongside the settle) instead of
-        // after — that way the lift + scale build during the
-        // last leg of the slide and the pop feels like a
-        // continuation of the snap, not a separate event after
-        // it. Magnitudes scale by per-slot centrality so only
-        // the slot currently arriving at the centre actually
-        // rises; everything else stays put.
+        const target = virtualBaseSV.value + delta;
+        // SYNCHRONOUS base update + JS-side advance — by the
+        // next gesture's onEnd, virtualBaseSV is already at
+        // the new value so a chained swipe accumulates
+        // correctly.
+        virtualBaseSV.value = target;
+        runOnJS(advance)(delta);
+        // Pop fires alongside the settle (same as before) so
+        // the lift overlaps the slide.
         popPhase.value = 0;
         popPhase.value = withSequence(
           withTiming(1, { duration: 328, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }),
           withTiming(0, { duration: 492, easing: Easing.bezier(0.33, 1, 0.68, 1) }),
         );
-        currentPos.value = withTiming(
-          target,
-          { duration: SETTLE_MS, easing: SETTLE_EASE },
-          (finished) => {
-            if (finished) {
-              // Bump the worklet-side base immediately so a
-              // back-to-back pan reads the right value, then ask
-              // React to catch up.
-              virtualBaseSV.value = target;
-              runOnJS(advance)(delta);
-            }
-          },
-        );
+        currentPos.value = withTiming(target, {
+          duration: SETTLE_MS,
+          easing: SETTLE_EASE,
+        });
         return;
       }
       // No commit and the finger barely moved → treat as a tap
