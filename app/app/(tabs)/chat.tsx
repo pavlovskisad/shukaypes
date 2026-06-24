@@ -368,14 +368,18 @@ export default function ChatScreen() {
         style={[
           styles.fadeStrip,
           {
-            // Moved DOWN to sit in the dashboard zone (was at
-            // the input level, redundant since the input pill is
-            // already opaque white). Now the fade dissolves
-            // chat bubbles into the dashboard area + home
-            // indicator strip instead of into nothing above the
-            // input. The dashboard pill floats over the fade.
+            // Spans from the screen bottom all the way up to the
+            // TOP of the input area — covers the dashboard pill,
+            // the input row (no longer a white pill — see
+            // inputCard style), and the gap between them. The
+            // fade gives the input its visual separation from
+            // the bubbles instead of a stacked white card.
             bottom: 0,
-            height: TAB_BAR_HEIGHT + insets.bottom,
+            height:
+              TAB_BAR_HEIGHT +
+              insets.bottom +
+              INPUT_GAP_ABOVE_TABS +
+              INPUT_BAND_HEIGHT,
             // Mirror of the top — same eased curve.
             backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${colors.greyBg} 35%, rgba(240,240,240,0.85) 50%, rgba(240,240,240,0.55) 68%, rgba(240,240,240,0.25) 83%, rgba(240,240,240,0.08) 95%, ${TRANSPARENT_BG} 100%)`,
           } as unknown as object,
@@ -644,10 +648,11 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginVertical: S.s,
   },
-  // Fatter input card — bigger paddings + radius to match the
-  // chunkier bubble + send-button proportions. CHROME_SHADOW so
-  // it floats clearly above the chat background instead of
-  // melting into the last bubble above.
+  // Input row — no white card backdrop. Just the input + send
+  // button floating directly on the fade so it doesn't stack as
+  // a second pill above the dashboard. The fade strip beneath
+  // (extends from screen bottom up to the input row) is what
+  // gives the input visual separation from the bubbles.
   inputCard: {
     flexDirection: 'row',
     gap: S.s,
@@ -655,9 +660,6 @@ const styles = StyleSheet.create({
     marginHorizontal: S.l,
     paddingHorizontal: S.m,
     paddingVertical: S.m,
-    backgroundColor: '#ffffff',
-    borderRadius: R.card,
-    ...CHROME_SHADOW,
   },
   input: {
     flex: 1,
