@@ -57,46 +57,40 @@ export default function TabsLayout() {
         animation: 'shift',
         tabBarActiveTintColor: colors.black,
         tabBarInactiveTintColor: colors.grey,
-        // Frosted-glass dashboard flush to the bottom edge with rounded
-        // top corners — pill shape on top, full-bleed on the bottom so
-        // it reads as a "drawer pulled up from the floor". Family
-        // shadow recipe (softer, lifted upward).
+        // Floating pill — the bar sits with margins on all three
+        // visible sides (left / right / bottom) instead of bleeding
+        // to the screen edges. Full pill radius matches the rest
+        // of the app's chip / pill family. Shadow is now a soft
+        // all-around lift instead of an upward-only top shadow.
         tabBarStyle: {
           position: 'absolute',
-          left: 0,
-          right: 0,
-          // Shift the bar's anchor DOWN by the bottom inset so its bg
-          // extends INTO the home-indicator strip; the matching
-          // `paddingBottom` pads the icons back up so they don't sit
-          // under the indicator. Without the negative `bottom` offset
-          // the bar's anchor sits at the TOP of the safe-area strip
-          // (the screen container respects the inset by default), so
-          // adding paddingBottom alone just made the bar taller upward
-          // and left the strip below uncovered.
-          bottom: -insets.bottom,
-          // Explicit height. Default Expo BottomTab shrinks when
-          // `tabBarShowLabel: false` is set, which broke the chat
-          // input's `bottom: TAB_BAR_HEIGHT + insets.bottom + …`
-          // offset (chat constant is 64; the bar was rendering at
-          // ~50, leaving a visible empty strip between the input and
-          // the dashboard in the TG Mini App). Locking it here pairs
-          // with TAB_BAR_HEIGHT in chat.tsx — keep them in sync.
-          height: HERO.size + insets.bottom,
-          paddingBottom: insets.bottom,
-          borderTopLeftRadius: R.card,
-          borderTopRightRadius: R.card,
-          // Plain white — the previous frosted-glass treatment
-          // picked up tints from whatever was behind the bar
-          // (dark night sky on profile, map colours on home) and
-          // read as greyish. Solid white is cleaner across all
-          // tabs.
+          left: S.l,
+          right: S.l,
+          // Hover the bar above the home-indicator strip with a
+          // small visual gap so it reads as a floating pill, not
+          // a docked bar. insets.bottom respects the iOS home
+          // indicator; the extra S.s puts a breathing gap between
+          // the pill and the indicator (or screen edge on
+          // Android / TG Mini App where insets.bottom is 0).
+          bottom: insets.bottom + S.s,
+          // Explicit height pairs with TAB_BAR_HEIGHT in chat.tsx
+          // — keep them in sync.
+          height: HERO.size,
+          paddingBottom: 0,
+          // Full pill radius (capsule) — matches the canonical
+          // chip family across the app (HUD pills, chips, etc.).
+          // On a 64-tall bar that's 32 px corners → capsule shape.
+          borderRadius: R.pill,
           backgroundColor: '#ffffff',
           borderTopWidth: 0,
+          // Lifted shadow on all sides (was upward-only since the
+          // bar bled to bottom). Centred 8 px offset + soft radius
+          // matches the chat input pill / HUD pills.
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: -2 },
-          shadowOpacity: 0.06,
-          shadowRadius: 12,
-          elevation: 4,
+          shadowOffset: { width: 0, height: 4 },
+          shadowOpacity: 0.10,
+          shadowRadius: 16,
+          elevation: 6,
         },
         tabBarItemStyle: {
           paddingVertical: S.s,
