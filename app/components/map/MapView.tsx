@@ -1756,7 +1756,16 @@ export default function MapViewWeb() {
                badge sits next to it as a SIBLING — i.e. NOT inside
                the overflow-hidden disc, so the bottom-right badge
                doesn't get cropped at the disc edge. */}
-      {offscreenDogIndicators.map((d) => {
+      {/* Portaled to document.body — same fix as the companion
+          chip. Without the portal, these top-edge chips were
+          trapped behind the HUD pills (parent stacking context
+          capped their z-index) and couldn't be tapped. Position
+          changes from absolute to fixed inside the chip; the
+          `left` / `top` percentages were already viewport-
+          relative via offscreenDogIndicators. */}
+      {typeof document !== 'undefined' && offscreenDogIndicators.length > 0
+        ? createPortal(
+            <>{offscreenDogIndicators.map((d) => {
         // Mirror the on-screen LostDogMarker halo so chips visually
         // echo the actual map pins. Medium-urgency BADGE swapped from
         // amber `rgba(217,160,48,...)` (read as gold + clashed with
@@ -1810,15 +1819,17 @@ export default function MapViewWeb() {
             role="button"
             aria-label={`pan to ${d.name}, ${formatDistance(d.distanceM)} away`}
             style={{
-              position: 'absolute',
+              position: 'fixed',
               left: d.left,
               top: d.top,
               transform: edgeTransform,
               transition:
                 'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-              // Bumped above the HUD layer so taps reliably hit the
-              // chip even where it overlaps the corner logo zone.
-              zIndex: Z.HUD_CHIPS,
+              // Portaled to document.body (see wrapping createPortal),
+              // so z lives at the page root above any HUD container.
+              // 9998 — one below the companion chip (9999) so the
+              // companion bookmark wins when both pin to the same edge.
+              zIndex: 9998,
               cursor: 'pointer',
               userSelect: 'none',
             }}
@@ -1919,7 +1930,10 @@ export default function MapViewWeb() {
             </div>
           </div>
         );
-      })}
+      })}</>,
+            document.body,
+          )
+        : null}
 
       {/* Unified bubble keyframes shared by the off-screen chips
           AND the HUD pills (StatusBar / QuestPill). The previous
