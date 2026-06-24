@@ -1212,12 +1212,12 @@ export default function MapViewWeb() {
     const ny = (n - companionPos.lat) / (n - s);
     const dx = nx - 0.5;
     const dy = ny - 0.5;
-    const sideReserve = 0.03;
-    // Sit at the actual top edge so 'dog is far north' reads as far
-    // north. Chip z-index is above the HUD pills so they don't
-    // intercept its tap when they overlap.
+    // Reserves push the bookmark in from the edge — kept
+    // tight per user request so the chip hugs the screen
+    // sides + the dashboard.
+    const sideReserve = 0.01;
     const topReserve = 0.02;
-    const bottomReserve = 0.14;
+    const bottomReserve = 0.08;
     const xBound = dx > 0 ? 1 - sideReserve - 0.5 : 0.5 - sideReserve;
     const yBound = dy > 0 ? 1 - bottomReserve - 0.5 : 0.5 - topReserve;
     const tx = Math.abs(xBound / Math.max(Math.abs(dx), 1e-6));
@@ -1620,8 +1620,24 @@ export default function MapViewWeb() {
           the chip's edge-side to the screen edge so dropping
           topReserve to 0 doesn't clip half the chip. */}
       {offscreenIndicator ? (
+        // Outer wrapper owns positioning + edge transform. Inner
+        // wrapper owns the chip's visual (bg / border / shadow /
+        // size) and is what we animate the tap-pop on — keeping
+        // the scale off the outer means the position transform
+        // doesn't get clobbered.
         <div
-          onClick={recenterOnCompanion}
+          onClick={(e) => {
+            const chip = e.currentTarget.firstElementChild as HTMLElement | null;
+            chip?.animate(
+              [
+                { transform: 'scale(0.92)', offset: 0, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' },
+                { transform: 'scale(1.12)', offset: 0.4, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' },
+                { transform: 'scale(1)', offset: 1 },
+              ],
+              { duration: 460, fill: 'none' },
+            );
+            recenterOnCompanion();
+          }}
           role="button"
           aria-label={t.hud.recenterOnCompanion}
           style={{
@@ -1643,30 +1659,31 @@ export default function MapViewWeb() {
             // the bookmark un-tappable behind the corner logo zone.
             zIndex: Z.HUD_CHIP_COMPANION,
             cursor: 'pointer',
-            // Adaptive to mode — dark chip + inverted white logo on
-            // the light map (pops against the pastel bg), light chip
-            // + black logo on sniff mode (pops against the dark bg).
-            // Matches the corner logo's same-recipe inversion.
-            background: sniffMode ? '#ffffff' : '#1a1a1a',
-            borderRadius: R.pill,
-            // Bumped 44 → 56 (and logo 30 → 38) per user request —
-            // bigger chip is easier to tap and reads as a clear
-            // "follow the dog" bookmark instead of a tiny dot.
-            width: 56,
-            height: 56,
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
-            border: sniffMode
-              ? '2px solid rgba(0,0,0,0.06)'
-              : '2px solid rgba(255,255,255,0.08)',
           }}
         >
-          {/* Wrapper div carries the CSS invert filter when we need
-              the logoNose PNG flipped to white. Filter on the
-              wrapper (not the <Image> itself) avoids the iOS Safari
-              quirk where RN-Web's <Image> drops the filter prop. */}
+          <div
+            style={{
+              // Adaptive to mode — dark chip + inverted white logo
+              // on the light map (pops against the pastel bg), light
+              // chip + black logo on sniff mode (pops against the
+              // dark bg). Matches the corner logo's same recipe.
+              background: sniffMode ? '#ffffff' : '#1a1a1a',
+              borderRadius: R.pill,
+              width: 56,
+              height: 56,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
+              border: sniffMode
+                ? '2px solid rgba(0,0,0,0.06)'
+                : '2px solid rgba(255,255,255,0.08)',
+            }}
+          >
+            {/* Wrapper div carries the CSS invert filter when we need
+                the logoNose PNG flipped to white. Filter on the
+                wrapper (not the <Image> itself) avoids the iOS Safari
+                quirk where RN-Web's <Image> drops the filter prop. */}
           <div
             aria-hidden
             style={{
@@ -1680,6 +1697,7 @@ export default function MapViewWeb() {
               style={{ width: 38, height: 38 }}
               resizeMode="contain"
             />
+          </div>
           </div>
         </div>
       ) : null}
