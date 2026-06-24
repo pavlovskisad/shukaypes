@@ -84,12 +84,15 @@ export function LostDogCardView({
         //
         // NO borderRadius here — the parent card already has
         // borderRadius + overflow:hidden which clips this div
-        // to the card's rounded shape. Adding a second
-        // borderRadius on the div itself was leaving 1-2 px
-        // white slivers along the right / bottom edges from
-        // the two rounded paths not aligning perfectly at the
-        // sub-pixel level. Trusting the parent's clip is
-        // pixel-perfect.
+        // to the card's rounded shape.
+        //
+        // transform: scale(1.04) gives the photo a 2 % overshoot
+        // on each side, which the card's overflow:hidden clips
+        // away. Belt-and-braces against sub-pixel rendering
+        // gaps along the edges — even when scale(0.74) on the
+        // peek cards quantises differently per axis, the photo
+        // still reaches all four card edges. User's "lil zoom"
+        // suggestion was the right call.
         <div
           style={{
             position: 'absolute',
@@ -98,6 +101,7 @@ export function LostDogCardView({
             backgroundSize: 'cover',
             backgroundPosition: 'center center',
             backgroundRepeat: 'no-repeat',
+            transform: 'scale(1.04)',
           }}
         />
       ) : (
