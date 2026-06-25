@@ -513,6 +513,11 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     ready: noRealBubble,
     showDelayMs: 1200,
     autoDismissMs: 6000,
+    // FIXME(hints): persist:false while we iterate on the
+    // wording / timing / sequence. Flip to true (or just
+    // remove this line) when the hint's behaviour is settled
+    // so it goes back to one-shot per device.
+    persist: false,
   });
   const activeBubble = menuOpen || hideBubble
     ? null

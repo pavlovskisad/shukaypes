@@ -62,17 +62,29 @@ interface Options {
   // delay + auto-dismiss don't run; flipping to true starts /
   // restarts them. Default true (always ready).
   ready?: boolean;
+  // When false, the hint does NOT persist its seen-flag to
+  // localStorage — it fires fresh on every mount / reload.
+  // Useful while iterating on the hint's wording / timing /
+  // appearance so you don't have to wipe storage between runs.
+  // Flip to true (the default) once the hint's behaviour is
+  // settled and we want it to be one-shot per device.
+  persist?: boolean;
 }
 
 export function useHint(id: string, opts: Options = {}) {
-  const { autoDismissMs = 5000, showDelayMs = 0, ready = true } = opts;
-  const seenAtMountRef = useRef(hasBeenSeen(id));
+  const {
+    autoDismissMs = 5000,
+    showDelayMs = 0,
+    ready = true,
+    persist = true,
+  } = opts;
+  const seenAtMountRef = useRef(persist ? hasBeenSeen(id) : false);
   const [visible, setVisible] = useState(false);
 
   const dismiss = () => {
     if (seenAtMountRef.current) return;
     seenAtMountRef.current = true;
-    markSeen(id);
+    if (persist) markSeen(id);
     setVisible(false);
   };
 
@@ -91,7 +103,7 @@ export function useHint(id: string, opts: Options = {}) {
       autoTimer = setTimeout(() => {
         if (!seenAtMountRef.current) {
           seenAtMountRef.current = true;
-          markSeen(id);
+          if (persist) markSeen(id);
           setVisible(false);
         }
       }, showDelayMs + autoDismissMs);
