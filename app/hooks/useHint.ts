@@ -80,12 +80,18 @@ export function useHint(id: string, opts: Options = {}) {
   } = opts;
   const seenAtMountRef = useRef(persist ? hasBeenSeen(id) : false);
   const [visible, setVisible] = useState(false);
+  // Reactive copy of seenAtMountRef so consumers can sequence
+  // hints on the same surface — "show hint B only after hint A
+  // has been seen". Initial value matches the ref; flips true on
+  // dismiss (manual or auto).
+  const [seen, setSeen] = useState(seenAtMountRef.current);
 
   const dismiss = () => {
     if (seenAtMountRef.current) return;
     seenAtMountRef.current = true;
     if (persist) markSeen(id);
     setVisible(false);
+    setSeen(true);
   };
 
   // Timers (re)start whenever `ready` flips true, so a hint
@@ -105,6 +111,7 @@ export function useHint(id: string, opts: Options = {}) {
           seenAtMountRef.current = true;
           if (persist) markSeen(id);
           setVisible(false);
+          setSeen(true);
         }
       }, showDelayMs + autoDismissMs);
     }
@@ -115,5 +122,5 @@ export function useHint(id: string, opts: Options = {}) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
-  return { visible, dismiss };
+  return { visible, dismiss, seen };
 }
