@@ -8,11 +8,16 @@
 //
 // Usage:
 //   const sniffHint = useHint('map:long-press-to-sniff', {
-//     // optional — auto-dismiss after this many ms even if user
-//     // doesn't interact. null = stay until dismiss() called.
-//     autoDismissMs: 5000,
-//     // optional — initial delay before the hint appears (so it
-//     // doesn't slap the user the instant they open the screen).
+//     // optional — gate the hint's show / dismiss timers behind a
+//     // predicate. While `ready` is false the timers are paused;
+//     // they (re)start once it flips true. Lets a hint wait for
+//     // the dog's greeting bubble to clear before counting down.
+//     ready: !bubble && !localBubble,
+//     // optional — auto-dismiss after this many ms of actually-
+//     // ready time. null = stay until dismiss() called.
+//     autoDismissMs: 6000,
+//     // optional — initial delay (from the moment `ready` first
+//     // turns true) before the hint appears.
 //     showDelayMs: 1200,
 //   });
 //   if (sniffHint.visible) {
@@ -47,19 +52,20 @@ function markSeen(id: string): void {
 }
 
 interface Options {
-  // Auto-dismiss after this many ms even with no user interaction.
+  // Auto-dismiss after this many ms of actually-ready time.
   // Default 5000. Pass null to disable.
   autoDismissMs?: number | null;
-  // Wait this long before showing. Default 0. Useful when a screen
-  // has its own enter animation and you want the hint to appear
-  // after things settle.
+  // Wait this long (after `ready` first turns true) before
+  // showing. Default 0.
   showDelayMs?: number;
+  // Predicate gating the hint's timers. While false the show
+  // delay + auto-dismiss don't run; flipping to true starts /
+  // restarts them. Default true (always ready).
+  ready?: boolean;
 }
 
 export function useHint(id: string, opts: Options = {}) {
-  const { autoDismissMs = 5000, showDelayMs = 0 } = opts;
-  // Seen state initialised once from storage. Bail-out early if
-  // already seen so the show / auto-dismiss timers never start.
+  const { autoDismissMs = 5000, showDelayMs = 0, ready = true } = opts;
   const seenAtMountRef = useRef(hasBeenSeen(id));
   const [visible, setVisible] = useState(false);
 
@@ -70,17 +76,19 @@ export function useHint(id: string, opts: Options = {}) {
     setVisible(false);
   };
 
+  // Timers (re)start whenever `ready` flips true, so a hint
+  // can wait for greeting bubbles / modals / etc. to clear
+  // before its show countdown begins. Going from ready=true
+  // → ready=false during the show delay just cancels the
+  // timers; a subsequent ready=true restarts from zero.
   useEffect(() => {
-    if (seenAtMountRef.current) return;
+    if (seenAtMountRef.current || !ready) return;
     const showTimer = setTimeout(() => {
       setVisible(true);
     }, showDelayMs);
     let autoTimer: ReturnType<typeof setTimeout> | null = null;
     if (autoDismissMs != null) {
       autoTimer = setTimeout(() => {
-        // Mark seen even on auto-dismiss — we showed the hint
-        // for the full window, that counts as "user had a chance
-        // to see it".
         if (!seenAtMountRef.current) {
           seenAtMountRef.current = true;
           markSeen(id);
@@ -92,11 +100,8 @@ export function useHint(id: string, opts: Options = {}) {
       clearTimeout(showTimer);
       if (autoTimer) clearTimeout(autoTimer);
     };
-    // id + opts are stable across the lifetime of a hint usage;
-    // re-running the effect on every render would reset the show
-    // delay and dismiss timers.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [ready]);
 
   return { visible, dismiss };
 }

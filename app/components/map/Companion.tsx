@@ -503,16 +503,17 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
   //
   // One-shot hint: long-pressing anywhere on the map triggers the
   // sniff-press flow, which is the most-missed gesture in the app
-  // because nothing in the UI suggests it exists. First map view
-  // shows a brief bubble from the dog explaining it; auto-dismisses
-  // after 5 s OR on first sniff-press. Persists "seen" in
-  // localStorage so it never fires again.
+  // because nothing in the UI suggests it exists. The hint waits
+  // for any real bubble (the greeting, sniff feedback, narration)
+  // to clear via `ready` so it doesn't get stomped on by the
+  // greeting on first map view — once the dog falls silent, the
+  // hint's show + auto-dismiss timers start counting.
+  const noRealBubble = !menuOpen && !hideBubble && !bubble && !localBubble;
   const longPressHint = useHint('map:long-press-to-sniff', {
-    showDelayMs: 1500,
+    ready: noRealBubble,
+    showDelayMs: 1200,
     autoDismissMs: 6000,
   });
-  // Hint loses to any real bubble — the dog's actual lines (greeting,
-  // sniff feedback, narration) always win over a tutorial nudge.
   const activeBubble = menuOpen || hideBubble
     ? null
     : (bubble ?? localBubble) ??
