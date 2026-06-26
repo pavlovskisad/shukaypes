@@ -409,6 +409,38 @@ export function applyCrayonOverride(
         map.setLayoutProperty(id, 'visibility', 'none');
         continue;
       }
+      // Service / construction / track / raceway — driveways, alleys,
+      // dead-end utility roads. Pure noise at any zoom; hide.
+      const isAlwaysHidden =
+        /(^|[_-])(service|track|construction|raceway)([_-]|$)/.test(lower);
+      if (isAlwaysHidden) {
+        map.setLayoutProperty(id, 'visibility', 'none');
+        continue;
+      }
+      // Path / footway / pedestrian / cycleway / steps / bridleway —
+      // these draw sidewalk doubles along major roads AND the actual
+      // paths through parks. We can't tell them apart from tags alone,
+      // so zoom-gate: only render at zoom >= 17, one notch past the
+      // default open-map zoom (16) so the user arrives to a clean
+      // city-overview and paths only surface once they've actively
+      // zoomed in.
+      const isPathish =
+        /(^|[_-])(path|footway|pedestrian|cycleway|steps|bridleway)([_-]|$)/.test(
+          lower,
+        );
+      if (isPathish) {
+        try {
+          (
+            map as unknown as {
+              setLayerZoomRange: (id: string, min: number, max: number) => void;
+            }
+          ).setLayerZoomRange(id, 17, 24);
+        } catch {
+          /* skip */
+        }
+        // Continue through so the path still gets the crayon-road
+        // pattern at the zooms it does appear at.
+      }
       clear(map, id, 'line-color');
       clear(map, id, 'line-dasharray');
       map.setPaintProperty(id, 'line-pattern', 'crayon-road');
