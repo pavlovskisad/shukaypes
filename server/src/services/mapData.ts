@@ -10,6 +10,7 @@ import { and, eq, isNull, not, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import type { LatLng } from '../utils/geo.js';
 import { xpProgress, MAX_LEVEL } from '../lib/xp.js';
+import { buildPhotoUrl } from './photoUrl.js';
 
 // Mirrors /tokens/nearby's TOKEN_VIEW_RADIUS_M — keep in sync.
 const TOKEN_VIEW_RADIUS_M = 2000;
@@ -122,6 +123,7 @@ export async function fetchNearbyLostDogs(
       breed: schema.lostDogs.breed,
       emoji: schema.lostDogs.emoji,
       photoUrl: schema.lostDogs.photoUrl,
+      photoFileId: schema.lostDogs.photoFileId,
       lat: schema.lostDogs.lastSeenLat,
       lng: schema.lostDogs.lastSeenLng,
       at: schema.lostDogs.lastSeenAt,
@@ -154,7 +156,7 @@ export async function fetchNearbyLostDogs(
     species: r.species,
     breed: r.breed,
     emoji: r.emoji,
-    photoUrl: r.photoUrl,
+    photoUrl: buildPhotoUrl(r.photoFileId, r.photoUrl),
     urgency: r.urgency,
     rewardPoints: r.rewardPoints,
     searchZoneRadiusM: r.zoneRadiusM,

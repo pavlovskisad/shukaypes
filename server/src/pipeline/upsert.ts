@@ -127,6 +127,7 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
         searchZoneRadiusM: parsed.searchZoneRadiusM,
         status: parsed.urgency === 'resolved' ? 'found' : 'active',
         photoUrl: parsed.photoUrl ?? undefined,
+        photoFileId: parsed.photoFileId ?? undefined,
       };
       if (!coordDriftSmall) {
         // Same landmark-jitter the insert path uses, seeded by the
@@ -166,6 +167,7 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
     breed: parsed.breed,
     emoji: parsed.emoji,
     photoUrl: parsed.photoUrl ?? null,
+    photoFileId: parsed.photoFileId ?? null,
     lastSeenLat: pin.lat,
     lastSeenLng: pin.lng,
     lastSeenAt,

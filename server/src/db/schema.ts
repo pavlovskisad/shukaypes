@@ -105,6 +105,12 @@ export const lostDogs = pgTable(
     breed: text('breed').notNull(),
     emoji: text('emoji').notNull().default('🐕'),
     photoUrl: text('photo_url'),
+    // Telegram file_id for bot-ingested photos. Stable forever (unlike
+    // the file_path URL, which TG only guarantees for ~1h). When set,
+    // the API serializer rewrites photoUrl to point at /photos/:fileId
+    // — a server-side proxy that re-resolves the file_path on demand,
+    // so the client URL stays valid indefinitely.
+    photoFileId: text('photo_file_id'),
     lastSeenLat: doublePrecision('last_seen_lat').notNull(),
     lastSeenLng: doublePrecision('last_seen_lng').notNull(),
     lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull(),

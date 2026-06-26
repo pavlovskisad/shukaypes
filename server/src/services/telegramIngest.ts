@@ -7,8 +7,11 @@
 // Flow:
 //   1. Skip if we've already ingested this exact message (scrape_log
 //      dedupe on the TG permalink URL).
-//   2. Resolve the largest photo's file_id to a download URL via TG's
-//      getFile API (best-effort — parser tolerates no photo).
+//   2. Pull the largest photo's file_id off the message and stash it
+//      on ParsedDog. The download URL itself is NOT resolved here —
+//      TG's file_path URLs expire in ~1h, so we keep the stable file_id
+//      on the row and serve photos through /photos/:fileId, which
+//      re-resolves the file_path on demand.
 //   3. Parse with Haiku; refuse confidence < BOT_CONFIDENCE_FLOOR so
 //      we don't dump junk into the DB on every false positive.
 //   4. Upsert via the shared dedupe path so a post reposted across
@@ -24,8 +27,6 @@ import { db, schema } from '../db/index.js';
 import { parseDogPost } from '../pipeline/parser.js';
 import { upsertLostDog } from '../pipeline/upsert.js';
 import type { IngestResult, ParsedDog } from '../pipeline/types.js';
-
-const TG_API = 'https://api.telegram.org';
 
 // Below this we skip the upsert and reply with the generic fallback.
 // Parser hands back ~0.85+ on clear posts, ~0.4 on resolution notices,
@@ -72,23 +73,9 @@ function messageUrl(chatId: number, messageId: number): string {
   return `tg://webhook/chat/${chatId}/msg/${messageId}`;
 }
 
-async function resolvePhotoUrl(photos: TgPhotoSize[]): Promise<string | null> {
-  const token = process.env.TELEGRAM_BOT_TOKEN;
-  const largest = photos[photos.length - 1];
-  if (!token || !largest) return null;
-  try {
-    const res = await fetch(
-      `${TG_API}/bot${token}/getFile?file_id=${encodeURIComponent(largest.file_id)}`,
-    );
-    const json = (await res.json()) as { ok: boolean; result?: { file_path?: string } };
-    if (!json.ok || !json.result?.file_path) return null;
-    // Note: this URL embeds the bot token. If the token ever rotates,
-    // old photos break. Acceptable trade-off for v1 — no separate
-    // image host / no DB bytes blob.
-    return `${TG_API}/file/bot${token}/${json.result.file_path}`;
-  } catch {
-    return null;
-  }
+function largestPhotoFileId(photos: TgPhotoSize[] | undefined): string | null {
+  const largest = photos?.[photos.length - 1];
+  return largest?.file_id ?? null;
 }
 
 export async function ingestFromTelegramPost(
@@ -110,11 +97,11 @@ export async function ingestFromTelegramPost(
     return { kind: 'already-ingested', dogId: prior.dogId ?? null };
   }
 
-  const photoUrl = msg.photo ? await resolvePhotoUrl(msg.photo) : null;
+  const photoFileId = largestPhotoFileId(msg.photo);
 
   let parsed: ParsedDog;
   try {
-    parsed = await parseDogPost({ text, photoUrl });
+    parsed = await parseDogPost({ text, photoFileId });
   } catch (err) {
     log.warn(
       { kind: 'telegram_ingest', url, err: (err as Error).message },

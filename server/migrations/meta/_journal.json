@@ -92,6 +92,13 @@
       "when": 1777220000000,
       "tag": "0012_kyiv_gazetteer_trgm_idx",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1777230000000,
+      "tag": "0013_lost_dog_photo_file_id",
+      "breakpoints": true
     }
   ]
 }

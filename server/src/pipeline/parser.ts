@@ -190,6 +190,10 @@ function stripJsonFence(raw: string): string {
 export interface ParseDogPostInput {
   text: string;
   photoUrl?: string | null;
+  // Stable TG file_id when the source is a Telegram bot ingest.
+  // Stored on the row so the proxy can re-resolve a fresh download URL
+  // each time the client asks for the image.
+  photoFileId?: string | null;
   nowIso?: string; // for tests; defaults to Date.now()
 }
 
@@ -289,6 +293,7 @@ export async function parseDogPost(input: ParseDogPostInput): Promise<ParsedDog>
     searchZoneRadiusM: clampRadius(raw.searchZoneRadiusM),
     rewardPoints: typeof raw.rewardPoints === 'number' ? Math.max(0, Math.round(raw.rewardPoints)) : 100,
     photoUrl: input.photoUrl ?? (typeof raw.photoUrl === 'string' ? raw.photoUrl : null),
+    photoFileId: input.photoFileId ?? null,
     parseConfidence: degradedConfidence,
     parseNotes: typeof raw.parseNotes === 'string' ? raw.parseNotes.slice(0, 400) : '',
   };

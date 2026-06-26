@@ -27,6 +27,10 @@ export interface ParsedDog {
   searchZoneRadiusM: number;
   rewardPoints: number;
   photoUrl: string | null;
+  // Stable Telegram file_id for bot-ingested photos. Lives on the row
+  // alongside photoUrl; the API serializer prefers it (resolved through
+  // /photos/:fileId) so the URL never expires. Null for non-TG sources.
+  photoFileId: string | null;
   // 0..1 — parser's own confidence. Low confidence rows still land in the DB
   // but get logged so we can eyeball them in `fly logs`.
   parseConfidence: number;

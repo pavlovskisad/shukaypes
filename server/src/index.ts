@@ -18,6 +18,7 @@ import syncMapRoute from './routes/syncMap.js';
 import dailyTasksRoute from './routes/dailyTasks.js';
 import loreRoute from './routes/lore.js';
 import placesRoute from './routes/places.js';
+import photosRoute from './routes/photos.js';
 import telegramRoute, { registerTelegramWebhook } from './routes/telegram.js';
 import { startDecayCron } from './services/decay.js';
 import { startZoneExpansionCron } from './services/searchZoneExpansion.js';
@@ -86,6 +87,7 @@ async function buildServer() {
   await app.register(dailyTasksRoute);
   await app.register(loreRoute);
   await app.register(placesRoute);
+  await app.register(photosRoute);
   await app.register(telegramRoute);
 
   return app;

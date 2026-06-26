@@ -1,6 +1,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { and, eq, not, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
+import { buildPhotoUrl } from '../services/photoUrl.js';
 
 interface NearbyQuery {
   lat: string;
@@ -35,6 +36,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         breed: schema.lostDogs.breed,
         emoji: schema.lostDogs.emoji,
         photoUrl: schema.lostDogs.photoUrl,
+        photoFileId: schema.lostDogs.photoFileId,
         lat: schema.lostDogs.lastSeenLat,
         lng: schema.lostDogs.lastSeenLng,
         at: schema.lostDogs.lastSeenAt,
@@ -69,7 +71,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         species: r.species,
         breed: r.breed,
         emoji: r.emoji,
-        photoUrl: r.photoUrl,
+        photoUrl: buildPhotoUrl(r.photoFileId, r.photoUrl),
         urgency: r.urgency,
         rewardPoints: r.rewardPoints,
         searchZoneRadiusM: r.zoneRadiusM,
@@ -93,6 +95,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         breed: schema.lostDogs.breed,
         emoji: schema.lostDogs.emoji,
         photoUrl: schema.lostDogs.photoUrl,
+        photoFileId: schema.lostDogs.photoFileId,
         lat: schema.lostDogs.lastSeenLat,
         lng: schema.lostDogs.lastSeenLng,
         at: schema.lostDogs.lastSeenAt,
@@ -115,7 +118,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         species: row.species,
         breed: row.breed,
         emoji: row.emoji,
-        photoUrl: row.photoUrl,
+        photoUrl: buildPhotoUrl(row.photoFileId, row.photoUrl),
         urgency: row.urgency,
         rewardPoints: row.rewardPoints,
         searchZoneRadiusM: row.zoneRadiusM,
