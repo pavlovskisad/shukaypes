@@ -12,7 +12,6 @@
 // the client. The bot token never leaves the server.
 
 import type { FastifyPluginAsync } from 'fastify';
-import { Readable } from 'node:stream';
 
 const TG_API = 'https://api.telegram.org';
 const PATH_TTL_MS = 45 * 60 * 1000;
@@ -73,7 +72,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         reply.code(502);
         return { error: 'upstream fetch failed' };
       }
-      if (!upstream.ok || !upstream.body) {
+      if (!upstream.ok) {
         // 404 from TG can mean the file_path went stale between our
         // getFile call and the bytes fetch — drop the cached path so
         // the next request re-resolves.
@@ -81,7 +80,13 @@ const plugin: FastifyPluginAsync = async (app) => {
         reply.code(upstream.status === 404 ? 404 : 502);
         return { error: 'upstream fetch failed' };
       }
-      reply
+      // Buffer the bytes rather than piping the web stream. Lost-pet
+      // photos are small (TG caps the largest size well under a MB), so
+      // the memory cost is trivial and we sidestep the Node-stream /
+      // web-stream interop dance — plus we get an accurate
+      // Content-Length for the client.
+      const bytes = Buffer.from(await upstream.arrayBuffer());
+      return reply
         .header(
           'content-type',
           upstream.headers.get('content-type') ?? 'image/jpeg',
@@ -89,12 +94,8 @@ const plugin: FastifyPluginAsync = async (app) => {
         // file_id → bytes is content-addressed (file_id changes if the
         // file does), so the browser can cache aggressively. A day is
         // plenty for the markers/cards path.
-        .header('cache-control', 'public, max-age=86400, immutable');
-      // Cast: Node's Readable.fromWeb signature is parameterised on
-      // `ReadableStream<any>`, but the global fetch returns
-      // `ReadableStream<Uint8Array>` — the variance mismatch is purely
-      // a type-system artefact, the runtime conversion is supported.
-      return reply.send(Readable.fromWeb(upstream.body as never));
+        .header('cache-control', 'public, max-age=86400, immutable')
+        .send(bytes);
     },
   );
 };

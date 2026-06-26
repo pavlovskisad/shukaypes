@@ -89,6 +89,12 @@ const plugin: FastifyPluginAsync = async (app) => {
     // Telegram webhook is authenticated by its own secret token
     // header (see routes/telegram.ts), not by our app's auth.
     if (path === '/telegram/webhook') return;
+    // Photo proxy is fetched by plain <img src> tags, which cannot
+    // carry our x-device-id / x-telegram-init-data headers — auth here
+    // would 401 every image. It serves only photos already posted to
+    // public lost-pet groups, keyed by an opaque TG file_id, so it's
+    // safe to leave open.
+    if (path?.startsWith('/photos/')) return;
 
     // Prefer Telegram initData when present — it's a stronger
     // identity (signed by Telegram with our bot token) and lets a
