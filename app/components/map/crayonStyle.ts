@@ -433,9 +433,9 @@ export function applyCrayonOverride(
       // these are the classes that draw sidewalk doubles along
       // Хрещатик AND the actual paths through Маріїнський park. We
       // can't tell them apart from tags alone, so zoom-gate: only
-      // render at zoom >= 17, one notch past the default open-map
+      // render at zoom >= 18, two notches past the default open-map
       // zoom (16) so the user arrives to a clean city-overview and
-      // paths only surface once they've actively zoomed in.
+      // paths only surface once they've zoomed in to street level.
       const isPathish =
         /(^|[_-])(path|footway|pedestrian|cycleway|steps|bridleway)([_-]|$)/.test(
           lower,
@@ -446,7 +446,7 @@ export function applyCrayonOverride(
             map as unknown as {
               setLayerZoomRange: (id: string, min: number, max: number) => void;
             }
-          ).setLayerZoomRange(id, 17, 24);
+          ).setLayerZoomRange(id, 18, 24);
         } catch {
           /* skip */
         }
