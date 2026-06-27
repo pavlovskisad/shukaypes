@@ -917,6 +917,13 @@ export default function MapViewWeb() {
       center: [pin.lng, pin.lat],
       zoom: Math.max(current, 17),
       padding: { top: 460, bottom: 110, left: 20, right: 20 },
+      // Extra downward nudge: dog markers are anchored at their foot
+      // with the photo chip floating ~90px above the geo point, so the
+      // padded centre alone lands the *chip* high in the strip. A fixed
+      // pixel offset drops it to the visual centre between the sheet's
+      // bottom edge and the tab bar without over-cranking padding
+      // (which would invert the camera's region on short viewports).
+      offset: [0, 60],
       duration: 500,
     });
   }, [selectedDogId, lostDogs, selectedSpotId, displayPositions]);
