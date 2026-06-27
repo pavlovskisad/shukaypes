@@ -292,13 +292,10 @@ export default function MapViewWeb() {
     void (async () => {
       const dog = await fetchLostDog(id);
       if (!dog) return;
+      // fetchLostDog merges the pet into lostDogs, so selecting it
+      // here lets the shared dog-snap effect (below) do the camera
+      // tween — same recipe a map-tap or quests-tab jump gets.
       setSelectedDog(dog.id);
-      mapRef.current?.easeTo({
-        center: [dog.lastSeen.position.lng, dog.lastSeen.position.lat],
-        zoom: 16,
-        padding: { top: 110, bottom: 130, left: 20, right: 20 },
-        duration: 700,
-      });
     })();
   }, [mapBounds, fetchLostDog, setSelectedDog]);
 
@@ -875,6 +872,48 @@ export default function MapViewWeb() {
       duration: 500,
     });
   }, [selectedSpotId, spots]);
+
+  // Dog-snap — same coordinated tween the spot gets, so tapping a pet
+  // (on the map OR via the quests-tab jump, which routes here with the
+  // dog already selected) snaps the camera onto it under the compact
+  // LostDogModal. The modal covers the top ~430 px; bias the pin into
+  // the visible strip between the sheet's bottom edge and the tab bar
+  // with the same padding recipe the spot uses so the two feel
+  // identical.
+  //
+  // The ref gate matters: lostDogs is in the effect deps (we need it
+  // to look up the pin once the deep-link / quests-jump merges the pet
+  // in), but it also refreshes on every 15 s syncMap tick. Without the
+  // gate the camera would re-snap onto the pet every 15 s while the
+  // modal is open, fighting the user's panning. So we only tween when
+  // the *selection* changes, not when the underlying list does.
+  const lastSnappedDogRef = useRef<string | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    if (!selectedDogId) {
+      lastSnappedDogRef.current = null;
+      // Only reset the camera padding when no spot is driving it —
+      // otherwise closing a dog modal would clobber an active spot
+      // snap's padding. (In practice only one is ever open, but the
+      // guard keeps the two effects from racing.)
+      if (!selectedSpotId) {
+        map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      }
+      return;
+    }
+    if (selectedDogId === lastSnappedDogRef.current) return;
+    const dog = lostDogs.find((d) => d.id === selectedDogId);
+    if (!dog) return; // not merged in yet — retry when lostDogs updates
+    lastSnappedDogRef.current = selectedDogId;
+    const current = map.getZoom() ?? balance.mapZoomDefault;
+    map.easeTo({
+      center: [dog.lastSeen.position.lng, dog.lastSeen.position.lat],
+      zoom: Math.max(current, 17),
+      padding: { top: 460, bottom: 110, left: 20, right: 20 },
+      duration: 500,
+    });
+  }, [selectedDogId, lostDogs, selectedSpotId]);
 
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null

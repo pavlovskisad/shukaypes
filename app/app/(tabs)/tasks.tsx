@@ -10,7 +10,6 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { api, type NearbyLostDog } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
-import { LostDogModal } from '../../components/ui/LostDogModal';
 import {
   LostDogCardStack,
   LostDogCardStackSkeleton,
@@ -79,12 +78,8 @@ export default function TasksScreen() {
   const lostDogs = useGameStore((s) => s.lostDogs);
   const lostDogsLoaded = useGameStore((s) => s.lostDogsLoaded);
   const userPos = useGameStore((s) => s.userPosition);
-  const activeQuest = useGameStore((s) => s.activeQuest);
-  const startQuest = useGameStore((s) => s.startQuest);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
-  const [modalDogId, setModalDogId] = useState<string | null>(null);
-  const [startingDogId, setStartingDogId] = useState<string | null>(null);
   // Open the "see all" fullscreen list when truthy.
   const [seeAllDogsOpen, setSeeAllDogsOpen] = useState(false);
 
@@ -105,26 +100,16 @@ export default function TasksScreen() {
     [lostDogs, userPos?.lat, userPos?.lng],
   );
 
-  const modalDog = useMemo(
-    () => sortedDogs.find((d) => d.id === modalDogId) ?? null,
-    [sortedDogs, modalDogId],
-  );
-
-  const handleStartSearch = useCallback(
-    async (dog: NearbyLostDog) => {
-      if (startingDogId) return;
-      setStartingDogId(dog.id);
-      try {
-        await startQuest(dog.id);
-        setSelectedDog(null);
-        router.push('/');
-      } catch {
-        /* gameStore surfaces the error; keep the row open so the user can retry */
-      } finally {
-        setStartingDogId(null);
-      }
+  // Tapping a dog (card or "see all" row) jumps to the map with the
+  // pet selected — the map snaps the camera onto it and opens the
+  // LostDogModal there. Same pattern the spots tab uses (setSelected +
+  // route to '/'); no local modal on this tab anymore.
+  const onPickDog = useCallback(
+    (dog: NearbyLostDog) => {
+      setSelectedDog(dog.id);
+      router.push('/');
     },
-    [startQuest, setSelectedDog, startingDogId, router],
+    [setSelectedDog, router],
   );
 
   useFocusEffect(
@@ -135,21 +120,6 @@ export default function TasksScreen() {
       refresh();
     }, [refresh])
   );
-
-  // Preload neighbour photos on the first modal open so prev/next
-  // swipes find them in cache and don't briefly show the grey
-  // backdrop while the photo decodes. Browser dedupes by URL.
-  // window.Image (not the RN <Image> imported above) is the
-  // browser's HTMLImageElement constructor.
-  useEffect(() => {
-    if (!modalDogId || typeof window === 'undefined') return;
-    for (const d of sortedDogs) {
-      if (d.photoUrl) {
-        const img = new window.Image();
-        img.src = d.photoUrl;
-      }
-    }
-  }, [modalDogId, sortedDogs]);
 
   // Refetch quest history on focus so a freshly completed quest shows
   // up immediately. Errors fail silent — the card just stays empty.
@@ -303,7 +273,7 @@ export default function TasksScreen() {
             ) : (
               <LostDogCardStack
                 dogs={sortedDogs}
-                onTap={(d) => setModalDogId(d.id)}
+                onTap={onPickDog}
                 onCounterTap={() => setSeeAllDogsOpen(true)}
               />
             )}
@@ -418,25 +388,12 @@ export default function TasksScreen() {
         ) : null}
       </ScrollView>
 
-      {/* Same LostDogModal as the map. modalDog comes from local
-          state so it doesn't fight with the map's selection (which
-          drives the search-zone circle there). onStartSearch routes
-          to the map after the quest commits — the user lands on
-          the active quest's polyline. Single-dog modal; users tap a
-          different stack card / row to switch. */}
-      <LostDogModal
-        dog={modalDog}
-        onClose={() => setModalDogId(null)}
-        searchActive={!!activeQuest && activeQuest.dogId === modalDogId}
-        onStartSearch={(d) => handleStartSearch(d)}
-      />
-
       <LostDogsModal
         dogs={seeAllDogsOpen ? sortedDogs : null}
         onClose={() => setSeeAllDogsOpen(false)}
         onPick={(d) => {
           setSeeAllDogsOpen(false);
-          setModalDogId(d.id);
+          onPickDog(d);
         }}
       />
     </SafeAreaView>

@@ -37,18 +37,21 @@ interface LostDogModalProps {
 }
 
 const SHEET_ANIM_MS = 280;
-const PHOTO_HEIGHT_PX = 380;
-// Modal is anchored to the viewport top now, so the close button +
-// badge need to clear the OS status-bar / notch area. env() lookup
-// falls back to 0 in non-PWA Safari (no inset), 12 in standalone
-// PWA on notched iPhones.
+// Whole modal is now just the photo with everything overlaid on it —
+// no separate white info / action sections below. This is what keeps
+// the sheet compact (matches the SpotModal footprint). MapView's
+// dog-snap padding is tuned to roughly this cover height; keep them
+// loosely in sync if you retune.
+const PHOTO_HEIGHT_PX = 430;
+// Modal is anchored to the viewport top, so the close button + badge
+// need to clear the OS status-bar / notch area. env() lookup falls
+// back to 0 in non-PWA Safari (no inset), 12 in standalone PWA on
+// notched iPhones.
 const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
 
-// Close button without the absolute positioning — now sits inside
-// a flex row with the distance chip in the top-right cluster.
-// Plain white (no rgba / backdrop blur) so it matches the rest of
-// the chip family — every modal / card chip is solid white now.
-const CLOSE_BUTTON_STYLE_NOABS: CSSProperties = {
+// Close button — solid white pill, sits in the top-right cluster next
+// to the distance chip. Matches the chip family used across modals.
+const CLOSE_BUTTON_STYLE: CSSProperties = {
   width: 36,
   height: 36,
   borderRadius: R.pill,
@@ -65,6 +68,18 @@ const CLOSE_BUTTON_STYLE_NOABS: CSSProperties = {
   lineHeight: 1,
 };
 
+// Small white chip used for the urgency badge + distance — shared
+// recipe so the top row reads as one family.
+const TOP_CHIP: CSSProperties = {
+  background: '#ffffff',
+  borderRadius: R.pill,
+  padding: '6px 12px',
+  fontSize: TYPE.small,
+  fontWeight: 700,
+  letterSpacing: 0.3,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+};
+
 function relativeTime(iso: string, t: AppStrings): string {
   const then = new Date(iso).getTime();
   const now = Date.now();
@@ -76,10 +91,12 @@ function relativeTime(iso: string, t: AppStrings): string {
   return t.time.ago(diffD, 'd');
 }
 
-// Slide-up dog detail sheet. Photo-led hero with name + breed on a
-// gradient overlay (matches the LostDogCardStack visual treatment),
-// then a slim info row + action pills below. Single dog at a time —
-// no prev/next cycling; the user taps another map marker to switch.
+// Compact dog detail sheet. The whole card is the photo — badge +
+// distance + close float on top, and the name / breed / last-seen /
+// reward / action pills all sit on a dark gradient over the bottom of
+// the image. Same top-anchored slide-down + transparent-scrim "snap
+// card" shape as the SpotModal so the two read as one family. Single
+// dog at a time — no prev/next cycling; tap another marker to switch.
 export function LostDogModal({
   dog,
   onClose,
@@ -134,16 +151,16 @@ export function LostDogModal({
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.3)',
+        // Transparent scrim (matches SpotModal): the snapped pin +
+        // search-zone circle stay visible in the strip below the
+        // sheet, so dimming them would only wash out exactly what the
+        // user is here to look at. Click still closes on outside tap.
+        background: 'transparent',
         display: 'flex',
-        // Anchored at the TOP — sheet slides down from off-screen-
-        // top and covers the HUD area like a dashboard / system-
-        // notification panel.
+        // Anchored at the TOP — sheet slides down from off-screen-top
+        // like a dashboard / system-notification panel.
         alignItems: 'flex-start',
         justifyContent: 'center',
-        // Tab bar at the bottom is visible behind the modal's
-        // dimmed overlay; no padding needed at top (sheet bleeds
-        // to viewport edge).
         zIndex: Z.MODAL_MAP,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
@@ -152,10 +169,9 @@ export function LostDogModal({
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: '#ffffff',
-          // Full-bleed top edge (no rounded corners), rounded
-          // bottom only — reads as a card hanging from the top
-          // of the screen.
+          background: '#f0f0f0',
+          // Full-bleed top edge (no rounded corners), rounded bottom
+          // only — reads as a card hanging from the top of the screen.
           borderTopLeftRadius: 0,
           borderTopRightRadius: 0,
           borderBottomLeftRadius: R.card,
@@ -163,150 +179,122 @@ export function LostDogModal({
           padding: 0,
           width: '100%',
           maxWidth: 460,
-          // Cap height so the action pills always stay above the
-          // tab bar. 100vh - tab-bar-area - small breather.
+          height: PHOTO_HEIGHT_PX,
+          // Cap on short viewports (landscape phone) so the card never
+          // runs under the tab bar; the photo shrinks, the bottom-
+          // anchored content block stays put.
           maxHeight: 'calc(100vh - 110px - env(safe-area-inset-bottom))' as unknown as number,
-          display: 'flex',
-          flexDirection: 'column',
           position: 'relative',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
           boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
           overflow: 'hidden',
         }}
       >
-        {/* Photo hero — fills the top of the modal. Name + breed sit
-            on a dark-to-transparent gradient over the bottom third
-            so the dog's image is the visual anchor (same recipe as
-            the LostDogCardStack on the tasks tab). Badge top-left,
-            close top-right. */}
-        <div
-          style={{
-            position: 'relative',
-            width: '100%',
-            height: PHOTO_HEIGHT_PX,
-            flexShrink: 0,
-            background: '#f0f0f0',
-            overflow: 'hidden',
-          }}
-        >
-          {renderDog.photoUrl ? (
-            <img
-              src={renderDog.photoUrl}
-              alt={renderDog.name}
-              onLoad={(e) => {
-                e.currentTarget.style.opacity = '1';
-              }}
-              style={{
-                width: '100%',
-                height: '100%',
-                objectFit: 'cover',
-                objectPosition: 'center center',
-                display: 'block',
-                opacity: 0,
-                transition: 'opacity 220ms ease-out',
-                transform: 'scale(1.04)',
-                transformOrigin: 'center center',
-              }}
-            />
-          ) : (
-            <div
-              style={{
-                width: '100%',
-                height: '100%',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                fontSize: 120,
-              }}
-            >
-              {renderDog.emoji}
-            </div>
-          )}
-          {/* Photo gradient — carries the white name + breed text
-              over the bottom half of the photo. */}
-          <div
+        {/* Photo fills the whole card. */}
+        {renderDog.photoUrl ? (
+          <img
+            src={renderDog.photoUrl}
+            alt={renderDog.name}
+            onLoad={(e) => {
+              e.currentTarget.style.opacity = '1';
+            }}
             style={{
-              position: 'absolute',
-              bottom: 0,
-              left: 0,
-              right: 0,
-              height: '55%',
-              background:
-                'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.1) 35%, rgba(0,0,0,0.72) 100%)',
-              pointerEvents: 'none',
+              width: '100%',
+              height: '100%',
+              objectFit: 'cover',
+              objectPosition: 'center center',
+              display: 'block',
+              opacity: 0,
+              transition: 'opacity 220ms ease-out',
+              transform: 'scale(1.04)',
+              transformOrigin: 'center center',
             }}
           />
-          {/* Urgency badge — top: SAFE_TOP so it clears the iPhone
-              notch / status bar with the modal anchored at viewport
-              top. */}
-          <span
-            style={{
-              position: 'absolute',
-              top: SAFE_TOP,
-              left: 14,
-              background: '#ffffff',
-              color: badgeFg,
-              // Full-pill + lifted shadow to match the HUD / chat
-              // pill family across the app.
-              borderRadius: R.pill,
-              padding: '6px 12px',
-              fontSize: TYPE.small,
-              fontWeight: 700,
-              letterSpacing: 0.5,
-              boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: S.s,
-            }}
-          >
-            <Icon name={badgeIcon} size={INLINE_ICON.badge} />
-            {badgeText}
-          </span>
-          {/* Top-right cluster — distance chip + close button. */}
+        ) : (
           <div
             style={{
-              position: 'absolute',
-              top: SAFE_TOP,
-              right: 12,
+              width: '100%',
+              height: '100%',
               display: 'flex',
               alignItems: 'center',
-              gap: S.s,
+              justifyContent: 'center',
+              fontSize: 120,
             }}
           >
-            {distLabel ? (
-              <span
-                style={{
-                  background: '#ffffff',
-                  color: '#555',
-                  borderRadius: R.pill,
-                  padding: '6px 12px',
-                  fontSize: TYPE.small,
-                  fontWeight: 700,
-                  letterSpacing: 0.3,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
-                }}
-              >
-                {distLabel}
-              </span>
-            ) : null}
-            <button
-              onClick={(e) => playPopThen(e.currentTarget, onClose)}
-              aria-label={t.modals.common.close}
-              style={CLOSE_BUTTON_STYLE_NOABS}
-            >
-              ×
-            </button>
+            {renderDog.emoji}
           </div>
-          {/* Name + breed overlay on the gradient */}
-          <div
-            style={{
-              position: 'absolute',
-              left: 22,
-              right: 22,
-              bottom: 22,
-              pointerEvents: 'none',
-            }}
+        )}
+
+        {/* Bottom gradient — carries the white name / breed / meta text
+            and the action pills over the lower portion of the photo. */}
+        <div
+          style={{
+            position: 'absolute',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: '72%',
+            background:
+              'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.15) 30%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.82) 100%)',
+            pointerEvents: 'none',
+          }}
+        />
+
+        {/* Urgency badge — top-left, clears the notch via SAFE_TOP. */}
+        <span
+          style={{
+            ...TOP_CHIP,
+            position: 'absolute',
+            top: SAFE_TOP,
+            left: 14,
+            color: badgeFg,
+            letterSpacing: 0.5,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: S.s,
+          }}
+        >
+          <Icon name={badgeIcon} size={INLINE_ICON.badge} />
+          {badgeText}
+        </span>
+
+        {/* Top-right cluster — distance chip + close button. */}
+        <div
+          style={{
+            position: 'absolute',
+            top: SAFE_TOP,
+            right: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: S.s,
+          }}
+        >
+          {distLabel ? (
+            <span style={{ ...TOP_CHIP, color: '#555' }}>{distLabel}</span>
+          ) : null}
+          <button
+            onClick={(e) => playPopThen(e.currentTarget, onClose)}
+            aria-label={t.modals.common.close}
+            style={CLOSE_BUTTON_STYLE}
           >
+            ×
+          </button>
+        </div>
+
+        {/* Bottom content block — name, breed, meta, action pills. All
+            on the gradient. */}
+        <div
+          style={{
+            position: 'absolute',
+            left: 18,
+            right: 18,
+            bottom: 16,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: S.s,
+          }}
+        >
+          <div>
             <div
               style={{
                 fontFamily: SYSTEM_FONT,
@@ -325,7 +313,7 @@ export function LostDogModal({
                   fontFamily: SYSTEM_FONT,
                   fontSize: TYPE.body,
                   color: 'rgba(255,255,255,0.92)',
-                  marginTop: S.xs,
+                  marginTop: 2,
                   textShadow: '0 1px 4px rgba(0,0,0,0.4)',
                 }}
               >
@@ -333,69 +321,55 @@ export function LostDogModal({
               </div>
             ) : null}
           </div>
-        </div>
 
-        {/* Info section — last-seen meta + reward hint. Scrolls
-            internally if the viewport is so short that even after
-            photo + actions there's no room for it. */}
-        <div
-          style={{
-            padding: '16px 22px 8px',
-            overflowY: 'auto',
-            flexGrow: 1,
-            minHeight: 0,
-          }}
-        >
-          <div style={{ display: 'flex', flexDirection: 'column', gap: S.xs }}>
-            <div style={{ fontSize: TYPE.small, color: '#555' }}>
-              {t.modals.lostDog.lastSeen(relativeTime(renderDog.lastSeen.at, t))}
-            </div>
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: S.s,
-                fontSize: TYPE.small,
-                color: '#777',
-              }}
-            >
-              <Icon name="paws" size={INLINE_ICON.secondary} />
+          {/* Meta — last-seen + reward, light text over the gradient.
+              Stacked so the (often long, localized) reward sentence
+              keeps its own line instead of wrapping mid-row. */}
+          <div
+            style={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: S.xs,
+              fontSize: TYPE.small,
+              color: 'rgba(255,255,255,0.88)',
+              textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+            }}
+          >
+            <span>{t.modals.lostDog.lastSeen(relativeTime(renderDog.lastSeen.at, t))}</span>
+            <span style={{ display: 'inline-flex', alignItems: 'center', gap: S.xs }}>
+              <Icon name="paws" size={INLINE_ICON.secondary} inverted />
               {t.modals.lostDog.questCta(renderDog.rewardPoints)}
-            </div>
+            </span>
           </div>
-        </div>
 
-        {/* Action pills — fixed at the bottom of the modal so they
-            never scroll out of view. flexShrink: 0 keeps them at
-            their natural height regardless of the info section's
-            content above. */}
-        <div
-          style={{
-            display: 'flex',
-            gap: S.s,
-            padding: '12px 22px 20px',
-            flexShrink: 0,
-          }}
-        >
-          <button
-            onClick={(e) =>
-              playPopThen(e.currentTarget, () => onReportSighting?.(renderDog))
-            }
-            style={MODAL_PILL_DARK}
+          {/* Action pills. */}
+          <div
+            style={{
+              display: 'flex',
+              gap: S.s,
+              marginTop: S.xs,
+            }}
           >
-            <Icon name="eyes" size={INLINE_ICON.cta} inverted />
-            {t.modals.lostDog.iveSeen}
-          </button>
-          <button
-            onClick={(e) =>
-              playPopThen(e.currentTarget, () => onStartSearch?.(renderDog))
-            }
-            disabled={searchActive}
-            style={searchActive ? MODAL_PILL_DISABLED : MODAL_PILL_BLUE}
-          >
-            <Icon name="search" size={INLINE_ICON.cta} inverted={!searchActive} />
-            {searchActive ? t.modals.lostDog.searchingCta : t.modals.lostDog.startSearch}
-          </button>
+            <button
+              onClick={(e) =>
+                playPopThen(e.currentTarget, () => onReportSighting?.(renderDog))
+              }
+              style={MODAL_PILL_DARK}
+            >
+              <Icon name="eyes" size={INLINE_ICON.cta} inverted />
+              {t.modals.lostDog.iveSeen}
+            </button>
+            <button
+              onClick={(e) =>
+                playPopThen(e.currentTarget, () => onStartSearch?.(renderDog))
+              }
+              disabled={searchActive}
+              style={searchActive ? MODAL_PILL_DISABLED : MODAL_PILL_BLUE}
+            >
+              <Icon name="search" size={INLINE_ICON.cta} inverted={!searchActive} />
+              {searchActive ? t.modals.lostDog.searchingCta : t.modals.lostDog.startSearch}
+            </button>
+          </div>
         </div>
 
         <style>{`
