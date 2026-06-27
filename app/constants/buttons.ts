@@ -44,6 +44,17 @@ export const MODAL_PILL_DARK: CSSProperties = {
   color: '#ffffff',
 };
 
+// Light/white pill — used when a dark pill would read poorly, e.g. on
+// top of a photo (the LostDogModal's on-image action row). Solid white
+// with dark text + a slightly stronger shadow so it lifts off the
+// image. Pair with a non-inverted (dark) Icon.
+export const MODAL_PILL_LIGHT: CSSProperties = {
+  ...MODAL_PILL_BASE,
+  background: '#ffffff',
+  color: '#1a1a1a',
+  boxShadow: '0 4px 12px rgba(0,0,0,0.22)',
+};
+
 export const MODAL_PILL_BLUE: CSSProperties = {
   ...MODAL_PILL_BASE,
   background: 'rgb(0,60,255)',

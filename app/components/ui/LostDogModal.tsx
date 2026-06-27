@@ -9,7 +9,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import {
-  MODAL_PILL_DARK,
+  MODAL_PILL_LIGHT,
   MODAL_PILL_BLUE,
   MODAL_PILL_DISABLED,
 } from '../../constants/buttons';
@@ -354,9 +354,9 @@ export function LostDogModal({
               onClick={(e) =>
                 playPopThen(e.currentTarget, () => onReportSighting?.(renderDog))
               }
-              style={MODAL_PILL_DARK}
+              style={MODAL_PILL_LIGHT}
             >
-              <Icon name="eyes" size={INLINE_ICON.cta} inverted />
+              <Icon name="eyes" size={INLINE_ICON.cta} />
               {t.modals.lostDog.iveSeen}
             </button>
             <button

@@ -905,15 +905,21 @@ export default function MapViewWeb() {
     if (selectedDogId === lastSnappedDogRef.current) return;
     const dog = lostDogs.find((d) => d.id === selectedDogId);
     if (!dog) return; // not merged in yet — retry when lostDogs updates
+    // The marker renders at its search-zone-jittered point (which can
+    // sit hundreds of metres — up to the zone radius — from the raw
+    // last-seen coord), so snap to THAT, not lastSeen.position, or the
+    // camera lands on empty map away from the pin. Same lookup the
+    // search-zone circle + marker use.
+    const pin = displayPositions.get(selectedDogId) ?? dog.lastSeen.position;
     lastSnappedDogRef.current = selectedDogId;
     const current = map.getZoom() ?? balance.mapZoomDefault;
     map.easeTo({
-      center: [dog.lastSeen.position.lng, dog.lastSeen.position.lat],
+      center: [pin.lng, pin.lat],
       zoom: Math.max(current, 17),
       padding: { top: 460, bottom: 110, left: 20, right: 20 },
       duration: 500,
     });
-  }, [selectedDogId, lostDogs, selectedSpotId]);
+  }, [selectedDogId, lostDogs, selectedSpotId, displayPositions]);
 
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null
