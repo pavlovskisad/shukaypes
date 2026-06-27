@@ -150,6 +150,13 @@ export default function MapViewWeb() {
   const tokens = useGameStore((s) => s.tokens);
   const foodItems = useGameStore((s) => s.foodItems);
   const lostDogs = useGameStore((s) => s.lostDogs);
+  // Whether the map tab is the active screen. The offscreen companion
+  // chip + offscreen dog indicators are portaled to document.body, so
+  // they'd otherwise stay painted over the other tabs (tasks, chat,
+  // …) — we gate their computation on this so they only show on the
+  // map.
+  const currentScreen = useGameStore((s) => s.currentScreen);
+  const onMapScreen = currentScreen === 'map';
   const selectedDogId = useGameStore((s) => s.selectedDogId);
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
@@ -1075,6 +1082,9 @@ export default function MapViewWeb() {
   // `sniffJustChanged` window keeps them mounted long enough for
   // the bubble-out animation to complete on toggle off.
   const offscreenDogIndicators = useMemo(() => {
+    // Portaled to document.body — suppress entirely off the map tab so
+    // the chips don't paint over other screens.
+    if (!onMapScreen) return [];
     if (!sniffMode && !sniffJustChanged) return [];
     if (!mapBounds || !userPos) return [];
     const { n, s, e, w } = mapBounds;
@@ -1289,6 +1299,7 @@ export default function MapViewWeb() {
       };
     });
   }, [
+    onMapScreen,
     mapBounds,
     userPos?.lat,
     userPos?.lng,
@@ -1320,6 +1331,9 @@ export default function MapViewWeb() {
   // `topReserve` clears the iPhone dynamic island / OS status bar — at
   // 0 the bookmark was clipping under the curved system bar.
   const offscreenIndicator = (() => {
+    // Portaled to document.body — suppress off the map tab so the chip
+    // doesn't paint over other screens.
+    if (!onMapScreen) return null;
     if (!mapBounds || !companionPos) return null;
     const { n, s, e, w } = mapBounds;
     if (
