@@ -2132,6 +2132,14 @@ export default function MapViewWeb() {
         </div>
       ) : null}
 
+      {/* Both modals portal to document.body, so gate them on the map
+          tab — otherwise a sheet left open while you switch tabs stays
+          painted over the other screens. Unmounting via `onMapScreen`
+          (rather than nulling the prop) drops the portal instantly on
+          tab-switch with no slide-out flash over the next tab, while
+          the normal X-to-close animation still runs on the map. */}
+      {onMapScreen ? (
+      <>
       <LostDogModal
         dog={lostDogs.find((d) => d.id === selectedDogId) ?? null}
         onClose={() => setSelectedDog(null)}
@@ -2191,6 +2199,8 @@ export default function MapViewWeb() {
           setSelectedSpot(null);
         }}
       />
+      </>
+      ) : null}
     </div>
   );
 }
