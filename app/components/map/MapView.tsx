@@ -935,6 +935,29 @@ export default function MapViewWeb() {
     });
   }, [selectedDogId, lostDogs, selectedSpotId, displayPositions]);
 
+  // Prev / next cycling for the LostDogModal. Walks the nearby pets in
+  // distance order (closest first) so ‹ › steps through them the same
+  // way the quests-tab list is sorted; wraps at the ends. Selecting the
+  // neighbour reuses the dog-snap effect above, so the camera follows.
+  const cycleSelectedDog = useCallback(
+    (dir: 1 | -1) => {
+      const id = useGameStore.getState().selectedDogId;
+      if (!id) return;
+      const list = userPos
+        ? [...lostDogs].sort(
+            (a, b) =>
+              distanceMeters(userPos, a.lastSeen.position) -
+              distanceMeters(userPos, b.lastSeen.position),
+          )
+        : lostDogs;
+      const idx = list.findIndex((d) => d.id === id);
+      if (idx < 0) return;
+      const neighbour = list[(idx + dir + list.length) % list.length];
+      if (neighbour) setSelectedDog(neighbour.id);
+    },
+    [lostDogs, userPos, setSelectedDog],
+  );
+
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null
   // (we render the "locating…" screen, so mapContainerRef.current is
@@ -2144,6 +2167,8 @@ export default function MapViewWeb() {
         dog={lostDogs.find((d) => d.id === selectedDogId) ?? null}
         onClose={() => setSelectedDog(null)}
         searchActive={!!activeQuest && activeQuest.dogId === selectedDogId}
+        onPrev={lostDogs.length > 1 ? () => cycleSelectedDog(-1) : undefined}
+        onNext={lostDogs.length > 1 ? () => cycleSelectedDog(1) : undefined}
         onReportSighting={async (d) => {
           setSelectedDog(null);
           const res = await useGameStore.getState().reportSighting(d.id);

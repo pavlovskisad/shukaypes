@@ -1,5 +1,5 @@
-import type { CSSProperties } from 'react';
-import { useEffect, useState } from 'react';
+import type { CSSProperties, TouchEvent as ReactTouchEvent } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -34,7 +34,16 @@ interface LostDogModalProps {
   // "start search" button for a muted "searching…" affordance that
   // leads to the abandon-via-pill flow instead of double-starting.
   searchActive?: boolean;
+  // Optional prev/next cycling between the nearby pets. When wired up,
+  // the modal shows ‹ › chevrons and responds to horizontal swipe
+  // gestures on the photo. Either both or neither.
+  onPrev?: () => void;
+  onNext?: () => void;
 }
+
+// Horizontal swipe threshold (px). Small enough for a thumb flick, big
+// enough that a stray diagonal drag doesn't trip a cycle.
+const SWIPE_THRESHOLD_PX = 60;
 
 const SHEET_ANIM_MS = 280;
 // Whole modal is now just the photo with everything overlaid on it —
@@ -68,6 +77,27 @@ const CLOSE_BUTTON_STYLE: CSSProperties = {
   lineHeight: 1,
 };
 
+// Prev / next chevron — dark translucent circular pill, vertically
+// centred on the photo. Shared base; left/right just swap the edge.
+const CHEVRON_BASE: CSSProperties = {
+  position: 'absolute',
+  top: '46%',
+  transform: 'translateY(-50%)',
+  width: 44,
+  height: 44,
+  borderRadius: R.pill,
+  border: 'none',
+  background: 'rgba(0,0,0,0.5)',
+  color: '#ffffff',
+  fontSize: 26,
+  lineHeight: '44px',
+  padding: 0,
+  cursor: 'pointer',
+  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
+};
+const CHEVRON_STYLE_LEFT: CSSProperties = { ...CHEVRON_BASE, left: 10 };
+const CHEVRON_STYLE_RIGHT: CSSProperties = { ...CHEVRON_BASE, right: 10 };
+
 // Small white chip used for the urgency badge + distance — shared
 // recipe so the top row reads as one family.
 const TOP_CHIP: CSSProperties = {
@@ -95,26 +125,37 @@ function relativeTime(iso: string, t: AppStrings): string {
 // distance + close float on top, and the name / breed / last-seen /
 // reward / action pills all sit on a dark gradient over the bottom of
 // the image. Same top-anchored slide-down + transparent-scrim "snap
-// card" shape as the SpotModal so the two read as one family. Single
-// dog at a time — no prev/next cycling; tap another marker to switch.
+// card" shape as the SpotModal so the two read as one family. When
+// onPrev/onNext are wired, ‹ › chevrons + horizontal swipe cycle
+// through the nearby pets; the photo/body slides, the controls stay.
 export function LostDogModal({
   dog,
   onClose,
   onReportSighting,
   onStartSearch,
   searchActive,
+  onPrev,
+  onNext,
 }: LostDogModalProps) {
   const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
   const [renderDog, setRenderDog] = useState<NearbyLostDog | null>(dog);
   const [closing, setClosing] = useState(false);
+  // Direction of the last cycle — drives the slide-in keyframe on the
+  // keyed content track. null on a fresh open so the sheet-down enter
+  // animation doesn't compose with a horizontal slide.
+  const [slideDir, setSlideDir] = useState<'left' | 'right' | null>(null);
+  const touchStartXRef = useRef<number | null>(null);
 
   // Three transitions matter:
-  //   prop dog: A   →  prop dog: B    (swap content, no animation)
+  //   prop dog: A   →  prop dog: B    (swap content, slide animation)
   //   prop dog: A   →  null           (start closing → unmount after MS)
   //   prop dog: null → A              (mount, enter animation runs)
   useEffect(() => {
     if (dog) {
+      // Only clear slideDir on a fresh open (renderDog was null). For
+      // A → B cycle swaps, leave it set so the new track mount slides.
+      if (!renderDog) setSlideDir(null);
       setRenderDog(dog);
       setClosing(false);
       return;
@@ -124,6 +165,7 @@ export function LostDogModal({
       const t = setTimeout(() => {
         setRenderDog(null);
         setClosing(false);
+        setSlideDir(null);
       }, SHEET_ANIM_MS);
       return () => clearTimeout(t);
     }
@@ -131,6 +173,32 @@ export function LostDogModal({
 
   if (!renderDog) return null;
   if (typeof document === 'undefined') return null;
+
+  // Cycle helpers — set slideDir BEFORE the parent swaps the dog so the
+  // next render's track mount picks up the right direction.
+  const handlePrev = () => {
+    if (!onPrev) return;
+    setSlideDir('left');
+    onPrev();
+  };
+  const handleNext = () => {
+    if (!onNext) return;
+    setSlideDir('right');
+    onNext();
+  };
+  const handleTouchStart = (e: ReactTouchEvent) => {
+    touchStartXRef.current = e.touches[0]?.clientX ?? null;
+  };
+  const handleTouchEnd = (e: ReactTouchEvent) => {
+    const start = touchStartXRef.current;
+    touchStartXRef.current = null;
+    if (start == null || (!onPrev && !onNext)) return;
+    const end = e.changedTouches[0]?.clientX ?? start;
+    const delta = end - start;
+    if (Math.abs(delta) < SWIPE_THRESHOLD_PX) return;
+    if (delta > 0) handlePrev();
+    else handleNext();
+  };
 
   const urgent = renderDog.urgency === 'urgent';
   const badgeIcon: IconName = urgent ? 'urgent' : 'search';
@@ -168,6 +236,8 @@ export function LostDogModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
+        onTouchStart={handleTouchStart}
+        onTouchEnd={handleTouchEnd}
         style={{
           background: '#f0f0f0',
           // Full-bleed top edge (no rounded corners), rounded bottom
@@ -190,11 +260,34 @@ export function LostDogModal({
           overflow: 'hidden',
         }}
       >
+        {/* Per-dog content TRACK — keyed by id so a prev/next swap
+            remounts it and runs the slide-in keyframe. Fills the card;
+            the nav controls (badge / close / chevrons) sit OUTSIDE it
+            so they don't slide with the content. */}
+        <div
+          key={renderDog.id}
+          style={{
+            position: 'absolute',
+            inset: 0,
+            animation: slideDir
+              ? `slide-in-from-${slideDir} ${SHEET_ANIM_MS}ms cubic-bezier(0.2,0.7,0.3,1)`
+              : undefined,
+          }}
+        >
         {/* Photo fills the whole card. */}
         {renderDog.photoUrl ? (
           <img
             src={renderDog.photoUrl}
             alt={renderDog.name}
+            // Cached photos (preloaded for prev/next) can finish before
+            // React attaches onLoad, which would leave the image stuck
+            // at opacity 0. The ref check reveals it immediately if it's
+            // already complete; onLoad covers the uncached path.
+            ref={(el) => {
+              if (el && el.complete && el.naturalWidth > 0) {
+                el.style.opacity = '1';
+              }
+            }}
             onLoad={(e) => {
               e.currentTarget.style.opacity = '1';
             }}
@@ -239,47 +332,6 @@ export function LostDogModal({
             pointerEvents: 'none',
           }}
         />
-
-        {/* Urgency badge — top-left, clears the notch via SAFE_TOP. */}
-        <span
-          style={{
-            ...TOP_CHIP,
-            position: 'absolute',
-            top: SAFE_TOP,
-            left: 14,
-            color: badgeFg,
-            letterSpacing: 0.5,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: S.s,
-          }}
-        >
-          <Icon name={badgeIcon} size={INLINE_ICON.badge} />
-          {badgeText}
-        </span>
-
-        {/* Top-right cluster — distance chip + close button. */}
-        <div
-          style={{
-            position: 'absolute',
-            top: SAFE_TOP,
-            right: 12,
-            display: 'flex',
-            alignItems: 'center',
-            gap: S.s,
-          }}
-        >
-          {distLabel ? (
-            <span style={{ ...TOP_CHIP, color: '#555' }}>{distLabel}</span>
-          ) : null}
-          <button
-            onClick={(e) => playPopThen(e.currentTarget, onClose)}
-            aria-label={t.modals.common.close}
-            style={CLOSE_BUTTON_STYLE}
-          >
-            ×
-          </button>
-        </div>
 
         {/* Bottom content block — name, breed, meta, action pills. All
             on the gradient. */}
@@ -371,6 +423,79 @@ export function LostDogModal({
             </button>
           </div>
         </div>
+        </div>
+        {/* end content track */}
+
+        {/* Urgency badge — top-left, clears the notch via SAFE_TOP.
+            Outside the slide track so it doesn't move on cycle. */}
+        <span
+          style={{
+            ...TOP_CHIP,
+            position: 'absolute',
+            top: SAFE_TOP,
+            left: 14,
+            color: badgeFg,
+            letterSpacing: 0.5,
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: S.s,
+          }}
+        >
+          <Icon name={badgeIcon} size={INLINE_ICON.badge} />
+          {badgeText}
+        </span>
+
+        {/* Top-right cluster — distance chip + close button. */}
+        <div
+          style={{
+            position: 'absolute',
+            top: SAFE_TOP,
+            right: 12,
+            display: 'flex',
+            alignItems: 'center',
+            gap: S.s,
+          }}
+        >
+          {distLabel ? (
+            <span style={{ ...TOP_CHIP, color: '#555' }}>{distLabel}</span>
+          ) : null}
+          <button
+            onClick={(e) => playPopThen(e.currentTarget, onClose)}
+            aria-label={t.modals.common.close}
+            style={CLOSE_BUTTON_STYLE}
+          >
+            ×
+          </button>
+        </div>
+
+        {/* Prev / next chevrons — vertically centred on the photo, above
+            the content block. Dark translucent pills so they read over
+            any image. Outside the slide track so they stay put while
+            the content slides. */}
+        {onPrev ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handlePrev();
+            }}
+            aria-label={t.modals.lostDog.previousPet}
+            style={CHEVRON_STYLE_LEFT}
+          >
+            ‹
+          </button>
+        ) : null}
+        {onNext ? (
+          <button
+            onClick={(e) => {
+              e.stopPropagation();
+              handleNext();
+            }}
+            aria-label={t.modals.lostDog.nextPet}
+            style={CHEVRON_STYLE_RIGHT}
+          >
+            ›
+          </button>
+        ) : null}
 
         <style>{`
           @keyframes top-sheet-in {
@@ -380,6 +505,14 @@ export function LostDogModal({
           @keyframes top-sheet-out {
             from { transform: translateY(0); }
             to { transform: translateY(-100%); }
+          }
+          @keyframes slide-in-from-left {
+            from { transform: translateX(-22px); opacity: 0.4; }
+            to   { transform: translateX(0); opacity: 1; }
+          }
+          @keyframes slide-in-from-right {
+            from { transform: translateX(22px); opacity: 0.4; }
+            to   { transform: translateX(0); opacity: 1; }
           }
         `}</style>
       </div>
