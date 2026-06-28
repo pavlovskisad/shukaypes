@@ -12,7 +12,9 @@ import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { SpotCardStack, SpotCardStackSkeleton } from '../../components/ui/SpotCardStack';
 import { SpotsCategoryModal } from '../../components/ui/SpotsCategoryModal';
+import { SwipeHintCallout } from '../../components/ui/SwipeHintCallout';
 import { distanceMeters } from '../../utils/geo';
+import { useHint } from '../../hooks/useHint';
 
 // Fixed display order — matches the FILTERS chip order from the
 // previous tab layout so users coming from older sessions land on
@@ -101,6 +103,21 @@ export default function SpotsScreen() {
     },
     [setSelectedSpot, router],
   );
+
+  // First category whose deck has more than one card — that's where the
+  // swipe nudge rides. Shares the 'cards:swipe' id with the dogs deck,
+  // so it shows on whichever carousel the user reaches first, not both.
+  const firstSwipeCat = useMemo(
+    () => CATEGORY_ORDER.find((cat) => (byCategory.get(cat)?.length ?? 0) > 1) ?? null,
+    [byCategory],
+  );
+  const currentScreen = useGameStore((s) => s.currentScreen);
+  const swipeHint = useHint('cards:swipe', {
+    ready: currentScreen === 'spots' && firstSwipeCat != null,
+    showDelayMs: 900,
+    autoDismissMs: 5000,
+    persist: false,
+  });
 
   // Snap-pop on dominant card change — same IntersectionObserver +
   // Web Animations pattern as the tasks tab. Cards have stable
@@ -213,14 +230,18 @@ export default function SpotsScreen() {
           ? CATEGORY_ORDER.map((cat) => {
               const list = byCategory.get(cat) ?? [];
               if (list.length === 0) return null;
+              const showSwipe = cat === firstSwipeCat && swipeHint.visible;
               return (
                 <View key={cat} nativeID={`snap-card-spots-${cat}`} style={styles.card}>
                   <Text style={styles.cardTitle}>{cardTitle(t, cat)}</Text>
-                  <SpotCardStack
-                    spots={list}
-                    onTap={onPickSpot}
-                    onCounterTap={() => setExpandedCategory(cat)}
-                  />
+                  <View style={styles.deckWrap}>
+                    <SpotCardStack
+                      spots={list}
+                      onTap={onPickSpot}
+                      onCounterTap={() => setExpandedCategory(cat)}
+                    />
+                    {showSwipe ? <SwipeHintCallout text={t.hints.swipeCards} /> : null}
+                  </View>
                 </View>
               );
             })
@@ -270,6 +291,10 @@ const styles = StyleSheet.create({
     scrollSnapAlign: 'start',
     scrollSnapStop: 'always',
   } as unknown as object,
+  // Relative wrapper so the swipe-hint callout can overlay the deck.
+  deckWrap: {
+    position: 'relative',
+  },
   // Card titles bumped to match the tasks-tab cardTitle — 17pt,
   // weight 800, colours.black. Were too quiet at 14/grey.
   cardTitle: {

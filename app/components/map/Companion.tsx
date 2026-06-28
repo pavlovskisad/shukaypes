@@ -536,6 +536,17 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     autoDismissMs: 6000,
     persist: false,
   });
+  // Soft fan-out, step 3 (map): the spots on/off toggle — the top-right
+  // pin pill. Chained after super-sniff so the map hints arrive one at
+  // a time. Pulses the pill via the published activeHint.
+  const spotsHint = useHint('map:spots-toggle', {
+    // Not in sniff mode — the HUD (and the pin pill it points at) is
+    // hidden there.
+    ready: hintsReady && supersniffHint.seen && !sniffMode,
+    showDelayMs: 1200,
+    autoDismissMs: 6000,
+    persist: false,
+  });
   // Radial-menu explainer: the first time the menu blooms, the dog
   // names what's in it (search / walk / visit / meet / chat) so the
   // icon ring isn't a guessing game. Rides alongside the open menu at
@@ -558,14 +569,18 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
       ? 'map:long-press-to-sniff'
       : supersniffHint.visible
         ? 'map:supersniff'
-        : null
+        : spotsHint.visible
+          ? 'map:spots-toggle'
+          : null
     : null;
   const hintBubble =
     activeHintId === 'map:long-press-to-sniff'
       ? t.hints.longPressToSniff
       : activeHintId === 'map:supersniff'
         ? t.hints.supersniff
-        : null;
+        : activeHintId === 'map:spots-toggle'
+          ? t.hints.spotsToggle
+          : null;
   // While the menu is open we normally suppress the bubble — except
   // for the one-shot radial-menu explainer, which is meant to sit
   // alongside the open menu at root and name the options.
@@ -586,6 +601,18 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     setActiveHint(activeHintId);
   }, [activeHintId, setActiveHint]);
   useEffect(() => () => setActiveHint(null), [setActiveHint]);
+
+  // Publish the radial-menu camera mode so MapView can frame the dog.
+  // Decided ONCE at open: first time (explainer not yet seen) → snap
+  // lower for the explainer; every later tap → just centre the dog.
+  // Deliberately keyed on menuOpen only so the framing doesn't jump
+  // when the explainer auto-dismisses while the menu is still open.
+  const setMenuCamera = useGameStore((s) => s.setMenuCamera);
+  useEffect(() => {
+    setMenuCamera(menuOpen ? (menuHint.seen ? 'center' : 'explainer') : null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuOpen, setMenuCamera]);
+  useEffect(() => () => setMenuCamera(null), [setMenuCamera]);
 
   return (
     <MapLibreMarker position={position} zIndex={Z.MARKER_COMPANION}>

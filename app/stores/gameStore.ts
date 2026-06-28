@@ -172,6 +172,12 @@ interface GameState {
   // cue for the same hint — e.g. the top-left logo pulsing while the
   // super-sniff hint shows. Transient UI state, never persisted.
   activeHint: string | null;
+  // How the camera should frame the dog while the radial menu is open,
+  // published by the Companion and applied by MapView. 'explainer'
+  // snaps the dog lower (room for the first-time explainer bubble above
+  // the ring); 'center' just centres the dog (2nd+ taps, menu only);
+  // null = menu closed.
+  menuCamera: 'explainer' | 'center' | null;
   // Active category filter for the spots tab + map. 'all' shows
   // everything; any specific category restricts the spots layer to
   // just that category. Lives in the store so the spots tab and the
@@ -237,6 +243,7 @@ interface GameState {
   toggleSniffMode: () => void;
   setAboutOpen: (open: boolean) => void;
   setActiveHint: (id: string | null) => void;
+  setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
   setSpotsCategoryFilter: (filter: 'all' | SpotCategory) => void;
   setViewportCenter: (p: LatLng | null) => void;
   setWalkRoute: (
@@ -312,6 +319,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   spotsVisibleBeforeSniff: null,
   aboutOpen: false,
   activeHint: null,
+  menuCamera: null,
   spotsCategoryFilter: 'all',
   viewportCenter: null,
   walkRoute: null,
@@ -781,6 +789,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setActiveHint: (activeHint) => set({ activeHint }),
+  setMenuCamera: (menuCamera) => set({ menuCamera }),
   setViewportCenter: (viewportCenter) => set({ viewportCenter }),
   setSpotsCategoryFilter: (spotsCategoryFilter) =>
     set((s) => ({

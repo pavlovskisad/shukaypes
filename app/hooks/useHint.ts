@@ -33,6 +33,13 @@ import { useEffect, useRef, useState } from 'react';
 const STORAGE_PREFIX = 'hint:';
 const SEEN_VALUE = '1';
 
+// Runtime "seen this session" set, shared across all useHint instances.
+// Lets the SAME hint id mounted in two places (e.g. the swipe hint on
+// both the dogs deck and the spots deck) fire on whichever surface the
+// user hits first and NOT on the other — even when persist:false skips
+// localStorage. Cleared on reload, like persist:false itself.
+const seenThisSession = new Set<string>();
+
 function hasBeenSeen(id: string): boolean {
   if (typeof window === 'undefined' || !window.localStorage) return false;
   try {
@@ -78,7 +85,9 @@ export function useHint(id: string, opts: Options = {}) {
     ready = true,
     persist = true,
   } = opts;
-  const seenAtMountRef = useRef(persist ? hasBeenSeen(id) : false);
+  const seenAtMountRef = useRef(
+    (persist && hasBeenSeen(id)) || seenThisSession.has(id),
+  );
   const [visible, setVisible] = useState(false);
   // Reactive copy of seenAtMountRef so consumers can sequence
   // hints on the same surface — "show hint B only after hint A
@@ -89,6 +98,7 @@ export function useHint(id: string, opts: Options = {}) {
   const dismiss = () => {
     if (seenAtMountRef.current) return;
     seenAtMountRef.current = true;
+    seenThisSession.add(id);
     if (persist) markSeen(id);
     setVisible(false);
     setSeen(true);
@@ -100,7 +110,11 @@ export function useHint(id: string, opts: Options = {}) {
   // → ready=false during the show delay just cancels the
   // timers; a subsequent ready=true restarts from zero.
   useEffect(() => {
-    if (seenAtMountRef.current || !ready) return;
+    // Bail if seen at mount, already shown elsewhere this session, or
+    // not ready. The seenThisSession check re-runs whenever `ready`
+    // flips (e.g. the user navigates to the other carousel tab), so a
+    // sibling instance that already fired suppresses this one.
+    if (seenAtMountRef.current || seenThisSession.has(id) || !ready) return;
     const showTimer = setTimeout(() => {
       setVisible(true);
     }, showDelayMs);
@@ -109,6 +123,7 @@ export function useHint(id: string, opts: Options = {}) {
       autoTimer = setTimeout(() => {
         if (!seenAtMountRef.current) {
           seenAtMountRef.current = true;
+          seenThisSession.add(id);
           if (persist) markSeen(id);
           setVisible(false);
           setSeen(true);

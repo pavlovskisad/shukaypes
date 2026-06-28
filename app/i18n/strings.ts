@@ -179,6 +179,7 @@ export interface AppStrings {
     supersniff: string;
     swipeCards: string;
     radialMenu: string;
+    spotsToggle: string;
   };
 }
 
@@ -403,6 +404,7 @@ const uk: AppStrings = {
     supersniff: 'торкнись мене вгорі ліворуч — це супернюх 👀',
     swipeCards: 'гортай вбік — там ще',
     radialMenu: 'тут усе наше: знайти пса, погуляти, зайти кудись, привітатись, побалакати 🐾',
+    spotsToggle: 'шпилька вгорі — показати чи сховати місця 📍',
   },
 };
 
@@ -626,6 +628,7 @@ const en: AppStrings = {
     supersniff: 'tap me up in the corner — that\'s supersniff 👀',
     swipeCards: 'swipe sideways — there\'s more',
     radialMenu: 'this is all of us: find a pet, take a walk, drop by a place, say hi, or chat 🐾',
+    spotsToggle: 'the pin up top — show or hide places 📍',
   },
 };
 

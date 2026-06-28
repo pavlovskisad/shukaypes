@@ -15,6 +15,7 @@ import {
   LostDogCardStackSkeleton,
 } from '../../components/ui/LostDogCardStack';
 import { LostDogsModal } from '../../components/ui/LostDogsModal';
+import { SwipeHintCallout } from '../../components/ui/SwipeHintCallout';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
@@ -290,56 +291,11 @@ export default function TasksScreen() {
                   onTap={onPickDog}
                   onCounterTap={() => setSeeAllDogsOpen(true)}
                 />
-                {/* Swipe nudge — small pill over the top of the deck
-                    (clear of the badges, which sit in the corners) with
-                    an arrow that gently slides to telegraph the
-                    gesture. Auto-dismisses; one-shot per device once
-                    persist flips on. */}
+                {/* Swipe nudge — one-shot, coordinates with the spots
+                    deck via the shared 'cards:swipe' id (shows on
+                    whichever carousel the user hits first, not both). */}
                 {swipeHint.visible ? (
-                  <div
-                    aria-hidden
-                    style={{
-                      position: 'absolute',
-                      top: 16,
-                      left: 0,
-                      right: 0,
-                      display: 'flex',
-                      justifyContent: 'center',
-                      pointerEvents: 'none',
-                      animation: 'hint-swipe-in 240ms ease-out',
-                    }}
-                  >
-                    <div
-                      style={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 6,
-                        background: 'rgba(0,0,0,0.62)',
-                        color: '#fff',
-                        fontFamily: SYSTEM_FONT,
-                        fontSize: TYPE.small,
-                        fontWeight: 700,
-                        padding: '7px 13px',
-                        borderRadius: 999,
-                        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
-                      }}
-                    >
-                      <span>{t.hints.swipeCards}</span>
-                      <span style={{ animation: 'hint-swipe-arrow 1s ease-in-out infinite' }}>
-                        👉
-                      </span>
-                    </div>
-                    <style>{`
-                      @keyframes hint-swipe-in {
-                        from { opacity: 0; transform: translateY(-6px); }
-                        to   { opacity: 1; transform: translateY(0); }
-                      }
-                      @keyframes hint-swipe-arrow {
-                        0%, 100% { transform: translateX(0); }
-                        50%      { transform: translateX(6px); }
-                      }
-                    `}</style>
-                  </div>
+                  <SwipeHintCallout text={t.hints.swipeCards} />
                 ) : null}
               </View>
             )}

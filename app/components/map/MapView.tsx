@@ -175,12 +175,12 @@ export default function MapViewWeb() {
   // map.
   const currentScreen = useGameStore((s) => s.currentScreen);
   const onMapScreen = currentScreen === 'map';
-  // Hint cue + radial-menu state, both consumed by camera/overlay
+  // Hint cue + radial-menu camera mode, consumed by camera/overlay
   // effects below: the long-press hint draws a "press the map" pulse,
-  // and opening the menu snaps the dog lower so the explainer bubble
-  // has room above the ring.
+  // and the menu camera mode frames the dog (lower for the first-time
+  // explainer, centred otherwise).
   const activeHint = useGameStore((s) => s.activeHint);
-  const menuOpen = useGameStore((s) => s.menuOpen);
+  const menuCamera = useGameStore((s) => s.menuCamera);
   const selectedDogId = useGameStore((s) => s.selectedDogId);
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
@@ -982,33 +982,27 @@ export default function MapViewWeb() {
     [lostDogs, userPos, setSelectedDog],
   );
 
-  // Radial-menu snap: when the menu opens, shift the map content down
-  // so the dog (and its ring) sit lower, leaving room above the top
-  // button for the explainer bubble — and clear of the HUD pills.
-  // Restore the exact pre-menu framing on close. easeTo(center=current,
-  // offset:[0,N]) lands the current centre N px below the viewport
-  // centre, i.e. everything slides down by N.
-  const preMenuCenterRef = useRef<maplibregl.LngLat | null>(null);
+  // Radial-menu camera: centre the dog on open so the ring is centred.
+  // 'explainer' (first tap) also drops it 140px so the explainer bubble
+  // clears the ring + HUD; 'center' (later taps) just centres it. On
+  // close, settle the dog back to centre. easeTo(center=companion,
+  // offset:[0,N]) lands the dog N px below the viewport centre.
+  const menuWasOpenRef = useRef(false);
   useEffect(() => {
     const map = mapRef.current;
-    if (!map) return;
-    const MENU_SHIFT_PX = 140;
-    if (menuOpen) {
-      preMenuCenterRef.current = map.getCenter();
-      map.easeTo({
-        center: map.getCenter(),
-        offset: [0, MENU_SHIFT_PX],
-        duration: 320,
-      });
-    } else if (preMenuCenterRef.current) {
-      map.easeTo({
-        center: preMenuCenterRef.current,
-        offset: [0, 0],
-        duration: 320,
-      });
-      preMenuCenterRef.current = null;
+    if (!map || !companionPos) return;
+    const c: [number, number] = [companionPos.lng, companionPos.lat];
+    if (menuCamera === 'explainer') {
+      menuWasOpenRef.current = true;
+      map.easeTo({ center: c, offset: [0, 140], duration: 320 });
+    } else if (menuCamera === 'center') {
+      menuWasOpenRef.current = true;
+      map.easeTo({ center: c, offset: [0, 0], duration: 320 });
+    } else if (menuWasOpenRef.current) {
+      menuWasOpenRef.current = false;
+      map.easeTo({ center: c, offset: [0, 0], duration: 320 });
     }
-  }, [menuOpen]);
+  }, [menuCamera, companionPos?.lat, companionPos?.lng]);
 
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null

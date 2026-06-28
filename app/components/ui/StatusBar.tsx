@@ -103,6 +103,9 @@ export function CounterPill({
 function SpotsTogglePill() {
   const visible = useGameStore((s) => s.spotsVisible);
   const setVisible = useGameStore((s) => s.setSpotsVisible);
+  // Pulse while the spots-toggle hint is calling attention to this pill
+  // (published by the Companion via activeHint).
+  const pulse = useGameStore((s) => s.activeHint) === 'map:spots-toggle';
   const t = useStrings();
   return (
     <Pressable
@@ -116,8 +119,34 @@ function SpotsTogglePill() {
         styles.togglePill,
         !visible && styles.togglePillOff,
         pressed && { opacity: 0.7 },
+        { position: 'relative' },
       ]}
     >
+      {pulse ? (
+        <>
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              width: '100%',
+              height: '100%',
+              borderRadius: 999,
+              border: '3px solid rgba(0,0,0,0.30)',
+              transform: 'translate(-50%, -50%) scale(0.8)',
+              animation: 'hint-pill-ring 1.4s ease-out infinite',
+              pointerEvents: 'none',
+            }}
+          />
+          <style>{`
+            @keyframes hint-pill-ring {
+              0%   { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
+              100% { transform: translate(-50%, -50%) scale(1.9); opacity: 0; }
+            }
+          `}</style>
+        </>
+      ) : null}
       <Icon name="pin" size={ICON_SIZE} opacity={visible ? 1 : 0.45} />
     </Pressable>
   );
