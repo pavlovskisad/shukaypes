@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { useFocusEffect } from 'expo-router';
@@ -91,6 +92,23 @@ const MPP_EQUATOR_Z0 = 156543.03392;
 // it; tab switches and re-focuses inside one session don't.
 let hasGreetedThisSession = false;
 
+// One expanding ring of the long-press "press the map" cue. `delay`
+// staggers the two rings into a repeating ripple. Keyframe
+// hint-map-pulse lives in MapView's <style> block.
+function mapPulseRing(delaySec: number): CSSProperties {
+  return {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: '100%',
+    height: '100%',
+    borderRadius: '50%',
+    border: '3px solid rgba(0,0,0,0.30)',
+    transform: 'translate(-50%, -50%) scale(0.4)',
+    animation: `hint-map-pulse 1.8s ease-out ${delaySec}s infinite`,
+  };
+}
+
 export default function MapViewWeb() {
   const location = useLocation();
   // Top-edge chips have to clear the iOS status bar (clock, signal,
@@ -157,6 +175,12 @@ export default function MapViewWeb() {
   // map.
   const currentScreen = useGameStore((s) => s.currentScreen);
   const onMapScreen = currentScreen === 'map';
+  // Hint cue + radial-menu state, both consumed by camera/overlay
+  // effects below: the long-press hint draws a "press the map" pulse,
+  // and opening the menu snaps the dog lower so the explainer bubble
+  // has room above the ring.
+  const activeHint = useGameStore((s) => s.activeHint);
+  const menuOpen = useGameStore((s) => s.menuOpen);
   const selectedDogId = useGameStore((s) => s.selectedDogId);
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
@@ -958,6 +982,34 @@ export default function MapViewWeb() {
     [lostDogs, userPos, setSelectedDog],
   );
 
+  // Radial-menu snap: when the menu opens, shift the map content down
+  // so the dog (and its ring) sit lower, leaving room above the top
+  // button for the explainer bubble — and clear of the HUD pills.
+  // Restore the exact pre-menu framing on close. easeTo(center=current,
+  // offset:[0,N]) lands the current centre N px below the viewport
+  // centre, i.e. everything slides down by N.
+  const preMenuCenterRef = useRef<maplibregl.LngLat | null>(null);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map) return;
+    const MENU_SHIFT_PX = 140;
+    if (menuOpen) {
+      preMenuCenterRef.current = map.getCenter();
+      map.easeTo({
+        center: map.getCenter(),
+        offset: [0, MENU_SHIFT_PX],
+        duration: 320,
+      });
+    } else if (preMenuCenterRef.current) {
+      map.easeTo({
+        center: preMenuCenterRef.current,
+        offset: [0, 0],
+        duration: 320,
+      });
+      preMenuCenterRef.current = null;
+    }
+  }, [menuOpen]);
+
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null
   // (we render the "locating…" screen, so mapContainerRef.current is
@@ -1441,6 +1493,41 @@ export default function MapViewWeb() {
           opacity: paperOpacity,
         }}
       />
+      {/* Long-press "press the map" cue — lives on open map BELOW the
+          dog (not radiating from it), so it reads as "hold the map
+          here", not "tap the dog". Shown only while the long-press
+          hint's bubble is up. */}
+      {onMapScreen && activeHint === 'map:long-press-to-sniff' ? (
+        <div
+          aria-hidden
+          style={{
+            position: 'absolute',
+            left: '50%',
+            top: '66%',
+            transform: 'translate(-50%, -50%)',
+            width: 84,
+            height: 84,
+            pointerEvents: 'none',
+          }}
+        >
+          <div style={mapPulseRing(0)} />
+          <div style={mapPulseRing(0.9)} />
+          {/* Fingertip dot pressing in the centre. */}
+          <div
+            style={{
+              position: 'absolute',
+              left: '50%',
+              top: '50%',
+              width: 22,
+              height: 22,
+              borderRadius: '50%',
+              background: 'rgba(0,0,0,0.55)',
+              transform: 'translate(-50%, -50%)',
+              animation: 'hint-map-press 1.8s ease-in-out infinite',
+            }}
+          />
+        </div>
+      ) : null}
       <MapContext.Provider value={mapInstance}>
         <UserMarker position={userPos} />
 
@@ -2108,6 +2195,15 @@ export default function MapViewWeb() {
           0%   { transform: scale(1);    opacity: 1; }
           25%  { transform: scale(1.10); opacity: 1; }
           100% { transform: scale(0);    opacity: 0; }
+        }
+        @keyframes hint-map-pulse {
+          0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0.5; }
+          70%  { opacity: 0; }
+          100% { transform: translate(-50%, -50%) scale(1.8); opacity: 0; }
+        }
+        @keyframes hint-map-press {
+          0%, 100% { transform: translate(-50%, -50%) scale(1);    }
+          50%      { transform: translate(-50%, -50%) scale(0.82); }
         }
       `}</style>
 

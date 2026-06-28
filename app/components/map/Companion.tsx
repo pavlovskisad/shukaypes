@@ -1,4 +1,3 @@
-import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { MapLibreMarker } from './MapLibreMarker';
@@ -92,25 +91,6 @@ interface CompanionProps {
   // onClick that Google Maps fires independently of DOM event flow —
   // without this, low-zoom taps open the menu and immediately close it.
   onTap?: () => void;
-}
-
-// One ring of the long-press tap-pulse. `delay` staggers the two rings
-// so they read as a repeating ripple, not a single ping. Centred on the
-// marker box (the dog) and expanded via the hint-tap-pulse keyframe.
-function tapPulseStyle(delaySec: number): CSSProperties {
-  return {
-    position: 'absolute',
-    left: '50%',
-    top: '50%',
-    width: 96,
-    height: 96,
-    borderRadius: '50%',
-    border: '3px solid rgba(0,0,0,0.32)',
-    transform: 'translate(-50%, -50%) scale(0.45)',
-    animation: `hint-tap-pulse 1.8s ease-out ${delaySec}s infinite`,
-    pointerEvents: 'none',
-    zIndex: 0,
-  };
 }
 
 // Companion overlay — float keyframe, tap-to-open radial menu. All children
@@ -607,11 +587,6 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
   }, [activeHintId, setActiveHint]);
   useEffect(() => () => setActiveHint(null), [setActiveHint]);
 
-  // Tap-pulse cue rides with the long-press hint — a soft ripple at
-  // the dog's feet reinforcing "press the map here". Only while that
-  // hint is the shown bubble.
-  const showTapPulse = activeHintId === 'map:long-press-to-sniff';
-
   return (
     <MapLibreMarker position={position} zIndex={Z.MARKER_COMPANION}>
       {/* Outer container is 140×140 — the entire box is the tap target
@@ -640,23 +615,6 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
           zIndex: Z.MARKER_COMPANION,
         }}
       >
-        {/* Tap-pulse cue for the long-press hint — two staggered rings
-            ripple outward from the dog's feet, suggesting "press and
-            hold here". Behind the sprite, pointer-events:none. */}
-        {showTapPulse ? (
-          <>
-            <div aria-hidden style={tapPulseStyle(0)} />
-            <div aria-hidden style={tapPulseStyle(0.9)} />
-            <style>{`
-              @keyframes hint-tap-pulse {
-                0%   { transform: translate(-50%, -50%) scale(0.45); opacity: 0.55; }
-                70%  { opacity: 0; }
-                100% { transform: translate(-50%, -50%) scale(1.8);  opacity: 0; }
-              }
-            `}</style>
-          </>
-        ) : null}
-
         {/* Pixel-art companion — 64×64 sprite scaled 2× = 128px on
             screen. Side-profile only (sheet has no top-down rotation),
             so we flip horizontally based on movement direction.
@@ -664,7 +622,13 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
             instead of the sprite div. */}
         <DogSprite anim={anim} facingLeft={facingLeft} />
 
-        <SpeechBubble text={activeBubble} />
+        {/* Explainer rides higher (above the top ring button) so it
+            clears the radial menu; every other line tucks just above
+            the nose. */}
+        <SpeechBubble
+          text={activeBubble}
+          bottom={menuExplainer ? 'calc(50% + 130px)' : undefined}
+        />
         <RadialMenu
           open={menuOpen}
           actions={currentActions}

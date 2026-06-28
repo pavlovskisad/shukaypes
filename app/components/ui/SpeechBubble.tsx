@@ -4,6 +4,11 @@ import { TYPE } from '../../constants/type';
 
 interface SpeechBubbleProps {
   text: string | null;
+  // Vertical anchor (CSS `bottom`) relative to the companion's 140px
+  // box. Default '85%' tucks the bubble just above the nose. The
+  // radial-menu explainer overrides this to sit ABOVE the top ring
+  // button instead of on top of it.
+  bottom?: string;
 }
 
 // Dark bubble just above the companion (demo lines 296-304). The parent
@@ -20,14 +25,14 @@ interface SpeechBubbleProps {
 // bound for tablets. whiteSpace stays `pre-line` for explicit \n
 // breaks; wordBreak dropped because the maxWidth alone now handles
 // long Haiku narrations without forcing per-character splits.
-export function SpeechBubble({ text }: SpeechBubbleProps) {
+export function SpeechBubble({ text, bottom = '85%' }: SpeechBubbleProps) {
   if (!text) return null;
   return (
     <div
       style={{
         position: 'absolute',
         left: '50%',
-        bottom: '85%',
+        bottom,
         transform: 'translateX(-50%)',
         background: VOICE.background,
         color: VOICE.color,
