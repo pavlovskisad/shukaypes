@@ -556,6 +556,18 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     autoDismissMs: 6000,
     persist: false,
   });
+  // Radial-menu explainer: the first time the menu blooms, the dog
+  // names what's in it (search / walk / visit / meet / chat) so the
+  // icon ring isn't a guessing game. Rides alongside the open menu at
+  // root level, shows quickly, auto-dismisses. Independent of the
+  // hintsReady gate (which suppresses while the menu is open) — this
+  // one is *for* the open menu.
+  const menuHint = useHint('menu:radial-explainer', {
+    ready: menuOpen && menuPath.length === 0,
+    showDelayMs: 250,
+    autoDismissMs: 5000,
+    persist: false,
+  });
   // Which hint (if any) is the bubble actually showing right now? A
   // hint only "counts" when no real bubble has taken the surface — so
   // a narration that arrives mid-hint hides both the line AND its
@@ -574,9 +586,18 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
       : activeHintId === 'map:supersniff'
         ? t.hints.supersniff
         : null;
-  const activeBubble = menuOpen || hideBubble
+  // While the menu is open we normally suppress the bubble — except
+  // for the one-shot radial-menu explainer, which is meant to sit
+  // alongside the open menu at root and name the options.
+  const menuExplainer =
+    menuOpen && menuPath.length === 0 && menuHint.visible
+      ? t.hints.radialMenu
+      : null;
+  const activeBubble = hideBubble
     ? null
-    : (bubble ?? localBubble) ?? hintBubble;
+    : menuOpen
+      ? menuExplainer
+      : (bubble ?? localBubble) ?? hintBubble;
 
   // Publish the visible hint so sibling components (the top-left logo
   // in the HUD) can render a matching cue. Clear on unmount.
