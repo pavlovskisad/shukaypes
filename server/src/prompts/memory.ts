@@ -15,5 +15,10 @@ export async function loadMemoryBlock(userId: string): Promise<string> {
   if (!notes) {
     return `MEMORY\nYou have not met this human before. Their companion name for you is "${companion?.name ?? 'шукайпес'}". Be curious but don't over-promise — you haven't learned them yet.`;
   }
-  return `MEMORY (what you remember about this human)\n${notes}`;
+  // The note carries two sections: FACTS (recall naturally) and
+  // RUNNING BITS (inside jokes you already share with this human).
+  // Frame the bits so the dog weaves one back in when it fits instead
+  // of reciting them — callbacks are what make it feel like it has
+  // history with them, but only when timed, never as a list.
+  return `MEMORY (what you remember about this human)\n${notes}\n\nThe RUNNING BITS are jokes you already share — drop one back in when the moment invites it, glancingly, like an old friend would. never list them, never explain one, never force it when nothing's calling for it.`;
 }

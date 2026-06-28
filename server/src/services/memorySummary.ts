@@ -17,18 +17,23 @@ const MESSAGES_PER_UPDATE = 6;
 const HISTORY_WINDOW = 16;
 // Hard cap on the stored note. Beyond this it starts to push out
 // other system blocks; trimming Haiku's reply is the safety net.
-const MAX_NOTE_CHARS = 600;
+// Bumped 600 → 900 to fit the RUNNING BITS section alongside FACTS.
+const MAX_NOTE_CHARS = 900;
 
-const SYSTEM = `You maintain a running memory note for шукайпес — a small dog companion in Kyiv — about ONE specific human walker. The note is what the dog remembers across sessions: language preference, the human's own dog (if any), favourite walks, habits, neighbourhoods, pets they searched for. Future chats inject this note so шукайпес can reference these details naturally.
+const SYSTEM = `You maintain a running memory note for шукайпес — a small dog companion in Kyiv — about ONE specific human walker. Future chats inject this note so шукайпес can reference it naturally. The note has TWO sections:
+
+FACTS — what the dog knows about this human: language preference, their own pet (if any), favourite walks, habits, neighbourhoods, pets they searched for, anything personal they shared.
+
+RUNNING BITS — the inside jokes and recurring threads THIS dog has going with THIS human. The whole point: they make the dog feel like it has real history with them, not a fresh chatbot every session. Examples of the shape: a nemesis pigeon by the bench, the human's "five more minutes" that is never five minutes, a café the dog keeps side-eyeing, a nickname, a callback to something silly that happened. Capture a bit when the dog clearly STARTED one (it's in the assistant lines) or the human played along. Keep the ones that recurred or clearly landed; drop one-off flops and anything that's gone stale. At most 4. They can be playful, but must be GROUNDED in what was actually said in the chat — never fabricate a joke that never happened.
 
 OUTPUT
-- Plain text, ≤ 500 characters.
-- Short bullet-style sentences. No headers, no markdown.
-- Keep the dog voice optional — these are notes-to-self, not dialogue.
-- If a fact in the OLD memory is contradicted by RECENT messages, replace it. Otherwise carry it forward.
-- If RECENT messages don't add anything new, you may return the OLD memory verbatim.
-- Never invent facts. Only write what the human actually said or what's clearly implied.
-- Output ONLY the new memory text, nothing else.`;
+- Plain text, ≤ 800 characters total.
+- Exactly two headers: "FACTS" and "RUNNING BITS", each followed by short dash bullets ("- ..."). If a section has nothing, write the header and "- (none yet)".
+- No markdown, no extra prose, no dialogue.
+- FACTS: if an old fact is contradicted by recent messages, replace it; otherwise carry it forward. Never invent facts.
+- RUNNING BITS: carry forward the live ones from OLD MEMORY, fold in any new one the recent messages earned, prune the dead.
+- If recent messages add nothing new, return the OLD note essentially verbatim.
+- Output ONLY the note text, nothing else.`;
 
 interface RecentMessage {
   role: 'user' | 'assistant';
@@ -100,7 +105,7 @@ Write the updated memory now.`;
   try {
     const resp = await anthropic().messages.create({
       model: AMBIENT_MODEL,
-      max_tokens: 350,
+      max_tokens: 500,
       temperature: 0.4,
       system: SYSTEM,
       messages: [{ role: 'user', content: userPrompt }],
