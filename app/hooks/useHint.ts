@@ -110,11 +110,18 @@ export function useHint(id: string, opts: Options = {}) {
   // → ready=false during the show delay just cancels the
   // timers; a subsequent ready=true restarts from zero.
   useEffect(() => {
-    // Bail if seen at mount, already shown elsewhere this session, or
-    // not ready. The seenThisSession check re-runs whenever `ready`
-    // flips (e.g. the user navigates to the other carousel tab), so a
-    // sibling instance that already fired suppresses this one.
-    if (seenAtMountRef.current || seenThisSession.has(id) || !ready) return;
+    // Bail if seen at mount, or already shown elsewhere this session.
+    // The seenThisSession check re-runs whenever `ready` flips (e.g. the
+    // user navigates to the other carousel tab), so a sibling instance
+    // that already fired suppresses this one.
+    if (seenAtMountRef.current || seenThisSession.has(id)) return;
+    // Not ready (user is doing something) → hide and reset so the
+    // show countdown starts fresh once they're idle again, instead of
+    // flashing the bubble back the instant ready returns.
+    if (!ready) {
+      setVisible(false);
+      return;
+    }
     const showTimer = setTimeout(() => {
       setVisible(true);
     }, showDelayMs);

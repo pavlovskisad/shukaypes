@@ -161,6 +161,9 @@ export default function MapViewWeb() {
   // Synced from the map in onIdle (fires after every pan/zoom).
   const [mapZoom, setMapZoom] = useState<number>(balance.mapZoomDefault);
   const [mapCenterLat, setMapCenterLat] = useState<number>(50.45);
+  // True while the camera is animating (sniff jump, snap, pan, zoom).
+  // Hints pause while moving and resume once it settles.
+  const [mapMoving, setMapMoving] = useState(false);
   // Which clusters the user has tapped to expand. Stored by cluster
   // key (sorted item ids); cleared by the floating "collapse all" pill
   // that appears at the top of the map while any cluster is open.
@@ -485,6 +488,35 @@ export default function MapViewWeb() {
   // and ticks cleanly.
   const companionPosRef = useRef(companionPos);
   companionPosRef.current = companionPos;
+
+  // Calm-state gate for the chained map hints (store.hintsAllowed).
+  // The dog must sit comfortably on-screen (so its bubble doesn't clip
+  // the HUD or fall off the edge) and the map must be settled — not
+  // mid sniff-jump / snap / pan, not in sniff mode, no modal open.
+  // Each hint's show-delay then debounces it out of brief transitions:
+  // if the user starts doing something the timer pauses (ready→false)
+  // and restarts only once they're back, idle, on the map.
+  const companionCentral = useMemo(() => {
+    if (!mapBounds || !companionPos) return false;
+    const { n, s, e, w } = mapBounds;
+    const nx = (companionPos.lng - w) / (e - w);
+    const ny = (n - companionPos.lat) / (n - s);
+    return nx > 0.15 && nx < 0.85 && ny > 0.33 && ny < 0.72;
+  }, [mapBounds, companionPos?.lat, companionPos?.lng]);
+
+  const hintsAllowed =
+    onMapScreen &&
+    !mapMoving &&
+    !sniffMode &&
+    !selectedDogId &&
+    !selectedSpotId &&
+    companionCentral;
+
+  const setHintsAllowed = useGameStore((s) => s.setHintsAllowed);
+  useEffect(() => {
+    setHintsAllowed(hintsAllowed);
+  }, [hintsAllowed, setHintsAllowed]);
+  useEffect(() => () => setHintsAllowed(false), [setHintsAllowed]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -1079,6 +1111,10 @@ export default function MapViewWeb() {
           setMapZoom(map.getZoom());
           setMapCenterLat(map.getCenter().lat);
         });
+        // Track camera animation so hints can hold off until the map
+        // settles (sniff jumps, snaps, pans all fire move start/end).
+        map.on('movestart', () => setMapMoving(true));
+        map.on('moveend', () => setMapMoving(false));
         map.on('click', () => {
           if (
             Date.now() - companionTappedAtRef.current <

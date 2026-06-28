@@ -508,13 +508,15 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
   // to clear via `ready` so it doesn't get stomped on by the
   // greeting on first map view — once the dog falls silent, the
   // hint's show + auto-dismiss timers start counting.
-  // Hints only count down while the map is the active screen AND no
-  // real bubble (greeting, sniff feedback, narration) holds the
-  // surface — so the dog never "spends" a one-shot hint off-screen or
-  // talks over itself.
-  const onMapScreen = useGameStore((s) => s.currentScreen) === 'map';
+  // Hints only count down when the map is in a calm state (hintsAllowed,
+  // computed in MapView: on the map tab, camera idle, not sniff mode, no
+  // modal, dog comfortably on-screen) AND no real bubble (greeting,
+  // sniff feedback, narration) holds the surface. If the user starts
+  // doing something the timer pauses and restarts once they're idle
+  // again — so a hint never fires mid-transition or off-screen.
+  const hintsAllowed = useGameStore((s) => s.hintsAllowed);
   const noRealBubble = !menuOpen && !hideBubble && !bubble && !localBubble;
-  const hintsReady = onMapScreen && noRealBubble;
+  const hintsReady = hintsAllowed && noRealBubble;
   const longPressHint = useHint('map:long-press-to-sniff', {
     ready: hintsReady,
     showDelayMs: 1200,

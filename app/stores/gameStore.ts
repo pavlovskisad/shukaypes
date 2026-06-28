@@ -178,6 +178,14 @@ interface GameState {
   // the ring); 'center' just centres the dog (2nd+ taps, menu only);
   // null = menu closed.
   menuCamera: 'explainer' | 'center' | null;
+  // Whether the map is in a calm enough state to surface a chained
+  // map hint right now: map tab active, camera idle (not animating a
+  // sniff jump / snap / pan), not in sniff mode, no modal open, and the
+  // dog sitting comfortably on-screen (so the bubble doesn't clip the
+  // HUD or fall off-screen). Computed by MapView, consumed by the
+  // Companion's hint gating. Combined with each hint's show-delay it
+  // debounces hints out of transitional states.
+  hintsAllowed: boolean;
   // Active category filter for the spots tab + map. 'all' shows
   // everything; any specific category restricts the spots layer to
   // just that category. Lives in the store so the spots tab and the
@@ -244,6 +252,7 @@ interface GameState {
   setAboutOpen: (open: boolean) => void;
   setActiveHint: (id: string | null) => void;
   setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
+  setHintsAllowed: (allowed: boolean) => void;
   setSpotsCategoryFilter: (filter: 'all' | SpotCategory) => void;
   setViewportCenter: (p: LatLng | null) => void;
   setWalkRoute: (
@@ -320,6 +329,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   aboutOpen: false,
   activeHint: null,
   menuCamera: null,
+  hintsAllowed: false,
   spotsCategoryFilter: 'all',
   viewportCenter: null,
   walkRoute: null,
@@ -790,6 +800,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setActiveHint: (activeHint) => set({ activeHint }),
   setMenuCamera: (menuCamera) => set({ menuCamera }),
+  setHintsAllowed: (hintsAllowed) => set({ hintsAllowed }),
   setViewportCenter: (viewportCenter) => set({ viewportCenter }),
   setSpotsCategoryFilter: (spotsCategoryFilter) =>
     set((s) => ({
