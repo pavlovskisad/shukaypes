@@ -3,7 +3,7 @@ import { useFocusEffect } from 'expo-router';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from '../../components/map';
-import { StatusBar } from '../../components/ui/StatusBar';
+import { StatusBar, PillPulseRing } from '../../components/ui/StatusBar';
 import { QuestPill } from '../../components/ui/QuestPill';
 import { AboutModal } from '../../components/ui/AboutModal';
 import { Z } from '../../constants/z';
@@ -107,26 +107,11 @@ export default function MapScreen() {
             hitSlop={8}
             style={{ position: 'relative' }}
           >
-            {/* Super-sniff hint cue — a soft ring expands out of the
-                logo while the dog is calling the user to try it, so the
-                spoken line has something to point at. */}
-            {pulseLogo ? (
-              <div
-                aria-hidden
-                style={{
-                  position: 'absolute',
-                  left: '50%',
-                  top: '50%',
-                  width: HUD_ICON_SIZE,
-                  height: HUD_ICON_SIZE,
-                  borderRadius: '50%',
-                  border: '3px solid rgba(0,0,0,0.30)',
-                  transform: 'translate(-50%, -50%) scale(0.7)',
-                  animation: 'hint-logo-ring 1.4s ease-out infinite',
-                  pointerEvents: 'none',
-                }}
-              />
-            ) : null}
+            {/* Super-sniff hint cue — the same blooming ring the HUD pills
+                use, so every hint reads as one family. Expands out of the
+                logo while the dog is calling the user to try it, giving the
+                spoken line a target. */}
+            {pulseLogo ? <PillPulseRing /> : null}
             {/* Corner logo — plain <div> with backgroundImage so CSS
                 `filter: invert(1)` works reliably (the previous RN
                 <Image> wrapper ate the filter on iOS Safari). Sniff
@@ -153,10 +138,6 @@ export default function MapScreen() {
                 @keyframes hint-logo-pop {
                   0%, 100% { transform: scale(1); }
                   50%      { transform: scale(1.12); }
-                }
-                @keyframes hint-logo-ring {
-                  0%   { transform: translate(-50%, -50%) scale(0.7); opacity: 0.5; }
-                  100% { transform: translate(-50%, -50%) scale(1.9); opacity: 0; }
                 }
               `}</style>
             ) : null}

@@ -36,8 +36,9 @@ const ICON_SIZE = CHIP.icon;
 // the blue meter fill), and a ring drawn inside that clip both got cut
 // off at the pill edge AND vanished against the blue fill of the
 // happiness / hunger pills. Blooming outside puts the ring over the
-// light map instead, where it actually reads.
-function PillPulseRing() {
+// light map instead, where it actually reads. Exported so the corner
+// logo (super-sniff cue) can use the exact same ring.
+export function PillPulseRing() {
   return (
     <>
       <div

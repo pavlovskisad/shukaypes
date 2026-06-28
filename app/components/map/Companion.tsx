@@ -527,43 +527,33 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     // so it goes back to one-shot per device.
     persist: false,
   });
-  // Soft fan-out, step 2: super-sniff (the top-left logo toggles it —
-  // a mode-switching brand logo is undiscoverable on its own). Chained
-  // on long-press being seen AND no longer on screen, so the two never
-  // share the bubble (hints mark seen on show now, so `!visible` is
-  // what enforces one-at-a-time).
-  const supersniffHint = useHint('map:supersniff', {
+  // Soft fan-out, step 2: the HUD meters — the three pills top-left
+  // (sun = mood, bone = hunger, paws = collected). Chained after the
+  // long-press hint so the dog names what it's feeling once the user has
+  // the basics. Pulses all three pills via activeHint. (hintsReady is
+  // already false in sniff mode, where the HUD is hidden.)
+  const hudMetersHint = useHint('map:hud-meters', {
     ready: hintsReady && longPressHint.seen && !longPressHint.visible,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     persist: false,
   });
-  // Soft fan-out, step 3 (map): the HUD meters — the three pills top-left
-  // (sun = mood, bone = hunger, paws = collected). Chained after
-  // super-sniff so the dog names what it's feeling once the user has the
-  // basics. Pulses all three pills via activeHint. Skipped in sniff mode
-  // (the HUD is hidden there).
-  const hudMetersHint = useHint('map:hud-meters', {
-    ready:
-      hintsReady &&
-      supersniffHint.seen &&
-      !supersniffHint.visible &&
-      !sniffMode,
+  // Soft fan-out, step 3 (map): the spots on/off toggle — the top-right
+  // pin pill. Chained after the HUD meters (seen + gone) so the map hints
+  // arrive strictly one at a time. Pulses the pill via activeHint.
+  const spotsHint = useHint('map:spots-toggle', {
+    ready: hintsReady && hudMetersHint.seen && !hudMetersHint.visible,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     persist: false,
   });
-  // Soft fan-out, step 4 (map): the spots on/off toggle — the top-right
-  // pin pill. Chained after the HUD meters (seen + gone) so the map hints
-  // arrive strictly one at a time. Pulses the pill via activeHint.
-  const spotsHint = useHint('map:spots-toggle', {
-    // Not in sniff mode — the HUD (and the pin pill it points at) is
-    // hidden there.
-    ready:
-      hintsReady &&
-      hudMetersHint.seen &&
-      !hudMetersHint.visible &&
-      !sniffMode,
+  // Soft fan-out, final step: super-sniff (the top-left logo toggles it —
+  // a mode-switching brand logo is undiscoverable on its own). Saved for
+  // last because it's the deepest feature (hunting lost dogs); by now the
+  // user knows the map basics. Chained after the spots toggle so the map
+  // hints arrive strictly one at a time. Pulses the logo via activeHint.
+  const supersniffHint = useHint('map:supersniff', {
+    ready: hintsReady && spotsHint.seen && !spotsHint.visible,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     persist: false,
@@ -586,22 +576,22 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
   // otherwise flip `hintsReady` false and yank the bubble away mid-show.
   const activeHintId = longPressHint.visible
     ? 'map:long-press-to-sniff'
-    : supersniffHint.visible
-      ? 'map:supersniff'
-      : hudMetersHint.visible
-        ? 'map:hud-meters'
-        : spotsHint.visible
-          ? 'map:spots-toggle'
+    : hudMetersHint.visible
+      ? 'map:hud-meters'
+      : spotsHint.visible
+        ? 'map:spots-toggle'
+        : supersniffHint.visible
+          ? 'map:supersniff'
           : null;
   const hintBubble =
     activeHintId === 'map:long-press-to-sniff'
       ? t.hints.longPressToSniff
-      : activeHintId === 'map:supersniff'
-        ? t.hints.supersniff
-        : activeHintId === 'map:hud-meters'
-          ? t.hints.hudMeters
-          : activeHintId === 'map:spots-toggle'
-            ? t.hints.spotsToggle
+      : activeHintId === 'map:hud-meters'
+        ? t.hints.hudMeters
+        : activeHintId === 'map:spots-toggle'
+          ? t.hints.spotsToggle
+          : activeHintId === 'map:supersniff'
+            ? t.hints.supersniff
             : null;
   // While the menu is open we normally suppress the bubble — except
   // for the one-shot radial-menu explainer, which is meant to sit

@@ -402,7 +402,7 @@ const uk: AppStrings = {
   },
   hints: {
     longPressToSniff: 'затисни карту щоб понюхати 🐾',
-    supersniff: 'торкнись мене вгорі ліворуч — це супернюх 👀',
+    supersniff: 'торкнись мене вгорі ліворуч — це супернюх: так винюхую загублених псів 👀',
     swipeCards: 'гортай вбік — там ще',
     radialMenu: 'тут усе наше: знайти пса, погуляти, зайти кудись, привітатись, побалакати 🐾',
     spotsToggle: 'шпилька вгорі — показати чи сховати місця 📍',
@@ -627,7 +627,7 @@ const en: AppStrings = {
   },
   hints: {
     longPressToSniff: 'hold the map and i\'ll have a sniff 🐾',
-    supersniff: 'tap me up in the corner — that\'s supersniff 👀',
+    supersniff: 'tap me up in the corner — that\'s supersniff: how i hunt for lost dogs 👀',
     swipeCards: 'swipe sideways — there\'s more',
     radialMenu: 'this is all of us: find a pet, take a walk, drop by a place, say hi, or chat 🐾',
     spotsToggle: 'the pin up top — show or hide places 📍',
