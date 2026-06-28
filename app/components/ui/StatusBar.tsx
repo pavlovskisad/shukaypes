@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
@@ -27,10 +28,15 @@ const GLASS_SHADOW_COLOR = '#000';
 // fontSize 14) read as cramped against the value text.
 const ICON_SIZE = CHIP.icon;
 
-// Attention ring for hint cues — an expanding outline pulse behind a HUD
-// pill, switched on while a hint is calling the user's eye to it. The
-// host Pressable / View must be position:relative. Shared by the HUD-
-// meters hint (sun / bone / paws) and the spots-toggle hint.
+// Attention ring for hint cues — an expanding outline pulse that blooms
+// OUT FROM a HUD pill while a hint is calling the user's eye to it.
+//
+// Rendered as a sibling BEHIND the pill (via PulseWrap) rather than a
+// child of it: the pills clip their content (overflow:hidden, needed for
+// the blue meter fill), and a ring drawn inside that clip both got cut
+// off at the pill edge AND vanished against the blue fill of the
+// happiness / hunger pills. Blooming outside puts the ring over the
+// light map instead, where it actually reads.
 function PillPulseRing() {
   return (
     <>
@@ -40,22 +46,39 @@ function PillPulseRing() {
           position: 'absolute',
           left: '50%',
           top: '50%',
-          width: '100%',
-          height: '100%',
+          // Slightly larger than the pill so the ring is already peeking
+          // past the edges at the start of each pulse, not hidden behind.
+          width: 'calc(100% + 10px)',
+          height: 'calc(100% + 10px)',
           borderRadius: 999,
-          border: '3px solid rgba(0,0,0,0.30)',
-          transform: 'translate(-50%, -50%) scale(0.8)',
+          border: '3px solid rgba(0,0,0,0.55)',
+          transform: 'translate(-50%, -50%) scale(0.85)',
           animation: 'hint-pill-ring 1.4s ease-out infinite',
           pointerEvents: 'none',
         }}
       />
       <style>{`
         @keyframes hint-pill-ring {
-          0%   { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
-          100% { transform: translate(-50%, -50%) scale(1.9); opacity: 0; }
+          0%   { transform: translate(-50%, -50%) scale(0.85); opacity: 0.75; }
+          100% { transform: translate(-50%, -50%) scale(1.7);  opacity: 0; }
         }
       `}</style>
     </>
+  );
+}
+
+// Wraps a pill so the attention ring can bloom outside it. The wrapper
+// stays unclipped (no overflow:hidden) and the ring paints behind the
+// pill, so the visible part of the ring is the halo spilling past the
+// pill edges. No-op passthrough when not active to avoid an extra layout
+// node in the common case.
+function PulseWrap({ active, children }: { active: boolean; children: ReactNode }) {
+  if (!active) return <>{children}</>;
+  return (
+    <View style={{ position: 'relative' }}>
+      <PillPulseRing />
+      {children}
+    </View>
   );
 }
 
@@ -84,34 +107,28 @@ export function MeterPill({
 }) {
   const fillPct = Math.max(0, Math.min(100, Math.round(value)));
   return (
-    <View
-      style={[
-        styles.pill,
-        styles.meterPill,
-        solid && styles.pillSolid,
-        pulse && { position: 'relative' },
-      ]}
-    >
-      {pulse ? <PillPulseRing /> : null}
-      <View
-        style={[
-          styles.fill,
-          {
-            width: `${fillPct}%` as unknown as number,
-            backgroundColor: PROGRESS_BLUE,
-          },
-        ]}
-      />
-      <Icon name={icon} size={ICON_SIZE} />
-      {showValue ? (
-        <Text
-          style={styles.value}
-          accessibilityLabel={`${label} ${fillPct} percent`}
-        >
-          {fillPct}%
-        </Text>
-      ) : null}
-    </View>
+    <PulseWrap active={!!pulse}>
+      <View style={[styles.pill, styles.meterPill, solid && styles.pillSolid]}>
+        <View
+          style={[
+            styles.fill,
+            {
+              width: `${fillPct}%` as unknown as number,
+              backgroundColor: PROGRESS_BLUE,
+            },
+          ]}
+        />
+        <Icon name={icon} size={ICON_SIZE} />
+        {showValue ? (
+          <Text
+            style={styles.value}
+            accessibilityLabel={`${label} ${fillPct} percent`}
+          >
+            {fillPct}%
+          </Text>
+        ) : null}
+      </View>
+    </PulseWrap>
   );
 }
 
@@ -132,21 +149,15 @@ export function CounterPill({
   pulse?: boolean;
 }) {
   return (
-    <View
-      style={[
-        styles.pill,
-        styles.counterPill,
-        solid && styles.pillSolid,
-        pulse && { position: 'relative' },
-      ]}
-    >
-      {pulse ? <PillPulseRing /> : null}
-      <Icon name={icon} size={ICON_SIZE} />
-      <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
-        {Math.round(value)}
-        {suffix ?? ''}
-      </Text>
-    </View>
+    <PulseWrap active={!!pulse}>
+      <View style={[styles.pill, styles.counterPill, solid && styles.pillSolid]}>
+        <Icon name={icon} size={ICON_SIZE} />
+        <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
+          {Math.round(value)}
+          {suffix ?? ''}
+        </Text>
+      </View>
+    </PulseWrap>
   );
 }
 
@@ -162,23 +173,23 @@ function SpotsTogglePill() {
   const pulse = useGameStore((s) => s.activeHint) === 'map:spots-toggle';
   const t = useStrings();
   return (
-    <Pressable
-      onPress={() => setVisible(!visible)}
-      onPressIn={popPressableEvent}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: visible }}
-      accessibilityLabel={visible ? t.hud.spotsVisible : t.hud.spotsHidden}
-      style={({ pressed }) => [
-        styles.pill,
-        styles.togglePill,
-        !visible && styles.togglePillOff,
-        pressed && { opacity: 0.7 },
-        { position: 'relative' },
-      ]}
-    >
-      {pulse ? <PillPulseRing /> : null}
-      <Icon name="pin" size={ICON_SIZE} opacity={visible ? 1 : 0.45} />
-    </Pressable>
+    <PulseWrap active={pulse}>
+      <Pressable
+        onPress={() => setVisible(!visible)}
+        onPressIn={popPressableEvent}
+        accessibilityRole="switch"
+        accessibilityState={{ checked: visible }}
+        accessibilityLabel={visible ? t.hud.spotsVisible : t.hud.spotsHidden}
+        style={({ pressed }) => [
+          styles.pill,
+          styles.togglePill,
+          !visible && styles.togglePillOff,
+          pressed && { opacity: 0.7 },
+        ]}
+      >
+        <Icon name="pin" size={ICON_SIZE} opacity={visible ? 1 : 0.45} />
+      </Pressable>
+    </PulseWrap>
   );
 }
 
