@@ -33,6 +33,25 @@ function langBlock(lang: Lang): string {
     : 'LANG: en\nThe human prefers english. default to english on every reply. switch only if they write back clearly in another language.';
 }
 
+// Per-request length die — the single strongest lever on reply length.
+// CORE_SYSTEM's brevity rules get drowned out by all the personality
+// instructions, so we re-state the length target as the LAST system
+// block (recency ⇒ the model actually obeys it) and randomise it for
+// natural variation, weighted heavily short. A pet-safety emergency in
+// CORE overrides regardless.
+function lengthDirective(): string {
+  const r = Math.random();
+  if (r < 0.6) {
+    // Most turns: one tight line.
+    return 'LENGTH THIS TURN — ONE short line, a single sentence. say the one best thing and stop. no second sentence, no line break. you are holding the rest back on purpose.';
+  }
+  if (r < 0.9) {
+    return 'LENGTH THIS TURN — two short sentences at most, one block, no line breaks.';
+  }
+  // Rare: let a small story breathe, still one block.
+  return 'LENGTH THIS TURN — you may take up to ~3 short sentences IF a story truly earns it, but keep it ONE block, no paragraph breaks.';
+}
+
 async function assembleSystem(
   userId: string,
   pos: Pos,
@@ -167,6 +186,9 @@ const plugin: FastifyPluginAsync = async (app) => {
         assembleSystem(req.userId, pos, lang, spots, viewport),
         recentHistory(req.userId),
       ]);
+      // Append the randomized length die as the very last system block
+      // so recency makes the model actually obey it (uncached tail).
+      system.push({ type: 'text', text: lengthDirective() });
       const last = history[history.length - 1];
       const messages: Anthropic.MessageParam[] = greet
         ? [{ role: 'user', content: userText }]
