@@ -180,6 +180,7 @@ export interface AppStrings {
     swipeCards: string;
     radialMenu: string;
     spotsToggle: string;
+    hudMeters: string;
   };
 }
 
@@ -405,6 +406,7 @@ const uk: AppStrings = {
     swipeCards: 'гортай вбік — там ще',
     radialMenu: 'тут усе наше: знайти пса, погуляти, зайти кудись, привітатись, побалакати 🐾',
     spotsToggle: 'шпилька вгорі — показати чи сховати місця 📍',
+    hudMeters: 'вгорі: сонце — мій настрій, кістка — голод, лапки — скільки назбирали 🐾',
   },
 };
 
@@ -629,6 +631,7 @@ const en: AppStrings = {
     swipeCards: 'swipe sideways — there\'s more',
     radialMenu: 'this is all of us: find a pet, take a walk, drop by a place, say hi, or chat 🐾',
     spotsToggle: 'the pin up top — show or hide places 📍',
+    hudMeters: "up top: sun's my mood, bone's hunger, paws are what we've found 🐾",
   },
 };
 

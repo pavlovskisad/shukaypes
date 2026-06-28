@@ -27,12 +27,45 @@ const GLASS_SHADOW_COLOR = '#000';
 // fontSize 14) read as cramped against the value text.
 const ICON_SIZE = CHIP.icon;
 
+// Attention ring for hint cues — an expanding outline pulse behind a HUD
+// pill, switched on while a hint is calling the user's eye to it. The
+// host Pressable / View must be position:relative. Shared by the HUD-
+// meters hint (sun / bone / paws) and the spots-toggle hint.
+function PillPulseRing() {
+  return (
+    <>
+      <div
+        aria-hidden
+        style={{
+          position: 'absolute',
+          left: '50%',
+          top: '50%',
+          width: '100%',
+          height: '100%',
+          borderRadius: 999,
+          border: '3px solid rgba(0,0,0,0.30)',
+          transform: 'translate(-50%, -50%) scale(0.8)',
+          animation: 'hint-pill-ring 1.4s ease-out infinite',
+          pointerEvents: 'none',
+        }}
+      />
+      <style>{`
+        @keyframes hint-pill-ring {
+          0%   { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
+          100% { transform: translate(-50%, -50%) scale(1.9); opacity: 0; }
+        }
+      `}</style>
+    </>
+  );
+}
+
 export function MeterPill({
   icon,
   value,
   label,
   solid,
   showValue = true,
+  pulse,
 }: {
   icon: IconName;
   value: number;
@@ -46,10 +79,20 @@ export function MeterPill({
   // read as quiet chips; map HUD keeps the default so the user
   // gets the exact number while walking.
   showValue?: boolean;
+  // Show the hint attention ring (driven by the HUD-meters hint).
+  pulse?: boolean;
 }) {
   const fillPct = Math.max(0, Math.min(100, Math.round(value)));
   return (
-    <View style={[styles.pill, styles.meterPill, solid && styles.pillSolid]}>
+    <View
+      style={[
+        styles.pill,
+        styles.meterPill,
+        solid && styles.pillSolid,
+        pulse && { position: 'relative' },
+      ]}
+    >
+      {pulse ? <PillPulseRing /> : null}
       <View
         style={[
           styles.fill,
@@ -78,15 +121,26 @@ export function CounterPill({
   label,
   suffix,
   solid,
+  pulse,
 }: {
   icon: IconName;
   value: number;
   label: string;
   suffix?: string;
   solid?: boolean;
+  // Show the hint attention ring (driven by the HUD-meters hint).
+  pulse?: boolean;
 }) {
   return (
-    <View style={[styles.pill, styles.counterPill, solid && styles.pillSolid]}>
+    <View
+      style={[
+        styles.pill,
+        styles.counterPill,
+        solid && styles.pillSolid,
+        pulse && { position: 'relative' },
+      ]}
+    >
+      {pulse ? <PillPulseRing /> : null}
       <Icon name={icon} size={ICON_SIZE} />
       <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
         {Math.round(value)}
@@ -122,31 +176,7 @@ function SpotsTogglePill() {
         { position: 'relative' },
       ]}
     >
-      {pulse ? (
-        <>
-          <div
-            aria-hidden
-            style={{
-              position: 'absolute',
-              left: '50%',
-              top: '50%',
-              width: '100%',
-              height: '100%',
-              borderRadius: 999,
-              border: '3px solid rgba(0,0,0,0.30)',
-              transform: 'translate(-50%, -50%) scale(0.8)',
-              animation: 'hint-pill-ring 1.4s ease-out infinite',
-              pointerEvents: 'none',
-            }}
-          />
-          <style>{`
-            @keyframes hint-pill-ring {
-              0%   { transform: translate(-50%, -50%) scale(0.8); opacity: 0.5; }
-              100% { transform: translate(-50%, -50%) scale(1.9); opacity: 0; }
-            }
-          `}</style>
-        </>
-      ) : null}
+      {pulse ? <PillPulseRing /> : null}
       <Icon name="pin" size={ICON_SIZE} opacity={visible ? 1 : 0.45} />
     </Pressable>
   );
@@ -156,6 +186,9 @@ export function StatusBar() {
   const hunger = useGameStore((s) => s.hunger);
   const happiness = useGameStore((s) => s.happiness);
   const tokensCollected = useGameStore((s) => s.tokensCollected);
+  // The HUD-meters hint pulses all three meter pills at once (the dog
+  // names what each one means in its bubble); published by Companion.
+  const metersPulse = useGameStore((s) => s.activeHint) === 'map:hud-meters';
   const t = useStrings();
 
   return (
@@ -165,9 +198,9 @@ export function StatusBar() {
     // is obviously "+20% fed", not "I ate 20 bones". Paw pill keeps
     // the lifetime collected count.
     <View style={styles.wrap} pointerEvents="box-none">
-      <MeterPill icon="sun" value={happiness} label={t.hud.happiness} showValue={false} />
-      <MeterPill icon="bone" value={hunger} label={t.hud.hunger} showValue={false} />
-      <CounterPill icon="paws" value={tokensCollected} label={t.hud.paws} />
+      <MeterPill icon="sun" value={happiness} label={t.hud.happiness} showValue={false} pulse={metersPulse} />
+      <MeterPill icon="bone" value={hunger} label={t.hud.hunger} showValue={false} pulse={metersPulse} />
+      <CounterPill icon="paws" value={tokensCollected} label={t.hud.paws} pulse={metersPulse} />
       <SpotsTogglePill />
     </View>
   );

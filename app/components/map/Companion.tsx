@@ -538,16 +538,31 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     autoDismissMs: 6000,
     persist: false,
   });
-  // Soft fan-out, step 3 (map): the spots on/off toggle — the top-right
-  // pin pill. Chained after super-sniff (seen + gone) so the map hints
+  // Soft fan-out, step 3 (map): the HUD meters — the three pills top-left
+  // (sun = mood, bone = hunger, paws = collected). Chained after
+  // super-sniff so the dog names what it's feeling once the user has the
+  // basics. Pulses all three pills via activeHint. Skipped in sniff mode
+  // (the HUD is hidden there).
+  const hudMetersHint = useHint('map:hud-meters', {
+    ready:
+      hintsReady &&
+      supersniffHint.seen &&
+      !supersniffHint.visible &&
+      !sniffMode,
+    showDelayMs: 1200,
+    autoDismissMs: 6000,
+    persist: false,
+  });
+  // Soft fan-out, step 4 (map): the spots on/off toggle — the top-right
+  // pin pill. Chained after the HUD meters (seen + gone) so the map hints
   // arrive strictly one at a time. Pulses the pill via activeHint.
   const spotsHint = useHint('map:spots-toggle', {
     // Not in sniff mode — the HUD (and the pin pill it points at) is
     // hidden there.
     ready:
       hintsReady &&
-      supersniffHint.seen &&
-      !supersniffHint.visible &&
+      hudMetersHint.seen &&
+      !hudMetersHint.visible &&
       !sniffMode,
     showDelayMs: 1200,
     autoDismissMs: 6000,
@@ -573,17 +588,21 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     ? 'map:long-press-to-sniff'
     : supersniffHint.visible
       ? 'map:supersniff'
-      : spotsHint.visible
-        ? 'map:spots-toggle'
-        : null;
+      : hudMetersHint.visible
+        ? 'map:hud-meters'
+        : spotsHint.visible
+          ? 'map:spots-toggle'
+          : null;
   const hintBubble =
     activeHintId === 'map:long-press-to-sniff'
       ? t.hints.longPressToSniff
       : activeHintId === 'map:supersniff'
         ? t.hints.supersniff
-        : activeHintId === 'map:spots-toggle'
-          ? t.hints.spotsToggle
-          : null;
+        : activeHintId === 'map:hud-meters'
+          ? t.hints.hudMeters
+          : activeHintId === 'map:spots-toggle'
+            ? t.hints.spotsToggle
+            : null;
   // While the menu is open we normally suppress the bubble — except
   // for the one-shot radial-menu explainer, which is meant to sit
   // alongside the open menu at root and name the options.
