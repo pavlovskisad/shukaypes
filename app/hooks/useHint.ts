@@ -95,54 +95,46 @@ export function useHint(id: string, opts: Options = {}) {
   // dismiss (manual or auto).
   const [seen, setSeen] = useState(seenAtMountRef.current);
 
-  const dismiss = () => {
-    if (seenAtMountRef.current) return;
+  const markSeen_ = () => {
     seenAtMountRef.current = true;
     seenThisSession.add(id);
     if (persist) markSeen(id);
-    setVisible(false);
     setSeen(true);
   };
 
-  // Timers (re)start whenever `ready` flips true, so a hint
-  // can wait for greeting bubbles / modals / etc. to clear
-  // before its show countdown begins. Going from ready=true
-  // → ready=false during the show delay just cancels the
-  // timers; a subsequent ready=true restarts from zero.
+  // Call when the user performs the gesture the hint was about — hides
+  // it and locks it seen.
+  const dismiss = () => {
+    setVisible(false);
+    if (!seenAtMountRef.current) markSeen_();
+  };
+
+  // Show ONCE, the first time `ready` has stayed true through the show
+  // delay. Crucially, the hint is marked seen the moment it actually
+  // shows — so it never fires a second time, and a sibling instance
+  // with the same id (e.g. the swipe hint on the other carousel) is
+  // suppressed. `ready` flipping false before the delay elapses just
+  // cancels the pending show; it restarts from zero next time ready
+  // returns. Chaining ("show B after A") keys off `seen` + `visible`,
+  // not a post-dismiss flag.
   useEffect(() => {
-    // Bail if seen at mount, or already shown elsewhere this session.
-    // The seenThisSession check re-runs whenever `ready` flips (e.g. the
-    // user navigates to the other carousel tab), so a sibling instance
-    // that already fired suppresses this one.
-    if (seenAtMountRef.current || seenThisSession.has(id)) return;
-    // Not ready (user is doing something) → hide and reset so the
-    // show countdown starts fresh once they're idle again, instead of
-    // flashing the bubble back the instant ready returns.
-    if (!ready) {
-      setVisible(false);
-      return;
-    }
+    if (seenAtMountRef.current || seenThisSession.has(id) || !ready) return;
     const showTimer = setTimeout(() => {
+      markSeen_();
       setVisible(true);
     }, showDelayMs);
-    let autoTimer: ReturnType<typeof setTimeout> | null = null;
-    if (autoDismissMs != null) {
-      autoTimer = setTimeout(() => {
-        if (!seenAtMountRef.current) {
-          seenAtMountRef.current = true;
-          seenThisSession.add(id);
-          if (persist) markSeen(id);
-          setVisible(false);
-          setSeen(true);
-        }
-      }, showDelayMs + autoDismissMs);
-    }
-    return () => {
-      clearTimeout(showTimer);
-      if (autoTimer) clearTimeout(autoTimer);
-    };
+    return () => clearTimeout(showTimer);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
+
+  // Auto-hide after the visible window. Purely visual — the hint is
+  // already marked seen on show, so this only takes the bubble down.
+  useEffect(() => {
+    if (!visible || autoDismissMs == null) return;
+    const t = setTimeout(() => setVisible(false), autoDismissMs);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [visible]);
 
   return { visible, dismiss, seen };
 }

@@ -529,22 +529,26 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
   });
   // Soft fan-out, step 2: super-sniff (the top-left logo toggles it —
   // a mode-switching brand logo is undiscoverable on its own). Chained
-  // on `longPressHint.seen` so it only arms once the long-press hint
-  // has cleared — the two never share the dog's bubble at the same
-  // time. Same gentle timing + dev-mode persist:false as above.
+  // on long-press being seen AND no longer on screen, so the two never
+  // share the bubble (hints mark seen on show now, so `!visible` is
+  // what enforces one-at-a-time).
   const supersniffHint = useHint('map:supersniff', {
-    ready: hintsReady && longPressHint.seen,
+    ready: hintsReady && longPressHint.seen && !longPressHint.visible,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     persist: false,
   });
   // Soft fan-out, step 3 (map): the spots on/off toggle — the top-right
-  // pin pill. Chained after super-sniff so the map hints arrive one at
-  // a time. Pulses the pill via the published activeHint.
+  // pin pill. Chained after super-sniff (seen + gone) so the map hints
+  // arrive strictly one at a time. Pulses the pill via activeHint.
   const spotsHint = useHint('map:spots-toggle', {
     // Not in sniff mode — the HUD (and the pin pill it points at) is
     // hidden there.
-    ready: hintsReady && supersniffHint.seen && !sniffMode,
+    ready:
+      hintsReady &&
+      supersniffHint.seen &&
+      !supersniffHint.visible &&
+      !sniffMode,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     persist: false,
@@ -561,20 +565,17 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     autoDismissMs: 5000,
     persist: false,
   });
-  // Which hint (if any) is the bubble actually showing right now? A
-  // hint only "counts" when no real bubble has taken the surface — so
-  // a narration that arrives mid-hint hides both the line AND its
-  // visual cue. This id drives the bubble text here and, via the
-  // store, the matching cue on other elements (the logo pulse).
-  const activeHintId = hintsReady
-    ? longPressHint.visible
-      ? 'map:long-press-to-sniff'
-      : supersniffHint.visible
-        ? 'map:supersniff'
-        : spotsHint.visible
-          ? 'map:spots-toggle'
-          : null
-    : null;
+  // Which hint is currently on screen. NOT re-gated by the live idle
+  // state: once a hint has fired (it only fires when idle) it owns the
+  // bubble for its full window — the snap-to-dog ease it triggers would
+  // otherwise flip `hintsReady` false and yank the bubble away mid-show.
+  const activeHintId = longPressHint.visible
+    ? 'map:long-press-to-sniff'
+    : supersniffHint.visible
+      ? 'map:supersniff'
+      : spotsHint.visible
+        ? 'map:spots-toggle'
+        : null;
   const hintBubble =
     activeHintId === 'map:long-press-to-sniff'
       ? t.hints.longPressToSniff
@@ -590,11 +591,16 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     menuOpen && menuPath.length === 0 && menuHint.visible
       ? t.hints.radialMenu
       : null;
+  // Priority: menu explainer (while open) → an active hint owns the
+  // bubble (it fired during an idle moment and shouldn't be stepped on
+  // by an ambient bark) → real bubbles (greeting / narration) →
+  // ambient. Ambient generation is also paused while a hint shows (see
+  // useGameLoop), so this mainly settles same-frame races.
   const activeBubble = hideBubble
     ? null
     : menuOpen
       ? menuExplainer
-      : (bubble ?? localBubble) ?? hintBubble;
+      : hintBubble ?? bubble ?? localBubble;
 
   // Publish the visible hint so sibling components (the top-left logo
   // in the HUD) can render a matching cue. Clear on unmount.

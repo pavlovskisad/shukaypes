@@ -489,34 +489,40 @@ export default function MapViewWeb() {
   const companionPosRef = useRef(companionPos);
   companionPosRef.current = companionPos;
 
-  // Calm-state gate for the chained map hints (store.hintsAllowed).
-  // The dog must sit comfortably on-screen (so its bubble doesn't clip
-  // the HUD or fall off the edge) and the map must be settled — not
-  // mid sniff-jump / snap / pan, not in sniff mode, no modal open.
-  // Each hint's show-delay then debounces it out of brief transitions:
-  // if the user starts doing something the timer pauses (ready→false)
-  // and restarts only once they're back, idle, on the map.
-  const companionCentral = useMemo(() => {
-    if (!mapBounds || !companionPos) return false;
-    const { n, s, e, w } = mapBounds;
-    const nx = (companionPos.lng - w) / (e - w);
-    const ny = (n - companionPos.lat) / (n - s);
-    return nx > 0.15 && nx < 0.85 && ny > 0.33 && ny < 0.72;
-  }, [mapBounds, companionPos?.lat, companionPos?.lng]);
-
+  // Action-based calm gate for the chained map hints
+  // (store.hintsAllowed): the user isn't doing anything right now — on
+  // the map tab, camera settled (not mid sniff-jump / snap / pan), not
+  // in sniff mode, no modal open. Position is NOT a factor: when a hint
+  // fires we snap to the dog (below) so the bubble is always framed,
+  // wherever the dog had drifted. Each hint's show-delay debounces this
+  // out of brief transitions — start doing something and the counter
+  // pauses, resuming once you're idle on the map again.
   const hintsAllowed =
-    onMapScreen &&
-    !mapMoving &&
-    !sniffMode &&
-    !selectedDogId &&
-    !selectedSpotId &&
-    companionCentral;
+    onMapScreen && !mapMoving && !sniffMode && !selectedDogId && !selectedSpotId;
 
   const setHintsAllowed = useGameStore((s) => s.setHintsAllowed);
   useEffect(() => {
     setHintsAllowed(hintsAllowed);
   }, [hintsAllowed, setHintsAllowed]);
   useEffect(() => () => setHintsAllowed(false), [setHintsAllowed]);
+
+  // Snap to the dog the moment a chained map hint fires, so its bubble
+  // lands framed even if the dog had wandered off-centre. Slight
+  // downward offset leaves room above the nose for the bubble, clear of
+  // the HUD. The bubble (anchored to the companion marker) glides in
+  // with the ease.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !companionPos) return;
+    if (activeHint && activeHint.startsWith('map:')) {
+      map.easeTo({
+        center: [companionPos.lng, companionPos.lat],
+        offset: [0, 60],
+        duration: 400,
+      });
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [activeHint]);
 
   useEffect(() => {
     if (!isFocused) return;
