@@ -184,6 +184,7 @@ export default function MapViewWeb() {
   // explainer, centred otherwise).
   const activeHint = useGameStore((s) => s.activeHint);
   const menuCamera = useGameStore((s) => s.menuCamera);
+  const sniffActive = useGameStore((s) => s.sniffActive);
   const selectedDogId = useGameStore((s) => s.selectedDogId);
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
@@ -498,7 +499,15 @@ export default function MapViewWeb() {
   // out of brief transitions — start doing something and the counter
   // pauses, resuming once you're idle on the map again.
   const hintsAllowed =
-    onMapScreen && !mapMoving && !sniffMode && !selectedDogId && !selectedSpotId;
+    onMapScreen &&
+    !mapMoving &&
+    !sniffMode &&
+    !selectedDogId &&
+    !selectedSpotId &&
+    // Nothing the user is actively reading/doing on the map: no sniff
+    // discovery up, no walking route drawn.
+    !sniffActive &&
+    !walkRoute;
 
   const setHintsAllowed = useGameStore((s) => s.setHintsAllowed);
   useEffect(() => {
@@ -1030,10 +1039,11 @@ export default function MapViewWeb() {
     const map = mapRef.current;
     if (!map || !companionPos) return;
     const c: [number, number] = [companionPos.lng, companionPos.lat];
-    if (menuCamera === 'explainer') {
-      menuWasOpenRef.current = true;
-      map.easeTo({ center: c, offset: [0, 140], duration: 320 });
-    } else if (menuCamera === 'center') {
+    // Both modes just centre the dog now — there's room for the
+    // explainer bubble above the ring at the default centre, so we no
+    // longer drop the dog lower for it. (menuCamera keeps the two
+    // values only so the explainer bubble can still be told apart.)
+    if (menuCamera) {
       menuWasOpenRef.current = true;
       map.easeTo({ center: c, offset: [0, 0], duration: 320 });
     } else if (menuWasOpenRef.current) {
@@ -1539,7 +1549,11 @@ export default function MapViewWeb() {
           style={{
             position: 'absolute',
             left: '50%',
-            top: '66%',
+            // Sits well below the dog's 140px tap target (the dog snaps
+            // to ~centre+60 when the hint fires) so holding ON the cue
+            // lands on the bare map and actually starts a sniff — but
+            // high enough that the expanding rings clear the tab bar.
+            top: '76%',
             transform: 'translate(-50%, -50%)',
             width: 84,
             height: 84,

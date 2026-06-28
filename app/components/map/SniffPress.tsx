@@ -136,6 +136,14 @@ export function SniffPress() {
   const userPos = useGameStore((s) => s.userPosition);
   const setWalkRoute = useGameStore((s) => s.setWalkRoute);
 
+  // Tell the hint system the map is busy (sniffing or a discovery is
+  // up) so it holds the next hint until the user is done reading.
+  const setSniffActive = useGameStore((s) => s.setSniffActive);
+  useEffect(() => {
+    setSniffActive(!!discovered || !!sniffingAt);
+  }, [discovered, sniffingAt, setSniffActive]);
+  useEffect(() => () => setSniffActive(false), [setSniffActive]);
+
   // Source + layer lifecycle. Created once when the map style is
   // ready, removed on unmount. Data is mutated in place during the
   // animation via setData.

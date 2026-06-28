@@ -186,6 +186,11 @@ interface GameState {
   // Companion's hint gating. Combined with each hint's show-delay it
   // debounces hints out of transitional states.
   hintsAllowed: boolean;
+  // True while a long-press sniff is in progress or its discovery
+  // result is on the map. Published by SniffPress; pauses hints so the
+  // next one doesn't fire (and yank the camera to the dog) while the
+  // user is reading what they just found.
+  sniffActive: boolean;
   // Active category filter for the spots tab + map. 'all' shows
   // everything; any specific category restricts the spots layer to
   // just that category. Lives in the store so the spots tab and the
@@ -253,6 +258,7 @@ interface GameState {
   setActiveHint: (id: string | null) => void;
   setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
   setHintsAllowed: (allowed: boolean) => void;
+  setSniffActive: (active: boolean) => void;
   setSpotsCategoryFilter: (filter: 'all' | SpotCategory) => void;
   setViewportCenter: (p: LatLng | null) => void;
   setWalkRoute: (
@@ -330,6 +336,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   activeHint: null,
   menuCamera: null,
   hintsAllowed: false,
+  sniffActive: false,
   spotsCategoryFilter: 'all',
   viewportCenter: null,
   walkRoute: null,
@@ -801,6 +808,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   setActiveHint: (activeHint) => set({ activeHint }),
   setMenuCamera: (menuCamera) => set({ menuCamera }),
   setHintsAllowed: (hintsAllowed) => set({ hintsAllowed }),
+  setSniffActive: (sniffActive) => set({ sniffActive }),
   setViewportCenter: (viewportCenter) => set({ viewportCenter }),
   setSpotsCategoryFilter: (spotsCategoryFilter) =>
     set((s) => ({
