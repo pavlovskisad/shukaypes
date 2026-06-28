@@ -74,6 +74,9 @@ interface Props<T> {
   // category in big-card form. When provided, the counter renders
   // as a Pressable with a chevron hint; otherwise it's plain text.
   onCounterTap?: () => void;
+  // Fired on each committed swipe (the carousel advances ±1). Used to
+  // dismiss the swipe hint the moment the user actually swipes.
+  onSwipe?: () => void;
 }
 
 // Per-item slot. `virtualIdx` is the item's stable position on the
@@ -162,6 +165,7 @@ export function CardStack<T>({
   cardHeight = CARD_H,
   peekScale = 1,
   onCounterTap,
+  onSwipe,
 }: Props<T>) {
   // virtualBase = the carousel position as an integer index. Grows
   // without bound (we cycle via modulo when picking which item to
@@ -270,8 +274,9 @@ export function CardStack<T>({
   const advance = useCallback(
     (delta: number) => {
       setVirtualBase((b) => b + delta);
+      onSwipe?.();
     },
-    [],
+    [onSwipe],
   );
 
   const handleTap = useCallback(() => {

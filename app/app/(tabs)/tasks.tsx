@@ -290,6 +290,7 @@ export default function TasksScreen() {
                   dogs={sortedDogs}
                   onTap={onPickDog}
                   onCounterTap={() => setSeeAllDogsOpen(true)}
+                  onSwipe={swipeHint.dismiss}
                 />
                 {/* Swipe nudge — one-shot, coordinates with the spots
                     deck via the shared 'cards:swipe' id (shows on

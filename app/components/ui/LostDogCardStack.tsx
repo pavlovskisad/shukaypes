@@ -20,6 +20,7 @@ interface Props {
   dogs: NearbyLostDog[];
   onTap: (dog: NearbyLostDog) => void;
   onCounterTap?: () => void;
+  onSwipe?: () => void;
 }
 
 // "X m" for sub-1km, "X.X km" beyond. Snapped to 50m below 1km so
@@ -29,7 +30,7 @@ function formatDistance(m: number): string {
   return `${(m / 1000).toFixed(1)} km`;
 }
 
-export function LostDogCardStack({ dogs, onTap, onCounterTap }: Props) {
+export function LostDogCardStack({ dogs, onTap, onCounterTap, onSwipe }: Props) {
   const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
   // useCallback-stable so CardStack's memoed ItemSlot doesn't see
@@ -45,6 +46,7 @@ export function LostDogCardStack({ dogs, onTap, onCounterTap }: Props) {
       getId={(d) => d.id}
       onTap={onTap}
       onCounterTap={onCounterTap}
+      onSwipe={onSwipe}
       getPhotoUrl={(d) => d.photoUrl}
       renderCard={renderCard}
     />

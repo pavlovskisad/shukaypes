@@ -239,6 +239,7 @@ export default function SpotsScreen() {
                       spots={list}
                       onTap={onPickSpot}
                       onCounterTap={() => setExpandedCategory(cat)}
+                      onSwipe={swipeHint.dismiss}
                     />
                     {showSwipe ? <SwipeHintCallout text={t.hints.swipeCards} /> : null}
                   </View>
