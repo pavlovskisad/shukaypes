@@ -176,6 +176,7 @@ export interface AppStrings {
   // tutorial modal.
   hints: {
     longPressToSniff: string;
+    supersniff: string;
   };
 }
 
@@ -397,6 +398,7 @@ const uk: AppStrings = {
   },
   hints: {
     longPressToSniff: 'затисни карту щоб понюхати 🐾',
+    supersniff: 'торкнись мене вгорі ліворуч — це супернюх 👀',
   },
 };
 
@@ -617,6 +619,7 @@ const en: AppStrings = {
   },
   hints: {
     longPressToSniff: 'hold the map and i\'ll have a sniff 🐾',
+    supersniff: 'tap me up in the corner — that\'s supersniff 👀',
   },
 };
 

@@ -519,10 +519,25 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
     // so it goes back to one-shot per device.
     persist: false,
   });
+  // Soft fan-out, step 2: super-sniff (the top-left logo toggles it —
+  // a mode-switching brand logo is undiscoverable on its own). Chained
+  // on `longPressHint.seen` so it only arms once the long-press hint
+  // has cleared — the two never share the dog's bubble at the same
+  // time. Same gentle timing + dev-mode persist:false as above.
+  const supersniffHint = useHint('map:supersniff', {
+    ready: noRealBubble && longPressHint.seen,
+    showDelayMs: 1200,
+    autoDismissMs: 6000,
+    persist: false,
+  });
+  const hintBubble = longPressHint.visible
+    ? t.hints.longPressToSniff
+    : supersniffHint.visible
+      ? t.hints.supersniff
+      : null;
   const activeBubble = menuOpen || hideBubble
     ? null
-    : (bubble ?? localBubble) ??
-      (longPressHint.visible ? t.hints.longPressToSniff : null);
+    : (bubble ?? localBubble) ?? hintBubble;
 
   return (
     <MapLibreMarker position={position} zIndex={Z.MARKER_COMPANION}>
