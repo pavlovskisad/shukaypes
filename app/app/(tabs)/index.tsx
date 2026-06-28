@@ -31,6 +31,11 @@ export default function MapScreen() {
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const sniffMode = useGameStore((s) => s.sniffMode);
   const toggleSniffMode = useGameStore((s) => s.toggleSniffMode);
+  // When the super-sniff hint is showing (the dog is calling the user
+  // to try it), pulse the logo so the spoken line has a target. The
+  // hint visibility is computed in the Companion and published to the
+  // store as `activeHint`.
+  const pulseLogo = useGameStore((s) => s.activeHint) === 'map:supersniff';
   // Pop animations on the HUD pills should only run during the brief
   // window around an actual sniff toggle, not on every re-render or
   // on initial mount. Static styles handle the steady state.
@@ -100,7 +105,28 @@ export default function MapScreen() {
               sniffMode ? 'exit sniff mode' : 'enter sniff mode'
             }
             hitSlop={8}
+            style={{ position: 'relative' }}
           >
+            {/* Super-sniff hint cue — a soft ring expands out of the
+                logo while the dog is calling the user to try it, so the
+                spoken line has something to point at. */}
+            {pulseLogo ? (
+              <div
+                aria-hidden
+                style={{
+                  position: 'absolute',
+                  left: '50%',
+                  top: '50%',
+                  width: HUD_ICON_SIZE,
+                  height: HUD_ICON_SIZE,
+                  borderRadius: '50%',
+                  border: '3px solid rgba(0,0,0,0.30)',
+                  transform: 'translate(-50%, -50%) scale(0.7)',
+                  animation: 'hint-logo-ring 1.4s ease-out infinite',
+                  pointerEvents: 'none',
+                }}
+              />
+            ) : null}
             {/* Corner logo — plain <div> with backgroundImage so CSS
                 `filter: invert(1)` works reliably (the previous RN
                 <Image> wrapper ate the filter on iOS Safari). Sniff
@@ -117,8 +143,23 @@ export default function MapScreen() {
                 backgroundPosition: 'center',
                 filter: sniffMode ? 'invert(1)' : undefined,
                 transition: 'filter 220ms ease-out',
+                animation: pulseLogo
+                  ? 'hint-logo-pop 1.4s ease-in-out infinite'
+                  : undefined,
               }}
             />
+            {pulseLogo ? (
+              <style>{`
+                @keyframes hint-logo-pop {
+                  0%, 100% { transform: scale(1); }
+                  50%      { transform: scale(1.12); }
+                }
+                @keyframes hint-logo-ring {
+                  0%   { transform: translate(-50%, -50%) scale(0.7); opacity: 0.5; }
+                  100% { transform: translate(-50%, -50%) scale(1.9); opacity: 0; }
+                }
+              `}</style>
+            ) : null}
           </Pressable>
           {/* StatusBar bubbles out in sniff mode. Anchor the scale
               transform to the right edge so it collapses toward the

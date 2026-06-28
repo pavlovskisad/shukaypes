@@ -18,6 +18,7 @@ import { LostDogsModal } from '../../components/ui/LostDogsModal';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
+import { useHint } from '../../hooks/useHint';
 
 interface QuestHistoryRow {
   id: string;
@@ -79,6 +80,7 @@ export default function TasksScreen() {
   const lostDogsLoaded = useGameStore((s) => s.lostDogsLoaded);
   const userPos = useGameStore((s) => s.userPosition);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
+  const currentScreen = useGameStore((s) => s.currentScreen);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
   // Open the "see all" fullscreen list when truthy.
   const [seeAllDogsOpen, setSeeAllDogsOpen] = useState(false);
@@ -99,6 +101,17 @@ export default function TasksScreen() {
     },
     [lostDogs, userPos?.lat, userPos?.lng],
   );
+
+  // Soft fan-out, step 3: nudge that the lost-pets deck is swipeable.
+  // Only arms while the tasks tab is the active screen AND there's
+  // more than one card to swipe to. Gentle timing + dev-mode
+  // persist:false to match the map hints.
+  const swipeHint = useHint('cards:swipe', {
+    ready: currentScreen === 'tasks' && sortedDogs.length > 1,
+    showDelayMs: 900,
+    autoDismissMs: 5000,
+    persist: false,
+  });
 
   // Tapping a dog (card or "see all" row) jumps to the map with the
   // pet selected — the map snaps the camera onto it and opens the
@@ -271,11 +284,64 @@ export default function TasksScreen() {
             {sortedDogs.length === 0 ? (
               <LostDogCardStackSkeleton />
             ) : (
-              <LostDogCardStack
-                dogs={sortedDogs}
-                onTap={onPickDog}
-                onCounterTap={() => setSeeAllDogsOpen(true)}
-              />
+              <View style={styles.deckWrap}>
+                <LostDogCardStack
+                  dogs={sortedDogs}
+                  onTap={onPickDog}
+                  onCounterTap={() => setSeeAllDogsOpen(true)}
+                />
+                {/* Swipe nudge — small pill over the top of the deck
+                    (clear of the badges, which sit in the corners) with
+                    an arrow that gently slides to telegraph the
+                    gesture. Auto-dismisses; one-shot per device once
+                    persist flips on. */}
+                {swipeHint.visible ? (
+                  <div
+                    aria-hidden
+                    style={{
+                      position: 'absolute',
+                      top: 16,
+                      left: 0,
+                      right: 0,
+                      display: 'flex',
+                      justifyContent: 'center',
+                      pointerEvents: 'none',
+                      animation: 'hint-swipe-in 240ms ease-out',
+                    }}
+                  >
+                    <div
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        background: 'rgba(0,0,0,0.62)',
+                        color: '#fff',
+                        fontFamily: SYSTEM_FONT,
+                        fontSize: TYPE.small,
+                        fontWeight: 700,
+                        padding: '7px 13px',
+                        borderRadius: 999,
+                        boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
+                      }}
+                    >
+                      <span>{t.hints.swipeCards}</span>
+                      <span style={{ animation: 'hint-swipe-arrow 1s ease-in-out infinite' }}>
+                        👉
+                      </span>
+                    </div>
+                    <style>{`
+                      @keyframes hint-swipe-in {
+                        from { opacity: 0; transform: translateY(-6px); }
+                        to   { opacity: 1; transform: translateY(0); }
+                      }
+                      @keyframes hint-swipe-arrow {
+                        0%, 100% { transform: translateX(0); }
+                        50%      { transform: translateX(6px); }
+                      }
+                    `}</style>
+                  </div>
+                ) : null}
+              </View>
             )}
           </View>
         )}
@@ -441,6 +507,10 @@ const styles = StyleSheet.create({
     scrollSnapAlign: 'start',
     scrollSnapStop: 'always',
   } as unknown as object,
+  // Relative wrapper so the swipe-hint callout can overlay the deck.
+  deckWrap: {
+    position: 'relative',
+  },
   // Card titles — bumped 14 → 17, weight to 800, colour to
   // colors.black so they actually catch the eye at the top of
   // each card instead of disappearing into the grey rhythm of

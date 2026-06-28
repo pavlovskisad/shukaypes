@@ -166,6 +166,12 @@ interface GameState {
   // "?" button. MapScreen still hosts the modal so the dashboard tab
   // bar isn't covered.
   aboutOpen: boolean;
+  // Currently-visible one-shot hint id (or null). Published by the
+  // component that owns the hint's primary surface (the companion's
+  // speech bubble) so OTHER components can render a matching visual
+  // cue for the same hint — e.g. the top-left logo pulsing while the
+  // super-sniff hint shows. Transient UI state, never persisted.
+  activeHint: string | null;
   // Active category filter for the spots tab + map. 'all' shows
   // everything; any specific category restricts the spots layer to
   // just that category. Lives in the store so the spots tab and the
@@ -230,6 +236,7 @@ interface GameState {
   setSniffMode: (on: boolean) => void;
   toggleSniffMode: () => void;
   setAboutOpen: (open: boolean) => void;
+  setActiveHint: (id: string | null) => void;
   setSpotsCategoryFilter: (filter: 'all' | SpotCategory) => void;
   setViewportCenter: (p: LatLng | null) => void;
   setWalkRoute: (
@@ -304,6 +311,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   sniffMode: false,
   spotsVisibleBeforeSniff: null,
   aboutOpen: false,
+  activeHint: null,
   spotsCategoryFilter: 'all',
   viewportCenter: null,
   walkRoute: null,
@@ -772,6 +780,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       };
     }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
+  setActiveHint: (activeHint) => set({ activeHint }),
   setViewportCenter: (viewportCenter) => set({ viewportCenter }),
   setSpotsCategoryFilter: (spotsCategoryFilter) =>
     set((s) => ({

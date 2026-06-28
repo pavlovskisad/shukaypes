@@ -1,3 +1,4 @@
+import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { MapLibreMarker } from './MapLibreMarker';
@@ -91,6 +92,25 @@ interface CompanionProps {
   // onClick that Google Maps fires independently of DOM event flow —
   // without this, low-zoom taps open the menu and immediately close it.
   onTap?: () => void;
+}
+
+// One ring of the long-press tap-pulse. `delay` staggers the two rings
+// so they read as a repeating ripple, not a single ping. Centred on the
+// marker box (the dog) and expanded via the hint-tap-pulse keyframe.
+function tapPulseStyle(delaySec: number): CSSProperties {
+  return {
+    position: 'absolute',
+    left: '50%',
+    top: '50%',
+    width: 96,
+    height: 96,
+    borderRadius: '50%',
+    border: '3px solid rgba(0,0,0,0.32)',
+    transform: 'translate(-50%, -50%) scale(0.45)',
+    animation: `hint-tap-pulse 1.8s ease-out ${delaySec}s infinite`,
+    pointerEvents: 'none',
+    zIndex: 0,
+  };
 }
 
 // Companion overlay — float keyframe, tap-to-open radial menu. All children
@@ -508,9 +528,15 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
   // to clear via `ready` so it doesn't get stomped on by the
   // greeting on first map view — once the dog falls silent, the
   // hint's show + auto-dismiss timers start counting.
+  // Hints only count down while the map is the active screen AND no
+  // real bubble (greeting, sniff feedback, narration) holds the
+  // surface — so the dog never "spends" a one-shot hint off-screen or
+  // talks over itself.
+  const onMapScreen = useGameStore((s) => s.currentScreen) === 'map';
   const noRealBubble = !menuOpen && !hideBubble && !bubble && !localBubble;
+  const hintsReady = onMapScreen && noRealBubble;
   const longPressHint = useHint('map:long-press-to-sniff', {
-    ready: noRealBubble,
+    ready: hintsReady,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     // FIXME(hints): persist:false while we iterate on the
@@ -525,19 +551,45 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
   // has cleared — the two never share the dog's bubble at the same
   // time. Same gentle timing + dev-mode persist:false as above.
   const supersniffHint = useHint('map:supersniff', {
-    ready: noRealBubble && longPressHint.seen,
+    ready: hintsReady && longPressHint.seen,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     persist: false,
   });
-  const hintBubble = longPressHint.visible
-    ? t.hints.longPressToSniff
-    : supersniffHint.visible
-      ? t.hints.supersniff
-      : null;
+  // Which hint (if any) is the bubble actually showing right now? A
+  // hint only "counts" when no real bubble has taken the surface — so
+  // a narration that arrives mid-hint hides both the line AND its
+  // visual cue. This id drives the bubble text here and, via the
+  // store, the matching cue on other elements (the logo pulse).
+  const activeHintId = hintsReady
+    ? longPressHint.visible
+      ? 'map:long-press-to-sniff'
+      : supersniffHint.visible
+        ? 'map:supersniff'
+        : null
+    : null;
+  const hintBubble =
+    activeHintId === 'map:long-press-to-sniff'
+      ? t.hints.longPressToSniff
+      : activeHintId === 'map:supersniff'
+        ? t.hints.supersniff
+        : null;
   const activeBubble = menuOpen || hideBubble
     ? null
     : (bubble ?? localBubble) ?? hintBubble;
+
+  // Publish the visible hint so sibling components (the top-left logo
+  // in the HUD) can render a matching cue. Clear on unmount.
+  const setActiveHint = useGameStore((s) => s.setActiveHint);
+  useEffect(() => {
+    setActiveHint(activeHintId);
+  }, [activeHintId, setActiveHint]);
+  useEffect(() => () => setActiveHint(null), [setActiveHint]);
+
+  // Tap-pulse cue rides with the long-press hint — a soft ripple at
+  // the dog's feet reinforcing "press the map here". Only while that
+  // hint is the shown bubble.
+  const showTapPulse = activeHintId === 'map:long-press-to-sniff';
 
   return (
     <MapLibreMarker position={position} zIndex={Z.MARKER_COMPANION}>
@@ -567,6 +619,23 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
           zIndex: Z.MARKER_COMPANION,
         }}
       >
+        {/* Tap-pulse cue for the long-press hint — two staggered rings
+            ripple outward from the dog's feet, suggesting "press and
+            hold here". Behind the sprite, pointer-events:none. */}
+        {showTapPulse ? (
+          <>
+            <div aria-hidden style={tapPulseStyle(0)} />
+            <div aria-hidden style={tapPulseStyle(0.9)} />
+            <style>{`
+              @keyframes hint-tap-pulse {
+                0%   { transform: translate(-50%, -50%) scale(0.45); opacity: 0.55; }
+                70%  { opacity: 0; }
+                100% { transform: translate(-50%, -50%) scale(1.8);  opacity: 0; }
+              }
+            `}</style>
+          </>
+        ) : null}
+
         {/* Pixel-art companion — 64×64 sprite scaled 2× = 128px on
             screen. Side-profile only (sheet has no top-down rotation),
             so we flip horizontally based on movement direction.
