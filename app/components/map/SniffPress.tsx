@@ -268,13 +268,17 @@ export function SniffPress() {
           setMoreText(null);
           setMoreLoading(false);
           setMoreOpen(false);
-          // Ease the map so the surfaced place lands in the centre of
-          // the visible area — padding clears the HUD pills + tab bar
-          // so the story bubble isn't sitting under an overlay. Same
-          // tween shape as the walk-route / quest fits for consistency.
+          // Place the find a touch BELOW screen centre. Its story
+          // bubble stacks ABOVE the marker, so centring the marker (or
+          // worse, the old top-biased padding) pushed the bubble up
+          // under the HUD and clipped the text. A small downward offset
+          // lands the whole result in the upper-centre, clear of the
+          // HUD. Reset any padding a prior snap left so the offset is
+          // measured from the true viewport centre.
           map.easeTo({
             center: [lore.position.lng, lore.position.lat],
-            padding: { top: 110, bottom: 200, left: 40, right: 40 },
+            padding: { top: 0, bottom: 0, left: 0, right: 0 },
+            offset: [0, 70],
             duration: 600,
           });
         } else {
