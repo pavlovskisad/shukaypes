@@ -22,6 +22,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { pickBottomInset } from '../../services/telegram';
+import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useGameStore } from '../../stores/gameStore';
 import {
   buildCandidates,
@@ -304,6 +305,11 @@ export default function ChatScreen() {
   // bottom inset there double-pads the chat input wrap so it floats
   // too far above the tab bar. Pick TG's bottom inset when present.
   const insets = { ...iosInsets, bottom: pickBottomInset(iosInsets.bottom) };
+  // Installed-PWA root is extended down by the bottom inset so the world
+  // bleeds through the home-indicator strip; everything anchored to the
+  // bottom adds this overshoot to stay clear of the indicator. 0 in
+  // browser / TG. See hooks/usePwaInsetOvershoot.ts.
+  const safeBottom = insets.bottom + usePwaInsetOvershoot();
   // Padding the scroll content reserves an empty band at top + bottom
   // so the first/last bubbles can scroll freely behind the floating
   // header + input cards (which sit on top of the scroll view as
@@ -316,7 +322,7 @@ export default function ChatScreen() {
   // include the home-indicator safe-area, so the last bubble must sit
   // above (TAB_BAR_HEIGHT + safe-area + input band) to scroll free.
   const bottomPad =
-    TAB_BAR_HEIGHT + insets.bottom + INPUT_GAP_ABOVE_TABS + INPUT_BAND_HEIGHT + 72;
+    TAB_BAR_HEIGHT + safeBottom + INPUT_GAP_ABOVE_TABS + INPUT_BAND_HEIGHT + 72;
 
   return (
     <View style={styles.root}>
@@ -377,7 +383,7 @@ export default function ChatScreen() {
             bottom: 0,
             height:
               TAB_BAR_HEIGHT +
-              insets.bottom +
+              safeBottom +
               INPUT_GAP_ABOVE_TABS +
               INPUT_BAND_HEIGHT,
             // Mirror of the top — same eased curve.
@@ -415,7 +421,7 @@ export default function ChatScreen() {
         behavior={Platform.OS === 'ios' ? 'padding' : undefined}
         style={[
           styles.bottomBandWrap,
-          { bottom: TAB_BAR_HEIGHT + insets.bottom + INPUT_GAP_ABOVE_TABS },
+          { bottom: TAB_BAR_HEIGHT + safeBottom + INPUT_GAP_ABOVE_TABS },
         ]}
         pointerEvents="box-none"
       >

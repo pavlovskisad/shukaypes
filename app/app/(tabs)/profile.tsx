@@ -16,6 +16,7 @@ import type { SceneMode } from '../../components/profile/ProfileSceneBackdrop';
 import { HERO, CHIP } from '../../constants/sizing';
 import { MeterPill, CounterPill } from '../../components/ui/StatusBar';
 import { useStrings } from '../../i18n/useStrings';
+import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useLangStore } from '../../stores/langStore';
 import { CardStack, CARD_W } from '../../components/ui/CardStack';
 
@@ -129,6 +130,10 @@ export default function ProfileScreen() {
   // 200-px strip glued to a flat-coloured page.
   const [sceneMode, setSceneMode] = useState<SceneMode>('day');
   const insets = useSafeAreaInsets();
+  // Installed-PWA root is extended down by the bottom inset so the scene
+  // bleeds through the home-indicator strip; lift the floating deck back
+  // up by the same amount. 0 in browser / TG. See usePwaInsetOvershoot.
+  const pwaOvershoot = usePwaInsetOvershoot();
 
   const refetch = useCallback(async () => {
     try {
@@ -261,7 +266,7 @@ export default function ProfileScreen() {
           // tab-bar inset).
           <ProfileDogScene
             onModeChange={setSceneMode}
-            dogBottomInset={260 + HERO.size + insets.bottom}
+            dogBottomInset={260 + HERO.size + insets.bottom + pwaOvershoot}
           />
         ) : null}
       </View>
@@ -304,7 +309,7 @@ export default function ProfileScreen() {
           as tasks / spots (peekScale 1) — the cards stay 320 wide
           here too, so a smaller STEP collapses the peeks under
           the centre card. */}
-      <View style={[styles.deckHolder, { bottom: HERO.size + insets.bottom }]}>
+      <View style={[styles.deckHolder, { bottom: HERO.size + insets.bottom + pwaOvershoot }]}>
         <CardStack
           items={sections}
           getId={(s) => s.id}

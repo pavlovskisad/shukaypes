@@ -137,22 +137,24 @@
         flex: 1;
       }
 
-      /* Installed PWA (added to the home screen): height units
-         (%/vh/dvh) on the root left the bottom home-indicator strip
-         uncovered — the world stopped bleeding ~34px short and the white
-         body::after showed through. Pin the root to the exact viewport
-         with fixed inset:0 instead: in standalone mode the viewport
-         (viewport-fit=cover) IS the full physical screen, so the app
-         fills it edge-to-edge (world bleeds through the strip) with no
-         overshoot — every bottom-anchored element (floating tab bar,
-         chat input, profile deck) keeps its correct safe-area gap.
-         Scoped to display-mode: standalone so a normal browser tab and
-         the ≥900px desktop column below are unaffected. */
+      /* Installed PWA (added to the home screen): the standalone webview
+         leaves the bottom home-indicator strip uncovered with plain
+         height units AND with `position:fixed; inset:0` (its fixed
+         viewport excludes that inset) — the world stops bleeding ~34px
+         short and the white body::after shows through. The one thing
+         that DOES paint through the strip is a height that explicitly
+         adds the inset back: calc(100dvh + env(safe-area-inset-bottom)).
+         The trade-off is that this extends the layout's bottom edge
+         BELOW the visible screen by that inset, so every bottom-anchored
+         element compensates with the matching overshoot (see
+         hooks/usePwaInsetOvershoot.ts). Scoped to display-mode:
+         standalone so a normal browser tab and the ≥900px desktop column
+         below are unaffected. */
       @media (display-mode: standalone) {
+        html,
+        body,
         #root {
-          position: fixed;
-          inset: 0;
-          height: auto;
+          height: calc(100dvh + env(safe-area-inset-bottom, 0px));
         }
       }
 

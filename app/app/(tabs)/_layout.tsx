@@ -7,6 +7,7 @@ import { S } from '../../constants/spacing';
 import { HERO } from '../../constants/sizing';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import { pickBottomInset } from '../../services/telegram';
+import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useStrings } from '../../i18n/useStrings';
 
 // Tab icons are pixel-art SVGs (see components/ui/Icon.tsx). Inactive
@@ -44,6 +45,11 @@ export default function TabsLayout() {
   // reads as 'too low' in that context.
   const bottomInset = pickBottomInset(iosInsets.bottom);
   const insets = { ...iosInsets, bottom: bottomInset };
+  // Installed-PWA root is extended down by the bottom inset (so the world
+  // bleeds through the home-indicator strip) — lift the floating bar back
+  // up by the same amount so it keeps its gap above the indicator. 0 in
+  // browser / TG, where the root isn't extended.
+  const pwaOvershoot = usePwaInsetOvershoot();
 
   return (
     <Tabs
@@ -74,7 +80,8 @@ export default function TabsLayout() {
           // Android / TG Mini App where insets.bottom is 0).
           // Bottom margin matches side margins (S.l) so the pill
           // has even breathing room on all three visible sides.
-          bottom: insets.bottom + S.l,
+          // + pwaOvershoot compensates the extended installed-PWA root.
+          bottom: insets.bottom + pwaOvershoot + S.l,
           // 10 % shorter than HERO.size (64 → 58). Explicit
           // pixel value — TAB_BAR_HEIGHT in chat.tsx pairs with
           // this + the bottom inset, keep them in sync.
