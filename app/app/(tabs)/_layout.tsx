@@ -78,10 +78,11 @@ export default function TabsLayout() {
           // indicator; the extra S.s puts a breathing gap between
           // the pill and the indicator (or screen edge on
           // Android / TG Mini App where insets.bottom is 0).
-          // Bottom margin matches side margins (S.l) so the pill
-          // has even breathing room on all three visible sides.
-          // + pwaOvershoot compensates the extended installed-PWA root.
-          bottom: insets.bottom + pwaOvershoot + S.l,
+          // Floats a touch higher than the side margins (S.xxl vs S.l)
+          // so the pill clears the home indicator with comfortable air
+          // below it. + pwaOvershoot compensates the extended
+          // installed-PWA root.
+          bottom: insets.bottom + pwaOvershoot + S.xxl,
           // 10 % shorter than HERO.size (64 → 58). Explicit
           // pixel value — TAB_BAR_HEIGHT in chat.tsx pairs with
           // this + the bottom inset, keep them in sync.
