@@ -78,17 +78,28 @@
       /* These styles make the body full-height */
       html,
       body {
+        /* Cascade so the app fills the FULL screen height, including the
+           bottom home-indicator safe-area strip. On an iOS standalone
+           PWA, plain `height: 100%` resolves to the screen height MINUS
+           the bottom inset — content then ends ~34px short of the
+           physical bottom and the white body::after strip below shows
+           through (the world stops bleeding at the bottom even though
+           the top, anchored at y=0, looks fine). 100dvh (with 100vh as
+           the pre-dvh fallback) includes that strip so the map / scene
+           paints all the way down. Older engines fall back to 100%. */
         height: 100%;
+        height: 100vh;
+        height: 100dvh;
         margin: 0;
         padding: 0;
       }
       /* Paint the iOS home-indicator safe-area strip white BEFORE
-         React mounts and reads the inset via useSafeAreaInsets().
-         Without this, the strip flashes the body bg for one frame
-         on cold load + each PWA wake — visible as a small grey
-         blink under the dashboard pill. The dashboard's tab-bar
-         (rgba white) covers the strip in steady state, so the
-         pseudo-element only matters during pre-React paint. */
+         React mounts. Once mounted, the full-bleed world (map / dog
+         scene) now extends all the way down through this strip and
+         covers it, so the pseudo-element only matters during pre-React
+         paint — it stops the strip flashing the body bg for one frame
+         on cold load + each PWA wake (a small blink below the floating
+         tab pill). z-index:-1 keeps it behind the app content. */
       body::after {
         content: '';
         position: fixed;
@@ -118,7 +129,11 @@
       /* These styles make the root element full-height */
       #root {
         display: flex;
+        /* Match the body cascade so the RN app container also reaches
+           the physical bottom edge (see the html/body note above). */
         height: 100%;
+        height: 100vh;
+        height: 100dvh;
         flex: 1;
       }
 
