@@ -107,11 +107,7 @@
         right: 0;
         bottom: 0;
         height: env(safe-area-inset-bottom, 0px);
-        /* DIAGNOSTIC (temporary): magenta instead of white so we can
-           tell whether the lingering bottom band IS this safe-area strip
-           (content not covering it) or something else. Revert to #ffffff
-           once the bleed is confirmed. */
-        background: #ff00ff;
+        background: #ffffff;
         z-index: -1;
       }
       body {
@@ -141,20 +137,22 @@
         flex: 1;
       }
 
-      /* Installed PWA (added to the iOS home screen): the standalone
-         webview reports its viewport height EXCLUDING the bottom
-         home-indicator inset, so 100dvh/100vh/100% all leave a ~34px
-         strip at the very bottom uncovered — the white (now magenta)
-         body::after shows through there. Add the inset back in
-         standalone mode so the app fills the FULL physical screen and
-         the world bleeds through that strip. Scoped to display-mode:
-         standalone so a regular browser tab (where the height units are
-         correct) doesn't overshoot. */
+      /* Installed PWA (added to the home screen): height units
+         (%/vh/dvh) on the root left the bottom home-indicator strip
+         uncovered — the world stopped bleeding ~34px short and the white
+         body::after showed through. Pin the root to the exact viewport
+         with fixed inset:0 instead: in standalone mode the viewport
+         (viewport-fit=cover) IS the full physical screen, so the app
+         fills it edge-to-edge (world bleeds through the strip) with no
+         overshoot — every bottom-anchored element (floating tab bar,
+         chat input, profile deck) keeps its correct safe-area gap.
+         Scoped to display-mode: standalone so a normal browser tab and
+         the ≥900px desktop column below are unaffected. */
       @media (display-mode: standalone) {
-        html,
-        body,
         #root {
-          height: calc(100dvh + env(safe-area-inset-bottom, 0px));
+          position: fixed;
+          inset: 0;
+          height: auto;
         }
       }
 
