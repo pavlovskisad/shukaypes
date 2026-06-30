@@ -2,7 +2,8 @@ export const balance = {
   hunger: { start: 80, decay: 2, interval: 8000 },
   happiness: { start: 80, decay: 1, interval: 8000 },
   bone: { hunger: 20, happiness: 18 },
-  token: { hunger: 2, happiness: 12 },
+  // Paws are a treat: happiness only, no hunger. Only bones feed.
+  token: { hunger: 0, happiness: 12 },
   lowThreshold: 30,
   tokenCount: 15,
   bonusPerDog: 6,

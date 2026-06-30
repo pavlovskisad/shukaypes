@@ -10,7 +10,10 @@ export const balance = {
   // and stall the meter entirely.
   happiness: { start: 80, decay: 1, intervalMs: 8000, min: 0, max: 100 },
   bone: { hunger: 20, happiness: 18 },
-  token: { hunger: 2, happiness: 12 },
+  // Paws are a treat, not a meal: pure happiness, no hunger effect.
+  // Only bones feed the dog. (token.hunger stays in the schema as 0 so
+  // the collect SQL's `hunger + token.hunger` is a clean no-op.)
+  token: { hunger: 0, happiness: 12 },
   // Per-waypoint progression bump + extra payoff at the final waypoint.
   // Walking the route is the main "we did it together" signal in v1.
   quest: { happinessPerWaypoint: 8, happinessOnComplete: 25 },
