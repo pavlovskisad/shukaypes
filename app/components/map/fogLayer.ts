@@ -38,6 +38,7 @@ uniform vec3 u_fogColor;    // grey haze (horizon)
 uniform vec3 u_skyColor;    // very light blue (toward the top)
 uniform vec3 u_sunColor;    // soft warm light
 uniform float u_sunStrength;
+uniform vec2 u_sunPos;      // sun centre in ndc (from camera bearing/pitch)
 uniform float u_yStart;     // ndc.y where fog begins (lower)
 uniform float u_yEnd;       // ndc.y where fog reaches full (upper)
 uniform float u_maxAlpha;
@@ -76,9 +77,12 @@ void main() {
   // sky toward the very top.
   float skyMix = smoothstep(0.35, 0.98, v_ndc.y);
   vec3 col = mix(u_fogColor, u_skyColor, skyMix);
-  // Soft sunlight from a single top spot — a wide, gentle warm glow.
-  float sd = distance(v_ndc, vec2(0.28, 0.88));
-  float sun = smoothstep(1.25, 0.0, sd);
+  // Soft directional sunlight — a wide, gentle warm glow whose centre
+  // moves with the camera (u_sunPos). Slightly elongated vertically so it
+  // reads as light coming in at an angle, not a flat blob.
+  vec2 sv = (v_ndc - u_sunPos) * vec2(1.0, 0.78);
+  float sd = length(sv);
+  float sun = smoothstep(1.35, 0.0, sd);
   sun *= sun;
   col = mix(col, u_sunColor, sun * u_sunStrength);
   float a = clamp(g * cloud, 0.0, 1.0) * u_maxAlpha;
@@ -112,17 +116,24 @@ interface FogTones {
   sunStrength: number;
 }
 const DAY: FogTones = {
-  fog: [0.913, 0.925, 0.933],
-  sky: [0.855, 0.91, 0.98],
-  sun: [1.0, 0.95, 0.83],
-  sunStrength: 0.5,
+  // Clean near-white (was a dirtier grey) so the haze brightens rather
+  // than muddies the city.
+  fog: [0.965, 0.97, 0.975],
+  sky: [0.85, 0.91, 0.99],
+  sun: [1.0, 0.96, 0.85],
+  sunStrength: 0.55,
 };
 const NIGHT: FogTones = {
-  fog: [0.16, 0.18, 0.21],
+  fog: [0.17, 0.19, 0.22],
   sky: [0.09, 0.12, 0.19],
   sun: [0.55, 0.66, 0.82],
   sunStrength: 0.2,
 };
+
+// Fixed world azimuth the sun "comes from" (deg, from north, clockwise).
+// The on-screen sun position is derived from this vs the camera bearing,
+// so the light slides as you rotate/tilt — feels like a real light.
+const SUN_AZIMUTH = 125;
 
 interface FogOpts {
   // ndc.y band over which fog ramps (−1 bottom … +1 top). Lower yStart and
@@ -141,7 +152,7 @@ interface FogOpts {
 }
 
 export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
-  const yStart = opts.yStart ?? -0.05;
+  const yStart = opts.yStart ?? 0.12;
   const yEnd = opts.yEnd ?? 0.72;
   const maxAlpha = opts.maxAlpha ?? 0.92;
   const particle = opts.particle ?? 120;
@@ -156,6 +167,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   let uSky: WebGLUniformLocation | null = null;
   let uSun: WebGLUniformLocation | null = null;
   let uSunStrength: WebGLUniformLocation | null = null;
+  let uSunPos: WebGLUniformLocation | null = null;
   let uYStart: WebGLUniformLocation | null = null;
   let uYEnd: WebGLUniformLocation | null = null;
   let uMaxAlpha: WebGLUniformLocation | null = null;
@@ -196,6 +208,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
       uSky = gl.getUniformLocation(prog, 'u_skyColor');
       uSun = gl.getUniformLocation(prog, 'u_sunColor');
       uSunStrength = gl.getUniformLocation(prog, 'u_sunStrength');
+      uSunPos = gl.getUniformLocation(prog, 'u_sunPos');
       uYStart = gl.getUniformLocation(prog, 'u_yStart');
       uYEnd = gl.getUniformLocation(prog, 'u_yEnd');
       uMaxAlpha = gl.getUniformLocation(prog, 'u_maxAlpha');
@@ -240,7 +253,18 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         gl.uniform3f(uColor, tones.fog[0], tones.fog[1], tones.fog[2]);
         gl.uniform3f(uSky, tones.sky[0], tones.sky[1], tones.sky[2]);
         gl.uniform3f(uSun, tones.sun[0], tones.sun[1], tones.sun[2]);
-        gl.uniform1f(uSunStrength, tones.sunStrength);
+        // Directional sun: derive its on-screen spot from the camera so it
+        // slides as you rotate and rises/falls as you tilt — and fades when
+        // you turn away from it.
+        const bearing = typeof mapRef.getBearing === 'function' ? mapRef.getBearing() : 0;
+        let rel = (((SUN_AZIMUTH - bearing) % 360) + 540) % 360 - 180; // [-180,180]
+        const relRad = (rel * Math.PI) / 180;
+        const front = Math.cos(relRad);
+        const vis = Math.max(0, Math.min(1, (front + 0.25) / 0.9));
+        const sunX = 0.62 * Math.sin(relRad);
+        const sunY = 0.7 + Math.max(0, Math.min(0.18, (pitch - 50) * 0.004));
+        gl.uniform2f(uSunPos, sunX, sunY);
+        gl.uniform1f(uSunStrength, tones.sunStrength * vis);
         gl.uniform1f(uYStart, yStart);
         gl.uniform1f(uYEnd, yEnd);
         gl.uniform1f(uMaxAlpha, maxAlpha * pitchT);
