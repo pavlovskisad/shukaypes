@@ -57,15 +57,15 @@ export const LIGHT_PALETTE = {
   // Multiply overlay opacity (lightens darken effect).
   paperOpacity: 0.48,
   // Atmospheric sky + horizon haze for the steep game-camera pitch.
-  // Daytime: an airy white-light-blue dome fading to a near-white bright
-  // haze at the horizon. The bright haze doubles as a soft mask over the
-  // bare ground→sky seam you'd otherwise see at steep pitch + zoomed out
-  // (where the far city isn't rendered) — it reads as atmosphere, not a
-  // crisp horizon line.
+  // Daytime: an airy light-blue dome fading to a lightly TONED haze at the
+  // horizon. The fog keeps a soft cool-grey tint (not pure white) on
+  // purpose — white buildings dissolving into white haze show no depth, so
+  // a little tone lets the far city recede visibly into the fog (the deep
+  // look) and masks the bare ground→sky seam.
   sky: {
     skyColor: '#c6e3f6',
-    horizonColor: '#e4f0f9',
-    fogColor: '#eef5fb',
+    horizonColor: '#dce8f3',
+    fogColor: '#d2deea',
   },
 };
 
@@ -345,9 +345,9 @@ export function applyCrayonOverride(
         ['linear'],
         ['zoom'],
         13,
-        0.9,
+        1,
         18,
-        0.62,
+        0.8,
       ] as unknown as number,
     });
   }

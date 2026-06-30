@@ -26,21 +26,22 @@ function gradientFor(sniffMode: boolean): string {
   // Translucent throughout (low alphas) so the far city shows through —
   // densest at the horizon, easing off through many soft stops so there's
   // no hard "band edge". Reads as depth haze rather than a flat cover.
-  // Concentrate a DENSE band right at the horizon strip — that's where the
-  // tile-limit zone (far ground with no building data) sits at steep pitch,
-  // so the bare seam gets masked there — then drop to a LIGHT haze below it
-  // so the rendered city just beneath stays visible through gentle fog. Top
-  // few % stay sky-coloured to blend with MapLibre's sky dome above the
-  // horizon.
+  // Deep, smooth, many-stop haze: a near-opaque toned band right at the
+  // horizon strip (where the bare tile-limit ground sits at steep pitch),
+  // easing down through a long graduated tail so the rendered city beneath
+  // recedes into it (depth) rather than meeting a flat band edge. Top few %
+  // stay sky-coloured to blend with MapLibre's sky dome.
   return [
     'linear-gradient(to bottom',
     `${hexToRgba(sky.skyColor, 0.45)} 0%`,
-    `${hexToRgba(sky.horizonColor, 0.72)} 9%`,
-    `${hexToRgba(sky.fogColor, 0.78)} 17%`, // dense horizon / tile-limit band
-    `${hexToRgba(sky.fogColor, 0.42)} 27%`,
-    `${hexToRgba(sky.fogColor, 0.22)} 42%`, // light haze over the rendered city
-    `${hexToRgba(sky.fogColor, 0.1)} 64%`,
-    `${hexToRgba(sky.fogColor, 0.03)} 85%`,
+    `${hexToRgba(sky.horizonColor, 0.74)} 8%`,
+    `${hexToRgba(sky.fogColor, 0.82)} 15%`, // dense horizon / tile-limit band
+    `${hexToRgba(sky.fogColor, 0.6)} 22%`,
+    `${hexToRgba(sky.fogColor, 0.42)} 30%`,
+    `${hexToRgba(sky.fogColor, 0.28)} 40%`, // graduated tail over the city = depth
+    `${hexToRgba(sky.fogColor, 0.17)} 52%`,
+    `${hexToRgba(sky.fogColor, 0.09)} 66%`,
+    `${hexToRgba(sky.fogColor, 0.03)} 84%`,
     `${hexToRgba(sky.fogColor, 0)} 100%)`,
   ].join(', ');
 }
@@ -55,19 +56,25 @@ export function FogCurtain({ sniffMode }: { sniffMode: boolean }) {
     const apply = () => {
       raf = 0;
       const p = map.getPitch();
-      // Ramps up with pitch so the dense horizon band only engages as you
-      // tilt into the flood zone. The light lower body keeps the city
-      // visible regardless; the dense top band intensifies to mask the
-      // bare tile-limit seam at steep pitch.
-      setOpacity(Math.max(0, Math.min(0.9, (p - 56) / 22)));
+      const z = map.getZoom();
+      // Pitch drives the base (engages as you tilt into the flood zone).
+      const pitchBase = Math.max(0, (p - 56) / 26);
+      // Zoom boost: zooming OUT is exactly when the far city stops being
+      // rendered and bare land shows at the horizon, so thicken the fog to
+      // swallow it. None at street level (>=16.5), ramping up as you pull
+      // back. Zoomed IN the city stays clear.
+      const zoomBoost = Math.max(0, Math.min(0.35, (16.5 - z) * 0.13));
+      setOpacity(Math.max(0, Math.min(0.95, pitchBase + zoomBoost)));
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(apply);
     };
     apply();
     map.on('pitch', schedule);
+    map.on('zoom', schedule);
     return () => {
       map.off('pitch', schedule);
+      map.off('zoom', schedule);
       if (raf) cancelAnimationFrame(raf);
     };
   }, [map]);
