@@ -479,28 +479,16 @@ export function applyCrayonOverride(
         continue;
       }
       // Path / footway / pedestrian / cycleway / steps / bridleway —
-      // these are the classes that draw sidewalk doubles along
-      // Хрещатик AND the actual paths through Маріїнський park. We
-      // can't tell them apart from tags alone, so zoom-gate: only
-      // render at zoom >= 18, two notches past the default open-map
-      // zoom (16) so the user arrives to a clean city-overview and
-      // paths only surface once they've zoomed in to street level.
+      // sidewalk doubles along streets + footpaths through parks. They
+      // clutter the map (a mess of thin doubled lines) at every zoom, so
+      // hide them outright rather than zoom-gating them in close.
       const isPathish =
         /(^|[_-])(path|footway|pedestrian|cycleway|steps|bridleway)([_-]|$)/.test(
           lower,
         );
       if (isPathish) {
-        try {
-          (
-            map as unknown as {
-              setLayerZoomRange: (id: string, min: number, max: number) => void;
-            }
-          ).setLayerZoomRange(id, 18, 24);
-        } catch {
-          /* skip */
-        }
-        // Continue through so the path still gets the crayon-road
-        // pattern at the zooms it does appear at.
+        map.setLayoutProperty(id, 'visibility', 'none');
+        continue;
       }
       clear(map, id, 'line-color');
       clear(map, id, 'line-dasharray');
