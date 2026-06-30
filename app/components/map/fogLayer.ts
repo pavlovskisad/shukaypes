@@ -42,6 +42,7 @@ uniform float u_particle;    // particle size in (physical) px
 uniform float u_noiseAmt;    // 0..1 cloudiness
 uniform vec2 u_offset;       // world-ish anchor offset (px) so particles
                              // drift with the map instead of sticking to glass
+uniform float u_time;        // seconds — animates the cloud body
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float vnoise(vec2 p) {
@@ -57,10 +58,16 @@ float fbm(vec2 p) {
 void main() {
   // Top-down gradient: 0 at the bottom (near) → 1 at the top (far).
   float g = smoothstep(u_yStart, u_yEnd, v_ndc.y);
-  // Big, strong particles. Anchored to (fragcoord + map offset) so the
-  // clouds travel with the world as you pan, not stuck to the screen.
-  vec2 pn = (gl_FragCoord.xy + u_offset) / u_particle;
-  float n = fbm(pn);
+  // Big, strong, LIVING particles. Base coords travel with the world as
+  // you pan (offset), then a slow drift + a domain-warp make the cloud
+  // forms churn and roll over time instead of sitting like a frozen
+  // overlay.
+  vec2 base = (gl_FragCoord.xy + u_offset) / u_particle;
+  vec2 drift = vec2(u_time * 0.021, u_time * -0.013);
+  float wx = vnoise(base * 0.6 + vec2(0.0, u_time * 0.016));
+  float wy = vnoise(base * 0.6 + vec2(5.2, -u_time * 0.012));
+  vec2 warp = (vec2(wx, wy) - 0.5) * 0.9;
+  float n = fbm(base + drift + warp);
   float cloud = mix(1.0, 0.25 + 1.3 * n, u_noiseAmt);
   float a = clamp(g * cloud, 0.0, 1.0) * u_maxAlpha;
   if (a <= 0.002) discard;
@@ -123,6 +130,11 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   let uParticle: WebGLUniformLocation | null = null;
   let uNoiseAmt: WebGLUniformLocation | null = null;
   let uOffset: WebGLUniformLocation | null = null;
+  let uTime: WebGLUniformLocation | null = null;
+  const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+  // Throttle the self-driven animation to ~22fps — the clouds drift slowly,
+  // so there's no need to force a full 60fps map repaint (battery).
+  let repaintScheduled = false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mapRef: any = null;
 
@@ -155,6 +167,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
       uParticle = gl.getUniformLocation(prog, 'u_particle');
       uNoiseAmt = gl.getUniformLocation(prog, 'u_noiseAmt');
       uOffset = gl.getUniformLocation(prog, 'u_offset');
+      uTime = gl.getUniformLocation(prog, 'u_time');
       buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bufferData(
@@ -196,6 +209,8 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         gl.uniform1f(uParticle, particle * dpr);
         gl.uniform1f(uNoiseAmt, noiseAmt);
         gl.uniform2f(uOffset, offX, offY);
+        const now = typeof performance !== 'undefined' ? performance.now() : 0;
+        gl.uniform1f(uTime, (now - t0) / 1000);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.enableVertexAttribArray(aPos);
@@ -205,6 +220,21 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        // Keep animating while the fog is visible (pitched), throttled to
+        // ~22fps via setTimeout. setTimeout is itself throttled when the tab
+        // is hidden, so this idles in the background.
+        if (!repaintScheduled) {
+          repaintScheduled = true;
+          setTimeout(() => {
+            repaintScheduled = false;
+            try {
+              mapRef?.triggerRepaint();
+            } catch {
+              /* ignore */
+            }
+          }, 45);
+        }
       } catch (e) {
         // Never let a fog hiccup break the map's frame.
         // eslint-disable-next-line no-console
