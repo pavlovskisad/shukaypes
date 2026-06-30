@@ -37,7 +37,7 @@ import { UserMarker } from './UserMarker';
 import { TokenMarker } from './TokenMarker';
 import { FoodMarker } from './FoodMarker';
 import { CollectBurst } from './CollectBurst';
-import { FogCurtain } from './FogCurtain';
+import { createDepthFogLayer, DEPTH_FOG_LAYER_ID } from './fogLayer';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
@@ -1170,6 +1170,17 @@ export default function MapViewWeb() {
         map.on('style.load', () => {
           applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
           syncStreetLabels();
+          // Real depth fog (custom WebGL layer) on top of the canvas —
+          // fogs the city by true distance so the far view dissolves into
+          // haze. Guarded so a re-fire doesn't double-add.
+          if (!map.getLayer(DEPTH_FOG_LAYER_ID)) {
+            try {
+              map.addLayer(createDepthFogLayer());
+            } catch (e) {
+              // eslint-disable-next-line no-console
+              console.error('[fog] addLayer failed', e);
+            }
+          }
         });
         // Street names hide at the steep game pitch, return when flat.
         map.on('pitchend', syncStreetLabels);
@@ -1639,9 +1650,6 @@ export default function MapViewWeb() {
         </div>
       ) : null}
       <MapContext.Provider value={mapInstance}>
-        {/* Atmosphere curtain — hides the distant city behind fog at steep
-            pitch (MapLibre's sky fog can't fog the geometry itself). */}
-        <FogCurtain sniffMode={sniffMode} />
         <UserMarker position={userPos} />
 
         {/* Zone is only drawn for the currently-selected pet — otherwise
