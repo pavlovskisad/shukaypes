@@ -48,31 +48,43 @@ uniform vec2 u_offset;       // world-ish anchor offset (px) so particles
                              // drift with the map instead of sticking to glass
 uniform float u_time;        // seconds — animates the cloud body
 
-float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
-float vnoise(vec2 p) {
-  vec2 i = floor(p), f = fract(p);
-  vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
-             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+vec2 hash2(vec2 p) {
+  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
+  return fract(sin(p) * 43758.5453);
 }
-float fbm(vec2 p) {
-  return 0.58 * vnoise(p) + 0.30 * vnoise(p * 2.03 + 9.1) + 0.12 * vnoise(p * 4.11 + 23.7);
+float cellHash(vec2 c) { return fract(sin(dot(c, vec2(12.9898, 78.233))) * 43758.5453); }
+// Flat-shaded Voronoi: every pixel takes the single value of its nearest
+// cell → hard polygonal facets (no smooth blur), echoing the low-poly map.
+// Cell centres orbit over time so the polygons morph/drift = a living,
+// granular fog rather than a frozen pattern.
+float voronoiFlat(vec2 x, float t) {
+  vec2 n = floor(x);
+  vec2 f = fract(x);
+  float md = 8.0;
+  vec2 mc = n;
+  for (int j = -1; j <= 1; j++) {
+    for (int i = -1; i <= 1; i++) {
+      vec2 g = vec2(float(i), float(j));
+      vec2 o = hash2(n + g);
+      o = 0.5 + 0.5 * sin(t + 6.2831853 * o);   // orbit the cell centre
+      vec2 r = g + o - f;
+      float d = dot(r, r);
+      if (d < md) { md = d; mc = n + g; }
+    }
+  }
+  return cellHash(mc);
 }
 
 void main() {
   // Top-down gradient: 0 at the bottom (near) → 1 at the top (far).
   float g = smoothstep(u_yStart, u_yEnd, v_ndc.y);
-  // Big, strong, LIVING particles. Base coords travel with the world as
-  // you pan (offset), then a slow drift + a domain-warp make the cloud
-  // forms churn and roll over time instead of sitting like a frozen
-  // overlay.
+  // Polygonal granular particles. Coords ride the world offset (pan) plus a
+  // slow drift; each Voronoi cell is a flat density chunk → faceted fog
+  // that matches the 3D map's low-poly look.
   vec2 base = (gl_FragCoord.xy + u_offset) / u_particle;
-  vec2 drift = vec2(u_time * 0.04, u_time * -0.026);
-  float wx = vnoise(base * 0.6 + vec2(0.0, u_time * 0.03));
-  float wy = vnoise(base * 0.6 + vec2(5.2, -u_time * 0.024));
-  vec2 warp = (vec2(wx, wy) - 0.5) * 1.25;
-  float n = fbm(base + drift + warp);
-  float cloud = mix(1.0, 0.25 + 1.3 * n, u_noiseAmt);
+  vec2 drift = vec2(u_time * 0.03, u_time * -0.02);
+  float cell = voronoiFlat(base + drift, u_time * 0.5);
+  float cloud = mix(1.0, 0.18 + 1.5 * cell, u_noiseAmt);
   // Colour: grey haze at the horizon transitioning to a very light blue
   // sky toward the very top.
   float skyMix = smoothstep(0.35, 0.98, v_ndc.y);
@@ -155,7 +167,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   const yStart = opts.yStart ?? 0.12;
   const yEnd = opts.yEnd ?? 0.72;
   const maxAlpha = opts.maxAlpha ?? 0.92;
-  const particle = opts.particle ?? 120;
+  const particle = opts.particle ?? 95;
   const noiseAmt = opts.noiseAmt ?? 0.8;
   const minPitch = opts.minPitch ?? 42;
   const fullPitch = opts.fullPitch ?? 60;
