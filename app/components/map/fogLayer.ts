@@ -123,6 +123,18 @@ uniform float u_invK;    // metres per mercator unit
 uniform vec3 u_fogColor;
 uniform float u_density;  // fog density per metre
 uniform float u_maxAlpha;
+uniform float u_noiseFreq; // particle frequency (1/metre) — smaller = bigger
+uniform float u_noiseAmt;  // 0..1 cloudiness
+
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+}
+float fbm(vec2 p) { return 0.62 * vnoise(p) + 0.38 * vnoise(p * 2.07 + 13.1); }
+
 void main() {
   vec4 nh = u_invMatrix * vec4(v_ndc, -1.0, 1.0);
   vec3 nearP = nh.xyz / nh.w;
@@ -133,9 +145,16 @@ void main() {
   float s = nearP.z / denom;          // ground (z=0) hit param
   if (s < 0.0) discard;               // ray points up → sky
   vec3 ground = nearP + s * (farP - nearP);
-  float distM = length(ground - u_camera) * u_invK;   // metres from camera
+  // Distance clamped so the perspective-singular horizon zone can't spike
+  // into a hard band; exponential saturates well before the clamp anyway.
+  float distM = min(length(ground - u_camera) * u_invK, 28000.0);
   float fog = 1.0 - exp(-u_density * distM);           // exponential falloff
-  float a = clamp(fog, 0.0, 1.0) * u_maxAlpha;
+  // World-anchored (camera-relative metres) cloud noise — gives the fog a
+  // particulate body and softens the horizon transition into an irregular,
+  // not-a-line edge.
+  vec2 relM = (ground.xy - u_camera.xy) * u_invK;
+  float cloud = mix(1.0, 0.4 + 1.15 * fbm(relM * u_noiseFreq), u_noiseAmt);
+  float a = clamp(fog * cloud, 0.0, 1.0) * u_maxAlpha;
   if (a <= 0.002) discard;
   gl_FragColor = vec4(u_fogColor * a, a);              // premultiplied
 }
@@ -163,14 +182,21 @@ interface FogOpts {
   density?: number;
   // Peak fog opacity (kept < 1 so the far city stays as silhouettes).
   maxAlpha?: number;
+  // Particle/cloud size: frequency in 1/metre. SMALLER = bigger particles.
+  // 0.005 ≈ ~200m blobs.
+  noiseFreq?: number;
+  // Cloudiness 0..1 — how strongly the particle noise modulates density.
+  noiseAmt?: number;
   // Fade the whole effect in with pitch (no fog on a flat map).
   minPitch?: number;
   fullPitch?: number;
 }
 
 export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
-  const density = opts.density ?? 0.0004;
-  const maxAlpha = opts.maxAlpha ?? 0.88;
+  const density = opts.density ?? 0.00038;
+  const maxAlpha = opts.maxAlpha ?? 0.84;
+  const noiseFreq = opts.noiseFreq ?? 0.005;
+  const noiseAmt = opts.noiseAmt ?? 0.55;
   const minPitch = opts.minPitch ?? 42;
   const fullPitch = opts.fullPitch ?? 60;
 
@@ -183,6 +209,8 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   let uColor: WebGLUniformLocation | null = null;
   let uDensity: WebGLUniformLocation | null = null;
   let uMaxAlpha: WebGLUniformLocation | null = null;
+  let uNoiseFreq: WebGLUniformLocation | null = null;
+  let uNoiseAmt: WebGLUniformLocation | null = null;
   const invOut = new Float32Array(16);
   const cam: number[] = [0, 0, 0];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -216,6 +244,8 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
       uColor = gl.getUniformLocation(prog, 'u_fogColor');
       uDensity = gl.getUniformLocation(prog, 'u_density');
       uMaxAlpha = gl.getUniformLocation(prog, 'u_maxAlpha');
+      uNoiseFreq = gl.getUniformLocation(prog, 'u_noiseFreq');
+      uNoiseAmt = gl.getUniformLocation(prog, 'u_noiseAmt');
       buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bufferData(
@@ -252,6 +282,8 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         gl.uniform3f(uColor, r, g, b);
         gl.uniform1f(uDensity, density);
         gl.uniform1f(uMaxAlpha, maxAlpha * pitchT);
+        gl.uniform1f(uNoiseFreq, noiseFreq);
+        gl.uniform1f(uNoiseAmt, noiseAmt);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.enableVertexAttribArray(aPos);
