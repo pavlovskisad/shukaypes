@@ -35,6 +35,7 @@ import logoNose from '../../assets/logo-nose.png';
 import { UserMarker } from './UserMarker';
 import { TokenMarker } from './TokenMarker';
 import { FoodMarker } from './FoodMarker';
+import { CollectBurst } from './CollectBurst';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
@@ -164,6 +165,12 @@ export default function MapViewWeb() {
   // True while the camera is animating (sniff jump, snap, pan, zoom).
   // Hints pause while moving and resume once it settles.
   const [mapMoving, setMapMoving] = useState(false);
+  // Active collect-burst FX — one transient pop per paw/bone pickup,
+  // keyed by the store's lastCollect.seq. Each self-removes after the
+  // animation (~800ms) via the effect below.
+  const [collectBursts, setCollectBursts] = useState<
+    { seq: number; lng: number; lat: number; kind: 'paw' | 'bone' }[]
+  >([]);
   // Which clusters the user has tapped to expand. Stored by cluster
   // key (sorted item ids); cleared by the floating "collapse all" pill
   // that appears at the top of the map while any cluster is open.
@@ -231,6 +238,7 @@ export default function MapViewWeb() {
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   const collectToken = useGameStore((s) => s.collectToken);
   const eatFood = useGameStore((s) => s.eatFood);
+  const lastCollect = useGameStore((s) => s.lastCollect);
   const setUserPosition = useGameStore((s) => s.setUserPosition);
   const syncMap = useGameStore((s) => s.syncMap);
   const syncSpots = useGameStore((s) => s.syncSpots);
@@ -532,6 +540,24 @@ export default function MapViewWeb() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeHint]);
+
+  // Spawn a collect-burst FX whenever a paw/bone is picked up (tap OR
+  // auto-collect — both funnel through the store's lastCollect). Keyed on
+  // seq so repeat pickups at the same spot still fire; each burst clears
+  // itself after the animation window. The ref is seeded with the
+  // mount-time seq so returning to the map tab doesn't replay the last
+  // pickup's burst at a stale spot.
+  const lastBurstSeqRef = useRef(useGameStore.getState().lastCollect?.seq ?? 0);
+  useEffect(() => {
+    if (!lastCollect || lastCollect.seq === lastBurstSeqRef.current) return;
+    const { seq, lng, lat, kind } = lastCollect;
+    lastBurstSeqRef.current = seq;
+    setCollectBursts((prev) => [...prev, { seq, lng, lat, kind }]);
+    const t = setTimeout(() => {
+      setCollectBursts((prev) => prev.filter((b) => b.seq !== seq));
+    }, 850);
+    return () => clearTimeout(t);
+  }, [lastCollect]);
 
   useEffect(() => {
     if (!isFocused) return;
@@ -1687,6 +1713,15 @@ export default function MapViewWeb() {
           />
         ))}
 
+        {/* Collect-burst FX — pops at the spot of each paw/bone pickup. */}
+        {collectBursts.map((b) => (
+          <CollectBurst
+            key={b.seq}
+            position={{ lat: b.lat, lng: b.lng }}
+            kind={b.kind}
+          />
+        ))}
+
         {/* Spots layer. Toggle off hides the ambient field; the
             spots-tab category filter further restricts which markers
             show when the layer IS on. Two spots always render
@@ -2262,6 +2297,29 @@ export default function MapViewWeb() {
         @keyframes hint-map-press {
           0%, 100% { transform: translate(-50%, -50%) scale(1);    }
           50%      { transform: translate(-50%, -50%) scale(0.82); }
+        }
+        /* Collectible idle "float" — paws/bones gently bob + breathe so
+           they read as live game pickups rather than flat map decals. */
+        @keyframes collectible-bob {
+          0%, 100% { transform: translateY(0)    scale(1);    }
+          50%      { transform: translateY(-3px) scale(1.06); }
+        }
+        /* Collect burst — the picked-up icon pops up, swells and fades. */
+        @keyframes collect-burst-icon {
+          0%   { transform: translate(-50%, -50%) scale(1);   opacity: 1; }
+          35%  { transform: translate(-50%, -120%) scale(1.7); opacity: 1; }
+          100% { transform: translate(-50%, -210%) scale(0.6); opacity: 0; }
+        }
+        /* Expanding shockwave ring at the pickup spot. */
+        @keyframes collect-burst-ring {
+          0%   { transform: translate(-50%, -50%) scale(0.3); opacity: 0.6; }
+          100% { transform: translate(-50%, -50%) scale(2.6); opacity: 0; }
+        }
+        /* Floating "+1" that rises and fades above the pickup. */
+        @keyframes collect-burst-plus {
+          0%   { transform: translate(-50%, -60%)  scale(0.6); opacity: 0; }
+          25%  { transform: translate(-50%, -120%) scale(1.1); opacity: 1; }
+          100% { transform: translate(-50%, -230%) scale(1);   opacity: 0; }
         }
       `}</style>
 

@@ -218,6 +218,13 @@ interface GameState {
   // worrying about stale-time math; no semantic meaning to the value.
   collectPulse: number;
 
+  // Last paw/bone pickup — drives the map collect-burst FX (a pop +
+  // rising "+1" at the item's spot). Carries the world position + kind
+  // so the FX can be spawned centrally from BOTH the tap handler and the
+  // auto-collect/auto-eat loops. `seq` increments every pickup so a
+  // subscriber can fire on === change even when two pickups share a spot.
+  lastCollect: { lng: number; lat: number; kind: 'paw' | 'bone'; seq: number } | null;
+
   setUserPosition: (pos: LatLng) => void;
   setHomePosition: (pos: LatLng) => void;
   // `force` skips the server distance check — used for explicit user
@@ -347,6 +354,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   syncing: false,
   lastSyncError: null,
   collectPulse: 0,
+  lastCollect: null,
 
   setUserPosition: (pos) =>
     set((s) => ({
@@ -376,6 +384,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         tokensCollected: s.tokensCollected + 1,
         points: s.points + tok.value,
         collectPulse: s.collectPulse + 1,
+        lastCollect: {
+          lng: tok.position.lng,
+          lat: tok.position.lat,
+          kind: 'paw',
+          seq: s.collectPulse + 1,
+        },
       };
     });
     try {
@@ -419,6 +433,12 @@ export const useGameStore = create<GameState>((set, get) => ({
         recentlyConsumedIds: next,
         foodItems: s.foodItems.filter((x) => x.id !== id),
         collectPulse: s.collectPulse + 1,
+        lastCollect: {
+          lng: f.position.lng,
+          lat: f.position.lat,
+          kind: 'bone',
+          seq: s.collectPulse + 1,
+        },
       };
     });
     try {

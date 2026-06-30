@@ -1,4 +1,4 @@
-import type { ReactNode } from 'react';
+import { useEffect, useRef, type ReactNode } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
@@ -83,6 +83,50 @@ function PulseWrap({ active, children }: { active: boolean; children: ReactNode 
   );
 }
 
+// Accent glow per meter, matching the map collectibles: sun = warm,
+// bone = amber, paws = lime. Used for the pickup pop flash below.
+function glowForIcon(icon: IconName): string {
+  switch (icon) {
+    case 'sun':
+      return 'rgba(245,200,70,0.95)';
+    case 'bone':
+      return 'rgba(245,180,70,0.95)';
+    case 'paws':
+      return 'rgba(150,220,70,0.95)';
+    default:
+      return 'rgba(255,255,255,0.9)';
+  }
+}
+
+// Pop + glow flash a pill whenever its value goes UP — the HUD half of
+// the collect dopamine loop (paws/hunger/happiness all rise on a pickup).
+// Returns a ref to put on a web wrapper around the pill. Decreases
+// (passive hunger/happiness decay) are ignored, so only gains celebrate.
+// The very first value the pill mounts with is the baseline (no pop), so
+// a fresh load doesn't fire a spurious flash.
+function usePopOnIncrease(value: number, glow: string) {
+  const ref = useRef<HTMLDivElement>(null);
+  const prev = useRef(value);
+  useEffect(() => {
+    const wentUp = value > prev.current;
+    prev.current = value;
+    if (!wentUp || !ref.current || typeof ref.current.animate !== 'function') return;
+    ref.current.animate(
+      [
+        { transform: 'scale(1)', filter: 'brightness(1) drop-shadow(0 0 0 rgba(0,0,0,0))' },
+        {
+          transform: 'scale(1.18)',
+          filter: `brightness(1.2) drop-shadow(0 0 9px ${glow})`,
+          offset: 0.4,
+        },
+        { transform: 'scale(1)', filter: 'brightness(1) drop-shadow(0 0 0 rgba(0,0,0,0))' },
+      ],
+      { duration: 460, easing: 'cubic-bezier(0.34, 1.56, 0.64, 1)' },
+    );
+  }, [value, glow]);
+  return ref;
+}
+
 export function MeterPill({
   icon,
   value,
@@ -107,29 +151,32 @@ export function MeterPill({
   pulse?: boolean;
 }) {
   const fillPct = Math.max(0, Math.min(100, Math.round(value)));
+  const popRef = usePopOnIncrease(value, glowForIcon(icon));
   return (
-    <PulseWrap active={!!pulse}>
-      <View style={[styles.pill, styles.meterPill, solid && styles.pillSolid]}>
-        <View
-          style={[
-            styles.fill,
-            {
-              width: `${fillPct}%` as unknown as number,
-              backgroundColor: PROGRESS_BLUE,
-            },
-          ]}
-        />
-        <Icon name={icon} size={ICON_SIZE} />
-        {showValue ? (
-          <Text
-            style={styles.value}
-            accessibilityLabel={`${label} ${fillPct} percent`}
-          >
-            {fillPct}%
-          </Text>
-        ) : null}
-      </View>
-    </PulseWrap>
+    <div ref={popRef} style={{ display: 'inline-flex' }}>
+      <PulseWrap active={!!pulse}>
+        <View style={[styles.pill, styles.meterPill, solid && styles.pillSolid]}>
+          <View
+            style={[
+              styles.fill,
+              {
+                width: `${fillPct}%` as unknown as number,
+                backgroundColor: PROGRESS_BLUE,
+              },
+            ]}
+          />
+          <Icon name={icon} size={ICON_SIZE} />
+          {showValue ? (
+            <Text
+              style={styles.value}
+              accessibilityLabel={`${label} ${fillPct} percent`}
+            >
+              {fillPct}%
+            </Text>
+          ) : null}
+        </View>
+      </PulseWrap>
+    </div>
   );
 }
 
@@ -149,16 +196,19 @@ export function CounterPill({
   // Show the hint attention ring (driven by the HUD-meters hint).
   pulse?: boolean;
 }) {
+  const popRef = usePopOnIncrease(value, glowForIcon(icon));
   return (
-    <PulseWrap active={!!pulse}>
-      <View style={[styles.pill, styles.counterPill, solid && styles.pillSolid]}>
-        <Icon name={icon} size={ICON_SIZE} />
-        <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
-          {Math.round(value)}
-          {suffix ?? ''}
-        </Text>
-      </View>
-    </PulseWrap>
+    <div ref={popRef} style={{ display: 'inline-flex' }}>
+      <PulseWrap active={!!pulse}>
+        <View style={[styles.pill, styles.counterPill, solid && styles.pillSolid]}>
+          <Icon name={icon} size={ICON_SIZE} />
+          <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
+            {Math.round(value)}
+            {suffix ?? ''}
+          </Text>
+        </View>
+      </PulseWrap>
+    </div>
   );
 }
 
