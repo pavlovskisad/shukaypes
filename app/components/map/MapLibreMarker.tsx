@@ -29,8 +29,20 @@ interface Props {
   zIndex?: number;
   // Optional click handler on the marker wrapper.
   onClick?: () => void;
+  // Hide this marker while it projects into the top "sky" band at steep
+  // pitch. At the game-camera tilt, distant markers compress toward the
+  // horizon and pile up at the top of the screen; culling them keeps the
+  // near field clean. Pitch-gated (no cull on a flat-ish map) and the
+  // band widens with pitch. Opt-in — only the markers that actually pile
+  // (dogs, clusters, paws, bones, POIs) set it; the companion / user /
+  // waypoints / sniff bubbles stay always-visible.
+  cullNearHorizon?: boolean;
   children: ReactNode;
 }
+
+// Below this pitch there's effectively no horizon in view, so nothing is
+// culled (a flat map's "top of screen" is just north, not the sky).
+const CULL_MIN_PITCH = 60;
 
 // Renders `children` into a div managed by a maplibregl.Marker
 // attached to the ambient map (from MapContext). Position + lifecycle
@@ -41,6 +53,7 @@ export function MapLibreMarker({
   offset,
   zIndex,
   onClick,
+  cullNearHorizon,
   children,
 }: Props) {
   const map = useMaplibreMap();
@@ -85,6 +98,46 @@ export function MapLibreMarker({
     el.style.zIndex = zIndex != null ? String(zIndex) : '';
     el.style.cursor = onClick ? 'pointer' : '';
   }, [el, zIndex, onClick]);
+
+  // Horizon cull. While pitched steeply, hide the marker if it projects
+  // into the top sky band (or off the top entirely). The band grows with
+  // pitch — the steeper the tilt, the more of the far field compresses up
+  // top. rAF-coalesced so a continuous pan does at most one project()
+  // per frame. Static markers (dogs/tokens/POIs) have a stable position,
+  // so this re-subscribes only when the marker actually moves.
+  useEffect(() => {
+    if (!map || !el || !cullNearHorizon) return;
+    let raf = 0;
+    const apply = () => {
+      raf = 0;
+      const pitch = map.getPitch();
+      if (pitch < CULL_MIN_PITCH) {
+        el.style.visibility = '';
+        return;
+      }
+      const h = map.getContainer().clientHeight || 1;
+      // 60° → top 16%, ramping to ~32% by 80°.
+      const frac = Math.min(0.32, 0.16 + (pitch - CULL_MIN_PITCH) * 0.008);
+      const { y } = map.project([position.lng, position.lat]);
+      el.style.visibility = y < h * frac ? 'hidden' : '';
+    };
+    const schedule = () => {
+      if (!raf) raf = requestAnimationFrame(apply);
+    };
+    apply();
+    map.on('move', schedule);
+    map.on('zoom', schedule);
+    map.on('pitch', schedule);
+    map.on('rotate', schedule);
+    return () => {
+      map.off('move', schedule);
+      map.off('zoom', schedule);
+      map.off('pitch', schedule);
+      map.off('rotate', schedule);
+      if (raf) cancelAnimationFrame(raf);
+      el.style.visibility = '';
+    };
+  }, [map, el, cullNearHorizon, position.lat, position.lng]);
 
   // Click handler wiring. Every tappable marker fires the
   // shared pop animation on tap — one change here gives

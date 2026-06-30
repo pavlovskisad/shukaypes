@@ -116,7 +116,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
   }, [active]);
 
   return (
-    <MapLibreMarker position={position} anchor="bottom" onClick={onTap}>
+    <MapLibreMarker position={position} anchor="bottom" onClick={onTap} cullNearHorizon>
       <div
         role="button"
         tabIndex={0}

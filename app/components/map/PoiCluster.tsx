@@ -31,7 +31,7 @@ interface PoiClusterProps {
 function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterProps) {
   const slot = iconForCategory(category);
   return (
-    <MapLibreMarker position={position}>
+    <MapLibreMarker position={position} cullNearHorizon>
       <div
         role="button"
         tabIndex={0}

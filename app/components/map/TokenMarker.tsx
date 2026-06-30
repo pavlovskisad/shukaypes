@@ -31,7 +31,7 @@ function TokenMarkerImpl({
     ? 'invert(1) drop-shadow(0 0 5px rgba(255,255,255,0.55))'
     : 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.3)) drop-shadow(0 0 4px rgba(150,220,70,0.75))';
   return (
-    <MapLibreMarker position={position} onClick={onTap}>
+    <MapLibreMarker position={position} onClick={onTap} cullNearHorizon>
       {/* Wrapper is the tap-pop target (MapLibreMarker pops firstChild);
           keeping the bob on the inner icon avoids fighting that scale. */}
       <div

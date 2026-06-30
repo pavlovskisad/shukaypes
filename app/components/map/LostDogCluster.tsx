@@ -67,7 +67,7 @@ function LostDogClusterImpl({
 }: LostDogClusterProps) {
   const count = items.length;
   return (
-    <MapLibreMarker position={position}>
+    <MapLibreMarker position={position} cullNearHorizon>
       <div
         style={{
           position: 'relative',

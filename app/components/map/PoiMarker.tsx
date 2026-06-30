@@ -47,7 +47,7 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
     );
   }, [selected]);
   return (
-    <MapLibreMarker position={position} anchor="bottom" onClick={onTap}>
+    <MapLibreMarker position={position} anchor="bottom" onClick={onTap} cullNearHorizon>
       <div
         ref={wrapRef}
         role="button"
