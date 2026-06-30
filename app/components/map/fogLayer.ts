@@ -18,6 +18,7 @@ import type {
   CustomLayerInterface,
   CustomRenderMethodInput,
 } from 'maplibre-gl';
+import { MercatorCoordinate } from 'maplibre-gl';
 import { useGameStore } from '../../stores/gameStore';
 
 export const DEPTH_FOG_LAYER_ID = 'depth-fog';
@@ -81,9 +82,12 @@ void main() {
   // Polygonal granular particles. Coords ride the world offset (pan) plus a
   // slow drift; each Voronoi cell is a flat density chunk → faceted fog
   // that matches the 3D map's low-poly look.
+  // Coords are anchored to the WORLD (u_offset is the mercator position in
+  // px) so the polygons travel with the map as you pan/zoom — parallax,
+  // not self-drift. Only a very slow cell morph keeps it alive.
   vec2 base = (gl_FragCoord.xy + u_offset) / u_particle;
-  vec2 drift = vec2(u_time * 0.03, u_time * -0.02);
-  float cell = voronoiFlat(base + drift, u_time * 0.5);
+  vec2 drift = vec2(u_time * 0.004, u_time * -0.003);
+  float cell = voronoiFlat(base + drift, u_time * 0.08);
   float cloud = mix(1.0, 0.18 + 1.5 * cell, u_noiseAmt);
   // Colour: grey haze at the horizon transitioning to a very light blue
   // sky toward the very top.
@@ -167,7 +171,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   const yStart = opts.yStart ?? 0.12;
   const yEnd = opts.yEnd ?? 0.72;
   const maxAlpha = opts.maxAlpha ?? 0.92;
-  const particle = opts.particle ?? 95;
+  const particle = opts.particle ?? 38;
   const noiseAmt = opts.noiseAmt ?? 0.8;
   const minPitch = opts.minPitch ?? 42;
   const fullPitch = opts.fullPitch ?? 60;
@@ -251,12 +255,19 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         // Anchor particles to the map so they drift with panning rather than
         // sticking to the screen. Project the map centre to pixels.
         const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+        // World anchor: the map centre's mercator position expressed in
+        // device px (worldSize = 512·2^zoom). As you pan, this tracks the
+        // ground 1:1 so the polygons travel WITH the world (parallax) and
+        // scale with zoom. Kept modulo a cell-aligned period so the value
+        // stays small enough for float precision (the rare wrap is far off).
         let offX = 0, offY = 0;
         try {
-          const c = mapRef.getCenter();
-          const p = mapRef.project(c);
-          offX = -p.x * dpr;
-          offY = p.y * dpr;
+          const m = MercatorCoordinate.fromLngLat(mapRef.getCenter());
+          const zoom = mapRef.getZoom();
+          const worldPx = 512 * Math.pow(2, zoom) * dpr;
+          const period = particle * dpr * 512;
+          offX = (((m.x * worldPx) % period) + period) % period;
+          offY = (((m.y * worldPx) % period) + period) % period;
         } catch {
           /* ignore */
         }
