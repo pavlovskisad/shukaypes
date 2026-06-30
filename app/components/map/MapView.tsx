@@ -37,6 +37,7 @@ import { UserMarker } from './UserMarker';
 import { TokenMarker } from './TokenMarker';
 import { FoodMarker } from './FoodMarker';
 import { CollectBurst } from './CollectBurst';
+import { FogCurtain } from './FogCurtain';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
@@ -1129,15 +1130,14 @@ export default function MapViewWeb() {
           maxBounds: MAP_MAX_BOUNDS,
           // Steep, near-ground tilt for a game-camera feel — the city
           // reads as a 3D world you walk through rather than a flat map.
-          // 70° (was 55°) drops the horizon low. maxPitch is capped just
-          // above the default (72, not 80): past ~72 the far city rises
-          // ABOVE the horizon fog band and floods the top of the screen
-          // (MapLibre's sky fog hazes the horizon, not distant geometry),
-          // so we keep the camera in the range where the fogged horizon
-          // actually hides the distance. Default maxPitch is 60, so it
-          // must be raised for 70 to take effect at all.
+          // 70° (was 55°) drops the horizon low; maxPitch 80 allows a
+          // dramatic near-ground tilt. Past ~70 the far city would rise
+          // above MapLibre's horizon haze and flood the top, so the
+          // FogCurtain overlay (pitch-driven) paints atmosphere over that
+          // band to hide the distance. Default maxPitch is 60, so it must
+          // be raised for 70 to take effect at all.
           pitch: 70,
-          maxPitch: 72,
+          maxPitch: 80,
           // Drop both attribution branding + the MapLibre wordmark
           // logo. Tile/data attribution is a legal requirement for
           // upstream sources (OFM, OSM, etc.) — those are surfaced
@@ -1639,6 +1639,9 @@ export default function MapViewWeb() {
         </div>
       ) : null}
       <MapContext.Provider value={mapInstance}>
+        {/* Atmosphere curtain — hides the distant city behind fog at steep
+            pitch (MapLibre's sky fog can't fog the geometry itself). */}
+        <FogCurtain sniffMode={sniffMode} />
         <UserMarker position={userPos} />
 
         {/* Zone is only drawn for the currently-selected pet — otherwise
