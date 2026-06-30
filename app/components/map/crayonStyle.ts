@@ -56,6 +56,15 @@ export const LIGHT_PALETTE = {
   labelStreet: '#3a3a3a',
   // Multiply overlay opacity (lightens darken effect).
   paperOpacity: 0.48,
+  // Atmospheric sky + horizon haze for the steep game-camera pitch.
+  // Daytime: a soft blue dome up top fading to a bright near-white haze
+  // at the horizon, so distant buildings dissolve into depth instead of
+  // stacking flat against the page colour.
+  sky: {
+    skyColor: '#a8d3ef',
+    horizonColor: '#e6f1f8',
+    fogColor: '#eef3f6',
+  },
 };
 
 export const DARK_PALETTE = {
@@ -86,6 +95,14 @@ export const DARK_PALETTE = {
   labelStreet: '#c8c8c8',
   // Lower opacity on dark — the multiply/screen overlay is subtler.
   paperOpacity: 0.35,
+  // Sniff mode: a deep night-blue dome fading to a dim muted horizon
+  // glow + dark haze, so the dark city recedes into atmosphere the same
+  // way the daytime map does.
+  sky: {
+    skyColor: '#0d1626',
+    horizonColor: '#313748',
+    fogColor: '#1b212e',
+  },
 };
 
 export type Palette = typeof LIGHT_PALETTE;
@@ -301,6 +318,31 @@ export function applyCrayonOverride(
   addImg(map, 'crayon-park', parkPattern(palette), 1);
   addImg(map, 'crayon-water', waterPattern(palette), 1);
   addImg(map, 'crayon-road', roadPattern(palette), 1);
+
+  // Atmospheric sky + horizon fog. At the steep game pitch the top of the
+  // screen shows sky, and distant buildings fade into the horizon haze for
+  // real depth (vs. piling flat against the page colour). atmosphere-blend
+  // (zoom-driven, the documented pattern) keeps the haze strong when
+  // zoomed out and eases it back as you zoom in close.
+  if (typeof map.setSky === 'function') {
+    map.setSky({
+      'sky-color': palette.sky.skyColor,
+      'sky-horizon-blend': 0.8,
+      'horizon-color': palette.sky.horizonColor,
+      'horizon-fog-blend': 0.6,
+      'fog-color': palette.sky.fogColor,
+      'fog-ground-blend': 0.55,
+      'atmosphere-blend': [
+        'interpolate',
+        ['linear'],
+        ['zoom'],
+        13,
+        1,
+        18,
+        0.5,
+      ] as unknown as number,
+    });
+  }
 
   const layers = map.getStyle().layers ?? [];
   const buildingLayer = layers.find(
