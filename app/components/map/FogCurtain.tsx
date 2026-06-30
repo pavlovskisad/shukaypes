@@ -26,17 +26,18 @@ function gradientFor(sniffMode: boolean): string {
   // Translucent throughout (low alphas) so the far city shows through —
   // densest at the horizon, easing off through many soft stops so there's
   // no hard "band edge". Reads as depth haze rather than a flat cover.
-  // Denser, near-opaque bright haze across the upper band (masks the
-  // ground→sky seam wherever it falls at steep pitch), then fading
-  // gradually to clear over the foreground. Near-white so even the dense
-  // top reads as airy bright sky rather than a heavy cover.
+  // Gentle, see-through haze — densest near the horizon but light enough
+  // that the rendered far city stays visible THROUGH it (rather than being
+  // covered), fading to clear over the foreground. A flat screen-space
+  // curtain can't tell "far city" from "bare horizon seam", so we keep it
+  // translucent: the city stays, the seam is softened (not fully masked).
   return [
     'linear-gradient(to bottom',
-    `${hexToRgba(sky.skyColor, 0.66)} 0%`,
-    `${hexToRgba(sky.horizonColor, 0.66)} 18%`,
-    `${hexToRgba(sky.fogColor, 0.5)} 36%`,
-    `${hexToRgba(sky.fogColor, 0.28)} 56%`,
-    `${hexToRgba(sky.fogColor, 0.1)} 76%`,
+    `${hexToRgba(sky.skyColor, 0.5)} 0%`,
+    `${hexToRgba(sky.horizonColor, 0.44)} 18%`,
+    `${hexToRgba(sky.fogColor, 0.32)} 36%`,
+    `${hexToRgba(sky.fogColor, 0.18)} 56%`,
+    `${hexToRgba(sky.fogColor, 0.06)} 76%`,
     `${hexToRgba(sky.fogColor, 0)} 100%)`,
   ].join(', ');
 }
@@ -51,10 +52,11 @@ export function FogCurtain({ sniffMode }: { sniffMode: boolean }) {
     const apply = () => {
       raf = 0;
       const p = map.getPitch();
-      // Eases in from ~54° and reaches near-full by the steep range so the
-      // bright haze reliably masks the ground→sky seam. Capped at 0.92 so
-      // a hint of the far city still shows through the brightest top.
-      setOpacity(Math.max(0, Math.min(0.92, (p - 54) / 22)));
+      // Gentle, fairly pitch-CONSISTENT ramp (low cap, shallow slope) so
+      // the haze doesn't thicken much as you tilt — the far city stays
+      // about as visible at steep pitch as at mild pitch, instead of being
+      // swallowed by a denser curtain when you look further.
+      setOpacity(Math.max(0, Math.min(0.6, (p - 52) / 40)));
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(apply);
