@@ -327,11 +327,16 @@ export function applyCrayonOverride(
   if (typeof map.setSky === 'function') {
     map.setSky({
       'sky-color': palette.sky.skyColor,
-      'sky-horizon-blend': 0.8,
+      // Soft, wide blends so the horizon is a broad fogged band rather
+      // than a hard line — sky melts gradually into a tall haze that the
+      // distant city dissolves into.
+      'sky-horizon-blend': 0.9,
       'horizon-color': palette.sky.horizonColor,
-      'horizon-fog-blend': 0.6,
+      'horizon-fog-blend': 0.5,
       'fog-color': palette.sky.fogColor,
-      'fog-ground-blend': 0.55,
+      // Fog rises high from the ground so the far field is swallowed well
+      // before the true horizon — "limits" how far you read into depth.
+      'fog-ground-blend': 0.9,
       'atmosphere-blend': [
         'interpolate',
         ['linear'],
@@ -407,7 +412,11 @@ export function applyCrayonOverride(
       } else if (type === 'fill-extrusion') {
         clear(map, id, 'fill-extrusion-pattern');
         map.setPaintProperty(id, 'fill-extrusion-color', palette.paper);
-        map.setPaintProperty(id, 'fill-extrusion-opacity', 0.7);
+        // Near-solid up close (was 0.7) so foreground buildings read as
+        // real volumes; the atmospheric fog (setSky below) is what melts
+        // the distant ones into the horizon haze, so "closer solid / far
+        // faded" comes from depth fog rather than a flat global alpha.
+        map.setPaintProperty(id, 'fill-extrusion-opacity', 0.95);
       }
       continue;
     }
@@ -729,6 +738,28 @@ export function applyCrayonOverride(
     } else {
       map.setPaintProperty('crayon-building-outline', 'line-color', palette.crayon);
       map.setPaintProperty('crayon-building-outline', 'line-opacity', BUILDING_OUTLINE_OPACITY);
+    }
+  }
+}
+
+// Show / hide the street-name labels (the `transportation_name` symbol
+// layers). At the steep game pitch, road names tilt into the perspective
+// and clutter the distance, so MapView hides them past the cull pitch and
+// brings them back when the camera flattens out. Kept here (not in
+// MapView) so the source-layer matching lives next to the rest of the
+// label styling.
+export function setStreetLabelsVisible(
+  map: maplibregl.Map,
+  visible: boolean,
+): void {
+  for (const l of map.getStyle().layers ?? []) {
+    const sl = (l as { 'source-layer'?: string })['source-layer'];
+    if (sl === 'transportation_name' && l.type === 'symbol') {
+      try {
+        map.setLayoutProperty(l.id, 'visibility', visible ? 'visible' : 'none');
+      } catch {
+        /* layer not ready / removed — skip */
+      }
     }
   }
 }

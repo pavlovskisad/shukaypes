@@ -19,6 +19,7 @@ import {
   LIGHT_PALETTE,
   DARK_PALETTE,
   applyCrayonOverride,
+  setStreetLabelsVisible,
   fetchCrayonStyleSpec,
   generatePaperTextureUrl,
   installPaperOverlaySync,
@@ -75,6 +76,11 @@ const CLUSTER_BADGE_THRESHOLD = 6;
 // walking horizon at our zoom levels — anything further is a planning
 // concern, not a "is it nearby" concern.
 const MAP_RENDER_RADIUS_M = 2000;
+
+// Above this pitch the camera is in "game view" — street names tilt into
+// the perspective and clutter the distance, so they're hidden until the
+// user flattens the camera back out. Matches the marker horizon-cull gate.
+const STREET_LABEL_HIDE_PITCH = 60;
 
 // Spot clustering — disk-overlap criterion. Each PoiMarker is now a
 // 44px disc and PoiCluster a 54px disc, so two pins "visually
@@ -540,6 +546,15 @@ export default function MapViewWeb() {
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeHint]);
+
+  // Hide street-name labels while the camera is steeply pitched (game
+  // view), show them when it flattens. Re-run after every crayon override
+  // (which resets label visibility) and on pitchend.
+  const syncStreetLabels = useCallback(() => {
+    const map = mapRef.current;
+    if (!map || !map.isStyleLoaded()) return;
+    setStreetLabelsVisible(map, map.getPitch() < STREET_LABEL_HIDE_PITCH);
+  }, []);
 
   // Spawn a collect-burst FX whenever a paw/bone is picked up (tap OR
   // auto-collect — both funnel through the store's lastCollect). Keyed on
@@ -1151,7 +1166,10 @@ export default function MapViewWeb() {
         mapRef.current = map;
         map.on('style.load', () => {
           applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
+          syncStreetLabels();
         });
+        // Street names hide at the steep game pitch, return when flat.
+        map.on('pitchend', syncStreetLabels);
         map.on('idle', () => {
           const b = map.getBounds();
           setMapBounds({
@@ -1227,7 +1245,10 @@ export default function MapViewWeb() {
     // sets both paint colours AND text-field language, so a lang flip
     // from the profile toggle re-localises street/place labels live.
     applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
-  }, [sniffMode, lang]);
+    // applyCrayonOverride resets transportation_name visibility to
+    // 'visible', so re-apply the pitch-based hide right after.
+    syncStreetLabels();
+  }, [sniffMode, lang, syncStreetLabels]);
 
   // Off-screen lost-pet edge-chip layout. Memoised so the per-pet
   // ray-cast / spread pass doesn't re-run on every companion lerp
