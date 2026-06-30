@@ -1,109 +1,26 @@
-// Real depth fog as a MapLibre custom WebGL layer.
+// Stylised "game" fog as a MapLibre custom WebGL layer.
 //
-// MapLibre 5 has no setFog, and its setSky atmosphere only paints the sky
-// dome — it doesn't fog the 3D geometry at city zoom. So this layer
-// reconstructs, for every screen pixel, the world ground point beneath it
-// (via the inverse projection matrix) and applies EXPONENTIAL fog by that
-// point's true distance from the camera. Exponential-over-distance is the
-// classic natural-fog model: it spreads gradually across the screen
-// (never a hard band), thickens with distance, swallows the bare
-// no-building far ground at any pitch/zoom, and melts the ground→sky seam
-// into the horizon colour. Foreground stays crisp; the distance dissolves.
+// An earlier version fogged by reconstructed ground distance (true depth),
+// but without access to MapLibre's depth buffer that paints a hard fog
+// stripe across tall near buildings at the horizon row (the ground BEHIND
+// them is at infinite distance). So this is a screen-space TOP-DOWN fog:
+// dense at the top (the far/horizon part of a pitched view) fading to
+// clear at the bottom (the near foreground) — no stripe, reads as "fog
+// from the top down". A world-/screen-anchored value-noise gives it big,
+// strong particles, and the whole thing fades in with pitch so a flat map
+// is untouched.
 //
-// Drawn on top of the map canvas (DOM markers/HUD sit above the canvas, so
-// they're unaffected). Sky pixels are discarded so MapLibre's sky dome
-// shows; the fog colour = the sky's horizon colour for a seamless join.
+// Drawn on top of the canvas (DOM markers/HUD sit above it). Grey, not
+// blue, for a game feel; the colour matches the sky's horizon colour so
+// the top of the fog meets the sky dome seamlessly.
 
 import type {
   CustomLayerInterface,
   CustomRenderMethodInput,
 } from 'maplibre-gl';
-import { MercatorCoordinate } from 'maplibre-gl';
-import { LIGHT_PALETTE, DARK_PALETTE } from './crayonStyle';
 import { useGameStore } from '../../stores/gameStore';
 
 export const DEPTH_FOG_LAYER_ID = 'depth-fog';
-
-function hexToRgb01(hex: string): [number, number, number] {
-  const h = hex.replace('#', '');
-  return [
-    parseInt(h.slice(0, 2), 16) / 255,
-    parseInt(h.slice(2, 4), 16) / 255,
-    parseInt(h.slice(4, 6), 16) / 255,
-  ];
-}
-
-// Column-major 4x4 inverse (gl-matrix layout). Returns null if singular.
-function invert16(a: ArrayLike<number>, out: Float32Array): Float32Array | null {
-  const a00 = a[0], a01 = a[1], a02 = a[2], a03 = a[3];
-  const a10 = a[4], a11 = a[5], a12 = a[6], a13 = a[7];
-  const a20 = a[8], a21 = a[9], a22 = a[10], a23 = a[11];
-  const a30 = a[12], a31 = a[13], a32 = a[14], a33 = a[15];
-  const b00 = a00 * a11 - a01 * a10;
-  const b01 = a00 * a12 - a02 * a10;
-  const b02 = a00 * a13 - a03 * a10;
-  const b03 = a01 * a12 - a02 * a11;
-  const b04 = a01 * a13 - a03 * a11;
-  const b05 = a02 * a13 - a03 * a12;
-  const b06 = a20 * a31 - a21 * a30;
-  const b07 = a20 * a32 - a22 * a30;
-  const b08 = a20 * a33 - a23 * a30;
-  const b09 = a21 * a32 - a22 * a31;
-  const b10 = a21 * a33 - a23 * a31;
-  const b11 = a22 * a33 - a23 * a32;
-  let det = b00 * b11 - b01 * b10 + b02 * b09 + b03 * b08 - b04 * b07 + b05 * b06;
-  if (!det) return null;
-  det = 1.0 / det;
-  out[0] = (a11 * b11 - a12 * b10 + a13 * b09) * det;
-  out[1] = (a02 * b10 - a01 * b11 - a03 * b09) * det;
-  out[2] = (a31 * b05 - a32 * b04 + a33 * b03) * det;
-  out[3] = (a22 * b04 - a21 * b05 - a23 * b03) * det;
-  out[4] = (a12 * b08 - a10 * b11 - a13 * b07) * det;
-  out[5] = (a00 * b11 - a02 * b08 + a03 * b07) * det;
-  out[6] = (a32 * b02 - a30 * b05 - a33 * b01) * det;
-  out[7] = (a20 * b05 - a22 * b02 + a23 * b01) * det;
-  out[8] = (a10 * b10 - a11 * b08 + a13 * b06) * det;
-  out[9] = (a01 * b08 - a00 * b10 - a03 * b06) * det;
-  out[10] = (a30 * b04 - a31 * b02 + a33 * b00) * det;
-  out[11] = (a21 * b02 - a20 * b04 - a23 * b00) * det;
-  out[12] = (a11 * b07 - a10 * b09 - a12 * b06) * det;
-  out[13] = (a00 * b09 - a01 * b07 + a02 * b06) * det;
-  out[14] = (a31 * b01 - a30 * b03 - a32 * b00) * det;
-  out[15] = (a20 * b03 - a21 * b01 + a22 * b00) * det;
-  return out;
-}
-
-// inv (column-major) · (x,y,z,1), perspective-divided → out3.
-function unproject(inv: Float32Array, x: number, y: number, z: number, out: number[]): void {
-  const cx = inv[0] * x + inv[4] * y + inv[8] * z + inv[12];
-  const cy = inv[1] * x + inv[5] * y + inv[9] * z + inv[13];
-  const cz = inv[2] * x + inv[6] * y + inv[10] * z + inv[14];
-  const cw = inv[3] * x + inv[7] * y + inv[11] * z + inv[15];
-  out[0] = cx / cw;
-  out[1] = cy / cw;
-  out[2] = cz / cw;
-}
-
-// Camera world (mercator) position = where two view rays converge. Solve
-// the near/far rays for NDC A and B and intersect them (using x,y). Falls
-// back to null if degenerate.
-const _nA: number[] = [], _fA: number[] = [], _nB: number[] = [], _fB: number[] = [];
-function extractCamera(inv: Float32Array, out: number[]): number[] | null {
-  unproject(inv, -0.5, -0.5, -1, _nA);
-  unproject(inv, -0.5, -0.5, 1, _fA);
-  unproject(inv, 0.5, 0.5, -1, _nB);
-  unproject(inv, 0.5, 0.5, 1, _fB);
-  const dAx = _fA[0] - _nA[0], dAy = _fA[1] - _nA[1], dAz = _fA[2] - _nA[2];
-  const dBx = _fB[0] - _nB[0], dBy = _fB[1] - _nB[1];
-  const det = dAx * -dBy - -dBx * dAy;
-  if (Math.abs(det) < 1e-20) return null;
-  const rx = _nB[0] - _nA[0], ry = _nB[1] - _nA[1];
-  const tA = (rx * -dBy - -dBx * ry) / det;
-  out[0] = _nA[0] + tA * dAx;
-  out[1] = _nA[1] + tA * dAy;
-  out[2] = _nA[2] + tA * dAz;
-  return out;
-}
 
 const VERT = `
 attribute vec2 a_pos;
@@ -117,14 +34,14 @@ void main() {
 const FRAG = `
 precision highp float;
 varying vec2 v_ndc;
-uniform mat4 u_invMatrix;
-uniform vec3 u_camera;   // camera position, mercator
-uniform float u_invK;    // metres per mercator unit
 uniform vec3 u_fogColor;
-uniform float u_density;  // fog density per metre
+uniform float u_yStart;     // ndc.y where fog begins (lower)
+uniform float u_yEnd;       // ndc.y where fog reaches full (upper)
 uniform float u_maxAlpha;
-uniform float u_noiseFreq; // particle frequency (1/metre) — smaller = bigger
-uniform float u_noiseAmt;  // 0..1 cloudiness
+uniform float u_particle;    // particle size in (physical) px
+uniform float u_noiseAmt;    // 0..1 cloudiness
+uniform vec2 u_offset;       // world-ish anchor offset (px) so particles
+                             // drift with the map instead of sticking to glass
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float vnoise(vec2 p) {
@@ -133,30 +50,21 @@ float vnoise(vec2 p) {
   return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
              mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
-float fbm(vec2 p) { return 0.62 * vnoise(p) + 0.38 * vnoise(p * 2.07 + 13.1); }
+float fbm(vec2 p) {
+  return 0.58 * vnoise(p) + 0.30 * vnoise(p * 2.03 + 9.1) + 0.12 * vnoise(p * 4.11 + 23.7);
+}
 
 void main() {
-  vec4 nh = u_invMatrix * vec4(v_ndc, -1.0, 1.0);
-  vec3 nearP = nh.xyz / nh.w;
-  vec4 fh = u_invMatrix * vec4(v_ndc, 1.0, 1.0);
-  vec3 farP = fh.xyz / fh.w;
-  float denom = nearP.z - farP.z;
-  if (abs(denom) < 1e-9) discard;
-  float s = nearP.z / denom;          // ground (z=0) hit param
-  if (s < 0.0) discard;               // ray points up → sky
-  vec3 ground = nearP + s * (farP - nearP);
-  // Distance clamped so the perspective-singular horizon zone can't spike
-  // into a hard band; exponential saturates well before the clamp anyway.
-  float distM = min(length(ground - u_camera) * u_invK, 28000.0);
-  float fog = 1.0 - exp(-u_density * distM);           // exponential falloff
-  // World-anchored (camera-relative metres) cloud noise — gives the fog a
-  // particulate body and softens the horizon transition into an irregular,
-  // not-a-line edge.
-  vec2 relM = (ground.xy - u_camera.xy) * u_invK;
-  float cloud = mix(1.0, 0.4 + 1.15 * fbm(relM * u_noiseFreq), u_noiseAmt);
-  float a = clamp(fog * cloud, 0.0, 1.0) * u_maxAlpha;
+  // Top-down gradient: 0 at the bottom (near) → 1 at the top (far).
+  float g = smoothstep(u_yStart, u_yEnd, v_ndc.y);
+  // Big, strong particles. Anchored to (fragcoord + map offset) so the
+  // clouds travel with the world as you pan, not stuck to the screen.
+  vec2 pn = (gl_FragCoord.xy + u_offset) / u_particle;
+  float n = fbm(pn);
+  float cloud = mix(1.0, 0.25 + 1.3 * n, u_noiseAmt);
+  float a = clamp(g * cloud, 0.0, 1.0) * u_maxAlpha;
   if (a <= 0.002) discard;
-  gl_FragColor = vec4(u_fogColor * a, a);              // premultiplied
+  gl_FragColor = vec4(u_fogColor * a, a);   // premultiplied
 }
 `;
 
@@ -176,16 +84,20 @@ function compile(gl: GL, type: number, src: string): WebGLShader | null {
   return sh;
 }
 
+// Grey "game" fog tones (RGB 0..1). Day: near-white grey. Sniff: dark grey.
+const DAY_FOG: [number, number, number] = [0.913, 0.925, 0.933];
+const NIGHT_FOG: [number, number, number] = [0.16, 0.18, 0.21];
+
 interface FogOpts {
-  // Fog density per metre. Higher = thicker / reaches closer (covers more
-  // of the screen). ~0.0004 → ~halfway by ~1.7km, near-full by ~7km.
-  density?: number;
-  // Peak fog opacity (kept < 1 so the far city stays as silhouettes).
+  // ndc.y band over which fog ramps (−1 bottom … +1 top). Lower yStart and
+  // yEnd = fog covers more of the screen / denser further down.
+  yStart?: number;
+  yEnd?: number;
+  // Peak fog opacity at the top (far). Higher = denser distance.
   maxAlpha?: number;
-  // Particle/cloud size: frequency in 1/metre. SMALLER = bigger particles.
-  // 0.005 ≈ ~200m blobs.
-  noiseFreq?: number;
-  // Cloudiness 0..1 — how strongly the particle noise modulates density.
+  // Particle size in CSS px (scaled by DPR internally). Bigger = bigger.
+  particle?: number;
+  // Cloudiness 0..1 — particle strength.
   noiseAmt?: number;
   // Fade the whole effect in with pitch (no fog on a flat map).
   minPitch?: number;
@@ -193,26 +105,24 @@ interface FogOpts {
 }
 
 export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
-  const density = opts.density ?? 0.00038;
-  const maxAlpha = opts.maxAlpha ?? 0.84;
-  const noiseFreq = opts.noiseFreq ?? 0.005;
-  const noiseAmt = opts.noiseAmt ?? 0.55;
+  const yStart = opts.yStart ?? -0.35;
+  const yEnd = opts.yEnd ?? 0.62;
+  const maxAlpha = opts.maxAlpha ?? 0.92;
+  const particle = opts.particle ?? 120;
+  const noiseAmt = opts.noiseAmt ?? 0.8;
   const minPitch = opts.minPitch ?? 42;
   const fullPitch = opts.fullPitch ?? 60;
 
   let program: WebGLProgram | null = null;
   let buffer: WebGLBuffer | null = null;
   let aPos = -1;
-  let uInv: WebGLUniformLocation | null = null;
-  let uCamera: WebGLUniformLocation | null = null;
-  let uInvK: WebGLUniformLocation | null = null;
   let uColor: WebGLUniformLocation | null = null;
-  let uDensity: WebGLUniformLocation | null = null;
+  let uYStart: WebGLUniformLocation | null = null;
+  let uYEnd: WebGLUniformLocation | null = null;
   let uMaxAlpha: WebGLUniformLocation | null = null;
-  let uNoiseFreq: WebGLUniformLocation | null = null;
+  let uParticle: WebGLUniformLocation | null = null;
   let uNoiseAmt: WebGLUniformLocation | null = null;
-  const invOut = new Float32Array(16);
-  const cam: number[] = [0, 0, 0];
+  let uOffset: WebGLUniformLocation | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mapRef: any = null;
 
@@ -238,14 +148,13 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
       }
       program = prog;
       aPos = gl.getAttribLocation(prog, 'a_pos');
-      uInv = gl.getUniformLocation(prog, 'u_invMatrix');
-      uCamera = gl.getUniformLocation(prog, 'u_camera');
-      uInvK = gl.getUniformLocation(prog, 'u_invK');
       uColor = gl.getUniformLocation(prog, 'u_fogColor');
-      uDensity = gl.getUniformLocation(prog, 'u_density');
+      uYStart = gl.getUniformLocation(prog, 'u_yStart');
+      uYEnd = gl.getUniformLocation(prog, 'u_yEnd');
       uMaxAlpha = gl.getUniformLocation(prog, 'u_maxAlpha');
-      uNoiseFreq = gl.getUniformLocation(prog, 'u_noiseFreq');
+      uParticle = gl.getUniformLocation(prog, 'u_particle');
       uNoiseAmt = gl.getUniformLocation(prog, 'u_noiseAmt');
+      uOffset = gl.getUniformLocation(prog, 'u_offset');
       buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bufferData(
@@ -255,35 +164,38 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
       );
     },
 
-    render(gl: GL, args: CustomRenderMethodInput) {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+    render(gl: GL, _args: CustomRenderMethodInput) {
       try {
         if (!program || !buffer || !mapRef) return;
         const pitch: number = mapRef.getPitch();
         const pitchT = Math.max(0, Math.min(1, (pitch - minPitch) / (fullPitch - minPitch)));
         if (pitchT <= 0) return;
 
-        const matrix = args.defaultProjectionData?.mainMatrix;
-        if (!matrix) return;
-        if (!invert16(matrix as unknown as ArrayLike<number>, invOut)) return;
-        if (!extractCamera(invOut, cam)) return;
-
-        const center = mapRef.getCenter();
-        const k = MercatorCoordinate.fromLngLat(center).meterInMercatorCoordinateUnits();
-        const invK = k > 0 ? 1 / k : 1;
-
         const sniff = useGameStore.getState().sniffMode;
-        const sky = (sniff ? DARK_PALETTE : LIGHT_PALETTE).sky;
-        const [r, g, b] = hexToRgb01(sky.horizonColor);
+        const tones = sniff ? NIGHT_FOG : DAY_FOG;
+
+        // Anchor particles to the map so they drift with panning rather than
+        // sticking to the screen. Project the map centre to pixels.
+        const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+        let offX = 0, offY = 0;
+        try {
+          const c = mapRef.getCenter();
+          const p = mapRef.project(c);
+          offX = -p.x * dpr;
+          offY = p.y * dpr;
+        } catch {
+          /* ignore */
+        }
 
         gl.useProgram(program);
-        gl.uniformMatrix4fv(uInv, false, invOut);
-        gl.uniform3f(uCamera, cam[0], cam[1], cam[2]);
-        gl.uniform1f(uInvK, invK);
-        gl.uniform3f(uColor, r, g, b);
-        gl.uniform1f(uDensity, density);
+        gl.uniform3f(uColor, tones[0], tones[1], tones[2]);
+        gl.uniform1f(uYStart, yStart);
+        gl.uniform1f(uYEnd, yEnd);
         gl.uniform1f(uMaxAlpha, maxAlpha * pitchT);
-        gl.uniform1f(uNoiseFreq, noiseFreq);
+        gl.uniform1f(uParticle, particle * dpr);
         gl.uniform1f(uNoiseAmt, noiseAmt);
+        gl.uniform2f(uOffset, offX, offY);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.enableVertexAttribArray(aPos);

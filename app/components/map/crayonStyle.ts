@@ -56,16 +56,13 @@ export const LIGHT_PALETTE = {
   labelStreet: '#3a3a3a',
   // Multiply overlay opacity (lightens darken effect).
   paperOpacity: 0.48,
-  // Atmospheric sky + horizon haze for the steep game-camera pitch.
-  // Daytime: an airy light-blue dome fading to a lightly TONED haze at the
-  // horizon. The fog keeps a soft cool-grey tint (not pure white) on
-  // purpose — white buildings dissolving into white haze show no depth, so
-  // a little tone lets the far city recede visibly into the fog (the deep
-  // look) and masks the bare ground→sky seam.
+  // Sky dome + horizon haze. Desaturated, near-grey "game" palette (way
+  // less blue): a pale blue-grey dome fading to a light neutral-grey
+  // horizon that matches the grey depth-fog layer so the join is seamless.
   sky: {
-    skyColor: '#c6e3f6',
-    horizonColor: '#dce8f3',
-    fogColor: '#d2deea',
+    skyColor: '#cfdae1',
+    horizonColor: '#e2e6e9',
+    fogColor: '#e9ebed',
   },
 };
 
@@ -340,14 +337,16 @@ export function applyCrayonOverride(
       // Fog rises high from the ground so the far field is swallowed well
       // before the true horizon — "limits" how far you read into depth.
       'fog-ground-blend': 0.9,
+      // Kept subtle — the grey depth-fog custom layer does the heavy
+      // lifting now; setSky mainly draws the sky dome.
       'atmosphere-blend': [
         'interpolate',
         ['linear'],
         ['zoom'],
         13,
-        1,
+        0.6,
         18,
-        0.8,
+        0.35,
       ] as unknown as number,
     });
   }
@@ -415,11 +414,7 @@ export function applyCrayonOverride(
       } else if (type === 'fill-extrusion') {
         clear(map, id, 'fill-extrusion-pattern');
         map.setPaintProperty(id, 'fill-extrusion-color', palette.paper);
-        // Near-solid up close (was 0.7) so foreground buildings read as
-        // real volumes; the atmospheric fog (setSky below) is what melts
-        // the distant ones into the horizon haze, so "closer solid / far
-        // faded" comes from depth fog rather than a flat global alpha.
-        map.setPaintProperty(id, 'fill-extrusion-opacity', 0.95);
+        map.setPaintProperty(id, 'fill-extrusion-opacity', 0.7);
       }
       continue;
     }
