@@ -34,7 +34,10 @@ void main() {
 const FRAG = `
 precision highp float;
 varying vec2 v_ndc;
-uniform vec3 u_fogColor;
+uniform vec3 u_fogColor;    // grey haze (horizon)
+uniform vec3 u_skyColor;    // very light blue (toward the top)
+uniform vec3 u_sunColor;    // soft warm light
+uniform float u_sunStrength;
 uniform float u_yStart;     // ndc.y where fog begins (lower)
 uniform float u_yEnd;       // ndc.y where fog reaches full (upper)
 uniform float u_maxAlpha;
@@ -69,9 +72,18 @@ void main() {
   vec2 warp = (vec2(wx, wy) - 0.5) * 1.25;
   float n = fbm(base + drift + warp);
   float cloud = mix(1.0, 0.25 + 1.3 * n, u_noiseAmt);
+  // Colour: grey haze at the horizon transitioning to a very light blue
+  // sky toward the very top.
+  float skyMix = smoothstep(0.35, 0.98, v_ndc.y);
+  vec3 col = mix(u_fogColor, u_skyColor, skyMix);
+  // Soft sunlight from a single top spot — a wide, gentle warm glow.
+  float sd = distance(v_ndc, vec2(0.28, 0.88));
+  float sun = smoothstep(1.25, 0.0, sd);
+  sun *= sun;
+  col = mix(col, u_sunColor, sun * u_sunStrength);
   float a = clamp(g * cloud, 0.0, 1.0) * u_maxAlpha;
   if (a <= 0.002) discard;
-  gl_FragColor = vec4(u_fogColor * a, a);   // premultiplied
+  gl_FragColor = vec4(col * a, a);   // premultiplied
 }
 `;
 
@@ -91,9 +103,26 @@ function compile(gl: GL, type: number, src: string): WebGLShader | null {
   return sh;
 }
 
-// Grey "game" fog tones (RGB 0..1). Day: near-white grey. Sniff: dark grey.
-const DAY_FOG: [number, number, number] = [0.913, 0.925, 0.933];
-const NIGHT_FOG: [number, number, number] = [0.16, 0.18, 0.21];
+// "Game" tones (RGB 0..1): grey haze at the horizon, a light-blue sky
+// toward the top, and a soft sun-glow colour. Day vs sniff (night).
+interface FogTones {
+  fog: [number, number, number];
+  sky: [number, number, number];
+  sun: [number, number, number];
+  sunStrength: number;
+}
+const DAY: FogTones = {
+  fog: [0.913, 0.925, 0.933],
+  sky: [0.855, 0.91, 0.98],
+  sun: [1.0, 0.95, 0.83],
+  sunStrength: 0.5,
+};
+const NIGHT: FogTones = {
+  fog: [0.16, 0.18, 0.21],
+  sky: [0.09, 0.12, 0.19],
+  sun: [0.55, 0.66, 0.82],
+  sunStrength: 0.2,
+};
 
 interface FogOpts {
   // ndc.y band over which fog ramps (−1 bottom … +1 top). Lower yStart and
@@ -124,6 +153,9 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   let buffer: WebGLBuffer | null = null;
   let aPos = -1;
   let uColor: WebGLUniformLocation | null = null;
+  let uSky: WebGLUniformLocation | null = null;
+  let uSun: WebGLUniformLocation | null = null;
+  let uSunStrength: WebGLUniformLocation | null = null;
   let uYStart: WebGLUniformLocation | null = null;
   let uYEnd: WebGLUniformLocation | null = null;
   let uMaxAlpha: WebGLUniformLocation | null = null;
@@ -161,6 +193,9 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
       program = prog;
       aPos = gl.getAttribLocation(prog, 'a_pos');
       uColor = gl.getUniformLocation(prog, 'u_fogColor');
+      uSky = gl.getUniformLocation(prog, 'u_skyColor');
+      uSun = gl.getUniformLocation(prog, 'u_sunColor');
+      uSunStrength = gl.getUniformLocation(prog, 'u_sunStrength');
       uYStart = gl.getUniformLocation(prog, 'u_yStart');
       uYEnd = gl.getUniformLocation(prog, 'u_yEnd');
       uMaxAlpha = gl.getUniformLocation(prog, 'u_maxAlpha');
@@ -186,7 +221,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         if (pitchT <= 0) return;
 
         const sniff = useGameStore.getState().sniffMode;
-        const tones = sniff ? NIGHT_FOG : DAY_FOG;
+        const tones = sniff ? NIGHT : DAY;
 
         // Anchor particles to the map so they drift with panning rather than
         // sticking to the screen. Project the map centre to pixels.
@@ -202,7 +237,10 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         }
 
         gl.useProgram(program);
-        gl.uniform3f(uColor, tones[0], tones[1], tones[2]);
+        gl.uniform3f(uColor, tones.fog[0], tones.fog[1], tones.fog[2]);
+        gl.uniform3f(uSky, tones.sky[0], tones.sky[1], tones.sky[2]);
+        gl.uniform3f(uSun, tones.sun[0], tones.sun[1], tones.sun[2]);
+        gl.uniform1f(uSunStrength, tones.sunStrength);
         gl.uniform1f(uYStart, yStart);
         gl.uniform1f(uYEnd, yEnd);
         gl.uniform1f(uMaxAlpha, maxAlpha * pitchT);

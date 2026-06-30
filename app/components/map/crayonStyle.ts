@@ -60,8 +60,8 @@ export const LIGHT_PALETTE = {
   // less blue): a pale blue-grey dome fading to a light neutral-grey
   // horizon that matches the grey depth-fog layer so the join is seamless.
   sky: {
-    skyColor: '#cfdae1',
-    horizonColor: '#e2e6e9',
+    skyColor: '#dbe8f7',
+    horizonColor: '#e6eaee',
     fogColor: '#e9ebed',
   },
 };
@@ -414,7 +414,7 @@ export function applyCrayonOverride(
       } else if (type === 'fill-extrusion') {
         clear(map, id, 'fill-extrusion-pattern');
         map.setPaintProperty(id, 'fill-extrusion-color', palette.paper);
-        map.setPaintProperty(id, 'fill-extrusion-opacity', 0.7);
+        map.setPaintProperty(id, 'fill-extrusion-opacity', 0.95);
       }
       continue;
     }
