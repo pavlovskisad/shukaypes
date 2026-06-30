@@ -26,18 +26,21 @@ function gradientFor(sniffMode: boolean): string {
   // Translucent throughout (low alphas) so the far city shows through —
   // densest at the horizon, easing off through many soft stops so there's
   // no hard "band edge". Reads as depth haze rather than a flat cover.
-  // Gentle, see-through haze — densest near the horizon but light enough
-  // that the rendered far city stays visible THROUGH it (rather than being
-  // covered), fading to clear over the foreground. A flat screen-space
-  // curtain can't tell "far city" from "bare horizon seam", so we keep it
-  // translucent: the city stays, the seam is softened (not fully masked).
+  // Concentrate a DENSE band right at the horizon strip — that's where the
+  // tile-limit zone (far ground with no building data) sits at steep pitch,
+  // so the bare seam gets masked there — then drop to a LIGHT haze below it
+  // so the rendered city just beneath stays visible through gentle fog. Top
+  // few % stay sky-coloured to blend with MapLibre's sky dome above the
+  // horizon.
   return [
     'linear-gradient(to bottom',
-    `${hexToRgba(sky.skyColor, 0.5)} 0%`,
-    `${hexToRgba(sky.horizonColor, 0.44)} 18%`,
-    `${hexToRgba(sky.fogColor, 0.32)} 36%`,
-    `${hexToRgba(sky.fogColor, 0.18)} 56%`,
-    `${hexToRgba(sky.fogColor, 0.06)} 76%`,
+    `${hexToRgba(sky.skyColor, 0.45)} 0%`,
+    `${hexToRgba(sky.horizonColor, 0.72)} 9%`,
+    `${hexToRgba(sky.fogColor, 0.78)} 17%`, // dense horizon / tile-limit band
+    `${hexToRgba(sky.fogColor, 0.42)} 27%`,
+    `${hexToRgba(sky.fogColor, 0.22)} 42%`, // light haze over the rendered city
+    `${hexToRgba(sky.fogColor, 0.1)} 64%`,
+    `${hexToRgba(sky.fogColor, 0.03)} 85%`,
     `${hexToRgba(sky.fogColor, 0)} 100%)`,
   ].join(', ');
 }
@@ -52,11 +55,11 @@ export function FogCurtain({ sniffMode }: { sniffMode: boolean }) {
     const apply = () => {
       raf = 0;
       const p = map.getPitch();
-      // Gentle, fairly pitch-CONSISTENT ramp (low cap, shallow slope) so
-      // the haze doesn't thicken much as you tilt — the far city stays
-      // about as visible at steep pitch as at mild pitch, instead of being
-      // swallowed by a denser curtain when you look further.
-      setOpacity(Math.max(0, Math.min(0.6, (p - 52) / 40)));
+      // Ramps up with pitch so the dense horizon band only engages as you
+      // tilt into the flood zone. The light lower body keeps the city
+      // visible regardless; the dense top band intensifies to mask the
+      // bare tile-limit seam at steep pitch.
+      setOpacity(Math.max(0, Math.min(0.9, (p - 56) / 22)));
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(apply);
