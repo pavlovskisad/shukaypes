@@ -1,24 +1,24 @@
 // Real depth fog as a MapLibre custom WebGL layer.
 //
 // MapLibre 5 has no setFog, and its setSky atmosphere only paints the sky
-// dome — it doesn't fog the 3D geometry at city zoom. So instead of a flat
-// screen-space overlay (which can't tell near from far), this layer
+// dome — it doesn't fog the 3D geometry at city zoom. So this layer
 // reconstructs, for every screen pixel, the world ground point beneath it
-// (via the inverse of the projection matrix) and fogs by how far along the
-// view ray that ground sits. Result: a genuine perspective/depth fog —
-// foreground stays crisp, the distance dissolves into haze, the bare
-// "no-building" far ground is always swallowed, and the ground→sky seam
-// melts away — at any pitch or zoom, no manual gradients.
+// (via the inverse projection matrix) and applies EXPONENTIAL fog by that
+// point's true distance from the camera. Exponential-over-distance is the
+// classic natural-fog model: it spreads gradually across the screen
+// (never a hard band), thickens with distance, swallows the bare
+// no-building far ground at any pitch/zoom, and melts the ground→sky seam
+// into the horizon colour. Foreground stays crisp; the distance dissolves.
 //
-// Drawn on top of the map canvas (under the DOM markers/HUD, which sit
-// above the canvas anyway). Sky pixels are left untouched so MapLibre's
-// own sky dome shows; the fog colour matches the sky's horizon colour so
-// the far ground fades seamlessly into it.
+// Drawn on top of the map canvas (DOM markers/HUD sit above the canvas, so
+// they're unaffected). Sky pixels are discarded so MapLibre's sky dome
+// shows; the fog colour = the sky's horizon colour for a seamless join.
 
 import type {
   CustomLayerInterface,
   CustomRenderMethodInput,
 } from 'maplibre-gl';
+import { MercatorCoordinate } from 'maplibre-gl';
 import { LIGHT_PALETTE, DARK_PALETTE } from './crayonStyle';
 import { useGameStore } from '../../stores/gameStore';
 
@@ -73,6 +73,38 @@ function invert16(a: ArrayLike<number>, out: Float32Array): Float32Array | null 
   return out;
 }
 
+// inv (column-major) · (x,y,z,1), perspective-divided → out3.
+function unproject(inv: Float32Array, x: number, y: number, z: number, out: number[]): void {
+  const cx = inv[0] * x + inv[4] * y + inv[8] * z + inv[12];
+  const cy = inv[1] * x + inv[5] * y + inv[9] * z + inv[13];
+  const cz = inv[2] * x + inv[6] * y + inv[10] * z + inv[14];
+  const cw = inv[3] * x + inv[7] * y + inv[11] * z + inv[15];
+  out[0] = cx / cw;
+  out[1] = cy / cw;
+  out[2] = cz / cw;
+}
+
+// Camera world (mercator) position = where two view rays converge. Solve
+// the near/far rays for NDC A and B and intersect them (using x,y). Falls
+// back to null if degenerate.
+const _nA: number[] = [], _fA: number[] = [], _nB: number[] = [], _fB: number[] = [];
+function extractCamera(inv: Float32Array, out: number[]): number[] | null {
+  unproject(inv, -0.5, -0.5, -1, _nA);
+  unproject(inv, -0.5, -0.5, 1, _fA);
+  unproject(inv, 0.5, 0.5, -1, _nB);
+  unproject(inv, 0.5, 0.5, 1, _fB);
+  const dAx = _fA[0] - _nA[0], dAy = _fA[1] - _nA[1], dAz = _fA[2] - _nA[2];
+  const dBx = _fB[0] - _nB[0], dBy = _fB[1] - _nB[1];
+  const det = dAx * -dBy - -dBx * dAy;
+  if (Math.abs(det) < 1e-20) return null;
+  const rx = _nB[0] - _nA[0], ry = _nB[1] - _nA[1];
+  const tA = (rx * -dBy - -dBx * ry) / det;
+  out[0] = _nA[0] + tA * dAx;
+  out[1] = _nA[1] + tA * dAy;
+  out[2] = _nA[2] + tA * dAz;
+  return out;
+}
+
 const VERT = `
 attribute vec2 a_pos;
 varying vec2 v_ndc;
@@ -82,18 +114,14 @@ void main() {
 }
 `;
 
-// For each pixel: shoot the view ray (near→far plane, reconstructed from the
-// inverse VP matrix), intersect the ground plane z=0, and fog by the ray
-// parameter `s` (0 at the near plane, 1 at the far plane) — which grows
-// monotonically with real distance, peaking at the horizon. Sky pixels
-// (ray never meets the ground ahead) are left transparent.
 const FRAG = `
 precision highp float;
 varying vec2 v_ndc;
 uniform mat4 u_invMatrix;
+uniform vec3 u_camera;   // camera position, mercator
+uniform float u_invK;    // metres per mercator unit
 uniform vec3 u_fogColor;
-uniform float u_start;
-uniform float u_end;
+uniform float u_density;  // fog density per metre
 uniform float u_maxAlpha;
 void main() {
   vec4 nh = u_invMatrix * vec4(v_ndc, -1.0, 1.0);
@@ -101,15 +129,15 @@ void main() {
   vec4 fh = u_invMatrix * vec4(v_ndc, 1.0, 1.0);
   vec3 farP = fh.xyz / fh.w;
   float denom = nearP.z - farP.z;
-  // Ray (nearly) parallel to ground, or pointing up → sky.
-  if (abs(denom) < 1e-9) { discard; }
-  float s = nearP.z / denom;            // ground hit at near + s*(far-near)
-  if (s < 0.0) { discard; }             // ray points up → sky, leave it
-  float fog = (s > 1.0) ? 1.0 : smoothstep(u_start, u_end, s);
-  float a = fog * u_maxAlpha;
-  if (a <= 0.001) { discard; }
-  // Premultiplied alpha (MapLibre's canvas blend expects it).
-  gl_FragColor = vec4(u_fogColor * a, a);
+  if (abs(denom) < 1e-9) discard;
+  float s = nearP.z / denom;          // ground (z=0) hit param
+  if (s < 0.0) discard;               // ray points up → sky
+  vec3 ground = nearP + s * (farP - nearP);
+  float distM = length(ground - u_camera) * u_invK;   // metres from camera
+  float fog = 1.0 - exp(-u_density * distM);           // exponential falloff
+  float a = clamp(fog, 0.0, 1.0) * u_maxAlpha;
+  if (a <= 0.002) discard;
+  gl_FragColor = vec4(u_fogColor * a, a);              // premultiplied
 }
 `;
 
@@ -130,34 +158,33 @@ function compile(gl: GL, type: number, src: string): WebGLShader | null {
 }
 
 interface FogOpts {
-  // How far along the view ray (0..1, near→far) the fog starts / reaches
-  // full. Higher = clearer foreground, fog hugs the horizon. Tunable feel.
-  start?: number;
-  end?: number;
+  // Fog density per metre. Higher = thicker / reaches closer (covers more
+  // of the screen). ~0.0004 → ~halfway by ~1.7km, near-full by ~7km.
+  density?: number;
   // Peak fog opacity (kept < 1 so the far city stays as silhouettes).
   maxAlpha?: number;
-  // Only fog once the camera is pitched enough that there's real depth to
-  // fog; ramps the peak alpha in with pitch.
+  // Fade the whole effect in with pitch (no fog on a flat map).
   minPitch?: number;
   fullPitch?: number;
 }
 
 export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
-  const start = opts.start ?? 0.7;
-  const end = opts.end ?? 0.985;
-  const maxAlpha = opts.maxAlpha ?? 0.92;
-  const minPitch = opts.minPitch ?? 48;
-  const fullPitch = opts.fullPitch ?? 64;
+  const density = opts.density ?? 0.0004;
+  const maxAlpha = opts.maxAlpha ?? 0.88;
+  const minPitch = opts.minPitch ?? 42;
+  const fullPitch = opts.fullPitch ?? 60;
 
   let program: WebGLProgram | null = null;
   let buffer: WebGLBuffer | null = null;
   let aPos = -1;
   let uInv: WebGLUniformLocation | null = null;
+  let uCamera: WebGLUniformLocation | null = null;
+  let uInvK: WebGLUniformLocation | null = null;
   let uColor: WebGLUniformLocation | null = null;
-  let uStart: WebGLUniformLocation | null = null;
-  let uEnd: WebGLUniformLocation | null = null;
+  let uDensity: WebGLUniformLocation | null = null;
   let uMaxAlpha: WebGLUniformLocation | null = null;
   const invOut = new Float32Array(16);
+  const cam: number[] = [0, 0, 0];
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mapRef: any = null;
 
@@ -184,13 +211,13 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
       program = prog;
       aPos = gl.getAttribLocation(prog, 'a_pos');
       uInv = gl.getUniformLocation(prog, 'u_invMatrix');
+      uCamera = gl.getUniformLocation(prog, 'u_camera');
+      uInvK = gl.getUniformLocation(prog, 'u_invK');
       uColor = gl.getUniformLocation(prog, 'u_fogColor');
-      uStart = gl.getUniformLocation(prog, 'u_start');
-      uEnd = gl.getUniformLocation(prog, 'u_end');
+      uDensity = gl.getUniformLocation(prog, 'u_density');
       uMaxAlpha = gl.getUniformLocation(prog, 'u_maxAlpha');
       buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      // Two triangles covering NDC [-1,1].
       gl.bufferData(
         gl.ARRAY_BUFFER,
         new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
@@ -200,36 +227,40 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
 
     render(gl: GL, args: CustomRenderMethodInput) {
       try {
-      if (!program || !buffer || !mapRef) return;
-      const pitch: number = mapRef.getPitch();
-      // Depth fog only reads as fog when the camera is tilted; fade it in.
-      const pitchT = Math.max(0, Math.min(1, (pitch - minPitch) / (fullPitch - minPitch)));
-      if (pitchT <= 0) return;
+        if (!program || !buffer || !mapRef) return;
+        const pitch: number = mapRef.getPitch();
+        const pitchT = Math.max(0, Math.min(1, (pitch - minPitch) / (fullPitch - minPitch)));
+        if (pitchT <= 0) return;
 
-      const matrix = args.defaultProjectionData?.mainMatrix;
-      if (!matrix) return;
-      if (!invert16(matrix as unknown as ArrayLike<number>, invOut)) return;
+        const matrix = args.defaultProjectionData?.mainMatrix;
+        if (!matrix) return;
+        if (!invert16(matrix as unknown as ArrayLike<number>, invOut)) return;
+        if (!extractCamera(invOut, cam)) return;
 
-      const sniff = useGameStore.getState().sniffMode;
-      const sky = (sniff ? DARK_PALETTE : LIGHT_PALETTE).sky;
-      const [r, g, b] = hexToRgb01(sky.horizonColor);
+        const center = mapRef.getCenter();
+        const k = MercatorCoordinate.fromLngLat(center).meterInMercatorCoordinateUnits();
+        const invK = k > 0 ? 1 / k : 1;
 
-      gl.useProgram(program);
-      gl.uniformMatrix4fv(uInv, false, invOut);
-      gl.uniform3f(uColor, r, g, b);
-      gl.uniform1f(uStart, start);
-      gl.uniform1f(uEnd, end);
-      gl.uniform1f(uMaxAlpha, maxAlpha * pitchT);
+        const sniff = useGameStore.getState().sniffMode;
+        const sky = (sniff ? DARK_PALETTE : LIGHT_PALETTE).sky;
+        const [r, g, b] = hexToRgb01(sky.horizonColor);
 
-      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-      gl.enableVertexAttribArray(aPos);
-      gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+        gl.useProgram(program);
+        gl.uniformMatrix4fv(uInv, false, invOut);
+        gl.uniform3f(uCamera, cam[0], cam[1], cam[2]);
+        gl.uniform1f(uInvK, invK);
+        gl.uniform3f(uColor, r, g, b);
+        gl.uniform1f(uDensity, density);
+        gl.uniform1f(uMaxAlpha, maxAlpha * pitchT);
 
-      gl.disable(gl.DEPTH_TEST);
-      gl.enable(gl.BLEND);
-      // Premultiplied-alpha over the existing scene.
-      gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
-      gl.drawArrays(gl.TRIANGLES, 0, 6);
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.enableVertexAttribArray(aPos);
+        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+        gl.disable(gl.DEPTH_TEST);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
       } catch (e) {
         // Never let a fog hiccup break the map's frame.
         // eslint-disable-next-line no-console
