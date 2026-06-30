@@ -1112,7 +1112,14 @@ export default function MapViewWeb() {
           minZoom: balance.mapZoomMin,
           maxZoom: balance.mapZoomMax,
           maxBounds: MAP_MAX_BOUNDS,
-          pitch: 55,
+          // Steep, near-ground tilt for a game-camera feel — the city
+          // reads as a 3D world you walk through rather than a flat map.
+          // 70° (was 55°) drops the horizon low; maxPitch 80 lets the
+          // user tilt a touch further by gesture without hitting the
+          // sky-heavy extreme (MapLibre's hard cap is 85). Default
+          // maxPitch is 60, so it must be raised for 70 to take effect.
+          pitch: 70,
+          maxPitch: 80,
           // Drop both attribution branding + the MapLibre wordmark
           // logo. Tile/data attribution is a legal requirement for
           // upstream sources (OFM, OSM, etc.) — those are surfaced
