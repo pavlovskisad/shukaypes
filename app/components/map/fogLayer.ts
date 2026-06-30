@@ -63,10 +63,10 @@ void main() {
   // forms churn and roll over time instead of sitting like a frozen
   // overlay.
   vec2 base = (gl_FragCoord.xy + u_offset) / u_particle;
-  vec2 drift = vec2(u_time * 0.021, u_time * -0.013);
-  float wx = vnoise(base * 0.6 + vec2(0.0, u_time * 0.016));
-  float wy = vnoise(base * 0.6 + vec2(5.2, -u_time * 0.012));
-  vec2 warp = (vec2(wx, wy) - 0.5) * 0.9;
+  vec2 drift = vec2(u_time * 0.04, u_time * -0.026);
+  float wx = vnoise(base * 0.6 + vec2(0.0, u_time * 0.03));
+  float wy = vnoise(base * 0.6 + vec2(5.2, -u_time * 0.024));
+  vec2 warp = (vec2(wx, wy) - 0.5) * 1.25;
   float n = fbm(base + drift + warp);
   float cloud = mix(1.0, 0.25 + 1.3 * n, u_noiseAmt);
   float a = clamp(g * cloud, 0.0, 1.0) * u_maxAlpha;
@@ -112,8 +112,8 @@ interface FogOpts {
 }
 
 export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
-  const yStart = opts.yStart ?? -0.35;
-  const yEnd = opts.yEnd ?? 0.62;
+  const yStart = opts.yStart ?? -0.05;
+  const yEnd = opts.yEnd ?? 0.72;
   const maxAlpha = opts.maxAlpha ?? 0.92;
   const particle = opts.particle ?? 120;
   const noiseAmt = opts.noiseAmt ?? 0.8;
@@ -132,8 +132,8 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   let uOffset: WebGLUniformLocation | null = null;
   let uTime: WebGLUniformLocation | null = null;
   const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
-  // Throttle the self-driven animation to ~22fps — the clouds drift slowly,
-  // so there's no need to force a full 60fps map repaint (battery).
+  // Throttle the self-driven animation to ~30fps — smooth enough for the
+  // drifting clouds without forcing a full 60fps map repaint (battery).
   let repaintScheduled = false;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mapRef: any = null;
@@ -233,7 +233,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
             } catch {
               /* ignore */
             }
-          }, 45);
+          }, 33);
         }
       } catch (e) {
         // Never let a fog hiccup break the map's frame.
