@@ -57,13 +57,14 @@ export const LIGHT_PALETTE = {
   // Multiply overlay opacity (lightens darken effect).
   paperOpacity: 0.48,
   // Atmospheric sky + horizon haze for the steep game-camera pitch.
-  // Daytime: a soft blue dome up top fading to a bright near-white haze
-  // at the horizon, so distant buildings dissolve into depth instead of
-  // stacking flat against the page colour.
+  // Daytime: a soft blue dome up top fading to a blue-GREY haze at the
+  // horizon. The grey tint matters — the buildings are white, so a
+  // near-white haze washed them to invisible; a blue-grey haze lets the
+  // distant white city read as silhouettes receding into deep fog.
   sky: {
     skyColor: '#a8d3ef',
-    horizonColor: '#e6f1f8',
-    fogColor: '#eef3f6',
+    horizonColor: '#c8dae8',
+    fogColor: '#b3c6d6',
   },
 };
 
@@ -95,13 +96,14 @@ export const DARK_PALETTE = {
   labelStreet: '#c8c8c8',
   // Lower opacity on dark — the multiply/screen overlay is subtler.
   paperOpacity: 0.35,
-  // Sniff mode: a deep night-blue dome fading to a dim muted horizon
-  // glow + dark haze, so the dark city recedes into atmosphere the same
-  // way the daytime map does.
+  // Sniff mode: a deep night-blue dome fading to a horizon glow + haze
+  // that is LIGHTER than the near-black buildings, so the dark city
+  // recedes into atmosphere as visible silhouettes instead of vanishing
+  // into a same-tone fog.
   sky: {
     skyColor: '#0d1626',
-    horizonColor: '#313748',
-    fogColor: '#1b212e',
+    horizonColor: '#3d4960',
+    fogColor: '#2c3646',
   },
 };
 
@@ -342,9 +344,9 @@ export function applyCrayonOverride(
         ['linear'],
         ['zoom'],
         13,
-        0.85,
+        0.9,
         18,
-        0.5,
+        0.62,
       ] as unknown as number,
     });
   }

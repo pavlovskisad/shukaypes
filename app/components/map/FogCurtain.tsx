@@ -28,11 +28,11 @@ function gradientFor(sniffMode: boolean): string {
   // no hard "band edge". Reads as depth haze rather than a flat cover.
   return [
     'linear-gradient(to bottom',
-    `${hexToRgba(sky.skyColor, 0.5)} 0%`,
-    `${hexToRgba(sky.horizonColor, 0.42)} 16%`,
-    `${hexToRgba(sky.fogColor, 0.3)} 34%`,
-    `${hexToRgba(sky.fogColor, 0.16)} 54%`,
-    `${hexToRgba(sky.fogColor, 0.06)} 76%`,
+    `${hexToRgba(sky.skyColor, 0.55)} 0%`,
+    `${hexToRgba(sky.horizonColor, 0.5)} 16%`,
+    `${hexToRgba(sky.fogColor, 0.38)} 34%`,
+    `${hexToRgba(sky.fogColor, 0.2)} 54%`,
+    `${hexToRgba(sky.fogColor, 0.07)} 76%`,
     `${hexToRgba(sky.fogColor, 0)} 100%)`,
   ].join(', ');
 }
@@ -47,10 +47,10 @@ export function FogCurtain({ sniffMode }: { sniffMode: boolean }) {
     const apply = () => {
       raf = 0;
       const p = map.getPitch();
-      // Eases in from ~56° and tops out around 80°. Combined with the
-      // gradient's low baked alphas this peaks at a translucent haze, so
-      // the far city is faded into depth, never covered.
-      setOpacity(Math.max(0, Math.min(1, (p - 56) / 24)));
+      // Eases in from ~56°. Capped at 0.85 (not 1) so even at the steepest
+      // tilt the haze stays translucent — the far city reads as silhouettes
+      // in deep fog rather than being erased.
+      setOpacity(Math.max(0, Math.min(0.85, (p - 56) / 24)));
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(apply);
