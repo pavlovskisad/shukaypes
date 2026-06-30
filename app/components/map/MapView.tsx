@@ -1921,8 +1921,11 @@ export default function MapViewWeb() {
         // MapView wasn't enough — the parent stacking contexts
         // (mapLayer, possibly MapLibre's canvas wrapper) trapped
         // it below the HUD container despite z=50 > HUD z=30.
-        // Portal lifts it out entirely; z=9999 then guarantees
-        // it sits above everything except true global modals.
+        // The portal already lifts it above the in-#root HUD (it's
+        // a later sibling of #root in <body>); HUD_CHIP_COMPANION
+        // then keeps it above the lost-pet chips while staying
+        // BELOW the modal tiers (MODAL_MAP / MODAL_GLOBAL) so the
+        // lost-dog / spot modals cover it.
         //
         // Outer wrapper owns positioning + edge transform. Inner
         // wrapper owns the chip's visual (bg / border / shadow /
@@ -1950,7 +1953,7 @@ export default function MapViewWeb() {
                     : 'translate(-100%, -50%)',
             transition:
               'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-            zIndex: 9999,
+            zIndex: Z.HUD_CHIP_COMPANION,
             cursor: 'pointer',
           }}
         >
@@ -2120,10 +2123,12 @@ export default function MapViewWeb() {
               transition:
                 'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
               // Portaled to document.body (see wrapping createPortal),
-              // so z lives at the page root above any HUD container.
-              // 9998 — one below the companion chip (9999) so the
-              // companion bookmark wins when both pin to the same edge.
-              zIndex: 9998,
+              // so z lives at the page root above the in-#root HUD.
+              // HUD_CHIPS (35) sits one tier below the companion chip
+              // (HUD_CHIP_COMPANION = 38) so the bookmark wins when both
+              // pin to the same edge, and below the modal tiers so the
+              // lost-dog / spot modals cover the chips.
+              zIndex: Z.HUD_CHIPS,
               cursor: 'pointer',
               userSelect: 'none',
             }}
