@@ -1129,12 +1129,15 @@ export default function MapViewWeb() {
           maxBounds: MAP_MAX_BOUNDS,
           // Steep, near-ground tilt for a game-camera feel — the city
           // reads as a 3D world you walk through rather than a flat map.
-          // 70° (was 55°) drops the horizon low; maxPitch 80 lets the
-          // user tilt a touch further by gesture without hitting the
-          // sky-heavy extreme (MapLibre's hard cap is 85). Default
-          // maxPitch is 60, so it must be raised for 70 to take effect.
+          // 70° (was 55°) drops the horizon low. maxPitch is capped just
+          // above the default (72, not 80): past ~72 the far city rises
+          // ABOVE the horizon fog band and floods the top of the screen
+          // (MapLibre's sky fog hazes the horizon, not distant geometry),
+          // so we keep the camera in the range where the fogged horizon
+          // actually hides the distance. Default maxPitch is 60, so it
+          // must be raised for 70 to take effect at all.
           pitch: 70,
-          maxPitch: 80,
+          maxPitch: 72,
           // Drop both attribution branding + the MapLibre wordmark
           // logo. Tile/data attribution is a legal requirement for
           // upstream sources (OFM, OSM, etc.) — those are surfaced

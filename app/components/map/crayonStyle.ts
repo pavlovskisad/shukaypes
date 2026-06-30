@@ -344,7 +344,7 @@ export function applyCrayonOverride(
         13,
         1,
         18,
-        0.5,
+        0.75,
       ] as unknown as number,
     });
   }
