@@ -2,15 +2,16 @@ import { useEffect, useState } from 'react';
 import { useMaplibreMap } from './MapContext';
 import { LIGHT_PALETTE, DARK_PALETTE } from './crayonStyle';
 
-// A pitch-driven "fog curtain" laid over the TOP of the map. MapLibre's
-// sky fog only hazes the sky band — it doesn't fog the 3D geometry — so at
-// a steep tilt the distant city rises above the horizon haze and floods
-// the top of the screen. This DOM overlay paints a sky→haze→clear
-// gradient over that region, hiding the far city behind atmosphere while
-// the near city stays crisp below. Its opacity fades in with pitch, so a
-// flat map is untouched and the effect only engages as the camera tilts
-// into the flood zone. Own opacity state so pitch updates re-render only
-// this div, not the whole (marker-heavy) MapView.
+// A pitch-driven atmospheric haze laid over the TOP of the map. MapLibre's
+// sky fog only hazes the sky band, not the 3D geometry, so at a steep tilt
+// the distant city would otherwise read flat and hard against the page.
+// This DOM overlay adds a SEE-THROUGH haze — densest near the horizon,
+// fading gradually to clear over the foreground — so the far city stays
+// visible but recedes into atmosphere (depth), rather than being covered
+// by an opaque band. Low baked-in alphas keep it translucent; the element
+// opacity eases in with pitch so a flat map is untouched. Own opacity
+// state so pitch updates re-render only this div, not the marker-heavy
+// MapView.
 
 function hexToRgba(hex: string, a: number): string {
   const h = hex.replace('#', '');
@@ -22,10 +23,18 @@ function hexToRgba(hex: string, a: number): string {
 
 function gradientFor(sniffMode: boolean): string {
   const sky = (sniffMode ? DARK_PALETTE : LIGHT_PALETTE).sky;
-  // Sky colour at the very top (blends with MapLibre's own sky dome),
-  // through the horizon haze, to the fog colour, fading fully out lower
-  // down so the foreground city reads clean.
-  return `linear-gradient(to bottom, ${sky.skyColor} 0%, ${sky.horizonColor} 28%, ${sky.fogColor} 52%, ${hexToRgba(sky.fogColor, 0)} 100%)`;
+  // Translucent throughout (low alphas) so the far city shows through —
+  // densest at the horizon, easing off through many soft stops so there's
+  // no hard "band edge". Reads as depth haze rather than a flat cover.
+  return [
+    'linear-gradient(to bottom',
+    `${hexToRgba(sky.skyColor, 0.5)} 0%`,
+    `${hexToRgba(sky.horizonColor, 0.42)} 16%`,
+    `${hexToRgba(sky.fogColor, 0.3)} 34%`,
+    `${hexToRgba(sky.fogColor, 0.16)} 54%`,
+    `${hexToRgba(sky.fogColor, 0.06)} 76%`,
+    `${hexToRgba(sky.fogColor, 0)} 100%)`,
+  ].join(', ');
 }
 
 export function FogCurtain({ sniffMode }: { sniffMode: boolean }) {
@@ -38,8 +47,10 @@ export function FogCurtain({ sniffMode }: { sniffMode: boolean }) {
     const apply = () => {
       raf = 0;
       const p = map.getPitch();
-      // None below 60°, full by 80° — engages as the distance floods.
-      setOpacity(Math.max(0, Math.min(1, (p - 60) / 20)));
+      // Eases in from ~56° and tops out around 80°. Combined with the
+      // gradient's low baked alphas this peaks at a translucent haze, so
+      // the far city is faded into depth, never covered.
+      setOpacity(Math.max(0, Math.min(1, (p - 56) / 24)));
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(apply);
@@ -60,7 +71,7 @@ export function FogCurtain({ sniffMode }: { sniffMode: boolean }) {
         top: 0,
         left: 0,
         right: 0,
-        height: '52%',
+        height: '58%',
         pointerEvents: 'none',
         opacity,
         transition: 'opacity 220ms linear',

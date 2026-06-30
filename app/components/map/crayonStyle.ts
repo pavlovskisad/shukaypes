@@ -342,9 +342,9 @@ export function applyCrayonOverride(
         ['linear'],
         ['zoom'],
         13,
-        1,
+        0.85,
         18,
-        0.75,
+        0.5,
       ] as unknown as number,
     });
   }
