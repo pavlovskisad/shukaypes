@@ -1591,6 +1591,36 @@ export default function MapViewWeb() {
     insets.top,
   ]);
 
+  // Nearby players (real + bots) to render as other dogs — only in view, and
+  // capped to the nearest N for perf (each walker runs a glide loop + sprite).
+  // MUST stay above the early `!userPos` return below (Rules of Hooks).
+  const otherWalkers = useMemo(() => {
+    if (!MULTIPLAYER || !onMapScreen || !nearbyPlayers.length) return [];
+    let list = nearbyPlayers;
+    if (mapBounds) {
+      const padLat = (mapBounds.n - mapBounds.s) * 0.15;
+      const padLng = (mapBounds.e - mapBounds.w) * 0.15;
+      list = list.filter(
+        (p) =>
+          p.position.lat <= mapBounds.n + padLat &&
+          p.position.lat >= mapBounds.s - padLat &&
+          p.position.lng <= mapBounds.e + padLng &&
+          p.position.lng >= mapBounds.w - padLng,
+      );
+    }
+    const up = userPos;
+    if (up && list.length > 24) {
+      list = [...list]
+        .sort(
+          (a, b) =>
+            distanceMeters(up, a.position) - distanceMeters(up, b.position),
+        )
+        .slice(0, 24);
+    }
+    return list;
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos; fine to re-run on nearbyPlayers/bounds
+  }, [nearbyPlayers, mapBounds, userPos?.lat, userPos?.lng, onMapScreen]);
+
   if (!userPos) {
     return (
       <View style={styles.msg}>
@@ -1674,35 +1704,6 @@ export default function MapViewWeb() {
     if (!mapRef.current) return;
     mapRef.current.panTo(target);
   };
-
-  // Nearby players (real + bots) to render as other dogs — only in view, and
-  // capped to the nearest N for perf (each walker runs a glide loop + sprite).
-  const otherWalkers = useMemo(() => {
-    if (!MULTIPLAYER || !onMapScreen || !nearbyPlayers.length) return [];
-    let list = nearbyPlayers;
-    if (mapBounds) {
-      const padLat = (mapBounds.n - mapBounds.s) * 0.15;
-      const padLng = (mapBounds.e - mapBounds.w) * 0.15;
-      list = list.filter(
-        (p) =>
-          p.position.lat <= mapBounds.n + padLat &&
-          p.position.lat >= mapBounds.s - padLat &&
-          p.position.lng <= mapBounds.e + padLng &&
-          p.position.lng >= mapBounds.w - padLng,
-      );
-    }
-    if (userPos && list.length > 24) {
-      list = [...list]
-        .sort(
-          (a, b) =>
-            distanceMeters(userPos, a.position) -
-            distanceMeters(userPos, b.position),
-        )
-        .slice(0, 24);
-    }
-    return list;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos elsewhere; fine to re-run on nearbyPlayers/bounds
-  }, [nearbyPlayers, mapBounds, userPos?.lat, userPos?.lng, onMapScreen]);
 
   return (
     <div style={{ flex: 1, position: 'relative', width: '100%', height: '100%' }}>
