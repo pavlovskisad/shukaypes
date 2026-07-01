@@ -99,6 +99,15 @@ const NIGHT: Tone = {
 // on where the light is.
 const SUN_AZIMUTH = 125;
 
+// Ground-mist "pool" that gives the fog SUBSTANCE (vs a flat distance
+// cutout): the haze is thickest at ground level and thins out by MIST_TOP
+// metres up, so buildings rise out of it — their bases sink into mist while
+// their tops stay clear, like the reference. POOL_STRENGTH caps how opaque
+// the pool gets. It ramps in with distance (see shader) so the immediate
+// foreground bases stay crisp.
+const MIST_TOP = 42;
+const POOL_STRENGTH = 0.9;
+
 type LngLat = [number, number];
 
 // Project a lng/lat to local metres (x=east, y=north) around an origin.
@@ -239,7 +248,19 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
       'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nvarying vec3 vLocalPos;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
-        '#include <dithering_fragment>\n  float _fd = max(0.0, length(vLocalPos - u_camLocal) - u_fogNear);\n  float _f = clamp(1.0 - exp(-u_fogDensity * _fd), 0.0, 1.0);\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
+        [
+          '#include <dithering_fragment>',
+          '  float _dist = length(vLocalPos - u_camLocal);',
+          // Exponential distance fog — the "wall" that swallows the far.
+          '  float _distFog = 1.0 - exp(-u_fogDensity * max(0.0, _dist - u_fogNear));',
+          // Ground-mist pool — thick at y=0, gone by MIST_TOP; ramps in with
+          // distance so foreground bases stay crisp. This is the height
+          // component that makes buildings RISE OUT of the mist (substance).
+          `  float _pool = 1.0 - smoothstep(0.0, ${MIST_TOP.toFixed(1)}, vLocalPos.y);`,
+          '  _pool *= smoothstep(u_fogNear * 0.55, u_fogNear * 1.05, _dist);',
+          `  float _f = clamp(max(_distFog, _pool * ${POOL_STRENGTH.toFixed(2)}), 0.0, 1.0);`,
+          '  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
+        ].join('\n'),
       );
   };
 
