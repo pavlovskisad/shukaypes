@@ -1,0 +1,12 @@
+// Feature flags for in-progress render experiments. These are toggled
+// per-branch: the `experiment/game-render` branch flips GAME_RENDER on so
+// its Vercel preview URL shows the Tier-2 look while `main` / prod stays
+// on the shipped MapLibre render. If this ever merges, flip the flag (or
+// wire it to an env / URL param) rather than deleting the plumbing.
+
+// Tier-2 "game render": replace MapLibre's flat fill-extrusion buildings
+// with real extruded Three.js meshes that get TRUE per-distance depth fog
+// (FogExp2) + a directional sun. The screen-space atmosphere fog + sky
+// still handle the ground/horizon; this adds correct volumetric fog on the
+// buildings themselves — the one thing the 2D approximation can't do.
+export const GAME_RENDER = true;

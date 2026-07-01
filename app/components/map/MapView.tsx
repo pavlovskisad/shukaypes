@@ -38,6 +38,12 @@ import { TokenMarker } from './TokenMarker';
 import { FoodMarker } from './FoodMarker';
 import { CollectBurst } from './CollectBurst';
 import { createDepthFogLayer, DEPTH_FOG_LAYER_ID } from './fogLayer';
+import {
+  createThreeBuildingsLayer,
+  THREE_BUILDINGS_LAYER_ID,
+} from './threeBuildingsLayer';
+import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
+import { GAME_RENDER } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
@@ -115,6 +121,35 @@ function mapPulseRing(delaySec: number): CSSProperties {
     transform: 'translate(-50%, -50%) scale(0.4)',
     animation: `hint-map-pulse 1.8s ease-out ${delaySec}s infinite`,
   };
+}
+
+// Experiment (GAME_RENDER): the id of the first symbol (label) layer, so we
+// can insert the 3D buildings + ground fog BELOW the labels. Without this the
+// custom layers append on top and the 3D buildings occlude place names
+// ("signs sitting under the buildings").
+function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
+  for (const l of map.getStyle().layers ?? []) {
+    if (l.type === 'symbol') return l.id;
+  }
+  return undefined;
+}
+
+// Experiment (GAME_RENDER): hide MapLibre's own flat fill-extrusion
+// buildings so the Three.js extruded city owns the building volumes. Called
+// after every crayon override (which re-shows / re-opacities them).
+function hideMapLibreBuildings(map: maplibregl.Map): void {
+  for (const l of map.getStyle().layers ?? []) {
+    if (
+      (l as { 'source-layer'?: string })['source-layer'] === 'building' &&
+      l.type === 'fill-extrusion'
+    ) {
+      try {
+        map.setLayoutProperty(l.id, 'visibility', 'none');
+      } catch {
+        /* layer not ready — skip */
+      }
+    }
+  }
 }
 
 export default function MapViewWeb() {
@@ -1168,10 +1203,47 @@ export default function MapViewWeb() {
         map.on('style.load', () => {
           applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
           syncStreetLabels();
-          // Real depth fog (custom WebGL layer) on top of the canvas —
-          // fogs the city by true distance so the far view dissolves into
-          // haze. Guarded so a re-fire doesn't double-add.
-          if (!map.getLayer(DEPTH_FOG_LAYER_ID)) {
+          // The game render (Three.js buildings + one unified mist) needs
+          // WebGL2, so it can fail on old devices. We build it defensively:
+          // add both custom layers FIRST and only hide MapLibre's own
+          // buildings once they're in — if anything throws we tear the
+          // partial state down and fall back to the classic screen-space fog
+          // with MapLibre's buildings intact, so prod never shows a city with
+          // no buildings. Order: ground-fog UNDER buildings UNDER labels.
+          let gameOk = false;
+          if (GAME_RENDER) {
+            try {
+              const beforeId = firstSymbolLayerId(map);
+              if (!map.getLayer(GROUND_FOG_LAYER_ID)) {
+                map.addLayer(createGroundFogLayer(), beforeId);
+              }
+              if (!map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
+                map.addLayer(createThreeBuildingsLayer(), beforeId);
+              }
+              hideMapLibreBuildings(map);
+              gameOk = true;
+            } catch (e) {
+              // eslint-disable-next-line no-console
+              console.error('[game-render] init failed — falling back to classic render', e);
+              try {
+                if (map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
+                  map.removeLayer(THREE_BUILDINGS_LAYER_ID);
+                }
+              } catch {
+                /* ignore */
+              }
+              try {
+                if (map.getLayer(GROUND_FOG_LAYER_ID)) {
+                  map.removeLayer(GROUND_FOG_LAYER_ID);
+                }
+              } catch {
+                /* ignore */
+              }
+            }
+          }
+          // Classic render (prod default OR game-render fallback): the
+          // screen-space depth fog over MapLibre's own buildings.
+          if (!gameOk && !map.getLayer(DEPTH_FOG_LAYER_ID)) {
             try {
               map.addLayer(createDepthFogLayer());
             } catch (e) {
@@ -1264,6 +1336,14 @@ export default function MapViewWeb() {
     // applyCrayonOverride resets transportation_name visibility to
     // 'visible', so re-apply the pitch-based hide right after.
     syncStreetLabels();
+    // …and it re-opacities the fill-extrusion buildings; keep them hidden
+    // so the Three.js city stays the sole building treatment — but only when
+    // the game render actually initialised (the Three layer is present).
+    // On a WebGL2-fallback session there's no Three layer, so we must NOT
+    // hide MapLibre's buildings or we'd be left with none.
+    if (GAME_RENDER && map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
+      hideMapLibreBuildings(map);
+    }
   }, [sniffMode, lang, syncStreetLabels]);
 
   // Off-screen lost-pet edge-chip layout. Memoised so the per-pet
