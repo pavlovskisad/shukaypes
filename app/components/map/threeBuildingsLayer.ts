@@ -120,12 +120,20 @@ export const CLEAR_RADIUS = 200;
 export const CLEAR_BAND = 240;
 
 // The clear bubble is a fixed world radius, but zooming out lifts the camera
-// far from the ground, so a fixed patch feels like a shrinking hole. Grow the
-// bubble a touch as you zoom out — gently, capped at ~2× so it never swallows
-// the view.
+// far from the ground (and a steep pitch pushes the view further into the
+// distance), so a fixed patch shrinks to a dot when zoomed out. Grow the
+// bubble ~with the visible extent: close to 2×/zoom-level out, plus extra at
+// steep pitch, so a steep zoomed-out view keeps a big clear island instead of
+// fogging the whole city.
 const ZOOM_REF = 17.5; // matches balance.mapZoomDefault
-export function clearBubbleForZoom(zoom: number): { radius: number; band: number } {
-  const factor = Math.pow(2, Math.min(Math.max(0, ZOOM_REF - zoom) * 0.45, 1));
+export function clearBubbleForCamera(
+  zoom: number,
+  pitch: number,
+): { radius: number; band: number } {
+  const zoomOut = Math.max(0, ZOOM_REF - zoom);
+  const zf = Math.pow(2, Math.min(zoomOut * 0.85, 3.4)); // up to ~10×
+  const pf = 1 + Math.max(0, pitch - 55) / 50; // 1× at ≤55°, ~1.5× at 80°
+  const factor = zf * pf;
   return { radius: CLEAR_RADIUS * factor, band: CLEAR_BAND * factor };
 }
 
@@ -562,7 +570,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
             0,
             (fm.y - originY) / mPerUnit, // south
           );
-          const bubble = clearBubbleForZoom(mapRef.getZoom());
+          const bubble = clearBubbleForCamera(mapRef.getZoom(), mapRef.getPitch());
           fogUniforms.u_clearRadius.value = bubble.radius;
           fogUniforms.u_clearBand.value = bubble.band;
         }

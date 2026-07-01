@@ -1163,15 +1163,13 @@ export default function MapViewWeb() {
           minZoom: balance.mapZoomMin,
           maxZoom: balance.mapZoomMax,
           maxBounds: MAP_MAX_BOUNDS,
-          // Steep, near-ground tilt for a game-camera feel — the city
-          // reads as a 3D world you walk through rather than a flat map.
-          // 70° (was 55°) drops the horizon low; maxPitch 80 allows a
-          // dramatic near-ground tilt. Past ~70 the far city would rise
-          // above MapLibre's horizon haze and flood the top, so the
-          // FogCurtain overlay (pitch-driven) paints atmosphere over that
-          // band to hide the distance. Default maxPitch is 60, so it must
-          // be raised for 70 to take effect at all.
-          pitch: 80,
+          // Game-camera tilt: a 3D world you look across, not a flat map.
+          // Opens at 68° — steep enough for real depth + a low horizon, but
+          // tilted down enough that the plaza/foreground reads clearly (the
+          // "hero" starting framing) rather than the near-horizontal 80° view
+          // that was mostly building-sides + sky. Users can still tilt up to
+          // maxPitch 80. (Default maxPitch is 60, so it must be raised.)
+          pitch: 68,
           maxPitch: 80,
           // Drop both attribution branding + the MapLibre wordmark
           // logo. Tile/data attribution is a legal requirement for

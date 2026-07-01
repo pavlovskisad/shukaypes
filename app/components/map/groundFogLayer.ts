@@ -30,7 +30,7 @@ import {
   NIGHT,
   POOL_STRENGTH,
   SUN_AZIMUTH,
-  clearBubbleForZoom,
+  clearBubbleForCamera,
   eyeFromMainMatrix,
 } from './threeBuildingsLayer';
 
@@ -290,7 +290,7 @@ export function createGroundFogLayer(): CustomLayerInterface {
         gl.uniform3f(u.u_fogColor, tone.fog[0], tone.fog[1], tone.fog[2]);
         gl.uniform1f(u.u_poolStrength, POOL_STRENGTH);
         gl.uniform3f(u.u_focusMerc, focus.x, focus.y, focus.z);
-        const bubble = clearBubbleForZoom(map.getZoom());
+        const bubble = clearBubbleForCamera(map.getZoom(), map.getPitch());
         gl.uniform1f(u.u_clearRadius, bubble.radius);
         gl.uniform1f(u.u_clearBand, bubble.band);
         gl.uniform3f(u.u_skyTop, tone.skyTop[0], tone.skyTop[1], tone.skyTop[2]);
