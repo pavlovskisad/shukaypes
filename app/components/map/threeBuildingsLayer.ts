@@ -76,8 +76,8 @@ interface Tone {
 const DAY: Tone = {
   building: 0xf4f5f7,
   fog: 0xedf0f3,
-  fogNear: 380,
-  fogDensity: 0.0055,
+  fogNear: 560,
+  fogDensity: 0.009,
   ambient: 0xdfe6f0,
   ambientI: 2.1,
   sun: 0xfff3d8,
@@ -86,8 +86,8 @@ const DAY: Tone = {
 const NIGHT: Tone = {
   building: 0x20242c,
   fog: 0x2c3646,
-  fogNear: 300,
-  fogDensity: 0.0065,
+  fogNear: 470,
+  fogDensity: 0.011,
   ambient: 0x2a3550,
   ambientI: 1.6,
   sun: 0x9fb4d8,
@@ -284,10 +284,51 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
       originZ = origin.z;
       mPerUnit = origin.meterInMercatorCoordinateUnits();
 
+      // Vector tiles buffer + clip features at tile edges, so
+      // querySourceFeatures returns the same building several times — a full
+      // copy from its home tile plus clipped/buffered copies from
+      // neighbours. Those coincident roofs z-fight and their walls double up
+      // along tile seams. Dedup by feature id, keeping the copy with the
+      // largest footprint bbox (the most complete, least-clipped one).
+      const dedup = new Map<string, { f: (typeof feats)[number]; area: number }>();
+      for (const f of feats) {
+        const g = f.geometry;
+        if (!g) continue;
+        let key: string;
+        if (f.id != null) {
+          key = 'i' + f.id;
+        } else {
+          const c0 =
+            g.type === 'Polygon'
+              ? (g.coordinates[0]?.[0] as number[] | undefined)
+              : g.type === 'MultiPolygon'
+                ? (g.coordinates[0]?.[0]?.[0] as number[] | undefined)
+                : undefined;
+          key = c0 ? `c${c0[0].toFixed(5)},${c0[1].toFixed(5)}` : `n${dedup.size}`;
+        }
+        const rings: number[][][] =
+          g.type === 'Polygon'
+            ? (g.coordinates as unknown as number[][][])
+            : g.type === 'MultiPolygon'
+              ? (g.coordinates as unknown as number[][][][]).flat()
+              : [];
+        let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+        for (const ring of rings)
+          for (const p of ring) {
+            if (p[0] < minX) minX = p[0];
+            if (p[0] > maxX) maxX = p[0];
+            if (p[1] < minY) minY = p[1];
+            if (p[1] > maxY) maxY = p[1];
+          }
+        const area = Number.isFinite(minX) ? (maxX - minX) * (maxY - minY) : 0;
+        const prev = dedup.get(key);
+        if (!prev || area > prev.area) dedup.set(key, { f, area });
+      }
+
       const positions: number[] = [];
       const normals: number[] = [];
 
-      for (const f of feats) {
+      for (const { f } of dedup.values()) {
         const geom = f.geometry;
         if (!geom) continue;
         const props = (f.properties ?? {}) as Record<string, unknown>;
