@@ -73,7 +73,7 @@ interface Tone {
   sun: number; // directional light colour
   sunI: number;
 }
-const DAY: Tone = {
+export const DAY: Tone = {
   building: 0xf4f5f7,
   fog: 0xedf0f3,
   fogNear: 560,
@@ -83,7 +83,7 @@ const DAY: Tone = {
   sun: 0xfff3d8,
   sunI: 2.6,
 };
-const NIGHT: Tone = {
+export const NIGHT: Tone = {
   building: 0x20242c,
   fog: 0x2c3646,
   fogNear: 470,
@@ -97,7 +97,7 @@ const NIGHT: Tone = {
 // Fixed world azimuth the sun comes from (deg from north, clockwise) —
 // matches SUN_AZIMUTH in fogLayer so the 2D glow and the 3D shading agree
 // on where the light is.
-const SUN_AZIMUTH = 125;
+export const SUN_AZIMUTH = 125;
 
 // Ground-mist "pool" that gives the fog SUBSTANCE (vs a flat distance
 // cutout): the haze is thickest at ground level and thins out by MIST_TOP
@@ -105,8 +105,8 @@ const SUN_AZIMUTH = 125;
 // their tops stay clear, like the reference. POOL_STRENGTH caps how opaque
 // the pool gets. It ramps in with distance (see shader) so the immediate
 // foreground bases stay crisp.
-const MIST_TOP = 42;
-const POOL_STRENGTH = 0.9;
+export const MIST_TOP = 42;
+export const POOL_STRENGTH = 0.9;
 
 type LngLat = [number, number];
 
@@ -158,7 +158,7 @@ function shapeFromRings(
 // through the camera apex, so solving any three of them for their common
 // point gives the eye — no dependence on MapLibre's internal transform.
 // `m` is column-major (WebGL/gl-matrix): element (row r, col c) = m[c*4+r].
-function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number] | null {
+export function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number] | null {
   // rows of M
   const r0 = [m[0], m[4], m[8], m[12]];
   const r1 = [m[1], m[5], m[9], m[13]];
@@ -425,6 +425,9 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
       builtLng = center.lng;
       builtLat = center.lat;
       builtZoom = zoom;
+      // Rebuilds happen on idle (no camera motion), so nothing else will
+      // trigger a frame — repaint once so the freshly-extruded city shows.
+      mapRef?.triggerRepaint();
     } catch (e) {
       // Never let a rebuild hiccup take down the map.
       // eslint-disable-next-line no-console

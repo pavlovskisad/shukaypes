@@ -42,6 +42,7 @@ import {
   createThreeBuildingsLayer,
   THREE_BUILDINGS_LAYER_ID,
 } from './threeBuildingsLayer';
+import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { GAME_RENDER } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
@@ -1191,11 +1192,23 @@ export default function MapViewWeb() {
         map.on('style.load', () => {
           applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
           syncStreetLabels();
-          // Tier-2 experiment: swap MapLibre's flat extrusions for real
-          // Three.js buildings that get true per-distance depth fog. Added
-          // BEFORE the screen fog so the 2D atmosphere still paints on top.
           if (GAME_RENDER) {
+            // Tier-2 experiment: swap MapLibre's flat extrusions for real
+            // Three.js buildings, and fog the whole world with ONE mist.
+            // Order matters: the ground-fog layer goes UNDER the buildings so
+            // buildings paint over it with their own (matching) fog — no
+            // double-fogging — and the map's ground pixels get fogged by true
+            // distance here. No separate screen haze: ground fog draws the
+            // sky + horizon too.
             hideMapLibreBuildings(map);
+            if (!map.getLayer(GROUND_FOG_LAYER_ID)) {
+              try {
+                map.addLayer(createGroundFogLayer());
+              } catch (e) {
+                // eslint-disable-next-line no-console
+                console.error('[ground-fog] addLayer failed', e);
+              }
+            }
             if (!map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
               try {
                 map.addLayer(createThreeBuildingsLayer());
@@ -1204,22 +1217,10 @@ export default function MapViewWeb() {
                 console.error('[three-buildings] addLayer failed', e);
               }
             }
-          }
-          // Screen-space haze on top of the canvas for the sky + far-ground
-          // band. In the game render the Three layer already does the TRUE
-          // per-distance mist on buildings, so here we drop the animated
-          // cloud texture (noiseAmt 0 → smooth mist, not "clouds stuck to
-          // glass") and pull the haze up toward the horizon so near
-          // buildings stay crisp. Guarded so a re-fire doesn't double-add.
-          if (!map.getLayer(DEPTH_FOG_LAYER_ID)) {
+          } else if (!map.getLayer(DEPTH_FOG_LAYER_ID)) {
+            // Production render: the screen-space depth fog.
             try {
-              map.addLayer(
-                createDepthFogLayer(
-                  GAME_RENDER
-                    ? { noiseAmt: 0, yStart: 0.42, yEnd: 0.7, maxAlpha: 1.0 }
-                    : {},
-                ),
-              );
+              map.addLayer(createDepthFogLayer());
             } catch (e) {
               // eslint-disable-next-line no-console
               console.error('[fog] addLayer failed', e);

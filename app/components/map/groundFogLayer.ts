@@ -1,0 +1,272 @@
+// Unified ground fog for the game render (experiment).
+//
+// The buildings (threeBuildingsLayer) get TRUE 3D distance + height fog. This
+// layer gives the GROUND the exact same treatment, so the whole world
+// dissolves into one consistent mist instead of a flat screen-space band on
+// the ground + real fog on the buildings ("split brain").
+//
+// Trick: the ground is a flat plane at mercator altitude z = 0, so we don't
+// need a depth buffer — for each pixel we unproject its camera ray and
+// intersect the ground plane analytically, giving that ground point's TRUE
+// world distance. Then we apply the identical exponential distance fog +
+// ground-mist pool the buildings use (imported from threeBuildingsLayer, one
+// source of truth). Above the horizon we draw the sky dome + sun glow.
+//
+// Layer order matters: this is added UNDER the Three buildings, so buildings
+// paint over it with their own fog (no double-fogging) and the map's ground
+// pixels get fogged here.
+
+import * as THREE from 'three';
+import { MercatorCoordinate } from 'maplibre-gl';
+import type {
+  CustomLayerInterface,
+  CustomRenderMethodInput,
+  Map as MlMap,
+} from 'maplibre-gl';
+import { useGameStore } from '../../stores/gameStore';
+import { LIGHT_PALETTE, DARK_PALETTE } from './crayonStyle';
+import {
+  DAY,
+  NIGHT,
+  POOL_STRENGTH,
+  SUN_AZIMUTH,
+  eyeFromMainMatrix,
+} from './threeBuildingsLayer';
+
+export const GROUND_FOG_LAYER_ID = 'ground-fog';
+
+type GL = WebGLRenderingContext | WebGL2RenderingContext;
+type RGB = [number, number, number];
+
+const rgbNum = (h: number): RGB => [
+  ((h >> 16) & 255) / 255,
+  ((h >> 8) & 255) / 255,
+  (h & 255) / 255,
+];
+const rgbHex = (s: string): RGB => rgbNum(parseInt(s.slice(1), 16));
+
+interface GroundTone {
+  fog: RGB;
+  fogNear: number;
+  fogDensity: number;
+  skyTop: RGB;
+  skyHorizon: RGB;
+  sun: RGB;
+  sunStrength: number;
+}
+const DAY_G: GroundTone = {
+  fog: rgbNum(DAY.fog),
+  fogNear: DAY.fogNear,
+  fogDensity: DAY.fogDensity,
+  skyTop: rgbHex(LIGHT_PALETTE.sky.skyColor),
+  skyHorizon: rgbHex(LIGHT_PALETTE.sky.horizonColor),
+  sun: rgbNum(DAY.sun),
+  sunStrength: 0.6,
+};
+const NIGHT_G: GroundTone = {
+  fog: rgbNum(NIGHT.fog),
+  fogNear: NIGHT.fogNear,
+  fogDensity: NIGHT.fogDensity,
+  skyTop: rgbHex(DARK_PALETTE.sky.skyColor),
+  skyHorizon: rgbHex(DARK_PALETTE.sky.horizonColor),
+  sun: rgbNum(NIGHT.sun),
+  sunStrength: 0.3,
+};
+
+const VERT = `
+attribute vec2 a_pos;
+varying vec2 v_ndc;
+void main() {
+  v_ndc = a_pos;
+  gl_Position = vec4(a_pos, 0.0, 1.0);
+}
+`;
+
+const FRAG = `
+precision highp float;
+varying vec2 v_ndc;
+uniform mat4 u_invVP;      // clip -> mercator
+uniform vec3 u_camMerc;    // eye in mercator
+uniform float u_mPerM;     // mercator units per metre
+uniform float u_fogNear;
+uniform float u_fogDensity;
+uniform vec3 u_fogColor;
+uniform float u_poolStrength;
+uniform vec3 u_skyTop;
+uniform vec3 u_skyHorizon;
+uniform vec3 u_sunColor;
+uniform float u_sunStrength;
+uniform vec2 u_sunPos;
+
+void main() {
+  // Sky dome gradient + a soft directional sun glow.
+  vec3 skyCol = mix(u_skyHorizon, u_skyTop, smoothstep(-0.1, 1.0, v_ndc.y));
+  vec2 sv = (v_ndc - u_sunPos) * vec2(1.0, 0.78);
+  float sd = length(sv);
+  float glow = smoothstep(1.5, 0.0, sd); glow *= glow;
+  float core = smoothstep(0.5, 0.0, sd); core *= core;
+  float sun = clamp(glow + core * 0.85, 0.0, 1.0);
+  skyCol = mix(skyCol, u_sunColor, sun * u_sunStrength);
+
+  // Camera ray for this pixel → intersect ground plane (mercator z = 0).
+  vec4 pn = u_invVP * vec4(v_ndc, -1.0, 1.0);
+  vec4 pf = u_invVP * vec4(v_ndc,  1.0, 1.0);
+  vec3 ro = pn.xyz / pn.w;
+  vec3 rd = (pf.xyz / pf.w) - ro;
+  float t = (abs(rd.z) > 1e-12) ? (-ro.z / rd.z) : -1.0;
+
+  if (t <= 0.0) {
+    gl_FragColor = vec4(skyCol, 1.0); // above horizon: pure sky
+    return;
+  }
+
+  vec3 hit = ro + t * rd;
+  float distM = length(hit - u_camMerc) / u_mPerM;
+  // Identical distance fog to the buildings.
+  float distFog = 1.0 - exp(-u_fogDensity * max(0.0, distM - u_fogNear));
+  // The ground is the floor of the mist pool (thickest), ramped in with
+  // distance so the near foreground stays crisp.
+  float pool = smoothstep(u_fogNear * 0.55, u_fogNear * 1.05, distM) * u_poolStrength;
+  float f = clamp(max(distFog, pool), 0.0, 1.0);
+  // As it saturates, the ground melts into the sky colour so the far ground
+  // meets the sky with no seam.
+  vec3 col = mix(u_fogColor, skyCol, smoothstep(0.85, 1.0, f));
+  float a = f;
+  if (a <= 0.002) discard;
+  gl_FragColor = vec4(col * a, a); // premultiplied
+}
+`;
+
+function compile(gl: GL, type: number, src: string): WebGLShader | null {
+  const sh = gl.createShader(type);
+  if (!sh) return null;
+  gl.shaderSource(sh, src);
+  gl.compileShader(sh);
+  if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+    // eslint-disable-next-line no-console
+    console.error('[ground-fog] shader compile failed:', gl.getShaderInfoLog(sh));
+    gl.deleteShader(sh);
+    return null;
+  }
+  return sh;
+}
+
+export function createGroundFogLayer(): CustomLayerInterface {
+  let program: WebGLProgram | null = null;
+  let buffer: WebGLBuffer | null = null;
+  let aPos = -1;
+  const u: Record<string, WebGLUniformLocation | null> = {};
+  let mapRef: MlMap | null = null;
+  const invMat = new THREE.Matrix4();
+
+  return {
+    id: GROUND_FOG_LAYER_ID,
+    type: 'custom',
+    renderingMode: '2d',
+
+    onAdd(map: MlMap, gl: GL) {
+      mapRef = map;
+      const vs = compile(gl, gl.VERTEX_SHADER, VERT);
+      const fs = compile(gl, gl.FRAGMENT_SHADER, FRAG);
+      if (!vs || !fs) return;
+      const prog = gl.createProgram();
+      if (!prog) return;
+      gl.attachShader(prog, vs);
+      gl.attachShader(prog, fs);
+      gl.linkProgram(prog);
+      if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        // eslint-disable-next-line no-console
+        console.error('[ground-fog] link failed:', gl.getProgramInfoLog(prog));
+        return;
+      }
+      program = prog;
+      aPos = gl.getAttribLocation(prog, 'a_pos');
+      for (const name of [
+        'u_invVP', 'u_camMerc', 'u_mPerM', 'u_fogNear', 'u_fogDensity',
+        'u_fogColor', 'u_poolStrength', 'u_skyTop', 'u_skyHorizon',
+        'u_sunColor', 'u_sunStrength', 'u_sunPos',
+      ]) {
+        u[name] = gl.getUniformLocation(prog, name);
+      }
+      buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(
+        gl.ARRAY_BUFFER,
+        new Float32Array([-1, -1, 1, -1, -1, 1, -1, 1, 1, -1, 1, 1]),
+        gl.STATIC_DRAW,
+      );
+    },
+
+    onRemove(_map, gl: GL) {
+      if (program) gl.deleteProgram(program);
+      if (buffer) gl.deleteBuffer(buffer);
+      program = null;
+      buffer = null;
+      mapRef = null;
+    },
+
+    render(gl: GL, args: CustomRenderMethodInput) {
+      try {
+        if (!program || !buffer || !mapRef) return;
+        const map = mapRef;
+        const sniff = useGameStore.getState().sniffMode;
+        const tone = sniff ? NIGHT_G : DAY_G;
+
+        const mmArr = Array.from(args.defaultProjectionData.mainMatrix);
+        invMat.fromArray(mmArr).invert();
+        const eye = eyeFromMainMatrix(mmArr);
+        if (!eye) return;
+
+        const c = map.getCenter();
+        const mPerM = MercatorCoordinate.fromLngLat(
+          [c.lng, c.lat],
+          0,
+        ).meterInMercatorCoordinateUnits();
+
+        // Directional sun position, derived from bearing/pitch (matches
+        // fogLayer so the glow slides with the camera).
+        const bearing = map.getBearing();
+        const pitch = map.getPitch();
+        const rel = ((((SUN_AZIMUTH - bearing) % 360) + 540) % 360) - 180;
+        const relRad = (rel * Math.PI) / 180;
+        const front = Math.cos(relRad);
+        const vis = Math.max(0, Math.min(1, (front + 0.25) / 0.9));
+        const sunX = 0.62 * Math.sin(relRad);
+        const sunY = 0.7 + Math.max(0, Math.min(0.18, (pitch - 50) * 0.004));
+
+        gl.useProgram(program);
+        gl.uniformMatrix4fv(u.u_invVP, false, invMat.elements);
+        gl.uniform3f(u.u_camMerc, eye[0], eye[1], eye[2]);
+        gl.uniform1f(u.u_mPerM, mPerM);
+        gl.uniform1f(u.u_fogNear, tone.fogNear);
+        gl.uniform1f(u.u_fogDensity, tone.fogDensity);
+        gl.uniform3f(u.u_fogColor, tone.fog[0], tone.fog[1], tone.fog[2]);
+        gl.uniform1f(u.u_poolStrength, POOL_STRENGTH);
+        gl.uniform3f(u.u_skyTop, tone.skyTop[0], tone.skyTop[1], tone.skyTop[2]);
+        gl.uniform3f(
+          u.u_skyHorizon,
+          tone.skyHorizon[0], tone.skyHorizon[1], tone.skyHorizon[2],
+        );
+        gl.uniform3f(u.u_sunColor, tone.sun[0], tone.sun[1], tone.sun[2]);
+        gl.uniform1f(u.u_sunStrength, tone.sunStrength * vis);
+        gl.uniform2f(u.u_sunPos, sunX, sunY);
+
+        gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+        gl.enableVertexAttribArray(aPos);
+        gl.vertexAttribPointer(aPos, 2, gl.FLOAT, false, 0, 0);
+
+        gl.disable(gl.DEPTH_TEST);
+        // Critical: this quad is drawn UNDER the 3D buildings, so it must not
+        // write depth — otherwise it would overwrite the ground depth the
+        // buildings depth-test against and mis-cull them.
+        gl.depthMask(false);
+        gl.enable(gl.BLEND);
+        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
+      } catch (e) {
+        // eslint-disable-next-line no-console
+        console.error('[ground-fog] render error', e);
+      }
+    },
+  };
+}
