@@ -75,10 +75,12 @@ void main() {
   float n = fbm(base + drift + warp);
   float cloud = mix(1.0, 0.25 + 1.3 * n, u_noiseAmt);
   // Sky is itself a gentle gradient: pale light blue near the horizon
-  // deepening a touch toward the very top (not a flat blue). The grey haze
-  // then blends up into that sky.
+  // deepening a touch toward the very top (not a flat blue). The haze
+  // resolves INTO that sky fairly low, so distant buildings + earth
+  // gradually dissolve into the sky (read as fading transparent) rather
+  // than hitting a grey haze wall.
   vec3 skyCol = mix(u_skyColor, u_skyTop, smoothstep(0.3, 1.0, v_ndc.y));
-  float skyMix = smoothstep(0.35, 0.98, v_ndc.y);
+  float skyMix = smoothstep(0.1, 0.8, v_ndc.y);
   vec3 col = mix(u_fogColor, skyCol, skyMix);
   // Directional sunlight — a wide warm glow plus a brighter core so the sun
   // reads as an active light. Centre moves with the camera (u_sunPos);
@@ -159,9 +161,12 @@ interface FogOpts {
 }
 
 export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
-  const yStart = opts.yStart ?? 0.12;
-  const yEnd = opts.yEnd ?? 0.72;
-  const maxAlpha = opts.maxAlpha ?? 0.92;
+  // Fade begins around screen centre (foreground/dog stays clear below it)
+  // and reaches a near-complete dissolve at the top, so distance fades out
+  // gradually into the sky.
+  const yStart = opts.yStart ?? 0.0;
+  const yEnd = opts.yEnd ?? 0.78;
+  const maxAlpha = opts.maxAlpha ?? 0.97;
   const particle = opts.particle ?? 120;
   const noiseAmt = opts.noiseAmt ?? 0.8;
   const minPitch = opts.minPitch ?? 42;
