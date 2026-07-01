@@ -170,8 +170,8 @@ interface FogOpts {
 export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   const yStart = opts.yStart ?? 0.12;
   const yEnd = opts.yEnd ?? 0.72;
-  const maxAlpha = opts.maxAlpha ?? 0.34;
-  const particle = opts.particle ?? 20;
+  const maxAlpha = opts.maxAlpha ?? 0.22;
+  const particle = opts.particle ?? 4;
   const noiseAmt = opts.noiseAmt ?? 0.85;
   const minPitch = opts.minPitch ?? 42;
   const fullPitch = opts.fullPitch ?? 60;
@@ -267,7 +267,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
           // Parallax at a FRACTION of world speed — the "air" drifts gently
           // as you pan, like a distant atmospheric layer, instead of racing
           // 1:1 with the ground.
-          const PARALLAX = 0.22;
+          const PARALLAX = 0.01;
           const worldPx = 512 * Math.pow(2, zoom) * dpr * PARALLAX;
           const period = particle * dpr * 512;
           offX = (((m.x * worldPx) % period) + period) % period;
