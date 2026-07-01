@@ -1205,12 +1205,21 @@ export default function MapViewWeb() {
               }
             }
           }
-          // Real depth fog (custom WebGL layer) on top of the canvas —
-          // fogs the city by true distance so the far view dissolves into
-          // haze. Guarded so a re-fire doesn't double-add.
+          // Screen-space haze on top of the canvas for the sky + far-ground
+          // band. In the game render the Three layer already does the TRUE
+          // per-distance mist on buildings, so here we drop the animated
+          // cloud texture (noiseAmt 0 → smooth mist, not "clouds stuck to
+          // glass") and pull the haze up toward the horizon so near
+          // buildings stay crisp. Guarded so a re-fire doesn't double-add.
           if (!map.getLayer(DEPTH_FOG_LAYER_ID)) {
             try {
-              map.addLayer(createDepthFogLayer());
+              map.addLayer(
+                createDepthFogLayer(
+                  GAME_RENDER
+                    ? { noiseAmt: 0, yStart: 0.55, yEnd: 0.95, maxAlpha: 0.9 }
+                    : {},
+                ),
+              );
             } catch (e) {
               // eslint-disable-next-line no-console
               console.error('[fog] addLayer failed', e);

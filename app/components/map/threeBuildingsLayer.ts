@@ -59,8 +59,13 @@ const REBUILD_ZOOM_D = 0.6;
 // seamlessly into the screen-space atmosphere at the horizon.
 interface Tone {
   building: number; // mesh base colour
-  fog: number; // FogExp2 colour (matches horizon haze)
-  fogDensity: number; // exp2 density — higher = closer dissolve
+  fog: number; // mist colour (matches the 2D horizon haze)
+  // Linear "mist wall" tied to TRUE distance from the camera (metres):
+  // everything nearer than fogNear is crisp, then it dissolves into the
+  // mist colour by fogFar. This is what makes distant buildings fade and
+  // near ones stay sharp — the wall reveals/hides as you walk.
+  fogNear: number;
+  fogFar: number;
   ambient: number; // fill light colour
   ambientI: number;
   sun: number; // directional light colour
@@ -68,8 +73,9 @@ interface Tone {
 }
 const DAY: Tone = {
   building: 0xf4f5f7,
-  fog: 0xe9ebed,
-  fogDensity: 0.00042,
+  fog: 0xe6eaee,
+  fogNear: 260,
+  fogFar: 1500,
   ambient: 0xdfe6f0,
   ambientI: 2.1,
   sun: 0xfff3d8,
@@ -78,7 +84,8 @@ const DAY: Tone = {
 const NIGHT: Tone = {
   building: 0x20242c,
   fog: 0x2c3646,
-  fogDensity: 0.00055,
+  fogNear: 210,
+  fogFar: 1150,
   ambient: 0x2a3550,
   ambientI: 1.6,
   sun: 0x9fb4d8,
@@ -135,12 +142,52 @@ function shapeFromRings(
   return shape;
 }
 
+// Recover the camera's world (mercator) position from a view-projection
+// matrix. The four *side* frustum planes (left/right/top/bottom) all pass
+// through the camera apex, so solving any three of them for their common
+// point gives the eye — no dependence on MapLibre's internal transform.
+// `m` is column-major (WebGL/gl-matrix): element (row r, col c) = m[c*4+r].
+function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number] | null {
+  // rows of M
+  const r0 = [m[0], m[4], m[8], m[12]];
+  const r1 = [m[1], m[5], m[9], m[13]];
+  const r3 = [m[3], m[7], m[11], m[15]];
+  // side planes = r3 ± r0 (left/right), r3 ± r1 (top/bottom)
+  const left = [r3[0] + r0[0], r3[1] + r0[1], r3[2] + r0[2], r3[3] + r0[3]];
+  const right = [r3[0] - r0[0], r3[1] - r0[1], r3[2] - r0[2], r3[3] - r0[3]];
+  const top = [r3[0] - r1[0], r3[1] - r1[1], r3[2] - r1[2], r3[3] - r1[3]];
+  // Solve [n1;n2;n3]·X = -d  (Cramer's rule on the 3×3 of plane normals).
+  const a = [
+    [left[0], left[1], left[2]],
+    [right[0], right[1], right[2]],
+    [top[0], top[1], top[2]],
+  ];
+  const b = [-left[3], -right[3], -top[3]];
+  const det =
+    a[0][0] * (a[1][1] * a[2][2] - a[1][2] * a[2][1]) -
+    a[0][1] * (a[1][0] * a[2][2] - a[1][2] * a[2][0]) +
+    a[0][2] * (a[1][0] * a[2][1] - a[1][1] * a[2][0]);
+  if (!Number.isFinite(det) || Math.abs(det) < 1e-20) return null;
+  const inv = 1 / det;
+  const det3 = (
+    c0: number[], c1: number[], c2: number[],
+  ): number =>
+    c0[0] * (c1[1] * c2[2] - c1[2] * c2[1]) -
+    c0[1] * (c1[0] * c2[2] - c1[2] * c2[0]) +
+    c0[2] * (c1[0] * c2[1] - c1[1] * c2[0]);
+  const col0 = [a[0][0], a[1][0], a[2][0]];
+  const col1 = [a[0][1], a[1][1], a[2][1]];
+  const col2 = [a[0][2], a[1][2], a[2][2]];
+  const x = det3(b, col1, col2) * inv;
+  const y = det3(col0, b, col2) * inv;
+  const z = det3(col0, col1, b) * inv;
+  return [x, y, z];
+}
+
 export function createThreeBuildingsLayer(): CustomLayerInterface {
   let renderer: THREE.WebGLRenderer | null = null;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
-  const fog = new THREE.FogExp2(DAY.fog, DAY.fogDensity);
-  scene.fog = fog;
 
   const ambient = new THREE.AmbientLight(DAY.ambient, DAY.ambientI);
   const sun = new THREE.DirectionalLight(DAY.sun, DAY.sunI);
@@ -160,6 +207,39 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     emissive: 0x0b0d12,
     emissiveIntensity: 0.15,
   });
+  // We don't use scene.fog — its factor is view-space depth, but we drive
+  // the whole placement through camera.projectionMatrix with no real view
+  // matrix, so that depth would be the local N/S axis, not distance from the
+  // eye. Instead inject a TRUE-distance linear fog: distance from the real
+  // camera position (fed in as u_camLocal each frame) to each fragment, then
+  // mix toward the mist colour between fogNear and fogFar. RGB-only mix keeps
+  // the mesh opaque, so far buildings become the mist colour (silhouettes
+  // dissolving into the horizon haze) with no transparency-sorting issues.
+  material.fog = false;
+  const fogUniforms = {
+    u_camLocal: { value: new THREE.Vector3() },
+    u_fogColor: { value: new THREE.Color(DAY.fog) },
+    u_fogNear: { value: DAY.fogNear },
+    u_fogFar: { value: DAY.fogFar },
+  };
+  material.onBeforeCompile = (shader) => {
+    shader.uniforms.u_camLocal = fogUniforms.u_camLocal;
+    shader.uniforms.u_fogColor = fogUniforms.u_fogColor;
+    shader.uniforms.u_fogNear = fogUniforms.u_fogNear;
+    shader.uniforms.u_fogFar = fogUniforms.u_fogFar;
+    shader.vertexShader =
+      'varying vec3 vLocalPos;\n' +
+      shader.vertexShader.replace(
+        '#include <begin_vertex>',
+        '#include <begin_vertex>\n  vLocalPos = position;',
+      );
+    shader.fragmentShader =
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogFar;\nvarying vec3 vLocalPos;\n' +
+      shader.fragmentShader.replace(
+        '#include <dithering_fragment>',
+        '#include <dithering_fragment>\n  float _fd = length(vLocalPos - u_camLocal);\n  float _f = smoothstep(u_fogNear, u_fogFar, _fd);\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
+      );
+  };
 
   let mesh: THREE.Mesh | null = null;
   let mapRef: MlMap | null = null;
@@ -344,23 +424,37 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     ) {
       if (!renderer || !mesh) return;
       try {
-        // Day/night follows sniff mode — swap fog, light + material tones.
+        // Day/night follows sniff mode — swap mist, light + material tones.
         const sniff = useGameStore.getState().sniffMode;
         const tone = sniff ? NIGHT : DAY;
-        fog.color.setHex(tone.fog);
-        fog.density = tone.fogDensity;
+        fogUniforms.u_fogColor.value.setHex(tone.fog);
+        fogUniforms.u_fogNear.value = tone.fogNear;
+        fogUniforms.u_fogFar.value = tone.fogFar;
         ambient.color.setHex(tone.ambient);
         ambient.intensity = tone.ambientI;
         sun.color.setHex(tone.sun);
         sun.intensity = tone.sunI;
         material.color.setHex(tone.building);
 
+        const mmArr = Array.from(args.defaultProjectionData.mainMatrix);
+
+        // Feed the TRUE camera position (mercator → local metres, matching
+        // the mesh's frame) so the distance-fog wall is measured from the
+        // eye — it then reveals/hides buildings correctly as you pan AND
+        // rotate, not just when facing north.
+        const eye = eyeFromMainMatrix(mmArr);
+        if (eye) {
+          fogUniforms.u_camLocal.value.set(
+            (eye[0] - originX) / mPerUnit, // east
+            (eye[2] - originZ) / mPerUnit, // up
+            (eye[1] - originY) / mPerUnit, // south
+          );
+        }
+
         // mainMatrix maps mercator → clip; L places our local-metre,
         // Y-up scene into mercator (translate origin, flip Y for mercator's
         // south-positive axis, rotate Y-up → mercator Z-up).
-        const m = new THREE.Matrix4().fromArray(
-          Array.from(args.defaultProjectionData.mainMatrix),
-        );
+        const m = new THREE.Matrix4().fromArray(mmArr);
         const l = new THREE.Matrix4()
           .makeTranslation(originX, originY, originZ)
           .multiply(
