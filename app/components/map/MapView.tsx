@@ -203,6 +203,7 @@ export default function MapViewWeb() {
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
   const sniffMode = useGameStore((s) => s.sniffMode);
+  const deepFog = useGameStore((s) => s.deepFog);
   // The chip pop animations should ONLY play during the brief window
   // around an actual sniff-mode toggle. Without this, two leaks happen:
   //
@@ -1166,7 +1167,7 @@ export default function MapViewWeb() {
         });
         mapRef.current = map;
         map.on('style.load', () => {
-          applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
+          applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang, deepFog);
           syncStreetLabels();
           // Real depth fog (custom WebGL layer) on top of the canvas —
           // fogs the city by true distance so the far view dissolves into
@@ -1257,14 +1258,14 @@ export default function MapViewWeb() {
     const map = mapRef.current;
     if (!map) return;
     if (!map.isStyleLoaded()) return;
-    // Re-apply when sniff palette OR language changes — the override
-    // sets both paint colours AND text-field language, so a lang flip
-    // from the profile toggle re-localises street/place labels live.
-    applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
+    // Re-apply when sniff palette, language, OR the deep-fog profile
+    // changes — the override sets paint colours (incl. building tint + sky)
+    // and text-field language.
+    applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang, deepFog);
     // applyCrayonOverride resets transportation_name visibility to
     // 'visible', so re-apply the pitch-based hide right after.
     syncStreetLabels();
-  }, [sniffMode, lang, syncStreetLabels]);
+  }, [sniffMode, lang, deepFog, syncStreetLabels]);
 
   // Off-screen lost-pet edge-chip layout. Memoised so the per-pet
   // ray-cast / spread pass doesn't re-run on every companion lerp

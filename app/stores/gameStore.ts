@@ -161,6 +161,10 @@ interface GameState {
   // about pets, not places); toggling off restores the prior state.
   sniffMode: boolean;
   spotsVisibleBeforeSniff: boolean | null;
+  // Experimental "deep atmosphere" fog profile — saturated blue-teal
+  // distance fog + dark silhouette buildings (the underwater/diorama look).
+  // A comparison toggle for now.
+  deepFog: boolean;
   // About sheet open state — promoted from MapScreen-local state so
   // the radial menu (a child of MapView) can trigger it via the new
   // "?" button. MapScreen still hosts the modal so the dashboard tab
@@ -261,6 +265,7 @@ interface GameState {
   setSpotsVisible: (visible: boolean) => void;
   setSniffMode: (on: boolean) => void;
   toggleSniffMode: () => void;
+  toggleDeepFog: () => void;
   setAboutOpen: (open: boolean) => void;
   setActiveHint: (id: string | null) => void;
   setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
@@ -337,6 +342,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   spotsVisible: false,
   sniffMode: false,
   spotsVisibleBeforeSniff: null,
+  deepFog: false,
   aboutOpen: false,
   activeHint: null,
   menuCamera: null,
@@ -822,6 +828,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         spotsVisible: false,
       };
     }),
+  toggleDeepFog: () => set((s) => ({ deepFog: !s.deepFog })),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setActiveHint: (activeHint) => set({ activeHint }),
   setMenuCamera: (menuCamera) => set({ menuCamera }),

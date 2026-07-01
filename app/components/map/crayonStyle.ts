@@ -310,11 +310,19 @@ function clear(map: maplibregl.Map, id: string, prop: string) {
 // building outlines).
 // ---------------------------------------------------------------------
 
+// "Deep atmosphere" overrides — dark blue-teal building silhouettes and a
+// blue sky dome to match the DEEP fog profile (see fogLayer.ts).
+const DEEP_BUILDING = '#123945';
+const DEEP_SKY = { skyColor: '#3a78a6', horizonColor: '#5ea2ce', fogColor: '#6cb0d8' };
+
 export function applyCrayonOverride(
   map: maplibregl.Map,
   palette: Palette,
   lang: 'uk' | 'en' = 'uk',
+  deep = false,
 ): void {
+  const buildingColor = deep ? DEEP_BUILDING : palette.paper;
+  const skyTones = deep ? DEEP_SKY : palette.sky;
   addImg(map, 'crayon-park', parkPattern(palette), 1);
   addImg(map, 'crayon-water', waterPattern(palette), 1);
   addImg(map, 'crayon-road', roadPattern(palette), 1);
@@ -326,14 +334,14 @@ export function applyCrayonOverride(
   // zoomed out and eases it back as you zoom in close.
   if (typeof map.setSky === 'function') {
     map.setSky({
-      'sky-color': palette.sky.skyColor,
+      'sky-color': skyTones.skyColor,
       // Soft, wide blends so the horizon is a broad fogged band rather
       // than a hard line — sky melts gradually into a tall haze that the
       // distant city dissolves into.
       'sky-horizon-blend': 0.9,
-      'horizon-color': palette.sky.horizonColor,
+      'horizon-color': skyTones.horizonColor,
       'horizon-fog-blend': 0.5,
-      'fog-color': palette.sky.fogColor,
+      'fog-color': skyTones.fogColor,
       // Fog rises high from the ground so the far field is swallowed well
       // before the true horizon — "limits" how far you read into depth.
       'fog-ground-blend': 0.9,
@@ -409,11 +417,11 @@ export function applyCrayonOverride(
     if (sl === 'building') {
       if (type === 'fill') {
         clear(map, id, 'fill-pattern');
-        map.setPaintProperty(id, 'fill-color', palette.paper);
+        map.setPaintProperty(id, 'fill-color', buildingColor);
         map.setPaintProperty(id, 'fill-opacity', 1);
       } else if (type === 'fill-extrusion') {
         clear(map, id, 'fill-extrusion-pattern');
-        map.setPaintProperty(id, 'fill-extrusion-color', palette.paper);
+        map.setPaintProperty(id, 'fill-extrusion-color', buildingColor);
         // Fully opaque so nothing shows through to grey them; the built-in
         // vertical gradient still gives walls their depth shading.
         map.setPaintProperty(id, 'fill-extrusion-opacity', 1);
