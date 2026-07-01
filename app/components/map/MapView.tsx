@@ -1136,7 +1136,7 @@ export default function MapViewWeb() {
           // FogCurtain overlay (pitch-driven) paints atmosphere over that
           // band to hide the distance. Default maxPitch is 60, so it must
           // be raised for 70 to take effect at all.
-          pitch: 70,
+          pitch: 80,
           maxPitch: 80,
           // Drop both attribution branding + the MapLibre wordmark
           // logo. Tile/data attribution is a legal requirement for

@@ -40,6 +40,8 @@ export const balance = {
   subMenuRadius: 124,
   mapZoomMin: 12,
   mapZoomMax: 19,
-  mapZoomDefault: 17,
+  // Closer default so the app opens right down in the 3D city (paired
+  // with the steep default pitch below).
+  mapZoomDefault: 17.5,
   gpsCircleRadius: 60,
 } as const;

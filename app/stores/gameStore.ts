@@ -332,11 +332,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   spotsLoading: false,
   spotsLoaded: false,
   selectedSpotId: null,
-  // Default ON — smart per-category clustering keeps the map clean
-  // even with many spots loaded, and surfacing them by default makes
-  // the "walk to a place" flow discoverable. Users can still hide via
-  // the HUD toggle if they want a clean walking map.
-  spotsVisible: true,
+  // Default OFF — the app opens on a clean 3D city view; users turn the
+  // spots layer on via the HUD pin toggle (there's a one-shot hint for it).
+  spotsVisible: false,
   sniffMode: false,
   spotsVisibleBeforeSniff: null,
   aboutOpen: false,
