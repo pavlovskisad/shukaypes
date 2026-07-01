@@ -1164,12 +1164,11 @@ export default function MapViewWeb() {
           maxZoom: balance.mapZoomMax,
           maxBounds: MAP_MAX_BOUNDS,
           // Game-camera tilt: a 3D world you look across, not a flat map.
-          // Opens at 68° — steep enough for real depth + a low horizon, but
-          // tilted down enough that the plaza/foreground reads clearly (the
-          // "hero" starting framing) rather than the near-horizontal 80° view
-          // that was mostly building-sides + sky. Users can still tilt up to
-          // maxPitch 80. (Default maxPitch is 60, so it must be raised.)
-          pitch: 68,
+          // Opens at 74° — steep for real depth + a low horizon with plenty of
+          // far city, while still tilted enough that the plaza/foreground
+          // reads (the "hero" framing). Users can still tilt up to maxPitch
+          // 80. (Default maxPitch is 60, so it must be raised.)
+          pitch: 74,
           maxPitch: 80,
           // Drop both attribution branding + the MapLibre wordmark
           // logo. Tile/data attribution is a legal requirement for
@@ -1382,7 +1381,11 @@ export default function MapViewWeb() {
     // catches the tap. Just enough top inset to clear the iPhone
     // dynamic island / status bar.
     const topReserve = 0.02;
-    const bottomReserve = 0.10;
+    // In sniff mode the dashboard (tab bar) is hidden, so the locate chips get
+    // the full screen height — drop the bottom reserve to the same small edge
+    // inset as the top. (Outside sniff — the brief toggle-off window — keep the
+    // reserve that clears the returning tab bar.)
+    const bottomReserve = sniffMode ? 0.02 : 0.10;
     const chipHalfPct = 0.04;
     const SPACING_ALONG = 0.12;
     // Used to be 0.18 to dodge the corner logo. Dropped to a small

@@ -478,6 +478,21 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     }
   };
 
+  // Far building tiles stream in over time (especially the distance at a
+  // steep pitch). The idle rebuild is gated on camera movement, so tiles that
+  // arrive AFTER the first build wouldn't be added until a pan — the far city
+  // "pops in" late. Rebuild (debounced) whenever the building source finishes
+  // loading new tiles, so the far skyline fills in from the start.
+  let tileRebuildTimer: ReturnType<typeof setTimeout> | null = null;
+  const onSourceData = (e: { sourceId?: string; isSourceLoaded?: boolean }) => {
+    if (e.sourceId !== SOURCE_ID || !e.isSourceLoaded) return;
+    if (tileRebuildTimer) return; // one pending rebuild at a time
+    tileRebuildTimer = setTimeout(() => {
+      tileRebuildTimer = null;
+      rebuild();
+    }, 350);
+  };
+
   const maybeRebuild = () => {
     const map = mapRef;
     if (!map) return;
@@ -508,13 +523,22 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         antialias: true,
       });
       renderer.autoClear = false;
-      // Rebuild the extruded city whenever the map settles somewhere new.
+      // Rebuild the extruded city whenever the map settles somewhere new, and
+      // as far building tiles stream in (so the distance preloads from start).
       map.on('idle', maybeRebuild);
+      map.on('sourcedata', onSourceData);
     },
 
     onRemove() {
       const map = mapRef;
-      if (map) map.off('idle', maybeRebuild);
+      if (map) {
+        map.off('idle', maybeRebuild);
+        map.off('sourcedata', onSourceData);
+      }
+      if (tileRebuildTimer) {
+        clearTimeout(tileRebuildTimer);
+        tileRebuildTimer = null;
+      }
       if (mesh) {
         scene.remove(mesh);
         mesh.geometry.dispose();
