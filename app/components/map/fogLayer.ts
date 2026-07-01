@@ -119,11 +119,6 @@ interface FogTones {
   skyTop: [number, number, number]; // very top (deeper light blue)
   sun: [number, number, number];
   sunStrength: number;
-  // Peak fog opacity for this profile (overrides the layer default).
-  alpha?: number;
-  // Extra downward reach of the fog band (ndc) — negative pulls it lower,
-  // so the deep profile floods more of the scene.
-  yStartShift?: number;
 }
 const DAY: FogTones = {
   // Clean near-white (was a dirtier grey) so the haze brightens rather
@@ -140,17 +135,6 @@ const NIGHT: FogTones = {
   skyTop: [0.07, 0.1, 0.17],
   sun: [0.6, 0.71, 0.88],
   sunStrength: 0.35,
-};
-// "Deep atmosphere" — saturated blue-teal underwater/diorama distance fog
-// that floods lower and denser, with a cool light instead of a warm sun.
-const DEEP: FogTones = {
-  fog: [0.36, 0.63, 0.83],
-  sky: [0.42, 0.7, 0.9],
-  skyTop: [0.16, 0.46, 0.74],
-  sun: [0.75, 0.92, 1.0],
-  sunStrength: 0.35,
-  alpha: 0.99,
-  yStartShift: -0.35,
 };
 
 // Fixed world azimuth the sun "comes from" (deg, from north, clockwise).
@@ -258,8 +242,8 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         const pitchT = Math.max(0, Math.min(1, (pitch - minPitch) / (fullPitch - minPitch)));
         if (pitchT <= 0) return;
 
-        const { sniffMode: sniff, deepFog } = useGameStore.getState();
-        const tones = deepFog ? DEEP : sniff ? NIGHT : DAY;
+        const sniff = useGameStore.getState().sniffMode;
+        const tones = sniff ? NIGHT : DAY;
 
         // Anchor particles to the map so they drift with panning rather than
         // sticking to the screen. Project the map centre to pixels.
@@ -291,9 +275,9 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         const sunY = 0.7 + Math.max(0, Math.min(0.18, (pitch - 50) * 0.004));
         gl.uniform2f(uSunPos, sunX, sunY);
         gl.uniform1f(uSunStrength, tones.sunStrength * vis);
-        gl.uniform1f(uYStart, yStart + (tones.yStartShift ?? 0));
+        gl.uniform1f(uYStart, yStart);
         gl.uniform1f(uYEnd, yEnd);
-        gl.uniform1f(uMaxAlpha, (tones.alpha ?? maxAlpha) * pitchT);
+        gl.uniform1f(uMaxAlpha, maxAlpha * pitchT);
         gl.uniform1f(uParticle, particle * dpr);
         gl.uniform1f(uNoiseAmt, noiseAmt);
         gl.uniform2f(uOffset, offX, offY);

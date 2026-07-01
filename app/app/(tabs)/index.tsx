@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from '../../components/map';
 import { StatusBar, PillPulseRing } from '../../components/ui/StatusBar';
@@ -31,9 +31,6 @@ export default function MapScreen() {
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const sniffMode = useGameStore((s) => s.sniffMode);
   const toggleSniffMode = useGameStore((s) => s.toggleSniffMode);
-  // Experimental deep-atmosphere fog profile — comparison toggle.
-  const deepFog = useGameStore((s) => s.deepFog);
-  const toggleDeepFog = useGameStore((s) => s.toggleDeepFog);
   // When the super-sniff hint is showing (the dog is calling the user
   // to try it), pulse the logo so the spoken line has a target. The
   // hint visibility is computed in the Companion and published to the
@@ -194,22 +191,6 @@ export default function MapScreen() {
           </div>
         </View>
       </SafeAreaView>
-      {/* Experimental deep-atmosphere fog toggle — floating pill on the
-          right edge so it's easy to flip and compare against the clear
-          look. Temporary while we evaluate the effect. */}
-      <Pressable
-        onPress={toggleDeepFog}
-        onPressIn={popPressableEvent}
-        accessibilityRole="switch"
-        accessibilityState={{ checked: deepFog }}
-        accessibilityLabel="toggle deep atmosphere fog"
-        style={styles.fogToggle}
-      >
-        <Text style={[styles.fogToggleText, deepFog && styles.fogToggleTextOn]}>
-          🌫
-        </Text>
-        {deepFog ? <View style={styles.fogToggleDot} /> : null}
-      </Pressable>
       <AboutModal open={aboutOpen} onClose={handleAboutClose} />
     </View>
   );
@@ -250,34 +231,5 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     marginTop: S.s,
     paddingHorizontal: S.m,
-  },
-  // Temporary floating toggle for the deep-atmosphere fog experiment.
-  fogToggle: {
-    position: 'absolute',
-    right: S.m,
-    top: 118,
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 5,
-    zIndex: Z.HUD_PILLS,
-  },
-  fogToggleText: { fontSize: 22, opacity: 0.45 },
-  fogToggleTextOn: { opacity: 1 },
-  fogToggleDot: {
-    position: 'absolute',
-    top: 6,
-    right: 6,
-    width: 8,
-    height: 8,
-    borderRadius: 4,
-    backgroundColor: 'rgb(0,60,255)',
   },
 });
