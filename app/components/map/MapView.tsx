@@ -1203,37 +1203,47 @@ export default function MapViewWeb() {
         map.on('style.load', () => {
           applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
           syncStreetLabels();
+          // The game render (Three.js buildings + one unified mist) needs
+          // WebGL2, so it can fail on old devices. We build it defensively:
+          // add both custom layers FIRST and only hide MapLibre's own
+          // buildings once they're in — if anything throws we tear the
+          // partial state down and fall back to the classic screen-space fog
+          // with MapLibre's buildings intact, so prod never shows a city with
+          // no buildings. Order: ground-fog UNDER buildings UNDER labels.
+          let gameOk = false;
           if (GAME_RENDER) {
-            // Tier-2 experiment: swap MapLibre's flat extrusions for real
-            // Three.js buildings, and fog the whole world with ONE mist.
-            // Order matters: the ground-fog layer goes UNDER the buildings so
-            // buildings paint over it with their own (matching) fog — no
-            // double-fogging — and the map's ground pixels get fogged by true
-            // distance here. No separate screen haze: ground fog draws the
-            // sky + horizon too.
-            hideMapLibreBuildings(map);
-            // Insert both custom layers BELOW the labels so place names stay
-            // on top of the 3D city (ground fog first, then buildings above
-            // it, then the label symbols above both).
-            const beforeId = firstSymbolLayerId(map);
-            if (!map.getLayer(GROUND_FOG_LAYER_ID)) {
-              try {
+            try {
+              const beforeId = firstSymbolLayerId(map);
+              if (!map.getLayer(GROUND_FOG_LAYER_ID)) {
                 map.addLayer(createGroundFogLayer(), beforeId);
-              } catch (e) {
-                // eslint-disable-next-line no-console
-                console.error('[ground-fog] addLayer failed', e);
               }
-            }
-            if (!map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
-              try {
+              if (!map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
                 map.addLayer(createThreeBuildingsLayer(), beforeId);
-              } catch (e) {
-                // eslint-disable-next-line no-console
-                console.error('[three-buildings] addLayer failed', e);
+              }
+              hideMapLibreBuildings(map);
+              gameOk = true;
+            } catch (e) {
+              // eslint-disable-next-line no-console
+              console.error('[game-render] init failed — falling back to classic render', e);
+              try {
+                if (map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
+                  map.removeLayer(THREE_BUILDINGS_LAYER_ID);
+                }
+              } catch {
+                /* ignore */
+              }
+              try {
+                if (map.getLayer(GROUND_FOG_LAYER_ID)) {
+                  map.removeLayer(GROUND_FOG_LAYER_ID);
+                }
+              } catch {
+                /* ignore */
               }
             }
-          } else if (!map.getLayer(DEPTH_FOG_LAYER_ID)) {
-            // Production render: the screen-space depth fog.
+          }
+          // Classic render (prod default OR game-render fallback): the
+          // screen-space depth fog over MapLibre's own buildings.
+          if (!gameOk && !map.getLayer(DEPTH_FOG_LAYER_ID)) {
             try {
               map.addLayer(createDepthFogLayer());
             } catch (e) {
@@ -1327,8 +1337,13 @@ export default function MapViewWeb() {
     // 'visible', so re-apply the pitch-based hide right after.
     syncStreetLabels();
     // …and it re-opacities the fill-extrusion buildings; keep them hidden
-    // so the Three.js city stays the sole building treatment.
-    if (GAME_RENDER) hideMapLibreBuildings(map);
+    // so the Three.js city stays the sole building treatment — but only when
+    // the game render actually initialised (the Three layer is present).
+    // On a WebGL2-fallback session there's no Three layer, so we must NOT
+    // hide MapLibre's buildings or we'd be left with none.
+    if (GAME_RENDER && map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
+      hideMapLibreBuildings(map);
+    }
   }, [sniffMode, lang, syncStreetLabels]);
 
   // Off-screen lost-pet edge-chip layout. Memoised so the per-pet
