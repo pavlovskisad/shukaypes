@@ -108,6 +108,15 @@ export const SUN_AZIMUTH = 125;
 export const MIST_TOP = 42;
 export const POOL_STRENGTH = 0.9;
 
+// Clear "bubble" around the focus (map centre / dog), in world metres. The
+// fog is multiplied by a mask that keeps everything within CLEAR_RADIUS of
+// the focus crisp, fading to full fog over CLEAR_BAND beyond it. Because the
+// radius is in metres, zooming in covers most of the view (no visible
+// change) while zooming out — which lifts the camera far from the ground and
+// would otherwise fog everything — still preserves the dog's neighbourhood.
+export const CLEAR_RADIUS = 300;
+export const CLEAR_BAND = 380;
+
 type LngLat = [number, number];
 
 // Project a lng/lat to local metres (x=east, y=north) around an origin.
@@ -232,12 +241,19 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     u_fogColor: { value: new THREE.Color(DAY.fog) },
     u_fogNear: { value: DAY.fogNear },
     u_fogDensity: { value: DAY.fogDensity },
+    // Focus (map centre / dog) in local metres — only .xz (east/south) used.
+    u_focusLocal: { value: new THREE.Vector3() },
+    u_clearRadius: { value: CLEAR_RADIUS },
+    u_clearBand: { value: CLEAR_BAND },
   };
   material.onBeforeCompile = (shader) => {
     shader.uniforms.u_camLocal = fogUniforms.u_camLocal;
     shader.uniforms.u_fogColor = fogUniforms.u_fogColor;
     shader.uniforms.u_fogNear = fogUniforms.u_fogNear;
     shader.uniforms.u_fogDensity = fogUniforms.u_fogDensity;
+    shader.uniforms.u_focusLocal = fogUniforms.u_focusLocal;
+    shader.uniforms.u_clearRadius = fogUniforms.u_clearRadius;
+    shader.uniforms.u_clearBand = fogUniforms.u_clearBand;
     shader.vertexShader =
       'varying vec3 vLocalPos;\n' +
       shader.vertexShader.replace(
@@ -245,7 +261,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         '#include <begin_vertex>\n  vLocalPos = position;',
       );
     shader.fragmentShader =
-      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nvarying vec3 vLocalPos;\n' +
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nvarying vec3 vLocalPos;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         [
@@ -259,6 +275,11 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
           `  float _pool = 1.0 - smoothstep(0.0, ${MIST_TOP.toFixed(1)}, vLocalPos.y);`,
           '  _pool *= smoothstep(u_fogNear * 0.55, u_fogNear * 1.05, _dist);',
           `  float _f = clamp(max(_distFog, _pool * ${POOL_STRENGTH.toFixed(2)}), 0.0, 1.0);`,
+          // Clear bubble around the focus — keeps the dog's neighbourhood crisp
+          // regardless of zoom (horizontal distance, so tall near buildings
+          // stay fully clear).
+          '  float _fd = length(vLocalPos.xz - u_focusLocal.xz);',
+          '  _f *= smoothstep(u_clearRadius, u_clearRadius + u_clearBand, _fd);',
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
         ].join('\n'),
       );
@@ -515,6 +536,19 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
             (eye[0] - originX) / mPerUnit, // east
             (eye[2] - originZ) / mPerUnit, // up
             (eye[1] - originY) / mPerUnit, // south
+          );
+        }
+
+        // Focus (current map centre) in the mesh's local frame — the clear
+        // bubble follows what the camera is looking at, so the dog's
+        // neighbourhood stays crisp even zoomed out.
+        if (mapRef) {
+          const fc = mapRef.getCenter();
+          const fm = MercatorCoordinate.fromLngLat([fc.lng, fc.lat], 0);
+          fogUniforms.u_focusLocal.value.set(
+            (fm.x - originX) / mPerUnit, // east
+            0,
+            (fm.y - originY) / mPerUnit, // south
           );
         }
 

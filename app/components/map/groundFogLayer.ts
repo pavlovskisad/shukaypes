@@ -30,6 +30,8 @@ import {
   NIGHT,
   POOL_STRENGTH,
   SUN_AZIMUTH,
+  CLEAR_RADIUS,
+  CLEAR_BAND,
   eyeFromMainMatrix,
 } from './threeBuildingsLayer';
 
@@ -92,6 +94,9 @@ uniform float u_fogNear;
 uniform float u_fogDensity;
 uniform vec3 u_fogColor;
 uniform float u_poolStrength;
+uniform vec3 u_focusMerc;   // map centre (dog) in mercator; .xy horizontal
+uniform float u_clearRadius;
+uniform float u_clearBand;
 uniform vec3 u_skyTop;
 uniform vec3 u_skyHorizon;
 uniform vec3 u_sunColor;
@@ -128,6 +133,10 @@ void main() {
   // distance so the near foreground stays crisp.
   float pool = smoothstep(u_fogNear * 0.55, u_fogNear * 1.05, distM) * u_poolStrength;
   float f = clamp(max(distFog, pool), 0.0, 1.0);
+  // Clear bubble around the focus (dog) — keeps its neighbourhood crisp at
+  // any zoom (horizontal ground distance to the map centre).
+  float dFocus = length(hit.xy - u_focusMerc.xy) / u_mPerM;
+  f *= smoothstep(u_clearRadius, u_clearRadius + u_clearBand, dFocus);
   // As it saturates, the ground melts into the sky colour so the far ground
   // meets the sky with no seam.
   vec3 col = mix(u_fogColor, skyCol, smoothstep(0.85, 1.0, f));
@@ -183,7 +192,8 @@ export function createGroundFogLayer(): CustomLayerInterface {
       aPos = gl.getAttribLocation(prog, 'a_pos');
       for (const name of [
         'u_invVP', 'u_camMerc', 'u_mPerM', 'u_fogNear', 'u_fogDensity',
-        'u_fogColor', 'u_poolStrength', 'u_skyTop', 'u_skyHorizon',
+        'u_fogColor', 'u_poolStrength', 'u_focusMerc', 'u_clearRadius',
+        'u_clearBand', 'u_skyTop', 'u_skyHorizon',
         'u_sunColor', 'u_sunStrength', 'u_sunPos',
       ]) {
         u[name] = gl.getUniformLocation(prog, name);
@@ -218,10 +228,8 @@ export function createGroundFogLayer(): CustomLayerInterface {
         if (!eye) return;
 
         const c = map.getCenter();
-        const mPerM = MercatorCoordinate.fromLngLat(
-          [c.lng, c.lat],
-          0,
-        ).meterInMercatorCoordinateUnits();
+        const focus = MercatorCoordinate.fromLngLat([c.lng, c.lat], 0);
+        const mPerM = focus.meterInMercatorCoordinateUnits();
 
         // Directional sun position, derived from bearing/pitch (matches
         // fogLayer so the glow slides with the camera).
@@ -242,6 +250,9 @@ export function createGroundFogLayer(): CustomLayerInterface {
         gl.uniform1f(u.u_fogDensity, tone.fogDensity);
         gl.uniform3f(u.u_fogColor, tone.fog[0], tone.fog[1], tone.fog[2]);
         gl.uniform1f(u.u_poolStrength, POOL_STRENGTH);
+        gl.uniform3f(u.u_focusMerc, focus.x, focus.y, focus.z);
+        gl.uniform1f(u.u_clearRadius, CLEAR_RADIUS);
+        gl.uniform1f(u.u_clearBand, CLEAR_BAND);
         gl.uniform3f(u.u_skyTop, tone.skyTop[0], tone.skyTop[1], tone.skyTop[2]);
         gl.uniform3f(
           u.u_skyHorizon,
