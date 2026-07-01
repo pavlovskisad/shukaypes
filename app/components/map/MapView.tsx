@@ -123,6 +123,17 @@ function mapPulseRing(delaySec: number): CSSProperties {
   };
 }
 
+// Experiment (GAME_RENDER): the id of the first symbol (label) layer, so we
+// can insert the 3D buildings + ground fog BELOW the labels. Without this the
+// custom layers append on top and the 3D buildings occlude place names
+// ("signs sitting under the buildings").
+function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
+  for (const l of map.getStyle().layers ?? []) {
+    if (l.type === 'symbol') return l.id;
+  }
+  return undefined;
+}
+
 // Experiment (GAME_RENDER): hide MapLibre's own flat fill-extrusion
 // buildings so the Three.js extruded city owns the building volumes. Called
 // after every crayon override (which re-shows / re-opacities them).
@@ -1201,9 +1212,13 @@ export default function MapViewWeb() {
             // distance here. No separate screen haze: ground fog draws the
             // sky + horizon too.
             hideMapLibreBuildings(map);
+            // Insert both custom layers BELOW the labels so place names stay
+            // on top of the 3D city (ground fog first, then buildings above
+            // it, then the label symbols above both).
+            const beforeId = firstSymbolLayerId(map);
             if (!map.getLayer(GROUND_FOG_LAYER_ID)) {
               try {
-                map.addLayer(createGroundFogLayer());
+                map.addLayer(createGroundFogLayer(), beforeId);
               } catch (e) {
                 // eslint-disable-next-line no-console
                 console.error('[ground-fog] addLayer failed', e);
@@ -1211,7 +1226,7 @@ export default function MapViewWeb() {
             }
             if (!map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
               try {
-                map.addLayer(createThreeBuildingsLayer());
+                map.addLayer(createThreeBuildingsLayer(), beforeId);
               } catch (e) {
                 // eslint-disable-next-line no-console
                 console.error('[three-buildings] addLayer failed', e);

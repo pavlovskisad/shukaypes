@@ -117,6 +117,16 @@ export const POOL_STRENGTH = 0.9;
 export const CLEAR_RADIUS = 300;
 export const CLEAR_BAND = 380;
 
+// The clear bubble is a fixed world radius, but zooming out lifts the camera
+// far from the ground, so a fixed patch feels like a shrinking hole. Grow the
+// bubble as you zoom out (below the default zoom) so the clear island stays
+// proportional — gently (0.6 of the ~2×/level camera growth), capped at 8×.
+const ZOOM_REF = 17.5; // matches balance.mapZoomDefault
+export function clearBubbleForZoom(zoom: number): { radius: number; band: number } {
+  const factor = Math.pow(2, Math.min(Math.max(0, ZOOM_REF - zoom) * 0.6, 3));
+  return { radius: CLEAR_RADIUS * factor, band: CLEAR_BAND * factor };
+}
+
 type LngLat = [number, number];
 
 // Project a lng/lat to local metres (x=east, y=north) around an origin.
@@ -541,7 +551,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
 
         // Focus (current map centre) in the mesh's local frame — the clear
         // bubble follows what the camera is looking at, so the dog's
-        // neighbourhood stays crisp even zoomed out.
+        // neighbourhood stays crisp even zoomed out (and grows on zoom-out).
         if (mapRef) {
           const fc = mapRef.getCenter();
           const fm = MercatorCoordinate.fromLngLat([fc.lng, fc.lat], 0);
@@ -550,6 +560,9 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
             0,
             (fm.y - originY) / mPerUnit, // south
           );
+          const bubble = clearBubbleForZoom(mapRef.getZoom());
+          fogUniforms.u_clearRadius.value = bubble.radius;
+          fogUniforms.u_clearBand.value = bubble.band;
         }
 
         // mainMatrix maps mercator → clip; L places our local-metre,
