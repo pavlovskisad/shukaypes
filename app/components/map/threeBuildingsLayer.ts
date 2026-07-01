@@ -80,8 +80,10 @@ export const DAY: Tone = {
   fogDensity: 0.009,
   ambient: 0xdfe6f0,
   ambientI: 2.1,
-  sun: 0xfff3d8,
-  sunI: 2.6,
+  // A touch warmer/golden so the lit faces feel sun-warmed alongside the
+  // warm sky glow (kept subtle so white buildings don't go orange).
+  sun: 0xffe9c4,
+  sunI: 2.7,
 };
 export const NIGHT: Tone = {
   building: 0x20242c,
