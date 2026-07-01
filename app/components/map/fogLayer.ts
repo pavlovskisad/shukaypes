@@ -86,8 +86,8 @@ void main() {
   // px) so the polygons travel with the map as you pan/zoom — parallax,
   // not self-drift. Only a very slow cell morph keeps it alive.
   vec2 base = (gl_FragCoord.xy + u_offset) / u_particle;
-  vec2 drift = vec2(u_time * 0.004, u_time * -0.003);
-  float cell = voronoiFlat(base + drift, u_time * 0.08);
+  vec2 drift = vec2(u_time * 0.002, u_time * -0.0015);
+  float cell = voronoiFlat(base + drift, u_time * 0.04);
   float cloud = mix(1.0, 0.18 + 1.5 * cell, u_noiseAmt);
   // Colour: grey haze at the horizon transitioning to a very light blue
   // sky toward the very top.
@@ -170,9 +170,9 @@ interface FogOpts {
 export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   const yStart = opts.yStart ?? 0.12;
   const yEnd = opts.yEnd ?? 0.72;
-  const maxAlpha = opts.maxAlpha ?? 0.92;
-  const particle = opts.particle ?? 38;
-  const noiseAmt = opts.noiseAmt ?? 0.8;
+  const maxAlpha = opts.maxAlpha ?? 0.34;
+  const particle = opts.particle ?? 20;
+  const noiseAmt = opts.noiseAmt ?? 0.85;
   const minPitch = opts.minPitch ?? 42;
   const fullPitch = opts.fullPitch ?? 60;
 
@@ -264,7 +264,11 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         try {
           const m = MercatorCoordinate.fromLngLat(mapRef.getCenter());
           const zoom = mapRef.getZoom();
-          const worldPx = 512 * Math.pow(2, zoom) * dpr;
+          // Parallax at a FRACTION of world speed — the "air" drifts gently
+          // as you pan, like a distant atmospheric layer, instead of racing
+          // 1:1 with the ground.
+          const PARALLAX = 0.22;
+          const worldPx = 512 * Math.pow(2, zoom) * dpr * PARALLAX;
           const period = particle * dpr * 512;
           offX = (((m.x * worldPx) % period) + period) % period;
           offY = (((m.y * worldPx) % period) + period) % period;
