@@ -18,7 +18,6 @@ import type {
   CustomLayerInterface,
   CustomRenderMethodInput,
 } from 'maplibre-gl';
-import { MercatorCoordinate } from 'maplibre-gl';
 import { useGameStore } from '../../stores/gameStore';
 
 export const DEPTH_FOG_LAYER_ID = 'depth-fog';
@@ -36,7 +35,8 @@ const FRAG = `
 precision highp float;
 varying vec2 v_ndc;
 uniform vec3 u_fogColor;    // grey haze (horizon)
-uniform vec3 u_skyColor;    // very light blue (toward the top)
+uniform vec3 u_skyColor;    // light blue near the horizon
+uniform vec3 u_skyTop;      // slightly deeper light blue at the very top
 uniform vec3 u_sunColor;    // soft warm light
 uniform float u_sunStrength;
 uniform vec2 u_sunPos;      // sun centre in ndc (from camera bearing/pitch)
@@ -49,57 +49,45 @@ uniform vec2 u_offset;       // world-ish anchor offset (px) so particles
                              // drift with the map instead of sticking to glass
 uniform float u_time;        // seconds — animates the cloud body
 
-vec2 hash2(vec2 p) {
-  p = vec2(dot(p, vec2(127.1, 311.7)), dot(p, vec2(269.5, 183.3)));
-  return fract(sin(p) * 43758.5453);
+float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
+float vnoise(vec2 p) {
+  vec2 i = floor(p), f = fract(p);
+  vec2 u = f * f * (3.0 - 2.0 * f);
+  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
+             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
 }
-float cellHash(vec2 c) { return fract(sin(dot(c, vec2(12.9898, 78.233))) * 43758.5453); }
-// Flat-shaded Voronoi: every pixel takes the single value of its nearest
-// cell → hard polygonal facets (no smooth blur), echoing the low-poly map.
-// Cell centres orbit over time so the polygons morph/drift = a living,
-// granular fog rather than a frozen pattern.
-float voronoiFlat(vec2 x, float t) {
-  vec2 n = floor(x);
-  vec2 f = fract(x);
-  float md = 8.0;
-  vec2 mc = n;
-  for (int j = -1; j <= 1; j++) {
-    for (int i = -1; i <= 1; i++) {
-      vec2 g = vec2(float(i), float(j));
-      vec2 o = hash2(n + g);
-      o = 0.5 + 0.5 * sin(t + 6.2831853 * o);   // orbit the cell centre
-      vec2 r = g + o - f;
-      float d = dot(r, r);
-      if (d < md) { md = d; mc = n + g; }
-    }
-  }
-  return cellHash(mc);
+float fbm(vec2 p) {
+  return 0.58 * vnoise(p) + 0.30 * vnoise(p * 2.03 + 9.1) + 0.12 * vnoise(p * 4.11 + 23.7);
 }
 
 void main() {
   // Top-down gradient: 0 at the bottom (near) → 1 at the top (far).
   float g = smoothstep(u_yStart, u_yEnd, v_ndc.y);
-  // Polygonal granular particles. Coords ride the world offset (pan) plus a
-  // slow drift; each Voronoi cell is a flat density chunk → faceted fog
-  // that matches the 3D map's low-poly look.
-  // Coords are anchored to the WORLD (u_offset is the mercator position in
-  // px) so the polygons travel with the map as you pan/zoom — parallax,
-  // not self-drift. Only a very slow cell morph keeps it alive.
+  // Big, strong, LIVING particles. Base coords travel with the world as
+  // you pan (offset), then a slow drift + a domain-warp make the cloud
+  // forms churn and roll over time instead of sitting like a frozen
+  // overlay.
   vec2 base = (gl_FragCoord.xy + u_offset) / u_particle;
-  vec2 drift = vec2(u_time * 0.002, u_time * -0.0015);
-  float cell = voronoiFlat(base + drift, u_time * 0.04);
-  float cloud = mix(1.0, 0.18 + 1.5 * cell, u_noiseAmt);
-  // Colour: grey haze at the horizon transitioning to a very light blue
-  // sky toward the very top.
+  vec2 drift = vec2(u_time * 0.04, u_time * -0.026);
+  float wx = vnoise(base * 0.6 + vec2(0.0, u_time * 0.03));
+  float wy = vnoise(base * 0.6 + vec2(5.2, -u_time * 0.024));
+  vec2 warp = (vec2(wx, wy) - 0.5) * 1.25;
+  float n = fbm(base + drift + warp);
+  float cloud = mix(1.0, 0.25 + 1.3 * n, u_noiseAmt);
+  // Sky is itself a gentle gradient: pale light blue near the horizon
+  // deepening a touch toward the very top (not a flat blue). The grey haze
+  // then blends up into that sky.
+  vec3 skyCol = mix(u_skyColor, u_skyTop, smoothstep(0.3, 1.0, v_ndc.y));
   float skyMix = smoothstep(0.35, 0.98, v_ndc.y);
-  vec3 col = mix(u_fogColor, u_skyColor, skyMix);
-  // Soft directional sunlight — a wide, gentle warm glow whose centre
-  // moves with the camera (u_sunPos). Slightly elongated vertically so it
-  // reads as light coming in at an angle, not a flat blob.
+  vec3 col = mix(u_fogColor, skyCol, skyMix);
+  // Directional sunlight — a wide warm glow plus a brighter core so the sun
+  // reads as an active light. Centre moves with the camera (u_sunPos);
+  // slightly elongated so light comes in at an angle.
   vec2 sv = (v_ndc - u_sunPos) * vec2(1.0, 0.78);
   float sd = length(sv);
-  float sun = smoothstep(1.35, 0.0, sd);
-  sun *= sun;
+  float glow = smoothstep(1.5, 0.0, sd); glow *= glow;
+  float core = smoothstep(0.55, 0.0, sd); core *= core;
+  float sun = clamp(glow + core * 0.85, 0.0, 1.0);
   col = mix(col, u_sunColor, sun * u_sunStrength);
   float a = clamp(g * cloud, 0.0, 1.0) * u_maxAlpha;
   if (a <= 0.002) discard;
@@ -127,7 +115,8 @@ function compile(gl: GL, type: number, src: string): WebGLShader | null {
 // toward the top, and a soft sun-glow colour. Day vs sniff (night).
 interface FogTones {
   fog: [number, number, number];
-  sky: [number, number, number];
+  sky: [number, number, number];    // near horizon (paler)
+  skyTop: [number, number, number]; // very top (deeper light blue)
   sun: [number, number, number];
   sunStrength: number;
 }
@@ -135,15 +124,17 @@ const DAY: FogTones = {
   // Clean near-white (was a dirtier grey) so the haze brightens rather
   // than muddies the city.
   fog: [0.965, 0.97, 0.975],
-  sky: [0.85, 0.91, 0.99],
-  sun: [1.0, 0.96, 0.85],
-  sunStrength: 0.55,
+  sky: [0.89, 0.935, 0.99],
+  skyTop: [0.72, 0.84, 0.98],
+  sun: [1.0, 0.955, 0.83],
+  sunStrength: 0.85,
 };
 const NIGHT: FogTones = {
   fog: [0.17, 0.19, 0.22],
-  sky: [0.09, 0.12, 0.19],
-  sun: [0.55, 0.66, 0.82],
-  sunStrength: 0.2,
+  sky: [0.12, 0.15, 0.23],
+  skyTop: [0.07, 0.1, 0.17],
+  sun: [0.6, 0.71, 0.88],
+  sunStrength: 0.35,
 };
 
 // Fixed world azimuth the sun "comes from" (deg, from north, clockwise).
@@ -170,9 +161,9 @@ interface FogOpts {
 export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   const yStart = opts.yStart ?? 0.12;
   const yEnd = opts.yEnd ?? 0.72;
-  const maxAlpha = opts.maxAlpha ?? 0.22;
-  const particle = opts.particle ?? 4;
-  const noiseAmt = opts.noiseAmt ?? 0.85;
+  const maxAlpha = opts.maxAlpha ?? 0.92;
+  const particle = opts.particle ?? 120;
+  const noiseAmt = opts.noiseAmt ?? 0.8;
   const minPitch = opts.minPitch ?? 42;
   const fullPitch = opts.fullPitch ?? 60;
 
@@ -181,6 +172,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   let aPos = -1;
   let uColor: WebGLUniformLocation | null = null;
   let uSky: WebGLUniformLocation | null = null;
+  let uSkyTop: WebGLUniformLocation | null = null;
   let uSun: WebGLUniformLocation | null = null;
   let uSunStrength: WebGLUniformLocation | null = null;
   let uSunPos: WebGLUniformLocation | null = null;
@@ -222,6 +214,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
       aPos = gl.getAttribLocation(prog, 'a_pos');
       uColor = gl.getUniformLocation(prog, 'u_fogColor');
       uSky = gl.getUniformLocation(prog, 'u_skyColor');
+      uSkyTop = gl.getUniformLocation(prog, 'u_skyTop');
       uSun = gl.getUniformLocation(prog, 'u_sunColor');
       uSunStrength = gl.getUniformLocation(prog, 'u_sunStrength');
       uSunPos = gl.getUniformLocation(prog, 'u_sunPos');
@@ -255,23 +248,12 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         // Anchor particles to the map so they drift with panning rather than
         // sticking to the screen. Project the map centre to pixels.
         const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
-        // World anchor: the map centre's mercator position expressed in
-        // device px (worldSize = 512·2^zoom). As you pan, this tracks the
-        // ground 1:1 so the polygons travel WITH the world (parallax) and
-        // scale with zoom. Kept modulo a cell-aligned period so the value
-        // stays small enough for float precision (the rare wrap is far off).
         let offX = 0, offY = 0;
         try {
-          const m = MercatorCoordinate.fromLngLat(mapRef.getCenter());
-          const zoom = mapRef.getZoom();
-          // Parallax at a FRACTION of world speed — the "air" drifts gently
-          // as you pan, like a distant atmospheric layer, instead of racing
-          // 1:1 with the ground.
-          const PARALLAX = 0.01;
-          const worldPx = 512 * Math.pow(2, zoom) * dpr * PARALLAX;
-          const period = particle * dpr * 512;
-          offX = (((m.x * worldPx) % period) + period) % period;
-          offY = (((m.y * worldPx) % period) + period) % period;
+          const c = mapRef.getCenter();
+          const p = mapRef.project(c);
+          offX = -p.x * dpr;
+          offY = p.y * dpr;
         } catch {
           /* ignore */
         }
@@ -279,6 +261,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         gl.useProgram(program);
         gl.uniform3f(uColor, tones.fog[0], tones.fog[1], tones.fog[2]);
         gl.uniform3f(uSky, tones.sky[0], tones.sky[1], tones.sky[2]);
+        gl.uniform3f(uSkyTop, tones.skyTop[0], tones.skyTop[1], tones.skyTop[2]);
         gl.uniform3f(uSun, tones.sun[0], tones.sun[1], tones.sun[2]);
         // Directional sun: derive its on-screen spot from the camera so it
         // slides as you rotate and rises/falls as you tilt — and fades when
