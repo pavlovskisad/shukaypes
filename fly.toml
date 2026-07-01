@@ -14,6 +14,9 @@ primary_region = "fra"  # Frankfurt — low-latency for Kyiv users.
 [env]
   NODE_ENV = "production"
   PORT = "3000"
+  # Multiplayer bot walkers that populate the presence map for testing/tuning.
+  # 0 disables (real presence still works). Set to "0" before a real launch.
+  MULTIPLAYER_BOTS = "30"
 
 [http_service]
   internal_port = 3000
