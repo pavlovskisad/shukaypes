@@ -1216,7 +1216,7 @@ export default function MapViewWeb() {
               map.addLayer(
                 createDepthFogLayer(
                   GAME_RENDER
-                    ? { noiseAmt: 0, yStart: 0.55, yEnd: 0.95, maxAlpha: 0.9 }
+                    ? { noiseAmt: 0, yStart: 0.3, yEnd: 0.72, maxAlpha: 1.0 }
                     : {},
                 ),
               );

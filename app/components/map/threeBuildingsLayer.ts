@@ -60,12 +60,14 @@ const REBUILD_ZOOM_D = 0.6;
 interface Tone {
   building: number; // mesh base colour
   fog: number; // mist colour (matches the 2D horizon haze)
-  // Linear "mist wall" tied to TRUE distance from the camera (metres):
-  // everything nearer than fogNear is crisp, then it dissolves into the
-  // mist colour by fogFar. This is what makes distant buildings fade and
-  // near ones stay sharp — the wall reveals/hides as you walk.
+  // "Mist wall" tied to TRUE distance from the camera (metres). Everything
+  // nearer than fogNear is perfectly crisp; past it the mist thickens
+  // EXPONENTIALLY (1 - e^(-density·d)) so it goes to (near-)full over a
+  // short band — a concentrated wall. That density curve is what makes
+  // far buildings sit fully hidden and then emerge one-by-one / in groups
+  // as the camera moves them across the ramp.
   fogNear: number;
-  fogFar: number;
+  fogDensity: number;
   ambient: number; // fill light colour
   ambientI: number;
   sun: number; // directional light colour
@@ -73,9 +75,9 @@ interface Tone {
 }
 const DAY: Tone = {
   building: 0xf4f5f7,
-  fog: 0xe6eaee,
-  fogNear: 260,
-  fogFar: 1500,
+  fog: 0xedf0f3,
+  fogNear: 380,
+  fogDensity: 0.0055,
   ambient: 0xdfe6f0,
   ambientI: 2.1,
   sun: 0xfff3d8,
@@ -84,8 +86,8 @@ const DAY: Tone = {
 const NIGHT: Tone = {
   building: 0x20242c,
   fog: 0x2c3646,
-  fogNear: 210,
-  fogFar: 1150,
+  fogNear: 300,
+  fogDensity: 0.0065,
   ambient: 0x2a3550,
   ambientI: 1.6,
   sun: 0x9fb4d8,
@@ -220,13 +222,13 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     u_camLocal: { value: new THREE.Vector3() },
     u_fogColor: { value: new THREE.Color(DAY.fog) },
     u_fogNear: { value: DAY.fogNear },
-    u_fogFar: { value: DAY.fogFar },
+    u_fogDensity: { value: DAY.fogDensity },
   };
   material.onBeforeCompile = (shader) => {
     shader.uniforms.u_camLocal = fogUniforms.u_camLocal;
     shader.uniforms.u_fogColor = fogUniforms.u_fogColor;
     shader.uniforms.u_fogNear = fogUniforms.u_fogNear;
-    shader.uniforms.u_fogFar = fogUniforms.u_fogFar;
+    shader.uniforms.u_fogDensity = fogUniforms.u_fogDensity;
     shader.vertexShader =
       'varying vec3 vLocalPos;\n' +
       shader.vertexShader.replace(
@@ -234,10 +236,10 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         '#include <begin_vertex>\n  vLocalPos = position;',
       );
     shader.fragmentShader =
-      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogFar;\nvarying vec3 vLocalPos;\n' +
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nvarying vec3 vLocalPos;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
-        '#include <dithering_fragment>\n  float _fd = length(vLocalPos - u_camLocal);\n  float _f = smoothstep(u_fogNear, u_fogFar, _fd);\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
+        '#include <dithering_fragment>\n  float _fd = max(0.0, length(vLocalPos - u_camLocal) - u_fogNear);\n  float _f = clamp(1.0 - exp(-u_fogDensity * _fd), 0.0, 1.0);\n  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
       );
   };
 
@@ -429,7 +431,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         const tone = sniff ? NIGHT : DAY;
         fogUniforms.u_fogColor.value.setHex(tone.fog);
         fogUniforms.u_fogNear.value = tone.fogNear;
-        fogUniforms.u_fogFar.value = tone.fogFar;
+        fogUniforms.u_fogDensity.value = tone.fogDensity;
         ambient.color.setHex(tone.ambient);
         ambient.intensity = tone.ambientI;
         sun.color.setHex(tone.sun);
