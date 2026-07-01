@@ -9,6 +9,7 @@ import { Icon, type IconName } from '../../components/ui/Icon';
 import { pickBottomInset } from '../../services/telegram';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useStrings } from '../../i18n/useStrings';
+import { useGameStore } from '../../stores/gameStore';
 
 // Tab icons are pixel-art SVGs (see components/ui/Icon.tsx). Inactive
 // tabs read as desaturated/dimmed via a wrapper View — RN-Web passes
@@ -50,6 +51,11 @@ export default function TabsLayout() {
   // up by the same amount so it keeps its gap above the indicator. 0 in
   // browser / TG, where the root isn't extended.
   const pwaOvershoot = usePwaInsetOvershoot();
+  // Supersniff = the lost-dogs "locate" flow. Hide the dashboard (this floating
+  // tab bar) while it's active so the map + lost-pet chips get the full screen;
+  // it returns when sniff is toggled off (via the corner logo). Only ever on
+  // the map tab, so this doesn't strand navigation elsewhere.
+  const sniffMode = useGameStore((s) => s.sniffMode);
 
   return (
     <Tabs
@@ -69,6 +75,8 @@ export default function TabsLayout() {
         // of the app's chip / pill family. Shadow is now a soft
         // all-around lift instead of an upward-only top shadow.
         tabBarStyle: {
+          // Dashboard off during supersniff (fullscreen locate view).
+          display: sniffMode ? 'none' : 'flex',
           position: 'absolute',
           left: S.l,
           right: S.l,
