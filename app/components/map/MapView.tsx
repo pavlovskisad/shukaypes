@@ -1147,19 +1147,17 @@ export default function MapViewWeb() {
           attributionControl: false,
           // Drag-pan inertia tuning. The finger-follow phase is always
           // 1:1 — these only shape what happens after the user lifts.
-          // Linearity 0.6 (default 0.3) makes a flick carry farther and
-          // map distance more proportionally to release speed;
-          // deceleration 1300 (default 2500) lets the glide settle very
-          // gradually for a long, smooth slide; maxSpeed 2000 keeps fast
-          // flicks from clipping to an abrupt cap; quartic ease-out gives
-          // the tail an even softer landing than cubic. Net: pan feels
-          // like sliding a sheet of paper across a smooth desk rather
-          // than letting go of a rubber band.
+          // Linearity 0.7 (default 0.3) makes a flick carry farther and
+          // map distance more proportionally to release speed; deceleration
+          // 950 (default 2500) lets the glide settle very gradually for a
+          // long, smooth slide; maxSpeed 2600 keeps fast flicks from
+          // clipping; quintic ease-out gives an even softer, longer tail.
+          // Net: pan glides like a sheet on ice rather than a rubber band.
           dragPan: {
-            linearity: 0.6,
-            deceleration: 1300,
-            maxSpeed: 2000,
-            easing: (t: number) => 1 - Math.pow(1 - t, 4),
+            linearity: 0.7,
+            deceleration: 950,
+            maxSpeed: 2600,
+            easing: (t: number) => 1 - Math.pow(1 - t, 5),
           },
         });
         map.on('error', (e) => {
