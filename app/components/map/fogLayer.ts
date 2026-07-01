@@ -48,6 +48,8 @@ uniform float u_noiseAmt;    // 0..1 cloudiness
 uniform vec2 u_offset;       // world-ish anchor offset (px) so particles
                              // drift with the map instead of sticking to glass
 uniform float u_time;        // seconds — animates the cloud body
+uniform float u_horizonY;    // ndc.y of the horizon (pitch-driven)
+uniform float u_bandStrength; // 0..1 dense horizon-band amount (steep pitch)
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float vnoise(vec2 p) {
@@ -91,7 +93,14 @@ void main() {
   float core = smoothstep(0.55, 0.0, sd); core *= core;
   float sun = clamp(glow + core * 0.85, 0.0, 1.0);
   col = mix(col, u_sunColor, sun * u_sunStrength);
-  float a = clamp(g * cloud, 0.0, 1.0) * u_maxAlpha;
+  // Dense band anchored just below the horizon — that's the tile-limit
+  // zone (far ground with no buildings) at steep pitch. Solid (bypasses
+  // the cloud dips) so it reliably covers the bare band. As the camera
+  // tilts down the horizon rises off-screen and u_bandStrength fades, so
+  // the band "moves away / thins out" where the city then renders.
+  float band = smoothstep(u_horizonY - 0.42, u_horizonY - 0.04, v_ndc.y) * u_bandStrength;
+  float dens = max(g * cloud, band);
+  float a = clamp(dens, 0.0, 1.0) * u_maxAlpha;
   if (a <= 0.002) discard;
   gl_FragColor = vec4(col * a, a);   // premultiplied
 }
@@ -188,6 +197,8 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   let uNoiseAmt: WebGLUniformLocation | null = null;
   let uOffset: WebGLUniformLocation | null = null;
   let uTime: WebGLUniformLocation | null = null;
+  let uHorizonY: WebGLUniformLocation | null = null;
+  let uBandStrength: WebGLUniformLocation | null = null;
   const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
   // Throttle the self-driven animation to ~30fps — smooth enough for the
   // drifting clouds without forcing a full 60fps map repaint (battery).
@@ -230,6 +241,8 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
       uNoiseAmt = gl.getUniformLocation(prog, 'u_noiseAmt');
       uOffset = gl.getUniformLocation(prog, 'u_offset');
       uTime = gl.getUniformLocation(prog, 'u_time');
+      uHorizonY = gl.getUniformLocation(prog, 'u_horizonY');
+      uBandStrength = gl.getUniformLocation(prog, 'u_bandStrength');
       buffer = gl.createBuffer();
       gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
       gl.bufferData(
@@ -288,6 +301,15 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         gl.uniform2f(uOffset, offX, offY);
         const now = typeof performance !== 'undefined' ? performance.now() : 0;
         gl.uniform1f(uTime, (now - t0) / 1000);
+        // Horizon position (ndc.y) from pitch: a ground point at infinity
+        // sits (90-pitch)° above the optical axis; project that through the
+        // half-FOV. Feeds the dense tile-limit band, which only bites at
+        // steep pitch (fades out 80°→72°) and rises off-screen as you flatten.
+        const aboveDeg = 90 - pitch;
+        const horizonY = Math.tan((aboveDeg * Math.PI) / 180) / 0.3333;
+        const bandStrength = Math.max(0, Math.min(1, (pitch - 72) / 8));
+        gl.uniform1f(uHorizonY, horizonY);
+        gl.uniform1f(uBandStrength, bandStrength);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.enableVertexAttribArray(aPos);
