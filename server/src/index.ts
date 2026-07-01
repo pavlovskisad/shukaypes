@@ -25,6 +25,7 @@ import { startZoneExpansionCron } from './services/searchZoneExpansion.js';
 import { runMemoryCleanupOnce } from './services/memoryCleanup.js';
 import { startScrapeCron } from './services/scrape.js';
 import { startLostDogCleanupCron } from './services/lostDogCleanup.js';
+import { startMultiplayerCron } from './services/bots.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
 import { redis } from './db/redis.js';
@@ -101,6 +102,13 @@ async function main() {
   const stopScrape = startScrapeCron(app.log);
   const stopZoneExpansion = startZoneExpansionCron(app.log);
   const stopLostDogCleanup = startLostDogCleanupCron(app.log);
+  // Multiplayer presence maintenance: purge stale walkers, and (if
+  // MULTIPLAYER_BOTS>0) step + publish the bot walkers that populate the
+  // presence set. Purge-only when no bots, so real presence still works.
+  const stopMultiplayer = startMultiplayerCron(
+    app.log,
+    Number(process.env.MULTIPLAYER_BOTS ?? 0) || 0,
+  );
   // One-shot retrofit: strip transcript prefixes from any existing
   // memory notes written before PR #158 added the filter to new
   // writes. Fire-and-forget so it doesn't delay listen().
@@ -119,6 +127,7 @@ async function main() {
     stopScrape();
     stopZoneExpansion();
     stopLostDogCleanup();
+    stopMultiplayer();
     process.exit(1);
   }
 
@@ -127,6 +136,7 @@ async function main() {
     stopScrape();
     stopLostDogCleanup();
     stopZoneExpansion();
+    stopMultiplayer();
     await app.close();
     process.exit(0);
   };

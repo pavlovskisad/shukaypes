@@ -10,3 +10,9 @@
 // still handle the ground/horizon; this adds correct volumetric fog on the
 // buildings themselves — the one thing the 2D approximation can't do.
 export const GAME_RENDER = true;
+
+// Multiplayer presence: send `mp=1` on the map sync so the server tracks this
+// walker and returns nearby online players (real + bots), and render them as
+// other dogs on the map. Gated so prod clients (flag off) neither appear to
+// nor see other players until we ship it.
+export const MULTIPLAYER = true;

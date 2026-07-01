@@ -16,7 +16,13 @@ import {
   fetchNearbyLostDogs,
   fetchUserState,
 } from '../services/mapData.js';
+import { syncPresence } from '../services/presence.js';
 import type { LatLng } from '../utils/geo.js';
+
+// Server kill-switch for multiplayer presence. Off only if explicitly set to
+// 'off'; otherwise presence runs when the client opts in via `mp=1` (so prod
+// clients that don't send the flag neither appear to nor see other players).
+const MULTIPLAYER_ON = process.env.MULTIPLAYER !== 'off';
 
 interface SyncMapQuery {
   lat: string;
@@ -28,6 +34,9 @@ interface SyncMapQuery {
   // Lost-pet radius — defaults match /dogs/nearby (5km) so existing
   // callers see no shape change.
   radius?: string;
+  // '1' when the client wants multiplayer presence (write self position +
+  // return nearby players). Only the multiplayer-enabled build sends it.
+  mp?: string;
 }
 
 function parseParks(raw?: string): LatLng[] {
@@ -64,11 +73,16 @@ const plugin: FastifyPluginAsync = async (app) => {
       ensureFoodForUser(req.userId, pos, parks),
     ]);
 
-    const [tokens, food, dogs, state] = await Promise.all([
+    const wantPlayers = MULTIPLAYER_ON && req.query.mp === '1';
+
+    const [tokens, food, dogs, state, players] = await Promise.all([
       fetchNearbyTokens(req.userId, pos),
       fetchNearbyFood(req.userId),
       fetchNearbyLostDogs(pos, radiusM),
       fetchUserState(req.userId),
+      // Presence never blocks the map response — on any Redis hiccup we just
+      // return no players.
+      wantPlayers ? syncPresence(req.userId, pos).catch(() => []) : Promise.resolve([]),
     ]);
 
     if (!state) {
@@ -76,7 +90,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { error: 'user not found' };
     }
 
-    return { tokens, food, dogs, state };
+    return { tokens, food, dogs, state, players };
   });
 };
 

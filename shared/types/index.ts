@@ -115,6 +115,17 @@ export interface WalkerSession {
   lastPingAt: string;
 }
 
+// A nearby online player's dog, as surfaced by the multiplayer presence
+// system (Redis GEO). `position` is lightly jittered for privacy; `bot`
+// marks simulated walkers used to populate/test the UX.
+export interface NearbyPlayer {
+  id: string;
+  position: LatLng;
+  name: string;
+  photoUrl: string | null;
+  bot?: boolean;
+}
+
 export type ChatRole = 'user' | 'assistant';
 export type ChatMode = 'active' | 'ambient';
 

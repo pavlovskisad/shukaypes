@@ -1,5 +1,14 @@
-import type { ChatMessage, FoodItem, LatLng, Quest, Token, UrgencyLevel } from '@shukajpes/shared';
+import type {
+  ChatMessage,
+  FoodItem,
+  LatLng,
+  NearbyPlayer,
+  Quest,
+  Token,
+  UrgencyLevel,
+} from '@shukajpes/shared';
 import { env } from '../constants/env';
+import { MULTIPLAYER } from '../constants/experiments';
 import { getDeviceId } from './deviceId';
 import { getTelegramInitData } from './telegram';
 
@@ -183,11 +192,16 @@ export const api = {
       params.set('parks', opts.parks.map((p) => `${p.lat},${p.lng}`).join('|'));
     }
     if (opts?.radiusM != null) params.set('radius', String(opts.radiusM));
+    // Opt into multiplayer presence — server writes our position + returns
+    // nearby players only when this flag is present.
+    if (MULTIPLAYER) params.set('mp', '1');
     return req<{
       tokens: Token[];
       food: FoodItem[];
       dogs: NearbyLostDog[];
       state: StateResponse;
+      // Present only when mp=1; older servers omit it (default []).
+      players?: NearbyPlayer[];
     }>(`/sync/map?${params.toString()}`);
   },
 
