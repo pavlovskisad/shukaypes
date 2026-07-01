@@ -61,8 +61,10 @@ const DAY_G: GroundTone = {
   fogDensity: DAY.fogDensity,
   skyTop: rgbHex(LIGHT_PALETTE.sky.skyColor),
   skyHorizon: rgbHex(LIGHT_PALETTE.sky.horizonColor),
-  sun: rgbNum(DAY.sun),
-  sunStrength: 0.6,
+  // Warm golden sun for the sky glow + god rays (decoupled from the cooler
+  // building fill light so we can push it warm without tinting the city).
+  sun: rgbNum(0xffcf83),
+  sunStrength: 0.72,
 };
 const NIGHT_G: GroundTone = {
   fog: rgbNum(NIGHT.fog),
@@ -70,8 +72,9 @@ const NIGHT_G: GroundTone = {
   fogDensity: NIGHT.fogDensity,
   skyTop: rgbHex(DARK_PALETTE.sky.skyColor),
   skyHorizon: rgbHex(DARK_PALETTE.sky.horizonColor),
-  sun: rgbNum(NIGHT.sun),
-  sunStrength: 0.3,
+  // A cool moon-glow at night.
+  sun: rgbNum(0xacc0e0),
+  sunStrength: 0.34,
 };
 
 const VERT = `
@@ -101,16 +104,36 @@ uniform vec3 u_skyHorizon;
 uniform vec3 u_sunColor;
 uniform float u_sunStrength;
 uniform vec2 u_sunPos;
+uniform float u_time;
 
 void main() {
-  // Sky dome gradient + a soft directional sun glow.
+  // Sky dome gradient.
   vec3 skyCol = mix(u_skyHorizon, u_skyTop, smoothstep(-0.1, 1.0, v_ndc.y));
+
+  // Warm sun: a wide soft halo + a brighter core, tinted into the sky. The
+  // vertical squash keeps it disc-like under the tilted camera.
   vec2 sv = (v_ndc - u_sunPos) * vec2(1.0, 0.78);
   float sd = length(sv);
-  float glow = smoothstep(1.5, 0.0, sd); glow *= glow;
-  float core = smoothstep(0.5, 0.0, sd); core *= core;
-  float sun = clamp(glow + core * 0.85, 0.0, 1.0);
-  skyCol = mix(skyCol, u_sunColor, sun * u_sunStrength);
+  float glow = smoothstep(1.55, 0.0, sd); glow *= glow;
+  float core = smoothstep(0.42, 0.0, sd); core *= core;
+  float halo = clamp(glow + core * 0.95, 0.0, 1.0);
+  // Gentle breathing so the sun feels alive even when the camera is still.
+  float pulse = 0.94 + 0.06 * sin(u_time * 0.6);
+  skyCol = mix(skyCol, u_sunColor, halo * u_sunStrength * pulse);
+
+  // Gentle god rays: warm radial shafts fanning out from the sun, drifting
+  // slowly (a few angular frequencies summed) and fading with distance.
+  // Additive so they read as light, not paint; buildings (drawn on top)
+  // occlude them, so they stream from behind the skyline.
+  vec2 rv = v_ndc - u_sunPos;
+  float ang = atan(rv.y, rv.x);
+  float shafts =
+      0.50 * sin(ang * 14.0 + u_time * 0.13) +
+      0.30 * sin(ang * 27.0 - u_time * 0.09) +
+      0.20 * sin(ang * 6.0  + u_time * 0.05);
+  shafts = pow(0.5 + 0.5 * shafts, 2.4);
+  float rayFall = smoothstep(1.7, 0.05, length(rv));
+  skyCol += u_sunColor * shafts * rayFall * u_sunStrength * 0.16;
 
   // Camera ray for this pixel → intersect ground plane (mercator z = 0).
   vec4 pn = u_invVP * vec4(v_ndc, -1.0, 1.0);
@@ -166,6 +189,12 @@ export function createGroundFogLayer(): CustomLayerInterface {
   const u: Record<string, WebGLUniformLocation | null> = {};
   let mapRef: MlMap | null = null;
   const invMat = new THREE.Matrix4();
+  const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
+  // Self-driven repaint for the god-ray / sun-pulse animation. Throttled to
+  // ~20fps and only kept alive while the sun is actually in view, so a
+  // camera facing away lets the map go idle (no battery drain, and building
+  // rebuilds still fire on idle in the gaps).
+  let repaintScheduled = false;
 
   return {
     id: GROUND_FOG_LAYER_ID,
@@ -193,7 +222,7 @@ export function createGroundFogLayer(): CustomLayerInterface {
         'u_invVP', 'u_camMerc', 'u_mPerM', 'u_fogNear', 'u_fogDensity',
         'u_fogColor', 'u_poolStrength', 'u_focusMerc', 'u_clearRadius',
         'u_clearBand', 'u_skyTop', 'u_skyHorizon',
-        'u_sunColor', 'u_sunStrength', 'u_sunPos',
+        'u_sunColor', 'u_sunStrength', 'u_sunPos', 'u_time',
       ]) {
         u[name] = gl.getUniformLocation(prog, name);
       }
@@ -261,6 +290,8 @@ export function createGroundFogLayer(): CustomLayerInterface {
         gl.uniform3f(u.u_sunColor, tone.sun[0], tone.sun[1], tone.sun[2]);
         gl.uniform1f(u.u_sunStrength, tone.sunStrength * vis);
         gl.uniform2f(u.u_sunPos, sunX, sunY);
+        const now = typeof performance !== 'undefined' ? performance.now() : 0;
+        gl.uniform1f(u.u_time, (now - t0) / 1000);
 
         gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
         gl.enableVertexAttribArray(aPos);
@@ -274,6 +305,20 @@ export function createGroundFogLayer(): CustomLayerInterface {
         gl.enable(gl.BLEND);
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
+
+        // Keep the sun/rays animating only while the sun is in view. Throttled
+        // to ~20fps; idle still fires in the gaps so building rebuilds run.
+        if (vis > 0.02 && !repaintScheduled) {
+          repaintScheduled = true;
+          setTimeout(() => {
+            repaintScheduled = false;
+            try {
+              mapRef?.triggerRepaint();
+            } catch {
+              /* ignore */
+            }
+          }, 50);
+        }
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error('[ground-fog] render error', e);
