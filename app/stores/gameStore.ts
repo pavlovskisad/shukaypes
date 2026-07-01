@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { balance } from '../constants/balance';
-import type { FoodItem, LatLng, Quest, Token } from '@shukajpes/shared';
+import type { FoodItem, LatLng, NearbyPlayer, Quest, Token } from '@shukajpes/shared';
 import { api, type NearbyLostDog } from '../services/api';
 import {
   fetchNearbySpots,
@@ -123,6 +123,9 @@ interface GameState {
   parks: Park[];
   lastParksFetchPos: LatLng | null;
   lostDogs: NearbyLostDog[];
+  // Nearby online players (real + bots) from the multiplayer presence system.
+  // Refreshed each /sync/map tick; rendered as other dogs on the map.
+  nearbyPlayers: NearbyPlayer[];
   // Flips true after the first syncLostDogs call settles (success or
   // failure). Lets the Tasks tab tell "still waiting for the first
   // fetch" apart from "fetched but zero nearby" so the lost-pets
@@ -325,6 +328,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   parks: [],
   lastParksFetchPos: null,
   lostDogs: [],
+  nearbyPlayers: [],
   lostDogsLoaded: false,
   selectedDogId: null,
   spots: [],
@@ -739,6 +743,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           tokens: filteredTokens,
           foodItems: res.food,
           lostDogs: keepSelected ? [...dogs, keepSelected] : dogs,
+          nearbyPlayers: res.players ?? [],
           points: res.state.user.points,
           tokensCollected: Math.max(prev.tokensCollected, res.state.user.totalTokens),
           hunger: res.state.companion.hunger,
