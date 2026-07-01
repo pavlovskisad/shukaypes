@@ -24,12 +24,15 @@ import type {
   Map as MlMap,
 } from 'maplibre-gl';
 import { useGameStore } from '../../stores/gameStore';
+import { LIGHT_PALETTE, DARK_PALETTE } from './crayonStyle';
 import {
+  DAY,
+  NIGHT,
   POOL_STRENGTH,
+  SUN_AZIMUTH,
   clearBubbleForZoom,
   eyeFromMainMatrix,
 } from './threeBuildingsLayer';
-import { DAYLIGHT, type DaylightPhase, type DaylightProfile } from './daylight';
 
 export const GROUND_FOG_LAYER_ID = 'ground-fog';
 
@@ -41,27 +44,38 @@ const rgbNum = (h: number): RGB => [
   ((h >> 8) & 255) / 255,
   (h & 255) / 255,
 ];
+const rgbHex = (s: string): RGB => rgbNum(parseInt(s.slice(1), 16));
 
-// Precompute the RGB triples the sky/ground shader needs per phase (colour
-// scalars like fogNear/glowStrength/sun position come straight off the
-// shared DAYLIGHT profile at render time).
-interface GroundRGB {
+interface GroundTone {
   fog: RGB;
+  fogNear: number;
+  fogDensity: number;
   skyTop: RGB;
   skyHorizon: RGB;
-  glow: RGB;
+  sun: RGB;
+  sunStrength: number;
 }
-const toGround = (p: DaylightProfile): GroundRGB => ({
-  fog: rgbNum(p.fog),
-  skyTop: rgbNum(p.skyTop),
-  skyHorizon: rgbNum(p.skyHorizon),
-  glow: rgbNum(p.glow),
-});
-const GROUND: Record<DaylightPhase, GroundRGB> = {
-  morning: toGround(DAYLIGHT.morning),
-  day: toGround(DAYLIGHT.day),
-  evening: toGround(DAYLIGHT.evening),
-  night: toGround(DAYLIGHT.night),
+const DAY_G: GroundTone = {
+  fog: rgbNum(DAY.fog),
+  fogNear: DAY.fogNear,
+  fogDensity: DAY.fogDensity,
+  skyTop: rgbHex(LIGHT_PALETTE.sky.skyColor),
+  skyHorizon: rgbHex(LIGHT_PALETTE.sky.horizonColor),
+  // Soft warm sun for the sky glow + god rays (decoupled from the cooler
+  // building fill light). Gentle strength — the source is off-screen so this
+  // reads as ambient warmth, not a spotlight.
+  sun: rgbNum(0xffdaa6),
+  sunStrength: 0.5,
+};
+const NIGHT_G: GroundTone = {
+  fog: rgbNum(NIGHT.fog),
+  fogNear: NIGHT.fogNear,
+  fogDensity: NIGHT.fogDensity,
+  skyTop: rgbHex(DARK_PALETTE.sky.skyColor),
+  skyHorizon: rgbHex(DARK_PALETTE.sky.horizonColor),
+  // A soft cool moon-glow at night.
+  sun: rgbNum(0xacc0e0),
+  sunStrength: 0.26,
 };
 
 const VERT = `
@@ -97,32 +111,29 @@ void main() {
   // Sky dome gradient.
   vec3 skyCol = mix(u_skyHorizon, u_skyTop, smoothstep(-0.1, 1.0, v_ndc.y));
 
-  // Warm sun: a wide soft halo + a brighter core, tinted into the sky. The
-  // vertical squash keeps it disc-like under the tilted camera.
-  vec2 sv = (v_ndc - u_sunPos) * vec2(1.0, 0.78);
+  // Off-screen sun: u_sunPos sits ABOVE the top of the screen, so the source
+  // itself is never visible — only a soft warm glow spilling down from above,
+  // no bright disc/core. Wide, gentle falloff.
+  vec2 sv = (v_ndc - u_sunPos) * vec2(1.0, 0.85);
   float sd = length(sv);
-  float glow = smoothstep(1.55, 0.0, sd); glow *= glow;
-  float core = smoothstep(0.42, 0.0, sd); core *= core;
-  float halo = clamp(glow + core * 0.95, 0.0, 1.0);
-  // Gentle breathing so the sun feels alive even when the camera is still.
-  float pulse = 0.94 + 0.06 * sin(u_time * 0.6);
-  skyCol = mix(skyCol, u_sunColor, halo * u_sunStrength * pulse);
+  float glow = smoothstep(1.9, 0.15, sd); glow *= glow;
+  // Very subtle breathing so it feels alive without pulsing.
+  float pulse = 0.97 + 0.03 * sin(u_time * 0.5);
+  skyCol = mix(skyCol, u_sunColor, glow * u_sunStrength * pulse);
 
-  // Gentle god rays: warm radial shafts fanning out from the sun, drifting
-  // slowly (a few angular frequencies summed) and fading with distance.
-  // Additive so they read as light, not paint; buildings (drawn on top)
-  // occlude them, so they stream from behind the skyline.
+  // Gentle, dispersed god rays fanning DOWN from the off-screen sun. Low
+  // angular frequencies = broad soft shafts; low exponent = diffuse (no sharp
+  // starburst); wide falloff so they drift far with no hard edge. Buildings
+  // (drawn on top) occlude them, so they stream from behind the skyline.
   vec2 rv = v_ndc - u_sunPos;
   float ang = atan(rv.y, rv.x);
   float shafts =
-      0.55 * sin(ang * 16.0 + u_time * 0.13) +
-      0.30 * sin(ang * 30.0 - u_time * 0.09) +
-      0.15 * sin(ang * 8.0  + u_time * 0.05);
-  // Higher exponent = crisper, more distinct beams with darker gaps between.
-  shafts = pow(0.5 + 0.5 * shafts, 4.5);
-  // Tighter reach so the rays stay focused around the sun.
-  float rayFall = smoothstep(1.35, 0.04, length(rv));
-  skyCol += u_sunColor * shafts * rayFall * u_sunStrength * 0.24;
+      0.55 * sin(ang * 5.0 + u_time * 0.07) +
+      0.30 * sin(ang * 9.0 - u_time * 0.05) +
+      0.15 * sin(ang * 3.0 + u_time * 0.03);
+  shafts = pow(0.5 + 0.5 * shafts, 1.6);
+  float rayFall = smoothstep(2.2, 0.2, length(rv));
+  skyCol += u_sunColor * shafts * rayFall * u_sunStrength * 0.09;
 
   // Camera ray for this pixel → intersect ground plane (mercator z = 0).
   vec4 pn = u_invVP * vec4(v_ndc, -1.0, 1.0);
@@ -151,9 +162,19 @@ void main() {
   // As it saturates, the ground melts into the sky colour so the far ground
   // meets the sky with no seam.
   vec3 col = mix(u_fogColor, skyCol, smoothstep(0.85, 1.0, f));
-  float a = f;
+
+  // Gentle warm sunlight on the FLOOR so the ground reads as lit by the same
+  // sun as the buildings (not flat/cold). A soft wash, stronger toward the
+  // sun side, faintly dappled by the god-ray pattern. It carries its own
+  // small alpha so even the mist-free near ground picks up warmth.
+  float groundToward = 0.6 + 0.4 * smoothstep(-0.8, 1.0, v_ndc.y);
+  float lightA = groundToward * (0.6 + 0.4 * shafts) * u_sunStrength * 0.15;
+
+  float a = clamp(f + lightA, 0.0, 1.0);
   if (a <= 0.002) discard;
-  gl_FragColor = vec4(col * a, a); // premultiplied
+  // Premultiplied: fog colour weighted by f + warm light weighted by lightA.
+  vec3 outRgb = col * f + u_sunColor * lightA;
+  gl_FragColor = vec4(outRgb, a);
 }
 `;
 
@@ -236,11 +257,8 @@ export function createGroundFogLayer(): CustomLayerInterface {
       try {
         if (!program || !buffer || !mapRef) return;
         const map = mapRef;
-        // Time-of-day drives the tones; sniff (search) mode forces night.
-        const gs = useGameStore.getState();
-        const phase: DaylightPhase = gs.sniffMode ? 'night' : gs.daylightPhase;
-        const prof = DAYLIGHT[phase];
-        const grgb = GROUND[phase];
+        const sniff = useGameStore.getState().sniffMode;
+        const tone = sniff ? NIGHT_G : DAY_G;
 
         const mmArr = Array.from(args.defaultProjectionData.mainMatrix);
         invMat.fromArray(mmArr).invert();
@@ -251,37 +269,37 @@ export function createGroundFogLayer(): CustomLayerInterface {
         const focus = MercatorCoordinate.fromLngLat([c.lng, c.lat], 0);
         const mPerM = focus.meterInMercatorCoordinateUnits();
 
-        // On-screen sun position from the phase azimuth + bearing/pitch, so
-        // the glow sits where that phase's sun/moon is and slides with the
-        // camera. sunScreenY baseline is low at dawn/dusk, high at midday.
+        // Sun glow direction slides horizontally with the camera bearing.
         const bearing = map.getBearing();
-        const pitch = map.getPitch();
-        const rel = ((((prof.lightAzimuth - bearing) % 360) + 540) % 360) - 180;
+        const rel = ((((SUN_AZIMUTH - bearing) % 360) + 540) % 360) - 180;
         const relRad = (rel * Math.PI) / 180;
         const front = Math.cos(relRad);
         const vis = Math.max(0, Math.min(1, (front + 0.25) / 0.9));
         const sunX = 0.62 * Math.sin(relRad);
-        const sunY = prof.sunScreenY + Math.max(0, Math.min(0.14, (pitch - 50) * 0.003));
+        // Keep the sun above the top of the screen (ndc.y > 1) so the source
+        // is never visible — only its glow + rays spill down into view. It
+        // still slides horizontally (sunX) with bearing so light stays dynamic.
+        const sunY = 1.32;
 
         gl.useProgram(program);
         gl.uniformMatrix4fv(u.u_invVP, false, invMat.elements);
         gl.uniform3f(u.u_camMerc, eye[0], eye[1], eye[2]);
         gl.uniform1f(u.u_mPerM, mPerM);
-        gl.uniform1f(u.u_fogNear, prof.fogNear);
-        gl.uniform1f(u.u_fogDensity, prof.fogDensity);
-        gl.uniform3f(u.u_fogColor, grgb.fog[0], grgb.fog[1], grgb.fog[2]);
+        gl.uniform1f(u.u_fogNear, tone.fogNear);
+        gl.uniform1f(u.u_fogDensity, tone.fogDensity);
+        gl.uniform3f(u.u_fogColor, tone.fog[0], tone.fog[1], tone.fog[2]);
         gl.uniform1f(u.u_poolStrength, POOL_STRENGTH);
         gl.uniform3f(u.u_focusMerc, focus.x, focus.y, focus.z);
         const bubble = clearBubbleForZoom(map.getZoom());
         gl.uniform1f(u.u_clearRadius, bubble.radius);
         gl.uniform1f(u.u_clearBand, bubble.band);
-        gl.uniform3f(u.u_skyTop, grgb.skyTop[0], grgb.skyTop[1], grgb.skyTop[2]);
+        gl.uniform3f(u.u_skyTop, tone.skyTop[0], tone.skyTop[1], tone.skyTop[2]);
         gl.uniform3f(
           u.u_skyHorizon,
-          grgb.skyHorizon[0], grgb.skyHorizon[1], grgb.skyHorizon[2],
+          tone.skyHorizon[0], tone.skyHorizon[1], tone.skyHorizon[2],
         );
-        gl.uniform3f(u.u_sunColor, grgb.glow[0], grgb.glow[1], grgb.glow[2]);
-        gl.uniform1f(u.u_sunStrength, prof.glowStrength * vis);
+        gl.uniform3f(u.u_sunColor, tone.sun[0], tone.sun[1], tone.sun[2]);
+        gl.uniform1f(u.u_sunStrength, tone.sunStrength * vis);
         gl.uniform2f(u.u_sunPos, sunX, sunY);
         const now = typeof performance !== 'undefined' ? performance.now() : 0;
         gl.uniform1f(u.u_time, (now - t0) / 1000);

@@ -10,7 +10,6 @@ import {
   type Park,
 } from '../services/places';
 import { distanceMeters } from '../utils/geo';
-import type { DaylightPhase } from '../components/map/daylight';
 
 // Re-fetch the cached Places lists (parks for bone seeding +
 // per-park paw rings, spots for the visit menu) when the user has
@@ -162,10 +161,6 @@ interface GameState {
   // about pets, not places); toggling off restores the prior state.
   sniffMode: boolean;
   spotsVisibleBeforeSniff: boolean | null;
-  // Time-of-day phase for the game render's daylight cycle. Driven by the
-  // device clock (see MapView); the map layers read it for their sky/mist/sun
-  // tones. Sniff mode overrides to a night look regardless.
-  daylightPhase: DaylightPhase;
   // About sheet open state — promoted from MapScreen-local state so
   // the radial menu (a child of MapView) can trigger it via the new
   // "?" button. MapScreen still hosts the modal so the dashboard tab
@@ -266,7 +261,6 @@ interface GameState {
   setSpotsVisible: (visible: boolean) => void;
   setSniffMode: (on: boolean) => void;
   toggleSniffMode: () => void;
-  setDaylightPhase: (phase: DaylightPhase) => void;
   setAboutOpen: (open: boolean) => void;
   setActiveHint: (id: string | null) => void;
   setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
@@ -342,7 +336,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   // spots layer on via the HUD pin toggle (there's a one-shot hint for it).
   spotsVisible: false,
   sniffMode: false,
-  daylightPhase: 'day',
   spotsVisibleBeforeSniff: null,
   aboutOpen: false,
   activeHint: null,
@@ -798,8 +791,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
-  setDaylightPhase: (daylightPhase) =>
-    set((s) => (s.daylightPhase === daylightPhase ? s : { daylightPhase })),
   setSniffMode: (sniffMode) =>
     set((s) => {
       if (sniffMode === s.sniffMode) return s;

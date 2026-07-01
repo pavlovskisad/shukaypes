@@ -44,11 +44,6 @@ import {
 } from './threeBuildingsLayer';
 import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { GAME_RENDER } from '../../constants/experiments';
-import {
-  resolveDaylightPhase,
-  daylightOverrideFromUrl,
-  type DaylightPhase,
-} from './daylight';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
@@ -243,35 +238,6 @@ export default function MapViewWeb() {
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
   const sniffMode = useGameStore((s) => s.sniffMode);
-  const daylightPhase = useGameStore((s) => s.daylightPhase);
-  const setDaylightPhase = useGameStore((s) => s.setDaylightPhase);
-  // Daylight cycle driver: pick the phase from the device clock and refresh
-  // it each minute. A `?daylight=` URL param or a tap on the dev cycle button
-  // pins it manually (manualPhaseRef) so tuning isn't overwritten by the clock.
-  const manualPhaseRef = useRef(false);
-  useEffect(() => {
-    if (!GAME_RENDER) return;
-    const override = daylightOverrideFromUrl();
-    if (override) {
-      manualPhaseRef.current = true;
-      setDaylightPhase(override);
-      return;
-    }
-    const applyFromClock = () => {
-      if (manualPhaseRef.current) return;
-      setDaylightPhase(resolveDaylightPhase(new Date().getHours()));
-    };
-    applyFromClock();
-    const id = setInterval(applyFromClock, 60000);
-    return () => clearInterval(id);
-  }, [setDaylightPhase]);
-  const cycleDaylightPhase = useCallback(() => {
-    manualPhaseRef.current = true;
-    const order: DaylightPhase[] = ['morning', 'day', 'evening', 'night'];
-    const cur = useGameStore.getState().daylightPhase;
-    const next = order[(order.indexOf(cur) + 1) % order.length]!;
-    setDaylightPhase(next);
-  }, [setDaylightPhase]);
   // The chip pop animations should ONLY play during the brief window
   // around an actual sniff-mode toggle. Without this, two leaks happen:
   //
@@ -1726,31 +1692,6 @@ export default function MapViewWeb() {
           opacity: paperOpacity,
         }}
       />
-      {/* TEMP dev tool: cycle the daylight phase to tune each look without
-          waiting for the clock. Remove before shipping the daylight cycle. */}
-      {GAME_RENDER && onMapScreen ? (
-        <button
-          type="button"
-          onClick={cycleDaylightPhase}
-          style={{
-            position: 'absolute',
-            left: 12,
-            bottom: 120,
-            zIndex: Z.HUD_PILLS,
-            padding: '8px 12px',
-            borderRadius: 999,
-            border: 'none',
-            background: 'rgba(20,20,25,0.82)',
-            color: '#fff',
-            font: `600 13px ${SYSTEM_FONT}`,
-            letterSpacing: 0.3,
-            cursor: 'pointer',
-            boxShadow: '0 2px 8px rgba(0,0,0,0.3)',
-          }}
-        >
-          {{ morning: '🌅 morning', day: '☀️ day', evening: '🌇 evening', night: '🌙 night' }[daylightPhase]}
-        </button>
-      ) : null}
       {/* Long-press "press the map" cue — lives on open map BELOW the
           dog (not radiating from it), so it reads as "hold the map
           here", not "tap the dog". Shown only while the long-press

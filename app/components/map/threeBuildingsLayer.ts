@@ -35,7 +35,6 @@ import type {
   Map as MlMap,
 } from 'maplibre-gl';
 import { useGameStore } from '../../stores/gameStore';
-import { DAYLIGHT } from './daylight';
 
 export const THREE_BUILDINGS_LAYER_ID = 'three-buildings';
 
@@ -54,8 +53,53 @@ const DEFAULT_HEIGHT = 6;
 const REBUILD_MOVE_M = 180;
 const REBUILD_ZOOM_D = 0.6;
 
-// Per-time-of-day building tones live in daylight.ts (shared with the
-// ground/sky layer). The layer picks DAYLIGHT[phase] each frame.
+// Day / night (sniff) tones. Buildings are the same paper-white as the 2D
+// map so the two building treatments would be interchangeable; fog + light
+// colours match the sky/haze palette in crayonStyle so the Three fog blends
+// seamlessly into the screen-space atmosphere at the horizon.
+interface Tone {
+  building: number; // mesh base colour
+  fog: number; // mist colour (matches the 2D horizon haze)
+  // "Mist wall" tied to TRUE distance from the camera (metres). Everything
+  // nearer than fogNear is perfectly crisp; past it the mist thickens
+  // EXPONENTIALLY (1 - e^(-density·d)) so it goes to (near-)full over a
+  // short band — a concentrated wall. That density curve is what makes
+  // far buildings sit fully hidden and then emerge one-by-one / in groups
+  // as the camera moves them across the ramp.
+  fogNear: number;
+  fogDensity: number;
+  ambient: number; // fill light colour
+  ambientI: number;
+  sun: number; // directional light colour
+  sunI: number;
+}
+export const DAY: Tone = {
+  building: 0xf4f5f7,
+  fog: 0xedf0f3,
+  fogNear: 560,
+  fogDensity: 0.009,
+  // Gentler light: raise the ambient fill and lower the directional intensity
+  // so faces are softly sun-warmed rather than harshly lit / high-contrast.
+  ambient: 0xdfe6f0,
+  ambientI: 2.4,
+  sun: 0xffe9c4,
+  sunI: 1.9,
+};
+export const NIGHT: Tone = {
+  building: 0x20242c,
+  fog: 0x2c3646,
+  fogNear: 470,
+  fogDensity: 0.011,
+  ambient: 0x2a3550,
+  ambientI: 1.6,
+  sun: 0x9fb4d8,
+  sunI: 1.3,
+};
+
+// Fixed world azimuth the sun comes from (deg from north, clockwise) —
+// matches SUN_AZIMUTH in fogLayer so the 2D glow and the 3D shading agree
+// on where the light is.
+export const SUN_AZIMUTH = 125;
 
 // Ground-mist "pool" that gives the fog SUBSTANCE (vs a flat distance
 // cutout): the haze is thickest at ground level and thins out by MIST_TOP
@@ -77,8 +121,8 @@ export const CLEAR_BAND = 240;
 
 // The clear bubble is a fixed world radius, but zooming out lifts the camera
 // far from the ground, so a fixed patch feels like a shrinking hole. Grow the
-// bubble a touch as you zoom out (below the default zoom) so the clear island
-// stays reasonable — but gently, capped at ~2× so it never swallows the view.
+// bubble a touch as you zoom out — gently, capped at ~2× so it never swallows
+// the view.
 const ZOOM_REF = 17.5; // matches balance.mapZoomDefault
 export function clearBubbleForZoom(zoom: number): { radius: number; band: number } {
   const factor = Math.pow(2, Math.min(Math.max(0, ZOOM_REF - zoom) * 0.45, 1));
@@ -177,16 +221,19 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
 
-  const ambient = new THREE.AmbientLight(DAYLIGHT.day.ambient, DAYLIGHT.day.ambientI);
-  const sun = new THREE.DirectionalLight(DAYLIGHT.day.sun, DAYLIGHT.day.sunI);
-  // Light colour, intensity + direction are set per phase each frame (see
-  // render) — azimuth/elevation shift so dawn/dusk light rakes low and midday
-  // comes from high up.
+  const ambient = new THREE.AmbientLight(DAY.ambient, DAY.ambientI);
+  const sun = new THREE.DirectionalLight(DAY.sun, DAY.sunI);
+  // Light position defines the direction it shines FROM (toward origin).
+  // Azimuth 125° → east sin, north cos; put it high in the sky.
+  {
+    const az = (SUN_AZIMUTH * Math.PI) / 180;
+    sun.position.set(Math.sin(az), 0.85, Math.cos(az)).normalize();
+  }
   scene.add(ambient);
   scene.add(sun);
 
   const material = new THREE.MeshLambertMaterial({
-    color: DAYLIGHT.day.building,
+    color: DAY.building,
     // Slight self-lighting so shadowed walls never crush to pure black —
     // reads as ambient sky bounce, keeps the low-poly city airy.
     emissive: 0x0b0d12,
@@ -203,9 +250,9 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
   material.fog = false;
   const fogUniforms = {
     u_camLocal: { value: new THREE.Vector3() },
-    u_fogColor: { value: new THREE.Color(DAYLIGHT.day.fog) },
-    u_fogNear: { value: DAYLIGHT.day.fogNear },
-    u_fogDensity: { value: DAYLIGHT.day.fogDensity },
+    u_fogColor: { value: new THREE.Color(DAY.fog) },
+    u_fogNear: { value: DAY.fogNear },
+    u_fogDensity: { value: DAY.fogDensity },
     // Focus (map centre / dog) in local metres — only .xz (east/south) used.
     u_focusLocal: { value: new THREE.Vector3() },
     u_clearRadius: { value: CLEAR_RADIUS },
@@ -477,9 +524,9 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     ) {
       if (!renderer || !mesh) return;
       try {
-        // Time-of-day drives the tones; sniff (search) mode forces night.
-        const gs = useGameStore.getState();
-        const tone = DAYLIGHT[gs.sniffMode ? 'night' : gs.daylightPhase];
+        // Day/night follows sniff mode — swap mist, light + material tones.
+        const sniff = useGameStore.getState().sniffMode;
+        const tone = sniff ? NIGHT : DAY;
         fogUniforms.u_fogColor.value.setHex(tone.fog);
         fogUniforms.u_fogNear.value = tone.fogNear;
         fogUniforms.u_fogDensity.value = tone.fogDensity;
@@ -488,14 +535,6 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         sun.color.setHex(tone.sun);
         sun.intensity = tone.sunI;
         material.color.setHex(tone.building);
-        // Light direction shifts with the phase — raking low at dawn/dusk,
-        // high at midday (elevation is the y of the incoming direction).
-        {
-          const az = (tone.lightAzimuth * Math.PI) / 180;
-          sun.position
-            .set(Math.sin(az), tone.lightElevation, Math.cos(az))
-            .normalize();
-        }
 
         const mmArr = Array.from(args.defaultProjectionData.mainMatrix);
 
