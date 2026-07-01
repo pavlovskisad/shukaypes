@@ -1194,6 +1194,10 @@ export default function MapViewWeb() {
           });
           setMapZoom(map.getZoom());
           setMapCenterLat(map.getCenter().lat);
+          // Belt-and-suspenders: ensure street names are hidden at the
+          // steep default pitch even if a load-time re-style briefly
+          // re-showed them.
+          syncStreetLabels();
         });
         // Track camera animation so hints can hold off until the map
         // settles (sniff jumps, snaps, pans all fire move start/end).

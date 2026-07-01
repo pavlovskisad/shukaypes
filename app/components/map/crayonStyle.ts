@@ -414,7 +414,9 @@ export function applyCrayonOverride(
       } else if (type === 'fill-extrusion') {
         clear(map, id, 'fill-extrusion-pattern');
         map.setPaintProperty(id, 'fill-extrusion-color', palette.paper);
-        map.setPaintProperty(id, 'fill-extrusion-opacity', 0.95);
+        // Fully opaque so nothing shows through to grey them; the built-in
+        // vertical gradient still gives walls their depth shading.
+        map.setPaintProperty(id, 'fill-extrusion-opacity', 1);
       }
       continue;
     }
