@@ -1652,7 +1652,16 @@ export default function MapViewWeb() {
         </div>
       ) : null}
       <MapContext.Provider value={mapInstance}>
-        <UserMarker position={userPos} />
+        {/* Hide the user dot when it's outside the visible bounds — at max
+            pitch an off-screen (beyond-horizon) position would otherwise
+            project up into the sky. */}
+        {!mapBounds ||
+        (userPos.lat <= mapBounds.n &&
+          userPos.lat >= mapBounds.s &&
+          userPos.lng <= mapBounds.e &&
+          userPos.lng >= mapBounds.w) ? (
+          <UserMarker position={userPos} />
+        ) : null}
 
         {/* Zone is only drawn for the currently-selected pet — otherwise
             overlapping circles turn dense neighborhoods (Podil, Pechersk)
@@ -1906,6 +1915,7 @@ export default function MapViewWeb() {
             position={companionPos}
             bubble={bubble}
             hideBubble={offscreenIndicator != null}
+            hidden={offscreenIndicator != null}
             onTap={() => {
               companionTappedAtRef.current = Date.now();
             }}

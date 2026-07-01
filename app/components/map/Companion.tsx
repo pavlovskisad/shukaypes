@@ -85,6 +85,11 @@ interface CompanionProps {
   // MapView wants to render the bubble next to the edge chip instead
   // (so the user can still see the dog's remark while panning around).
   hideBubble?: boolean;
+  // Hide the dog sprite entirely — used when the companion is off-screen
+  // (its edge chip is showing instead). At max pitch an off-screen,
+  // beyond-horizon position projects up into the sky, so the sprite must
+  // be hidden or it floats in the air.
+  hidden?: boolean;
   onTapCompanion?: () => void;
   // Fires on EVERY tap (open and close), before the menu state changes.
   // Parent uses it to record a timestamp and suppress the map-level
@@ -97,7 +102,7 @@ interface CompanionProps {
 // (bubble, menu) live inside this OverlayView div so they move with the map
 // (demo's floatPane pattern). The expanding aura rings were a bit much —
 // we'll revisit that animation later when we have the right sensor metaphor.
-export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap }: CompanionProps) {
+export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion, onTap }: CompanionProps) {
   const t = useStrings();
   const router = useRouter();
   const menuOpen = useGameStore((s) => s.menuOpen);
@@ -657,6 +662,10 @@ export function Companion({ position, bubble, hideBubble, onTapCompanion, onTap 
           justifyContent: 'center',
           touchAction: 'manipulation',
           zIndex: Z.MARKER_COMPANION,
+          // Off-screen (edge chip showing): hide so a beyond-horizon
+          // position can't float the dog in the sky at steep pitch.
+          visibility: hidden ? 'hidden' : 'visible',
+          pointerEvents: hidden ? 'none' : 'auto',
         }}
       >
         {/* Pixel-art companion — 64×64 sprite scaled 2× = 128px on
