@@ -37,6 +37,11 @@ interface Props {
   // (dogs, clusters, paws, bones, POIs) set it; the companion / user /
   // waypoints / sniff bubbles stay always-visible.
   cullNearHorizon?: boolean;
+  // Extra px above the anchor that the marker's artwork occupies (e.g. a tall
+  // dog sprite + name tag sit ~130px above their ground point). The horizon
+  // cull treats the marker as entering the sky band when its TOP does, not
+  // just its anchor — so tall markers don't "fly" above the skyline.
+  cullSkyMarginPx?: number;
   children: ReactNode;
 }
 
@@ -54,6 +59,7 @@ export function MapLibreMarker({
   zIndex,
   onClick,
   cullNearHorizon,
+  cullSkyMarginPx = 0,
   children,
 }: Props) {
   const map = useMaplibreMap();
@@ -119,7 +125,9 @@ export function MapLibreMarker({
       // 60° → top 16%, ramping to ~32% by 80°.
       const frac = Math.min(0.32, 0.16 + (pitch - CULL_MIN_PITCH) * 0.008);
       const { y } = map.project([position.lng, position.lat]);
-      el.style.visibility = y < h * frac ? 'hidden' : '';
+      // Cull when the marker's TOP (anchor minus its artwork height) enters
+      // the sky band — so tall sprites hide before they float over the skyline.
+      el.style.visibility = y - cullSkyMarginPx < h * frac ? 'hidden' : '';
     };
     const schedule = () => {
       if (!raf) raf = requestAnimationFrame(apply);
@@ -137,7 +145,7 @@ export function MapLibreMarker({
       if (raf) cancelAnimationFrame(raf);
       el.style.visibility = '';
     };
-  }, [map, el, cullNearHorizon, position.lat, position.lng]);
+  }, [map, el, cullNearHorizon, cullSkyMarginPx, position.lat, position.lng]);
 
   // Click handler wiring. Every tappable marker fires the
   // shared pop animation on tap — one change here gives

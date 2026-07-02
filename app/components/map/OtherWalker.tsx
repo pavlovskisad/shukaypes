@@ -78,6 +78,7 @@ export function OtherWalker({ player }: Props) {
       position={pos}
       anchor="bottom"
       cullNearHorizon
+      cullSkyMarginPx={140}
       zIndex={Z.HUD_CHIPS - 2}
       onClick={onPoke}
     >
