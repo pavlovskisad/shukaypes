@@ -3,8 +3,13 @@
 // - In a Telegram Mini App we use Telegram's HapticFeedback API, which works
 //   on iOS *and* Android (plain web `navigator.vibrate` is unsupported on
 //   iOS Safari).
-// - Elsewhere (Android web / PWA) we fall back to navigator.vibrate.
-// - iOS Safari PWA outside Telegram has no web vibration API — it's a no-op.
+// - Elsewhere with the Vibration API (Android web / PWA) we use
+//   navigator.vibrate.
+// - iOS Safari / installed PWA has NO web vibration API, so as a last resort
+//   we use the "switch toggle" trick: iOS 17.4+ fires a subtle native haptic
+//   when a <input type="checkbox" switch> flips, so we flip a hidden one.
+//   Must run inside a user gesture (poke = a tap, so we're fine). Best-effort:
+//   silent no-op on older iOS / desktop Safari.
 //
 // Always wrapped in try/catch — haptics are a nicety, never a hard dependency.
 
@@ -21,6 +26,30 @@ function tgHaptics(): TgHaptics | null {
     Telegram?: { WebApp?: { HapticFeedback?: TgHaptics } };
   };
   return w.Telegram?.WebApp?.HapticFeedback ?? null;
+}
+
+// Lazily-created hidden iOS switch. Toggling it fires a subtle native haptic
+// on iOS 17.4+ Safari — the only way to get any buzz there. Reused across
+// calls; kept rendered (offscreen, not display:none) so iOS actually toggles it.
+let iosSwitchEl: HTMLInputElement | null = null;
+function iosSwitchHaptic(): void {
+  if (typeof document === 'undefined') return;
+  if (!iosSwitchEl) {
+    const label = document.createElement('label');
+    label.setAttribute('aria-hidden', 'true');
+    label.style.cssText =
+      'position:fixed;top:-40px;left:-40px;width:8px;height:8px;opacity:0;pointer-events:none;';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    // The `switch` attribute is what makes iOS render/handle it as a toggle
+    // (and emit the haptic on flip).
+    input.setAttribute('switch', '');
+    label.appendChild(input);
+    (document.body ?? document.documentElement).appendChild(label);
+    iosSwitchEl = input;
+  }
+  // A synthetic click flips the switch → iOS emits the toggle haptic.
+  iosSwitchEl.click();
 }
 
 export function haptic(kind: HapticKind = 'light'): void {
@@ -47,7 +76,10 @@ export function haptic(kind: HapticKind = 'light'): void {
                 ? 25
                 : 12;
       nav.vibrate(pattern);
+      return;
     }
+    // No Telegram, no Vibration API → iOS Safari/PWA. Try the switch hack.
+    iosSwitchHaptic();
   } catch {
     /* haptics are best-effort */
   }
