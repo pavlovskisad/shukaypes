@@ -126,6 +126,9 @@ interface GameState {
   // Nearby online players (real + bots) from the multiplayer presence system.
   // Refreshed each /sync/map tick; rendered as other dogs on the map.
   nearbyPlayers: NearbyPlayer[];
+  // Latest incoming poke (seq bumps when a new one arrives so the UI can
+  // trigger the notification + haptic once per poke).
+  incomingPoke: { seq: number; fromName: string; position: LatLng | null } | null;
   // Flips true after the first syncLostDogs call settles (success or
   // failure). Lets the Tasks tab tell "still waiting for the first
   // fetch" apart from "fetched but zero nearby" so the lost-pets
@@ -258,6 +261,7 @@ interface GameState {
   // only need one slice (Quests tab refreshing the lost-pet list,
   // etc).
   syncMap: (pos: LatLng) => Promise<void>;
+  pokePlayer: (targetId: string) => Promise<void>;
   setSelectedDog: (id: string | null) => void;
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
@@ -329,6 +333,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   lastParksFetchPos: null,
   lostDogs: [],
   nearbyPlayers: [],
+  incomingPoke: null,
   lostDogsLoaded: false,
   selectedDogId: null,
   spots: [],
@@ -744,6 +749,15 @@ export const useGameStore = create<GameState>((set, get) => ({
           foodItems: res.food,
           lostDogs: keepSelected ? [...dogs, keepSelected] : dogs,
           nearbyPlayers: res.players ?? [],
+          // Surface the most recent poke (bump seq so the UI fires once).
+          incomingPoke:
+            res.pokes && res.pokes.length
+              ? {
+                  seq: (prev.incomingPoke?.seq ?? 0) + 1,
+                  fromName: res.pokes[res.pokes.length - 1]!.fromName,
+                  position: res.pokes[res.pokes.length - 1]!.position,
+                }
+              : prev.incomingPoke,
           points: res.state.user.points,
           tokensCollected: Math.max(prev.tokensCollected, res.state.user.totalTokens),
           hunger: res.state.companion.hunger,
@@ -754,6 +768,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       });
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
+    }
+  },
+
+  pokePlayer: async (targetId) => {
+    try {
+      await api.poke(targetId);
+    } catch {
+      // Best-effort — a failed poke is a no-op.
     }
   },
 

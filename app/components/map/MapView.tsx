@@ -44,6 +44,7 @@ import {
 } from './threeBuildingsLayer';
 import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { OtherWalker } from './OtherWalker';
+import { PokeToast } from './PokeToast';
 import { GAME_RENDER, MULTIPLAYER } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
@@ -84,6 +85,10 @@ const CLUSTER_BADGE_THRESHOLD = 6;
 // walking horizon at our zoom levels — anything further is a planning
 // concern, not a "is it nearby" concern.
 const MAP_RENDER_RADIUS_M = 2000;
+
+// On the NORMAL (non-sniff) map, only show lost pets this close so they don't
+// clutter the world — the full lost-pet view is the sniff/locate flow.
+const NORMAL_LOSTDOG_RADIUS_M = 500;
 
 // Above this pitch the camera is in "game view" — street names tilt into
 // the perspective and clutter the distance, so they're hidden until the
@@ -702,6 +707,10 @@ export default function MapViewWeb() {
   const userLngBucket = userPos ? Math.round(userPos.lng * 1000) / 1000 : null;
   const visibleLostDogs = useMemo(() => {
     if (!userPos) return lostDogs;
+    // Lost pets are the SNIFF (locate) flow. On the normal map only show the
+    // closest few so they don't clutter it; sniff mode reveals the full set
+    // within the render radius (plus the off-screen locate chips).
+    const radius = sniffMode ? MAP_RENDER_RADIUS_M : NORMAL_LOSTDOG_RADIUS_M;
     return lostDogs.filter(
       (d) =>
         // Always keep the currently-selected dog visible — when a
@@ -710,10 +719,10 @@ export default function MapViewWeb() {
         // Pechersk). Without this carve-out the modal opens but the
         // marker is filtered out by the GPS-radius gate below.
         d.id === selectedDogId ||
-        distanceMeters(userPos, d.lastSeen.position) <= MAP_RENDER_RADIUS_M,
+        distanceMeters(userPos, d.lastSeen.position) <= radius,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos on purpose; see comment above
-  }, [lostDogs, userLatBucket, userLngBucket, selectedDogId]);
+  }, [lostDogs, userLatBucket, userLngBucket, selectedDogId, sniffMode]);
   const visibleTokens = useMemo(() => {
     const uncollected = tokens.filter((t) => !t.collectedAt);
     if (!userPos) return uncollected;
@@ -2050,6 +2059,20 @@ export default function MapViewWeb() {
         ) : null}
       </MapContext.Provider>
 
+      {/* "X poked you!" notification (multiplayer). Portaled to body; taps
+          fly the camera to the poker if they're still online. */}
+      {MULTIPLAYER && onMapScreen ? (
+        <PokeToast
+          onGoTo={(p) =>
+            mapRef.current?.easeTo({
+              center: [p.lng, p.lat],
+              zoom: Math.max(mapRef.current.getZoom(), 16.5),
+              duration: 700,
+            })
+          }
+        />
+      ) : null}
+
       {/* Cancel pills — small floating chips that drop in below the
           HUD when a route or quest is active. Stacked vertically so
           both can show at once (rare but valid: a walk + a separate
@@ -2456,6 +2479,20 @@ export default function MapViewWeb() {
           0%   { transform: scale(0);    opacity: 0; }
           70%  { transform: scale(1.10); opacity: 1; }
           100% { transform: scale(1);    opacity: 1; }
+        }
+        @keyframes poke-wave {
+          0%   { transform: translateY(0) scale(0.6) rotate(-15deg); opacity: 0; }
+          25%  { transform: translateY(-6px) scale(1.15) rotate(12deg); opacity: 1; }
+          100% { transform: translateY(-20px) scale(1) rotate(-8deg); opacity: 0; }
+        }
+        @keyframes poke-card-in {
+          0%   { transform: translateY(-16px) scale(0.8); opacity: 0; }
+          60%  { transform: translateY(0) scale(1.06);    opacity: 1; }
+          100% { transform: translateY(0) scale(1);       opacity: 1; }
+        }
+        @keyframes poke-dog-bounce {
+          0%,100% { transform: translateY(0); }
+          50%     { transform: translateY(-7px); }
         }
         @keyframes pop-out {
           0%   { transform: scale(1);    opacity: 1; }

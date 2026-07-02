@@ -126,6 +126,13 @@ export interface NearbyPlayer {
   bot?: boolean;
 }
 
+// A "poke" from another player, delivered on the target's next map sync.
+export interface Poke {
+  fromId: string;
+  fromName: string;
+  position: LatLng | null; // poker's current position, if still online
+}
+
 export type ChatRole = 'user' | 'assistant';
 export type ChatMode = 'active' | 'ambient';
 

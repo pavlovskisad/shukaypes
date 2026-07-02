@@ -4,6 +4,8 @@ import { MapLibreMarker } from './MapLibreMarker';
 import { DogSprite } from './DogSprite';
 import { Z } from '../../constants/z';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { useGameStore } from '../../stores/gameStore';
+import { haptic } from '../../utils/haptics';
 
 // One other player's dog on the map (real player or bot). Presence updates
 // arrive every ~15s (real) / ~3.5s (bots), so we GLIDE the dog toward its
@@ -31,6 +33,9 @@ export function OtherWalker({ player }: Props) {
   const [pos, setPos] = useState({ ...player.position });
   const [facingLeft, setFacingLeft] = useState(false);
   const [moving, setMoving] = useState(false);
+  // Brief "👋" confirmation after you poke this walker.
+  const [poked, setPoked] = useState(false);
+  const pokePlayer = useGameStore((s) => s.pokePlayer);
 
   useEffect(() => {
     let last = typeof performance !== 'undefined' ? performance.now() : 0;
@@ -61,8 +66,21 @@ export function OtherWalker({ player }: Props) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  const onPoke = () => {
+    haptic('medium');
+    setPoked(true);
+    setTimeout(() => setPoked(false), 1500);
+    void pokePlayer(player.id);
+  };
+
   return (
-    <MapLibreMarker position={pos} anchor="bottom" cullNearHorizon zIndex={Z.HUD_CHIPS - 2}>
+    <MapLibreMarker
+      position={pos}
+      anchor="bottom"
+      cullNearHorizon
+      zIndex={Z.HUD_CHIPS - 2}
+      onClick={onPoke}
+    >
       <div
         style={{
           position: 'relative',
@@ -72,9 +90,22 @@ export function OtherWalker({ player }: Props) {
           // Slightly translucent so other walkers read as "background life"
           // and don't compete with the player's own companion.
           opacity: 0.92,
-          pointerEvents: 'none',
+          cursor: 'pointer',
         }}
       >
+        {poked ? (
+          <div
+            aria-hidden
+            style={{
+              position: 'absolute',
+              top: -14,
+              fontSize: 20,
+              animation: 'poke-wave 1.4s ease-out forwards',
+            }}
+          >
+            👋
+          </div>
+        ) : null}
         <div
           style={{
             font: `600 10px ${SYSTEM_FONT}`,

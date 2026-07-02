@@ -32,13 +32,19 @@ export interface NearbyPlayer {
 const POS_KEY = 'mp:pos';
 const SEEN_KEY = 'mp:seen';
 const META_KEY = 'mp:meta';
+const POKE_KEY = (id: string) => `mp:poke:${id}`;
 
 // A client refreshes every ~15s poll; 45s TTL keeps them alive across a
 // missed tick and drops them within ~3 ticks once they stop.
 export const PRESENCE_TTL_MS = 45_000;
-const RADIUS_M = 2200;
+// Visibility radius for "who's nearby" — wide enough to see a friend across
+// the city.
+const RADIUS_M = 8000;
 const MAX_NEARBY = 60;
 const JITTER_M = 25;
+// Pending pokes live briefly (delivered on the target's next ~15s poll).
+const POKE_TTL_S = 120;
+const MAX_POKES = 10;
 
 // Stable per-id positional offset (privacy). Deterministic so a player's dog
 // doesn't jitter around each poll — it's their real movement + a fixed ~25m
@@ -60,7 +66,7 @@ function jitter(id: string, pos: LatLng): LatLng {
 // In-memory name/photo cache so we don't hit Postgres on every poll — a
 // user's display identity barely changes. 1h TTL per user.
 const metaCache = new Map<string, { name: string; photo: string | null; exp: number }>();
-async function selfMeta(userId: string): Promise<{ name: string; photo: string | null }> {
+export async function selfMeta(userId: string): Promise<{ name: string; photo: string | null }> {
   const cached = metaCache.get(userId);
   if (cached && cached.exp > Date.now()) return cached;
   let name = 'walker';
@@ -213,4 +219,72 @@ export async function purgeStalePresence(now = Date.now()): Promise<void> {
   pipe.zrem(SEEN_KEY, ...stale);
   pipe.hdel(META_KEY, ...stale);
   await pipe.exec();
+}
+
+// A poke delivered to a player on their next poll.
+export interface Poke {
+  fromId: string;
+  fromName: string;
+  position: LatLng | null; // poker's current (jittered) position, if online
+}
+
+// Queue a poke for `targetId` from `fromId`. Capped + short TTL so it's a
+// live nudge, not a mailbox.
+export async function sendPoke(
+  fromId: string,
+  fromName: string,
+  targetId: string,
+  now = Date.now(),
+): Promise<void> {
+  const key = POKE_KEY(targetId);
+  const pipe = redis.pipeline();
+  pipe.rpush(key, JSON.stringify({ f: fromId, n: fromName, t: now }));
+  pipe.ltrim(key, -MAX_POKES, -1);
+  pipe.expire(key, POKE_TTL_S);
+  await pipe.exec();
+}
+
+// Read + clear the caller's pending pokes, attaching each poker's current
+// position (so the client can point to them).
+export async function takePokes(userId: string): Promise<Poke[]> {
+  const key = POKE_KEY(userId);
+  let raw: string[];
+  try {
+    const pipe = redis.multi();
+    pipe.lrange(key, 0, -1);
+    pipe.del(key);
+    const res = await pipe.exec();
+    raw = (res?.[0]?.[1] as string[]) ?? [];
+  } catch {
+    return [];
+  }
+  if (!raw.length) return [];
+  const parsed = raw
+    .map((s) => {
+      try {
+        return JSON.parse(s) as { f: string; n: string; t: number };
+      } catch {
+        return null;
+      }
+    })
+    .filter((p): p is { f: string; n: string; t: number } => !!p);
+  if (!parsed.length) return [];
+  // Look up pokers' current positions in one GEOPOS.
+  let coords: (([string, string]) | null)[] = [];
+  try {
+    coords = (await redis.geopos(
+      POS_KEY,
+      ...parsed.map((p) => p.f),
+    )) as (([string, string]) | null)[];
+  } catch {
+    coords = parsed.map(() => null);
+  }
+  return parsed.map((p, i) => {
+    const c = coords[i];
+    return {
+      fromId: p.f,
+      fromName: p.n,
+      position: c ? { lat: Number(c[1]), lng: Number(c[0]) } : null,
+    };
+  });
 }

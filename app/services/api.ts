@@ -3,6 +3,7 @@ import type {
   FoodItem,
   LatLng,
   NearbyPlayer,
+  Poke,
   Quest,
   Token,
   UrgencyLevel,
@@ -200,10 +201,18 @@ export const api = {
       food: FoodItem[];
       dogs: NearbyLostDog[];
       state: StateResponse;
-      // Present only when mp=1; older servers omit it (default []).
+      // Present only when mp=1; older servers omit these (default []).
       players?: NearbyPlayer[];
+      pokes?: Poke[];
     }>(`/sync/map?${params.toString()}`);
   },
+
+  // Nudge another nearby player; delivered on their next map sync.
+  poke: (targetId: string) =>
+    req<{ ok: boolean }>('/poke', {
+      method: 'POST',
+      body: JSON.stringify({ targetId }),
+    }),
 
   collectToken: (tokenId: string, pos: LatLng, force = false) =>
     req<{ ok: true; value: number }>('/collect/token', {

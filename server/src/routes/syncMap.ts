@@ -16,7 +16,7 @@ import {
   fetchNearbyLostDogs,
   fetchUserState,
 } from '../services/mapData.js';
-import { syncPresence } from '../services/presence.js';
+import { syncPresence, takePokes } from '../services/presence.js';
 import type { LatLng } from '../utils/geo.js';
 
 // Server kill-switch for multiplayer presence. Off only if explicitly set to
@@ -75,14 +75,15 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     const wantPlayers = MULTIPLAYER_ON && req.query.mp === '1';
 
-    const [tokens, food, dogs, state, players] = await Promise.all([
+    const [tokens, food, dogs, state, players, pokes] = await Promise.all([
       fetchNearbyTokens(req.userId, pos),
       fetchNearbyFood(req.userId),
       fetchNearbyLostDogs(pos, radiusM),
       fetchUserState(req.userId),
       // Presence never blocks the map response — on any Redis hiccup we just
-      // return no players.
+      // return no players / pokes.
       wantPlayers ? syncPresence(req.userId, pos).catch(() => []) : Promise.resolve([]),
+      wantPlayers ? takePokes(req.userId).catch(() => []) : Promise.resolve([]),
     ]);
 
     if (!state) {
@@ -90,7 +91,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { error: 'user not found' };
     }
 
-    return { tokens, food, dogs, state, players };
+    return { tokens, food, dogs, state, players, pokes };
   });
 };
 
