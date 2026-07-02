@@ -108,7 +108,8 @@ export async function writePresenceBatch(
   entries: PresenceEntry[],
   now: number,
 ): Promise<void> {
-  if (!entries.length) return;
+  // Skip cleanly when Redis is unavailable — no throw, no log flood.
+  if (!entries.length || redis.status !== 'ready') return;
   const geoArgs: (string | number)[] = [];
   const zaddArgs: (string | number)[] = [];
   const hsetArgs: string[] = [];
@@ -140,6 +141,7 @@ export async function writePresence(
 
 // Write self-presence and return nearby online players (excluding self).
 export async function syncPresence(userId: string, pos: LatLng): Promise<NearbyPlayer[]> {
+  if (redis.status !== 'ready') return [];
   const now = Date.now();
   const meta = await selfMeta(userId);
   await writePresence(userId, jitter(userId, pos), meta.name, meta.photo, now, false);
@@ -211,6 +213,7 @@ export async function syncPresence(userId: string, pos: LatLng): Promise<NearbyP
 // Drop entries that haven't pinged within the TTL. GEO sets are ZSETs, so
 // ZREM removes a geo member. Runs on a cron (services/bots.ts).
 export async function purgeStalePresence(now = Date.now()): Promise<void> {
+  if (redis.status !== 'ready') return;
   const cutoff = now - PRESENCE_TTL_MS;
   const stale = await redis.zrangebyscore(SEEN_KEY, 0, cutoff);
   if (!stale.length) return;
@@ -236,6 +239,7 @@ export async function sendPoke(
   targetId: string,
   now = Date.now(),
 ): Promise<void> {
+  if (redis.status !== 'ready') return;
   const key = POKE_KEY(targetId);
   const pipe = redis.pipeline();
   pipe.rpush(key, JSON.stringify({ f: fromId, n: fromName, t: now }));
@@ -247,6 +251,7 @@ export async function sendPoke(
 // Read + clear the caller's pending pokes, attaching each poker's current
 // position (so the client can point to them).
 export async function takePokes(userId: string): Promise<Poke[]> {
+  if (redis.status !== 'ready') return [];
   const key = POKE_KEY(userId);
   let raw: string[];
   try {

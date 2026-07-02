@@ -98,6 +98,16 @@ async function buildServer() {
 
 async function main() {
   const app = await buildServer();
+  // Eagerly connect Redis at boot (it's lazyConnect). This keeps the DB
+  // actually in use — an idle free-tier Redis gets reaped by the provider —
+  // and makes the `redis.status === 'ready'` guards throughout the code
+  // reliable (they'd otherwise skip forever if nothing ever connected). A
+  // failure here is non-fatal: everything degrades gracefully without Redis.
+  if (redis.status === 'wait') {
+    redis
+      .connect()
+      .catch((err) => app.log.warn({ err }, '[redis] initial connect failed; will retry lazily'));
+  }
   // Boot-seed dropped — pilot now runs on real scraped pets only.
   // The seedLostDogs() CLI in db/seed-dogs.ts still works for local dev.
   const stopDecay = startDecayCron(app.log);
