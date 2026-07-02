@@ -15,6 +15,7 @@ import statsRoute from './routes/stats.js';
 import profileRoute from './routes/profile.js';
 import pathRoute from './routes/path.js';
 import syncMapRoute from './routes/syncMap.js';
+import pokeRoute from './routes/poke.js';
 import dailyTasksRoute from './routes/dailyTasks.js';
 import loreRoute from './routes/lore.js';
 import placesRoute from './routes/places.js';
@@ -85,6 +86,7 @@ async function buildServer() {
   await app.register(profileRoute);
   await app.register(pathRoute);
   await app.register(syncMapRoute);
+  await app.register(pokeRoute);
   await app.register(dailyTasksRoute);
   await app.register(loreRoute);
   await app.register(placesRoute);
