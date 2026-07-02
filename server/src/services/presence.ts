@@ -87,8 +87,40 @@ async function selfMeta(userId: string): Promise<{ name: string; photo: string |
   return rec;
 }
 
-// Write one presence entry (a real user or a bot). shownPos is the position to
-// store (already jittered for real users; bots pass their sim position).
+export interface PresenceEntry {
+  id: string;
+  pos: LatLng;
+  name: string;
+  photo: string | null;
+  bot?: boolean;
+}
+
+// Write many presence entries in ONE round-trip: a single pipeline with one
+// variadic GEOADD / ZADD / HSET covering every entry (vs. a pipeline per
+// walker). Makes the bots cron O(1) round-trips regardless of bot count.
+export async function writePresenceBatch(
+  entries: PresenceEntry[],
+  now: number,
+): Promise<void> {
+  if (!entries.length) return;
+  const geoArgs: (string | number)[] = [];
+  const zaddArgs: (string | number)[] = [];
+  const hsetArgs: string[] = [];
+  for (const e of entries) {
+    geoArgs.push(e.pos.lng, e.pos.lat, e.id);
+    zaddArgs.push(now, e.id);
+    hsetArgs.push(e.id, JSON.stringify({ n: e.name, p: e.photo, b: e.bot ? 1 : 0 }));
+  }
+  const pipe = redis.pipeline();
+  pipe.geoadd(POS_KEY, ...geoArgs);
+  pipe.zadd(SEEN_KEY, ...zaddArgs);
+  pipe.hset(META_KEY, ...hsetArgs);
+  await pipe.exec();
+}
+
+// Write a single presence entry (a real user or a bot). shownPos is the
+// position to store (already jittered for real users; bots pass their sim
+// position). Thin wrapper over the batch writer.
 export async function writePresence(
   id: string,
   shownPos: LatLng,
@@ -97,12 +129,7 @@ export async function writePresence(
   now: number,
   bot = false,
 ): Promise<void> {
-  const meta = JSON.stringify({ n: name, p: photo, b: bot ? 1 : 0 });
-  const pipe = redis.pipeline();
-  pipe.geoadd(POS_KEY, shownPos.lng, shownPos.lat, id);
-  pipe.zadd(SEEN_KEY, now, id);
-  pipe.hset(META_KEY, id, meta);
-  await pipe.exec();
+  await writePresenceBatch([{ id, pos: shownPos, name, photo, bot }], now);
 }
 
 // Write self-presence and return nearby online players (excluding self).

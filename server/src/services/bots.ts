@@ -10,7 +10,7 @@
 // works even when no bots run.
 
 import type { FastifyBaseLogger } from 'fastify';
-import { writePresence, purgeStalePresence } from './presence.js';
+import { writePresenceBatch, purgeStalePresence } from './presence.js';
 import { runCronTick } from './cronUtils.js';
 
 interface LatLng {
@@ -112,11 +112,17 @@ export function startMultiplayerCron(
         const dtS = Math.min(MAX_DT_S, (now - last) / 1000);
         last = now;
         if (bots.length) {
-          await Promise.all(
-            bots.map((b) => {
-              stepBot(b, dtS);
-              return writePresence(b.id, b.pos, b.name, null, now, true);
-            }),
+          for (const b of bots) stepBot(b, dtS);
+          // All bots in ONE round-trip.
+          await writePresenceBatch(
+            bots.map((b) => ({
+              id: b.id,
+              pos: b.pos,
+              name: b.name,
+              photo: null,
+              bot: true,
+            })),
+            now,
           );
         }
         await purgeStalePresence(now);
