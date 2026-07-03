@@ -45,6 +45,7 @@ import {
 import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
+import { createBuildingAvoider } from './buildingAvoider';
 import { GAME_RENDER, MULTIPLAYER } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
@@ -723,6 +724,12 @@ export default function MapViewWeb() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos on purpose; see comment above
   }, [lostDogs, userLatBucket, userLngBucket, selectedDogId, sniffMode]);
+  // Building avoidance (game render): nudges the DISPLAY position of
+  // collectibles + other dogs out of building footprints. Rebuilt on idle as
+  // tiles stream; bumping the version re-runs the nudged memos below.
+  const buildingAvoiderRef = useRef<ReturnType<typeof createBuildingAvoider> | null>(null);
+  const [buildingIndexVersion, setBuildingIndexVersion] = useState(0);
+
   const visibleTokens = useMemo(() => {
     const uncollected = tokens.filter((t) => !t.collectedAt);
     if (!userPos) return uncollected;
@@ -738,6 +745,39 @@ export default function MapViewWeb() {
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos on purpose
   }, [foodItems, userLatBucket, userLngBucket]);
+
+  // Display positions nudged out of buildings (game render only). Real
+  // positions in the store are untouched — collect distance etc. stay honest.
+  const avoidedTokens = useMemo(() => {
+    const av = buildingAvoiderRef.current;
+    if (!GAME_RENDER || !av) return visibleTokens;
+    return visibleTokens.map((t) => ({ ...t, position: av.nudge(t.position) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- version drives recompute
+  }, [visibleTokens, buildingIndexVersion]);
+  const avoidedFood = useMemo(() => {
+    const av = buildingAvoiderRef.current;
+    if (!GAME_RENDER || !av) return visibleFood;
+    return visibleFood.map((f) => ({ ...f, position: av.nudge(f.position) }));
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- version drives recompute
+  }, [visibleFood, buildingIndexVersion]);
+
+  // Build/refresh the building footprint index once the map exists, and on
+  // every idle as more building tiles stream in.
+  useEffect(() => {
+    if (!GAME_RENDER || !mapInstance) return;
+    const av = createBuildingAvoider(mapInstance);
+    buildingAvoiderRef.current = av;
+    const refresh = () => {
+      av.rebuild();
+      setBuildingIndexVersion(av.version());
+    };
+    refresh();
+    mapInstance.on('idle', refresh);
+    return () => {
+      mapInstance.off('idle', refresh);
+      buildingAvoiderRef.current = null;
+    };
+  }, [mapInstance]);
 
   // Clustering runs against TRUE positions so "genuinely close reports"
   // are grouped regardless of display jitter. The cluster badge sits at the
@@ -1626,9 +1666,12 @@ export default function MapViewWeb() {
         )
         .slice(0, 24);
     }
+    // Nudge their shown dot out of building footprints (display only).
+    const av = buildingAvoiderRef.current;
+    if (av) list = list.map((p) => ({ ...p, position: av.nudge(p.position) }));
     return list;
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos; fine to re-run on nearbyPlayers/bounds
-  }, [nearbyPlayers, mapBounds, userPos?.lat, userPos?.lng, onMapScreen]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos; version drives re-nudge
+  }, [nearbyPlayers, mapBounds, userPos?.lat, userPos?.lng, onMapScreen, buildingIndexVersion]);
 
   if (!userPos) {
     return (
@@ -1876,7 +1919,7 @@ export default function MapViewWeb() {
           ];
         })}
 
-        {visibleTokens.map((t) => (
+        {avoidedTokens.map((t) => (
           <TokenMarker
             key={t.id}
             position={t.position}
@@ -1885,7 +1928,7 @@ export default function MapViewWeb() {
           />
         ))}
 
-        {visibleFood.map((f) => (
+        {avoidedFood.map((f) => (
           <FoodMarker
             key={f.id}
             position={f.position}
