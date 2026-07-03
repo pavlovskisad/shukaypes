@@ -78,7 +78,10 @@ export function OtherWalker({ player }: Props) {
       position={pos}
       anchor="bottom"
       cullNearHorizon
-      cullSkyMarginPx={140}
+      // Small margin on purpose: cull only when the dog's FEET are near the
+      // horizon, not when its sprite pokes up — so close dogs never vanish at
+      // steep pitch. We accept a little float on the truly-distant ones.
+      cullSkyMarginPx={40}
       zIndex={Z.HUD_CHIPS - 2}
       onClick={onPoke}
     >
