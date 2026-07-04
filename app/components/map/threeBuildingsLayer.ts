@@ -130,10 +130,12 @@ const SHADOW_MAX_LEN = 45;
 // ghost — MIN-blend + this pale tint darkens the lit ground only a few percent,
 // so the floor reads through almost untouched.
 const SHADOW_COLOR = 0xccd2da;
-// Day shadow opacity. Very low on purpose — 1.0 pulled the ground to mid-grey
-// and 0.34 was still a visible shade; ~0.18 leaves just a faint transparent
-// hint (~3–4% darkening near-field) so the floor stays clearly visible.
-const SHADOW_DAY_STRENGTH = 0.18;
+// Peak day shadow opacity — reached only right at the building base (the
+// contact point). The shadow fades along its length to nothing at the tip via
+// a per-vertex gradient (see aShadowT in the shadow shader), so the *average*
+// darkness is well below this. Kept low (0.15) so even the base is a faint
+// contact hint and the floor reads through everywhere else.
+const SHADOW_DAY_STRENGTH = 0.15;
 
 // The clear bubble is a fixed world radius, but zooming out lifts the camera
 // far from the ground (and a steep pitch pushes the view further into the
@@ -343,9 +345,12 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     blendSrc: THREE.OneFactor,
     blendDst: THREE.OneFactor,
     vertexShader: `
+      attribute float aShadowT; // 0 at the building base → 1 at the shadow tip
       varying vec3 vSPos;
+      varying float vT;
       void main() {
         vSPos = position;
+        vT = aShadowT;
         gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
       }
     `,
@@ -358,13 +363,19 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
       uniform vec3 u_shadowColor;
       uniform float u_strength;
       varying vec3 vSPos;
+      varying float vT;
       void main() {
         float d = length(vSPos - u_camLocal);
         float f = clamp(1.0 - exp(-u_fogDensity * max(0.0, d - u_fogNear)), 0.0, 1.0);
+        // Gradient along the shadow: darkest at the base (vT=0), dissolving to
+        // nothing at the tip (vT=1). Slightly convex so the contact stays a
+        // touch more present, then the tail feathers softly to zero.
+        float grad = pow(1.0 - clamp(vT, 0.0, 1.0), 1.4);
+        float s = u_strength * grad;
         // Shadow tint, fading into the mist with distance.
         vec3 col = mix(u_shadowColor, u_fogColor, f);
-        // strength 0 → vec3(1) → MIN leaves the ground untouched (night off).
-        vec3 outc = mix(vec3(1.0), col, u_strength);
+        // s → 0 → vec3(1) → MIN leaves the ground untouched (tip + night off).
+        vec3 outc = mix(vec3(1.0), col, s);
         gl_FragColor = vec4(outc, 1.0);
       }
     `,
@@ -459,6 +470,10 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
       // ground direction + length-per-height from the same azimuth/elevation
       // the building light uses.
       const shadowPositions: number[] = [];
+      // Per-vertex gradient param: 0 for base-edge verts, 1 for the swept tip
+      // verts — the shadow shader fades opacity along it. Parallel to
+      // shadowPositions (one entry per vertex).
+      const shadowT: number[] = [];
       const saz = (SUN_AZIMUTH * Math.PI) / 180;
       const spx = Math.sin(saz);
       const spy = 0.85;
@@ -511,6 +526,8 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
                 ax, SHADOW_Y, az, bx, SHADOW_Y, bz, bx + sx, SHADOW_Y, bz + sz,
                 ax, SHADOW_Y, az, bx + sx, SHADOW_Y, bz + sz, ax + sx, SHADOW_Y, az + sz,
               );
+              // Base verts (a, b) → 0; swept-tip verts (a+s, b+s) → 1.
+              shadowT.push(0, 0, 1, 0, 1, 1);
             }
           }
 
@@ -580,6 +597,10 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         sg.setAttribute(
           'position',
           new THREE.Float32BufferAttribute(shadowPositions, 3),
+        );
+        sg.setAttribute(
+          'aShadowT',
+          new THREE.Float32BufferAttribute(shadowT, 1),
         );
         shadowMesh = new THREE.Mesh(sg, shadowMaterial);
         shadowMesh.frustumCulled = false;
