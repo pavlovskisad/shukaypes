@@ -119,6 +119,14 @@ export const POOL_STRENGTH = 0.9;
 export const CLEAR_RADIUS = 200;
 export const CLEAR_BAND = 240;
 
+// Cheap ground drop-shadows: flat quads swept from each footprint toward the
+// sun. SHADOW_Y lifts them just off the ground (z-fight), SHADOW_MAX_LEN caps
+// how far a tall building's shadow reaches, SHADOW_COLOR is the MIN-blend tint
+// the lit ground is darkened toward.
+const SHADOW_Y = 0.4;
+const SHADOW_MAX_LEN = 45;
+const SHADOW_COLOR = 0x808793;
+
 // The clear bubble is a fixed world radius, but zooming out lifts the camera
 // far from the ground (and a steep pitch pushes the view further into the
 // distance), so a fixed patch shrinks to a dot when zoomed out. Grow the
@@ -305,7 +313,57 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
       );
   };
 
+  // Cheap ground "drop shadows": flat quads swept from each footprint toward
+  // the sun, merged into one mesh (one draw call — no shadow-map pass). Blended
+  // with MIN so overlapping shadows don't compound into black; faded into the
+  // mist with distance; hidden at night (sniff) via u_strength.
+  const shadowUniforms = {
+    u_camLocal: fogUniforms.u_camLocal, // shared — updated each frame
+    u_fogColor: fogUniforms.u_fogColor,
+    u_fogNear: fogUniforms.u_fogNear,
+    u_fogDensity: fogUniforms.u_fogDensity,
+    u_shadowColor: { value: new THREE.Color(SHADOW_COLOR) },
+    u_strength: { value: 1 },
+  };
+  const shadowMaterial = new THREE.ShaderMaterial({
+    uniforms: shadowUniforms,
+    transparent: false, // opaque pass so it draws before the buildings
+    depthWrite: false,
+    depthTest: true,
+    blending: THREE.CustomBlending,
+    blendEquation: THREE.MinEquation, // result = min(src, dst) → darken, no compound
+    blendSrc: THREE.OneFactor,
+    blendDst: THREE.OneFactor,
+    vertexShader: `
+      varying vec3 vSPos;
+      void main() {
+        vSPos = position;
+        gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+      }
+    `,
+    fragmentShader: `
+      precision highp float;
+      uniform vec3 u_camLocal;
+      uniform vec3 u_fogColor;
+      uniform float u_fogNear;
+      uniform float u_fogDensity;
+      uniform vec3 u_shadowColor;
+      uniform float u_strength;
+      varying vec3 vSPos;
+      void main() {
+        float d = length(vSPos - u_camLocal);
+        float f = clamp(1.0 - exp(-u_fogDensity * max(0.0, d - u_fogNear)), 0.0, 1.0);
+        // Shadow tint, fading into the mist with distance.
+        vec3 col = mix(u_shadowColor, u_fogColor, f);
+        // strength 0 → vec3(1) → MIN leaves the ground untouched (night off).
+        vec3 outc = mix(vec3(1.0), col, u_strength);
+        gl_FragColor = vec4(outc, 1.0);
+      }
+    `,
+  });
+
   let mesh: THREE.Mesh | null = null;
+  let shadowMesh: THREE.Mesh | null = null;
   let mapRef: MlMap | null = null;
 
   // Mercator origin of the current mesh + the metre scale at that origin.
@@ -389,6 +447,22 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
 
       const positions: number[] = [];
       const normals: number[] = [];
+      // Ground drop-shadow geometry (flat quads swept toward the sun). Shadow
+      // ground direction + length-per-height from the same azimuth/elevation
+      // the building light uses.
+      const shadowPositions: number[] = [];
+      const saz = (SUN_AZIMUTH * Math.PI) / 180;
+      const spx = Math.sin(saz);
+      const spy = 0.85;
+      const spz = Math.cos(saz);
+      const spn = Math.hypot(spx, spy, spz) || 1;
+      const nX = spx / spn;
+      const nY = spy / spn;
+      const nZ = spz / spn;
+      const horiz = Math.hypot(nX, nZ) || 1e-6;
+      const shDirX = -nX / horiz; // world east
+      const shDirZ = -nZ / horiz; // world south
+      const shLenPerH = horiz / nY; // × building height = shadow length
 
       for (const { f } of dedup.values()) {
         const geom = f.geometry;
@@ -408,6 +482,30 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
               : [];
 
         for (const rings of polys) {
+          // Sweep the outer ring toward the sun to make its ground shadow. The
+          // building (drawn on top, opaque) covers the base, so what shows is
+          // the shadow beyond the footprint.
+          const outer = rings[0];
+          if (outer && outer.length >= 3) {
+            const L = Math.min(height * shLenPerH, SHADOW_MAX_LEN);
+            const sx = shDirX * L;
+            const sz = shDirZ * L;
+            const wp = outer.map((c) => {
+              const [e, n] = toLocal(c[0], c[1], originX, originY, mPerUnit);
+              return [e, -n] as [number, number]; // world x(east), z(south)
+            });
+            for (let i = 0; i < wp.length - 1; i++) {
+              const ax = wp[i]![0];
+              const az = wp[i]![1];
+              const bx = wp[i + 1]![0];
+              const bz = wp[i + 1]![1];
+              shadowPositions.push(
+                ax, SHADOW_Y, az, bx, SHADOW_Y, bz, bx + sx, SHADOW_Y, bz + sz,
+                ax, SHADOW_Y, az, bx + sx, SHADOW_Y, bz + sz, ax + sx, SHADOW_Y, az + sz,
+              );
+            }
+          }
+
           const shape = shapeFromRings(rings, originX, originY, mPerUnit);
           if (!shape) continue;
           let geo: THREE.ExtrudeGeometry;
@@ -462,6 +560,24 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
       // (untransformed) local bounds and wrongly cull it — turn it off.
       mesh.frustumCulled = false;
       scene.add(mesh);
+
+      // Ground shadows (one merged flat mesh, drawn before the buildings).
+      if (shadowMesh) {
+        scene.remove(shadowMesh);
+        shadowMesh.geometry.dispose();
+        shadowMesh = null;
+      }
+      if (shadowPositions.length) {
+        const sg = new THREE.BufferGeometry();
+        sg.setAttribute(
+          'position',
+          new THREE.Float32BufferAttribute(shadowPositions, 3),
+        );
+        shadowMesh = new THREE.Mesh(sg, shadowMaterial);
+        shadowMesh.frustumCulled = false;
+        shadowMesh.renderOrder = -1; // draw before the buildings
+        scene.add(shadowMesh);
+      }
 
       builtLng = center.lng;
       builtLat = center.lat;
@@ -544,7 +660,13 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         mesh.geometry.dispose();
         mesh = null;
       }
+      if (shadowMesh) {
+        scene.remove(shadowMesh);
+        shadowMesh.geometry.dispose();
+        shadowMesh = null;
+      }
       material.dispose();
+      shadowMaterial.dispose();
       renderer?.dispose();
       renderer = null;
       mapRef = null;
@@ -567,6 +689,9 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         sun.color.setHex(tone.sun);
         sun.intensity = tone.sunI;
         material.color.setHex(tone.building);
+        // Ground shadows fade out at night (dark ground would swallow them
+        // anyway, but this makes it explicit + free).
+        shadowUniforms.u_strength.value = sniff ? 0 : 1;
 
         const mmArr = Array.from(args.defaultProjectionData.mainMatrix);
 
