@@ -125,7 +125,13 @@ export const CLEAR_BAND = 240;
 // the lit ground is darkened toward.
 const SHADOW_Y = 0.4;
 const SHADOW_MAX_LEN = 45;
-const SHADOW_COLOR = 0x808793;
+// Kept deliberately light: a soft cool-grey the ground is nudged toward, not a
+// dark patch. Combined with a low day strength (below) it's a gentle shade that
+// still lets the floor read through — MIN-blend + this pale tint barely darkens.
+const SHADOW_COLOR = 0xc2c8d0;
+// Day shadow opacity. Low on purpose — 1.0 pulled the ground to mid-grey, which
+// hid the floor; ~0.34 leaves a light, transparent shade.
+const SHADOW_DAY_STRENGTH = 0.34;
 
 // The clear bubble is a fixed world radius, but zooming out lifts the camera
 // far from the ground (and a steep pitch pushes the view further into the
@@ -323,7 +329,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     u_fogNear: fogUniforms.u_fogNear,
     u_fogDensity: fogUniforms.u_fogDensity,
     u_shadowColor: { value: new THREE.Color(SHADOW_COLOR) },
-    u_strength: { value: 1 },
+    u_strength: { value: SHADOW_DAY_STRENGTH },
   };
   const shadowMaterial = new THREE.ShaderMaterial({
     uniforms: shadowUniforms,
@@ -691,7 +697,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         material.color.setHex(tone.building);
         // Ground shadows fade out at night (dark ground would swallow them
         // anyway, but this makes it explicit + free).
-        shadowUniforms.u_strength.value = sniff ? 0 : 1;
+        shadowUniforms.u_strength.value = sniff ? 0 : SHADOW_DAY_STRENGTH;
 
         const mmArr = Array.from(args.defaultProjectionData.mainMatrix);
 
