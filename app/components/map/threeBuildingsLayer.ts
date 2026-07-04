@@ -125,13 +125,15 @@ export const CLEAR_BAND = 240;
 // the lit ground is darkened toward.
 const SHADOW_Y = 0.4;
 const SHADOW_MAX_LEN = 45;
-// Kept deliberately light: a soft cool-grey the ground is nudged toward, not a
-// dark patch. Combined with a low day strength (below) it's a gentle shade that
-// still lets the floor read through — MIN-blend + this pale tint barely darkens.
-const SHADOW_COLOR = 0xc2c8d0;
-// Day shadow opacity. Low on purpose — 1.0 pulled the ground to mid-grey, which
-// hid the floor; ~0.34 leaves a light, transparent shade.
-const SHADOW_DAY_STRENGTH = 0.34;
+// Kept deliberately faint: a very pale cool-grey the ground is nudged toward,
+// not a dark patch. Combined with the low day strength (below) it's barely a
+// ghost — MIN-blend + this pale tint darkens the lit ground only a few percent,
+// so the floor reads through almost untouched.
+const SHADOW_COLOR = 0xccd2da;
+// Day shadow opacity. Very low on purpose — 1.0 pulled the ground to mid-grey
+// and 0.34 was still a visible shade; ~0.18 leaves just a faint transparent
+// hint (~3–4% darkening near-field) so the floor stays clearly visible.
+const SHADOW_DAY_STRENGTH = 0.18;
 
 // The clear bubble is a fixed world radius, but zooming out lifts the camera
 // far from the ground (and a steep pitch pushes the view further into the
