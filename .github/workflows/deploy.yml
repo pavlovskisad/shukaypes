@@ -10,8 +10,26 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # Gate the deploy on typecheck + lint so a broken push to main can't ship.
+  # (react-hooks/rules-of-hooks is an error here — the class of bug that
+  # white-screened prod once.) The frontend deploys via Vercel's own git
+  # integration and is not gated by this workflow.
+  checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: pnpm/action-setup@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: pnpm
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm typecheck
+      - run: pnpm lint
+
   server:
     name: server → fly.io
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
