@@ -1,6 +1,7 @@
 import type { LatLng } from '../utils/geo.js';
 import {
   distanceMeters,
+  isInRiver,
   scatterInRadius,
   snapToLandIfInRiver,
 } from '../utils/geo.js';
@@ -11,6 +12,38 @@ import type { StoredWaypoint } from '../db/schema.js';
 // scent trail instead of running dead straight.
 const QUEST_STEP_M = 150;
 const QUEST_HEADING_JITTER = 0.6;
+// Trail length scales with the search zone: a fresh, tight case is a quick
+// 3-stop sniff; an old case whose zone has expanded reads as a bigger hunt
+// (up to MAX). This is the "difficulty" — it rides the case, no UI needed.
+const QUEST_MIN_STOPS = 3;
+const QUEST_MAX_STOPS = 5;
+
+// Advance one step from `from` along roughly `heading`, staying on land. We
+// wander the heading a little, then — if that lands in the Dnipro — rotate
+// and retry so the trail walks ALONG the bank rather than being snapped
+// across the river (which flings stops km away and bunches them up).
+function stepOnLand(
+  from: LatLng,
+  heading: number,
+  mPerLat: number,
+  mPerLng: number,
+): { pos: LatLng; heading: number } {
+  let h = heading + (Math.random() - 0.5) * 2 * QUEST_HEADING_JITTER;
+  for (let k = 0; k < 8; k++) {
+    const pos: LatLng = {
+      lat: from.lat + (Math.sin(h) * QUEST_STEP_M) / mPerLat,
+      lng: from.lng + (Math.cos(h) * QUEST_STEP_M) / mPerLng,
+    };
+    if (!isInRiver(pos)) return { pos, heading: h };
+    h += Math.PI / 4; // turn 45° and try again — follow the bank
+  }
+  // Whole neighbourhood is water (rare) — fall back to the plain snap.
+  const straight: LatLng = {
+    lat: from.lat + (Math.sin(heading) * QUEST_STEP_M) / mPerLat,
+    lng: from.lng + (Math.cos(heading) * QUEST_STEP_M) / mPerLng,
+  };
+  return { pos: snapToLandIfInRiver(straight), heading };
+}
 
 // Detective-quest waypoint generation.
 //
@@ -24,44 +57,51 @@ const QUEST_HEADING_JITTER = 0.6;
 //     searches — and different walkers — cover different corners, and the
 //     whole (possibly large) zone gets swept collectively rather than one
 //     person being asked to cover all of it.
+//
+// `count` defaults to a zone-scaled length (see QUEST_MIN/MAX_STOPS).
 export function generateDetectiveWaypoints(
   userPos: LatLng,
   dogPos: LatLng,
   zoneRadiusM: number,
-  count = 3,
+  count?: number,
 ): StoredWaypoint[] {
-  const n = Math.max(1, count);
+  const stops = Math.max(
+    1,
+    count ??
+      Math.min(
+        QUEST_MAX_STOPS,
+        QUEST_MIN_STOPS + Math.floor(Math.max(0, zoneRadiusM) / 1200),
+      ),
+  );
+
   // 1. Pick a random patch centre inside the zone. Leave room for the trail
   //    so the whole thing stays inside the zone. Uniform-in-area sampling
   //    (the scatter default) even biases the patch toward the outer zone,
   //    which helps cover the ground the zone gains as it grows over days.
-  const trailSpan = QUEST_STEP_M * (n - 1);
+  const trailSpan = QUEST_STEP_M * (stops - 1);
   const centerReach = Math.max(0, zoneRadiusM - trailSpan);
   const patch = scatterInRadius(dogPos, 1, centerReach)[0] ?? dogPos;
 
-  // 2. Lay a short chained trail through the patch: each stop ~QUEST_STEP_M
-  //    from the last along a gently wandering heading. We march along the
-  //    ideal line and only snap the STORED point out of the river, so a snap
-  //    never drags the rest of the trail with it.
+  // 2. Lay a short chained trail through the patch — each stop ~QUEST_STEP_M
+  //    from the last, staying on land (stepOnLand follows the bank if a step
+  //    would land in the river instead of snapping across it).
   const mPerLat = 111_000;
   const mPerLng = 111_000 * Math.cos((patch.lat * Math.PI) / 180) || 111_000;
   let heading = Math.random() * 2 * Math.PI;
-  let cur: LatLng = patch;
-  const trail: LatLng[] = [snapToLandIfInRiver(cur)];
-  for (let i = 1; i < n; i++) {
-    heading += (Math.random() - 0.5) * 2 * QUEST_HEADING_JITTER;
-    cur = {
-      lat: cur.lat + (Math.sin(heading) * QUEST_STEP_M) / mPerLat,
-      lng: cur.lng + (Math.cos(heading) * QUEST_STEP_M) / mPerLng,
-    };
-    trail.push(snapToLandIfInRiver(cur));
+  let cur: LatLng = snapToLandIfInRiver(patch);
+  const trail: LatLng[] = [cur];
+  for (let i = 1; i < stops; i++) {
+    const next = stepOnLand(cur, heading, mPerLat, mPerLng);
+    cur = next.pos;
+    heading = next.heading;
+    trail.push(cur);
   }
 
   // 3. Enter the patch from whichever end is nearer the user, so the approach
   //    reads naturally instead of doubling back past the near stop.
-  const first = trail[0]!;
-  const last = trail[trail.length - 1]!;
-  if (distanceMeters(userPos, last) < distanceMeters(userPos, first)) {
+  const firstP = trail[0]!;
+  const lastP = trail[trail.length - 1]!;
+  if (distanceMeters(userPos, lastP) < distanceMeters(userPos, firstP)) {
     trail.reverse();
   }
 
