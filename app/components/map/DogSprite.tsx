@@ -30,6 +30,9 @@ export type DogAnim =
 
 // Native GIF frame box. All poses are 64×64 (sniffing 64×55, bottom-aligned).
 const FRAME_PX = 64;
+// Global size trim applied on top of each caller's `scale` — the designer's
+// dogs ran a touch large, so everything renders at 85% (15% smaller).
+const SIZE_SCALE = 0.85;
 
 const GIFS: Record<DogAnim, string> = {
   walking: '/dog/walking.gif',
@@ -64,7 +67,7 @@ interface DogSpriteProps {
 }
 
 export function DogSprite({ anim, facingLeft, scale = 2 }: DogSpriteProps) {
-  const size = FRAME_PX * scale;
+  const size = FRAME_PX * scale * SIZE_SCALE;
   return (
     <div
       aria-hidden
