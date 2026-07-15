@@ -1376,22 +1376,38 @@ export default function MapViewWeb() {
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
-    if (!map.isStyleLoaded()) return;
     // Re-apply when sniff palette OR language changes — the override
     // sets both paint colours AND text-field language, so a lang flip
     // from the profile toggle re-localises street/place labels live.
-    applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
-    // applyCrayonOverride resets transportation_name visibility to
-    // 'visible', so re-apply the pitch-based hide right after.
-    syncStreetLabels();
-    // …and it re-opacities the fill-extrusion buildings; keep them hidden
-    // so the Three.js city stays the sole building treatment — but only when
-    // the game render actually initialised (the Three layer is present).
-    // On a WebGL2-fallback session there's no Three layer, so we must NOT
-    // hide MapLibre's buildings or we'd be left with none.
-    if (GAME_RENDER && map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
-      hideMapLibreBuildings(map);
+    const apply = () => {
+      applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
+      // applyCrayonOverride resets transportation_name visibility to
+      // 'visible', so re-apply the pitch-based hide right after.
+      syncStreetLabels();
+      // …and it re-opacities the fill-extrusion buildings; keep them hidden
+      // so the Three.js city stays the sole building treatment — but only when
+      // the game render actually initialised (the Three layer is present).
+      // On a WebGL2-fallback session there's no Three layer, so we must NOT
+      // hide MapLibre's buildings or we'd be left with none.
+      if (GAME_RENDER && map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
+        hideMapLibreBuildings(map);
+      }
+    };
+    // The style is briefly "not loaded" while it's mid-update — which happens
+    // exactly during rapid sniff toggles. The old code bailed here, DROPPING
+    // that toggle's palette change, so a sequence like on→off→on→off could
+    // leave the base map stuck on the previous tone (dark floor under a day
+    // sky). Instead of dropping it, apply now if we can, else once the style
+    // settles. The cleanup cancels a still-pending apply if sniff/lang flips
+    // again first, so we never apply a stale palette.
+    if (map.isStyleLoaded()) {
+      apply();
+      return;
     }
+    map.once('idle', apply);
+    return () => {
+      map.off('idle', apply);
+    };
   }, [sniffMode, lang, syncStreetLabels]);
 
   // Off-screen lost-pet edge-chip layout. Memoised so the per-pet
