@@ -1,24 +1,23 @@
-import { useEffect, useState } from 'react';
-
-// Pixel-art companion sprite. White-with-spots dog from the
-// "8-Bit Dogs" pack by 14collective (free for commercial use, no
-// attribution required — README in the original RAR).
+// Pixel-art companion sprite — the "dogs with tiny stroke" set (animated
+// GIFs, one per pose, by our designer).
 //
-// Sheets live in /public/dog/ so they're served as plain static URLs
-// (bypassing Metro's asset pipeline). Each sheet is a horizontal strip
-// of 64×64 frames, all facing right.
+// These are self-animating GIFs, so unlike the old PNG sprite-sheets we no
+// longer step frames in JS — the browser plays each GIF's baked timing and
+// loops it. That drops all the frame-count / frameMs / staticFrame bookkeeping;
+// swapping `anim` just swaps which GIF the div paints.
 //
-// We render at 2× nominal so the dog reads on the map at zoom 16
-// without going so big that it eats neighbouring tiles. The container
-// is positioned so its anchor (the dog's paws) sits on the actual
-// companionPos lat/lng — feet on the ground, head looks "above" it.
+// Assets live in /public/dog/ so they're served as plain static URLs
+// (bypassing Metro's asset pipeline). Each GIF is a 64×64 frame (sniffing is
+// 64×55; we bottom-align so the paws still sit on the anchor).
 //
-// Direction: the sheets only have one perspective (side view facing
-// right). For movement to the left we flip horizontally via
-// scaleX(-1). North/south movement reuses the most-recent horizontal
-// facing — top-down movement on a map doesn't have a "front view" and
-// trying to fake one with a rotation looks worse than letting the dog
-// slide while still facing east/west.
+// We render at 2× nominal so the dog reads on the map at zoom 16 without
+// eating neighbouring tiles. The container's anchor (the dog's paws) sits on
+// the companionPos lat/lng — feet on the ground, head "above" it.
+//
+// Direction: the art is a single side view facing right. For leftward movement
+// we flip horizontally via scaleX(-1). North/south reuses the last horizontal
+// facing — top-down map movement has no "front view", and faking one looks
+// worse than letting the dog slide while facing east/west.
 
 export type DogAnim =
   | 'walking'
@@ -29,116 +28,60 @@ export type DogAnim =
   | 'jumping'
   | 'crouched';
 
-interface Sheet {
-  url: string;
-  frameCount: number;
-  // ms per frame. Walking is moderate, running is faster (3-frame
-  // cycle blurs by quickly), sniffing is slower (the dog is busy with
-  // its nose), sitting is the slowest (idle breathing).
-  frameMs: number;
-  // Optional fixed frame index. When set, the sprite renders that
-  // single frame without cycling. Used for animations where the
-  // source sheet is a *transition* into a pose (lying.png is
-  // "stand → lay-down" frames; cycling reads as the dog repeatedly
-  // standing back up).
-  staticFrame?: number;
-}
-
+// Native GIF frame box. All poses are 64×64 (sniffing 64×55, bottom-aligned).
 const FRAME_PX = 64;
 
-const SHEETS: Record<DogAnim, Sheet> = {
-  walking: { url: '/dog/walking.png', frameCount: 7, frameMs: 110 },
-  sitting: { url: '/dog/sitting.png', frameCount: 5, frameMs: 220 },
-  running: { url: '/dog/running.png', frameCount: 3, frameMs: 80 },
-  // The original Sniffing.png is 512×55 (top whitespace trimmed).
-  // We pre-pad it to 512×64 with a transparent 9px top strip so the
-  // frame grid stays uniform — see scripts in the PR description.
-  sniffing: { url: '/dog/sniffing.png', frameCount: 8, frameMs: 140 },
-  // Hold the final "fully down" frame instead of cycling — the
-  // 4-frame sheet is a transition (stand → lower → mostly-down →
-  // fully-down) and looping it reads as the dog popping back up
-  // every cycle. Static frame keeps the dog peacefully laid out.
-  lying: { url: '/dog/lying.png', frameCount: 4, frameMs: 320, staticFrame: 3 },
-  // 6-frame hop cycle. ~110ms/frame matches walking, full cycle ≈
-  // 660ms which is about right for one tap-reaction beat.
-  jumping: { url: '/dog/jumping.png', frameCount: 6, frameMs: 110 },
-  // 6-frame stand → crouch transition. Pinned to the last frame
-  // (similar to lying) so the dog settles into the crouch instead
-  // of popping back up every cycle.
-  crouched: { url: '/dog/crouched.png', frameCount: 6, frameMs: 140, staticFrame: 5 },
+const GIFS: Record<DogAnim, string> = {
+  walking: '/dog/walking.gif',
+  sitting: '/dog/sitting.gif',
+  running: '/dog/running.gif',
+  sniffing: '/dog/sniffing.gif',
+  lying: '/dog/lying.gif',
+  jumping: '/dog/jumping.gif',
+  crouched: '/dog/crouched.gif',
 };
+// death.gif ships alongside these for a future "fainted/ko" state — no caller
+// uses it yet, so it's intentionally not in the DogAnim union.
 
-// Warm the browser cache for every sheet on module import. Without
-// this, the FIRST render of a given anim has to fetch its PNG
-// (cold), which paints as a blank flash before the image arrives.
-// Cheap one-shot — none of these sheets exceed a few KB.
+// Warm the browser cache for every GIF on module import, so the FIRST render
+// of a given anim doesn't flash blank while the image is fetched. Cheap
+// one-shot — each GIF is a few KB.
 if (typeof window !== 'undefined') {
-  for (const sheet of Object.values(SHEETS)) {
+  for (const url of Object.values(GIFS)) {
     const img = new Image();
-    img.src = sheet.url;
+    img.src = url;
   }
 }
 
 interface DogSpriteProps {
   anim: DogAnim;
-  // True when the dog should face left. The sheet is inherently
-  // right-facing, so we flip via CSS instead of maintaining a second
-  // copy of every animation.
+  // True when the dog should face left. The art is inherently right-facing, so
+  // we flip via CSS instead of keeping a second copy of every animation.
   facingLeft: boolean;
-  // Multiplier on the 64px native frame size. 2 = 128px on screen,
-  // which is roughly the right presence at our 16+ map zoom.
+  // Multiplier on the 64px native frame. 2 = 128px on screen, ~the right
+  // presence at our 16+ map zoom.
   scale?: number;
 }
 
 export function DogSprite({ anim, facingLeft, scale = 2 }: DogSpriteProps) {
-  const sheet = SHEETS[anim];
-  const [frameIdx, setFrameIdx] = useState(() => sheet.staticFrame ?? 0);
-  // Track which anim the current frameIdx is for. When anim changes
-  // we reset frameIdx during render (React's "adjusting state during
-  // rendering" pattern) so the OLD frameIdx is never paired with the
-  // NEW sheet's url — that mismatch is what made the dog "blink"
-  // (one paint of frame N from sheet A while the div already has
-  // sheet B's url, bleeding through past sheet B's frame range).
-  const [animKey, setAnimKey] = useState(anim);
-  if (animKey !== anim) {
-    setAnimKey(anim);
-    setFrameIdx(sheet.staticFrame ?? 0);
-  }
-
-  // Cycle the frame for non-static anims. The frameIdx reset itself
-  // happens in the render-time guard above; this effect just owns
-  // the interval for the currently-active anim.
-  useEffect(() => {
-    if (sheet.staticFrame != null) return;
-    const id = setInterval(() => {
-      setFrameIdx((i) => (i + 1) % sheet.frameCount);
-    }, sheet.frameMs);
-    return () => clearInterval(id);
-  }, [anim, sheet.frameCount, sheet.frameMs, sheet.staticFrame]);
-
   const size = FRAME_PX * scale;
-  // Defensive clamp — if frameIdx ever exceeds the new sheet's count
-  // (eg. switching from sniffing's 8 frames to running's 3), render
-  // the last valid frame instead of background-positioning past the
-  // sheet's edge into transparent space.
-  const safeFrameIdx = Math.min(frameIdx, sheet.frameCount - 1);
-
   return (
     <div
       aria-hidden
       style={{
         width: size,
         height: size,
-        backgroundImage: `url(${sheet.url})`,
+        backgroundImage: `url(${GIFS[anim]})`,
         backgroundRepeat: 'no-repeat',
-        // Each frame is FRAME_PX wide; we shift left by frame*FRAME_PX
-        // (in source pixels) and let backgroundSize scale the whole
-        // strip up by `scale` so positioning math stays in source-px.
-        backgroundPosition: `-${safeFrameIdx * FRAME_PX * scale}px 0`,
-        backgroundSize: `${sheet.frameCount * size}px ${size}px`,
-        // imageRendering: pixelated keeps the 8-bit edges crisp at 2×.
-        // Without this, browsers smooth-scale and the dog turns into a
-        // blurry beige smudge.
+        // Anchor the art to the bottom-centre so the paws sit on the marker
+        // point; a shorter frame (sniffing, 64×55) leaves clear space at the
+        // top rather than lifting the feet.
+        backgroundPosition: 'center bottom',
+        // Scale width to `size` and let height follow the aspect ratio, so the
+        // non-square sniffing frame isn't stretched.
+        backgroundSize: `${size}px auto`,
+        // pixelated keeps the 8-bit edges crisp at 2×; without it the browser
+        // smooth-scales the dog into a blurry smudge.
         imageRendering: 'pixelated',
         transform: facingLeft ? 'scaleX(-1)' : undefined,
         pointerEvents: 'none',
