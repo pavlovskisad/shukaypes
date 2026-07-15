@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import type { NearbyPlayer } from '@shukajpes/shared';
 import { MapLibreMarker } from './MapLibreMarker';
+import { useMaplibreMap } from './MapContext';
 import { DogSprite } from './DogSprite';
 import { Z } from '../../constants/z';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -36,6 +37,11 @@ export function OtherWalker({ player }: Props) {
   // Brief "👋" confirmation after you poke this walker.
   const [poked, setPoked] = useState(false);
   const pokePlayer = useGameStore((s) => s.pokePlayer);
+  // Kept in a ref so the []-deps glide interval always reads the current map
+  // without re-creating. Used for screen-space facing (rotation-proof).
+  const map = useMaplibreMap();
+  const mapRef = useRef(map);
+  mapRef.current = map;
 
   useEffect(() => {
     let last = typeof performance !== 'undefined' ? performance.now() : 0;
@@ -56,7 +62,19 @@ export function OtherWalker({ player }: Props) {
         if (moving) setMoving(false);
         return;
       }
-      if (Math.abs(dLng) > 1e-7) setFacingLeft(dLng < 0);
+      // Face the SCREEN-space direction of travel (project cur → target), so
+      // it's correct even when the map is rotated. World dLng alone faced the
+      // wrong way on a rotated map ("running backwards").
+      const m = mapRef.current;
+      if (m) {
+        try {
+          const dxPx = m.project([tgt.lng, tgt.lat]).x - m.project([cur.lng, cur.lat]).x;
+          if (dxPx > 0.5) setFacingLeft(false);
+          else if (dxPx < -0.5) setFacingLeft(true);
+        } catch {
+          /* project can throw mid-teardown — keep last facing */
+        }
+      }
       if (!moving) setMoving(true);
       const next = { lat: cur.lat + dLat * k, lng: cur.lng + dLng * k };
       posRef.current = next;

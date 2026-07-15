@@ -27,19 +27,22 @@ const HUNT_STEP_M = 2.0;
 const IDLE_STEP_M = 0.55;
 const LERP_TAIL = 0.2;
 
-// Distance from the orbit "follow position" below which we stop
-// sprinting and just keep pace with the user. Above this we treat the
-// situation as "we got separated" and sprint home at HUNT_STEP_M.
-const ORBIT_SETTLE_M = 3;
+// Only sprint (running gait) when we're genuinely SEPARATED from where the
+// dog should be — a big GPS jump, or coming back from an off-screen pause.
+// Everyday roaming + keeping pace with a walking user stays a walk (IDLE_STEP),
+// so the frantic running sprite is reserved for hunts and real catch-ups
+// instead of firing on every little orbit hop. IDLE_STEP (1.8 m/s) already
+// out-paces a normal walker, so the dog keeps up without ever sprinting.
+const CATCHUP_M = 28;
 
-// The companion roams in DISCRETE hops: every ROAM_MIN_MS (+ up to
-// ROAM_JITTER_MS) it picks a fresh spot on the orbit ring, trots there, then
-// RESTS until the next hop. Between hops the target doesn't move, so once the
-// dog arrives it actually stops and the sprite settles to sitting — the walk
-// cycle only plays while it's genuinely travelling, never in place. Roaming
-// happens whether the user walks or stands still.
-const ROAM_MIN_MS = 6000;
-const ROAM_JITTER_MS = 12000;
+// The companion roams in DISCRETE, SHORT hops: every ROAM_MIN_MS (+ up to
+// ROAM_JITTER_MS) it ambles a little way around the orbit ring (a ±ROAM_ARC_MAX
+// nudge, not a jump to the far side), then RESTS until the next hop. Short hop
+// + long rest = the dog mostly stands/sits near you and only walks a few steps
+// now and then, and because the hop is small it's a walk, never a sprint.
+const ROAM_MIN_MS = 12000;
+const ROAM_JITTER_MS = 14000;
+const ROAM_ARC_MAX = 0.35; // radians of arc per hop (~12 m on the ring)
 
 // To stop the dog "walking in place" from GPS jitter while the user stands
 // still, the orbit CENTRE follows the user's live position only while they're
@@ -189,7 +192,10 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
       // while it's actually travelling (to the next spot, or keeping pace with
       // a walking user). No continuous drift/wobble → no walking in place.
       if (now >= nextRoamAtRef.current) {
-        angleRef.current = Math.random() * Math.PI * 2;
+        // Amble a short, random arc around the ring — either direction, and
+        // sometimes barely at all — so it reads as an organic shuffle rather
+        // than a fixed mechanical step.
+        angleRef.current += (Math.random() - 0.5) * 2 * ROAM_ARC_MAX;
         nextRoamAtRef.current =
           now + ROAM_MIN_MS + Math.random() * ROAM_JITTER_MS;
       }
@@ -203,13 +209,14 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
         return;
       }
 
-      // No prey — head back to (or stay at) orbit pos. Sprint while
-      // we're far from where the user wants us; gentle trot once
-      // we're close enough to be just "following alongside".
+      // No prey — amble to (or rest at) the orbit spot. Walk (IDLE_STEP) for
+      // everyday roaming + keeping pace; only break into a run if we're really
+      // far behind (CATCHUP_M). Spawn straight at the orbit spot so there's no
+      // startup dash across the screen.
       setPos((prev) => {
-        const from = prev ?? userPos;
+        const from = prev ?? orbitPos;
         const distToOrbitM = distanceMeters(from, orbitPos);
-        const stepCap = distToOrbitM > ORBIT_SETTLE_M ? HUNT_STEP_M : IDLE_STEP_M;
+        const stepCap = distToOrbitM > CATCHUP_M ? HUNT_STEP_M : IDLE_STEP_M;
         return lerpStep(from, orbitPos, stepCap);
       });
     }, balance.roamTick);
