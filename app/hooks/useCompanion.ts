@@ -32,6 +32,23 @@ const LERP_TAIL = 0.2;
 // situation as "we got separated" and sprint home at HUNT_STEP_M.
 const ORBIT_SETTLE_M = 3;
 
+// The companion roams in DISCRETE hops: every ROAM_MIN_MS (+ up to
+// ROAM_JITTER_MS) it picks a fresh spot on the orbit ring, trots there, then
+// RESTS until the next hop. Between hops the target doesn't move, so once the
+// dog arrives it actually stops and the sprite settles to sitting — the walk
+// cycle only plays while it's genuinely travelling, never in place. Roaming
+// happens whether the user walks or stands still.
+const ROAM_MIN_MS = 6000;
+const ROAM_JITTER_MS = 12000;
+
+// To stop the dog "walking in place" from GPS jitter while the user stands
+// still, the orbit CENTRE follows the user's live position only while they're
+// actually moving (drifted > MOVE_THRESHOLD_M within STILL_AFTER_MS). Once
+// still it holds fixed, so the dog roams around a stable point and rests
+// cleanly between hops instead of chasing GPS noise.
+const MOVE_THRESHOLD_M = 6;
+const STILL_AFTER_MS = 3000;
+
 // Time after any collect (auto, forced, by user or companion) where
 // the dog ignores fresh hunt targets and just returns/sits. Without
 // this, a parked user with several paws in the 90-200m ring keeps the
@@ -104,16 +121,31 @@ function lerpStep(from: LatLng, to: LatLng, maxStepM: number): LatLng {
 export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | null {
   const [pos, setPos] = useState<LatLng | null>(null);
   const angleRef = useRef(Math.random() * Math.PI * 2);
-  const targetRef = useRef(angleRef.current);
   // Tracks the last gameStore.collectPulse we saw so we can detect
   // bumps inside the interval and start a fresh cooldown. Init to -1
   // so the first observed value (always 0 on a fresh store) doesn't
   // count as a collect.
   const lastCollectPulseRef = useRef<number>(-1);
   const cooldownUntilRef = useRef<number>(0);
+  // Idle-roam bookkeeping: the orbit centre the dog roams around (held steady
+  // while the user is still), the last position counted as a real user move +
+  // when it happened, and when the next discrete roam hop is due.
+  const centerRef = useRef<LatLng | null>(null);
+  const moveAnchorRef = useRef<LatLng | null>(null);
+  const lastMoveAtRef = useRef<number>(0);
+  const nextRoamAtRef = useRef<number>(0);
 
   useEffect(() => {
     if (!userPos || !enabled) return;
+
+    // Real user movement vs GPS jitter: the anchor only resets when the user
+    // drifts past MOVE_THRESHOLD_M, and lastMoveAt marks that moment — so a
+    // parked user's GPS wander never counts as walking.
+    const moveAnchor = moveAnchorRef.current;
+    if (!moveAnchor || distanceMeters(moveAnchor, userPos) > MOVE_THRESHOLD_M) {
+      moveAnchorRef.current = userPos;
+      lastMoveAtRef.current = Date.now();
+    }
 
     const id = setInterval(() => {
       const { menuOpen, tokens, foodItems, collectPulse } = useGameStore.getState();
@@ -144,21 +176,26 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
         ? null
         : findNearestTarget(userPos, tokens, foodItems);
 
-      // Slowly drift the orbit angle in both modes so when we switch
-      // back to idle the dog isn't snapped to a stale heading.
-      if (Math.random() < 0.005) {
-        targetRef.current = Math.random() * Math.PI * 2;
+      // Orbit centre: follow the user's live position while they're actually
+      // walking; hold it fixed once they're still, so GPS jitter doesn't drag
+      // the dog around (which read as "walking in place").
+      const userMoving = now - lastMoveAtRef.current < STILL_AFTER_MS;
+      if (userMoving || !centerRef.current) centerRef.current = userPos;
+      const center = centerRef.current ?? userPos;
+
+      // Discrete roam: every few seconds pick a fresh spot on the orbit ring.
+      // Between hops the angle is unchanged, so once the dog reaches its spot it
+      // stops and the sprite settles to sitting — the walk cycle only plays
+      // while it's actually travelling (to the next spot, or keeping pace with
+      // a walking user). No continuous drift/wobble → no walking in place.
+      if (now >= nextRoamAtRef.current) {
+        angleRef.current = Math.random() * Math.PI * 2;
+        nextRoamAtRef.current =
+          now + ROAM_MIN_MS + Math.random() * ROAM_JITTER_MS;
       }
-      let diff = targetRef.current - angleRef.current;
-      if (diff > Math.PI) diff -= Math.PI * 2;
-      if (diff < -Math.PI) diff += Math.PI * 2;
-      angleRef.current += diff * 0.02 + Math.sin(now / 3000) * 0.005;
-      const roamR =
-        balance.roamRadius +
-        Math.sin(now / balance.roamRadiusWobblePeriod) * balance.roamRadiusWobble;
       const orbitPos: LatLng = {
-        lat: userPos.lat + Math.sin(angleRef.current) * roamR,
-        lng: userPos.lng + Math.cos(angleRef.current) * roamR,
+        lat: center.lat + Math.sin(angleRef.current) * balance.roamRadius,
+        lng: center.lng + Math.cos(angleRef.current) * balance.roamRadius,
       };
 
       if (hunt) {
