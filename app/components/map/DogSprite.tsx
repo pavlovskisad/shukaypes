@@ -40,9 +40,12 @@ const SIZE_SCALE = 0.85;
 // CSS — stacked hard drop-shadows in 8 directions — so it works regardless of
 // which art set is uploaded, outlines the whole silhouette, and is tunable.
 // STROKE_SRC_PX is the rim thickness in SOURCE (64px-native) pixels; it scales
-// with the sprite so it looks the same at any caller `scale`.
+// with the sprite so it looks the same at any caller `scale`. Kept low (0.4) so
+// it reads as a tight outline hugging the silhouette rather than a fat halo —
+// the 8 chained drop-shadows compound, so a small value is already a clean,
+// continuous ~1px line.
 const STROKE_COLOR = '#ffffff';
-const STROKE_SRC_PX = 1;
+const STROKE_SRC_PX = 0.4;
 const STROKE_DIRS: [number, number][] = [
   [1, 0], [-1, 0], [0, 1], [0, -1],
   [1, 1], [1, -1], [-1, 1], [-1, -1],
