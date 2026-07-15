@@ -134,7 +134,7 @@ function avoidWater(_center: LatLng, sampled: LatLng): LatLng {
 // scatter spread for points that legitimately had a water roll.
 const RESAMPLE_LIMIT = 8;
 
-function isInRiver(p: LatLng): boolean {
+export function isInRiver(p: LatLng): boolean {
   return pointInRiverPolygon(p.lat, p.lng);
 }
 

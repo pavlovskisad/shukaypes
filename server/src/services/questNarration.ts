@@ -79,27 +79,45 @@ export async function narrateQuestComplete(
 // Haiku call per arrival. Returns N short clues — each one describes
 // what the companion notices / suspects at that specific waypoint
 // ("she'd nap by the warm vent", "kids feed strays here at dusk").
+//
+// Two touches: the clues ESCALATE (early stops are faint/old traces, later
+// ones warmer, the last is the strongest lead — we're closing in), and where
+// a stop snapped to a real place (placeNames[i]) the companion names it, so
+// the trail reads as real Kyiv spots rather than abstract dots.
+//
 // Fails soft: returns null if the API call or the JSON parse fails;
 // the caller leaves clue=null and the client falls back to the
 // generic narrateWaypointReached on advance.
 export async function narrateWaypointClues(
   dog: DogContext,
   count: number,
+  placeNames: (string | null)[] = [],
 ): Promise<string[] | null> {
   try {
+    const stopLines = Array.from({ length: count }, (_, i) => {
+      const place = placeNames[i];
+      return place
+        ? `stop ${i + 1}: near ${place}`
+        : `stop ${i + 1}: (somewhere along the way)`;
+    }).join('\n');
     const resp = await anthropic().messages.create({
       model: AMBIENT_MODEL,
-      max_tokens: 220,
+      max_tokens: 240,
       temperature: 0.8,
       system: QUEST_NARRATION_SYSTEM,
       messages: [
         {
           role: 'user',
-          content: `We're about to start a detective search for ${dog.name} (${dog.species}, ${dog.breed}) — ${count} stops along the way.
+          content: `We're about to start a detective search for ${dog.name} (${dog.species}, ${dog.breed}) — ${count} stops in order:
+${stopLines}
 
-For each stop in order, write ONE short clue (5-10 words) the companion would notice or suspect there. Vary the clues — different sensory details, different hunches. Don't number them. Don't add quotes. Output ONLY a JSON array of ${count} strings, nothing else.
+For each stop, write ONE short clue (5-10 words) the companion notices or suspects there.
+- The trail ESCALATES: the first stops are faint or old traces, the middle ones warmer, and the LAST stop is the strongest, freshest lead — like we're closing in on ${dog.name}.
+- If a stop names a real place, weave that place into its clue naturally.
+- Vary the sensory details and hunches. Don't number them. Don't add quotes.
+Output ONLY a JSON array of ${count} strings, nothing else.
 
-Example shape: ["warm vent under the steps — she'd nap here", "kids feed strays at the corner store", "scent fades by the playground gate"]`,
+Example shape: ["a faint old scent by the tram stop", "fresher now — someone fed a stray here", "warm — fur caught on the fence", "she was just here, by the park gate"]`,
         },
       ],
     });

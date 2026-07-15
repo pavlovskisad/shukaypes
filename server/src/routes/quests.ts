@@ -7,6 +7,7 @@ import {
   generateDetectiveWaypoints,
   WAYPOINT_REACH_RADIUS_M,
 } from '../services/quest.js';
+import { snapWaypointsToPlaces } from '../services/questPlaces.js';
 import {
   narrateQuestStart,
   narrateWaypointReached,
@@ -112,18 +113,24 @@ const plugin: FastifyPluginAsync = async (app) => {
         ),
       );
 
-    const waypoints = generateDetectiveWaypoints(
+    const rawWaypoints = generateDetectiveWaypoints(
       { lat, lng },
       { lat: dog.lat, lng: dog.lng },
       dog.zoneRadiusM,
-      3,
     );
+    // Snap each stop onto a real nearby place (park/square/metro/building) so
+    // the trail lands on named spots; placeNames feeds the clue narration.
+    const { waypoints, placeNames } = await snapWaypointsToPlaces(rawWaypoints);
 
     // One Haiku call up-front fills clue strings per waypoint so we
     // don't burn a model call on every /advance. Fail-soft → clues
     // stay null, client falls back to the generic arrival narration.
     const dogCtx = { name: dog.name, species: dog.species, breed: dog.breed };
-    const clues = await narrateWaypointClues(dogCtx, waypoints.length);
+    const clues = await narrateWaypointClues(
+      dogCtx,
+      waypoints.length,
+      placeNames,
+    );
     const waypointsWithClues: StoredWaypoint[] = waypoints.map((w, i) => ({
       ...w,
       clue: clues?.[i] ?? null,
