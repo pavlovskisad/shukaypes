@@ -135,7 +135,11 @@ export const balance = {
   zoneExpansion: {
     baseRadiusM: 500,
     growthPerDayM: 150,
-    maxRadiusM: 2500,
+    // 1.25 km cap (was 2.5 km — a 5 km-wide circle spanned several districts
+    // and made searches/quests feel scattered). Because the cron clamps with
+    // LEAST(maxRadiusM, …), lowering this also shrinks any existing oversized
+    // zones down to the new cap on the next tick, not just new ones.
+    maxRadiusM: 1250,
     intervalMs: 60 * 60 * 1000,
   },
   // Daily janitor for lostDogs. Two sweeps so noisy parses and
