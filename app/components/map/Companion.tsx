@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
 import { MapLibreMarker } from './MapLibreMarker';
+import { useMaplibreMap } from './MapContext';
 import { useGameStore } from '../../stores/gameStore';
 import { Z } from '../../constants/z';
 import { iconForCategory } from '../ui/Icon';
@@ -144,21 +145,21 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   //   - movedM ≤ WALK_THRESHOLD_M: sitting sprite, after a debounce
   //     so a single quiet tick mid-walk doesn't blink to sit.
   const RUN_THRESHOLD_M = 1.5;
-  const WALK_THRESHOLD_M = 0.04;
+  const WALK_THRESHOLD_M = 0.1;
   const STILL_DEBOUNCE_MS = 400;
   const [motion, setMotion] = useState<'still' | 'walking' | 'running'>('still');
   const [facingLeft, setFacingLeft] = useState(false);
   const lastPosRef = useRef<LatLng | null>(null);
   const idleTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  // Multi-tick smoothing for the facing direction. Per-tick dLng was
-  // flickering near zero when the dog's trajectory crossed a tile
-  // boundary or a target switched 180° — sprite could face one way
-  // while the body slid the other for a frame ("running backwards"
-  // bug the user reported). Average the last 4 ticks' dLng + only
-  // flip when the smoothed value crosses a hysteresis band.
-  const FACING_WINDOW = 4;
-  const FACING_HYSTERESIS = 5e-7;
-  const recentDLngRef = useRef<number[]>([]);
+  const map = useMaplibreMap();
+  // Facing follows the dog's SCREEN-space travel this tick — project both
+  // positions and compare X. Basing it on world longitude (dLng) was wrong two
+  // ways: it ignored map rotation (a rotated map makes east ≠ screen-right),
+  // and the old 4-tick averaging lagged behind direction changes, so on a
+  // reversed hop the dog slid one way while still facing the other ("running
+  // backwards"). Screen-space + instantaneous fixes both; a small pixel
+  // deadzone holds the facing on near-vertical / negligible moves.
+  const FACING_DEADZONE_PX = 0.5;
   useEffect(() => {
     const last = lastPosRef.current;
     lastPosRef.current = position;
@@ -167,27 +168,22 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
     if (movedM > RUN_THRESHOLD_M) setMotion('running');
     else if (movedM > WALK_THRESHOLD_M) setMotion('walking');
     if (movedM > WALK_THRESHOLD_M) {
-      const dLng = position.lng - last.lng;
-      recentDLngRef.current.push(dLng);
-      if (recentDLngRef.current.length > FACING_WINDOW) {
-        recentDLngRef.current.shift();
+      if (map) {
+        try {
+          const ax = map.project([last.lng, last.lat]).x;
+          const bx = map.project([position.lng, position.lat]).x;
+          const dxPx = bx - ax;
+          if (dxPx > FACING_DEADZONE_PX) setFacingLeft(false);
+          else if (dxPx < -FACING_DEADZONE_PX) setFacingLeft(true);
+          // else: near-vertical / tiny move → keep current facing.
+        } catch {
+          /* project can throw mid-teardown — keep last facing */
+        }
       }
-      const avgDLng =
-        recentDLngRef.current.reduce((a, b) => a + b, 0) /
-        recentDLngRef.current.length;
-      if (avgDLng > FACING_HYSTERESIS) setFacingLeft(false);
-      else if (avgDLng < -FACING_HYSTERESIS) setFacingLeft(true);
-      // Inside the hysteresis band → keep previous facing (don't flip
-      // on noise near zero).
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
       idleTimerRef.current = setTimeout(() => setMotion('still'), STILL_DEBOUNCE_MS);
-    } else {
-      // Movement stopped — let the dLng history age out so the next
-      // motion start gets fresh samples, not stale averages from the
-      // previous burst.
-      recentDLngRef.current = [];
     }
-  }, [position]);
+  }, [position, map]);
   useEffect(() => {
     return () => {
       if (idleTimerRef.current) clearTimeout(idleTimerRef.current);
