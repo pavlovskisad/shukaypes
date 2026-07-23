@@ -56,6 +56,7 @@ import { getDeepLinkDogId } from '../../services/telegram';
 import { useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
 import { fetchWalkingRoute } from '../../services/directions';
+import type { NearbyLostDog } from '../../services/api';
 import { PoiMarker } from './PoiMarker';
 import { PoiCluster } from './PoiCluster';
 import { WaypointMarker } from './WaypointMarker';
@@ -232,6 +233,10 @@ export default function MapViewWeb() {
   // Dog-cam prototype (toggled by the old supersniff button — see index.tsx).
   // Drives the low chase-camera follow effect + DOGCAM_* constants below.
   const dogCam = useGameStore((s) => s.dogCam);
+  // Sniff-and-lead search mode assignment (which lost dog + spot). Set by the
+  // search controller below while dogCam is on.
+  const searchTarget = useGameStore((s) => s.searchTarget);
+  const setSearchTarget = useGameStore((s) => s.setSearchTarget);
   // Tracks the map's visible bounds so we can detect when the
   // companion has wandered (or been panned) off-screen and surface a
   // tap-to-recenter indicator at the screen edge.
@@ -640,6 +645,101 @@ export default function MapViewWeb() {
       }
     };
   }, [dogCam]);
+
+  // ── Sniff-and-lead search mode (Phase 1) ────────────────────────────────
+  // While search mode (dogCam) is on, the system assigns the nearest lost dog +
+  // a spot inside its search zone; the companion leads you there (useCompanion),
+  // the dog-cam follows, and a photo card shows who you're looking for. When you
+  // reach the spot you get a reward and it serves the next-closest dog. Endless.
+  const SEARCH_REACH_M = 40;
+  const visitedDogsRef = useRef<Set<string>>(new Set());
+  // Pick a random spot inside a dog's search zone, biased to sit a little away
+  // from the user so "arrival" isn't instant.
+  const spotInZone = useCallback(
+    (center: LatLng, radiusM: number, awayFrom: LatLng | null): LatLng => {
+      const r = Math.max(80, radiusM);
+      for (let i = 0; i < 6; i++) {
+        const rr = r * Math.sqrt(Math.random());
+        const th = Math.random() * Math.PI * 2;
+        const spot = {
+          lat: center.lat + (rr * Math.sin(th)) / 110540,
+          lng:
+            center.lng +
+            (rr * Math.cos(th)) /
+              (111320 * Math.cos((center.lat * Math.PI) / 180) || 111320),
+        };
+        if (!awayFrom || distanceMeters(awayFrom, spot) > SEARCH_REACH_M * 2) {
+          return spot;
+        }
+      }
+      return center;
+    },
+    [],
+  );
+  // Nearest active lost dog we haven't just visited (resets the exclusion set
+  // once they're all seen, so it loops forever).
+  const pickNextSearchDog = useCallback((): NearbyLostDog | null => {
+    if (!userPos || lostDogs.length === 0) return null;
+    let pool = lostDogs.filter((d) => !visitedDogsRef.current.has(d.id));
+    if (pool.length === 0) {
+      visitedDogsRef.current.clear();
+      pool = lostDogs;
+    }
+    let best: NearbyLostDog | null = null;
+    let bestD = Infinity;
+    for (const d of pool) {
+      const dist = distanceMeters(userPos, d.lastSeen.position);
+      if (dist < bestD) {
+        bestD = dist;
+        best = d;
+      }
+    }
+    return best;
+  }, [userPos, lostDogs]);
+
+  const assignSearch = useCallback(
+    (dog: NearbyLostDog) => {
+      visitedDogsRef.current.add(dog.id);
+      setSearchTarget({
+        dogId: dog.id,
+        spot: spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, userPos),
+      });
+    },
+    [setSearchTarget, spotInZone, userPos],
+  );
+
+  // Assign a target when the mode turns on (or when the current one clears).
+  useEffect(() => {
+    if (!DOG_CAM || !dogCam) {
+      visitedDogsRef.current.clear();
+      return;
+    }
+    if (searchTarget) return;
+    const dog = pickNextSearchDog();
+    if (dog) assignSearch(dog);
+  }, [dogCam, searchTarget, pickNextSearchDog, assignSearch]);
+
+  // Arrival → reward + serve the next dog.
+  useEffect(() => {
+    if (!DOG_CAM || !dogCam || !searchTarget || !userPos) return;
+    if (distanceMeters(userPos, searchTarget.spot) > SEARCH_REACH_M) return;
+    const dog = lostDogs.find((d) => d.id === searchTarget.dogId);
+    showBubble(
+      dog ? `checked this spot for ${dog.name} 🐾 on to the next!` : 'on to the next! 🐾',
+      3500,
+    );
+    const next = pickNextSearchDog();
+    if (next) assignSearch(next);
+    else setSearchTarget(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [userPos, searchTarget, dogCam]);
+
+  // The dog currently being searched for (for the photo card).
+  const searchDog = useMemo(
+    () =>
+      searchTarget ? lostDogs.find((d) => d.id === searchTarget.dogId) ?? null : null,
+    [searchTarget, lostDogs],
+  );
 
   // Action-based calm gate for the chained map hints
   // (store.hintsAllowed): the user isn't doing anything right now — on
@@ -2223,6 +2323,77 @@ export default function MapViewWeb() {
             })
           }
         />
+      ) : null}
+
+      {/* Sniff-and-lead search card — who the dog is leading you to find. */}
+      {DOG_CAM && dogCam && onMapScreen && searchDog ? (
+        <div
+          style={{
+            position: 'fixed',
+            top: 96,
+            left: '50%',
+            transform: 'translateX(-50%)',
+            zIndex: Z.HUD_CHIPS,
+            display: 'flex',
+            alignItems: 'center',
+            gap: 10,
+            background: 'rgba(20,20,24,0.86)',
+            color: '#fff',
+            borderRadius: 16,
+            padding: '8px 16px 8px 8px',
+            boxShadow: '0 6px 20px rgba(0,0,0,0.30)',
+            maxWidth: '86vw',
+            pointerEvents: 'none',
+          }}
+        >
+          <div
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 12,
+              overflow: 'hidden',
+              background: '#333',
+              flexShrink: 0,
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              fontSize: 28,
+            }}
+          >
+            {searchDog.photoUrl ? (
+              <img
+                src={searchDog.photoUrl}
+                alt=""
+                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
+              />
+            ) : (
+              searchDog.emoji || '🐕'
+            )}
+          </div>
+          <div style={{ minWidth: 0 }}>
+            <div
+              style={{
+                font: `700 14px ${SYSTEM_FONT}`,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              🔍 {searchDog.name}
+            </div>
+            <div
+              style={{
+                font: `500 11px ${SYSTEM_FONT}`,
+                opacity: 0.82,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+              }}
+            >
+              {searchDog.breed} · on the trail
+            </div>
+          </div>
+        </div>
       ) : null}
 
       {/* Cancel pills — small floating chips that drop in below the

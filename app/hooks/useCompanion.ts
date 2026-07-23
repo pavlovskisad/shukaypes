@@ -151,10 +151,20 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
     }
 
     const id = setInterval(() => {
-      const { menuOpen, tokens, foodItems, collectPulse } = useGameStore.getState();
+      const { menuOpen, tokens, foodItems, collectPulse, dogCam, searchTarget } =
+        useGameStore.getState();
       if (menuOpen) return;
 
       const now = Date.now();
+
+      // Sniff-and-lead search mode: when active with an assigned spot, the dog
+      // LEADS you there — sprint toward the spot, overriding roam/hunt. It
+      // arrives ahead of you and waits; the MapView controller advances to the
+      // next dog once you catch up.
+      if (dogCam && searchTarget) {
+        setPos((prev) => lerpStep(prev ?? userPos, searchTarget.spot, HUNT_STEP_M));
+        return;
+      }
 
       // Detect a collect since last tick → start hunt cooldown. After
       // any collect (auto, companion, or forced tap) we ignore fresh

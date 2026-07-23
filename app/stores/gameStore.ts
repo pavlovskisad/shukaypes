@@ -169,6 +169,10 @@ interface GameState {
   spotsVisibleBeforeSniff: boolean | null;
   // Dog-cam prototype (wired to the old supersniff toggle button).
   dogCam: boolean;
+  // Sniff-and-lead search mode: the current assignment — which lost dog we're
+  // searching for and the spot in its zone the companion is leading you to.
+  // Set while dogCam (search mode) is on; the companion heads to `spot`.
+  searchTarget: { dogId: string; spot: LatLng } | null;
   // About sheet open state — promoted from MapScreen-local state so
   // the radial menu (a child of MapView) can trigger it via the new
   // "?" button. MapScreen still hosts the modal so the dashboard tab
@@ -271,6 +275,7 @@ interface GameState {
   setSniffMode: (on: boolean) => void;
   toggleSniffMode: () => void;
   toggleDogCam: () => void;
+  setSearchTarget: (t: { dogId: string; spot: LatLng } | null) => void;
   setAboutOpen: (open: boolean) => void;
   setActiveHint: (id: string | null) => void;
   setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
@@ -350,6 +355,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   sniffMode: false,
   spotsVisibleBeforeSniff: null,
   dogCam: false,
+  searchTarget: null,
   aboutOpen: false,
   activeHint: null,
   menuCamera: null,
@@ -855,7 +861,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     }),
   // Dog-cam prototype: the supersniff toggle is wired to this instead (see
   // index.tsx) so supersniff is unreachable for now. Camera-only mode.
-  toggleDogCam: () => set((s) => ({ dogCam: !s.dogCam })),
+  // Toggling the mode always clears the assignment; the search controller
+  // (MapView) picks a fresh target when the mode turns on.
+  toggleDogCam: () => set((s) => ({ dogCam: !s.dogCam, searchTarget: null })),
+  setSearchTarget: (searchTarget) => set({ searchTarget }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setActiveHint: (activeHint) => set({ activeHint }),
   setMenuCamera: (menuCamera) => set({ menuCamera }),
