@@ -111,8 +111,10 @@ const DOGCAM_MIN_MOVE_M = 0.6;
 // Preview (carousel-swipe) camera: keep the immersive 3D tilt and look FROM you
 // TOWARD the dog's zone, so the zone sits out in the distance/horizon where the
 // fog layer washes it brand-blue — rather than a flat zoomed-out overview.
-const PREVIEW_PITCH = 68;
-const PREVIEW_ZOOM = 15.5;
+// Close + steep (near the dog-cam feel); the steep pitch still shows the zone
+// out on the horizon despite the closer zoom.
+const PREVIEW_PITCH = 76;
+const PREVIEW_ZOOM = 16.3;
 
 // Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
 // the dog-cam "up" along the dog's direction of travel.
@@ -788,8 +790,8 @@ export default function MapViewWeb() {
         // the zone. The fog layer paints the zone brand-blue out in the haze.
         const center = from
           ? {
-              lng: from.lng + (zone.lng - from.lng) * 0.35,
-              lat: from.lat + (zone.lat - from.lat) * 0.35,
+              lng: from.lng + (zone.lng - from.lng) * 0.3,
+              lat: from.lat + (zone.lat - from.lat) * 0.3,
             }
           : zone;
         try {
