@@ -115,6 +115,10 @@ const DOGCAM_MIN_MOVE_M = 0.6;
 // out on the horizon despite the closer zoom.
 const PREVIEW_PITCH = 76;
 const PREVIEW_ZOOM = 16.3;
+// Bottom screen space (CSS px) reserved for the search carousel while in
+// dog-cam. Applied as map padding so the camera frames the dog ABOVE the cards
+// instead of sliding it down into them.
+const DOGCAM_BOTTOM_RESERVE_PX = 200;
 
 // Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
 // the dog-cam "up" along the dog's direction of travel.
@@ -622,6 +626,13 @@ export default function MapViewWeb() {
     if (!DOG_CAM || !dogCam) return;
     const map = mapRef.current;
     if (!map) return;
+    // Reserve the bottom of the screen for the carousel so the follow loop +
+    // preview frame the dog ABOVE the cards, never sliding it down into them.
+    try {
+      map.setPadding({ top: 0, right: 0, bottom: DOGCAM_BOTTOM_RESERVE_PX, left: 0 });
+    } catch {
+      /* style not ready */
+    }
     let heading = map.getBearing();
     let lastDog: LatLng | null = null;
     // Latches true the first time the user rotates by hand; once set, the loop
@@ -666,6 +677,11 @@ export default function MapViewWeb() {
       clearInterval(id);
       map.off('rotatestart', onUserRotate);
       map.off('rotate', onUserRotate);
+      try {
+        map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 });
+      } catch {
+        /* map tearing down */
+      }
       try {
         map.easeTo({ bearing: 0, pitch: 74, zoom: balance.mapZoomDefault, duration: 500 });
       } catch {
@@ -2214,35 +2230,26 @@ export default function MapViewWeb() {
 
         {/* Zone is only drawn for the currently-selected pet — otherwise
             overlapping circles turn dense neighborhoods (Podil, Pechersk)
-            into a lava lamp. Tapping a pin blooms the zone for that pet. */}
-        {lostDogs
-          .filter((d) => d.id === selectedDogId)
-          .map((d) => (
-            <SearchZoneCircle
-              key={`zone-${d.id}`}
-              center={d.lastSeen.position}
-              radiusM={d.searchZoneRadiusM}
-              urgency={d.urgency}
-            />
-          ))}
-
-        {/* Search preview: the swiped-to dog's zone, drawn bold so the lifted-fog
-            area reads as "lit up". Rendered only in dog-cam while previewing. */}
-        {DOG_CAM && dogCam && searchPreviewDogId
-          ? lostDogs
-              .filter((d) => d.id === searchPreviewDogId)
+            into a lava lamp. Tapping a pin blooms the zone for that pet.
+            Suppressed in dog-cam: the blue beacon fog marks the previewed
+            zone there, and the circle fill just washed the area. */}
+        {DOG_CAM && dogCam
+          ? null
+          : lostDogs
+              .filter((d) => d.id === selectedDogId)
               .map((d) => (
                 <SearchZoneCircle
-                  key={`preview-zone-${d.id}`}
+                  key={`zone-${d.id}`}
                   center={d.lastSeen.position}
                   radiusM={d.searchZoneRadiusM}
                   urgency={d.urgency}
-                  highlight
                 />
-              ))
-          : null}
+              ))}
 
-        {clusters.flatMap((c) => {
+        {/* Lost-dog pins are hidden in dog-cam/search mode — the carousel +
+            the previewed zone (with its blue beacon) are the focus there, and
+            the photo pins just clutter the immersive shot. */}
+        {(DOG_CAM && dogCam ? [] : clusters).flatMap((c) => {
           if (c.items.length === 1) {
             const d = c.items[0]!.dog;
             const pos = displayPositions.get(d.id) ?? d.lastSeen.position;
