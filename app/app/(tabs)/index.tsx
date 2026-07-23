@@ -30,7 +30,11 @@ export default function MapScreen() {
   const aboutOpen = useGameStore((s) => s.aboutOpen);
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const sniffMode = useGameStore((s) => s.sniffMode);
-  const toggleSniffMode = useGameStore((s) => s.toggleSniffMode);
+  // Supersniff is deactivated for the prototype — the corner-logo button now
+  // toggles the dog-cam instead. sniffMode stays false / unreachable, so its
+  // other visuals (logo invert, status-bar collapse) simply never fire.
+  const dogCam = useGameStore((s) => s.dogCam);
+  const toggleDogCam = useGameStore((s) => s.toggleDogCam);
   // When the super-sniff hint is showing (the dog is calling the user
   // to try it), pulse the logo so the spoken line has a target. The
   // hint visibility is computed in the Companion and published to the
@@ -98,12 +102,10 @@ export default function MapScreen() {
       <SafeAreaView style={styles.hud} pointerEvents="box-none" edges={['top']}>
         <View style={styles.hudRow}>
           <Pressable
-            onPress={toggleSniffMode}
+            onPress={toggleDogCam}
             onPressIn={popPressableEvent}
             accessibilityRole="button"
-            accessibilityLabel={
-              sniffMode ? 'exit sniff mode' : 'enter sniff mode'
-            }
+            accessibilityLabel={dogCam ? 'exit dog cam' : 'enter dog cam'}
             hitSlop={8}
             style={{ position: 'relative' }}
           >

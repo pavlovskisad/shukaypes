@@ -16,3 +16,9 @@ export const GAME_RENDER = true;
 // other dogs on the map. Gated so prod clients (flag off) neither appear to
 // nor see other players until we ship it.
 export const MULTIPLAYER = true;
+
+// Dog-cam (prototype): a low, close "car-navigation" chase camera that follows
+// the companion — heading-locked to the dog's travel so forward is up. Exposes
+// a toggle button; off by default. Flag-gated so we can pull the whole thing
+// with one switch while we feel the dynamics out.
+export const DOG_CAM = true;
