@@ -108,6 +108,11 @@ const DOGCAM_PITCH = 78;
 const DOGCAM_ZOOM = 18.6;
 const DOGCAM_TICK = 350;
 const DOGCAM_MIN_MOVE_M = 0.6;
+// Preview (carousel-swipe) camera: a gentle top-down-ish tilt over the whole
+// search zone so the lifted-fog "lit up" area reads clearly. maxZoom keeps tiny
+// zones from zooming in too far.
+const PREVIEW_PITCH = 38;
+const PREVIEW_MAX_ZOOM = 16.5;
 
 // Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
 // the dog-cam "up" along the dog's direction of travel.
@@ -236,6 +241,9 @@ export default function MapViewWeb() {
   const setSearchTarget = useGameStore((s) => s.setSearchTarget);
   const searchRoute = useGameStore((s) => s.searchRoute);
   const setSearchRoute = useGameStore((s) => s.setSearchRoute);
+  // Preview: the dog whose zone is being framed (swiped-to, not yet committed).
+  const searchPreviewDogId = useGameStore((s) => s.searchPreviewDogId);
+  const setSearchPreview = useGameStore((s) => s.setSearchPreview);
   // Tracks the map's visible bounds so we can detect when the
   // companion has wandered (or been panned) off-screen and surface a
   // tap-to-recenter indicator at the screen edge.
@@ -631,6 +639,9 @@ export default function MapViewWeb() {
     const id = setInterval(() => {
       const dog = companionPosRef.current;
       if (!dog) return;
+      // Previewing a zone → the camera is framing that zone, not following the
+      // dog. Leave it be until the user commits (tap) or swipes to another.
+      if (useGameStore.getState().searchPreviewDogId) return;
       // Rotate gesture still in flight (events arriving) → hands off entirely.
       if (Date.now() - lastUserRotateAt < DOGCAM_TICK) return;
       let moved = false;
@@ -712,10 +723,13 @@ export default function MapViewWeb() {
     return best;
   }, [userPos, lostDogs]);
 
+  // Commit (carousel TAP): draw the route + start the dog leading. This is the
+  // only path that spends a Routes API call — swiping just previews (below).
   const assignSearch = useCallback(
     // `announce` is the by-name "on the trail" bark; suppressed on the arrival
     // re-assign (the arrival effect shows its own "found the spot" line).
     (dog: NearbyLostDog, announce = true) => {
+      setSearchPreview(null); // leave preview → back to the tight follow cam
       visitedDogsRef.current.add(dog.id);
       const spot = spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, userPos);
       setSearchTarget({ dogId: dog.id, spot });
@@ -753,19 +767,57 @@ export default function MapViewWeb() {
         showBubble(leadLines[Math.floor(Math.random() * leadLines.length)]!, 3500);
       }
     },
-    [setSearchTarget, setSearchRoute, spotInZone, userPos, showBubble, dogCam],
+    [setSearchPreview, setSearchTarget, setSearchRoute, spotInZone, userPos, showBubble, dogCam],
   );
 
-  // Assign a target when the mode turns on (or when the current one clears).
+  // Preview (carousel SWIPE, or the initial mode-on pick): frame the dog's whole
+  // search zone with the fog lifted over it — NO route, NO API call. The clear
+  // bubble follows the map centre and grows on zoom-out, so simply flying the
+  // camera to fit the zone lights it up against the surrounding fog. Tapping the
+  // card commits it (assignSearch above).
+  const previewSearch = useCallback(
+    (dog: NearbyLostDog) => {
+      setSearchPreview(dog.id); // stops any current lead
+      const map = mapRef.current;
+      if (DOG_CAM && dogCam && map) {
+        const c = dog.lastSeen.position;
+        const r = Math.max(140, dog.searchZoneRadiusM);
+        const dLat = r / 111320;
+        const dLng = r / (111320 * Math.cos((c.lat * Math.PI) / 180) || 111320);
+        try {
+          map.fitBounds(
+            [
+              [c.lng - dLng, c.lat - dLat],
+              [c.lng + dLng, c.lat + dLat],
+            ],
+            {
+              padding: 72,
+              pitch: PREVIEW_PITCH,
+              bearing: 0,
+              maxZoom: PREVIEW_MAX_ZOOM,
+              duration: 900,
+            },
+          );
+        } catch {
+          /* style not ready — the zone circle still renders */
+        }
+      }
+      showBubble(`${dog.name}? tap to pick up the trail 🐾`, 4000);
+    },
+    [setSearchPreview, dogCam, showBubble],
+  );
+
+  // Engage the mode: on turn-on (nothing committed or previewed yet) frame the
+  // nearest dog's zone as a preview — the user taps to actually set off.
   useEffect(() => {
     if (!DOG_CAM || !dogCam) {
       visitedDogsRef.current.clear();
       return;
     }
-    if (searchTarget) return;
+    if (searchTarget || searchPreviewDogId) return;
     const dog = pickNextSearchDog();
-    if (dog) assignSearch(dog);
-  }, [dogCam, searchTarget, pickNextSearchDog, assignSearch]);
+    if (dog) previewSearch(dog);
+  }, [dogCam, searchTarget, searchPreviewDogId, pickNextSearchDog, previewSearch]);
 
   // Arrival → reward, then a FRESH spot for the SAME dog (keeps you moving
   // within its zone). Switching dogs is the carousel's job (swipe), so we don't
@@ -2170,6 +2222,22 @@ export default function MapViewWeb() {
             />
           ))}
 
+        {/* Search preview: the swiped-to dog's zone, drawn bold so the lifted-fog
+            area reads as "lit up". Rendered only in dog-cam while previewing. */}
+        {DOG_CAM && dogCam && searchPreviewDogId
+          ? lostDogs
+              .filter((d) => d.id === searchPreviewDogId)
+              .map((d) => (
+                <SearchZoneCircle
+                  key={`preview-zone-${d.id}`}
+                  center={d.lastSeen.position}
+                  radiusM={d.searchZoneRadiusM}
+                  urgency={d.urgency}
+                  highlight
+                />
+              ))
+          : null}
+
         {clusters.flatMap((c) => {
           if (c.items.length === 1) {
             const d = c.items[0]!.dog;
@@ -2467,7 +2535,7 @@ export default function MapViewWeb() {
           <LostDogCardStack
             dogs={searchDogs}
             onTap={assignSearch}
-            onSwipe={assignSearch}
+            onSwipe={previewSearch}
             cardWidth={200}
             cardHeight={176}
             showCounter={false}

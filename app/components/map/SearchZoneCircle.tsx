@@ -13,6 +13,9 @@ interface SearchZoneCircleProps {
   center: LatLng;
   radiusM: number;
   urgency: UrgencyLevel;
+  // Bolder fill + stroke for the sniff-and-lead preview, where the zone is the
+  // focus of the shot (fog lifted over it) rather than a subtle map annotation.
+  highlight?: boolean;
 }
 
 // MapLibre has no native "geographic circle" primitive. We approximate
@@ -54,6 +57,7 @@ export function SearchZoneCircle({
   center,
   radiusM,
   urgency,
+  highlight = false,
 }: SearchZoneCircleProps) {
   const map = useMaplibreMap();
   const uid = useId();
@@ -67,6 +71,11 @@ export function SearchZoneCircle({
     if (!map) return;
     const data = circlePolygon(center, radiusM) as unknown as GeoJSON.Feature;
     const color = URGENCY_COLOR[urgency];
+    // Preview zone is the subject of the shot → bolder; plain annotation stays
+    // whisper-quiet so overlapping zones don't turn dense areas into a lava lamp.
+    const fillOpacity = highlight ? 0.14 : 0.04;
+    const lineOpacity = highlight ? 0.85 : 0.35;
+    const lineWidth = highlight ? 3 : 1;
     const addOrUpdate = () => {
       const existing = map.getSource(sourceId) as
         | maplibregl.GeoJSONSource
@@ -74,7 +83,10 @@ export function SearchZoneCircle({
       if (existing) {
         existing.setData(data);
         map.setPaintProperty(fillId, 'fill-color', color);
+        map.setPaintProperty(fillId, 'fill-opacity', fillOpacity);
         map.setPaintProperty(strokeId, 'line-color', color);
+        map.setPaintProperty(strokeId, 'line-opacity', lineOpacity);
+        map.setPaintProperty(strokeId, 'line-width', lineWidth);
         return;
       }
       map.addSource(sourceId, { type: 'geojson', data });
@@ -82,7 +94,7 @@ export function SearchZoneCircle({
         id: fillId,
         type: 'fill',
         source: sourceId,
-        paint: { 'fill-color': color, 'fill-opacity': 0.04 },
+        paint: { 'fill-color': color, 'fill-opacity': fillOpacity },
       });
       map.addLayer({
         id: strokeId,
@@ -90,8 +102,8 @@ export function SearchZoneCircle({
         source: sourceId,
         paint: {
           'line-color': color,
-          'line-opacity': 0.35,
-          'line-width': 1,
+          'line-opacity': lineOpacity,
+          'line-width': lineWidth,
         },
       });
     };
@@ -107,7 +119,7 @@ export function SearchZoneCircle({
       if (map.getLayer(fillId)) map.removeLayer(fillId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
     };
-  }, [map, center.lat, center.lng, radiusM, urgency, sourceId, fillId, strokeId]);
+  }, [map, center.lat, center.lng, radiusM, urgency, highlight, sourceId, fillId, strokeId]);
 
   return null;
 }
