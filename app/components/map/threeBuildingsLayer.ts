@@ -350,8 +350,11 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
           '  if (u_previewStrength > 0.001) {',
           '    float _pd = length(vLocalPos.xz - u_previewLocal.xz);',
           '    float _pg = 1.0 - smoothstep(u_previewRadius * 0.3, u_previewRadius * 1.25, _pd);',
-          '    float _blue = _pg * u_previewStrength * clamp(_distFog + 0.15, 0.0, 1.0);',
-          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_previewColor, clamp(_blue * 0.8, 0.0, 1.0));',
+          // Gate on the distance haze (no near floor) so the blue only starts
+          // out past the fog near-plane — well away from the dog/foreground —
+          // and builds toward the horizon rather than washing the whole shot.
+          '    float _blue = _pg * u_previewStrength * clamp(_distFog, 0.0, 1.0);',
+          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_previewColor, clamp(_blue * 0.5, 0.0, 1.0));',
           '  }',
           // Dog-cam see-through: a soft "invisibility orb" around the focus
           // (the dog, since the chase cam centres on it) — buildings between you
