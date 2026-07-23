@@ -28,7 +28,7 @@ import type { Spot } from '../../services/places';
 import { useLocation } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
 import { useGameLoop } from '../../hooks/useGameLoop';
-import { distanceMeters } from '../../utils/geo';
+import { distanceMeters, pointAheadOnRoute } from '../../utils/geo';
 import { playPop } from '../../utils/popOnTap';
 import { Companion } from './Companion';
 import { CrayonRoute } from './CrayonRoute';
@@ -116,13 +116,19 @@ const DOGCAM_MIN_MOVE_M = 0.6;
 const PREVIEW_PITCH = 76;
 const PREVIEW_ZOOM = 16.3;
 // Bottom screen space (CSS px) reserved for the search carousel while in
-// dog-cam. Applied as map padding so the camera frames the dog ABOVE the cards
-// instead of sliding it down into them.
-const DOGCAM_BOTTOM_RESERVE_PX = 200;
+// dog-cam. Small — the steep pitch already sits the dog low; we just keep it a
+// touch off the very bottom so it rides just above the carousel (car-nav feel),
+// not up at centre.
+const DOGCAM_BOTTOM_RESERVE_PX = 70;
+// How far ahead along the route the committed cam looks — it faces this point so
+// the view runs DOWN the route (not perpendicular to it) and tracks its curves.
+const ROUTE_LOOK_AHEAD_M = 90;
 // Preview beacon fragment: rather than lighting the whole (up-to-1.25km) search
 // zone, we pick one candidate quest spot and glow a small patch around it — the
-// bit of the zone the quest point will actually come from.
+// bit of the zone the quest point will actually come from. Target distance keeps
+// the beacon a little out on the horizon (clear of the dog's speech bubble).
 const PREVIEW_FRAGMENT_RADIUS_M = 320;
+const PREVIEW_TARGET_DIST_M = 430;
 
 // Preview zoom adapts to how far the fragment is from the dog, so a distant
 // beacon still lands on-screen instead of falling off the horizon. Near spots
@@ -689,11 +695,27 @@ export default function MapViewWeb() {
           easing: (t) => t,
         });
       } else {
+        // Committed: face DOWN the route (toward a point ahead of you on it) so
+        // the view runs along the way you're being led — never perpendicular to
+        // it — and tracks its curves. This also auto-corrects the moment the
+        // straight line upgrades to the real walking route. Falls back to the
+        // dog's travel heading if there's no route yet.
+        let applyBearing = false;
+        if (!userTookBearing) {
+          const route = useGameStore.getState().searchRoute;
+          const up = userPosRef.current;
+          if (route && route.length >= 2 && up) {
+            heading = bearingDeg(up, pointAheadOnRoute(route, up, ROUTE_LOOK_AHEAD_M));
+            applyBearing = true;
+          } else if (moved) {
+            applyBearing = true; // heading already = dog travel direction
+          }
+        }
         map.easeTo({
           center: [dog.lng, dog.lat],
           pitch: DOGCAM_PITCH,
           zoom: DOGCAM_ZOOM,
-          ...(!userTookBearing && moved ? { bearing: heading } : {}),
+          ...(applyBearing ? { bearing: heading } : {}),
           duration: DOGCAM_TICK,
           easing: (t) => t,
         });
@@ -829,17 +851,18 @@ export default function MapViewWeb() {
   const previewSearch = useCallback(
     (dog: NearbyLostDog) => {
       const from = userPosRef.current;
-      // Bias the fragment toward the user: take the nearest of several in-zone
-      // samples. Keeps the beacon reachable/visible (and the walk shorter) even
-      // for dogs with a big zone, instead of often landing on the far side.
+      // Aim the fragment for a comfortable middle distance (~PREVIEW_TARGET_DIST):
+      // pick the in-zone sample closest to that target. Keeps the beacon out on
+      // the horizon — clear of the dog's speech bubble — yet reachable, instead of
+      // hugging the dog (too close) or landing on the far side of a big zone.
       let spot = spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, from);
       if (from) {
-        let bestD = distanceMeters(from, spot);
+        let bestScore = Math.abs(distanceMeters(from, spot) - PREVIEW_TARGET_DIST_M);
         for (let i = 0; i < 7; i++) {
           const s = spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, from);
-          const d = distanceMeters(from, s);
-          if (d < bestD) {
-            bestD = d;
+          const score = Math.abs(distanceMeters(from, s) - PREVIEW_TARGET_DIST_M);
+          if (score < bestScore) {
+            bestScore = score;
             spot = s;
           }
         }
