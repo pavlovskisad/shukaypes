@@ -116,6 +116,10 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // well there. On the light (normal) map a light menu disappeared
   // into the background, so invert the menu theme when sniff is off.
   const sniffMode = useGameStore((s) => s.sniffMode);
+  // Dog-cam sits the dog low and the beacon on the horizon — tuck the bubble
+  // closer to the nose (lower) so it clears the beacon and reads as "the dog is
+  // saying this" rather than floating up in the sky.
+  const dogCam = useGameStore((s) => s.dogCam);
   const [localBubble, setLocalBubble] = useState<string | null>(null);
   // Stack of branch ids representing the current menu drill-down. Empty
   // = root (PRIMARY_ACTIONS). Tapping the companion always resets to
@@ -676,7 +680,9 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
             the nose. */}
         <SpeechBubble
           text={activeBubble}
-          bottom={menuExplainer ? 'calc(50% + 130px)' : undefined}
+          bottom={
+            menuExplainer ? 'calc(50% + 130px)' : dogCam ? '72%' : undefined
+          }
         />
         <RadialMenu
           open={menuOpen}
