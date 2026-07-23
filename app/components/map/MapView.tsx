@@ -119,6 +119,10 @@ const PREVIEW_ZOOM = 16.3;
 // dog-cam. Applied as map padding so the camera frames the dog ABOVE the cards
 // instead of sliding it down into them.
 const DOGCAM_BOTTOM_RESERVE_PX = 200;
+// Preview beacon fragment: rather than lighting the whole (up-to-1.25km) search
+// zone, we pick one candidate quest spot and glow a small patch around it — the
+// bit of the zone the quest point will actually come from.
+const PREVIEW_FRAGMENT_RADIUS_M = 260;
 
 // Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
 // the dog-cam "up" along the dog's direction of travel.
@@ -248,7 +252,7 @@ export default function MapViewWeb() {
   const searchRoute = useGameStore((s) => s.searchRoute);
   const setSearchRoute = useGameStore((s) => s.setSearchRoute);
   // Preview: the dog whose zone is being framed (swiped-to, not yet committed).
-  const searchPreviewDogId = useGameStore((s) => s.searchPreviewDogId);
+  const searchPreview = useGameStore((s) => s.searchPreview);
   const setSearchPreview = useGameStore((s) => s.setSearchPreview);
   // Tracks the map's visible bounds so we can detect when the
   // companion has wandered (or been panned) off-screen and surface a
@@ -652,11 +656,13 @@ export default function MapViewWeb() {
     const id = setInterval(() => {
       const dog = companionPosRef.current;
       if (!dog) return;
-      // Previewing a zone → the camera is framing that zone, not following the
-      // dog. Leave it be until the user commits (tap) or swipes to another.
-      if (useGameStore.getState().searchPreviewDogId) return;
       // Rotate gesture still in flight (events arriving) → hands off entirely.
       if (Date.now() - lastUserRotateAt < DOGCAM_TICK) return;
+      // Preview → stay TIED to the dog but zoomed out, facing the fragment we're
+      // eyeing (so the blue beacon sits up-screen). Committed → tight chase cam
+      // with heading-up. Either way the camera is glued to the dog, so it never
+      // drifts down into the carousel.
+      const preview = useGameStore.getState().searchPreview;
       let moved = false;
       if (lastDog && distanceMeters(lastDog, dog) > DOGCAM_MIN_MOVE_M) {
         // Only auto-orient heading-up until the user has taken the wheel.
@@ -664,14 +670,26 @@ export default function MapViewWeb() {
         moved = true;
       }
       lastDog = dog;
-      map.easeTo({
-        center: [dog.lng, dog.lat],
-        pitch: DOGCAM_PITCH,
-        zoom: DOGCAM_ZOOM,
-        ...(!userTookBearing && moved ? { bearing: heading } : {}),
-        duration: DOGCAM_TICK,
-        easing: (t) => t,
-      });
+      if (preview) {
+        const toSpot = bearingDeg(dog, preview.spot);
+        map.easeTo({
+          center: [dog.lng, dog.lat],
+          pitch: PREVIEW_PITCH,
+          zoom: PREVIEW_ZOOM,
+          ...(userTookBearing ? {} : { bearing: toSpot }),
+          duration: DOGCAM_TICK,
+          easing: (t) => t,
+        });
+      } else {
+        map.easeTo({
+          center: [dog.lng, dog.lat],
+          pitch: DOGCAM_PITCH,
+          zoom: DOGCAM_ZOOM,
+          ...(!userTookBearing && moved ? { bearing: heading } : {}),
+          duration: DOGCAM_TICK,
+          easing: (t) => t,
+        });
+      }
     }, DOGCAM_TICK);
     return () => {
       clearInterval(id);
@@ -747,9 +765,16 @@ export default function MapViewWeb() {
     // `announce` is the by-name "on the trail" bark; suppressed on the arrival
     // re-assign (the arrival effect shows its own "found the spot" line).
     (dog: NearbyLostDog, announce = true) => {
+      // Reuse the previewed fragment's spot so tapping sends you exactly to the
+      // patch the beacon lit up; fall back to a fresh spot (arrival re-assign,
+      // or a tap with no matching preview).
+      const preview = useGameStore.getState().searchPreview;
+      const spot =
+        preview && preview.dogId === dog.id
+          ? preview.spot
+          : spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, userPos);
       setSearchPreview(null); // leave preview → back to the tight follow cam
       visitedDogsRef.current.add(dog.id);
-      const spot = spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, userPos);
       setSearchTarget({ dogId: dog.id, spot });
       // Draw a straight line to the spot immediately so the dog can start
       // leading right away, then upgrade to the street-hugging walking route
@@ -788,43 +813,37 @@ export default function MapViewWeb() {
     [setSearchPreview, setSearchTarget, setSearchRoute, spotInZone, userPos, showBubble, dogCam],
   );
 
-  // Preview (carousel SWIPE, or the initial mode-on pick): frame the dog's whole
-  // search zone with the fog lifted over it — NO route, NO API call. The clear
-  // bubble follows the map centre and grows on zoom-out, so simply flying the
-  // camera to fit the zone lights it up against the surrounding fog. Tapping the
-  // card commits it (assignSearch above).
+  // Preview (carousel SWIPE, or the initial mode-on pick): pick the candidate
+  // quest spot now and glow a small FRAGMENT of the zone around it — NO route,
+  // NO API call. The camera stays tied to the dog, just zoomed out and turned to
+  // face the fragment so the blue beacon sits up-screen. Tapping the card commits
+  // it (assignSearch above) and reuses this exact spot.
   const previewSearch = useCallback(
     (dog: NearbyLostDog) => {
-      setSearchPreview(dog.id); // stops any current lead
+      const from = userPosRef.current;
+      const spot = spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, from);
+      setSearchPreview({ dogId: dog.id, spot, radiusM: PREVIEW_FRAGMENT_RADIUS_M });
       const map = mapRef.current;
       if (DOG_CAM && dogCam && map) {
-        const zone = dog.lastSeen.position;
-        const from = userPosRef.current;
-        // Look from you toward the zone: centre a little ahead (35% of the way)
-        // so there's foreground below and the zone reads up-screen on the
-        // horizon, keep the immersive tilt, and aim the bearing down the line to
-        // the zone. The fog layer paints the zone brand-blue out in the haze.
-        const center = from
-          ? {
-              lng: from.lng + (zone.lng - from.lng) * 0.3,
-              lat: from.lat + (zone.lat - from.lat) * 0.3,
-            }
-          : zone;
+        // Tied to the dog (never flies off to the zone, so the dog can't drift
+        // into the carousel), just zoomed out and facing the fragment. The
+        // follow loop keeps it glued from here.
+        const focus = companionPosRef.current ?? from ?? spot;
         try {
           map.easeTo({
-            center: [center.lng, center.lat],
+            center: [focus.lng, focus.lat],
             zoom: PREVIEW_ZOOM,
             pitch: PREVIEW_PITCH,
-            ...(from ? { bearing: bearingDeg(from, zone) } : {}),
-            duration: 900,
+            bearing: bearingDeg(focus, spot),
+            duration: 700,
           });
         } catch {
-          /* style not ready — the zone circle + glow still render */
+          /* style not ready — the beacon still renders */
         }
       }
       showBubble(`${dog.name}? tap to pick up the trail 🐾`, 4000);
     },
-    [setSearchPreview, dogCam, showBubble],
+    [setSearchPreview, spotInZone, dogCam, showBubble],
   );
 
   // Engage the mode: on turn-on (nothing committed or previewed yet) frame the
@@ -834,10 +853,10 @@ export default function MapViewWeb() {
       visitedDogsRef.current.clear();
       return;
     }
-    if (searchTarget || searchPreviewDogId) return;
+    if (searchTarget || searchPreview) return;
     const dog = pickNextSearchDog();
     if (dog) previewSearch(dog);
-  }, [dogCam, searchTarget, searchPreviewDogId, pickNextSearchDog, previewSearch]);
+  }, [dogCam, searchTarget, searchPreview, pickNextSearchDog, previewSearch]);
 
   // Arrival → reward, then a FRESH spot for the SAME dog (keeps you moving
   // within its zone). Switching dogs is the carousel's job (swipe), so we don't
