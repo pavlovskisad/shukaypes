@@ -104,16 +104,16 @@ const STREET_LABEL_HIDE_PITCH = 60;
 // companion's 300ms roam tick so consecutive linear eases chain into a smooth
 // glide). Below DOGCAM_MIN_MOVE_M of dog travel we hold the heading so the
 // camera doesn't swing on GPS/idle micro-jitter.
-const DOGCAM_PITCH = 74;
+const DOGCAM_PITCH = 70;
 const DOGCAM_ZOOM = 18.6;
 const DOGCAM_TICK = 350;
 const DOGCAM_MIN_MOVE_M = 0.6;
 // Preview (carousel-swipe) camera: keep the immersive 3D tilt and look FROM you
 // TOWARD the dog's zone, so the zone sits out in the distance/horizon where the
 // fog layer washes it brand-blue — rather than a flat zoomed-out overview.
-// Close + tilted (near the dog-cam feel) — a touch less steep than before so the
-// horizon sits a bit lower and the shot feels less cramped.
-const PREVIEW_PITCH = 72;
+// Close + tilted (near the dog-cam feel) — eased less steep so the horizon sits
+// lower and the shot feels less cramped.
+const PREVIEW_PITCH = 68;
 const PREVIEW_ZOOM = 16.3;
 // The dog rides in the LOWER part of the screen (car-nav feel) so its speech
 // bubble — anchored just above it — clears the horizon/beacon instead of
@@ -623,6 +623,11 @@ export default function MapViewWeb() {
   // search target's name without re-subscribing the effect on every list churn.
   const lostDogsRef = useRef(lostDogs);
   lostDogsRef.current = lostDogs;
+  // Latches true when the user hand-rotates the dog-cam, so the follow loop stops
+  // driving the bearing (lets them look around). A ref — not effect-local — so
+  // each new preview/commit can RESET it, re-orienting toward the new target
+  // instead of staying stuck at the old hand-set angle.
+  const userTookBearingRef = useRef(false);
 
   // Dog-cam: while enabled, chase the companion with a low, close camera whose
   // bearing tracks the dog's direction of travel (forward = up), like a
@@ -659,18 +664,18 @@ export default function MapViewWeb() {
     } catch {
       /* style not ready */
     }
+    // Fresh entry → auto-orient again (don't inherit a hand-set angle from a
+    // previous session).
+    userTookBearingRef.current = false;
     let heading = map.getBearing();
     let lastDog: LatLng | null = null;
-    // Latches true the first time the user rotates by hand; once set, the loop
-    // stops driving the bearing so the user's rotation is never overridden.
-    let userTookBearing = false;
     // Timestamp of the last hand-driven rotate; the loop skips while this is
     // fresh so it never fights the live gesture.
     let lastUserRotateAt = 0;
     // originalEvent is present only for user-driven rotation, not our easeTo.
     const onUserRotate = (e: { originalEvent?: unknown }) => {
       if (!e || !e.originalEvent) return;
-      userTookBearing = true;
+      userTookBearingRef.current = true;
       lastUserRotateAt = Date.now();
     };
     map.on('rotatestart', onUserRotate);
@@ -688,7 +693,7 @@ export default function MapViewWeb() {
       let moved = false;
       if (lastDog && distanceMeters(lastDog, dog) > DOGCAM_MIN_MOVE_M) {
         // Only auto-orient heading-up until the user has taken the wheel.
-        if (!userTookBearing) heading = bearingDeg(lastDog, dog);
+        if (!userTookBearingRef.current) heading = bearingDeg(lastDog, dog);
         moved = true;
       }
       lastDog = dog;
@@ -698,7 +703,7 @@ export default function MapViewWeb() {
           center: [dog.lng, dog.lat],
           pitch: PREVIEW_PITCH,
           zoom: previewZoomFor(distanceMeters(dog, preview.spot)),
-          ...(userTookBearing ? {} : { bearing: toSpot }),
+          ...(userTookBearingRef.current ? {} : { bearing: toSpot }),
           duration: DOGCAM_TICK,
           easing: (t) => t,
         });
@@ -709,7 +714,7 @@ export default function MapViewWeb() {
         // straight line upgrades to the real walking route. Falls back to the
         // dog's travel heading if there's no route yet.
         let applyBearing = false;
-        if (!userTookBearing) {
+        if (!userTookBearingRef.current) {
           const route = useGameStore.getState().searchRoute;
           const up = userPosRef.current;
           if (route && route.length >= 2 && up) {
@@ -812,6 +817,7 @@ export default function MapViewWeb() {
           ? preview.spot
           : spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, userPos);
       setSearchPreview(null); // leave preview → back to the tight follow cam
+      userTookBearingRef.current = false; // re-orient down the new route
       visitedDogsRef.current.add(dog.id);
       setSearchTarget({ dogId: dog.id, spot });
       // Draw a straight line to the spot immediately so the dog can start
@@ -876,6 +882,7 @@ export default function MapViewWeb() {
         }
       }
       setSearchPreview({ dogId: dog.id, spot, radiusM: PREVIEW_FRAGMENT_RADIUS_M });
+      userTookBearingRef.current = false; // re-orient toward the new fragment
       const map = mapRef.current;
       if (DOG_CAM && dogCam && map) {
         // Tied to the dog (never flies off to the zone, so the dog can't drift
