@@ -56,6 +56,9 @@ export default function TabsLayout() {
   // it returns when sniff is toggled off (via the corner logo). Only ever on
   // the map tab, so this doesn't strand navigation elsewhere.
   const sniffMode = useGameStore((s) => s.sniffMode);
+  // Search mode (dog-cam) hides the dashboard too — the lost-dogs carousel
+  // takes its place (rendered by MapView).
+  const dogCam = useGameStore((s) => s.dogCam);
 
   return (
     <Tabs
@@ -75,8 +78,9 @@ export default function TabsLayout() {
         // of the app's chip / pill family. Shadow is now a soft
         // all-around lift instead of an upward-only top shadow.
         tabBarStyle: {
-          // Dashboard off during supersniff (fullscreen locate view).
-          display: sniffMode ? 'none' : 'flex',
+          // Dashboard off during search mode (the lost-dogs carousel replaces
+          // it) — and during the old supersniff, which is unreachable now.
+          display: sniffMode || dogCam ? 'none' : 'flex',
           position: 'absolute',
           left: S.l,
           right: S.l,
