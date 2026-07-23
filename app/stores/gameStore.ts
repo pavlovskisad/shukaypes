@@ -173,6 +173,10 @@ interface GameState {
   // searching for and the spot in its zone the companion is leading you to.
   // Set while dogCam (search mode) is on; the companion heads to `spot`.
   searchTarget: { dogId: string; spot: LatLng } | null;
+  // Walking route (polyline) to the current search spot — drawn on the map and
+  // used to make the companion lead you along it. Straight [user, spot] fallback
+  // when the Routes API is unavailable.
+  searchRoute: LatLng[] | null;
   // About sheet open state — promoted from MapScreen-local state so
   // the radial menu (a child of MapView) can trigger it via the new
   // "?" button. MapScreen still hosts the modal so the dashboard tab
@@ -276,6 +280,7 @@ interface GameState {
   toggleSniffMode: () => void;
   toggleDogCam: () => void;
   setSearchTarget: (t: { dogId: string; spot: LatLng } | null) => void;
+  setSearchRoute: (r: LatLng[] | null) => void;
   setAboutOpen: (open: boolean) => void;
   setActiveHint: (id: string | null) => void;
   setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
@@ -356,6 +361,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   spotsVisibleBeforeSniff: null,
   dogCam: false,
   searchTarget: null,
+  searchRoute: null,
   aboutOpen: false,
   activeHint: null,
   menuCamera: null,
@@ -863,8 +869,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   // index.tsx) so supersniff is unreachable for now. Camera-only mode.
   // Toggling the mode always clears the assignment; the search controller
   // (MapView) picks a fresh target when the mode turns on.
-  toggleDogCam: () => set((s) => ({ dogCam: !s.dogCam, searchTarget: null })),
+  toggleDogCam: () =>
+    set((s) => ({ dogCam: !s.dogCam, searchTarget: null, searchRoute: null })),
   setSearchTarget: (searchTarget) => set({ searchTarget }),
+  setSearchRoute: (searchRoute) => set({ searchRoute }),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setActiveHint: (activeHint) => set({ activeHint }),
   setMenuCamera: (menuCamera) => set({ menuCamera }),
