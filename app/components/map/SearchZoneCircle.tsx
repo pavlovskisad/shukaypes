@@ -71,9 +71,11 @@ export function SearchZoneCircle({
     if (!map) return;
     const data = circlePolygon(center, radiusM) as unknown as GeoJSON.Feature;
     const color = URGENCY_COLOR[urgency];
-    // Preview zone is the subject of the shot → bolder; plain annotation stays
-    // whisper-quiet so overlapping zones don't turn dense areas into a lava lamp.
-    const fillOpacity = highlight ? 0.14 : 0.04;
+    // Preview zone is the subject of the shot → bold RING, but keep the fill
+    // barely-there: at highlight opacity the urgency-tinted fill (amber for
+    // "searching", red for urgent) washed the whole framed area warm and fought
+    // the blue beacon. The ring marks the boundary; the beacon does the glow.
+    const fillOpacity = highlight ? 0.05 : 0.04;
     const lineOpacity = highlight ? 0.85 : 0.35;
     const lineWidth = highlight ? 3 : 1;
     const addOrUpdate = () => {
