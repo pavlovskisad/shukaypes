@@ -35,6 +35,9 @@ export default function MapScreen() {
   // other visuals (logo invert, status-bar collapse) simply never fire.
   const dogCam = useGameStore((s) => s.dogCam);
   const toggleDogCam = useGameStore((s) => s.toggleDogCam);
+  // Immersive = the HUD bubbles out. Search mode (dogCam) reuses the old
+  // supersniff hide (sniffMode is unreachable now, but keep it in the OR).
+  const immersive = sniffMode || dogCam;
   // When the super-sniff hint is showing (the dog is calling the user
   // to try it), pulse the logo so the spoken line has a target. The
   // hint visibility is computed in the Companion and published to the
@@ -60,7 +63,7 @@ export default function MapScreen() {
     // before the flag clears.
     const t = setTimeout(() => setSniffJustChanged(false), 700);
     return () => clearTimeout(t);
-  }, [sniffMode]);
+  }, [immersive]);
 
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('map');
@@ -150,40 +153,34 @@ export default function MapScreen() {
           <div
             style={{
               transformOrigin: 'right center',
-              opacity: sniffMode ? 0 : 1,
-              transform: sniffMode ? 'scale(0)' : 'scale(1)',
-              // Stagger: HUD collapses immediately on sniff-on; on
-              // sniff-off it bubbles back in AFTER the chips have
-              // popped out (200ms delay). `both` fill mode applies
-              // the 0% keyframe during the delay so the HUD doesn't
-              // flash visible before the animation starts.
+              opacity: immersive ? 0 : 1,
+              transform: immersive ? 'scale(0)' : 'scale(1)',
+              // Stagger: HUD collapses immediately on mode-on; on mode-off it
+              // bubbles back in AFTER the chips have popped out (200ms delay).
+              // `both` fill mode applies the 0% keyframe during the delay so the
+              // HUD doesn't flash visible before the animation starts.
               animation: sniffJustChanged
-                ? sniffMode
+                ? immersive
                   ? `pop-out 320ms ease-in forwards`
                   : `pop-in 360ms ${POP_IN} 200ms both`
                 : 'none',
-              pointerEvents: sniffMode ? 'none' : 'auto',
+              pointerEvents: immersive ? 'none' : 'auto',
             }}
           >
             <StatusBar />
           </div>
         </View>
-        {/* Quest banner bubbles out in sniff mode too. */}
+        {/* Quest banner bubbles out in immersive (search) mode too. */}
         <View
           style={styles.questRow}
-          pointerEvents={sniffMode ? 'none' : 'box-none'}
+          pointerEvents={immersive ? 'none' : 'box-none'}
         >
           <div
             style={{
-              opacity: sniffMode ? 0 : 1,
-              transform: sniffMode ? 'scale(0)' : 'scale(1)',
-              // Stagger: HUD collapses immediately on sniff-on; on
-              // sniff-off it bubbles back in AFTER the chips have
-              // popped out (200ms delay). `both` fill mode applies
-              // the 0% keyframe during the delay so the HUD doesn't
-              // flash visible before the animation starts.
+              opacity: immersive ? 0 : 1,
+              transform: immersive ? 'scale(0)' : 'scale(1)',
               animation: sniffJustChanged
-                ? sniffMode
+                ? immersive
                   ? `pop-out 320ms ease-in forwards`
                   : `pop-in 360ms ${POP_IN} 200ms both`
                 : 'none',

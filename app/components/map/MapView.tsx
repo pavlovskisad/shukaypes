@@ -45,6 +45,7 @@ import {
 import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
+import { SearchCarousel } from './SearchCarousel';
 import { createBuildingAvoider } from './buildingAvoider';
 import { GAME_RENDER, MULTIPLAYER, DOG_CAM } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
@@ -743,21 +744,6 @@ export default function MapViewWeb() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userPos, searchTarget, dogCam]);
 
-  // The dog currently being searched for (for the photo card).
-  const searchDog = useMemo(
-    () =>
-      searchTarget ? lostDogs.find((d) => d.id === searchTarget.dogId) ?? null : null,
-    [searchTarget, lostDogs],
-  );
-  // Remaining distance to the search spot (for the card).
-  const searchDistM = useMemo(
-    () =>
-      searchTarget && userPos
-        ? Math.round(distanceMeters(userPos, searchTarget.spot))
-        : null,
-    [searchTarget, userPos],
-  );
-
   // Call-to-action: when the dog is leading but you're not closing the gap,
   // it barks encouragement (it's up ahead waiting for you to follow). Only
   // nudges when you're NOT progressing, so it never nags while you walk.
@@ -949,6 +935,21 @@ export default function MapViewWeb() {
   // "compounding tick lag" the user kept reporting.
   const userLatBucket = userPos ? Math.round(userPos.lat * 1000) / 1000 : null;
   const userLngBucket = userPos ? Math.round(userPos.lng * 1000) / 1000 : null;
+  // Nearest lost dogs for the search-mode carousel (sorted by distance; coarse
+  // user-bucket dep so the order doesn't reshuffle on every GPS tick).
+  const searchDogs = useMemo(() => {
+    const up = userPosRef.current;
+    const arr = [...lostDogs];
+    if (up) {
+      arr.sort(
+        (a, b) =>
+          distanceMeters(up, a.lastSeen.position) -
+          distanceMeters(up, b.lastSeen.position),
+      );
+    }
+    return arr.slice(0, 15);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lostDogs, userLatBucket, userLngBucket]);
   const visibleLostDogs = useMemo(() => {
     if (!userPos) return lostDogs;
     // Lost pets are the SNIFF (locate) flow. On the normal map only show the
@@ -2386,78 +2387,16 @@ export default function MapViewWeb() {
         />
       ) : null}
 
-      {/* Sniff-and-lead search card — who the dog is leading you to find. */}
-      {DOG_CAM && dogCam && onMapScreen && searchDog ? (
-        <div
-          style={{
-            position: 'fixed',
-            top: 96,
-            left: '50%',
-            transform: 'translateX(-50%)',
-            zIndex: Z.HUD_CHIPS,
-            display: 'flex',
-            alignItems: 'center',
-            gap: 10,
-            background: 'rgba(20,20,24,0.86)',
-            color: '#fff',
-            borderRadius: 16,
-            padding: '8px 16px 8px 8px',
-            boxShadow: '0 6px 20px rgba(0,0,0,0.30)',
-            maxWidth: '86vw',
-            pointerEvents: 'none',
-          }}
-        >
-          <div
-            style={{
-              width: 52,
-              height: 52,
-              borderRadius: 12,
-              overflow: 'hidden',
-              background: '#333',
-              flexShrink: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 28,
-            }}
-          >
-            {searchDog.photoUrl ? (
-              <img
-                src={searchDog.photoUrl}
-                alt=""
-                style={{ width: '100%', height: '100%', objectFit: 'cover' }}
-              />
-            ) : (
-              searchDog.emoji || '🐕'
-            )}
-          </div>
-          <div style={{ minWidth: 0 }}>
-            <div
-              style={{
-                font: `700 14px ${SYSTEM_FONT}`,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              🔍 {searchDog.name}
-            </div>
-            <div
-              style={{
-                font: `500 11px ${SYSTEM_FONT}`,
-                opacity: 0.82,
-                whiteSpace: 'nowrap',
-                overflow: 'hidden',
-                textOverflow: 'ellipsis',
-              }}
-            >
-              {searchDog.breed}
-              {searchDistM != null
-                ? ` · ${searchDistM >= 1000 ? (searchDistM / 1000).toFixed(1) + ' km' : searchDistM + ' m'} away`
-                : ' · on the trail'}
-            </div>
-          </div>
-        </div>
+      {/* Search mode: swipeable carousel of nearby lost dogs (replaces the
+          dashboard). The centred card is the dog you're on the trail of; swipe
+          to hand yourself a different dog's trail. */}
+      {DOG_CAM && dogCam && onMapScreen ? (
+        <SearchCarousel
+          dogs={searchDogs}
+          activeDogId={searchTarget?.dogId ?? null}
+          userPos={userPos}
+          onSelect={assignSearch}
+        />
       ) : null}
 
       {/* Cancel pills — small floating chips that drop in below the
