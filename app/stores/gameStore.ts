@@ -167,6 +167,8 @@ interface GameState {
   // about pets, not places); toggling off restores the prior state.
   sniffMode: boolean;
   spotsVisibleBeforeSniff: boolean | null;
+  // Dog-cam prototype (wired to the old supersniff toggle button).
+  dogCam: boolean;
   // About sheet open state — promoted from MapScreen-local state so
   // the radial menu (a child of MapView) can trigger it via the new
   // "?" button. MapScreen still hosts the modal so the dashboard tab
@@ -268,6 +270,7 @@ interface GameState {
   setSpotsVisible: (visible: boolean) => void;
   setSniffMode: (on: boolean) => void;
   toggleSniffMode: () => void;
+  toggleDogCam: () => void;
   setAboutOpen: (open: boolean) => void;
   setActiveHint: (id: string | null) => void;
   setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
@@ -346,6 +349,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   spotsVisible: false,
   sniffMode: false,
   spotsVisibleBeforeSniff: null,
+  dogCam: false,
   aboutOpen: false,
   activeHint: null,
   menuCamera: null,
@@ -849,6 +853,9 @@ export const useGameStore = create<GameState>((set, get) => ({
         spotsVisible: false,
       };
     }),
+  // Dog-cam prototype: the supersniff toggle is wired to this instead (see
+  // index.tsx) so supersniff is unreachable for now. Camera-only mode.
+  toggleDogCam: () => set((s) => ({ dogCam: !s.dogCam })),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setActiveHint: (activeHint) => set({ activeHint }),
   setMenuCamera: (menuCamera) => set({ menuCamera }),

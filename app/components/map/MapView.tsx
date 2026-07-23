@@ -46,7 +46,7 @@ import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
 import { createBuildingAvoider } from './buildingAvoider';
-import { GAME_RENDER, MULTIPLAYER } from '../../constants/experiments';
+import { GAME_RENDER, MULTIPLAYER, DOG_CAM } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { SearchZoneCircle } from './SearchZoneCircle';
@@ -95,6 +95,31 @@ const NORMAL_LOSTDOG_RADIUS_M = 500;
 // the perspective and clutter the distance, so they're hidden until the
 // user flattens the camera back out. Matches the marker horizon-cull gate.
 const STREET_LABEL_HIDE_PITCH = 60;
+
+// Dog-cam (prototype): a low, close chase camera locked on the companion.
+// DOGCAM_PITCH sits near maxPitch (80) for a street-level look; DOGCAM_ZOOM is
+// closer than the default; DOGCAM_TICK is the follow cadence (a touch above the
+// companion's 300ms roam tick so consecutive linear eases chain into a smooth
+// glide). Below DOGCAM_MIN_MOVE_M of dog travel we hold the heading so the
+// camera doesn't swing on GPS/idle micro-jitter.
+const DOGCAM_PITCH = 78;
+const DOGCAM_ZOOM = 18.6;
+const DOGCAM_TICK = 350;
+const DOGCAM_MIN_MOVE_M = 0.6;
+
+// Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
+// the dog-cam "up" along the dog's direction of travel.
+function bearingDeg(a: LatLng, b: LatLng): number {
+  const D = Math.PI / 180;
+  const phi1 = a.lat * D;
+  const phi2 = b.lat * D;
+  const dLng = (b.lng - a.lng) * D;
+  const y = Math.sin(dLng) * Math.cos(phi2);
+  const x =
+    Math.cos(phi1) * Math.sin(phi2) -
+    Math.sin(phi1) * Math.cos(phi2) * Math.cos(dLng);
+  return ((Math.atan2(y, x) * 180) / Math.PI + 360) % 360;
+}
 
 // Spot clustering — disk-overlap criterion. Each PoiMarker is now a
 // 44px disc and PoiCluster a 54px disc, so two pins "visually
@@ -200,6 +225,9 @@ export default function MapViewWeb() {
   const isFocused = useIsFocused();
 
   const companionPos = useCompanion(userPos, isFocused);
+  // Dog-cam prototype (toggled by the old supersniff button — see index.tsx).
+  // Drives the low chase-camera follow effect + DOGCAM_* constants below.
+  const dogCam = useGameStore((s) => s.dogCam);
   // Tracks the map's visible bounds so we can detect when the
   // companion has wandered (or been panned) off-screen and surface a
   // tap-to-recenter indicator at the screen edge.
@@ -547,6 +575,46 @@ export default function MapViewWeb() {
   // and ticks cleanly.
   const companionPosRef = useRef(companionPos);
   companionPosRef.current = companionPos;
+
+  // Dog-cam: while enabled, chase the companion with a low, close camera whose
+  // bearing tracks the dog's direction of travel (forward = up), like a
+  // car-navigation view. A light follow loop re-eases toward the dog each tick;
+  // linear easing + duration≈tick chains the eases into a continuous glide. The
+  // heading only updates when the dog actually moves, so a resting dog gives a
+  // steady shot. On exit it eases back to the normal north-up game view.
+  // Prototype: this locks out manual pan/rotate while on — toggle off for free
+  // control.
+  useEffect(() => {
+    if (!DOG_CAM || !dogCam) return;
+    const map = mapRef.current;
+    if (!map) return;
+    let heading = map.getBearing();
+    let lastDog: LatLng | null = null;
+    const id = setInterval(() => {
+      const dog = companionPosRef.current;
+      if (!dog) return;
+      if (lastDog && distanceMeters(lastDog, dog) > DOGCAM_MIN_MOVE_M) {
+        heading = bearingDeg(lastDog, dog);
+      }
+      lastDog = dog;
+      map.easeTo({
+        center: [dog.lng, dog.lat],
+        pitch: DOGCAM_PITCH,
+        zoom: DOGCAM_ZOOM,
+        bearing: heading,
+        duration: DOGCAM_TICK,
+        easing: (t) => t,
+      });
+    }, DOGCAM_TICK);
+    return () => {
+      clearInterval(id);
+      try {
+        map.easeTo({ bearing: 0, pitch: 74, zoom: balance.mapZoomDefault, duration: 500 });
+      } catch {
+        /* map tearing down */
+      }
+    };
+  }, [dogCam]);
 
   // Action-based calm gate for the chained map hints
   // (store.hintsAllowed): the user isn't doing anything right now — on
