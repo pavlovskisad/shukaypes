@@ -178,10 +178,12 @@ interface GameState {
   // when the Routes API is unavailable.
   searchRoute: LatLng[] | null;
   // Sniff-and-lead preview: the lost dog whose zone is currently being *previewed*
-  // (swiped-to but not committed). While set, the camera frames that dog's search
-  // zone with the fog lifted over it and NO route is drawn — tapping the card
-  // commits it (sets searchTarget + fetches the route). Free: no API call.
-  searchPreviewDogId: string | null;
+  // (swiped-to but not committed). Holds the dog + the FRAGMENT of its zone the
+  // beacon lights up: `spot` is the candidate quest point, `radiusM` the patch
+  // size. While set, the camera stays tied to the dog (zoomed out) and the fog
+  // layer washes that patch brand-blue; NO route is drawn. Tapping commits it
+  // (reuses `spot` as the quest target + fetches the route). Free: no API call.
+  searchPreview: { dogId: string; spot: LatLng; radiusM: number } | null;
   // About sheet open state — promoted from MapScreen-local state so
   // the radial menu (a child of MapView) can trigger it via the new
   // "?" button. MapScreen still hosts the modal so the dashboard tab
@@ -286,9 +288,11 @@ interface GameState {
   toggleDogCam: () => void;
   setSearchTarget: (t: { dogId: string; spot: LatLng } | null) => void;
   setSearchRoute: (r: LatLng[] | null) => void;
-  // Enter preview for a dog (clears any committed target/route so the lead
-  // stops), or pass null to leave preview.
-  setSearchPreview: (dogId: string | null) => void;
+  // Enter preview for a dog + zone fragment (clears any committed target/route
+  // so the lead stops), or pass null to leave preview.
+  setSearchPreview: (
+    p: { dogId: string; spot: LatLng; radiusM: number } | null,
+  ) => void;
   setAboutOpen: (open: boolean) => void;
   setActiveHint: (id: string | null) => void;
   setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
@@ -370,7 +374,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   dogCam: false,
   searchTarget: null,
   searchRoute: null,
-  searchPreviewDogId: null,
+  searchPreview: null,
   aboutOpen: false,
   activeHint: null,
   menuCamera: null,
@@ -883,17 +887,17 @@ export const useGameStore = create<GameState>((set, get) => ({
       dogCam: !s.dogCam,
       searchTarget: null,
       searchRoute: null,
-      searchPreviewDogId: null,
+      searchPreview: null,
     })),
   setSearchTarget: (searchTarget) => set({ searchTarget }),
   setSearchRoute: (searchRoute) => set({ searchRoute }),
   // Entering a preview clears any committed lead so the dog stops heading off
   // while you browse; leaving preview (null) touches nothing else.
-  setSearchPreview: (searchPreviewDogId) =>
+  setSearchPreview: (searchPreview) =>
     set(
-      searchPreviewDogId
-        ? { searchPreviewDogId, searchTarget: null, searchRoute: null }
-        : { searchPreviewDogId: null },
+      searchPreview
+        ? { searchPreview, searchTarget: null, searchRoute: null }
+        : { searchPreview: null },
     ),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setActiveHint: (activeHint) => set({ activeHint }),

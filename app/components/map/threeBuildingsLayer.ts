@@ -853,26 +853,23 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
           fogUniforms.u_clearBand.value = bubble.band;
         }
 
-        // Sniff-and-lead preview beacon — while previewing a dog, position the
-        // blue glow over its search zone; otherwise fade it out. Reads the store
-        // directly (same as dogCam above) so no extra plumbing from MapView.
+        // Sniff-and-lead preview beacon — while previewing, glow the small zone
+        // FRAGMENT (spot + radius) the quest point will come from; otherwise fade
+        // it out. Reads the store directly (same as dogCam above) so no extra
+        // plumbing from MapView.
         {
-          const st = useGameStore.getState();
-          const previewId = dogCamOn ? st.searchPreviewDogId : null;
-          const pdog = previewId
-            ? st.lostDogs.find((d) => d.id === previewId)
-            : null;
-          if (pdog) {
-            const pc = pdog.lastSeen.position;
+          const preview = dogCamOn ? useGameStore.getState().searchPreview : null;
+          if (preview) {
+            const pc = preview.spot;
             const pm = MercatorCoordinate.fromLngLat([pc.lng, pc.lat], 0);
             fogUniforms.u_previewLocal.value.set(
               (pm.x - originX) / mPerUnit,
               0,
               (pm.y - originY) / mPerUnit,
             );
-            fogUniforms.u_previewRadius.value = Math.max(140, pdog.searchZoneRadiusM);
+            fogUniforms.u_previewRadius.value = Math.max(120, preview.radiusM);
           }
-          previewStrength += ((pdog ? 1 : 0) - previewStrength) * 0.12;
+          previewStrength += ((preview ? 1 : 0) - previewStrength) * 0.12;
           fogUniforms.u_previewStrength.value = previewStrength;
         }
 
