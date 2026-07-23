@@ -45,7 +45,7 @@ import {
 import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
-import { SearchCarousel } from './SearchCarousel';
+import { LostDogCardStack } from '../ui/LostDogCardStack';
 import { createBuildingAvoider } from './buildingAvoider';
 import { GAME_RENDER, MULTIPLAYER, DOG_CAM } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
@@ -729,17 +729,18 @@ export default function MapViewWeb() {
     if (dog) assignSearch(dog);
   }, [dogCam, searchTarget, pickNextSearchDog, assignSearch]);
 
-  // Arrival → reward + serve the next dog.
+  // Arrival → reward, then a FRESH spot for the SAME dog (keeps you moving
+  // within its zone). Switching dogs is the carousel's job (swipe), so we don't
+  // auto-jump to a different dog here — that would desync the carousel.
   useEffect(() => {
     if (!DOG_CAM || !dogCam || !searchTarget || !userPos) return;
     if (distanceMeters(userPos, searchTarget.spot) > SEARCH_REACH_M) return;
     const dog = lostDogs.find((d) => d.id === searchTarget.dogId);
     showBubble(
-      dog ? `checked this spot for ${dog.name} 🐾 on to the next!` : 'on to the next! 🐾',
+      dog ? `found the spot for ${dog.name} 🐾 sniffing out another…` : 'nice find! 🐾',
       3500,
     );
-    const next = pickNextSearchDog();
-    if (next) assignSearch(next);
+    if (dog) assignSearch(dog);
     else setSearchTarget(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userPos, searchTarget, dogCam]);
@@ -2387,16 +2388,29 @@ export default function MapViewWeb() {
         />
       ) : null}
 
-      {/* Search mode: swipeable carousel of nearby lost dogs (replaces the
-          dashboard). The centred card is the dog you're on the trail of; swipe
-          to hand yourself a different dog's trail. */}
+      {/* Search mode: the same swipeable card stack as the Quests tab, at the
+          bottom in place of the dashboard. The centred card is the dog you're
+          on the trail of — swipe or tap to hand yourself that dog's trail. */}
       {DOG_CAM && dogCam && onMapScreen ? (
-        <SearchCarousel
-          dogs={searchDogs}
-          activeDogId={searchTarget?.dogId ?? null}
-          userPos={userPos}
-          onSelect={assignSearch}
-        />
+        <View
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            bottom: 6,
+            alignItems: 'center',
+            zIndex: Z.HUD_CHIPS,
+          }}
+          pointerEvents="box-none"
+        >
+          <LostDogCardStack
+            dogs={searchDogs}
+            onTap={assignSearch}
+            onSwipe={assignSearch}
+            cardHeight={188}
+            peekScale={0.68}
+          />
+        </View>
       ) : null}
 
       {/* Cancel pills — small floating chips that drop in below the
