@@ -727,6 +727,21 @@ export default function MapViewWeb() {
       void fetchWalkingRoute(origin, [spot]).then((r) => {
         if (r && r.length >= 2) setSearchRoute(r);
       });
+      // Recentre on the dog and point the camera along the fresh route so the
+      // new direction reads at a glance. One-shot easeTo (no originalEvent, so
+      // it doesn't count as the user "taking" the bearing); the follow loop
+      // picks up from here. Only in dog-cam so normal map view is untouched.
+      const map = mapRef.current;
+      if (DOG_CAM && dogCam && map) {
+        const focus = companionPosRef.current ?? origin;
+        map.easeTo({
+          center: [focus.lng, focus.lat],
+          bearing: bearingDeg(origin, spot),
+          pitch: DOGCAM_PITCH,
+          zoom: DOGCAM_ZOOM,
+          duration: 500,
+        });
+      }
       if (announce) {
         const leadLines = [
           `беремо слід ${dog.name}! ходімо 🐾`,
@@ -738,7 +753,7 @@ export default function MapViewWeb() {
         showBubble(leadLines[Math.floor(Math.random() * leadLines.length)]!, 3500);
       }
     },
-    [setSearchTarget, setSearchRoute, spotInZone, userPos, showBubble],
+    [setSearchTarget, setSearchRoute, spotInZone, userPos, showBubble, dogCam],
   );
 
   // Assign a target when the mode turns on (or when the current one clears).
@@ -1996,6 +2011,10 @@ export default function MapViewWeb() {
     // Portaled to document.body — suppress off the map tab so the chip
     // doesn't paint over other screens.
     if (!onMapScreen) return null;
+    // Dog-cam / search mode: never collapse the dog into an edge chip — it's
+    // the star of this view (it's leading you), and the camera keeps it framed.
+    // Recentring on each new route (below) keeps it on-screen.
+    if (DOG_CAM && dogCam) return null;
     if (!mapBounds || !companionPos) return null;
     const { n, s, e, w } = mapBounds;
     if (
