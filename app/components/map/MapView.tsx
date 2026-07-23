@@ -600,9 +600,14 @@ export default function MapViewWeb() {
   // stays car-nav "up" (auto-orients along the dog's travel) UNTIL the first
   // manual rotate — from then on the bearing is theirs for the rest of the
   // session and the loop never yanks it back, so rotation feels unlimited.
-  // Throughout, the dog stays glued to its screen spot: we re-centre on it on
-  // every rotate frame so the view spins AROUND the dog instead of the dog
-  // sliding off. On exit it eases back to the normal north-up game view.
+  //
+  // Crucially the follow loop does NOTHING while a rotate gesture is live: any
+  // programmatic camera move (easeTo/setCenter) mid-gesture cancels the user's
+  // gesture and makes rotation feel stuck. It stands down until a beat after the
+  // last rotate event, then the normal ease glides the dog back to centre — no
+  // hard snap. On desktop, rotation pivots around screen-centre (= the dog), so
+  // the dog stays put on its own; on touch it drifts during the twist and
+  // glides home on release. On exit it eases back to the north-up game view.
   useEffect(() => {
     if (!DOG_CAM || !dogCam) return;
     const map = mapRef.current;
@@ -612,20 +617,22 @@ export default function MapViewWeb() {
     // Latches true the first time the user rotates by hand; once set, the loop
     // stops driving the bearing so the user's rotation is never overridden.
     let userTookBearing = false;
+    // Timestamp of the last hand-driven rotate; the loop skips while this is
+    // fresh so it never fights the live gesture.
+    let lastUserRotateAt = 0;
     // originalEvent is present only for user-driven rotation, not our easeTo.
     const onUserRotate = (e: { originalEvent?: unknown }) => {
       if (!e || !e.originalEvent) return;
       userTookBearing = true;
-      // Pin the dog to its screen position while the world rotates around it —
-      // setCenter each rotate frame cancels the gesture's own pivot drift.
-      const dog = companionPosRef.current;
-      if (dog) map.setCenter([dog.lng, dog.lat]);
+      lastUserRotateAt = Date.now();
     };
     map.on('rotatestart', onUserRotate);
     map.on('rotate', onUserRotate);
     const id = setInterval(() => {
       const dog = companionPosRef.current;
       if (!dog) return;
+      // Rotate gesture still in flight (events arriving) → hands off entirely.
+      if (Date.now() - lastUserRotateAt < DOGCAM_TICK) return;
       let moved = false;
       if (lastDog && distanceMeters(lastDog, dog) > DOGCAM_MIN_MOVE_M) {
         // Only auto-orient heading-up until the user has taken the wheel.
