@@ -120,6 +120,11 @@ export const POOL_STRENGTH = 0.9;
 export const CLEAR_RADIUS = 200;
 export const CLEAR_BAND = 240;
 
+// Sniff-and-lead preview: a brand-blue "beacon" glow washed over the previewed
+// dog's search zone, weighted by the distance haze so the target area lights up
+// as blue fog toward the horizon rather than flat paint up close.
+export const PREVIEW_GLOW_COLOR = 0x2f6bff;
+
 // Cheap ground drop-shadows: flat quads swept from each footprint toward the
 // sun. SHADOW_Y lifts them just off the ground (z-fight), SHADOW_MAX_LEN caps
 // how far a tall building's shadow reaches, SHADOW_COLOR is the MIN-blend tint
@@ -290,6 +295,12 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     // Seconds since layer start — drives the subtle animated shimmer on the
     // see-through orb.
     u_time: { value: 0 },
+    // Sniff-and-lead preview beacon: zone centre (local metres, .xz used),
+    // radius (metres), brand-blue colour, and a 0→1 fade-in strength.
+    u_previewLocal: { value: new THREE.Vector3() },
+    u_previewRadius: { value: 300 },
+    u_previewColor: { value: new THREE.Color(PREVIEW_GLOW_COLOR) },
+    u_previewStrength: { value: 0 },
   };
   material.onBeforeCompile = (shader) => {
     shader.uniforms.u_camLocal = fogUniforms.u_camLocal;
@@ -301,6 +312,10 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     shader.uniforms.u_clearBand = fogUniforms.u_clearBand;
     shader.uniforms.u_dogCam = fogUniforms.u_dogCam;
     shader.uniforms.u_time = fogUniforms.u_time;
+    shader.uniforms.u_previewLocal = fogUniforms.u_previewLocal;
+    shader.uniforms.u_previewRadius = fogUniforms.u_previewRadius;
+    shader.uniforms.u_previewColor = fogUniforms.u_previewColor;
+    shader.uniforms.u_previewStrength = fogUniforms.u_previewStrength;
     shader.vertexShader =
       'varying vec3 vLocalPos;\n' +
       shader.vertexShader.replace(
@@ -308,7 +323,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         '#include <begin_vertex>\n  vLocalPos = position;',
       );
     shader.fragmentShader =
-      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nvarying vec3 vLocalPos;\n' +
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nvarying vec3 vLocalPos;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         [
@@ -328,6 +343,16 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
           '  float _fd = length(vLocalPos.xz - u_focusLocal.xz);',
           '  _f *= smoothstep(u_clearRadius, u_clearRadius + u_clearBand, _fd);',
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
+          // Sniff-and-lead preview beacon: wash the previewed zone's area in
+          // brand blue. Weighted by the distance haze (+ a small floor) so the
+          // target reads as blue fog lighting up toward the horizon, not flat
+          // paint up close. Off unless previewing (strength ramps 0→1).
+          '  if (u_previewStrength > 0.001) {',
+          '    float _pd = length(vLocalPos.xz - u_previewLocal.xz);',
+          '    float _pg = 1.0 - smoothstep(u_previewRadius * 0.3, u_previewRadius * 1.25, _pd);',
+          '    float _blue = _pg * u_previewStrength * clamp(_distFog + 0.15, 0.0, 1.0);',
+          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_previewColor, clamp(_blue * 0.8, 0.0, 1.0));',
+          '  }',
           // Dog-cam see-through: a soft "invisibility orb" around the focus
           // (the dog, since the chase cam centres on it) — buildings between you
           // and the pup smoothly DISSOLVE into the background haze so it's never
@@ -427,6 +452,8 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
   let shadowMesh: THREE.Mesh | null = null;
   // Guards the self-driven repaint that animates the see-through orb shimmer.
   let dogCamRepaintPending = false;
+  // Eased 0→1 strength of the preview beacon glow (fades in/out per frame).
+  let previewStrength = 0;
   let mapRef: MlMap | null = null;
 
   // Mercator origin of the current mesh + the metre scale at that origin.
@@ -821,6 +848,29 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
           const bubble = clearBubbleForCamera(mapRef.getZoom(), mapRef.getPitch());
           fogUniforms.u_clearRadius.value = bubble.radius;
           fogUniforms.u_clearBand.value = bubble.band;
+        }
+
+        // Sniff-and-lead preview beacon — while previewing a dog, position the
+        // blue glow over its search zone; otherwise fade it out. Reads the store
+        // directly (same as dogCam above) so no extra plumbing from MapView.
+        {
+          const st = useGameStore.getState();
+          const previewId = dogCamOn ? st.searchPreviewDogId : null;
+          const pdog = previewId
+            ? st.lostDogs.find((d) => d.id === previewId)
+            : null;
+          if (pdog) {
+            const pc = pdog.lastSeen.position;
+            const pm = MercatorCoordinate.fromLngLat([pc.lng, pc.lat], 0);
+            fogUniforms.u_previewLocal.value.set(
+              (pm.x - originX) / mPerUnit,
+              0,
+              (pm.y - originY) / mPerUnit,
+            );
+            fogUniforms.u_previewRadius.value = Math.max(140, pdog.searchZoneRadiusM);
+          }
+          previewStrength += ((pdog ? 1 : 0) - previewStrength) * 0.12;
+          fogUniforms.u_previewStrength.value = previewStrength;
         }
 
         // mainMatrix maps mercator → clip; L places our local-metre,

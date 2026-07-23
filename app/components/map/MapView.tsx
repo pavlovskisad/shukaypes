@@ -108,11 +108,11 @@ const DOGCAM_PITCH = 78;
 const DOGCAM_ZOOM = 18.6;
 const DOGCAM_TICK = 350;
 const DOGCAM_MIN_MOVE_M = 0.6;
-// Preview (carousel-swipe) camera: a gentle top-down-ish tilt over the whole
-// search zone so the lifted-fog "lit up" area reads clearly. maxZoom keeps tiny
-// zones from zooming in too far.
-const PREVIEW_PITCH = 38;
-const PREVIEW_MAX_ZOOM = 16.5;
+// Preview (carousel-swipe) camera: keep the immersive 3D tilt and look FROM you
+// TOWARD the dog's zone, so the zone sits out in the distance/horizon where the
+// fog layer washes it brand-blue — rather than a flat zoomed-out overview.
+const PREVIEW_PITCH = 68;
+const PREVIEW_ZOOM = 15.5;
 
 // Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
 // the dog-cam "up" along the dog's direction of travel.
@@ -780,26 +780,28 @@ export default function MapViewWeb() {
       setSearchPreview(dog.id); // stops any current lead
       const map = mapRef.current;
       if (DOG_CAM && dogCam && map) {
-        const c = dog.lastSeen.position;
-        const r = Math.max(140, dog.searchZoneRadiusM);
-        const dLat = r / 111320;
-        const dLng = r / (111320 * Math.cos((c.lat * Math.PI) / 180) || 111320);
+        const zone = dog.lastSeen.position;
+        const from = userPosRef.current;
+        // Look from you toward the zone: centre a little ahead (35% of the way)
+        // so there's foreground below and the zone reads up-screen on the
+        // horizon, keep the immersive tilt, and aim the bearing down the line to
+        // the zone. The fog layer paints the zone brand-blue out in the haze.
+        const center = from
+          ? {
+              lng: from.lng + (zone.lng - from.lng) * 0.35,
+              lat: from.lat + (zone.lat - from.lat) * 0.35,
+            }
+          : zone;
         try {
-          map.fitBounds(
-            [
-              [c.lng - dLng, c.lat - dLat],
-              [c.lng + dLng, c.lat + dLat],
-            ],
-            {
-              padding: 72,
-              pitch: PREVIEW_PITCH,
-              bearing: 0,
-              maxZoom: PREVIEW_MAX_ZOOM,
-              duration: 900,
-            },
-          );
+          map.easeTo({
+            center: [center.lng, center.lat],
+            zoom: PREVIEW_ZOOM,
+            pitch: PREVIEW_PITCH,
+            ...(from ? { bearing: bearingDeg(from, zone) } : {}),
+            duration: 900,
+          });
         } catch {
-          /* style not ready — the zone circle still renders */
+          /* style not ready — the zone circle + glow still render */
         }
       }
       showBubble(`${dog.name}? tap to pick up the trail 🐾`, 4000);
