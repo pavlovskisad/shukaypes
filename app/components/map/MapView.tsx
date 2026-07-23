@@ -122,7 +122,15 @@ const DOGCAM_BOTTOM_RESERVE_PX = 200;
 // Preview beacon fragment: rather than lighting the whole (up-to-1.25km) search
 // zone, we pick one candidate quest spot and glow a small patch around it — the
 // bit of the zone the quest point will actually come from.
-const PREVIEW_FRAGMENT_RADIUS_M = 260;
+const PREVIEW_FRAGMENT_RADIUS_M = 320;
+
+// Preview zoom adapts to how far the fragment is from the dog, so a distant
+// beacon still lands on-screen instead of falling off the horizon. Near spots
+// keep the close PREVIEW_ZOOM; far ones ease out.
+function previewZoomFor(distM: number): number {
+  const z = PREVIEW_ZOOM - Math.log2(Math.max(distM, 300) / 300) * 0.9;
+  return Math.max(14.0, Math.min(PREVIEW_ZOOM, z));
+}
 
 // Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
 // the dog-cam "up" along the dog's direction of travel.
@@ -675,7 +683,7 @@ export default function MapViewWeb() {
         map.easeTo({
           center: [dog.lng, dog.lat],
           pitch: PREVIEW_PITCH,
-          zoom: PREVIEW_ZOOM,
+          zoom: previewZoomFor(distanceMeters(dog, preview.spot)),
           ...(userTookBearing ? {} : { bearing: toSpot }),
           duration: DOGCAM_TICK,
           easing: (t) => t,
@@ -821,18 +829,33 @@ export default function MapViewWeb() {
   const previewSearch = useCallback(
     (dog: NearbyLostDog) => {
       const from = userPosRef.current;
-      const spot = spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, from);
+      // Bias the fragment toward the user: take the nearest of several in-zone
+      // samples. Keeps the beacon reachable/visible (and the walk shorter) even
+      // for dogs with a big zone, instead of often landing on the far side.
+      let spot = spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, from);
+      if (from) {
+        let bestD = distanceMeters(from, spot);
+        for (let i = 0; i < 7; i++) {
+          const s = spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, from);
+          const d = distanceMeters(from, s);
+          if (d < bestD) {
+            bestD = d;
+            spot = s;
+          }
+        }
+      }
       setSearchPreview({ dogId: dog.id, spot, radiusM: PREVIEW_FRAGMENT_RADIUS_M });
       const map = mapRef.current;
       if (DOG_CAM && dogCam && map) {
         // Tied to the dog (never flies off to the zone, so the dog can't drift
-        // into the carousel), just zoomed out and facing the fragment. The
-        // follow loop keeps it glued from here.
+        // into the carousel), just zoomed out and facing the fragment. Zoom eases
+        // out for far fragments so the beacon stays on-screen. The follow loop
+        // keeps it glued from here.
         const focus = companionPosRef.current ?? from ?? spot;
         try {
           map.easeTo({
             center: [focus.lng, focus.lat],
-            zoom: PREVIEW_ZOOM,
+            zoom: previewZoomFor(distanceMeters(focus, spot)),
             pitch: PREVIEW_PITCH,
             bearing: bearingDeg(focus, spot),
             duration: 700,
