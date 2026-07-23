@@ -35,6 +35,7 @@ import type {
   Map as MlMap,
 } from 'maplibre-gl';
 import { useGameStore } from '../../stores/gameStore';
+import { DOG_CAM } from '../../constants/experiments';
 
 export const THREE_BUILDINGS_LAYER_ID = 'three-buildings';
 
@@ -283,6 +284,9 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     u_focusLocal: { value: new THREE.Vector3() },
     u_clearRadius: { value: CLEAR_RADIUS },
     u_clearBand: { value: CLEAR_BAND },
+    // Dog-cam see-through: 1 while the chase cam is active, else 0. Gates the
+    // occluder fade below.
+    u_dogCam: { value: 0 },
   };
   material.onBeforeCompile = (shader) => {
     shader.uniforms.u_camLocal = fogUniforms.u_camLocal;
@@ -292,6 +296,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     shader.uniforms.u_focusLocal = fogUniforms.u_focusLocal;
     shader.uniforms.u_clearRadius = fogUniforms.u_clearRadius;
     shader.uniforms.u_clearBand = fogUniforms.u_clearBand;
+    shader.uniforms.u_dogCam = fogUniforms.u_dogCam;
     shader.vertexShader =
       'varying vec3 vLocalPos;\n' +
       shader.vertexShader.replace(
@@ -299,7 +304,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         '#include <begin_vertex>\n  vLocalPos = position;',
       );
     shader.fragmentShader =
-      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nvarying vec3 vLocalPos;\n' +
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nvarying vec3 vLocalPos;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         [
@@ -319,6 +324,25 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
           '  float _fd = length(vLocalPos.xz - u_focusLocal.xz);',
           '  _f *= smoothstep(u_clearRadius, u_clearRadius + u_clearBand, _fd);',
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
+          // Dog-cam see-through: dither-fade buildings that sit between the
+          // camera and the focus (the dog, since the chase cam centres on it),
+          // so the pup is never hidden behind a wall. Fade fragments inside a
+          // narrow cone around the camera→focus ray that are IN FRONT of the
+          // focus; screen-door (hash dither) discard keeps the mesh opaque (no
+          // transparency sorting). Off unless u_dogCam.
+          '  if (u_dogCam > 0.5) {',
+          '    vec3 _toC = u_focusLocal - u_camLocal; float _cD = length(_toC);',
+          '    vec3 _cDir = _toC / max(_cD, 1e-3);',
+          '    vec3 _toF = vLocalPos - u_camLocal; float _fD = length(_toF);',
+          '    vec3 _fDir = _toF / max(_fD, 1e-3);',
+          // cone: 1 within ~6deg of the ray, fading to 0 by ~15deg.
+          '    float _cone = smoothstep(0.965, 0.995, dot(_cDir, _fDir));',
+          // front: 1 when well in front of the focus, 0 near/behind it.
+          '    float _front = 1.0 - smoothstep(_cD - 14.0, _cD - 3.0, _fD);',
+          '    float _occ = _cone * _front;',
+          '    float _dh = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);',
+          '    if (_occ > _dh) discard;',
+          '  }',
         ].join('\n'),
       );
   };
@@ -710,6 +734,9 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         // Day/night follows sniff mode — swap mist, light + material tones.
         const sniff = useGameStore.getState().sniffMode;
         const tone = sniff ? NIGHT : DAY;
+        // See-through occluder fade only while the dog-cam chase view is active.
+        fogUniforms.u_dogCam.value =
+          DOG_CAM && useGameStore.getState().dogCam ? 1 : 0;
         fogUniforms.u_fogColor.value.setHex(tone.fog);
         fogUniforms.u_fogNear.value = tone.fogNear;
         fogUniforms.u_fogDensity.value = tone.fogDensity;
