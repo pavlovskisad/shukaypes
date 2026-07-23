@@ -74,9 +74,10 @@ interface Props<T> {
   // category in big-card form. When provided, the counter renders
   // as a Pressable with a chevron hint; otherwise it's plain text.
   onCounterTap?: () => void;
-  // Fired on each committed swipe (the carousel advances ±1). Used to
-  // dismiss the swipe hint the moment the user actually swipes.
-  onSwipe?: () => void;
+  // Fired on each committed swipe (the carousel advances ±1) with the item
+  // now centred (the new top card). Used to dismiss the swipe hint, and by the
+  // search carousel to switch which lost dog is being tracked.
+  onSwipe?: (item: T) => void;
 }
 
 // Per-item slot. `virtualIdx` is the item's stable position on the
@@ -274,9 +275,15 @@ export function CardStack<T>({
   const advance = useCallback(
     (delta: number) => {
       setVirtualBase((b) => b + delta);
-      onSwipe?.();
+      // Report the item now centred (virtualBaseSV was set to the target
+      // synchronously on the worklet before this runs, so it's the new base).
+      if (onSwipe && N > 0) {
+        const nb = Math.round(virtualBaseSV.value);
+        const it = items[((nb % N) + N) % N];
+        if (it !== undefined) onSwipe(it);
+      }
     },
-    [onSwipe],
+    [onSwipe, items, N, virtualBaseSV],
   );
 
   const handleTap = useCallback(() => {
