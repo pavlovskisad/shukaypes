@@ -108,10 +108,6 @@ const DOGCAM_PITCH = 78;
 const DOGCAM_ZOOM = 18.6;
 const DOGCAM_TICK = 350;
 const DOGCAM_MIN_MOVE_M = 0.6;
-// After the user manually rotates (a two-finger twist) to look around, the
-// follow loop hands them full control for this long before it resumes chasing +
-// re-orienting — so "look around whenever you want" doesn't fight the camera.
-const DOGCAM_LOOK_GRACE_MS = 2500;
 
 // Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
 // the dog-cam "up" along the dog's direction of travel.
@@ -590,42 +586,50 @@ export default function MapViewWeb() {
   // Current user position in a ref for interval callbacks (search nudges).
   const userPosRef = useRef(userPos);
   userPosRef.current = userPos;
+  // Same for the lost-dogs list, so the nudge interval can resolve the active
+  // search target's name without re-subscribing the effect on every list churn.
+  const lostDogsRef = useRef(lostDogs);
+  lostDogsRef.current = lostDogs;
 
   // Dog-cam: while enabled, chase the companion with a low, close camera whose
   // bearing tracks the dog's direction of travel (forward = up), like a
   // car-navigation view. A light follow loop re-eases toward the dog each tick;
   // linear easing + duration≈tick chains the eases into a continuous glide.
   //
-  // Look-around: the user can twist to rotate the view any time. A real rotate
-  // gesture hands them full control for DOGCAM_LOOK_GRACE_MS (the loop stands
-  // down), then chasing resumes. And heading-up only re-orients while the dog
-  // is actually moving — a resting dog keeps whatever direction you turned to
-  // look — so glancing around never gets yanked back mid-look. On exit it eases
-  // back to the normal north-up game view.
+  // Look-around: the user can twist to rotate the view any time, freely. Heading
+  // stays car-nav "up" (auto-orients along the dog's travel) UNTIL the first
+  // manual rotate — from then on the bearing is theirs for the rest of the
+  // session and the loop never yanks it back, so rotation feels unlimited.
+  // Throughout, the dog stays glued to its screen spot: we re-centre on it on
+  // every rotate frame so the view spins AROUND the dog instead of the dog
+  // sliding off. On exit it eases back to the normal north-up game view.
   useEffect(() => {
     if (!DOG_CAM || !dogCam) return;
     const map = mapRef.current;
     if (!map) return;
     let heading = map.getBearing();
     let lastDog: LatLng | null = null;
-    let lastUserRotateAt = 0;
+    // Latches true the first time the user rotates by hand; once set, the loop
+    // stops driving the bearing so the user's rotation is never overridden.
+    let userTookBearing = false;
     // originalEvent is present only for user-driven rotation, not our easeTo.
     const onUserRotate = (e: { originalEvent?: unknown }) => {
-      if (e && e.originalEvent) lastUserRotateAt = Date.now();
+      if (!e || !e.originalEvent) return;
+      userTookBearing = true;
+      // Pin the dog to its screen position while the world rotates around it —
+      // setCenter each rotate frame cancels the gesture's own pivot drift.
+      const dog = companionPosRef.current;
+      if (dog) map.setCenter([dog.lng, dog.lat]);
     };
     map.on('rotatestart', onUserRotate);
     map.on('rotate', onUserRotate);
     const id = setInterval(() => {
       const dog = companionPosRef.current;
       if (!dog) return;
-      // Recent twist gesture → the user is looking around: keep the dog CENTRED
-      // (so the view rotates AROUND it, never drifting off) but hand the user
-      // the bearing. Otherwise auto heading-up while travelling; a resting dog
-      // keeps whatever bearing you last turned to.
-      const looking = Date.now() - lastUserRotateAt < DOGCAM_LOOK_GRACE_MS;
       let moved = false;
       if (lastDog && distanceMeters(lastDog, dog) > DOGCAM_MIN_MOVE_M) {
-        heading = bearingDeg(lastDog, dog);
+        // Only auto-orient heading-up until the user has taken the wheel.
+        if (!userTookBearing) heading = bearingDeg(lastDog, dog);
         moved = true;
       }
       lastDog = dog;
@@ -633,7 +637,7 @@ export default function MapViewWeb() {
         center: [dog.lng, dog.lat],
         pitch: DOGCAM_PITCH,
         zoom: DOGCAM_ZOOM,
-        ...(!looking && moved ? { bearing: heading } : {}),
+        ...(!userTookBearing && moved ? { bearing: heading } : {}),
         duration: DOGCAM_TICK,
         easing: (t) => t,
       });
@@ -702,7 +706,9 @@ export default function MapViewWeb() {
   }, [userPos, lostDogs]);
 
   const assignSearch = useCallback(
-    (dog: NearbyLostDog) => {
+    // `announce` is the by-name "on the trail" bark; suppressed on the arrival
+    // re-assign (the arrival effect shows its own "found the spot" line).
+    (dog: NearbyLostDog, announce = true) => {
       visitedDogsRef.current.add(dog.id);
       const spot = spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, userPos);
       setSearchTarget({ dogId: dog.id, spot });
@@ -714,8 +720,18 @@ export default function MapViewWeb() {
       void fetchWalkingRoute(origin, [spot]).then((r) => {
         if (r && r.length >= 2) setSearchRoute(r);
       });
+      if (announce) {
+        const leadLines = [
+          `беремо слід ${dog.name}! ходімо 🐾`,
+          `шукаємо ${dog.name} — за мною!`,
+          `${dog.name} десь тут… чую запах 🐽`,
+          `на пошук ${dog.name}, тримайся поруч!`,
+          `on the trail of ${dog.name} — this way! 🐾`,
+        ];
+        showBubble(leadLines[Math.floor(Math.random() * leadLines.length)]!, 3500);
+      }
     },
-    [setSearchTarget, setSearchRoute, spotInZone, userPos],
+    [setSearchTarget, setSearchRoute, spotInZone, userPos, showBubble],
   );
 
   // Assign a target when the mode turns on (or when the current one clears).
@@ -740,7 +756,7 @@ export default function MapViewWeb() {
       dog ? `found the spot for ${dog.name} 🐾 sniffing out another…` : 'nice find! 🐾',
       3500,
     );
-    if (dog) assignSearch(dog);
+    if (dog) assignSearch(dog, false);
     else setSearchTarget(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userPos, searchTarget, dogCam]);
@@ -755,12 +771,28 @@ export default function MapViewWeb() {
       return;
     }
     const NUDGE_MS = 9000;
-    const lines = [
+    // Generic "keep following me" barks (mix of uk + en, matching the app).
+    const generic = [
       'сюди! 🐾',
       'ходімо, ніс не бреше!',
       'this way — I caught a scent!',
       'давай, за мною!',
       'нюхом чую, туди!',
+      'майже там, не відставай! 🐕',
+      'слід свіжий, швидше!',
+      'keep up — the trail is warm! 🐾',
+      'туди-туди, ще трохи!',
+      'не зупиняйся, я веду!',
+      'almost there — stay with me!',
+      'ще пару кроків, ходімо 🐽',
+    ];
+    // Name-aware barks — only usable when we can resolve the active dog.
+    const named = (name: string) => [
+      `${name} десь поруч — за мною! 🐾`,
+      `нюхаю ${name}, сюди!`,
+      `не губи слід ${name}!`,
+      `${name} чекає — ходімо!`,
+      `closing in on ${name} — this way!`,
     ];
     const id = setInterval(() => {
       const st = useGameStore.getState().searchTarget;
@@ -771,7 +803,10 @@ export default function MapViewWeb() {
       const prev = lastNudgeDistRef.current;
       // Only bark if you haven't meaningfully closed the gap since last check.
       if (prev === null || prev - dist < 12) {
-        showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3200);
+        const name = lostDogsRef.current.find((d) => d.id === st.dogId)?.name;
+        // Weave name-aware lines in when we know who we're after.
+        const pool = name ? [...generic, ...named(name)] : generic;
+        showBubble(pool[Math.floor(Math.random() * pool.length)]!, 3200);
       }
       lastNudgeDistRef.current = dist;
     }, NUDGE_MS);
