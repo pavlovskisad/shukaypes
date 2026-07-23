@@ -2397,7 +2397,7 @@ export default function MapViewWeb() {
             position: 'absolute',
             left: 0,
             right: 0,
-            bottom: 6,
+            bottom: -14,
             alignItems: 'center',
             zIndex: Z.HUD_CHIPS,
           }}
@@ -2407,8 +2407,9 @@ export default function MapViewWeb() {
             dogs={searchDogs}
             onTap={assignSearch}
             onSwipe={assignSearch}
-            cardHeight={188}
-            peekScale={0.68}
+            cardWidth={200}
+            cardHeight={176}
+            showCounter={false}
           />
         </View>
       ) : null}

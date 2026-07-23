@@ -22,8 +22,10 @@ interface Props {
   onCounterTap?: () => void;
   // Fired on each committed swipe with the dog now centred (the new top card).
   onSwipe?: (dog: NearbyLostDog) => void;
+  cardWidth?: number;
   cardHeight?: number;
   peekScale?: number;
+  showCounter?: boolean;
 }
 
 // "X m" for sub-1km, "X.X km" beyond. Snapped to 50m below 1km so
@@ -38,8 +40,10 @@ export function LostDogCardStack({
   onTap,
   onCounterTap,
   onSwipe,
+  cardWidth,
   cardHeight,
   peekScale,
+  showCounter,
 }: Props) {
   const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
@@ -59,8 +63,10 @@ export function LostDogCardStack({
       onSwipe={onSwipe}
       getPhotoUrl={(d) => d.photoUrl}
       renderCard={renderCard}
+      {...(cardWidth != null ? { cardWidth } : {})}
       {...(cardHeight != null ? { cardHeight } : {})}
       {...(peekScale != null ? { peekScale } : {})}
+      {...(showCounter != null ? { showCounter } : {})}
     />
   );
 }

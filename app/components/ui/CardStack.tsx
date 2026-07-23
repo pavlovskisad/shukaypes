@@ -67,6 +67,7 @@ interface Props<T> {
   onTap?: (item: T) => void;
   getPhotoUrl?: (item: T) => string | null | undefined;
   showCounter?: boolean;
+  cardWidth?: number;
   cardHeight?: number;
   peekScale?: number;
   // Optional callback fired when the user taps the "N / M" counter.
@@ -163,6 +164,7 @@ export function CardStack<T>({
   onTap,
   getPhotoUrl,
   showCounter = true,
+  cardWidth = CARD_W,
   cardHeight = CARD_H,
   peekScale = 1,
   onCounterTap,
@@ -195,10 +197,11 @@ export function CardStack<T>({
   const dragStartPos = useSharedValue(0);
 
   // Carousel step — horizontal distance between adjacent slot
-  // centres. 290 with TOP_SCALE 0.88 + PEEK_SCALE 0.74 leaves a
-  // ~31 px gap between the centre's right edge and the peek's
-  // left edge.
-  const STEP = 290 * peekScale;
+  // centres. Scales with cardWidth (290 at the default 320) so the
+  // peek gap stays proportional at narrower widths instead of
+  // collapsing. 290 with TOP_SCALE 0.88 + PEEK_SCALE 0.74 leaves a
+  // ~31 px gap between the centre's right edge and the peek's left.
+  const STEP = ((cardWidth * 290) / CARD_W) * peekScale;
 
   // Reset when the underlying list changes.
   const ids = useMemo(() => items.map(getId).join(','), [items, getId]);
@@ -416,8 +419,8 @@ export function CardStack<T>({
   // Stable reference so the memoed ItemSlot doesn't see a "new"
   // slotSize object every render and discard the memo.
   const slotSize = useMemo(
-    () => ({ width: CARD_W, height: cardHeight }),
-    [cardHeight],
+    () => ({ width: cardWidth, height: cardHeight }),
+    [cardWidth, cardHeight],
   );
 
   if (!topItem) return null;
