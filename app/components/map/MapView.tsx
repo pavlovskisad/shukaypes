@@ -106,6 +106,10 @@ const DOGCAM_PITCH = 78;
 const DOGCAM_ZOOM = 18.6;
 const DOGCAM_TICK = 350;
 const DOGCAM_MIN_MOVE_M = 0.6;
+// After the user manually rotates (a two-finger twist) to look around, the
+// follow loop hands them full control for this long before it resumes chasing +
+// re-orienting — so "look around whenever you want" doesn't fight the camera.
+const DOGCAM_LOOK_GRACE_MS = 2500;
 
 // Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
 // the dog-cam "up" along the dog's direction of travel.
@@ -579,35 +583,56 @@ export default function MapViewWeb() {
   // Dog-cam: while enabled, chase the companion with a low, close camera whose
   // bearing tracks the dog's direction of travel (forward = up), like a
   // car-navigation view. A light follow loop re-eases toward the dog each tick;
-  // linear easing + duration≈tick chains the eases into a continuous glide. The
-  // heading only updates when the dog actually moves, so a resting dog gives a
-  // steady shot. On exit it eases back to the normal north-up game view.
-  // Prototype: this locks out manual pan/rotate while on — toggle off for free
-  // control.
+  // linear easing + duration≈tick chains the eases into a continuous glide.
+  //
+  // Look-around: the user can twist to rotate the view any time. A real rotate
+  // gesture hands them full control for DOGCAM_LOOK_GRACE_MS (the loop stands
+  // down), then chasing resumes. And heading-up only re-orients while the dog
+  // is actually moving — a resting dog keeps whatever direction you turned to
+  // look — so glancing around never gets yanked back mid-look. On exit it eases
+  // back to the normal north-up game view.
   useEffect(() => {
     if (!DOG_CAM || !dogCam) return;
     const map = mapRef.current;
     if (!map) return;
     let heading = map.getBearing();
     let lastDog: LatLng | null = null;
+    let lastUserRotateAt = 0;
+    // originalEvent is present only for user-driven rotation, not our easeTo.
+    const onUserRotate = (e: { originalEvent?: unknown }) => {
+      if (e && e.originalEvent) lastUserRotateAt = Date.now();
+    };
+    map.on('rotatestart', onUserRotate);
+    map.on('rotate', onUserRotate);
     const id = setInterval(() => {
       const dog = companionPosRef.current;
       if (!dog) return;
+      // Hands off while the user is looking around (recent twist gesture).
+      if (Date.now() - lastUserRotateAt < DOGCAM_LOOK_GRACE_MS) {
+        lastDog = dog;
+        return;
+      }
+      let moved = false;
       if (lastDog && distanceMeters(lastDog, dog) > DOGCAM_MIN_MOVE_M) {
         heading = bearingDeg(lastDog, dog);
+        moved = true;
       }
       lastDog = dog;
       map.easeTo({
         center: [dog.lng, dog.lat],
         pitch: DOGCAM_PITCH,
         zoom: DOGCAM_ZOOM,
-        bearing: heading,
+        // Only re-orient heading-up while travelling; a resting dog keeps the
+        // bearing the user last looked toward.
+        ...(moved ? { bearing: heading } : {}),
         duration: DOGCAM_TICK,
         easing: (t) => t,
       });
     }, DOGCAM_TICK);
     return () => {
       clearInterval(id);
+      map.off('rotatestart', onUserRotate);
+      map.off('rotate', onUserRotate);
       try {
         map.easeTo({ bearing: 0, pitch: 74, zoom: balance.mapZoomDefault, duration: 500 });
       } catch {
