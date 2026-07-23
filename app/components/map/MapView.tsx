@@ -112,9 +112,11 @@ const DOGCAM_MIN_MOVE_M = 0.6;
 // TOWARD the dog's zone, so the zone sits out in the distance/horizon where the
 // fog layer washes it brand-blue — rather than a flat zoomed-out overview.
 // Close + tilted (near the dog-cam feel) — eased less steep so the horizon sits
-// lower and the shot feels less cramped.
+// lower and the shot feels less cramped. Zoomed in ~20% vs before (16.3 → 16.55)
+// so the tighter framing pushes the beacon farther up the screen, opening a gap
+// above the dog for its speech bubble before the beacon.
 const PREVIEW_PITCH = 68;
-const PREVIEW_ZOOM = 16.3;
+const PREVIEW_ZOOM = 16.55;
 // The dog rides in the LOWER part of the screen (car-nav feel) so its speech
 // bubble — anchored just above it — clears the horizon/beacon instead of
 // covering it. Achieved with TOP map padding (a fraction of the container
