@@ -104,22 +104,23 @@ const STREET_LABEL_HIDE_PITCH = 60;
 // companion's 300ms roam tick so consecutive linear eases chain into a smooth
 // glide). Below DOGCAM_MIN_MOVE_M of dog travel we hold the heading so the
 // camera doesn't swing on GPS/idle micro-jitter.
-const DOGCAM_PITCH = 78;
+const DOGCAM_PITCH = 74;
 const DOGCAM_ZOOM = 18.6;
 const DOGCAM_TICK = 350;
 const DOGCAM_MIN_MOVE_M = 0.6;
 // Preview (carousel-swipe) camera: keep the immersive 3D tilt and look FROM you
 // TOWARD the dog's zone, so the zone sits out in the distance/horizon where the
 // fog layer washes it brand-blue — rather than a flat zoomed-out overview.
-// Close + steep (near the dog-cam feel); the steep pitch still shows the zone
-// out on the horizon despite the closer zoom.
-const PREVIEW_PITCH = 76;
+// Close + tilted (near the dog-cam feel) — a touch less steep than before so the
+// horizon sits a bit lower and the shot feels less cramped.
+const PREVIEW_PITCH = 72;
 const PREVIEW_ZOOM = 16.3;
-// Bottom screen space (CSS px) reserved for the search carousel while in
-// dog-cam. Small — the steep pitch already sits the dog low; we just keep it a
-// touch off the very bottom so it rides just above the carousel (car-nav feel),
-// not up at centre.
-const DOGCAM_BOTTOM_RESERVE_PX = 70;
+// The dog rides in the LOWER part of the screen (car-nav feel) so its speech
+// bubble — anchored just above it — clears the horizon/beacon instead of
+// covering it. Achieved with TOP map padding (a fraction of the container
+// height): padding shifts the centred point down, so the dog sits ~this-frac
+// below screen centre. (Bottom padding only ever lifts it UP toward centre.)
+const DOGCAM_TOP_RESERVE_FRAC = 0.24;
 // How far ahead along the route the committed cam looks — it faces this point so
 // the view runs DOWN the route (not perpendicular to it) and tracks its curves.
 const ROUTE_LOOK_AHEAD_M = 90;
@@ -644,10 +645,17 @@ export default function MapViewWeb() {
     if (!DOG_CAM || !dogCam) return;
     const map = mapRef.current;
     if (!map) return;
-    // Reserve the bottom of the screen for the carousel so the follow loop +
-    // preview frame the dog ABOVE the cards, never sliding it down into them.
+    // Sit the dog low on screen (car-nav feel) so its speech bubble clears the
+    // horizon/beacon. TOP padding pushes the centred point down; sized as a
+    // fraction of the map height so it holds across devices.
     try {
-      map.setPadding({ top: 0, right: 0, bottom: DOGCAM_BOTTOM_RESERVE_PX, left: 0 });
+      const h = map.getContainer?.()?.clientHeight ?? 700;
+      map.setPadding({
+        top: Math.round(h * DOGCAM_TOP_RESERVE_FRAC),
+        right: 0,
+        bottom: 0,
+        left: 0,
+      });
     } catch {
       /* style not ready */
     }
