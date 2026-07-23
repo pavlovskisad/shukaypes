@@ -339,10 +339,11 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
           '    vec3 _cDir = _toC / max(_cD, 1e-3);',
           '    vec3 _toF = vLocalPos - u_camLocal; float _fD = length(_toF);',
           '    vec3 _fDir = _toF / max(_fD, 1e-3);',
-          // Soft orb: 1 within ~6deg of the camera→dog ray, fading out by ~17deg.
-          '    float _cone = smoothstep(0.955, 0.995, dot(_cDir, _fDir));',
+          // Soft orb: full within ~8deg of the camera→dog ray, fading out by
+          // ~20deg (a bit wider than before so the effect actually reads).
+          '    float _cone = smoothstep(0.94, 0.99, dot(_cDir, _fDir));',
           // Only dissolve what's IN FRONT of the dog (nearer to the camera).
-          '    float _front = 1.0 - smoothstep(_cD - 18.0, _cD - 3.0, _fD);',
+          '    float _front = 1.0 - smoothstep(_cD - 20.0, _cD - 3.0, _fD);',
           '    float _occ = _cone * _front;',
           // Alive: a gentle ripple over the surface (by world pos + time) so the
           // dissolve shimmers rather than sitting as a flat wash.
@@ -352,7 +353,13 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
           // feel) but keep it mostly smooth.
           '    float _q = floor(_o * 5.0) / 5.0;',
           '    _o = mix(_o, _q, 0.45);',
-          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _o);',
+          // REAL see-through: drop the fragment ALPHA so you see the ground (and
+          // the dog, drawn on top) behind the wall. Fading to the fog colour did
+          // almost nothing because the building colour ≈ fog colour. A faint fog
+          // tint too, just to soften the cut. Needs material.transparent (toggled
+          // on in render only while dog-cam is active).
+          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _o * 0.4);',
+          '    gl_FragColor.a *= (1.0 - _o);',
           '  }',
         ].join('\n'),
       );
@@ -750,6 +757,13 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         // See-through occluder fade only while the dog-cam chase view is active.
         const dogCamOn = DOG_CAM && useGameStore.getState().dogCam;
         fogUniforms.u_dogCam.value = dogCamOn ? 1 : 0;
+        // The see-through drops fragment alpha, which needs a transparent
+        // material. Toggle it ONLY in dog-cam (recompile once per mode switch)
+        // so normal play stays a plain opaque mesh — no render-order changes.
+        if (material.transparent !== dogCamOn) {
+          material.transparent = dogCamOn;
+          material.needsUpdate = true;
+        }
         fogUniforms.u_time.value =
           (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
         // Keep the shimmer animating while the orb is active (the map otherwise
