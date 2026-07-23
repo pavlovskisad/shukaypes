@@ -287,6 +287,9 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     // Dog-cam see-through: 1 while the chase cam is active, else 0. Gates the
     // occluder fade below.
     u_dogCam: { value: 0 },
+    // Seconds since layer start — drives the subtle animated shimmer on the
+    // see-through orb.
+    u_time: { value: 0 },
   };
   material.onBeforeCompile = (shader) => {
     shader.uniforms.u_camLocal = fogUniforms.u_camLocal;
@@ -297,6 +300,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     shader.uniforms.u_clearRadius = fogUniforms.u_clearRadius;
     shader.uniforms.u_clearBand = fogUniforms.u_clearBand;
     shader.uniforms.u_dogCam = fogUniforms.u_dogCam;
+    shader.uniforms.u_time = fogUniforms.u_time;
     shader.vertexShader =
       'varying vec3 vLocalPos;\n' +
       shader.vertexShader.replace(
@@ -304,7 +308,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         '#include <begin_vertex>\n  vLocalPos = position;',
       );
     shader.fragmentShader =
-      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nvarying vec3 vLocalPos;\n' +
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nvarying vec3 vLocalPos;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         [
@@ -324,24 +328,31 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
           '  float _fd = length(vLocalPos.xz - u_focusLocal.xz);',
           '  _f *= smoothstep(u_clearRadius, u_clearRadius + u_clearBand, _fd);',
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
-          // Dog-cam see-through: dither-fade buildings that sit between the
-          // camera and the focus (the dog, since the chase cam centres on it),
-          // so the pup is never hidden behind a wall. Fade fragments inside a
-          // narrow cone around the camera→focus ray that are IN FRONT of the
-          // focus; screen-door (hash dither) discard keeps the mesh opaque (no
-          // transparency sorting). Off unless u_dogCam.
+          // Dog-cam see-through: a soft "invisibility orb" around the focus
+          // (the dog, since the chase cam centres on it) — buildings between you
+          // and the pup smoothly DISSOLVE into the background haze so it's never
+          // hidden behind a wall. Smooth (no dither/stipple), and gently
+          // animated + lightly stepped so it feels alive. Fades toward u_fogColor
+          // (no transparency, no depth-sorting cost). Off unless u_dogCam.
           '  if (u_dogCam > 0.5) {',
           '    vec3 _toC = u_focusLocal - u_camLocal; float _cD = length(_toC);',
           '    vec3 _cDir = _toC / max(_cD, 1e-3);',
           '    vec3 _toF = vLocalPos - u_camLocal; float _fD = length(_toF);',
           '    vec3 _fDir = _toF / max(_fD, 1e-3);',
-          // cone: 1 within ~6deg of the ray, fading to 0 by ~15deg.
-          '    float _cone = smoothstep(0.965, 0.995, dot(_cDir, _fDir));',
-          // front: 1 when well in front of the focus, 0 near/behind it.
-          '    float _front = 1.0 - smoothstep(_cD - 14.0, _cD - 3.0, _fD);',
+          // Soft orb: 1 within ~6deg of the camera→dog ray, fading out by ~17deg.
+          '    float _cone = smoothstep(0.955, 0.995, dot(_cDir, _fDir));',
+          // Only dissolve what's IN FRONT of the dog (nearer to the camera).
+          '    float _front = 1.0 - smoothstep(_cD - 18.0, _cD - 3.0, _fD);',
           '    float _occ = _cone * _front;',
-          '    float _dh = fract(sin(dot(gl_FragCoord.xy, vec2(12.9898, 78.233))) * 43758.5453);',
-          '    if (_occ > _dh) discard;',
+          // Alive: a gentle ripple over the surface (by world pos + time) so the
+          // dissolve shimmers rather than sitting as a flat wash.
+          '    float _wob = 0.5 + 0.5 * sin(u_time * 2.2 + vLocalPos.y * 0.25 + vLocalPos.x * 0.08);',
+          '    float _o = clamp(_occ * (0.82 + 0.18 * _wob), 0.0, 1.0);',
+          // Lightly quantise into soft bands (the "stepped becoming-transparent"
+          // feel) but keep it mostly smooth.
+          '    float _q = floor(_o * 5.0) / 5.0;',
+          '    _o = mix(_o, _q, 0.45);',
+          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _o);',
           '  }',
         ].join('\n'),
       );
@@ -407,6 +418,8 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
 
   let mesh: THREE.Mesh | null = null;
   let shadowMesh: THREE.Mesh | null = null;
+  // Guards the self-driven repaint that animates the see-through orb shimmer.
+  let dogCamRepaintPending = false;
   let mapRef: MlMap | null = null;
 
   // Mercator origin of the current mesh + the metre scale at that origin.
@@ -735,8 +748,24 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         const sniff = useGameStore.getState().sniffMode;
         const tone = sniff ? NIGHT : DAY;
         // See-through occluder fade only while the dog-cam chase view is active.
-        fogUniforms.u_dogCam.value =
-          DOG_CAM && useGameStore.getState().dogCam ? 1 : 0;
+        const dogCamOn = DOG_CAM && useGameStore.getState().dogCam;
+        fogUniforms.u_dogCam.value = dogCamOn ? 1 : 0;
+        fogUniforms.u_time.value =
+          (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
+        // Keep the shimmer animating while the orb is active (the map otherwise
+        // idles between camera moves). Throttled to ~16fps via a guard so we
+        // don't stack timers. Harmless no-op if unsupported.
+        if (dogCamOn && !dogCamRepaintPending) {
+          dogCamRepaintPending = true;
+          setTimeout(() => {
+            dogCamRepaintPending = false;
+            try {
+              mapRef?.triggerRepaint();
+            } catch {
+              /* ignore */
+            }
+          }, 60);
+        }
         fogUniforms.u_fogColor.value.setHex(tone.fog);
         fogUniforms.u_fogNear.value = tone.fogNear;
         fogUniforms.u_fogDensity.value = tone.fogDensity;
