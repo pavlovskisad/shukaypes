@@ -237,6 +237,8 @@ export default function MapViewWeb() {
   // search controller below while dogCam is on.
   const searchTarget = useGameStore((s) => s.searchTarget);
   const setSearchTarget = useGameStore((s) => s.setSearchTarget);
+  const searchRoute = useGameStore((s) => s.searchRoute);
+  const setSearchRoute = useGameStore((s) => s.setSearchRoute);
   // Tracks the map's visible bounds so we can detect when the
   // companion has wandered (or been panned) off-screen and surface a
   // tap-to-recenter indicator at the screen edge.
@@ -584,6 +586,9 @@ export default function MapViewWeb() {
   // and ticks cleanly.
   const companionPosRef = useRef(companionPos);
   companionPosRef.current = companionPos;
+  // Current user position in a ref for interval callbacks (search nudges).
+  const userPosRef = useRef(userPos);
+  userPosRef.current = userPos;
 
   // Dog-cam: while enabled, chase the companion with a low, close camera whose
   // bearing tracks the dog's direction of travel (forward = up), like a
@@ -698,12 +703,18 @@ export default function MapViewWeb() {
   const assignSearch = useCallback(
     (dog: NearbyLostDog) => {
       visitedDogsRef.current.add(dog.id);
-      setSearchTarget({
-        dogId: dog.id,
-        spot: spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, userPos),
+      const spot = spotInZone(dog.lastSeen.position, dog.searchZoneRadiusM, userPos);
+      setSearchTarget({ dogId: dog.id, spot });
+      // Draw a straight line to the spot immediately so the dog can start
+      // leading right away, then upgrade to the street-hugging walking route
+      // once the Routes API answers (falls back to the straight line if not).
+      const origin = userPos ?? dog.lastSeen.position;
+      setSearchRoute([origin, spot]);
+      void fetchWalkingRoute(origin, [spot]).then((r) => {
+        if (r && r.length >= 2) setSearchRoute(r);
       });
     },
-    [setSearchTarget, spotInZone, userPos],
+    [setSearchTarget, setSearchRoute, spotInZone, userPos],
   );
 
   // Assign a target when the mode turns on (or when the current one clears).
@@ -738,6 +749,47 @@ export default function MapViewWeb() {
       searchTarget ? lostDogs.find((d) => d.id === searchTarget.dogId) ?? null : null,
     [searchTarget, lostDogs],
   );
+  // Remaining distance to the search spot (for the card).
+  const searchDistM = useMemo(
+    () =>
+      searchTarget && userPos
+        ? Math.round(distanceMeters(userPos, searchTarget.spot))
+        : null,
+    [searchTarget, userPos],
+  );
+
+  // Call-to-action: when the dog is leading but you're not closing the gap,
+  // it barks encouragement (it's up ahead waiting for you to follow). Only
+  // nudges when you're NOT progressing, so it never nags while you walk.
+  const lastNudgeDistRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!DOG_CAM || !dogCam) {
+      lastNudgeDistRef.current = null;
+      return;
+    }
+    const NUDGE_MS = 9000;
+    const lines = [
+      'сюди! 🐾',
+      'ходімо, ніс не бреше!',
+      'this way — I caught a scent!',
+      'давай, за мною!',
+      'нюхом чую, туди!',
+    ];
+    const id = setInterval(() => {
+      const st = useGameStore.getState().searchTarget;
+      const up = userPosRef.current;
+      if (!st || !up) return;
+      const dist = distanceMeters(up, st.spot);
+      if (dist <= SEARCH_REACH_M) return;
+      const prev = lastNudgeDistRef.current;
+      // Only bark if you haven't meaningfully closed the gap since last check.
+      if (prev === null || prev - dist < 12) {
+        showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3200);
+      }
+      lastNudgeDistRef.current = dist;
+    }, NUDGE_MS);
+    return () => clearInterval(id);
+  }, [dogCam, showBubble]);
 
   // Action-based calm gate for the chained map hints
   // (store.hintsAllowed): the user isn't doing anything right now — on
@@ -2307,6 +2359,17 @@ export default function MapViewWeb() {
             }}
           />
         ) : null}
+
+        {/* Sniff-and-lead: the route the dog is leading you along. */}
+        {DOG_CAM && dogCam && searchRoute && searchRoute.length >= 2 ? (
+          <CrayonRoute
+            path={searchRoute}
+            color="#2f6bff"
+            weight={9}
+            opacity={0.85}
+            autoFit={false}
+          />
+        ) : null}
       </MapContext.Provider>
 
       {/* "X poked you!" notification (multiplayer). Portaled to body; taps
@@ -2388,7 +2451,10 @@ export default function MapViewWeb() {
                 textOverflow: 'ellipsis',
               }}
             >
-              {searchDog.breed} · on the trail
+              {searchDog.breed}
+              {searchDistM != null
+                ? ` · ${searchDistM >= 1000 ? (searchDistM / 1000).toFixed(1) + ' km' : searchDistM + ' m'} away`
+                : ' · on the trail'}
             </div>
           </div>
         </div>

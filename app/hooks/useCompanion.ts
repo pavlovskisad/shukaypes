@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { balance } from '../constants/balance';
 import { useGameStore } from '../stores/gameStore';
-import { distanceMeters } from '../utils/geo';
+import { distanceMeters, pointAheadOnRoute } from '../utils/geo';
 import type { LatLng, FoodItem, Token } from '@shukajpes/shared';
 
 // Detection radius around the USER for "there's something to eat
@@ -34,6 +34,11 @@ const LERP_TAIL = 0.2;
 // instead of firing on every little orbit hop. IDLE_STEP (1.8 m/s) already
 // out-paces a normal walker, so the dog keeps up without ever sprinting.
 const CATCHUP_M = 28;
+
+// Search-mode lead distance: how far AHEAD of the user (along the route) the
+// companion positions itself while leading. Enough to read as "follow me,"
+// small enough that it never abandons you and paces your walk.
+const LEAD_AHEAD_M = 35;
 
 // The companion roams in DISCRETE, SHORT hops: every ROAM_MIN_MS (+ up to
 // ROAM_JITTER_MS) it ambles a little way around the orbit ring (a ±ROAM_ARC_MAX
@@ -151,18 +156,25 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
     }
 
     const id = setInterval(() => {
-      const { menuOpen, tokens, foodItems, collectPulse, dogCam, searchTarget } =
+      const { menuOpen, tokens, foodItems, collectPulse, dogCam, searchTarget, searchRoute } =
         useGameStore.getState();
       if (menuOpen) return;
 
       const now = Date.now();
 
-      // Sniff-and-lead search mode: when active with an assigned spot, the dog
-      // LEADS you there — sprint toward the spot, overriding roam/hunt. It
-      // arrives ahead of you and waits; the MapView controller advances to the
-      // next dog once you catch up.
+      // Sniff-and-lead search mode: the dog LEADS you along the route toward the
+      // spot — it heads to a point LEAD_AHEAD_M further along the route than you
+      // currently are, so it stays in front and PACES you (advancing as you
+      // advance) instead of sprinting off to the destination and abandoning you.
+      // A resting user → the lead point holds a set distance ahead → the dog
+      // waits there (MapView barks encouragement).
       if (dogCam && searchTarget) {
-        setPos((prev) => lerpStep(prev ?? userPos, searchTarget.spot, HUNT_STEP_M));
+        const route =
+          searchRoute && searchRoute.length >= 2
+            ? searchRoute
+            : [userPos, searchTarget.spot];
+        const goal = pointAheadOnRoute(route, userPos, LEAD_AHEAD_M);
+        setPos((prev) => lerpStep(prev ?? userPos, goal, HUNT_STEP_M));
         return;
       }
 
