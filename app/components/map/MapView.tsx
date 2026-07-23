@@ -607,11 +607,11 @@ export default function MapViewWeb() {
     const id = setInterval(() => {
       const dog = companionPosRef.current;
       if (!dog) return;
-      // Hands off while the user is looking around (recent twist gesture).
-      if (Date.now() - lastUserRotateAt < DOGCAM_LOOK_GRACE_MS) {
-        lastDog = dog;
-        return;
-      }
+      // Recent twist gesture → the user is looking around: keep the dog CENTRED
+      // (so the view rotates AROUND it, never drifting off) but hand the user
+      // the bearing. Otherwise auto heading-up while travelling; a resting dog
+      // keeps whatever bearing you last turned to.
+      const looking = Date.now() - lastUserRotateAt < DOGCAM_LOOK_GRACE_MS;
       let moved = false;
       if (lastDog && distanceMeters(lastDog, dog) > DOGCAM_MIN_MOVE_M) {
         heading = bearingDeg(lastDog, dog);
@@ -622,9 +622,7 @@ export default function MapViewWeb() {
         center: [dog.lng, dog.lat],
         pitch: DOGCAM_PITCH,
         zoom: DOGCAM_ZOOM,
-        // Only re-orient heading-up while travelling; a resting dog keeps the
-        // bearing the user last looked toward.
-        ...(moved ? { bearing: heading } : {}),
+        ...(!looking && moved ? { bearing: heading } : {}),
         duration: DOGCAM_TICK,
         easing: (t) => t,
       });
