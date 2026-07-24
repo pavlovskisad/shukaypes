@@ -633,6 +633,18 @@ export default function MapViewWeb() {
   // and ticks cleanly.
   const companionPosRef = useRef(companionPos);
   companionPosRef.current = companionPos;
+  // The dog's clear-orb (threeBuildingsLayer) tracks companionPos, but the dog
+  // is a DOM marker — moving it doesn't repaint the WebGL canvas. Nudge a
+  // repaint when it moves so the orb follows (cheap: only fires on roam ticks,
+  // and dog-cam already repaints itself). Game render only.
+  useEffect(() => {
+    if (!GAME_RENDER || !onMapScreen) return;
+    try {
+      mapRef.current?.triggerRepaint();
+    } catch {
+      /* map tearing down */
+    }
+  }, [companionPos, onMapScreen]);
   // Current user position in a ref for interval callbacks (search nudges).
   const userPosRef = useRef(userPos);
   userPosRef.current = userPos;
@@ -1759,7 +1771,10 @@ export default function MapViewWeb() {
                 map.addLayer(createGroundFogLayer(), beforeId);
               }
               if (!map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
-                map.addLayer(createThreeBuildingsLayer(), beforeId);
+                map.addLayer(
+                  createThreeBuildingsLayer(() => companionPosRef.current),
+                  beforeId,
+                );
               }
               hideMapLibreBuildings(map);
               gameOk = true;

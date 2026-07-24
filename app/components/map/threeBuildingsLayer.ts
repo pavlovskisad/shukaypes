@@ -131,6 +131,13 @@ export const PREVIEW_GLOW_COLOR = 0x2f6bff;
 // there to avoid dissolving buildings for no reason.
 export const SEE_THROUGH_MIN_ZOOM = 17.5;
 
+// A small always-on "invisibility bubble" right around the dog itself (both
+// normal + supersniff, all zooms): buildings within this radius of the dog
+// dissolve so the sprite never reads as pasted inside a wall — the failure mode
+// when zoomed out. Metres; small so it's just a tidy clear patch under the dog.
+export const DOG_ORB_RADIUS = 15;
+export const DOG_ORB_BAND = 12;
+
 // Cheap ground drop-shadows: flat quads swept from each footprint toward the
 // sun. SHADOW_Y lifts them just off the ground (z-fight), SHADOW_MAX_LEN caps
 // how far a tall building's shadow reaches, SHADOW_COLOR is the MIN-blend tint
@@ -254,7 +261,11 @@ export function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number
   return [x, y, z];
 }
 
-export function createThreeBuildingsLayer(): CustomLayerInterface {
+export function createThreeBuildingsLayer(
+  // Live getter for the companion (dog) position — drives the always-on orb that
+  // keeps buildings dissolved right around the dog so it never sits inside a wall.
+  getDogPos?: () => { lat: number; lng: number } | null,
+): CustomLayerInterface {
   let renderer: THREE.WebGLRenderer | null = null;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
@@ -307,6 +318,9 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     u_previewRadius: { value: 300 },
     u_previewColor: { value: new THREE.Color(PREVIEW_GLOW_COLOR) },
     u_previewStrength: { value: 0 },
+    // Dog position (local metres, .xz used) + 1 when there's a dog to orb around.
+    u_dogLocal: { value: new THREE.Vector3() },
+    u_dogActive: { value: 0 },
   };
   material.onBeforeCompile = (shader) => {
     shader.uniforms.u_camLocal = fogUniforms.u_camLocal;
@@ -322,6 +336,8 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
     shader.uniforms.u_previewRadius = fogUniforms.u_previewRadius;
     shader.uniforms.u_previewColor = fogUniforms.u_previewColor;
     shader.uniforms.u_previewStrength = fogUniforms.u_previewStrength;
+    shader.uniforms.u_dogLocal = fogUniforms.u_dogLocal;
+    shader.uniforms.u_dogActive = fogUniforms.u_dogActive;
     shader.vertexShader =
       'varying vec3 vLocalPos;\n' +
       shader.vertexShader.replace(
@@ -329,7 +345,7 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         '#include <begin_vertex>\n  vLocalPos = position;',
       );
     shader.fragmentShader =
-      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nvarying vec3 vLocalPos;\n' +
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nuniform vec3 u_dogLocal;\nuniform float u_dogActive;\nvarying vec3 vLocalPos;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         [
@@ -394,6 +410,20 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
           // on in render only while dog-cam is active).
           '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _o * 0.4);',
           '    gl_FragColor.a *= (1.0 - _o);',
+          '  }',
+          // Small always-on orb right around the DOG (both normal + supersniff,
+          // every zoom): dissolve buildings in a tight bubble around it, biased
+          // to the ones in front, so the sprite reads as standing on clear ground
+          // instead of pasted inside a wall — the failure mode when zoomed out.
+          '  if (u_dogActive > 0.5) {',
+          `    float _dh = length(vLocalPos.xz - u_dogLocal.xz);`,
+          `    float _dnear = 1.0 - smoothstep(${DOG_ORB_RADIUS.toFixed(1)}, ${(DOG_ORB_RADIUS + DOG_ORB_BAND).toFixed(1)}, _dh);`,
+          '    float _dfd = length(vLocalPos - u_camLocal);',
+          '    float _ddd = length(u_dogLocal - u_camLocal);',
+          '    float _dfront = 1.0 - smoothstep(_ddd - 4.0, _ddd + 12.0, _dfd);',
+          '    float _dorb = clamp(_dnear * (0.4 + 0.6 * _dfront), 0.0, 1.0);',
+          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _dorb * 0.25);',
+          '    gl_FragColor.a *= (1.0 - _dorb);',
           '  }',
         ].join('\n'),
       );
@@ -797,11 +827,25 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         const seeThrough =
           dogCamOn && !!mapRef && mapRef.getZoom() >= SEE_THROUGH_MIN_ZOOM;
         fogUniforms.u_dogCam.value = seeThrough ? 1 : 0;
-        // The see-through drops fragment alpha, which needs a transparent
-        // material. Toggle it ONLY when actually seeing through (recompile once
-        // per switch) so normal play + the preview cam stay a plain opaque mesh.
-        if (material.transparent !== seeThrough) {
-          material.transparent = seeThrough;
+        // Small always-on orb around the dog itself (both modes, all zooms). Feed
+        // its position; active whenever we have a dog.
+        const dogPos = getDogPos?.() ?? null;
+        if (dogPos) {
+          const dm = MercatorCoordinate.fromLngLat([dogPos.lng, dogPos.lat], 0);
+          fogUniforms.u_dogLocal.value.set(
+            (dm.x - originX) / mPerUnit,
+            0,
+            (dm.y - originY) / mPerUnit,
+          );
+        }
+        fogUniforms.u_dogActive.value = dogPos ? 1 : 0;
+        // Dropping fragment alpha (cone see-through OR the dog orb) needs a
+        // transparent material. Toggle on whenever either is live — the orb means
+        // that's essentially always on the map, which is fine (one draw call,
+        // depthWrite stays on so buildings still occlude each other).
+        const wantTransparent = seeThrough || !!dogPos;
+        if (material.transparent !== wantTransparent) {
+          material.transparent = wantTransparent;
           material.needsUpdate = true;
         }
         fogUniforms.u_time.value =
