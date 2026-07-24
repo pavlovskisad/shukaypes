@@ -245,10 +245,11 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: '50%',
-    // RN-Web passes `backgroundImage` straight through to CSS.
+    height: '48%',
+    // RN-Web passes `backgroundImage` straight through to CSS. Kept light — just
+    // enough to keep the white name legible — so the photo doesn't read as dark.
     backgroundImage:
-      'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.05) 35%, rgba(0,0,0,0.65) 100%)',
+      'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.03) 45%, rgba(0,0,0,0.5) 100%)',
   } as unknown as object,
   badge: {
     position: 'absolute',

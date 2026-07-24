@@ -666,19 +666,21 @@ export default function MapViewWeb() {
     if (!map) return;
     // Sit the dog low on screen (car-nav feel) so its speech bubble clears the
     // horizon/beacon. TOP padding pushes the centred point down; sized as a
-    // fraction of the map height so it holds across devices. Re-applied on
-    // resize + once shortly after entry: entering supersniff hides the tab bar,
-    // which resizes the map container — without the re-apply the dog rides too
-    // high (over the carousel) until the next interaction re-frames it.
+    // fraction of the map height so it holds across devices. Entering supersniff
+    // hides the tab bar → the map container resizes, so the padding computed at
+    // entry can be stale. applyPad re-derives from the CURRENT height and only
+    // calls setPadding when it actually changes (so it's a cheap no-op once
+    // settled). Driven from: entry, the map 'resize' event, a short safety
+    // timer, AND every follow tick — so the framing always self-corrects within
+    // one tick no matter how the resize timing shakes out.
+    let lastPadTop = -1;
     const applyPad = () => {
       try {
         const h = map.getContainer?.()?.clientHeight ?? 700;
-        map.setPadding({
-          top: Math.round(h * DOGCAM_TOP_RESERVE_FRAC),
-          right: 0,
-          bottom: 0,
-          left: 0,
-        });
+        const top = Math.round(h * DOGCAM_TOP_RESERVE_FRAC);
+        if (top === lastPadTop) return;
+        lastPadTop = top;
+        map.setPadding({ top, right: 0, bottom: 0, left: 0 });
       } catch {
         /* style not ready */
       }
@@ -705,6 +707,9 @@ export default function MapViewWeb() {
     const id = setInterval(() => {
       const dog = companionPosRef.current;
       if (!dog) return;
+      // Keep the low-dog framing correct even if the container resized after
+      // entry (no-op once the padding has settled).
+      applyPad();
       // Rotate gesture still in flight (events arriving) → hands off entirely.
       if (Date.now() - lastUserRotateAt < DOGCAM_TICK) return;
       // Preview → stay TIED to the dog but zoomed out, facing the fragment we're

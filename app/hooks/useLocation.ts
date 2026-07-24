@@ -41,17 +41,47 @@ export function useLocation(): LocationState {
           });
         },
         (err) => {
-          setState({
-            position: KYIV_FALLBACK,
-            error: err.message,
-            granted: false,
-            usingFallback: true,
-          });
+          // Only fall back if we don't already have a fix — a transient error
+          // (e.g. a momentary timeout) shouldn't yank a working position.
+          setState((s) =>
+            s.position && !s.usingFallback
+              ? s
+              : {
+                  position: KYIV_FALLBACK,
+                  error: err.message,
+                  granted: false,
+                  usingFallback: true,
+                },
+          );
         },
-        { enableHighAccuracy: true, maximumAge: 2000 }
+        // `timeout` is essential: without it watchPosition can hang forever
+        // (neither callback fires) while the browser waits on a slow/pending
+        // permission — which left the app stuck on the "locating…" screen,
+        // notably in Chrome.
+        { enableHighAccuracy: true, timeout: 10000, maximumAge: 2000 },
       );
 
-      return () => navigator.geolocation.clearWatch(watchId);
+      // Belt-and-braces: some browsers never fire EITHER callback when
+      // geolocation stalls. If nothing has arrived after a few seconds, drop to
+      // the Kyiv fallback so the app renders; a real fix still upgrades it later
+      // (the watch keeps running).
+      const fallbackTimer = setTimeout(() => {
+        setState((s) =>
+          s.position
+            ? s
+            : {
+                position: KYIV_FALLBACK,
+                error: 'location timed out',
+                granted: false,
+                usingFallback: true,
+              },
+        );
+      }, 6000);
+
+      return () => {
+        navigator.geolocation.clearWatch(watchId);
+        clearTimeout(fallbackTimer);
+      };
     }
 
     // Native: wired in Phase 2.5 via expo-location.
