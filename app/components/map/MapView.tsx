@@ -666,18 +666,26 @@ export default function MapViewWeb() {
     if (!map) return;
     // Sit the dog low on screen (car-nav feel) so its speech bubble clears the
     // horizon/beacon. TOP padding pushes the centred point down; sized as a
-    // fraction of the map height so it holds across devices.
-    try {
-      const h = map.getContainer?.()?.clientHeight ?? 700;
-      map.setPadding({
-        top: Math.round(h * DOGCAM_TOP_RESERVE_FRAC),
-        right: 0,
-        bottom: 0,
-        left: 0,
-      });
-    } catch {
-      /* style not ready */
-    }
+    // fraction of the map height so it holds across devices. Re-applied on
+    // resize + once shortly after entry: entering supersniff hides the tab bar,
+    // which resizes the map container — without the re-apply the dog rides too
+    // high (over the carousel) until the next interaction re-frames it.
+    const applyPad = () => {
+      try {
+        const h = map.getContainer?.()?.clientHeight ?? 700;
+        map.setPadding({
+          top: Math.round(h * DOGCAM_TOP_RESERVE_FRAC),
+          right: 0,
+          bottom: 0,
+          left: 0,
+        });
+      } catch {
+        /* style not ready */
+      }
+    };
+    applyPad();
+    map.on('resize', applyPad);
+    const padSettleTimer = setTimeout(applyPad, 450);
     // Fresh entry → auto-orient again (don't inherit a hand-set angle from a
     // previous session).
     userTookBearingRef.current = false;
@@ -750,8 +758,10 @@ export default function MapViewWeb() {
     }, DOGCAM_TICK);
     return () => {
       clearInterval(id);
+      clearTimeout(padSettleTimer);
       map.off('rotatestart', onUserRotate);
       map.off('rotate', onUserRotate);
+      map.off('resize', applyPad);
       try {
         map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 });
       } catch {
@@ -2318,10 +2328,11 @@ export default function MapViewWeb() {
         ) : null}
 
         {/* Other players' dogs (real + bots) — multiplayer presence. Glide
-            between the ~15s presence updates so they read as people walking. */}
-        {otherWalkers.map((p) => (
-          <OtherWalker key={p.id} player={p} />
-        ))}
+            between the ~15s presence updates so they read as people walking.
+            Hidden in supersniff so the whole focus is the dog search. */}
+        {DOG_CAM && dogCam
+          ? null
+          : otherWalkers.map((p) => <OtherWalker key={p.id} player={p} />)}
 
         {/* Zone is only drawn for the currently-selected pet — otherwise
             overlapping circles turn dense neighborhoods (Podil, Pechersk)
