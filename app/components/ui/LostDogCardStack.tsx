@@ -3,7 +3,7 @@
 // hint. All the deck animation / gesture / cycling lives in
 // ../CardStack — this file is just the lost-pets visual.
 
-import { useCallback } from 'react';
+import { useCallback, useEffect } from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -26,6 +26,9 @@ interface Props {
   cardHeight?: number;
   peekScale?: number;
   showCounter?: boolean;
+  // Id of the dog that's the active quest — that card gets a slowly-pulsing
+  // blue glow so it's clear which one you're on the trail of.
+  activeId?: string;
 }
 
 // "X m" for sub-1km, "X.X km" beyond. Snapped to 50m below 1km so
@@ -44,6 +47,7 @@ export function LostDogCardStack({
   cardHeight,
   peekScale,
   showCounter,
+  activeId,
 }: Props) {
   const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
@@ -51,8 +55,10 @@ export function LostDogCardStack({
   // a "new" renderCard prop on every parent render and discard
   // the memo. Deps cover everything the closure actually reads.
   const renderCard = useCallback(
-    (d: NearbyLostDog) => <LostDogCardView dog={d} t={t} userPos={userPos} />,
-    [t, userPos],
+    (d: NearbyLostDog) => (
+      <LostDogCardView dog={d} t={t} userPos={userPos} active={d.id === activeId} />
+    ),
+    [t, userPos, activeId],
   );
   return (
     <CardStack
@@ -84,11 +90,28 @@ export function LostDogCardView({
   dog,
   t,
   userPos,
+  active = false,
 }: {
   dog: NearbyLostDog;
   t: ReturnType<typeof useStrings>;
   userPos: LatLng | null;
+  // Active quest card → slowly-pulsing blue glow so it's clear which dog
+  // you're on the trail of.
+  active?: boolean;
 }) {
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (document.getElementById('dog-active-glow-style')) return;
+    const el = document.createElement('style');
+    el.id = 'dog-active-glow-style';
+    el.textContent = `
+      @keyframes dog-active-glow {
+        0%, 100% { box-shadow: 0 0 0 2px rgba(47,107,255,0.5), 0 6px 24px 2px rgba(47,107,255,0.35); }
+        50%      { box-shadow: 0 0 0 3px rgba(47,107,255,0.95), 0 10px 34px 6px rgba(47,107,255,0.75); }
+      }
+    `;
+    document.head.appendChild(el);
+  }, []);
   const urgent = dog.urgency === 'urgent';
   const badgeText = urgent ? t.tasks.badgeUrgent : t.tasks.badgeSearching;
   const badgeFg = urgent ? '#e84040' : '#d9a030';
@@ -96,7 +119,20 @@ export function LostDogCardView({
     ? formatDistance(distanceMeters(userPos, dog.lastSeen.position))
     : null;
   return (
-    <View style={styles.card}>
+    <View
+      style={
+        active
+          ? [
+              styles.card,
+              {
+                boxShadow:
+                  '0 0 0 2px rgba(47,107,255,0.7), 0 8px 28px 4px rgba(47,107,255,0.5)',
+                animation: 'dog-active-glow 2.2s ease-in-out infinite',
+              } as unknown as object,
+            ]
+          : styles.card
+      }
+    >
       {dog.photoUrl ? (
         // <div> with background-image:cover instead of <img>:
         // CSS-level guaranteed fill regardless of the photo's
