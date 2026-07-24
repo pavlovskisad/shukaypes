@@ -125,6 +125,12 @@ export const CLEAR_BAND = 240;
 // as blue fog toward the horizon rather than flat paint up close.
 export const PREVIEW_GLOW_COLOR = 0x2f6bff;
 
+// See-through (building dissolve) only kicks in at the close committed chase
+// zoom (~18.6), where buildings actually block the dog. The high preview cam
+// (zoom ≤ ~16.5) looks down over everything, so nothing blocks — disable it
+// there to avoid dissolving buildings for no reason.
+export const SEE_THROUGH_MIN_ZOOM = 17.5;
+
 // Cheap ground drop-shadows: flat quads swept from each footprint toward the
 // sun. SHADOW_Y lifts them just off the ground (z-fight), SHADOW_MAX_LEN caps
 // how far a tall building's shadow reaches, SHADOW_COLOR is the MIN-blend tint
@@ -784,14 +790,18 @@ export function createThreeBuildingsLayer(): CustomLayerInterface {
         // Day/night follows sniff mode — swap mist, light + material tones.
         const sniff = useGameStore.getState().sniffMode;
         const tone = sniff ? NIGHT : DAY;
-        // See-through occluder fade only while the dog-cam chase view is active.
+        // See-through occluder fade only while the dog-cam chase view is active
+        // AND zoomed in close enough that buildings actually block the dog. The
+        // high preview cam looks down over everything, so skip it there.
         const dogCamOn = DOG_CAM && useGameStore.getState().dogCam;
-        fogUniforms.u_dogCam.value = dogCamOn ? 1 : 0;
+        const seeThrough =
+          dogCamOn && !!mapRef && mapRef.getZoom() >= SEE_THROUGH_MIN_ZOOM;
+        fogUniforms.u_dogCam.value = seeThrough ? 1 : 0;
         // The see-through drops fragment alpha, which needs a transparent
-        // material. Toggle it ONLY in dog-cam (recompile once per mode switch)
-        // so normal play stays a plain opaque mesh — no render-order changes.
-        if (material.transparent !== dogCamOn) {
-          material.transparent = dogCamOn;
+        // material. Toggle it ONLY when actually seeing through (recompile once
+        // per switch) so normal play + the preview cam stay a plain opaque mesh.
+        if (material.transparent !== seeThrough) {
+          material.transparent = seeThrough;
           material.needsUpdate = true;
         }
         fogUniforms.u_time.value =
