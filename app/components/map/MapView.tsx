@@ -495,7 +495,10 @@ export default function MapViewWeb() {
       dogCamBubbleInitRef.current = false;
       return;
     }
-    if (!dogCam) showBubble(t.bubbles.sniffOff, 3500);
+    if (!dogCam) {
+      const lines = t.bubbles.backToWalks;
+      showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3500);
+    }
   }, [dogCam, showBubble, t]);
 
   // Greet on every map-tab focus — pick a random "woof" so it doesn't
@@ -1047,9 +1050,15 @@ export default function MapViewWeb() {
   // downward offset leaves room above the nose for the bubble, clear of
   // the HUD. The bubble (anchored to the companion marker) glides in
   // with the ease.
+  //
+  // NOT in supersniff (dogCam): the follow loop owns the camera there (low-dog
+  // framing via padding). The supersniff intro hint id also starts with "map:",
+  // so without this guard its fire would snap the camera with a conflicting
+  // offset and yank the dog up over the carousel.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !companionPos) return;
+    if (DOG_CAM && dogCam) return;
     if (activeHint && activeHint.startsWith('map:')) {
       map.easeTo({
         center: [companionPos.lng, companionPos.lat],
@@ -1058,7 +1067,7 @@ export default function MapViewWeb() {
       });
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [activeHint]);
+  }, [activeHint, dogCam]);
 
   // Hide street-name labels while the camera is steeply pitched (game
   // view), show them when it flattens. Re-run after every crayon override

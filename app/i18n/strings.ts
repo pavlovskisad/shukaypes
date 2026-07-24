@@ -46,6 +46,8 @@ export interface AppStrings {
     greeting: string;
     sniffOn: string;
     sniffOff: string;
+    // Varied "leaving supersniff" lines so repeated toggles don't feel canned.
+    backToWalks: string[];
     questComplete: string;
     questAdvance: string;
     simpleWoof: string;
@@ -211,6 +213,13 @@ const uk: AppStrings = {
     greeting: 'гав! натисни на мене — розкажу, що до чого 🐾',
     sniffOn: '*глибокий вдих* супернюх увімкнено 👀',
     sniffOff: 'добре, повертаємось гуляти 🐾',
+    backToWalks: [
+      'добре, повертаємось гуляти 🐾',
+      'ніс відпочине — просто гуляємо 🐕',
+      'супернюх вимкнено, йдемо неквапом',
+      'окей, звичайна прогулянка 🌳',
+      'досить нюхати, розімнемо лапи!',
+    ],
     questComplete: 'знайшли! квест виконано 🎉',
     questAdvance: 'слід тут — рухаємось далі 🐾',
     simpleWoof: 'гав 🐾',
@@ -438,6 +447,13 @@ const en: AppStrings = {
     greeting: "woof! tap me to learn what's what 🐾",
     sniffOn: '*deep sniff* supersniff mode 👀',
     sniffOff: 'okay, back to walks 🐾',
+    backToWalks: [
+      'okay, back to walks 🐾',
+      'nose off duty — just strolling now 🐕',
+      'supersniff off, taking it easy',
+      'alright, normal walk 🌳',
+      'enough sniffing, let\'s stretch our legs!',
+    ],
     questComplete: 'found something! quest complete 🎉',
     questAdvance: "paw print here — let's keep going 🐾",
     simpleWoof: 'woof 🐾',
