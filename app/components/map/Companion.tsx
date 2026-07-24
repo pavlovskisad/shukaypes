@@ -562,13 +562,14 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
     autoDismissMs: 6000,
     persist: false,
   });
-  // Supersniff "how it works" — fires the first time you ENTER supersniff (not
-  // gated on the idle hintsReady, since the chase cam is always easing): the dog
-  // explains the swipe/tap interaction, replacing the old per-swipe bubble.
-  // Fires when nothing else is talking so it doesn't stomp a live bark.
+  // Supersniff "how it works" — fires immediately the first time you ENTER
+  // supersniff (not gated on the idle hintsReady, since the chase cam is always
+  // easing): the dog explains the swipe/tap interaction, replacing the old
+  // per-swipe bubble. Fires right away and takes priority over any bark that
+  // happens to be up (see activeBubble below).
   const supersniffIntroHint = useHint('map:supersniff-intro', {
-    ready: dogCam && noRealBubble,
-    showDelayMs: 700,
+    ready: dogCam,
+    showDelayMs: 150,
     autoDismissMs: 6500,
     // FIXME(hints): persist:false while iterating — fires once per session
     // (fresh each reload). Flip to true for one-shot-per-device once settled.

@@ -6,7 +6,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
@@ -29,6 +29,7 @@ import { useLocation } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
 import { useGameLoop } from '../../hooks/useGameLoop';
 import { distanceMeters, pointAheadOnRoute } from '../../utils/geo';
+import { popPressableEvent } from '../../utils/popOnTap';
 import { playPop } from '../../utils/popOnTap';
 import { Companion } from './Companion';
 import { CrayonRoute } from './CrayonRoute';
@@ -45,7 +46,7 @@ import {
 import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
-import { LostDogCardStack } from '../ui/LostDogCardStack';
+import { LostDogCardStack, LostDogCardView } from '../ui/LostDogCardStack';
 import { createBuildingAvoider } from './buildingAvoider';
 import { GAME_RENDER, MULTIPLAYER, DOG_CAM } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
@@ -485,6 +486,18 @@ export default function MapViewWeb() {
     }
     showBubble(sniffMode ? t.bubbles.sniffOn : t.bubbles.sniffOff, 3500);
   }, [sniffMode, showBubble, t]);
+
+  // "back to walks" when leaving supersniff. Entering supersniff is announced by
+  // the intro hint (Companion), so we only bark on exit here. Init-guarded so no
+  // line fires on the first mount.
+  const dogCamBubbleInitRef = useRef(true);
+  useEffect(() => {
+    if (dogCamBubbleInitRef.current) {
+      dogCamBubbleInitRef.current = false;
+      return;
+    }
+    if (!dogCam) showBubble(t.bubbles.sniffOff, 3500);
+  }, [dogCam, showBubble, t]);
 
   // Greet on every map-tab focus — pick a random "woof" so it doesn't
   // get repetitive. Same energy as Claude Code's *percolating* /
@@ -1163,6 +1176,17 @@ export default function MapViewWeb() {
     return arr.slice(0, 15);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lostDogs, userLatBucket, userLngBucket]);
+  // The dog you've committed to hunting (big card during a quest).
+  const questTargetDog = useMemo(
+    () => (searchTarget ? lostDogs.find((d) => d.id === searchTarget.dogId) ?? null : null),
+    [searchTarget, lostDogs],
+  );
+  // Drop the quest and return to browsing the carousel: clearing the target lets
+  // the mode-start effect re-preview the nearest dog.
+  const backToBrowsing = useCallback(() => {
+    setSearchTarget(null);
+    setSearchRoute(null);
+  }, [setSearchTarget, setSearchRoute]);
   const visibleLostDogs = useMemo(() => {
     if (!userPos) return lostDogs;
     // Lost pets are the SNIFF (locate) flow. On the normal map only show the
@@ -2611,9 +2635,10 @@ export default function MapViewWeb() {
         />
       ) : null}
 
-      {/* Search mode: the same swipeable card stack as the Quests tab, at the
-          bottom in place of the dashboard. The centred card is the dog you're
-          on the trail of — swipe or tap to hand yourself that dog's trail. */}
+      {/* Search mode. Browsing (no quest committed) → the swipeable card stack
+          (swipe previews a dog's zone, tap picks up the trail). On a quest
+          (committed) → a single BIG photo of the dog you're hunting so you can
+          spot it while you walk; a pill drops you back to browsing. */}
       {DOG_CAM && dogCam && onMapScreen ? (
         <View
           style={{
@@ -2626,14 +2651,30 @@ export default function MapViewWeb() {
           }}
           pointerEvents="box-none"
         >
-          <LostDogCardStack
-            dogs={searchDogs}
-            onTap={assignSearch}
-            onSwipe={previewSearch}
-            cardWidth={200}
-            cardHeight={176}
-            showCounter={false}
-          />
+          {searchTarget && questTargetDog ? (
+            <View style={{ alignItems: 'center' }} pointerEvents="box-none">
+              <Pressable
+                onPress={backToBrowsing}
+                onPressIn={popPressableEvent}
+                hitSlop={8}
+                style={styles.questSwapPill}
+              >
+                <Text style={styles.questSwapPillText}>🐾 other dogs</Text>
+              </Pressable>
+              <View style={{ width: 232, height: 264 }} pointerEvents="none">
+                <LostDogCardView dog={questTargetDog} t={t} userPos={userPos} />
+              </View>
+            </View>
+          ) : (
+            <LostDogCardStack
+              dogs={searchDogs}
+              onTap={assignSearch}
+              onSwipe={previewSearch}
+              cardWidth={200}
+              cardHeight={176}
+              showCounter={false}
+            />
+          )}
         </View>
       ) : null}
 
@@ -3217,6 +3258,25 @@ export default function MapViewWeb() {
 }
 
 const styles = StyleSheet.create({
+  // "other dogs" pill above the big quest card — drops back to the carousel.
+  questSwapPill: {
+    backgroundColor: '#ffffff',
+    paddingHorizontal: S.m,
+    paddingVertical: S.s,
+    borderRadius: R.pill,
+    marginBottom: S.s,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.14,
+    shadowRadius: 12,
+    elevation: 4,
+  },
+  questSwapPillText: {
+    fontSize: TYPE.caption,
+    fontWeight: '700',
+    color: '#555',
+    letterSpacing: 0.3,
+  },
   msg: {
     flex: 1,
     alignItems: 'center',
