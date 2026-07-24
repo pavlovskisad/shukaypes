@@ -29,6 +29,9 @@ interface Props {
   // Id of the dog that's the active quest — that card gets a slowly-pulsing
   // blue glow so it's clear which one you're on the trail of.
   activeId?: string;
+  // Heavier drop shadow so cards separate cleanly from a busy background (the
+  // 3D map in supersniff). Off by default — the Quests tab keeps its lighter one.
+  strongShadow?: boolean;
 }
 
 // "X m" for sub-1km, "X.X km" beyond. Snapped to 50m below 1km so
@@ -48,6 +51,7 @@ export function LostDogCardStack({
   peekScale,
   showCounter,
   activeId,
+  strongShadow,
 }: Props) {
   const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
@@ -56,9 +60,15 @@ export function LostDogCardStack({
   // the memo. Deps cover everything the closure actually reads.
   const renderCard = useCallback(
     (d: NearbyLostDog) => (
-      <LostDogCardView dog={d} t={t} userPos={userPos} active={d.id === activeId} />
+      <LostDogCardView
+        dog={d}
+        t={t}
+        userPos={userPos}
+        active={d.id === activeId}
+        strongShadow={strongShadow}
+      />
     ),
-    [t, userPos, activeId],
+    [t, userPos, activeId, strongShadow],
   );
   return (
     <CardStack
@@ -91,6 +101,7 @@ export function LostDogCardView({
   t,
   userPos,
   active = false,
+  strongShadow = false,
 }: {
   dog: NearbyLostDog;
   t: ReturnType<typeof useStrings>;
@@ -98,6 +109,8 @@ export function LostDogCardView({
   // Active quest card → slowly-pulsing blue glow so it's clear which dog
   // you're on the trail of.
   active?: boolean;
+  // Heavier drop shadow (contact + ambient) to lift the card off a busy bg.
+  strongShadow?: boolean;
 }) {
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -120,18 +133,24 @@ export function LostDogCardView({
     : null;
   return (
     <View
-      style={
+      style={[
+        styles.card,
+        // Heavier shadow first so the active blue glow (below) still wins when
+        // a card is both the active quest AND on a strong-shadow deck.
+        strongShadow
+          ? ({
+              boxShadow:
+                '0 3px 8px rgba(0,0,0,0.24), 0 14px 32px rgba(0,0,0,0.30)',
+            } as unknown as object)
+          : null,
         active
-          ? [
-              styles.card,
-              {
-                boxShadow:
-                  '0 0 0 2px rgba(47,107,255,0.7), 0 8px 28px 4px rgba(47,107,255,0.5)',
-                animation: 'dog-active-glow 2.2s ease-in-out infinite',
-              } as unknown as object,
-            ]
-          : styles.card
-      }
+          ? ({
+              boxShadow:
+                '0 0 0 2px rgba(47,107,255,0.7), 0 8px 28px 4px rgba(47,107,255,0.5)',
+              animation: 'dog-active-glow 2.2s ease-in-out infinite',
+            } as unknown as object)
+          : null,
+      ]}
     >
       {dog.photoUrl ? (
         // <div> with background-image:cover instead of <img>:
