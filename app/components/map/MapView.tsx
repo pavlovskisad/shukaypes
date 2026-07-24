@@ -2645,6 +2645,9 @@ export default function MapViewWeb() {
             onSwipe={previewSearch}
             showCounter={false}
             activeId={searchTarget?.dogId}
+            cardWidth={288}
+            cardHeight={252}
+            strongShadow
           />
         </View>
       ) : null}
