@@ -116,6 +116,9 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // well there. On the light (normal) map a light menu disappeared
   // into the background, so invert the menu theme when sniff is off.
   const sniffMode = useGameStore((s) => s.sniffMode);
+  // Supersniff (dog-cam search) mode — used to fire the one-time "how it works"
+  // intro hint on entry.
+  const dogCam = useGameStore((s) => s.dogCam);
   const [localBubble, setLocalBubble] = useState<string | null>(null);
   // Stack of branch ids representing the current menu drill-down. Empty
   // = root (PRIMARY_ACTIONS). Tapping the companion always resets to
@@ -559,6 +562,18 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
     autoDismissMs: 6000,
     persist: false,
   });
+  // Supersniff "how it works" — fires the first time you ENTER supersniff (not
+  // gated on the idle hintsReady, since the chase cam is always easing): the dog
+  // explains the swipe/tap interaction, replacing the old per-swipe bubble.
+  // Fires when nothing else is talking so it doesn't stomp a live bark.
+  const supersniffIntroHint = useHint('map:supersniff-intro', {
+    ready: dogCam && noRealBubble,
+    showDelayMs: 700,
+    autoDismissMs: 6500,
+    // FIXME(hints): persist:false while iterating — fires once per session
+    // (fresh each reload). Flip to true for one-shot-per-device once settled.
+    persist: false,
+  });
   // Radial-menu explainer: the first time the menu blooms, the dog
   // names what's in it (search / walk / visit / meet / chat) so the
   // icon ring isn't a guessing game. Rides alongside the open menu at
@@ -601,6 +616,9 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
     menuOpen && menuPath.length === 0 && menuHint.visible
       ? t.hints.radialMenu
       : null;
+  // Supersniff intro bubble — shown over ambient/real barks for its window.
+  const supersniffIntro =
+    dogCam && supersniffIntroHint.visible ? t.hints.supersniffIntro : null;
   // Priority: menu explainer (while open) → an active hint owns the
   // bubble (it fired during an idle moment and shouldn't be stepped on
   // by an ambient bark) → real bubbles (greeting / narration) →
@@ -610,7 +628,7 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
     ? null
     : menuOpen
       ? menuExplainer
-      : hintBubble ?? bubble ?? localBubble;
+      : supersniffIntro ?? hintBubble ?? bubble ?? localBubble;
 
   // Publish the visible hint so sibling components (the top-left logo
   // in the HUD) can render a matching cue. Clear on unmount.
