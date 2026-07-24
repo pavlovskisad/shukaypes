@@ -904,9 +904,10 @@ export default function MapViewWeb() {
           /* style not ready — the beacon still renders */
         }
       }
-      showBubble(`${dog.name}? tap to pick up the trail 🐾`, 4000);
+      // No per-swipe bubble — the one-time "supersniff on! swipe / tap" intro
+      // hint (Companion) now teaches the interaction instead.
     },
-    [setSearchPreview, spotInZone, dogCam, showBubble],
+    [setSearchPreview, spotInZone, dogCam],
   );
 
   // Engage the mode: on turn-on (nothing committed or previewed yet) frame the

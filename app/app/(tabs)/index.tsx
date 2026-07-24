@@ -30,9 +30,9 @@ export default function MapScreen() {
   const aboutOpen = useGameStore((s) => s.aboutOpen);
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const sniffMode = useGameStore((s) => s.sniffMode);
-  // Supersniff is deactivated for the prototype — the corner-logo button now
-  // toggles the dog-cam instead. sniffMode stays false / unreachable, so its
-  // other visuals (logo invert, status-bar collapse) simply never fire.
+  // Supersniff IS the dog-cam sniff-and-lead mode now — the corner-logo button
+  // toggles it. The old chip-based sniffMode is retired (stays false /
+  // unreachable), so its visuals (logo invert, status-bar collapse) never fire.
   const dogCam = useGameStore((s) => s.dogCam);
   const toggleDogCam = useGameStore((s) => s.toggleDogCam);
   // Immersive = the HUD bubbles out. Search mode (dogCam) reuses the old
@@ -108,7 +108,7 @@ export default function MapScreen() {
             onPress={toggleDogCam}
             onPressIn={popPressableEvent}
             accessibilityRole="button"
-            accessibilityLabel={dogCam ? 'exit dog cam' : 'enter dog cam'}
+            accessibilityLabel={dogCam ? 'turn supersniff off' : 'turn supersniff on'}
             hitSlop={8}
             style={{ position: 'relative' }}
           >
