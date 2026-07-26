@@ -117,12 +117,12 @@ const DOGCAM_MIN_MOVE_M = 0.6;
 // above the dog for its speech bubble before the beacon.
 const PREVIEW_PITCH = 68;
 const PREVIEW_ZOOM = 16.55;
-// The dog rides in the LOWER part of the screen (car-nav feel) so its speech
-// bubble — anchored just above it — clears the horizon/beacon instead of
-// covering it. Achieved with TOP map padding (a fraction of the container
-// height): padding shifts the centred point down, so the dog sits ~this-frac
-// below screen centre. (Bottom padding only ever lifts it UP toward centre.)
-const DOGCAM_TOP_RESERVE_FRAC = 0.24;
+// The dog rides at true screen CENTRE in supersniff — same as every other
+// camera framing (hint snaps, radial-menu open). We used to reserve 24% top
+// padding for a car-nav "dog low" feel, but the padded centre (62% of map
+// height) landed the dog ON the carousel on short viewports (iPhone Safari
+// with its URL bar showing) and only cleared it once Safari's chrome
+// collapsed — read as a framing bug. Centre clears the carousel everywhere.
 // How far ahead along the route the committed cam looks — it faces this point so
 // the view runs DOWN the route (not perpendicular to it) and tracks its curves.
 const ROUTE_LOOK_AHEAD_M = 90;
@@ -693,30 +693,17 @@ export default function MapViewWeb() {
     if (!DOG_CAM || !dogCam) return;
     const map = mapRef.current;
     if (!map) return;
-    // Sit the dog low on screen (car-nav feel) so its speech bubble clears the
-    // horizon/beacon. TOP padding pushes the centred point down; sized as a
-    // fraction of the map height so it holds across devices. Entering supersniff
-    // hides the tab bar → the map container resizes, so the padding computed at
-    // entry can be stale. applyPad re-derives from the CURRENT height and only
-    // calls setPadding when it actually changes (so it's a cheap no-op once
-    // settled). Driven from: entry, the map 'resize' event, a short safety
-    // timer, AND every follow tick — so the framing always self-corrects within
-    // one tick no matter how the resize timing shakes out.
-    let lastPadTop = -1;
-    const applyPad = () => {
-      try {
-        const h = map.getContainer?.()?.clientHeight ?? 700;
-        const top = Math.round(h * DOGCAM_TOP_RESERVE_FRAC);
-        if (top === lastPadTop) return;
-        lastPadTop = top;
-        map.setPadding({ top, right: 0, bottom: 0, left: 0 });
-      } catch {
-        /* style not ready */
-      }
-    };
-    applyPad();
-    map.on('resize', applyPad);
-    const padSettleTimer = setTimeout(applyPad, 450);
+    // The dog rides at true centre (see the framing comment on the constants
+    // above), so the mode needs NO camera padding of its own — but the
+    // pet/spot modal snap eases `padding` onto the transform and MapLibre
+    // keeps it across calls, so an entry taken right out of the modal
+    // ("start search") could inherit that framing. Zero it once on entry so
+    // the mode always starts from a known camera base.
+    try {
+      map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 });
+    } catch {
+      /* style not ready */
+    }
     // Fresh entry → auto-orient again (don't inherit a hand-set angle from a
     // previous session).
     userTookBearingRef.current = false;
@@ -736,9 +723,6 @@ export default function MapViewWeb() {
     const id = setInterval(() => {
       const dog = companionPosRef.current;
       if (!dog) return;
-      // Keep the low-dog framing correct even if the container resized after
-      // entry (no-op once the padding has settled).
-      applyPad();
       // Rotate gesture still in flight (events arriving) → hands off entirely.
       if (Date.now() - lastUserRotateAt < DOGCAM_TICK) return;
       // Preview → stay TIED to the dog but zoomed out, facing the fragment we're
@@ -792,15 +776,8 @@ export default function MapViewWeb() {
     }, DOGCAM_TICK);
     return () => {
       clearInterval(id);
-      clearTimeout(padSettleTimer);
       map.off('rotatestart', onUserRotate);
       map.off('rotate', onUserRotate);
-      map.off('resize', applyPad);
-      try {
-        map.setPadding({ top: 0, right: 0, bottom: 0, left: 0 });
-      } catch {
-        /* map tearing down */
-      }
       try {
         map.easeTo({ bearing: 0, pitch: 74, zoom: balance.mapZoomDefault, duration: 500 });
       } catch {
@@ -1082,14 +1059,17 @@ export default function MapViewWeb() {
   // carousel. The bubble (anchored to the companion marker) glides in
   // with the ease.
   //
-  // NOT in supersniff (dogCam): the follow loop owns the camera there (low-dog
-  // framing via padding). The supersniff intro hint id also starts with "map:",
-  // so without this guard its fire would snap the camera with a conflicting
-  // offset and yank the dog up over the carousel.
+  // NOT in supersniff (dogCam): the follow loop owns the camera there. The
+  // supersniff intro hint id also starts with "map:", so without this guard
+  // its fire would snap the camera with a conflicting framing mid-follow.
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !companionPos) return;
     if (DOG_CAM && dogCam) return;
+    // The supersniff-exit hint lives INSIDE dogCam; on mode exit its id can
+    // outlive dogCam by one commit and would cancel the exit camera ease
+    // mid-flight (freezing pitch/zoom partway). It never needs a snap.
+    if (activeHint === 'map:supersniff-exit') return;
     if (activeHint && activeHint.startsWith('map:')) {
       map.easeTo({
         center: [companionPos.lng, companionPos.lat],
@@ -3255,6 +3235,9 @@ export default function MapViewWeb() {
           setSelectedDog(null);
           if (!useGameStore.getState().dogCam) {
             useGameStore.getState().toggleDogCam();
+            // Arrived without touching the logo — lets the Companion
+            // show the "tap the logo to get back to walks" hint.
+            useGameStore.getState().setDogCamViaSearch(true);
           }
           assignSearch(d);
         }}

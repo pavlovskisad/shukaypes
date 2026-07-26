@@ -38,11 +38,14 @@ export default function MapScreen() {
   // Immersive = the HUD bubbles out. Search mode (dogCam) reuses the old
   // supersniff hide (sniffMode is unreachable now, but keep it in the OR).
   const immersive = sniffMode || dogCam;
-  // When the super-sniff hint is showing (the dog is calling the user
-  // to try it), pulse the logo so the spoken line has a target. The
-  // hint visibility is computed in the Companion and published to the
-  // store as `activeHint`.
-  const pulseLogo = useGameStore((s) => s.activeHint) === 'map:supersniff';
+  // When a logo-targeting hint is showing, pulse the logo so the spoken
+  // line has a target: 'map:supersniff' calls the user to TRY the mode,
+  // 'map:supersniff-exit' shows modal-arrived searchers the way BACK to
+  // walks. Hint visibility is computed in the Companion and published to
+  // the store as `activeHint`.
+  const activeHint = useGameStore((s) => s.activeHint);
+  const pulseLogo =
+    activeHint === 'map:supersniff' || activeHint === 'map:supersniff-exit';
   // Pop animations on the HUD pills should only run during the brief
   // window around an actual sniff toggle, not on every re-render or
   // on initial mount. Static styles handle the steady state.
