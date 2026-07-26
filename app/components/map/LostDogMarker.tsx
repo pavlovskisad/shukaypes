@@ -3,6 +3,7 @@ import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
+import { Z } from '../../constants/z';
 import { MapLibreMarker } from './MapLibreMarker';
 
 // Neutral halo — every urgency uses the same shadow / ring
@@ -62,7 +63,16 @@ interface LostDogMarkerProps {
   // wasted re-renders compound. Default true so callers that don't
   // know about the gate get the old "always animate" behaviour.
   active?: boolean;
+  // The pet the cinematic zone view is framing (its info card is open).
+  // Grows the photo disc to 3× and the name with it, lifts the marker
+  // above everything else, and pauses the SOS beep (the big pin IS the
+  // highlight — rings sized for the small pin would misalign anyway).
+  selected?: boolean;
 }
+
+// Photo-disc diameter, normal vs selected (3×).
+const DISC_PX = 54;
+const DISC_SELECTED_PX = 162;
 
 const NAME_COLOUR_DAY = '#1a1a1a';
 const NAME_SHADOW_DAY = '0 1px 4px rgba(255,255,255,0.95)';
@@ -79,10 +89,11 @@ const NAME_SHADOW_NIGHT = '0 1px 4px rgba(0,0,0,0.95)';
 //
 // Beep: a translucent ring expands out of the pin every ~22s. Per-pet
 // random phase so they don't synchronize across the map.
-function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, active = true, inverted = false }: LostDogMarkerProps) {
+function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, active = true, inverted = false, selected = false }: LostDogMarkerProps) {
   const [beeping, setBeeping] = useState(false);
   const beepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const halo = getHalo(inverted);
+  const disc = selected ? DISC_SELECTED_PX : DISC_PX;
 
   // SOS beep. Each pet rolls its own period at mount (inside the
   // min/max band above) so the map doesn't breathe in sync. A random
@@ -90,7 +101,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
   // pet's own period for every subsequent one. Same `active` gate
   // as wander — off-screen markers don't ping.
   useEffect(() => {
-    if (!active) return;
+    if (!active || selected) return;
     let cancelled = false;
     const periodMs =
       BEEP_PERIOD_MIN_MS +
@@ -113,10 +124,18 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
       cancelled = true;
       if (beepTimeoutRef.current) clearTimeout(beepTimeoutRef.current);
     };
-  }, [active]);
+  }, [active, selected]);
 
   return (
-    <MapLibreMarker position={position} anchor="bottom" onClick={onTap} cullNearHorizon>
+    <MapLibreMarker
+      position={position}
+      anchor="bottom"
+      onClick={onTap}
+      cullNearHorizon
+      // The big selected pin is the subject of the cinematic zone shot —
+      // lift it above every other marker (companion included).
+      {...(selected ? { zIndex: Z.MARKER_COMPANION + 1 } : {})}
+    >
       <div
         role="button"
         tabIndex={0}
@@ -179,16 +198,25 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
         <div
           style={{
             position: 'relative',
-            width: 54,
-            height: 54,
+            width: disc,
+            height: disc,
             borderRadius: R.pill,
             background: '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: TYPE.display,
+            fontSize: selected ? 64 : TYPE.display,
             overflow: 'hidden',
-            boxShadow: halo.glow,
+            // Selected pin gets a heavier lift — it's the hero of the
+            // cinematic zone shot, floating over a pulled-back camera.
+            boxShadow: selected
+              ? '0 12px 40px rgba(0,0,0,0.35), 0 3px 10px rgba(0,0,0,0.2)'
+              : halo.glow,
+            // Smooth grow/shrink when the selection toggles. Width/height
+            // transitions are layout-thrashy in general, but this is a
+            // single marker and the effect only runs on select/deselect.
+            transition:
+              'width 320ms cubic-bezier(0.34, 1.2, 0.64, 1), height 320ms cubic-bezier(0.34, 1.2, 0.64, 1), box-shadow 320ms ease-out, font-size 320ms ease-out',
           }}
         >
           <span style={{ position: 'absolute' }}>{emoji}</span>
@@ -216,15 +244,23 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
             />
           ) : null}
         </div>
-        <div style={{ width: 1.5, height: 5, background: '#aaa' }} />
+        <div
+          style={{
+            width: 1.5,
+            height: selected ? 8 : 5,
+            background: '#aaa',
+            transition: 'height 320ms ease-out',
+          }}
+        />
         <div
           style={{
             fontFamily: SYSTEM_FONT,
-            fontSize: TYPE.body,
-            fontWeight: 700,
+            fontSize: selected ? 24 : TYPE.body,
+            fontWeight: selected ? 800 : 700,
             color: inverted ? NAME_COLOUR_NIGHT : NAME_COLOUR_DAY,
             textShadow: inverted ? NAME_SHADOW_NIGHT : NAME_SHADOW_DAY,
             whiteSpace: 'nowrap',
+            transition: 'font-size 320ms ease-out',
           }}
         >
           {name}

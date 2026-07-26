@@ -9,7 +9,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import {
-  MODAL_PILL_LIGHT,
+  MODAL_PILL_BASE,
   MODAL_PILL_BLUE,
   MODAL_PILL_DISABLED,
 } from '../../constants/buttons';
@@ -30,13 +30,12 @@ interface LostDogModalProps {
   onClose: () => void;
   onReportSighting?: (dog: NearbyLostDog) => void;
   onStartSearch?: (dog: NearbyLostDog) => void;
-  // When this dog already has an active detective quest, swap the
-  // "start search" button for a muted "searching…" affordance that
-  // leads to the abandon-via-pill flow instead of double-starting.
+  // When this dog already has an active search, swap the "start search"
+  // button for a muted "searching…" affordance.
   searchActive?: boolean;
   // Optional prev/next cycling between the nearby pets. When wired up,
-  // the modal shows ‹ › chevrons and responds to horizontal swipe
-  // gestures on the photo. Either both or neither.
+  // the card shows ‹ › chevrons and responds to horizontal swipe
+  // gestures. Either both or neither.
   onPrev?: () => void;
   onNext?: () => void;
 }
@@ -46,68 +45,46 @@ interface LostDogModalProps {
 const SWIPE_THRESHOLD_PX = 60;
 
 const SHEET_ANIM_MS = 280;
-// Whole modal is now just the photo with everything overlaid on it —
-// no separate white info / action sections below. This is what keeps
-// the sheet compact (matches the SpotModal footprint). MapView's
-// dog-snap padding is tuned to roughly this cover height; keep them
-// loosely in sync if you retune.
-const PHOTO_HEIGHT_PX = 430;
-// Modal is anchored to the viewport top, so the close button + badge
-// need to clear the OS status-bar / notch area. env() lookup falls
-// back to 0 in non-PWA Safari (no inset), 12 in standalone PWA on
-// notched iPhones.
-const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
 
-// Close button — solid white pill, sits in the top-right cluster next
-// to the distance chip. Matches the chip family used across modals.
+// The card floats above the tab bar; this clears the bar + home
+// indicator on every device class. Keep loosely in sync with
+// DOG_VIEW_PAD_BOTTOM in MapView (the camera reserves this strip).
+const CARD_BOTTOM = 'calc(env(safe-area-inset-bottom, 0px) + 96px)';
+
+// Light-grey secondary pill — on the white card the old white pill
+// disappeared, so the "i've seen them" action gets a soft grey fill.
+const CARD_PILL_LIGHT: CSSProperties = {
+  ...MODAL_PILL_BASE,
+  background: '#f0f0f2',
+  color: '#1a1a1a',
+  boxShadow: 'none',
+};
+
+// Close button — soft grey circle in the card's top-right corner.
 const CLOSE_BUTTON_STYLE: CSSProperties = {
-  width: 36,
-  height: 36,
+  width: 32,
+  height: 32,
   borderRadius: R.pill,
-  border: '1px solid rgba(0,0,0,0.06)',
-  background: '#ffffff',
+  border: 'none',
+  background: '#f0f0f2',
   color: '#1a1a1a',
   padding: 0,
   display: 'flex',
   alignItems: 'center',
   justifyContent: 'center',
   cursor: 'pointer',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
-  fontSize: TYPE.display,
+  fontSize: TYPE.body,
   lineHeight: 1,
+  flexShrink: 0,
 };
 
-// Prev / next chevron — dark translucent circular pill, vertically
-// centred on the photo. Shared base; left/right just swap the edge.
-const CHEVRON_BASE: CSSProperties = {
-  position: 'absolute',
-  top: '46%',
-  transform: 'translateY(-50%)',
-  width: 44,
-  height: 44,
-  borderRadius: R.pill,
-  border: 'none',
-  background: 'rgba(0,0,0,0.5)',
-  color: '#ffffff',
-  fontSize: 26,
-  lineHeight: '44px',
-  padding: 0,
-  cursor: 'pointer',
-  boxShadow: '0 2px 8px rgba(0,0,0,0.25)',
-};
-const CHEVRON_STYLE_LEFT: CSSProperties = { ...CHEVRON_BASE, left: 10 };
-const CHEVRON_STYLE_RIGHT: CSSProperties = { ...CHEVRON_BASE, right: 10 };
-
-// Small white chip used for the urgency badge + distance — shared
-// recipe so the top row reads as one family.
-const TOP_CHIP: CSSProperties = {
-  background: '#ffffff',
-  borderRadius: R.pill,
-  padding: '6px 12px',
-  fontSize: TYPE.small,
-  fontWeight: 700,
-  letterSpacing: 0.3,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+// Prev / next chevron — same soft grey circle family as the close
+// button; the three sit as one ‹ › × cluster in the card's top-right.
+// Horizontal swipe on the card cycles too — the chevrons make the
+// affordance visible.
+const CHEVRON_STYLE: CSSProperties = {
+  ...CLOSE_BUTTON_STYLE,
+  fontSize: 18,
 };
 
 function relativeTime(iso: string, t: AppStrings): string {
@@ -121,13 +98,14 @@ function relativeTime(iso: string, t: AppStrings): string {
   return t.time.ago(diffD, 'd');
 }
 
-// Compact dog detail sheet. The whole card is the photo — badge +
-// distance + close float on top, and the name / breed / last-seen /
-// reward / action pills all sit on a dark gradient over the bottom of
-// the image. Same top-anchored slide-down + transparent-scrim "snap
-// card" shape as the SpotModal so the two read as one family. When
+// Explore-city-style bottom card. The map is the hero now — the
+// cinematic zone view frames the pet's lit-up search zone with the BIG
+// photo pin, so this card is compact info + actions floating above the
+// tab bar: small photo thumb, name/breed, urgency + distance +
+// last-seen meta, reward line, and the two action pills. Slides up
+// from the bottom; transparent scrim so the shot stays visible; when
 // onPrev/onNext are wired, ‹ › chevrons + horizontal swipe cycle
-// through the nearby pets; the photo/body slides, the controls stay.
+// through the nearby pets (content slides, controls stay).
 export function LostDogModal({
   dog,
   onClose,
@@ -142,7 +120,7 @@ export function LostDogModal({
   const [renderDog, setRenderDog] = useState<NearbyLostDog | null>(dog);
   const [closing, setClosing] = useState(false);
   // Direction of the last cycle — drives the slide-in keyframe on the
-  // keyed content track. null on a fresh open so the sheet-down enter
+  // keyed content track. null on a fresh open so the slide-up enter
   // animation doesn't compose with a horizontal slide.
   const [slideDir, setSlideDir] = useState<'left' | 'right' | null>(null);
   const touchStartXRef = useRef<number | null>(null);
@@ -162,12 +140,12 @@ export function LostDogModal({
     }
     if (renderDog && !closing) {
       setClosing(true);
-      const t = setTimeout(() => {
+      const timer = setTimeout(() => {
         setRenderDog(null);
         setClosing(false);
         setSlideDir(null);
       }, SHEET_ANIM_MS);
-      return () => clearTimeout(t);
+      return () => clearTimeout(timer);
     }
   }, [dog]);
 
@@ -208,27 +186,25 @@ export function LostDogModal({
     ? formatDistance(distanceMeters(userPos, renderDog.lastSeen.position))
     : null;
 
-  // Portal to document.body so the modal escapes the MapView /
-  // tab-page stacking context. Without this, the HUD pills (rendered
-  // as a sibling of MapView with zIndex: HUD_PILLS) paint over the
-  // modal regardless of MODAL_MAP z-index, because the mapLayer
-  // container has no z-index of its own.
+  // Portal to document.body so the card escapes the MapView / tab-page
+  // stacking context (the HUD pills would otherwise paint over it).
   return createPortal(
     <div
       onClick={onClose}
       style={{
         position: 'fixed',
         inset: 0,
-        // Transparent scrim (matches SpotModal): the snapped pin +
-        // search-zone circle stay visible in the strip below the
-        // sheet, so dimming them would only wash out exactly what the
-        // user is here to look at. Click still closes on outside tap.
+        // Transparent scrim: the cinematic zone shot (lit zone + big
+        // photo pin) IS the content — dimming it would wash out exactly
+        // what the user is here to look at. Outside tap still closes.
         background: 'transparent',
         display: 'flex',
-        // Anchored at the TOP — sheet slides down from off-screen-top
-        // like a dashboard / system-notification panel.
-        alignItems: 'flex-start',
-        justifyContent: 'center',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        paddingBottom: CARD_BOTTOM as unknown as number,
+        paddingLeft: 10,
+        paddingRight: 10,
         zIndex: Z.MODAL_MAP,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
@@ -239,174 +215,193 @@ export function LostDogModal({
         onTouchStart={handleTouchStart}
         onTouchEnd={handleTouchEnd}
         style={{
-          background: '#f0f0f0',
-          // Full-bleed top edge (no rounded corners), rounded bottom
-          // only — reads as a card hanging from the top of the screen.
-          borderTopLeftRadius: 0,
-          borderTopRightRadius: 0,
-          borderBottomLeftRadius: R.card,
-          borderBottomRightRadius: R.card,
-          padding: 0,
+          background: '#ffffff',
+          borderRadius: R.card,
           width: '100%',
-          maxWidth: 460,
-          height: PHOTO_HEIGHT_PX,
-          // Cap on short viewports (landscape phone) so the card never
-          // runs under the tab bar; the photo shrinks, the bottom-
-          // anchored content block stays put.
-          maxHeight: 'calc(100vh - 110px - env(safe-area-inset-bottom))' as unknown as number,
+          maxWidth: 440,
           position: 'relative',
-          animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+          padding: 14,
+          animation: `bottom-card-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
+          boxShadow: '0 10px 34px rgba(0,0,0,0.22), 0 2px 8px rgba(0,0,0,0.10)',
           overflow: 'hidden',
         }}
       >
         {/* Per-dog content TRACK — keyed by id so a prev/next swap
-            remounts it and runs the slide-in keyframe. Fills the card;
-            the nav controls (badge / close / chevrons) sit OUTSIDE it
-            so they don't slide with the content. */}
+            remounts it and runs the slide-in keyframe. The chevrons sit
+            OUTSIDE it so they don't slide with the content. */}
         <div
           key={renderDog.id}
           style={{
-            position: 'absolute',
-            inset: 0,
+            display: 'flex',
+            flexDirection: 'column',
+            gap: S.m,
             animation: slideDir
               ? `slide-in-from-${slideDir} ${SHEET_ANIM_MS}ms cubic-bezier(0.2,0.7,0.3,1)`
               : undefined,
           }}
         >
-        {/* Photo fills the whole card. */}
-        {renderDog.photoUrl ? (
-          <img
-            src={renderDog.photoUrl}
-            alt={renderDog.name}
-            // Cached photos (preloaded for prev/next) can finish before
-            // React attaches onLoad, which would leave the image stuck
-            // at opacity 0. The ref check reveals it immediately if it's
-            // already complete; onLoad covers the uncached path.
-            ref={(el) => {
-              if (el && el.complete && el.naturalWidth > 0) {
-                el.style.opacity = '1';
-              }
-            }}
-            onLoad={(e) => {
-              e.currentTarget.style.opacity = '1';
-            }}
-            style={{
-              width: '100%',
-              height: '100%',
-              objectFit: 'cover',
-              objectPosition: 'center center',
-              display: 'block',
-              opacity: 0,
-              transition: 'opacity 220ms ease-out',
-              transform: 'scale(1.04)',
-              transformOrigin: 'center center',
-            }}
-          />
-        ) : (
-          <div
-            style={{
-              width: '100%',
-              height: '100%',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontSize: 120,
-            }}
-          >
-            {renderDog.emoji}
-          </div>
-        )}
-
-        {/* Bottom gradient — carries the white name / breed / meta text
-            and the action pills over the lower portion of the photo. */}
-        <div
-          style={{
-            position: 'absolute',
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: '72%',
-            background:
-              'linear-gradient(180deg, rgba(0,0,0,0) 0%, rgba(0,0,0,0.15) 30%, rgba(0,0,0,0.55) 60%, rgba(0,0,0,0.82) 100%)',
-            pointerEvents: 'none',
-          }}
-        />
-
-        {/* Bottom content block — name, breed, meta, action pills. All
-            on the gradient. */}
-        <div
-          style={{
-            position: 'absolute',
-            left: 18,
-            right: 18,
-            bottom: 16,
-            display: 'flex',
-            flexDirection: 'column',
-            gap: S.s,
-          }}
-        >
-          <div>
+          {/* Header row — thumb, name/breed, close. */}
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: S.m }}>
             <div
               style={{
-                fontFamily: SYSTEM_FONT,
-                fontSize: TYPE.display,
-                fontWeight: 800,
-                lineHeight: 1.1,
-                color: '#ffffff',
-                textShadow: '0 1px 4px rgba(0,0,0,0.45)',
+                position: 'relative',
+                width: 64,
+                height: 64,
+                borderRadius: 16,
+                overflow: 'hidden',
+                background: '#f0f0f2',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                fontSize: 34,
+                flexShrink: 0,
               }}
             >
-              {renderDog.name}
+              {/* Emoji renders BEHIND the img so a failed/loading photo
+                  naturally falls back without extra state — same trick
+                  as the map pin. */}
+              <span style={{ position: 'absolute' }}>{renderDog.emoji}</span>
+              {renderDog.photoUrl ? (
+                <img
+                  src={renderDog.photoUrl}
+                  alt={renderDog.name}
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    display: 'block',
+                  }}
+                  onError={(e) => {
+                    // Some hotlinked images 403 — hide the img so the
+                    // emoji behind it shows through.
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : null}
             </div>
-            {renderDog.breed ? (
+            <div style={{ flex: 1, minWidth: 0 }}>
               <div
                 style={{
                   fontFamily: SYSTEM_FONT,
-                  fontSize: TYPE.body,
-                  color: 'rgba(255,255,255,0.92)',
-                  marginTop: 2,
-                  textShadow: '0 1px 4px rgba(0,0,0,0.4)',
+                  fontSize: TYPE.display,
+                  fontWeight: 800,
+                  lineHeight: 1.15,
+                  color: '#1a1a1a',
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
                 }}
               >
-                {renderDog.breed}
+                {renderDog.name}
               </div>
-            ) : null}
+              {renderDog.breed ? (
+                <div
+                  style={{
+                    fontFamily: SYSTEM_FONT,
+                    fontSize: TYPE.small,
+                    color: '#777',
+                    marginTop: 2,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {renderDog.breed}
+                </div>
+              ) : null}
+              {/* Meta line — urgency + distance + last seen, one quiet
+                  row under the name (explore-card style). */}
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  flexWrap: 'wrap',
+                  gap: S.s,
+                  marginTop: S.s,
+                  fontFamily: SYSTEM_FONT,
+                  fontSize: TYPE.small,
+                  color: '#777',
+                }}
+              >
+                <span
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    color: badgeFg,
+                    fontWeight: 700,
+                    letterSpacing: 0.3,
+                  }}
+                >
+                  <Icon name={badgeIcon} size={INLINE_ICON.badge} />
+                  {badgeText}
+                </span>
+                {distLabel ? <span>· {distLabel}</span> : null}
+                <span>· {t.modals.lostDog.lastSeen(relativeTime(renderDog.lastSeen.at, t))}</span>
+              </div>
+            </div>
+            {/* Top-right control cluster: ‹ › cycle + close. Outside the
+                keyed track conceptually, but rendering inside the header
+                row keeps layout simple — the buttons are identical for
+                every dog so the remount is invisible. */}
+            <div style={{ display: 'flex', gap: S.xs, flexShrink: 0 }}>
+              {onPrev ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handlePrev();
+                  }}
+                  aria-label={t.modals.lostDog.previousPet}
+                  style={CHEVRON_STYLE}
+                >
+                  ‹
+                </button>
+              ) : null}
+              {onNext ? (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleNext();
+                  }}
+                  aria-label={t.modals.lostDog.nextPet}
+                  style={CHEVRON_STYLE}
+                >
+                  ›
+                </button>
+              ) : null}
+              <button
+                onClick={(e) => playPopThen(e.currentTarget, onClose)}
+                aria-label={t.modals.common.close}
+                style={CLOSE_BUTTON_STYLE}
+              >
+                ×
+              </button>
+            </div>
           </div>
 
-          {/* Meta — last-seen + reward, light text over the gradient.
-              Stacked so the (often long, localized) reward sentence
-              keeps its own line instead of wrapping mid-row. */}
+          {/* Reward line. */}
           <div
             style={{
-              display: 'flex',
-              flexDirection: 'column',
+              display: 'inline-flex',
+              alignItems: 'center',
               gap: S.xs,
+              fontFamily: SYSTEM_FONT,
               fontSize: TYPE.small,
-              color: 'rgba(255,255,255,0.88)',
-              textShadow: '0 1px 3px rgba(0,0,0,0.5)',
+              color: '#555',
             }}
           >
-            <span>{t.modals.lostDog.lastSeen(relativeTime(renderDog.lastSeen.at, t))}</span>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: S.xs }}>
-              <Icon name="paws" size={INLINE_ICON.secondary} inverted />
-              {t.modals.lostDog.questCta(renderDog.rewardPoints)}
-            </span>
+            <Icon name="paws" size={INLINE_ICON.secondary} />
+            {t.modals.lostDog.questCta(renderDog.rewardPoints)}
           </div>
 
           {/* Action pills. */}
-          <div
-            style={{
-              display: 'flex',
-              gap: S.s,
-              marginTop: S.xs,
-            }}
-          >
+          <div style={{ display: 'flex', gap: S.s }}>
             <button
               onClick={(e) =>
                 playPopThen(e.currentTarget, () => onReportSighting?.(renderDog))
               }
-              style={MODAL_PILL_LIGHT}
+              style={CARD_PILL_LIGHT}
             >
               <Icon name="eyes" size={INLINE_ICON.cta} />
               {t.modals.lostDog.iveSeen}
@@ -423,88 +418,16 @@ export function LostDogModal({
             </button>
           </div>
         </div>
-        </div>
         {/* end content track */}
 
-        {/* Urgency badge — top-left, clears the notch via SAFE_TOP.
-            Outside the slide track so it doesn't move on cycle. */}
-        <span
-          style={{
-            ...TOP_CHIP,
-            position: 'absolute',
-            top: SAFE_TOP,
-            left: 14,
-            color: badgeFg,
-            letterSpacing: 0.5,
-            display: 'inline-flex',
-            alignItems: 'center',
-            gap: S.s,
-          }}
-        >
-          <Icon name={badgeIcon} size={INLINE_ICON.badge} />
-          {badgeText}
-        </span>
-
-        {/* Top-right cluster — distance chip + close button. */}
-        <div
-          style={{
-            position: 'absolute',
-            top: SAFE_TOP,
-            right: 12,
-            display: 'flex',
-            alignItems: 'center',
-            gap: S.s,
-          }}
-        >
-          {distLabel ? (
-            <span style={{ ...TOP_CHIP, color: '#555' }}>{distLabel}</span>
-          ) : null}
-          <button
-            onClick={(e) => playPopThen(e.currentTarget, onClose)}
-            aria-label={t.modals.common.close}
-            style={CLOSE_BUTTON_STYLE}
-          >
-            ×
-          </button>
-        </div>
-
-        {/* Prev / next chevrons — vertically centred on the photo, above
-            the content block. Dark translucent pills so they read over
-            any image. Outside the slide track so they stay put while
-            the content slides. */}
-        {onPrev ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handlePrev();
-            }}
-            aria-label={t.modals.lostDog.previousPet}
-            style={CHEVRON_STYLE_LEFT}
-          >
-            ‹
-          </button>
-        ) : null}
-        {onNext ? (
-          <button
-            onClick={(e) => {
-              e.stopPropagation();
-              handleNext();
-            }}
-            aria-label={t.modals.lostDog.nextPet}
-            style={CHEVRON_STYLE_RIGHT}
-          >
-            ›
-          </button>
-        ) : null}
-
         <style>{`
-          @keyframes top-sheet-in {
-            from { transform: translateY(-100%); }
+          @keyframes bottom-card-in {
+            from { transform: translateY(130%); }
             to { transform: translateY(0); }
           }
-          @keyframes top-sheet-out {
+          @keyframes bottom-card-out {
             from { transform: translateY(0); }
-            to { transform: translateY(-100%); }
+            to { transform: translateY(130%); }
           }
           @keyframes slide-in-from-left {
             from { transform: translateX(-22px); opacity: 0.4; }
