@@ -140,6 +140,18 @@ export const SEE_THROUGH_MIN_ZOOM = 17.5;
 export const DOG_ORB_RADIUS = 15;
 export const DOG_ORB_BAND = 12;
 
+// World-metre cap on the sight-line dissolve: on top of the angular cone, a
+// fragment must sit within this corridor of the camera→dog LINE to dissolve
+// (full inside RADIUS, gone by RADIUS+BAND). Without it, a high zoomed-out
+// camera looks steeply down at both the dog and the foreground — their rays
+// are angularly close even hundreds of metres apart laterally, and the cone
+// alone washed out half the visible city. True occluders (walls that cover
+// the dog on screen) intersect the line itself, so they always stay inside.
+// At the close chase zoom the full 8° cone is already narrower than this
+// corridor, so supersniff's look is untouched.
+export const SIGHT_RADIUS = 35;
+export const SIGHT_BAND = 25;
+
 // Cheap ground drop-shadows: flat quads swept from each footprint toward the
 // sun. SHADOW_Y lifts them just off the ground (z-fight), SHADOW_MAX_LEN caps
 // how far a tall building's shadow reaches, SHADOW_COLOR is the MIN-blend tint
@@ -403,7 +415,13 @@ export function createThreeBuildingsLayer(
           // Only what sits IN FRONT of the dog (nearer the camera) dissolves;
           // the city behind it stays put so the dog reads as standing in it.
           '    float _front = 1.0 - smoothstep(_dD - 20.0, _dD - 3.0, _fD);',
-          '    float _sight = _cone * _front;',
+          // World-metre corridor around the camera→dog LINE (see SIGHT_RADIUS):
+          // caps the angular cone so a high zoomed-out camera doesn't wash out
+          // the whole foreground whose rays are steep like the dog's.
+          '    float _t = clamp(dot(_toF, _dDir), 0.0, _dD);',
+          '    float _ray = length(vLocalPos - (u_camLocal + _dDir * _t));',
+          `    float _corr = 1.0 - smoothstep(${SIGHT_RADIUS.toFixed(1)}, ${(SIGHT_RADIUS + SIGHT_BAND).toFixed(1)}, _ray);`,
+          '    float _sight = _cone * _front * _corr;',
           `    float _dh = length(vLocalPos.xz - u_dogLocal.xz);`,
           `    float _dnear = 1.0 - smoothstep(${DOG_ORB_RADIUS.toFixed(1)}, ${(DOG_ORB_RADIUS + DOG_ORB_BAND).toFixed(1)}, _dh);`,
           '    float _dfront = 1.0 - smoothstep(_dD - 4.0, _dD + 12.0, _fD);',
