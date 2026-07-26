@@ -18,7 +18,7 @@
 //
 // Built on react-native-reanimated v3 + gesture-handler v2.
 
-import { useState, useEffect, useMemo, useCallback, memo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, memo, type ReactNode } from 'react';
 import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -79,6 +79,12 @@ interface Props<T> {
   // now centred (the new top card). Used to dismiss the swipe hint, and by the
   // search carousel to switch which lost dog is being tracked.
   onSwipe?: (item: T) => void;
+  // Start the deck with THIS item's card on top instead of items[0].
+  // Read once at mount (the deck mounts fresh per surface); unknown ids
+  // fall back to 0, and later list churn keeps the reset-to-0 behavior.
+  // Used by the search carousel when supersniff is entered already
+  // committed to a dog (modal's "start search").
+  initialId?: string;
 }
 
 // Per-item slot. `virtualIdx` is the item's stable position on the
@@ -169,18 +175,27 @@ export function CardStack<T>({
   peekScale = 1,
   onCounterTap,
   onSwipe,
+  initialId,
 }: Props<T>) {
+  // Mount-time anchor: index of initialId in the CURRENT items, or 0.
+  // useState initializer (not an effect) so the first paint already has
+  // the right card on top — no flash of items[0].
+  const [initialIndex] = useState(() => {
+    if (!initialId) return 0;
+    const idx = items.findIndex((it) => getId(it) === initialId);
+    return idx > 0 ? idx : 0;
+  });
   // virtualBase = the carousel position as an integer index. Grows
   // without bound (we cycle via modulo when picking which item to
   // render at each virtualIdx). currentPos is the float version,
   // animates between integer values, drives the visual translate.
-  const [virtualBase, setVirtualBase] = useState(0);
-  const currentPos = useSharedValue(0);
+  const [virtualBase, setVirtualBase] = useState(initialIndex);
+  const currentPos = useSharedValue(initialIndex);
   // Worklet-side mirror of virtualBase so the pan handler reads
   // the freshest value even when React hasn't re-rendered yet
   // (rare but possible if the user starts a new pan before
   // setVirtualBase commits).
-  const virtualBaseSV = useSharedValue(0);
+  const virtualBaseSV = useSharedValue(initialIndex);
   // Drives the centre-card pop on every committed advance —
   // 0 at rest, jumps to 1 right after settle, then eases back
   // to 0. ItemSlot multiplies by per-item centrality so only
@@ -203,9 +218,16 @@ export function CardStack<T>({
   // ~31 px gap between the centre's right edge and the peek's left.
   const STEP = ((cardWidth * 290) / CARD_W) * peekScale;
 
-  // Reset when the underlying list changes.
+  // Reset when the underlying list changes. Skips the mount run —
+  // effects fire after the first paint, and resetting there would
+  // clobber the initialId anchor the state initialised with.
   const ids = useMemo(() => items.map(getId).join(','), [items, getId]);
+  const idsInitRef = useRef(true);
   useEffect(() => {
+    if (idsInitRef.current) {
+      idsInitRef.current = false;
+      return;
+    }
     setVirtualBase(0);
     currentPos.value = 0;
     virtualBaseSV.value = 0;

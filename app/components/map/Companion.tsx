@@ -290,6 +290,22 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
       // Google's map-level onClick can race against ours at low zoom and
       // would otherwise close the menu we just opened.
       onTap?.();
+      // Supersniff: the dog is working the trail — no radial menu, and no
+      // onTapCompanion either (its recenter would fight the follow cam).
+      // A tap gets the profile-scene treatment instead: a quick sniff
+      // beat + a random woof. Live store read so the closure can't go
+      // stale across the mode toggle.
+      if (useGameStore.getState().dogCam) {
+        const woofs = t.bubbles.woofs;
+        flash(
+          woofs[Math.floor(Math.random() * woofs.length)] ?? t.bubbles.simpleWoof,
+          2500,
+        );
+        setSniffing(true);
+        if (sniffTimerRef.current) clearTimeout(sniffTimerRef.current);
+        sniffTimerRef.current = setTimeout(() => setSniffing(false), 1500);
+        return;
+      }
       if (!menuOpen) {
         setMenuOpen(true);
         onTapCompanion?.();
@@ -304,7 +320,7 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
       }
       setMenuOpen(false);
     },
-    [menuOpen, menuPath, setMenuOpen, onTapCompanion, onTap]
+    [menuOpen, menuPath, setMenuOpen, onTapCompanion, onTap, t, flash]
   );
 
   const fireLeafAction = useCallback(
@@ -622,14 +638,16 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
     dogCam && supersniffIntroHint.visible ? t.hints.supersniffIntro : null;
   // Priority: menu explainer (while open) → an active hint owns the
   // bubble (it fired during an idle moment and shouldn't be stepped on
-  // by an ambient bark) → real bubbles (greeting / narration) →
-  // ambient. Ambient generation is also paused while a hint shows (see
-  // useGameLoop), so this mainly settles same-frame races.
+  // by an ambient bark) → local tap/action feedback (user-initiated —
+  // a supersniff tap-woof shouldn't lose to an ambient lead bark) →
+  // parent bubbles (greeting / narration / ambient). Ambient generation
+  // is also paused while a hint shows (see useGameLoop), so this mainly
+  // settles same-frame races.
   const activeBubble = hideBubble
     ? null
     : menuOpen
       ? menuExplainer
-      : supersniffIntro ?? hintBubble ?? bubble ?? localBubble;
+      : supersniffIntro ?? hintBubble ?? localBubble ?? bubble;
 
   // Publish the visible hint so sibling components (the top-left logo
   // in the HUD) can render a matching cue. Clear on unmount.

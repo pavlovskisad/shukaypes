@@ -29,6 +29,9 @@ interface Props {
   // Id of the dog that's the active quest — that card gets a slowly-pulsing
   // blue glow so it's clear which one you're on the trail of.
   activeId?: string;
+  // Dog whose card starts on top of the deck (mount-time only) — used when
+  // supersniff opens already committed to a dog. See CardStack.initialId.
+  initialId?: string;
   // Heavier drop shadow so cards separate cleanly from a busy background (the
   // 3D map in supersniff). Off by default — the Quests tab keeps its lighter one.
   strongShadow?: boolean;
@@ -51,6 +54,7 @@ export function LostDogCardStack({
   peekScale,
   showCounter,
   activeId,
+  initialId,
   strongShadow,
 }: Props) {
   const t = useStrings();
@@ -83,6 +87,7 @@ export function LostDogCardStack({
       {...(cardHeight != null ? { cardHeight } : {})}
       {...(peekScale != null ? { peekScale } : {})}
       {...(showCounter != null ? { showCounter } : {})}
+      {...(initialId != null ? { initialId } : {})}
     />
   );
 }
