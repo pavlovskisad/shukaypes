@@ -39,10 +39,13 @@ const SWIPE_THRESHOLD_PX = 60;
 
 const SHEET_ANIM_MS = 240;
 
-// The big photo pin sits at true screen centre (see MapView's dog-view
-// camera), anchored at its foot with ~110px of artwork above the point.
-// The bubble stack's bottom edge clears that.
-const STACK_BOTTOM = 'calc(50% + 128px)';
+// The stack hangs from the TOP, just below the HUD row (logo + pills):
+// safe-area inset + HUD height + a breathing gap. The camera (MapView's
+// dog-view ease) offsets the pin DOWN to sit right under the stack, so
+// HUD → bubble → pills → pin reads as one centred column on every
+// viewport instead of the bubble riding up into the HUD on short ones.
+// Keep in sync with DOG_VIEW_* in MapView if retuned.
+const STACK_TOP = 'calc(env(safe-area-inset-top, 0px) + 122px)';
 
 // Matches the SniffPress discovery CTA — the brand-blue pill under the
 // dark story bubble.
@@ -211,7 +214,7 @@ export function LostDogModal({
           position: 'absolute',
           left: 0,
           right: 0,
-          bottom: STACK_BOTTOM as unknown as number,
+          top: STACK_TOP as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
