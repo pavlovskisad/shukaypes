@@ -141,8 +141,34 @@ const DOG_VIEW_MAX_ZOOM = 16.6;
 // inside the zone), so keep this modest to hold most of the circle
 // in-frame even when the pin sits off the zone centre.
 const DOG_VIEW_ZONE_FRAC = 0.62;
+// Where the pin's FOOT lands on screen, measured from below the safe-area
+// inset: the story-bubble stack top (122, see LostDogModal.STACK_TOP) +
+// the bubble/pills block (~215) + the pin's own artwork above its foot
+// (~115). Together with the top-anchored stack this makes HUD → bubble →
+// pills → pin one centred column on every viewport height.
+const DOG_VIEW_PIN_TOP_PX = 452;
 // Streets-level game camera to fly back to when the view closes.
 const GAME_PITCH = 74;
+
+// Safe-area top inset in CSS px, measured once via an env() probe —
+// SafeAreaView values aren't reachable here and the inset differs
+// between browser-tab (0) and installed-PWA (notch height) contexts.
+let cachedSafeTop: number | null = null;
+function safeAreaTopPx(): number {
+  if (cachedSafeTop != null) return cachedSafeTop;
+  if (typeof document === 'undefined') return 0;
+  try {
+    const el = document.createElement('div');
+    el.style.cssText =
+      'position:fixed;top:0;height:0;padding-top:env(safe-area-inset-top, 0px);visibility:hidden;pointer-events:none;';
+    document.body.appendChild(el);
+    cachedSafeTop = el.getBoundingClientRect().height;
+    el.remove();
+  } catch {
+    cachedSafeTop = 0;
+  }
+  return cachedSafeTop;
+}
 // Preview beacon fragment: rather than lighting the whole (up-to-1.25km) search
 // zone, we pick one candidate quest spot and glow a small patch around it — the
 // bit of the zone the quest point will actually come from. Target distance keeps
@@ -1653,9 +1679,9 @@ export default function MapViewWeb() {
     if (!dog) return; // not merged in yet — retry when lostDogs updates
     lastSnappedDogRef.current = selectedDogId;
     dogViewActiveRef.current = true;
-    // Centre the PIN (its zone-jittered display point — where the big
-    // photo pin actually renders), dead screen centre. The story bubble
-    // stacks above it in screen space.
+    // Frame the PIN (its zone-jittered display point — where the big
+    // photo pin actually renders) directly under the top-anchored story
+    // bubble, horizontally centred.
     const pin = displayPositions.get(selectedDogId) ?? dog.lastSeen.position;
     const radius = Math.max(120, dog.searchZoneRadiusM || 300);
     const container = map.getContainer?.();
@@ -1672,9 +1698,14 @@ export default function MapViewWeb() {
       center: [pin.lng, pin.lat],
       zoom: Math.min(DOG_VIEW_MAX_ZOOM, Math.max(DOG_VIEW_MIN_ZOOM, zoom)),
       pitch: DOG_VIEW_PITCH,
-      // Zero out any padding a prior spot/modal snap left so "centre"
-      // means the true viewport centre.
+      // Zero out any padding a prior spot/modal snap left so the offset
+      // below is measured from the true viewport centre.
       padding: { top: 0, bottom: 0, left: 0, right: 0 },
+      // Land the pin's foot DOG_VIEW_PIN_TOP_PX below the safe-area
+      // inset — right under the story-bubble stack (positive y = down
+      // from centre; negative on very tall viewports is fine, the pin
+      // just rides above centre, still glued to the stack).
+      offset: [0, Math.round(safeAreaTopPx() + DOG_VIEW_PIN_TOP_PX - h / 2)],
       // Slow enough to read as a camera move, not a snap.
       duration: 950,
     });
