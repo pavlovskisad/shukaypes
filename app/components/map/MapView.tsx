@@ -41,7 +41,6 @@ import { createDepthFogLayer, DEPTH_FOG_LAYER_ID } from './fogLayer';
 import {
   createThreeBuildingsLayer,
   THREE_BUILDINGS_LAYER_ID,
-  DOG_VIEW_ZONE_RADIUS_M,
 } from './threeBuildingsLayer';
 import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { OtherWalker } from './OtherWalker';
@@ -51,7 +50,6 @@ import { createBuildingAvoider } from './buildingAvoider';
 import { GAME_RENDER, MULTIPLAYER, DOG_CAM } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
-import { SearchZoneCircle } from './SearchZoneCircle';
 import { LostDogModal } from '../ui/LostDogModal';
 import { SpotModal } from '../ui/SpotModal';
 import { getDeepLinkDogId } from '../../services/telegram';
@@ -135,26 +133,17 @@ const ROUTE_LOOK_AHEAD_M = 90;
 // pin. Pitch sits well under the street-level game pitch (74) so the shot
 // reads as a helicopter establishing view.
 const DOG_VIEW_PITCH = 57;
-// Low floor so the fixed 1 km zone (below) actually fits the frame —
-// it needs roughly z≈12.4 on a phone.
-const DOG_VIEW_MIN_ZOOM = 12.2;
-const DOG_VIEW_MAX_ZOOM = 16.6;
-// The zone's diameter should span about this fraction of the smaller
-// viewport dimension.
-const DOG_VIEW_ZONE_FRAC = 0.62;
-// The dog view uses one FIXED search radius (DOG_VIEW_ZONE_RADIUS_M, 1 km,
-// imported from threeBuildingsLayer so the beacon shares it) centred on the
-// PIN — the pin is the logical middle of its circle. The per-dog
-// searchZoneRadiusM stays the parser-uncertainty value used by jitter +
-// quest logic; the fixed value is only the visual/framing radius of the
-// cinematic view (circle ring, blue beacon, camera fit).
+// Fixed neighbourhood-level zoom — close enough that streets and blocks
+// read (the zone glow lights the surroundings toward the horizon; we no
+// longer zoom out to fit the whole 1 km circle, which made the shot a
+// city overview).
+const DOG_VIEW_ZOOM = 16.2;
 // Where the pin's FOOT lands on screen, measured from below the safe-area
 // inset: the story-bubble stack top (122, see LostDogModal.STACK_TOP) +
-// the bubble/pills block (~215) + a breathing gap + the big pin's own
-// artwork above its foot (~195 at the 160px disc). Together with the
-// top-anchored stack this makes HUD → bubble → pills → pin one centred
-// column on every viewport height.
-const DOG_VIEW_PIN_TOP_PX = 555;
+// the bubble/pills block (~145) + a small gap + the big pin's own artwork
+// above its foot (~200 at the 160px disc). Together with the top-anchored
+// stack this makes HUD → bubble → pills → pin one snug centred column.
+const DOG_VIEW_PIN_TOP_PX = 485;
 // Streets-level game camera to fly back to when the view closes.
 const GAME_PITCH = 74;
 
@@ -1691,20 +1680,11 @@ export default function MapViewWeb() {
     // photo pin actually renders) directly under the top-anchored story
     // bubble, horizontally centred.
     const pin = displayPositions.get(selectedDogId) ?? dog.lastSeen.position;
-    const radius = DOG_VIEW_ZONE_RADIUS_M;
     const container = map.getContainer?.();
-    const w = container?.clientWidth ?? 390;
     const h = container?.clientHeight ?? 700;
-    const dim = Math.min(w - 40, Math.max(220, h - 280));
-    // Zoom where the zone's 2R metres span DOG_VIEW_ZONE_FRAC of `dim`
-    // px (512-px world tiles: m/px = EARTH_CIRC·cos(lat) / (512·2^z)).
-    const cosLat = Math.cos((pin.lat * Math.PI) / 180);
-    const zoom = Math.log2(
-      (40075016.686 * cosLat * DOG_VIEW_ZONE_FRAC * dim) / (2 * radius * 512),
-    );
     map.easeTo({
       center: [pin.lng, pin.lat],
-      zoom: Math.min(DOG_VIEW_MAX_ZOOM, Math.max(DOG_VIEW_MIN_ZOOM, zoom)),
+      zoom: DOG_VIEW_ZOOM,
       pitch: DOG_VIEW_PITCH,
       // Zero out any padding a prior spot/modal snap left so the offset
       // below is measured from the true viewport centre.
@@ -2443,31 +2423,10 @@ export default function MapViewWeb() {
           ? null
           : otherWalkers.map((p) => <OtherWalker key={p.id} player={p} />)}
 
-        {/* Zone is only drawn for the currently-selected pet — otherwise
-            overlapping circles turn dense neighborhoods (Podil, Pechersk)
-            into a lava lamp. Tapping a pin blooms the zone for that pet.
-            Suppressed in dog-cam: the blue beacon fog marks the previewed
-            zone there, and the circle fill just washed the area.
-            `highlight` — the zone is the subject of the cinematic shot,
-            same bold-ring treatment the supersniff preview uses (the blue
-            beacon does the glow, the ring marks the boundary). */}
-        {DOG_CAM && dogCam
-          ? null
-          : lostDogs
-              .filter((d) => d.id === selectedDogId)
-              .map((d) => (
-                <SearchZoneCircle
-                  key={`zone-${d.id}`}
-                  // Centred on the PIN (not the raw last-seen coord) so
-                  // the pet sits in the logical middle of its circle,
-                  // and one fixed 1 km radius — matches the camera fit
-                  // and the blue beacon.
-                  center={displayPositions.get(d.id) ?? d.lastSeen.position}
-                  radiusM={DOG_VIEW_ZONE_RADIUS_M}
-                  urgency={d.urgency}
-                  highlight
-                />
-              ))}
+        {/* No zone RING in the cinematic dog view — at the close zoom the
+            circle cut across mid-screen and read as clutter. The blue
+            beacon fog (threeBuildingsLayer, centred on the pin) marks the
+            search area on its own. */}
 
         {/* Lost-dog pins are hidden in dog-cam/search mode — the carousel +
             the previewed zone (with its blue beacon) are the focus there, and
