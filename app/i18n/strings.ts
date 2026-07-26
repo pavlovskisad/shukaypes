@@ -183,6 +183,9 @@ export interface AppStrings {
     longPressToSniff: string;
     supersniff: string;
     supersniffIntro: string;
+    // Way out of supersniff for users who arrived via the modal's
+    // "start search" and never touched the logo.
+    supersniffExit: string;
     swipeCards: string;
     radialMenu: string;
     spotsToggle: string;
@@ -424,6 +427,7 @@ const uk: AppStrings = {
     longPressToSniff: 'затисни карту щоб понюхати 🐾',
     supersniff: 'торкнись мене вгорі ліворуч — це супернюх: так винюхую загублених псів 👀',
     supersniffIntro: 'супернюх увімкнено! гортай — наступний пес, тисни — беру слід 🐾',
+    supersniffExit: 'щоб повернутись до прогулянок — тисни лого вгорі ліворуч ↖️',
     swipeCards: 'гортай вбік — там ще',
     radialMenu: 'тут усе наше: знайти пса, погуляти, зайти кудись, привітатись, побалакати 🐾',
     spotsToggle: 'шпилька вгорі — показати чи сховати місця 📍',
@@ -664,6 +668,7 @@ const en: AppStrings = {
     longPressToSniff: 'hold the map and i\'ll have a sniff 🐾',
     supersniff: 'tap me up in the corner — that\'s supersniff: how i hunt for lost dogs 👀',
     supersniffIntro: 'supersniff on! swipe for the next dog, tap to pick up the trail 🐾',
+    supersniffExit: 'to get back to walks — tap the logo top-left ↖️',
     swipeCards: 'swipe sideways — there\'s more',
     radialMenu: 'this is all of us: find a pet, take a walk, drop by a place, say hi, or chat 🐾',
     spotsToggle: 'the pin up top — show or hide places 📍',

@@ -169,6 +169,11 @@ interface GameState {
   spotsVisibleBeforeSniff: boolean | null;
   // Dog-cam prototype (wired to the old supersniff toggle button).
   dogCam: boolean;
+  // True when the CURRENT supersniff session was entered from the lost-dog
+  // modal's "start search" (not the logo). Those users never touched the
+  // logo, so the Companion shows a one-shot "tap the logo to get back to
+  // walks" hint. Reset on every mode flip; the modal path sets it after.
+  dogCamViaSearch: boolean;
   // Sniff-and-lead search mode: the current assignment — which lost dog we're
   // searching for and the spot in its zone the companion is leading you to.
   // Set while dogCam (search mode) is on; the companion heads to `spot`.
@@ -286,6 +291,7 @@ interface GameState {
   setSniffMode: (on: boolean) => void;
   toggleSniffMode: () => void;
   toggleDogCam: () => void;
+  setDogCamViaSearch: (dogCamViaSearch: boolean) => void;
   setSearchTarget: (t: { dogId: string; spot: LatLng } | null) => void;
   setSearchRoute: (r: LatLng[] | null) => void;
   // Enter preview for a dog + zone fragment (clears any committed target/route
@@ -372,6 +378,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   sniffMode: false,
   spotsVisibleBeforeSniff: null,
   dogCam: false,
+  dogCamViaSearch: false,
   searchTarget: null,
   searchRoute: null,
   searchPreview: null,
@@ -885,6 +892,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   toggleDogCam: () =>
     set((s) => ({
       dogCam: !s.dogCam,
+      // Default entry channel is the logo; the modal's "start search"
+      // path flips this true right after toggling.
+      dogCamViaSearch: false,
       // The radial menu is disabled in supersniff (tap = reaction only),
       // so drop it on any mode flip — otherwise a menu left open while
       // tapping the logo would float over the search UI.
@@ -893,6 +903,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       searchRoute: null,
       searchPreview: null,
     })),
+  setDogCamViaSearch: (dogCamViaSearch) => set({ dogCamViaSearch }),
   setSearchTarget: (searchTarget) => set({ searchTarget }),
   setSearchRoute: (searchRoute) => set({ searchRoute }),
   // Entering a preview clears any committed lead so the dog stops heading off

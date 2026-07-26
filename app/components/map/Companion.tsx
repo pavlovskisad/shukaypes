@@ -591,6 +591,26 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
     // (fresh each reload). Flip to true for one-shot-per-device once settled.
     persist: false,
   });
+  // Logo way-out hint: when supersniff was entered from the lost-dog modal
+  // ("start search"), the user never touched the logo — nothing tells them
+  // how to get back to walks. Once the entry bark has cleared and things go
+  // quiet (ready gates on an empty bubble + the intro hint being done), a
+  // couple of beats later the dog points at the logo, which pulses in sync
+  // via activeHint. Purely additive: it only borrows the bubble for its
+  // window — carousel swiping/tapping keeps working underneath it.
+  const dogCamViaSearch = useGameStore((s) => s.dogCamViaSearch);
+  const supersniffExitHint = useHint('map:supersniff-exit', {
+    ready:
+      dogCam &&
+      dogCamViaSearch &&
+      !supersniffIntroHint.visible &&
+      !bubble &&
+      !localBubble,
+    showDelayMs: 2500,
+    autoDismissMs: 7000,
+    // FIXME(hints): persist:false while iterating, same as the intro.
+    persist: false,
+  });
   // Radial-menu explainer: the first time the menu blooms, the dog
   // names what's in it (search / walk / visit / meet / chat) so the
   // icon ring isn't a guessing game. Rides alongside the open menu at
@@ -615,7 +635,12 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
         ? 'map:spots-toggle'
         : supersniffHint.visible
           ? 'map:supersniff'
-          : null;
+          : // Gated on dogCam so the line + logo pulse drop the moment the
+            // user exits (the hinted gesture) instead of riding out the
+            // window into normal mode, where "get back to walks" is stale.
+            supersniffExitHint.visible && dogCam
+            ? 'map:supersniff-exit'
+            : null;
   const hintBubble =
     activeHintId === 'map:long-press-to-sniff'
       ? t.hints.longPressToSniff
@@ -625,7 +650,9 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           ? t.hints.spotsToggle
           : activeHintId === 'map:supersniff'
             ? t.hints.supersniff
-            : null;
+            : activeHintId === 'map:supersniff-exit'
+              ? t.hints.supersniffExit
+              : null;
   // While the menu is open we normally suppress the bubble — except
   // for the one-shot radial-menu explainer, which is meant to sit
   // alongside the open menu at root and name the options.
