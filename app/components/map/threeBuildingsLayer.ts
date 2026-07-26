@@ -921,23 +921,43 @@ export function createThreeBuildingsLayer(
           fogUniforms.u_clearBand.value = bubble.band;
         }
 
-        // Sniff-and-lead preview beacon — while previewing, glow the small zone
-        // FRAGMENT (spot + radius) the quest point will come from; otherwise fade
-        // it out. Reads the store directly (same as dogCam above) so no extra
-        // plumbing from MapView.
+        // Zone beacon — two sources, same brand-blue glow. Supersniff
+        // preview lights the small zone FRAGMENT the quest point will come
+        // from; the normal-mode cinematic dog view (a pet's card open)
+        // lights the pet's WHOLE search zone. Reads the store directly
+        // (same as dogCam above) so no extra plumbing from MapView.
         {
-          const preview = dogCamOn ? useGameStore.getState().searchPreview : null;
-          if (preview) {
-            const pc = preview.spot;
-            const pm = MercatorCoordinate.fromLngLat([pc.lng, pc.lat], 0);
+          const st = useGameStore.getState();
+          let beacon: { lng: number; lat: number; radiusM: number } | null = null;
+          if (dogCamOn) {
+            const preview = st.searchPreview;
+            if (preview) {
+              beacon = {
+                lng: preview.spot.lng,
+                lat: preview.spot.lat,
+                radiusM: Math.max(120, preview.radiusM),
+              };
+            }
+          } else if (st.selectedDogId) {
+            const dog = st.lostDogs.find((d) => d.id === st.selectedDogId);
+            if (dog) {
+              beacon = {
+                lng: dog.lastSeen.position.lng,
+                lat: dog.lastSeen.position.lat,
+                radiusM: Math.max(150, dog.searchZoneRadiusM),
+              };
+            }
+          }
+          if (beacon) {
+            const pm = MercatorCoordinate.fromLngLat([beacon.lng, beacon.lat], 0);
             fogUniforms.u_previewLocal.value.set(
               (pm.x - originX) / mPerUnit,
               0,
               (pm.y - originY) / mPerUnit,
             );
-            fogUniforms.u_previewRadius.value = Math.max(120, preview.radiusM);
+            fogUniforms.u_previewRadius.value = beacon.radiusM;
           }
-          previewStrength += ((preview ? 1 : 0) - previewStrength) * 0.12;
+          previewStrength += ((beacon ? 1 : 0) - previewStrength) * 0.12;
           fogUniforms.u_previewStrength.value = previewStrength;
         }
 

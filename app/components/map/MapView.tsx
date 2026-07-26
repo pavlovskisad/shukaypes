@@ -126,6 +126,23 @@ const PREVIEW_ZOOM = 16.55;
 // How far ahead along the route the committed cam looks — it faces this point so
 // the view runs DOWN the route (not perpendicular to it) and tracks its curves.
 const ROUTE_LOOK_AHEAD_M = 90;
+
+// Cinematic lost-dog view (pin tapped / quests-tab jump): the camera pulls
+// back and tilts to frame the pet's WHOLE search zone above the bottom info
+// card, the zone lights up with the supersniff-preview-style blue beacon,
+// and the pet's pin grows to the big photo pin. Pitch sits well under the
+// street-level game pitch (74) so the shot reads as a helicopter
+// establishing view.
+const DOG_VIEW_PITCH = 57;
+const DOG_VIEW_MIN_ZOOM = 13.8;
+const DOG_VIEW_MAX_ZOOM = 16.6;
+// The zone's diameter should span about this fraction of the smaller
+// visible dimension (width vs height-above-the-card).
+const DOG_VIEW_ZONE_FRAC = 0.62;
+// Bottom strip reserved for the info card + tab bar.
+const DOG_VIEW_PAD_BOTTOM = 280;
+// Streets-level game camera to fly back to when the view closes.
+const GAME_PITCH = 74;
 // Preview beacon fragment: rather than lighting the whole (up-to-1.25km) search
 // zone, we pick one candidate quest spot and glow a small patch around it — the
 // bit of the zone the quest point will actually come from. Target distance keeps
@@ -1582,60 +1599,82 @@ export default function MapViewWeb() {
     });
   }, [selectedSpotId, spots]);
 
-  // Dog-snap — same coordinated tween the spot gets, so tapping a pet
-  // (on the map OR via the quests-tab jump, which routes here with the
-  // dog already selected) snaps the camera onto it under the compact
-  // LostDogModal. The modal covers the top ~430 px; bias the pin into
-  // the visible strip between the sheet's bottom edge and the tab bar
-  // with the same padding recipe the spot uses so the two feel
-  // identical.
+  // Cinematic dog view — tapping a pet (on the map OR via the quests-tab
+  // jump, which routes here with the dog already selected) pulls the
+  // camera back and tilts it to frame the pet's WHOLE search zone above
+  // the bottom info card. Zoom is computed so the zone circle spans
+  // ~DOG_VIEW_ZONE_FRAC of the visible strip; the zone centre (raw
+  // last-seen coord) is the frame centre — the jittered pin lies inside
+  // the zone by construction, so it's always in shot.
   //
   // The ref gate matters: lostDogs is in the effect deps (we need it
-  // to look up the pin once the deep-link / quests-jump merges the pet
-  // in), but it also refreshes on every 15 s syncMap tick. Without the
-  // gate the camera would re-snap onto the pet every 15 s while the
-  // modal is open, fighting the user's panning. So we only tween when
-  // the *selection* changes, not when the underlying list does.
+  // to look up the pet once the deep-link / quests-jump merges it in),
+  // but it also refreshes on every 15 s syncMap tick. Without the gate
+  // the camera would re-frame the zone every 15 s while the card is
+  // open, fighting the user's panning. So we only tween when the
+  // *selection* changes, not when the underlying list does.
   const lastSnappedDogRef = useRef<string | null>(null);
+  // True once the cinematic ease ran — gates the fly-back on close so an
+  // unrelated mount/cleanup doesn't yank the camera.
+  const dogViewActiveRef = useRef(false);
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
     if (!selectedDogId) {
       lastSnappedDogRef.current = null;
-      // Only reset the camera padding when no spot is driving it —
-      // otherwise closing a dog modal would clobber an active spot
-      // snap's padding. (In practice only one is ever open, but the
-      // guard keeps the two effects from racing.)
+      // Only reset the camera when no spot is driving it — otherwise
+      // closing a dog card would clobber an active spot snap. (In
+      // practice only one is ever open, but the guard keeps the two
+      // effects from racing.)
       if (!selectedSpotId) {
         map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+        // Fly back down to the street-level game view — unless supersniff
+        // took over (its follow loop owns the camera; "start search"
+        // closes the card INTO that mode).
+        if (dogViewActiveRef.current && !(DOG_CAM && useGameStore.getState().dogCam)) {
+          const anchor = companionPosRef.current ?? userPosRef.current;
+          try {
+            map.easeTo({
+              ...(anchor ? { center: [anchor.lng, anchor.lat] } : {}),
+              zoom: balance.mapZoomDefault,
+              pitch: GAME_PITCH,
+              duration: 800,
+            });
+          } catch {
+            /* map tearing down */
+          }
+        }
       }
+      dogViewActiveRef.current = false;
       return;
     }
     if (selectedDogId === lastSnappedDogRef.current) return;
     const dog = lostDogs.find((d) => d.id === selectedDogId);
     if (!dog) return; // not merged in yet — retry when lostDogs updates
-    // The marker renders at its search-zone-jittered point (which can
-    // sit hundreds of metres — up to the zone radius — from the raw
-    // last-seen coord), so snap to THAT, not lastSeen.position, or the
-    // camera lands on empty map away from the pin. Same lookup the
-    // search-zone circle + marker use.
-    const pin = displayPositions.get(selectedDogId) ?? dog.lastSeen.position;
     lastSnappedDogRef.current = selectedDogId;
-    const current = map.getZoom() ?? balance.mapZoomDefault;
+    dogViewActiveRef.current = true;
+    const zc = dog.lastSeen.position;
+    const radius = Math.max(120, dog.searchZoneRadiusM || 300);
+    const container = map.getContainer?.();
+    const w = container?.clientWidth ?? 390;
+    const h = container?.clientHeight ?? 700;
+    const visH = Math.max(220, h - DOG_VIEW_PAD_BOTTOM - 80);
+    const dim = Math.min(w - 40, visH);
+    // Zoom where the zone's 2R metres span DOG_VIEW_ZONE_FRAC of `dim`
+    // px (512-px world tiles: m/px = EARTH_CIRC·cos(lat) / (512·2^z)).
+    const cosLat = Math.cos((zc.lat * Math.PI) / 180);
+    const zoom = Math.log2(
+      (40075016.686 * cosLat * DOG_VIEW_ZONE_FRAC * dim) / (2 * radius * 512),
+    );
     map.easeTo({
-      center: [pin.lng, pin.lat],
-      zoom: Math.max(current, 17),
-      padding: { top: 460, bottom: 110, left: 20, right: 20 },
-      // Extra downward nudge: dog markers are anchored at their foot
-      // with the photo chip floating ~90px above the geo point, so the
-      // padded centre alone lands the *chip* high in the strip. A fixed
-      // pixel offset drops it to the visual centre between the sheet's
-      // bottom edge and the tab bar without over-cranking padding
-      // (which would invert the camera's region on short viewports).
-      offset: [0, 60],
-      duration: 500,
+      center: [zc.lng, zc.lat],
+      zoom: Math.min(DOG_VIEW_MAX_ZOOM, Math.max(DOG_VIEW_MIN_ZOOM, zoom)),
+      pitch: DOG_VIEW_PITCH,
+      padding: { top: 80, bottom: DOG_VIEW_PAD_BOTTOM, left: 20, right: 20 },
+      // Slow enough to read as a camera move, not a snap.
+      duration: 950,
     });
-  }, [selectedDogId, lostDogs, selectedSpotId, displayPositions]);
+  }, [selectedDogId, lostDogs, selectedSpotId]);
 
   // Prev / next cycling for the LostDogModal. Walks the nearby pets in
   // distance order (closest first) so ‹ › steps through them the same
@@ -2365,7 +2404,10 @@ export default function MapViewWeb() {
             overlapping circles turn dense neighborhoods (Podil, Pechersk)
             into a lava lamp. Tapping a pin blooms the zone for that pet.
             Suppressed in dog-cam: the blue beacon fog marks the previewed
-            zone there, and the circle fill just washed the area. */}
+            zone there, and the circle fill just washed the area.
+            `highlight` — the zone is the subject of the cinematic shot,
+            same bold-ring treatment the supersniff preview uses (the blue
+            beacon does the glow, the ring marks the boundary). */}
         {DOG_CAM && dogCam
           ? null
           : lostDogs
@@ -2376,13 +2418,17 @@ export default function MapViewWeb() {
                   center={d.lastSeen.position}
                   radiusM={d.searchZoneRadiusM}
                   urgency={d.urgency}
+                  highlight
                 />
               ))}
 
         {/* Lost-dog pins are hidden in dog-cam/search mode — the carousel +
             the previewed zone (with its blue beacon) are the focus there, and
-            the photo pins just clutter the immersive shot. */}
-        {(DOG_CAM && dogCam ? [] : clusters).flatMap((c) => {
+            the photo pins just clutter the immersive shot. They also hide
+            while the cinematic dog view is open (a pet selected): only the
+            selected pet's BIG pin shows (below), so the framed zone isn't
+            cluttered by neighbours. */}
+        {((DOG_CAM && dogCam) || selectedDogId ? [] : clusters).flatMap((c) => {
           if (c.items.length === 1) {
             const d = c.items[0]!.dog;
             const pos = displayPositions.get(d.id) ?? d.lastSeen.position;
@@ -2452,6 +2498,30 @@ export default function MapViewWeb() {
             />,
           ];
         })}
+
+        {/* Cinematic dog view: the selected pet renders alone as the BIG
+            photo pin — every other pin/cluster is hidden above. Rendered
+            from `lostDogs` (not the render-radius-gated visible list) so a
+            deep-linked far pet still gets its pin. Tap dismisses, same as
+            tapping outside the card. */}
+        {!(DOG_CAM && dogCam) && selectedDogId
+          ? lostDogs
+              .filter((d) => d.id === selectedDogId)
+              .map((d) => (
+                <LostDogMarker
+                  key={`selected-${d.id}`}
+                  position={displayPositions.get(d.id) ?? d.lastSeen.position}
+                  emoji={d.emoji}
+                  name={d.name}
+                  urgency={d.urgency}
+                  photoUrl={d.photoUrl}
+                  onTap={() => setSelectedDog(null)}
+                  active
+                  selected
+                  inverted={sniffMode}
+                />
+              ))
+          : null}
 
         {avoidedTokens.map((t) => (
           <TokenMarker
