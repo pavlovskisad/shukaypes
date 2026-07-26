@@ -9,6 +9,11 @@ const URGENCY_COLOR: Record<UrgencyLevel, string> = {
   resolved: '#aaa',
 };
 
+// Highlighted (cinematic dog view / preview) zones are always the brand
+// blue — matching the beacon fog that lights the area — regardless of
+// urgency. Red/amber rings fought the blue glow and read as warnings.
+const HIGHLIGHT_COLOR = '#2f6bff';
+
 interface SearchZoneCircleProps {
   center: LatLng;
   radiusM: number;
@@ -70,7 +75,7 @@ export function SearchZoneCircle({
   useEffect(() => {
     if (!map) return;
     const data = circlePolygon(center, radiusM) as unknown as GeoJSON.Feature;
-    const color = URGENCY_COLOR[urgency];
+    const color = highlight ? HIGHLIGHT_COLOR : URGENCY_COLOR[urgency];
     // Preview zone is the subject of the shot → bold RING, but keep the fill
     // barely-there: at highlight opacity the urgency-tinted fill (amber for
     // "searching", red for urgent) washed the whole framed area warm and fought
