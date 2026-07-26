@@ -70,9 +70,10 @@ interface LostDogMarkerProps {
   selected?: boolean;
 }
 
-// Photo-disc diameter, normal vs selected.
+// Photo-disc diameter, normal vs selected (middle size — big enough to
+// be the hero of the dog view, small enough not to swallow the map).
 const DISC_PX = 54;
-const DISC_SELECTED_PX = 160;
+const DISC_SELECTED_PX = 110;
 
 const NAME_COLOUR_DAY = '#1a1a1a';
 const NAME_SHADOW_DAY = '0 1px 4px rgba(255,255,255,0.95)';
@@ -205,7 +206,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: selected ? 64 : TYPE.display,
+            fontSize: selected ? 48 : TYPE.display,
             overflow: 'hidden',
             // Selected pin gets a heavier lift — it's the hero of the
             // cinematic zone shot, floating over a pulled-back camera.
@@ -252,19 +253,23 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
             transition: 'height 320ms ease-out',
           }}
         />
-        <div
-          style={{
-            fontFamily: SYSTEM_FONT,
-            fontSize: selected ? 22 : TYPE.body,
-            fontWeight: selected ? 800 : 700,
-            color: inverted ? NAME_COLOUR_NIGHT : NAME_COLOUR_DAY,
-            textShadow: inverted ? NAME_SHADOW_NIGHT : NAME_SHADOW_DAY,
-            whiteSpace: 'nowrap',
-            transition: 'font-size 320ms ease-out',
-          }}
-        >
-          {name}
-        </div>
+        {/* Name label — hidden on the selected pin: the story bubble
+            right above already names the pet, so the label under the
+            big disc was redundant. */}
+        {selected ? null : (
+          <div
+            style={{
+              fontFamily: SYSTEM_FONT,
+              fontSize: TYPE.body,
+              fontWeight: 700,
+              color: inverted ? NAME_COLOUR_NIGHT : NAME_COLOUR_DAY,
+              textShadow: inverted ? NAME_SHADOW_NIGHT : NAME_SHADOW_DAY,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {name}
+          </div>
+        )}
         <style>{`
           @keyframes sos-pulse {
             0%   { transform: scale(1);   opacity: 0.55; }
