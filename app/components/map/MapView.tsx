@@ -133,17 +133,16 @@ const ROUTE_LOOK_AHEAD_M = 90;
 // pin. Pitch sits well under the street-level game pitch (74) so the shot
 // reads as a helicopter establishing view.
 const DOG_VIEW_PITCH = 57;
-// Fixed neighbourhood-level zoom — close enough that streets and blocks
-// read (the zone glow lights the surroundings toward the horizon; we no
-// longer zoom out to fit the whole 1 km circle, which made the shot a
-// city overview).
-const DOG_VIEW_ZOOM = 16.2;
+// Fixed district-level zoom — the pet's part of the city with the zone
+// glow spreading around it, without collapsing into a full-city overview.
+const DOG_VIEW_ZOOM = 14.6;
 // Where the pin's FOOT lands on screen, measured from below the safe-area
 // inset: the story-bubble stack top (122, see LostDogModal.STACK_TOP) +
-// the bubble/pills block (~145) + a small gap + the big pin's own artwork
-// above its foot (~200 at the 160px disc). Together with the top-anchored
-// stack this makes HUD → bubble → pills → pin one snug centred column.
-const DOG_VIEW_PIN_TOP_PX = 485;
+// the bubble/pills block (~145) + a small gap + the pin's own artwork
+// above its foot (~120 at the 110px disc, no name label). Together with
+// the top-anchored stack this makes HUD → bubble → pills → pin one snug
+// centred column.
+const DOG_VIEW_PIN_TOP_PX = 405;
 // Streets-level game camera to fly back to when the view closes.
 const GAME_PITCH = 74;
 
