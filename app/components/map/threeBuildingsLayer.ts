@@ -126,9 +126,10 @@ export const CLEAR_BAND = 240;
 // as blue fog toward the horizon rather than flat paint up close.
 export const PREVIEW_GLOW_COLOR = 0x2f6bff;
 
-// Fixed visual radius of the cinematic dog view's search zone (normal-mode
-// pet card open): circle ring, blue beacon, and camera fit all use this one
-// value, centred on the pet's jittered PIN position. Shared with MapView.
+// Fixed radius of the cinematic dog view's blue beacon glow (normal-mode
+// pet card open), centred on the pet's jittered PIN position. The camera
+// sits at a close neighbourhood zoom, so the glow washes the visible
+// surroundings and fades out toward the kilometre mark on the horizon.
 export const DOG_VIEW_ZONE_RADIUS_M = 1000;
 
 // The see-through dissolve itself is ALWAYS on (it clears the camera→dog
