@@ -486,16 +486,30 @@ export default function MapViewWeb() {
     showBubble(sniffMode ? t.bubbles.sniffOn : t.bubbles.sniffOff, 3500);
   }, [sniffMode, showBubble, t]);
 
-  // "back to walks" when leaving supersniff. Entering supersniff is announced by
-  // the intro hint (Companion), so we only bark on exit here. Init-guarded so no
-  // line fires on the first mount.
+  // Mode-relevant bark on EVERY supersniff toggle. Exit: "back to walks"
+  // lines. Entry: the FIRST entry per session is announced by the swipe/tap
+  // intro hint (Companion) so we stay quiet then; every later entry gets a
+  // short "nose is on" line — without it, repeat entries either said nothing
+  // or (on a quick off→on) left the stale exit line up, so the bubble read
+  // as the wrong mode. A pre-committed entry (modal's "start search" flips
+  // the mode with a target already set) announces itself with the by-name
+  // lead bark, so the generic line stands down. Init-guarded so no line
+  // fires on the first mount.
   const dogCamBubbleInitRef = useRef(true);
+  const dogCamEnteredOnceRef = useRef(false);
   useEffect(() => {
     if (dogCamBubbleInitRef.current) {
       dogCamBubbleInitRef.current = false;
       return;
     }
-    if (!dogCam) {
+    if (dogCam) {
+      const firstEntry = !dogCamEnteredOnceRef.current;
+      dogCamEnteredOnceRef.current = true;
+      if (firstEntry) return; // intro hint owns the bubble
+      if (useGameStore.getState().searchTarget) return; // lead bark owns it
+      const lines = t.bubbles.supersniffOn;
+      showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3500);
+    } else {
       const lines = t.bubbles.backToWalks;
       showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3500);
     }
@@ -876,8 +890,11 @@ export default function MapViewWeb() {
       // new direction reads at a glance. One-shot easeTo (no originalEvent, so
       // it doesn't count as the user "taking" the bearing); the follow loop
       // picks up from here. Only in dog-cam so normal map view is untouched.
+      // Live store read (not the render closure): the modal's "start search"
+      // flips the mode and commits in the same tick, before this component
+      // re-renders with dogCam=true.
       const map = mapRef.current;
-      if (DOG_CAM && dogCam && map) {
+      if (DOG_CAM && useGameStore.getState().dogCam && map) {
         const focus = companionPosRef.current ?? origin;
         map.easeTo({
           center: [focus.lng, focus.lat],
@@ -898,7 +915,7 @@ export default function MapViewWeb() {
         showBubble(leadLines[Math.floor(Math.random() * leadLines.length)]!, 3500);
       }
     },
-    [setSearchPreview, setSearchTarget, setSearchRoute, spotInZone, userPos, showBubble, dogCam],
+    [setSearchPreview, setSearchTarget, setSearchRoute, spotInZone, userPos, showBubble],
   );
 
   // Preview (carousel SWIPE, or the initial mode-on pick): pick the candidate
@@ -1058,9 +1075,11 @@ export default function MapViewWeb() {
   useEffect(() => () => setHintsAllowed(false), [setHintsAllowed]);
 
   // Snap to the dog the moment a chained map hint fires, so its bubble
-  // lands framed even if the dog had wandered off-centre. Slight
-  // downward offset leaves room above the nose for the bubble, clear of
-  // the HUD. The bubble (anchored to the companion marker) glides in
+  // lands framed even if the dog had wandered off-centre. Dead centre —
+  // the bubble has plenty of room above the nose there, and a lowered
+  // dog framing leaking into a mode switch (e.g. tapping the pulsing
+  // logo into supersniff mid-hint) used to leave the dog sitting on the
+  // carousel. The bubble (anchored to the companion marker) glides in
   // with the ease.
   //
   // NOT in supersniff (dogCam): the follow loop owns the camera there (low-dog
@@ -1074,7 +1093,6 @@ export default function MapViewWeb() {
     if (activeHint && activeHint.startsWith('map:')) {
       map.easeTo({
         center: [companionPos.lng, companionPos.lat],
-        offset: [0, 60],
         duration: 400,
       });
     }
@@ -2316,7 +2334,7 @@ export default function MapViewWeb() {
             position: 'absolute',
             left: '50%',
             // Sits well below the dog's 140px tap target (the dog snaps
-            // to ~centre+60 when the hint fires) so holding ON the cue
+            // to centre when the hint fires) so holding ON the cue
             // lands on the bare map and actually starts a sniff — but
             // high enough that the expanding rings clear the tab bar.
             top: '76%',
@@ -2685,6 +2703,9 @@ export default function MapViewWeb() {
             onSwipe={previewSearch}
             showCounter={false}
             activeId={searchTarget?.dogId}
+            // Deck mounts on mode entry; when entry came pre-committed
+            // (modal's "start search") the chosen dog's card starts on top.
+            initialId={searchTarget?.dogId}
             cardWidth={288}
             cardHeight={252}
             strongShadow
@@ -3207,7 +3228,12 @@ export default function MapViewWeb() {
       <LostDogModal
         dog={lostDogs.find((d) => d.id === selectedDogId) ?? null}
         onClose={() => setSelectedDog(null)}
-        searchActive={!!activeQuest && activeQuest.dogId === selectedDogId}
+        searchActive={
+          // Already on this dog's trail — supersniff lead, or a legacy
+          // chat-started quest. Either way the CTA flips to "searching…".
+          searchTarget?.dogId === selectedDogId ||
+          (!!activeQuest && activeQuest.dogId === selectedDogId)
+        }
         onPrev={lostDogs.length > 1 ? () => cycleSelectedDog(-1) : undefined}
         onNext={lostDogs.length > 1 ? () => cycleSelectedDog(1) : undefined}
         onReportSighting={async (d) => {
@@ -3221,20 +3247,16 @@ export default function MapViewWeb() {
             showBubble(`couldn't report that one — try again`, 5000);
           }
         }}
-        onStartSearch={async (d) => {
+        onStartSearch={(d) => {
+          // The generated 4-step quest is retired here for now (chat can
+          // still start one) — "start search" drops you straight into
+          // supersniff locked on this dog: mode on, its card front-and-
+          // centre in the carousel, the dog leading immediately.
           setSelectedDog(null);
-          const { quest, narration } = await useGameStore
-            .getState()
-            .startQuest(d.id);
-          if (quest) {
-            showBubble(
-              narration ??
-                `on it — ${quest.waypoints.length} spots to check for ${d.name} 🔍`,
-              6000,
-            );
-          } else {
-            showBubble("couldn't start the search — try again", 5000);
+          if (!useGameStore.getState().dogCam) {
+            useGameStore.getState().toggleDogCam();
           }
+          assignSearch(d);
         }}
       />
 

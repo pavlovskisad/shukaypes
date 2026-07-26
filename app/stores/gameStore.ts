@@ -885,6 +885,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   toggleDogCam: () =>
     set((s) => ({
       dogCam: !s.dogCam,
+      // The radial menu is disabled in supersniff (tap = reaction only),
+      // so drop it on any mode flip — otherwise a menu left open while
+      // tapping the logo would float over the search UI.
+      menuOpen: false,
       searchTarget: null,
       searchRoute: null,
       searchPreview: null,

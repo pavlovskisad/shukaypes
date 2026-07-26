@@ -48,6 +48,9 @@ export interface AppStrings {
     sniffOff: string;
     // Varied "leaving supersniff" lines so repeated toggles don't feel canned.
     backToWalks: string[];
+    // Varied "entering supersniff" lines for repeat entries. The FIRST entry
+    // per session is announced by the intro hint (swipe/tap how-to) instead.
+    supersniffOn: string[];
     questComplete: string;
     questAdvance: string;
     simpleWoof: string;
@@ -219,6 +222,13 @@ const uk: AppStrings = {
       'супернюх вимкнено, йдемо неквапом',
       'окей, звичайна прогулянка 🌳',
       'досить нюхати, розімнемо лапи!',
+    ],
+    supersniffOn: [
+      '*вжух* ніс увімкнено 🐽',
+      'супернюх! чую всіх навколо 👃',
+      'ніс до землі — працюємо 🐾',
+      '*принюхується* хто тут загубився?',
+      'нюх на максимум, погнали!',
     ],
     questComplete: 'знайшли! квест виконано 🎉',
     questAdvance: 'слід тут — рухаємось далі 🐾',
@@ -453,6 +463,13 @@ const en: AppStrings = {
       'supersniff off, taking it easy',
       'alright, normal walk 🌳',
       'enough sniffing, let\'s stretch our legs!',
+    ],
+    supersniffOn: [
+      '*fwoosh* nose is on 🐽',
+      'supersniff! I smell everyone around 👃',
+      'nose to the ground — working 🐾',
+      '*sniffs* who got lost out here?',
+      'sniffer at full power, let\'s go!',
     ],
     questComplete: 'found something! quest complete 🎉',
     questAdvance: "paw print here — let's keep going 🐾",
