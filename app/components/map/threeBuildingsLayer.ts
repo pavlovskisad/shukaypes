@@ -125,16 +125,18 @@ export const CLEAR_BAND = 240;
 // as blue fog toward the horizon rather than flat paint up close.
 export const PREVIEW_GLOW_COLOR = 0x2f6bff;
 
-// See-through (building dissolve) only kicks in at the close committed chase
-// zoom (~18.6), where buildings actually block the dog. The high preview cam
-// (zoom ≤ ~16.5) looks down over everything, so nothing blocks — disable it
-// there to avoid dissolving buildings for no reason.
+// The see-through dissolve itself is ALWAYS on (it clears the camera→dog
+// sight line in both modes — see the shader). This zoom gate only enables its
+// animated shimmer/banding treatment, tied to the close committed chase cam
+// where the effect is front-and-centre; the high preview cam and the normal
+// map keep the static cut (no constant-repaint battery cost).
 export const SEE_THROUGH_MIN_ZOOM = 17.5;
 
-// A small always-on "invisibility bubble" right around the dog itself (both
-// normal + supersniff, all zooms): buildings within this radius of the dog
-// dissolve so the sprite never reads as pasted inside a wall — the failure mode
-// when zoomed out. Metres; small so it's just a tidy clear patch under the dog.
+// The tight world-space component of the always-on see-through: buildings
+// within this radius of the dog dissolve so the sprite never reads as pasted
+// inside a wall when it overlaps a footprint edge-on. Metres; small so it's
+// just a tidy clear patch under the dog. (The sight-line cone in the shader
+// handles occluders further away, between the camera and the dog.)
 export const DOG_ORB_RADIUS = 15;
 export const DOG_ORB_BAND = 12;
 
@@ -378,52 +380,46 @@ export function createThreeBuildingsLayer(
           '    float _blue = _pg * u_previewStrength * clamp(_distFog, 0.0, 1.0);',
           '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_previewColor, clamp(_blue * 0.5, 0.0, 1.0));',
           '  }',
-          // Dog-cam see-through: a soft "invisibility orb" around the focus
-          // (the dog, since the chase cam centres on it) — buildings between you
-          // and the pup smoothly DISSOLVE into the background haze so it's never
-          // hidden behind a wall. Smooth (no dither/stipple), and gently
-          // animated + lightly stepped so it feels alive. Fades toward u_fogColor
-          // (no transparency, no depth-sorting cost). Off unless u_dogCam.
-          '  if (u_dogCam > 0.5) {',
-          '    vec3 _toC = u_focusLocal - u_camLocal; float _cD = length(_toC);',
-          '    vec3 _cDir = _toC / max(_cD, 1e-3);',
+          // Dog see-through — ALWAYS on (normal + supersniff, every zoom).
+          // Two parts, taking the max:
+          //   1. SIGHT LINE: fragments between the camera and the dog, within
+          //      a narrow angular cone of the camera→dog ray, dissolve — the
+          //      wall between you and the pup is the one that matters, not
+          //      just walls near the dog. Angular, so the clear channel stays
+          //      screen-proportional at any camera distance.
+          //   2. A tight world-space orb around the dog itself, biased to the
+          //      front — the pasted-inside-a-wall guard when the sprite
+          //      overlaps a footprint edge-on.
+          // REAL see-through: drop the fragment ALPHA so the ground (and the
+          // dog, drawn on top) shows through; a faint fog tint softens the
+          // cut. Needs material.transparent (toggled on in render).
+          '  if (u_dogActive > 0.5) {',
+          '    vec3 _toD = u_dogLocal - u_camLocal; float _dD = length(_toD);',
+          '    vec3 _dDir = _toD / max(_dD, 1e-3);',
           '    vec3 _toF = vLocalPos - u_camLocal; float _fD = length(_toF);',
           '    vec3 _fDir = _toF / max(_fD, 1e-3);',
-          // Soft orb: full within ~8deg of the camera→dog ray, fading out by
-          // ~20deg (a bit wider than before so the effect actually reads).
-          '    float _cone = smoothstep(0.94, 0.99, dot(_cDir, _fDir));',
-          // Only dissolve what's IN FRONT of the dog (nearer to the camera).
-          '    float _front = 1.0 - smoothstep(_cD - 20.0, _cD - 3.0, _fD);',
-          '    float _occ = _cone * _front;',
-          // Alive: a gentle ripple over the surface (by world pos + time) so the
-          // dissolve shimmers rather than sitting as a flat wash.
-          '    float _wob = 0.5 + 0.5 * sin(u_time * 2.2 + vLocalPos.y * 0.25 + vLocalPos.x * 0.08);',
-          '    float _o = clamp(_occ * (0.82 + 0.18 * _wob), 0.0, 1.0);',
-          // Lightly quantise into soft bands (the "stepped becoming-transparent"
-          // feel) but keep it mostly smooth.
-          '    float _q = floor(_o * 5.0) / 5.0;',
-          '    _o = mix(_o, _q, 0.45);',
-          // REAL see-through: drop the fragment ALPHA so you see the ground (and
-          // the dog, drawn on top) behind the wall. Fading to the fog colour did
-          // almost nothing because the building colour ≈ fog colour. A faint fog
-          // tint too, just to soften the cut. Needs material.transparent (toggled
-          // on in render only while dog-cam is active).
-          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _o * 0.4);',
-          '    gl_FragColor.a *= (1.0 - _o);',
-          '  }',
-          // Small always-on orb right around the DOG (both normal + supersniff,
-          // every zoom): dissolve buildings in a tight bubble around it, biased
-          // to the ones in front, so the sprite reads as standing on clear ground
-          // instead of pasted inside a wall — the failure mode when zoomed out.
-          '  if (u_dogActive > 0.5) {',
+          // Full within ~8deg of the sight line, gone by ~20deg.
+          '    float _cone = smoothstep(0.94, 0.99, dot(_dDir, _fDir));',
+          // Only what sits IN FRONT of the dog (nearer the camera) dissolves;
+          // the city behind it stays put so the dog reads as standing in it.
+          '    float _front = 1.0 - smoothstep(_dD - 20.0, _dD - 3.0, _fD);',
+          '    float _sight = _cone * _front;',
           `    float _dh = length(vLocalPos.xz - u_dogLocal.xz);`,
           `    float _dnear = 1.0 - smoothstep(${DOG_ORB_RADIUS.toFixed(1)}, ${(DOG_ORB_RADIUS + DOG_ORB_BAND).toFixed(1)}, _dh);`,
-          '    float _dfd = length(vLocalPos - u_camLocal);',
-          '    float _ddd = length(u_dogLocal - u_camLocal);',
-          '    float _dfront = 1.0 - smoothstep(_ddd - 4.0, _ddd + 12.0, _dfd);',
-          '    float _dorb = clamp(_dnear * (0.4 + 0.6 * _dfront), 0.0, 1.0);',
-          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _dorb * 0.25);',
-          '    gl_FragColor.a *= (1.0 - _dorb);',
+          '    float _dfront = 1.0 - smoothstep(_dD - 4.0, _dD + 12.0, _fD);',
+          '    float _o = max(_sight, _dnear * (0.4 + 0.6 * _dfront));',
+          // Supersniff chase cam only: gentle ripple + soft banding so the
+          // dissolve feels alive there. Kept out of normal mode — it needs
+          // constant repaints, and the static cut reads fine on the open map.
+          '    if (u_dogCam > 0.5) {',
+          '      float _wob = 0.5 + 0.5 * sin(u_time * 2.2 + vLocalPos.y * 0.25 + vLocalPos.x * 0.08);',
+          '      _o *= (0.82 + 0.18 * _wob);',
+          '      float _q = floor(_o * 5.0) / 5.0;',
+          '      _o = mix(_o, _q, 0.45);',
+          '    }',
+          '    _o = clamp(_o, 0.0, 1.0);',
+          '    gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _o * 0.35);',
+          '    gl_FragColor.a *= (1.0 - _o);',
           '  }',
         ].join('\n'),
       );
@@ -820,15 +816,15 @@ export function createThreeBuildingsLayer(
         // Day/night follows sniff mode — swap mist, light + material tones.
         const sniff = useGameStore.getState().sniffMode;
         const tone = sniff ? NIGHT : DAY;
-        // See-through occluder fade only while the dog-cam chase view is active
-        // AND zoomed in close enough that buildings actually block the dog. The
-        // high preview cam looks down over everything, so skip it there.
+        // The see-through dissolve is always on (u_dogActive below); this flag
+        // only adds its animated shimmer/banding while the dog-cam chase view
+        // is active and close enough for the effect to be front-and-centre.
         const dogCamOn = DOG_CAM && useGameStore.getState().dogCam;
         const seeThrough =
           dogCamOn && !!mapRef && mapRef.getZoom() >= SEE_THROUGH_MIN_ZOOM;
         fogUniforms.u_dogCam.value = seeThrough ? 1 : 0;
-        // Small always-on orb around the dog itself (both modes, all zooms). Feed
-        // its position; active whenever we have a dog.
+        // Dog position for the always-on see-through (sight-line cone + tight
+        // orb — both modes, all zooms). Active whenever we have a dog.
         const dogPos = getDogPos?.() ?? null;
         if (dogPos) {
           const dm = MercatorCoordinate.fromLngLat([dogPos.lng, dogPos.lat], 0);
