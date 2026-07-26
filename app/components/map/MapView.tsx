@@ -128,19 +128,19 @@ const PREVIEW_ZOOM = 16.55;
 const ROUTE_LOOK_AHEAD_M = 90;
 
 // Cinematic lost-dog view (pin tapped / quests-tab jump): the camera pulls
-// back and tilts to frame the pet's WHOLE search zone above the bottom info
-// card, the zone lights up with the supersniff-preview-style blue beacon,
-// and the pet's pin grows to the big photo pin. Pitch sits well under the
-// street-level game pitch (74) so the shot reads as a helicopter
-// establishing view.
+// back and tilts, the pet's PIN snaps to the true screen centre (its story
+// bubble stacks above it), the whole search zone lights up with the
+// supersniff-preview-style blue beacon, and the pin grows to the big photo
+// pin. Pitch sits well under the street-level game pitch (74) so the shot
+// reads as a helicopter establishing view.
 const DOG_VIEW_PITCH = 57;
 const DOG_VIEW_MIN_ZOOM = 13.8;
 const DOG_VIEW_MAX_ZOOM = 16.6;
 // The zone's diameter should span about this fraction of the smaller
-// visible dimension (width vs height-above-the-card).
+// viewport dimension. The camera centres the PIN (which is jittered
+// inside the zone), so keep this modest to hold most of the circle
+// in-frame even when the pin sits off the zone centre.
 const DOG_VIEW_ZONE_FRAC = 0.62;
-// Bottom strip reserved for the info card + tab bar.
-const DOG_VIEW_PAD_BOTTOM = 280;
 // Streets-level game camera to fly back to when the view closes.
 const GAME_PITCH = 74;
 // Preview beacon fragment: rather than lighting the whole (up-to-1.25km) search
@@ -1653,28 +1653,32 @@ export default function MapViewWeb() {
     if (!dog) return; // not merged in yet — retry when lostDogs updates
     lastSnappedDogRef.current = selectedDogId;
     dogViewActiveRef.current = true;
-    const zc = dog.lastSeen.position;
+    // Centre the PIN (its zone-jittered display point — where the big
+    // photo pin actually renders), dead screen centre. The story bubble
+    // stacks above it in screen space.
+    const pin = displayPositions.get(selectedDogId) ?? dog.lastSeen.position;
     const radius = Math.max(120, dog.searchZoneRadiusM || 300);
     const container = map.getContainer?.();
     const w = container?.clientWidth ?? 390;
     const h = container?.clientHeight ?? 700;
-    const visH = Math.max(220, h - DOG_VIEW_PAD_BOTTOM - 80);
-    const dim = Math.min(w - 40, visH);
+    const dim = Math.min(w - 40, Math.max(220, h - 280));
     // Zoom where the zone's 2R metres span DOG_VIEW_ZONE_FRAC of `dim`
     // px (512-px world tiles: m/px = EARTH_CIRC·cos(lat) / (512·2^z)).
-    const cosLat = Math.cos((zc.lat * Math.PI) / 180);
+    const cosLat = Math.cos((pin.lat * Math.PI) / 180);
     const zoom = Math.log2(
       (40075016.686 * cosLat * DOG_VIEW_ZONE_FRAC * dim) / (2 * radius * 512),
     );
     map.easeTo({
-      center: [zc.lng, zc.lat],
+      center: [pin.lng, pin.lat],
       zoom: Math.min(DOG_VIEW_MAX_ZOOM, Math.max(DOG_VIEW_MIN_ZOOM, zoom)),
       pitch: DOG_VIEW_PITCH,
-      padding: { top: 80, bottom: DOG_VIEW_PAD_BOTTOM, left: 20, right: 20 },
+      // Zero out any padding a prior spot/modal snap left so "centre"
+      // means the true viewport centre.
+      padding: { top: 0, bottom: 0, left: 0, right: 0 },
       // Slow enough to read as a camera move, not a snap.
       duration: 950,
     });
-  }, [selectedDogId, lostDogs, selectedSpotId]);
+  }, [selectedDogId, lostDogs, selectedSpotId, displayPositions]);
 
   // Prev / next cycling for the LostDogModal. Walks the nearby pets in
   // distance order (closest first) so ‹ › steps through them the same

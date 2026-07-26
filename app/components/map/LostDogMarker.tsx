@@ -64,15 +64,15 @@ interface LostDogMarkerProps {
   // know about the gate get the old "always animate" behaviour.
   active?: boolean;
   // The pet the cinematic zone view is framing (its info card is open).
-  // Grows the photo disc to 3× and the name with it, lifts the marker
+  // Grows the photo disc to ~1.5× and the name with it, lifts the marker
   // above everything else, and pauses the SOS beep (the big pin IS the
   // highlight — rings sized for the small pin would misalign anyway).
   selected?: boolean;
 }
 
-// Photo-disc diameter, normal vs selected (3×).
+// Photo-disc diameter, normal vs selected.
 const DISC_PX = 54;
-const DISC_SELECTED_PX = 162;
+const DISC_SELECTED_PX = 80;
 
 const NAME_COLOUR_DAY = '#1a1a1a';
 const NAME_SHADOW_DAY = '0 1px 4px rgba(255,255,255,0.95)';
@@ -205,7 +205,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
-            fontSize: selected ? 64 : TYPE.display,
+            fontSize: selected ? 40 : TYPE.display,
             overflow: 'hidden',
             // Selected pin gets a heavier lift — it's the hero of the
             // cinematic zone shot, floating over a pulled-back camera.
@@ -255,7 +255,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
         <div
           style={{
             fontFamily: SYSTEM_FONT,
-            fontSize: selected ? 24 : TYPE.body,
+            fontSize: selected ? 18 : TYPE.body,
             fontWeight: selected ? 800 : 700,
             color: inverted ? NAME_COLOUR_NIGHT : NAME_COLOUR_DAY,
             textShadow: inverted ? NAME_SHADOW_NIGHT : NAME_SHADOW_DAY,
