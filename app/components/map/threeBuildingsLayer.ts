@@ -36,6 +36,7 @@ import type {
 } from 'maplibre-gl';
 import { useGameStore } from '../../stores/gameStore';
 import { DOG_CAM } from '../../constants/experiments';
+import { jitterInRadius } from '../../utils/cluster';
 
 export const THREE_BUILDINGS_LAYER_ID = 'three-buildings';
 
@@ -124,6 +125,11 @@ export const CLEAR_BAND = 240;
 // dog's search zone, weighted by the distance haze so the target area lights up
 // as blue fog toward the horizon rather than flat paint up close.
 export const PREVIEW_GLOW_COLOR = 0x2f6bff;
+
+// Fixed visual radius of the cinematic dog view's search zone (normal-mode
+// pet card open): circle ring, blue beacon, and camera fit all use this one
+// value, centred on the pet's jittered PIN position. Shared with MapView.
+export const DOG_VIEW_ZONE_RADIUS_M = 1000;
 
 // The see-through dissolve itself is ALWAYS on (it clears the camera→dog
 // sight line in both modes — see the shader). This zoom gate only enables its
@@ -941,10 +947,19 @@ export function createThreeBuildingsLayer(
           } else if (st.selectedDogId) {
             const dog = st.lostDogs.find((d) => d.id === st.selectedDogId);
             if (dog) {
+              // Same deterministic jitter MapView's displayPositions uses,
+              // so the glow centres on the PIN the user sees (the pin is
+              // the logical middle of its circle), at the fixed dog-view
+              // radius the ring + camera use.
+              const pin = jitterInRadius(
+                dog.lastSeen.position,
+                dog.searchZoneRadiusM,
+                dog.id,
+              );
               beacon = {
-                lng: dog.lastSeen.position.lng,
-                lat: dog.lastSeen.position.lat,
-                radiusM: Math.max(150, dog.searchZoneRadiusM),
+                lng: pin.lng,
+                lat: pin.lat,
+                radiusM: DOG_VIEW_ZONE_RADIUS_M,
               };
             }
           }

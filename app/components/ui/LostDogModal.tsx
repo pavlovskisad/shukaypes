@@ -89,11 +89,10 @@ const PILL_DISABLED: CSSProperties = {
   boxShadow: 'none',
 };
 
-// Urgency tints readable on the dark bubble.
-const URGENCY_ON_DARK: Record<'urgent' | 'other', string> = {
-  urgent: '#ff7a7a',
-  other: '#ffc46b',
-};
+// Status tint on the dark bubble — brand blue only (lightened for
+// legibility on #1a1a1a). Red/amber urgency colouring is retired from
+// this view: everything the dog view marks is blue.
+const BADGE_ON_DARK = '#8fb0ff';
 
 function relativeTime(iso: string, t: AppStrings): string {
   const then = new Date(iso).getTime();
@@ -185,7 +184,7 @@ export function LostDogModal({
 
   const urgent = renderDog.urgency === 'urgent';
   const badgeText = urgent ? t.modals.lostDog.badgeUrgent : t.modals.lostDog.badgeSearching;
-  const badgeFg = urgent ? URGENCY_ON_DARK.urgent : URGENCY_ON_DARK.other;
+  const badgeFg = BADGE_ON_DARK;
   const distLabel = userPos
     ? formatDistance(distanceMeters(userPos, renderDog.lastSeen.position))
     : null;

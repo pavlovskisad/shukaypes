@@ -41,6 +41,7 @@ import { createDepthFogLayer, DEPTH_FOG_LAYER_ID } from './fogLayer';
 import {
   createThreeBuildingsLayer,
   THREE_BUILDINGS_LAYER_ID,
+  DOG_VIEW_ZONE_RADIUS_M,
 } from './threeBuildingsLayer';
 import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { OtherWalker } from './OtherWalker';
@@ -134,19 +135,26 @@ const ROUTE_LOOK_AHEAD_M = 90;
 // pin. Pitch sits well under the street-level game pitch (74) so the shot
 // reads as a helicopter establishing view.
 const DOG_VIEW_PITCH = 57;
-const DOG_VIEW_MIN_ZOOM = 13.8;
+// Low floor so the fixed 1 km zone (below) actually fits the frame —
+// it needs roughly z≈12.4 on a phone.
+const DOG_VIEW_MIN_ZOOM = 12.2;
 const DOG_VIEW_MAX_ZOOM = 16.6;
 // The zone's diameter should span about this fraction of the smaller
-// viewport dimension. The camera centres the PIN (which is jittered
-// inside the zone), so keep this modest to hold most of the circle
-// in-frame even when the pin sits off the zone centre.
+// viewport dimension.
 const DOG_VIEW_ZONE_FRAC = 0.62;
+// The dog view uses one FIXED search radius (DOG_VIEW_ZONE_RADIUS_M, 1 km,
+// imported from threeBuildingsLayer so the beacon shares it) centred on the
+// PIN — the pin is the logical middle of its circle. The per-dog
+// searchZoneRadiusM stays the parser-uncertainty value used by jitter +
+// quest logic; the fixed value is only the visual/framing radius of the
+// cinematic view (circle ring, blue beacon, camera fit).
 // Where the pin's FOOT lands on screen, measured from below the safe-area
 // inset: the story-bubble stack top (122, see LostDogModal.STACK_TOP) +
-// the bubble/pills block (~215) + the pin's own artwork above its foot
-// (~115). Together with the top-anchored stack this makes HUD → bubble →
-// pills → pin one centred column on every viewport height.
-const DOG_VIEW_PIN_TOP_PX = 452;
+// the bubble/pills block (~215) + a breathing gap + the big pin's own
+// artwork above its foot (~195 at the 160px disc). Together with the
+// top-anchored stack this makes HUD → bubble → pills → pin one centred
+// column on every viewport height.
+const DOG_VIEW_PIN_TOP_PX = 555;
 // Streets-level game camera to fly back to when the view closes.
 const GAME_PITCH = 74;
 
@@ -1683,7 +1691,7 @@ export default function MapViewWeb() {
     // photo pin actually renders) directly under the top-anchored story
     // bubble, horizontally centred.
     const pin = displayPositions.get(selectedDogId) ?? dog.lastSeen.position;
-    const radius = Math.max(120, dog.searchZoneRadiusM || 300);
+    const radius = DOG_VIEW_ZONE_RADIUS_M;
     const container = map.getContainer?.();
     const w = container?.clientWidth ?? 390;
     const h = container?.clientHeight ?? 700;
@@ -2450,8 +2458,12 @@ export default function MapViewWeb() {
               .map((d) => (
                 <SearchZoneCircle
                   key={`zone-${d.id}`}
-                  center={d.lastSeen.position}
-                  radiusM={d.searchZoneRadiusM}
+                  // Centred on the PIN (not the raw last-seen coord) so
+                  // the pet sits in the logical middle of its circle,
+                  // and one fixed 1 km radius — matches the camera fit
+                  // and the blue beacon.
+                  center={displayPositions.get(d.id) ?? d.lastSeen.position}
+                  radiusM={DOG_VIEW_ZONE_RADIUS_M}
                   urgency={d.urgency}
                   highlight
                 />
