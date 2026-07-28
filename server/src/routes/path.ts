@@ -124,7 +124,15 @@ const plugin: FastifyPluginAsync = async (app) => {
     // validated position — including standing still, since a dog marking
     // the corner it's sitting on is exactly right, and the service's own
     // spacing rule stops it from claiming the same patch twice.
-    const mark = await markIfDue(userId, current);
+    //
+    // Never allowed to break the sweep: path collection is what credits a
+    // backgrounded walk's paws and bones, and a territory hiccup (or a
+    // deploy that lands before its migration) must not cost the user
+    // those. Failure just means no mark this tick.
+    const mark: MarkResult = await markIfDue(userId, current).catch((err) => {
+      req.log.warn({ err }, '[territory] mark failed');
+      return { marked: false } as MarkResult;
+    });
 
     // No real movement (GPS jitter etc) — refresh anchor, skip sweep.
     if (segLen < 5) {

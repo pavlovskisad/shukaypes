@@ -1,6 +1,17 @@
 // Server-authoritative balance. Mirror of app/constants/balance.ts for values
 // the server controls. Client values may display faster/slower animations;
 // these are the canonical numbers for state transitions and reward math.
+
+// A handful of values are env-overridable so they can be tuned on a live
+// API without a redeploy per guess (see `territory` at the bottom). A
+// missing or unparseable var always falls back to the tuned default —
+// never to zero, which would silently disable whatever it gates.
+function envNum(name: string, fallback: number): number {
+  const raw = process.env[name];
+  if (!raw) return fallback;
+  const n = Number(raw);
+  return Number.isFinite(n) && n >= 0 ? n : fallback;
+}
 export const balance = {
   hunger: { start: 80, decay: 2, intervalMs: 8000, min: 0, max: 100 },
   // Happiness starts high (the dog is excited), decays slow, and gets
@@ -167,11 +178,18 @@ export const balance = {
     // The dog marks at most this often. Sized so a 30-minute walk yields
     // roughly 8-13 marks — enough that a walk visibly grows your range,
     // few enough that each one is a real claim you can't spam.
-    cooldownMs: 150_000,
+    //
+    // This and the spacing below are env-overridable because the whole
+    // feel of the mechanic lives in these two numbers, and finding the
+    // right pair takes walking around with them — not a redeploy per
+    // guess. Set TERRITORY_COOLDOWN_MS / TERRITORY_MIN_DISTANCE_M on the
+    // API (e.g. 20000 / 60 to watch a ribbon build in a couple of
+    // minutes) and unset them to fall back to the tuned defaults.
+    cooldownMs: envNum('TERRITORY_COOLDOWN_MS', 150_000),
     // …and never within this distance of its last mark, so two marks in a
     // row can't land on the same patch and go to waste. Combined with the
     // cooldown this is what actually paces claims on a fast walk.
-    minDistanceM: 140,
+    minDistanceM: envNum('TERRITORY_MIN_DISTANCE_M', 140),
     // A mark claims every grid cell whose centre falls inside this radius
     // (~1-5 cells at CELL_M=110). Chunky on purpose.
     radiusM: 100,
