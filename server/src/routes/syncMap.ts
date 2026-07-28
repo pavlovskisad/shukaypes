@@ -17,6 +17,7 @@ import {
   fetchUserState,
 } from '../services/mapData.js';
 import { syncPresence, takePokes } from '../services/presence.js';
+import { fetchTerritoryNear } from '../services/territory.js';
 import type { LatLng } from '../utils/geo.js';
 
 // Server kill-switch for multiplayer presence. Off only if explicitly set to
@@ -75,7 +76,7 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     const wantPlayers = MULTIPLAYER_ON && req.query.mp === '1';
 
-    const [tokens, food, dogs, state, players, pokes] = await Promise.all([
+    const [tokens, food, dogs, state, players, pokes, territory] = await Promise.all([
       fetchNearbyTokens(req.userId, pos),
       fetchNearbyFood(req.userId),
       fetchNearbyLostDogs(pos, radiusM),
@@ -84,6 +85,9 @@ const plugin: FastifyPluginAsync = async (app) => {
       // return no players / pokes.
       wantPlayers ? syncPresence(req.userId, pos).catch(() => []) : Promise.resolve([]),
       wantPlayers ? takePokes(req.userId).catch(() => []) : Promise.resolve([]),
+      // Your own claimed ground around here. Never blocks the map either —
+      // an empty list just means no scent on this part of the city yet.
+      fetchTerritoryNear(req.userId, pos).catch(() => []),
     ]);
 
     if (!state) {
@@ -91,7 +95,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { error: 'user not found' };
     }
 
-    return { tokens, food, dogs, state, players, pokes };
+    return { tokens, food, dogs, state, players, pokes, territory };
   });
 };
 

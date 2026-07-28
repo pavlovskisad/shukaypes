@@ -62,6 +62,7 @@ import { PoiCluster } from './PoiCluster';
 import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import { SniffPress } from './SniffPress';
+import { TerritoryLayer } from './TerritoryLayer';
 import type { LatLng } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
@@ -310,6 +311,11 @@ export default function MapViewWeb() {
   // Preview: the dog whose zone is being framed (swiped-to, not yet committed).
   const searchPreview = useGameStore((s) => s.searchPreview);
   const setSearchPreview = useGameStore((s) => s.setSearchPreview);
+  // Territory: the ground the dog has claimed, plus the one-shot events
+  // for "just marked here" / "not in the mood to mark".
+  const territory = useGameStore((s) => s.territory);
+  const lastMark = useGameStore((s) => s.lastMark);
+  const markMood = useGameStore((s) => s.markMood);
   // Tracks the map's visible bounds so we can detect when the
   // companion has wandered (or been panned) off-screen and surface a
   // tap-to-recenter indicator at the screen edge.
@@ -553,6 +559,34 @@ export default function MapViewWeb() {
       showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3500);
     }
   }, [dogCam, showBubble, t]);
+
+  // Territory: the dog announces its own claims. Seq-keyed (the store
+  // bumps it once per server-confirmed mark) and init-guarded so a
+  // mark that happened before this mount doesn't replay on focus.
+  const markSeqRef = useRef(lastMark?.seq ?? 0);
+  useEffect(() => {
+    if (!lastMark || lastMark.seq === markSeqRef.current) return;
+    markSeqRef.current = lastMark.seq;
+    const lines = t.bubbles.marked;
+    showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3200);
+  }, [lastMark, showBubble, t]);
+
+  // …and grumbles when it's too hungry or too glum to bother. Rate-
+  // limited hard: the server reports the mood on every sync it would
+  // otherwise have marked, so without this the dog would whine every
+  // 15 s all the way through a walk.
+  const moodSeqRef = useRef(markMood?.seq ?? 0);
+  const lastMoodBubbleRef = useRef(0);
+  useEffect(() => {
+    if (!markMood || markMood.seq === moodSeqRef.current) return;
+    moodSeqRef.current = markMood.seq;
+    const MOOD_BUBBLE_GAP_MS = 5 * 60 * 1000;
+    if (Date.now() - lastMoodBubbleRef.current < MOOD_BUBBLE_GAP_MS) return;
+    lastMoodBubbleRef.current = Date.now();
+    const lines =
+      markMood.reason === 'hungry' ? t.bubbles.tooHungryToMark : t.bubbles.tooGlumToMark;
+    showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3500);
+  }, [markMood, showBubble, t]);
 
   // Greet on every map-tab focus — pick a random "woof" so it doesn't
   // get repetitive. Same energy as Claude Code's *percolating* /
@@ -2689,6 +2723,13 @@ export default function MapViewWeb() {
             a "let's go here" CTA. Past finds excluded so each press
             picks something new. */}
         <SniffPress />
+
+        {/* Your dog's scent on the city — a soft wash over the ground it
+            has claimed. Hidden in supersniff, where the blue search
+            beacon owns the ground and a second colour would fight it. */}
+        {!(DOG_CAM && dogCam) && onMapScreen ? (
+          <TerritoryLayer cells={territory} />
+        ) : null}
 
         {companionPos ? (
           <Companion

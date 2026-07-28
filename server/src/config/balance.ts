@@ -160,4 +160,40 @@ export const balance = {
     staleAfterMs: 90 * 24 * 60 * 60 * 1000,
     sightingsGraceMs: 30 * 24 * 60 * 60 * 1000,
   },
+  // Territory marking — the dog claims ground the way a real one does.
+  // The companion decides on its own; the human's only lever is walking
+  // it somewhere worth marking and keeping it in the mood.
+  territory: {
+    // The dog marks at most this often. Sized so a 30-minute walk yields
+    // roughly 8-13 marks — enough that a walk visibly grows your range,
+    // few enough that each one is a real claim you can't spam.
+    cooldownMs: 150_000,
+    // …and never within this distance of its last mark, so two marks in a
+    // row can't land on the same patch and go to waste. Combined with the
+    // cooldown this is what actually paces claims on a fast walk.
+    minDistanceM: 140,
+    // A mark claims every grid cell whose centre falls inside this radius
+    // (~1-5 cells at CELL_M=110). Chunky on purpose.
+    radiusM: 100,
+    // Mood gates. Below the low-happiness threshold the dog isn't feeling
+    // it, and an empty stomach means no marking either — which is what
+    // wires territory into the existing bones/paws economy.
+    minHappiness: 30,
+    minHunger: 15,
+    // Marking costs a little (effort + water) and gives back a little
+    // (dogs love doing it).
+    hungerCost: 3,
+    happinessGain: 4,
+    // Claim strength. One mark puts `strengthPerMark` into every cell it
+    // covers, capped at `maxStrength`; strength then bleeds away at
+    // `decayPerDay`. So a single mark fades to nothing in ~1.5 days,
+    // while a spot marked repeatedly (a core) holds for ~4 — edges go
+    // soft first, exactly where we want the fighting to happen.
+    strengthPerMark: 40,
+    maxStrength: 100,
+    decayPerDay: 25,
+    // Viewport radius for the territory the map asks for each sync.
+    fetchRadiusM: 3000,
+    maxCellsPerFetch: 900,
+  },
 } as const;

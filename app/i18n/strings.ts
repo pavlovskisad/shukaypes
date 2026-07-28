@@ -51,6 +51,11 @@ export interface AppStrings {
     // Varied "entering supersniff" lines for repeat entries. The FIRST entry
     // per session is announced by the intro hint (swipe/tap how-to) instead.
     supersniffOn: string[];
+    // Territory: the dog announcing a fresh claim, and the two reasons it
+    // won't bother right now.
+    marked: string[];
+    tooHungryToMark: string[];
+    tooGlumToMark: string[];
     questComplete: string;
     questAdvance: string;
     simpleWoof: string;
@@ -232,6 +237,24 @@ const uk: AppStrings = {
       'ніс до землі — працюємо 🐾',
       '*принюхується* хто тут загубився?',
       'нюх на максимум, погнали!',
+    ],
+    marked: [
+      '*позначив* це наше 🐾',
+      'записав цей кут на нас',
+      '*лапу вгору* моє!',
+      'тепер тут пахне нами 🐽',
+      'ще шматок нашої вулиці',
+      '*мітка* хай знають, хто тут ходить',
+    ],
+    tooHungryToMark: [
+      'нічим мітити — я порожній 🦴',
+      'спочатку кістку, потім мітки',
+      '*бурчить животом* не до міток',
+    ],
+    tooGlumToMark: [
+      'настрою мітити нема… 🐕',
+      'щось не хочеться. пограймось?',
+      '*зітхає* не той день для міток',
     ],
     questComplete: 'знайшли! квест виконано 🎉',
     questAdvance: 'слід тут — рухаємось далі 🐾',
@@ -474,6 +497,24 @@ const en: AppStrings = {
       'nose to the ground — working 🐾',
       '*sniffs* who got lost out here?',
       'sniffer at full power, let\'s go!',
+    ],
+    marked: [
+      '*marked it* this one\'s ours 🐾',
+      'put this corner down as ours',
+      '*leg up* mine!',
+      'smells like us here now 🐽',
+      'another piece of our street',
+      '*mark* let them know who walks here',
+    ],
+    tooHungryToMark: [
+      'nothing left to mark with — I\'m empty 🦴',
+      'bone first, territory after',
+      '*stomach rumbles* not in marking shape',
+    ],
+    tooGlumToMark: [
+      'not in the mood to mark… 🐕',
+      'don\'t feel like it. play with me?',
+      '*sighs* wrong day for marking',
     ],
     questComplete: 'found something! quest complete 🎉',
     questAdvance: "paw print here — let's keep going 🐾",
