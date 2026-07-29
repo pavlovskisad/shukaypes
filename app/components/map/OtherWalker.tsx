@@ -35,6 +35,11 @@ export function OtherWalker({ player }: Props) {
   const [pos, setPos] = useState({ ...player.position });
   const [facingLeft, setFacingLeft] = useState(false);
   const [moving, setMoving] = useState(false);
+  // Mirrored into a ref because the glide loop below is created once with
+  // []-deps: read straight from the state variable and it sees whatever
+  // `moving` was on the first render forever, so the branch that puts the
+  // dog back down never runs.
+  const movingRef = useRef(false);
   // Brief "👋" confirmation after you poke this walker.
   const [poked, setPoked] = useState(false);
   const pokePlayer = useGameStore((s) => s.pokePlayer);
@@ -60,7 +65,10 @@ export function OtherWalker({ player }: Props) {
       const cosLat = Math.cos((cur.lat * Math.PI) / 180) || 1;
       const remM = Math.hypot(dLat * M_PER_LAT, dLng * M_PER_LAT * cosLat);
       if (remM < 0.5) {
-        if (moving) setMoving(false);
+        if (movingRef.current) {
+          movingRef.current = false;
+          setMoving(false);
+        }
         return;
       }
       // Face the SCREEN-space direction of travel (project cur → target), so
@@ -76,7 +84,10 @@ export function OtherWalker({ player }: Props) {
           /* project can throw mid-teardown — keep last facing */
         }
       }
-      if (!moving) setMoving(true);
+      if (!movingRef.current) {
+        movingRef.current = true;
+        setMoving(true);
+      }
       const next = { lat: cur.lat + dLat * k, lng: cur.lng + dLng * k };
       posRef.current = next;
       setPos(next);
