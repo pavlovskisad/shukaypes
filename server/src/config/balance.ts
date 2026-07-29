@@ -200,8 +200,38 @@ export const balance = {
     // makes a far-flung mark part of your mainland rather than an
     // orphan). Narrow and weak: a single pass fades within the day, but a
     // route you walk daily builds into real ground of its own.
-    trailRadiusM: 45,
+    //
+    // The radius is NOT free to tune down: a point can sit up to half a
+    // cell diagonal (78m at CELL_M=110) from its own cell's centre, so
+    // any radius below that claims nothing at all while you walk near a
+    // cell corner — and the ribbon comes out with holes in it. Measured
+    // at 45m: ~1 walk in 4 produced a disconnected trail, which defeats
+    // the entire point of having one. Keep this comfortably above 78.
+    trailRadiusM: 85,
     trailStrength: 12,
+    // SHAPES — territory is a function of the MARKS, not of the path
+    // walked between them. Three marks near each other make a triangle of
+    // ground; every mark after that grows the shape outward. Nothing to
+    // close, nothing to time right — you can't "almost" get it.
+    //
+    // Marks join the same shape when they're within this of another mark
+    // in it. Beyond that a mark starts its own island, which is what stops
+    // one stray mark across town from stretching a single triangle over
+    // half the city.
+    shapeLinkM: 350,
+    // A shape needs at least this many marks before it encloses anything.
+    // Two marks are a line with no area; three are a piece of the city.
+    shapeMinMarks: 3,
+    // How many recent marks are considered when rebuilding shapes. Old
+    // ground doesn't vanish (its cells decay on their own schedule) —
+    // this just bounds the geometry work per mark.
+    shapeMarkWindow: 300,
+    // Ground inside a shape comes in solid but not maxed: you own it, and
+    // actually walking it is still what turns it into a core.
+    shapeFillStrength: 30,
+    // Ceiling per shape, so a very spread-out cluster can't spend a minute
+    // of server time filling tens of thousands of cells.
+    shapeMaxCells: 2500,
     // Mood gates. Below the low-happiness threshold the dog isn't feeling
     // it, and an empty stomach means no marking either — which is what
     // wires territory into the existing bones/paws economy.

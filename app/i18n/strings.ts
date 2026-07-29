@@ -54,6 +54,8 @@ export interface AppStrings {
     // Territory: the dog announcing a fresh claim, and the two reasons it
     // won't bother right now.
     marked: string[];
+    // A third mark near two others: the dots become a piece of the city.
+    enclosed: string[];
     tooHungryToMark: string[];
     tooGlumToMark: string[];
     questComplete: string;
@@ -245,6 +247,11 @@ const uk: AppStrings = {
       'тепер тут пахне нами 🐽',
       'ще шматок нашої вулиці',
       '*мітка* хай знають, хто тут ходить',
+    ],
+    enclosed: [
+      'три мітки — і цей шматок наш! 🐾',
+      '*обнюхав кути* тепер це наша земля',
+      'ділянка наша — все між мітками 🔵',
     ],
     tooHungryToMark: [
       'нічим мітити — я порожній 🦴',
@@ -505,6 +512,11 @@ const en: AppStrings = {
       'smells like us here now 🐽',
       'another piece of our street',
       '*mark* let them know who walks here',
+    ],
+    enclosed: [
+      'three marks — this patch is ours! 🐾',
+      '*sniffed the corners* this is our land now',
+      'the ground between them is ours 🔵',
     ],
     tooHungryToMark: [
       'nothing left to mark with — I\'m empty 🦴',

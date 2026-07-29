@@ -59,6 +59,15 @@ export interface TerritoryCell {
   mine: boolean;
 }
 
+// One spot the dog marked, in walk order. Dots on the map; the line
+// joining them is the route walked, and a mark that closed a ring is
+// flagged so the map can make more of it.
+export interface TerritoryMark {
+  lat: number;
+  lng: number;
+  closedLoop: boolean;
+}
+
 export interface NearbyLostDog {
   id: string;
   name: string;
@@ -219,6 +228,7 @@ export const api = {
       // Your claimed ground near this position. Optional so an older
       // server (or a failed territory read) just means an unmarked map.
       territory?: TerritoryCell[];
+      marks?: TerritoryMark[];
     }>(`/sync/map?${params.toString()}`);
   },
 
@@ -253,7 +263,13 @@ export const api = {
       reason?: string;
       // Set when the dog marked territory on this sync — the server
       // decides, we just announce it and refresh the map.
-      marked?: { lat: number; lng: number; cells: number } | null;
+      marked?: {
+        lat: number;
+        lng: number;
+        cells: number;
+        // >0 when this mark closed a loop and claimed the ground inside.
+        enclosed?: number;
+      } | null;
       // Why it didn't, when the reason is worth a word from the dog.
       mood?: 'hungry' | 'grumpy' | null;
     }>('/collect/path', {

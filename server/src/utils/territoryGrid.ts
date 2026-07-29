@@ -97,6 +97,135 @@ export function cellsWithinRadius(
   return out;
 }
 
+// Convex hull of a set of points (Andrew's monotone chain), returned
+// counter-clockwise and closed-open (no repeated first point).
+//
+// This is the shape a cluster of marks encloses. The alternative —
+// joining each new mark to its two nearest — is what a person naturally
+// describes, but it folds over itself once marks get dense, producing
+// self-intersecting polygons that fill wrongly. For any real walking
+// pattern the hull is the same shape without those failure modes.
+//
+// Degenerate input (fewer than 3 points, or all collinear) returns the
+// input's extremes, which encloses no area — correct: two marks are a
+// line, and a line owns nothing.
+export function convexHull<T extends { lat: number; lng: number }>(
+  points: T[],
+): { lat: number; lng: number }[] {
+  if (points.length < 3) return points.map((p) => ({ lat: p.lat, lng: p.lng }));
+  const pts = points
+    .map((p) => ({ lat: p.lat, lng: p.lng }))
+    .sort((a, b) => (a.lng === b.lng ? a.lat - b.lat : a.lng - b.lng));
+  // Cross product of OA × OB. >0 = counter-clockwise turn.
+  const cross = (
+    o: { lat: number; lng: number },
+    a: { lat: number; lng: number },
+    b: { lat: number; lng: number },
+  ): number =>
+    (a.lng - o.lng) * (b.lat - o.lat) - (a.lat - o.lat) * (b.lng - o.lng);
+  const build = (src: typeof pts): typeof pts => {
+    const out: typeof pts = [];
+    for (const p of src) {
+      while (out.length >= 2 && cross(out[out.length - 2]!, out[out.length - 1]!, p) <= 0) {
+        out.pop();
+      }
+      out.push(p);
+    }
+    out.pop(); // last point is the first of the other half
+    return out;
+  };
+  const lower = build(pts);
+  const upper = build([...pts].reverse());
+  return [...lower, ...upper];
+}
+
+// Group points into clusters, where a point joins a cluster if it's
+// within `linkM` of ANY point already in it (single-linkage). This is what
+// keeps a mark left across town from being pulled into the shape you're
+// building here — it starts its own island instead.
+export function clusterPoints<T extends { lat: number; lng: number }>(
+  points: T[],
+  linkM: number,
+): T[][] {
+  const unvisited = new Set(points.keys());
+  const clusters: T[][] = [];
+  const near = (a: T, b: T): boolean => {
+    // Flat-earth metres; exact enough at these distances.
+    const dy = (a.lat - b.lat) * 110540;
+    const dx =
+      (a.lng - b.lng) * 111320 * Math.cos((a.lat * Math.PI) / 180);
+    return dx * dx + dy * dy <= linkM * linkM;
+  };
+  for (const start of points.keys()) {
+    if (!unvisited.has(start)) continue;
+    unvisited.delete(start);
+    const cluster: T[] = [points[start]!];
+    const queue = [start];
+    while (queue.length) {
+      const cur = points[queue.pop()!]!;
+      for (const idx of [...unvisited]) {
+        if (near(cur, points[idx]!)) {
+          unvisited.delete(idx);
+          cluster.push(points[idx]!);
+          queue.push(idx);
+        }
+      }
+    }
+    clusters.push(cluster);
+  }
+  return clusters;
+}
+
+// Every cell whose centre falls INSIDE a closed ring of lat/lng points.
+// Used by the enclosure claim: walk a loop and the ground it encircles
+// becomes yours, not just the path you trod.
+//
+// Ray casting on the raw lat/lng plane — at city scale the projection
+// distortion is far below one cell, so there's nothing to gain from
+// projecting first. Bounded by `maxCells` because the caller can't know
+// in advance how big a loop someone walked.
+export function cellsInsideRing(
+  ring: { lat: number; lng: number }[],
+  maxCells: number,
+): Cell[] {
+  if (ring.length < 3) return [];
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  for (const p of ring) {
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+    if (p.lng < minLng) minLng = p.lng;
+    if (p.lng > maxLng) maxLng = p.lng;
+  }
+  const out: Cell[] = [];
+  const latIdxMin = Math.floor(minLat / LAT_STEP);
+  const latIdxMax = Math.floor(maxLat / LAT_STEP);
+  for (let latIdx = latIdxMin; latIdx <= latIdxMax; latIdx++) {
+    const lngStep = lngStepForBand(latIdx);
+    const cLat = (latIdx + 0.5) * LAT_STEP;
+    const lngIdxMin = Math.floor(minLng / lngStep);
+    const lngIdxMax = Math.floor(maxLng / lngStep);
+    for (let lngIdx = lngIdxMin; lngIdx <= lngIdxMax; lngIdx++) {
+      const cLng = (lngIdx + 0.5) * lngStep;
+      let inside = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const a = ring[i]!;
+        const b = ring[j]!;
+        if (
+          a.lat > cLat !== b.lat > cLat &&
+          cLng < ((b.lng - a.lng) * (cLat - a.lat)) / (b.lat - a.lat) + a.lng
+        ) {
+          inside = !inside;
+        }
+      }
+      if (inside) {
+        out.push({ id: `${latIdx}.${lngIdx}`, lat: cLat, lng: cLng });
+        if (out.length >= maxCells) return out;
+      }
+    }
+  }
+  return out;
+}
+
 // Are these two cells edge- or corner-adjacent? Used by the connected-range
 // walk (slice 3's bonuses scale with the largest connected region, and an
 // island is worth less than the mainland).

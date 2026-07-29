@@ -21,11 +21,17 @@
 // fighting to happen once slice 2 turns stealing on. Nothing decays on a
 // schedule — an untouched cell costs nothing until someone looks at it.
 
-import { and, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
-import { cellsWithinRadius } from '../utils/territoryGrid.js';
+import {
+  cellsWithinRadius,
+  cellsInsideRing,
+  convexHull,
+  clusterPoints,
+} from '../utils/territoryGrid.js';
 
 const T = balance.territory;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -48,6 +54,10 @@ export interface MarkResult {
   position?: LatLng;
   // Cells claimed by this mark (already live-strength).
   cells?: number;
+  // How much ground the shape this mark belongs to now encloses. Set
+  // whenever the mark's cluster has enough marks to have area at all —
+  // the client makes a moment of the first one.
+  enclosed?: { cells: number };
 }
 
 // Live strength for a row, given when it was last marked.
@@ -176,7 +186,47 @@ export async function markIfDue(
   if (cells.length === 0) return { marked: false, reason: 'too-close' };
 
   const markedAt = new Date(now);
+
+  // Territory is a function of the MARKS, not of the route walked between
+  // them: marks near each other form a shape, and everything inside that
+  // shape is yours. Three marks make a triangle; every mark after that
+  // grows it. Recomputed from scratch on each new mark rather than
+  // patched incrementally — it's a few hundred points of geometry, and
+  // deriving it fresh means the shape can never drift out of sync with
+  // the marks the user can see on screen.
+  const priorMarks = await db
+    .select({ lat: schema.territoryMarks.lat, lng: schema.territoryMarks.lng })
+    .from(schema.territoryMarks)
+    .where(eq(schema.territoryMarks.userId, userId))
+    .orderBy(desc(schema.territoryMarks.createdAt))
+    .limit(T.shapeMarkWindow);
+
+  // Only the cluster this mark actually belongs to needs refilling — the
+  // shapes elsewhere in the city are unchanged by a mark over here.
+  const all = [...priorMarks.map((m) => ({ lat: m.lat, lng: m.lng })), pos];
+  const myCluster =
+    clusterPoints(all, T.shapeLinkM).find((c) =>
+      c.some((p) => p.lat === pos.lat && p.lng === pos.lng),
+    ) ?? [];
+  const enclosedCells =
+    myCluster.length >= T.shapeMinMarks
+      ? cellsInsideRing(convexHull(myCluster), T.shapeMaxCells)
+      : [];
+
   await db.transaction(async (tx) => {
+    await tx.insert(schema.territoryMarks).values({
+      id: nanoid(),
+      userId,
+      lat: pos.lat,
+      lng: pos.lng,
+      // Flags the mark that first gave its cluster area (3rd in a group),
+      // so the map can mark the moment a shape came into being.
+      closedLoop: enclosedCells.length > 0 && myCluster.length === T.shapeMinMarks,
+      createdAt: markedAt,
+    });
+    if (enclosedCells.length) {
+      await claimCells(tx, userId, enclosedCells, T.shapeFillStrength, markedAt);
+    }
     await claimCells(tx, userId, cells, T.strengthPerMark, markedAt);
 
     // Marking costs a little effort and pays back a little joy — the wire
@@ -193,7 +243,31 @@ export async function markIfDue(
       .where(eq(schema.companionState.userId, userId));
   });
 
-  return { marked: true, position: pos, cells: cells.length };
+  return {
+    marked: true,
+    position: pos,
+    cells: cells.length,
+    ...(enclosedCells.length ? { enclosed: { cells: enclosedCells.length } } : {}),
+  };
+}
+
+// The recent chain of marks for the map: dots to draw, and the order to
+// join them in. Capped at the same window the loop check uses, so what
+// you see on screen is exactly what can still close a ring.
+export async function fetchMarks(userId: string): Promise<
+  { lat: number; lng: number; closedLoop: boolean }[]
+> {
+  const rows = await db
+    .select({
+      lat: schema.territoryMarks.lat,
+      lng: schema.territoryMarks.lng,
+      closedLoop: schema.territoryMarks.closedLoop,
+    })
+    .from(schema.territoryMarks)
+    .where(eq(schema.territoryMarks.userId, userId))
+    .orderBy(desc(schema.territoryMarks.createdAt))
+    .limit(T.shapeMarkWindow);
+  return rows.reverse();
 }
 
 // Claimed cells around a point, for the map. Slice 1 returns only the
