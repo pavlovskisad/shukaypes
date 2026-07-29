@@ -326,7 +326,7 @@ export const api = {
         captured?: boolean;
       } | null;
       // Why it didn't, when the reason is worth a word from the dog.
-      mood?: 'hungry' | 'grumpy' | null;
+      mood?: 'hungry' | 'grumpy' | 'own-ground' | null;
     }>('/collect/path', {
       method: 'POST',
       body: JSON.stringify({

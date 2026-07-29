@@ -32,9 +32,18 @@
 //
 //   • near YOUR OWN live marks  → they renew: their clocks restart, so
 //     walking the same streets keeps that ground alive against decay.
+//     Only at the EDGE, though — see below.
 //   • near a RIVAL's live marks → the nearest couple are simply GONE, and
 //     their shape shrinks. A raid row is written so the loser hears about
 //     it on their next sync.
+//
+// NO MARKING ON GROUND YOU ALREADY HOLD. A mark inside your own hull
+// moves no border and changes nothing anyone can see — it just spends the
+// cooldown while the dog announces it has refreshed a scent. So the dog
+// only marks at the frontier or on somebody else's ground, and every mark
+// either extends a territory or takes one. The cost is that territory is
+// no longer topped up from the inside: it lives on whoever keeps walking
+// its edge, and decays away under an owner who stops going out.
 //
 // EVERY MARK IS EQUAL. There was a strength tier once — marks hardened to
 // 3 on repeat visits and took as many rival marks to remove — and it made
@@ -118,7 +127,7 @@ export interface MarkResult {
   // Why the dog passed, for the caller's bubble. 'cooldown' / 'too-close'
   // are the boring ones (stay silent); 'hungry' / 'grumpy' are worth
   // voicing occasionally.
-  reason?: 'cooldown' | 'too-close' | 'hungry' | 'grumpy' | 'no-state';
+  reason?: 'cooldown' | 'too-close' | 'hungry' | 'grumpy' | 'no-state' | 'own-ground';
   position?: LatLng;
   // Set when this mark is the one that gave its cluster area for the
   // first time — the third of a group. The client makes a moment of it.
@@ -326,6 +335,31 @@ async function placeMark(
 // Called from /collect/path with a position the server has already
 // validated as reachable — and with the COMPANION's position, since it's
 // the dog that marks, not the walker.
+// Is this spot already inside ground the owner holds?
+//
+// Marking there does nothing anyone can see: the hull is unchanged, so no
+// border moves, and the only effect is that the cooldown is spent. The dog
+// stands in the middle of its own park announcing it has refreshed a scent
+// while the map sits still. Every mark should either take ground or extend
+// it, which means the dog has to be at the frontier to make one.
+//
+// Tested against the raw hull of the owner's live marks, deliberately NOT
+// the buffered claim the map draws. The claim reaches claimReachM past the
+// hull, so testing against that would forbid marking anywhere within 150m
+// of the edge — and since a mark just outside the hull is exactly how a
+// territory grows, that would not slow expansion down, it would stop it.
+async function insideOwnGround(userId: string, pos: LatLng): Promise<boolean> {
+  const own = await liveMarks(userId);
+  if (own.length < T.shapeMinMarks) return false;
+  const pts = own.map((m) => ({ lat: m.lat, lng: m.lng }));
+  for (const cluster of clusterPoints(pts, T.shapeLinkM)) {
+    if (cluster.length < T.shapeMinMarks) continue;
+    const hull = convexHull(cluster);
+    if (hull.length >= 3 && pointInPolygon(pos, hull)) return true;
+  }
+  return false;
+}
+
 export async function markIfDue(
   userId: string,
   pos: LatLng,
@@ -362,6 +396,11 @@ export async function markIfDue(
   }
   if (state.happiness < T.minHappiness) return { marked: false, reason: 'grumpy' };
   if (state.hunger < T.minHunger) return { marked: false, reason: 'hungry' };
+  // Last, because it costs a query — and by here the cooldown has already
+  // elapsed, so this runs at most once per cooldown rather than per sync.
+  if (T.markOnlyOutsideOwnGround && (await insideOwnGround(userId, pos))) {
+    return { marked: false, reason: 'own-ground' };
+  }
 
   const outcome = await placeMark(userId, raiderName, pos);
 
@@ -392,6 +431,13 @@ export async function markIfDue(
 // walked.
 export async function markAsBot(botId: string, botName: string, pos: LatLng): Promise<void> {
   const live = await liveMarks(botId);
+  // Same rule the player's dog follows: no marking on ground you already
+  // hold. A bot's stroll radius is wider than its patch, so this turns
+  // most of its walking into either expansion at the edge or a raid on a
+  // neighbour, instead of it circling its own park topping up a scent
+  // nobody can see. Checked before the ceiling logic below, so the
+  // at-cap renewal can't smuggle a home-ground mark back in.
+  if (T.markOnlyOutsideOwnGround && (await insideOwnGround(botId, pos))) return;
   if (live.length >= T.botMaxMarks) {
     // At the ceiling. What happens next depends on WHERE it's standing.
     const rivals = await marksNear(pos, T.contestM, { exceptUserId: botId });
