@@ -17,18 +17,22 @@
 // drew one, and it implied the path mattered — which sent the eye looking
 // for a loop to close instead of just watching the shape grow.
 //
-// The fill is the ACTUAL hull of the marks, not the ownership cells. An
-// earlier cut drew the cells as squares and it came out as blocky
-// rectangles bolted around each dot — nothing like the clean triangle
-// three marks ought to enclose. Cells remain the ownership truth
-// server-side (they're what stealing will operate on); this draws the
-// shape a person would draw.
+// The fill is the ACTUAL hull of the marks. An earlier cut drew per-cell
+// ownership squares and it came out as blocky rectangles bolted around
+// each dot — nothing like the clean triangle three marks ought to
+// enclose. The cells are gone now; the marks are the only ownership
+// truth, so what's drawn and what's owned can't drift apart.
+//
+// Rival ground is the fourth thing on this layer, and it's deliberately
+// quiet: one graphite colour for everyone else, thinner than yours, only
+// present while you're near it. The map is yours; running into someone
+// else's edge should be an event, not a permanent second layer of paint.
 
 import { useEffect, useMemo, useState } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { useMaplibreMap } from './MapContext';
 import { THREE_BUILDINGS_LAYER_ID } from './threeBuildingsLayer';
-import type { TerritoryMark, TerritoryShape } from '../../services/api';
+import type { RivalTerritory, TerritoryMark, TerritoryShape } from '../../services/api';
 
 const AREA_SOURCE = 'territory-area-src';
 const AREA_FILL = 'territory-area-fill';
@@ -36,6 +40,9 @@ const LINK_SOURCE = 'territory-link-src';
 const LINK_LAYER = 'territory-link';
 const DOTS_SOURCE = 'territory-dots-src';
 const DOTS_LAYER = 'territory-dots';
+const RIVAL_SOURCE = 'territory-rival-src';
+const RIVAL_FILL = 'territory-rival-fill';
+const RIVAL_EDGE = 'territory-rival-edge';
 
 // Brand blue (the CTA pill blue, rgb(0,60,255)). The previous sky-blue
 // was picked to sit clear of the search beacon, but on a pale map it read
@@ -43,6 +50,16 @@ const DOTS_LAYER = 'territory-dots';
 // looked like a lake. Brand blue is unmistakably paint, not terrain.
 const BLUE = 'rgb(0,60,255)';
 const BLUE_DEEP = 'rgb(0,60,255)';
+
+// Rival ground. ONE colour for everyone else, not a colour per player —
+// the question the map has to answer is "is this mine or not", and a
+// palette of owners turns that into a legend you have to learn. Graphite
+// reads as "someone's been here" without competing with the brand blue
+// for attention, and it's the only other paint on the floor, so there's
+// never any doubt which one is yours. Drawn thinner than your own fill
+// and given the outline yours doesn't have, so at a glance it's clearly
+// somebody else's edge you're walking up to.
+const RIVAL = 'rgb(72,78,96)';
 
 // A dot is a moment, not a monument: it shows where the dog just marked,
 // holds while you notice it, then fades out and leaves the territory
@@ -101,7 +118,13 @@ function dotsGeoJSON(marks: TerritoryMark[], now: number): GeoJSON.FeatureCollec
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [m.lng, m.lat] },
-      properties: { r: m.closedLoop ? 6.5 : 4.5, o: Math.max(0, Math.min(1, o)) },
+      properties: {
+        // A hardened mark (revisited on a later walk) draws a little
+        // bigger — the only place strength is visible, and it's the
+        // difference between a soft edge and a core you'd defend.
+        r: (m.closedLoop ? 6.5 : 4.5) + Math.max(0, (m.strength ?? 1) - 1) * 1.1,
+        o: Math.max(0, Math.min(1, o)),
+      },
     });
   }
   return { type: 'FeatureCollection', features };
@@ -110,11 +133,23 @@ function dotsGeoJSON(marks: TerritoryMark[], now: number): GeoJSON.FeatureCollec
 export function TerritoryLayer({
   shapes,
   marks,
+  rivals,
 }: {
   shapes: TerritoryShape[];
   marks: TerritoryMark[];
+  rivals: RivalTerritory[];
 }) {
   const map = useMaplibreMap();
+  // Rival ground only arrives while you're near it, so most of the time
+  // this is an empty list and the layer is a no-op.
+  const rivalShapes = useMemo(() => rivals.flatMap((r) => r.shapes), [rivals]);
+  const rivalSig = useMemo(
+    () =>
+      rivals
+        .map((r) => `${r.ownerId}:${r.shapes.length}:${r.shapes[0]?.points[0]?.lat.toFixed(5) ?? ''}`)
+        .join(','),
+    [rivals],
+  );
   // The store hands us fresh array references every 15s sync even when
   // nothing changed; re-uploading geometry each tick would stutter the 3D
   // city. Signatures keep uploads to real changes.
@@ -147,6 +182,7 @@ export function TerritoryLayer({
     const areas = areaGeoJSON(shapes);
     const links = linkGeoJSON(shapes);
     const dots = dotsGeoJSON(marks, Date.now());
+    const rivalAreas = areaGeoJSON(rivalShapes);
 
     const apply = () => {
       // Territory is paint on the FLOOR — it belongs under the city, not
@@ -167,6 +203,31 @@ export function TerritoryLayer({
         map.addSource(id, { type: 'geojson', data });
         return false;
       };
+
+      // Rivals go down FIRST so your own fill paints over theirs where the
+      // two overlap — the contested strip should read as yours-with-a-
+      // shadow, not as theirs-on-top-of-yours.
+      if (!setOr(RIVAL_SOURCE, rivalAreas)) {
+        map.addLayer(
+          {
+            id: RIVAL_FILL,
+            type: 'fill',
+            source: RIVAL_SOURCE,
+            paint: { 'fill-color': RIVAL, 'fill-opacity': 0.18 },
+          },
+          under,
+        );
+        map.addLayer(
+          {
+            id: RIVAL_EDGE,
+            type: 'line',
+            source: RIVAL_SOURCE,
+            layout: { 'line-join': 'round' },
+            paint: { 'line-color': RIVAL, 'line-width': 1.5, 'line-opacity': 0.55 },
+          },
+          under,
+        );
+      }
 
       if (!setOr(AREA_SOURCE, areas)) {
         map.addLayer(
@@ -221,7 +282,7 @@ export function TerritoryLayer({
     if (map.isStyleLoaded()) apply();
     else map.once('style.load', apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, shapeSig, markSig, tick]);
+  }, [map, shapeSig, markSig, rivalSig, tick]);
 
   // Tear everything down on unmount (tab switch / mode change) so nothing
   // lingers over another screen's map.
@@ -229,10 +290,10 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
+        for (const id of [RIVAL_EDGE, RIVAL_FILL, AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
-        for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {
+        for (const id of [RIVAL_SOURCE, AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {
           if (map.getSource(id)) map.removeSource(id);
         }
       } catch {

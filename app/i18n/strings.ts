@@ -56,8 +56,17 @@ export interface AppStrings {
     marked: string[];
     // A third mark near two others: the dots become a piece of the city.
     enclosed: string[];
+    // Marked on ground we already hold — the claim gets harder to take.
+    renewed: string[];
+    // Marked over someone else's ground: weakened it, or took it outright.
+    contested: string[];
+    captured: string[];
     tooHungryToMark: string[];
     tooGlumToMark: string[];
+    // Someone marked over ours while we weren't there. {name} is the
+    // raider; the killed variant is for when we actually lost ground.
+    raided: string[];
+    raidedLost: string[];
     questComplete: string;
     questAdvance: string;
     simpleWoof: string;
@@ -253,6 +262,23 @@ const uk: AppStrings = {
       '*обнюхав кути* тепер це наша земля',
       'ділянка наша — все між мітками 🔵',
     ],
+    renewed: [
+      '*освіжив* тут наш запах тримається 🐾',
+      'оновив мітку — тепер її так просто не зітруть',
+      '*ще раз* наше міцніше стало 💪',
+      'цей кут ми тримаємо давно 🐽',
+    ],
+    contested: [
+      '*гарчить* тут хтось чужий мітив 😾',
+      'перебив чужу мітку 🐾',
+      '*фиркає* пахло не нами. вже пахне',
+      'посунули сусіда трохи',
+    ],
+    captured: [
+      '*відвоював* цей кут тепер наш! 🔵',
+      'чужа мітка стерта — земля наша 🐾',
+      '*тріумфально* забрали шматок!',
+    ],
     tooHungryToMark: [
       'нічим мітити — я порожній 🦴',
       'спочатку кістку, потім мітки',
@@ -262,6 +288,16 @@ const uk: AppStrings = {
       'настрою мітити нема… 🐕',
       'щось не хочеться. пограймось?',
       '*зітхає* не той день для міток',
+    ],
+    raided: [
+      '{name} нюхає нашу територію! 😾',
+      '*гарчить* {name} мітив на нашому',
+      'чуєш? {name} ходив по нашому 🐽',
+    ],
+    raidedLost: [
+      '{name} забрав наш кут! 😾',
+      '*виє* ми втратили шматок — це {name}',
+      '{name} стер нашу мітку. йдемо повертати 🐾',
     ],
     questComplete: 'знайшли! квест виконано 🎉',
     questAdvance: 'слід тут — рухаємось далі 🐾',
@@ -518,6 +554,23 @@ const en: AppStrings = {
       '*sniffed the corners* this is our land now',
       'the ground between them is ours 🔵',
     ],
+    renewed: [
+      '*freshened it up* our scent holds here 🐾',
+      'topped up the mark — harder to wipe now',
+      '*again* this one\'s solid 💪',
+      'we\'ve held this corner a long time 🐽',
+    ],
+    contested: [
+      '*growls* someone else marked here 😾',
+      'marked right over theirs 🐾',
+      '*snorts* smelled like them. not any more',
+      'pushed the neighbour back a bit',
+    ],
+    captured: [
+      '*took it back* this corner\'s ours now! 🔵',
+      'their mark\'s gone — the ground is ours 🐾',
+      '*triumphant* we grabbed a piece!',
+    ],
     tooHungryToMark: [
       'nothing left to mark with — I\'m empty 🦴',
       'bone first, territory after',
@@ -527,6 +580,16 @@ const en: AppStrings = {
       'not in the mood to mark… 🐕',
       'don\'t feel like it. play with me?',
       '*sighs* wrong day for marking',
+    ],
+    raided: [
+      '{name} is sniffing round our turf! 😾',
+      '*growls* {name} marked on ours',
+      'smell that? {name} walked our streets 🐽',
+    ],
+    raidedLost: [
+      '{name} took our corner! 😾',
+      '*howls* we lost a piece — that\'s {name}',
+      '{name} wiped our mark. let\'s go take it back 🐾',
     ],
     questComplete: 'found something! quest complete 🎉',
     questAdvance: "paw print here — let's keep going 🐾",

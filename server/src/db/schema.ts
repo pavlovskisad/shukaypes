@@ -378,12 +378,16 @@ export const placesCache = pgTable(
   }),
 );
 
-// Territory marks — the individual spots the dog has marked, in order.
+// Territory marks — the individual spots a dog has marked.
 //
-// The cells table below is the ownership truth; this is the SHAPE of how
-// you got it. The map draws these as dots joined by a line (the route you
-// walked between them), and when that line closes a loop the enclosed
-// area is claimed — so the sequence matters, not just the set of points.
+// These are the ONLY ownership record: a territory is the convex hull of
+// a cluster of live marks, derived fresh on every read. There is no cells
+// table any more (0016 dropped it) — keeping one alongside the drawn
+// shapes meant the two diverged, and "someone took territory that never
+// looked like mine" is not a bug you want once ground can be stolen.
+//
+// Decay is a read-time filter on created_at rather than a sweep, so an
+// untouched mark costs nothing until someone looks at it.
 export const territoryMarks = pgTable(
   'territory_marks',
   {
@@ -396,9 +400,49 @@ export const territoryMarks = pgTable(
     // Set when this mark closed a loop, so the client can draw the ring
     // it completed and we don't re-claim the same enclosure twice.
     closedLoop: boolean('closed_loop').notNull().default(false),
+    // How well established this mark is. A fresh one is 1; re-marking the
+    // same spot on a later walk hardens it, up to a cap. This is what makes
+    // the core of your range expensive for someone else to take while the
+    // edges stay soft — the border war happens where it should.
+    strength: integer('strength').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({
     userCreatedIdx: index('territory_marks_user_created_idx').on(t.userId, t.createdAt),
+    // Rivals' marks are looked up by area, not by owner: "whose marks are
+    // near this point" for both contesting and for drawing their ground.
+    bboxIdx: index('territory_marks_bbox_idx').on(t.lat, t.lng),
+  }),
+);
+
+// Raids — someone marked over your ground.
+//
+// Delivered on the victim's next sync and then marked seen, rather than
+// pushed through Redis like pokes: a raid that happens while you're
+// asleep still has to reach you, and a 2-minute TTL would drop it.
+export const territoryRaids = pgTable(
+  'territory_raids',
+  {
+    id: text('id').primaryKey(),
+    victimId: text('victim_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    raiderId: text('raider_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    // Denormalised: the notification says who, and we don't want a join on
+    // the sync path (nor a broken message if the raider is ever removed).
+    raiderName: text('raider_name').notNull(),
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    // True when the raid finished the mark off rather than just weakening
+    // it — the difference between "someone's sniffing around" and "we lost
+    // that corner".
+    killed: boolean('killed').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    seenAt: timestamp('seen_at', { withTimezone: true }),
+  },
+  (t) => ({
+    victimIdx: index('territory_raids_victim_idx').on(t.victimId, t.seenAt),
   }),
 );

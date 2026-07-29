@@ -1,4 +1,5 @@
-// Territory marking — the dog claims ground as you walk.
+// Territory marking — the dog claims ground as you walk, and loses it when
+// someone else walks over it.
 //
 // The whole mechanic hangs off one hook: /collect/path already gives the
 // server a movement-verified position every ~15s (it owns the previous
@@ -21,11 +22,25 @@
 // Marks expire (markTtlDays). Nothing is deleted — expiry is a read-time
 // filter, so an untouched mark costs nothing until someone looks — and
 // the shape simply shrinks to the hull of whatever is still live. Visible
-// decay, unlike a per-cell strength nobody could see, and it gives
-// marking inside your own ground a purpose: it doesn't expand the shape,
-// it renews it.
+// decay, unlike a per-cell strength nobody could see.
+//
+// CONTEST
+// -------
+// Marking is the same gesture for attack and defence, which is the whole
+// point: you don't press a "raid" button, you walk somewhere and the dog
+// does what dogs do.
+//
+//   • near YOUR OWN live marks  → they renew (clocks restart) and the new
+//     mark lands harder (strength 2, then 3). A corner you walk daily
+//     becomes a core.
+//   • near a RIVAL's live marks → the nearest couple weaken by one, and
+//     at zero they die and their shape shrinks. A raid row is written so
+//     the loser hears about it on their next sync.
+//
+// Soft edges fall to a single visit; a hardened core takes several across
+// separate walks. The border war happens at the border.
 
-import { and, desc, eq, gte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, ne, sql, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
@@ -34,10 +49,36 @@ import { convexHull, clusterPoints } from '../utils/territoryShapes.js';
 
 const T = balance.territory;
 const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+
+// Bots live in Redis presence, but they need real user rows to own marks
+// (the FKs are real). They're still not people: we never queue raid
+// notifications for them, because nothing would ever read them.
+const BOT_PREFIX = 'bot:';
+const isBot = (id: string) => id.startsWith(BOT_PREFIX);
+
+// Ceiling on how many neighbours' ground we'll draw at once. A busy
+// hotspot could have a dozen overlapping ranges, and past a handful the
+// map stops saying anything — it's just grey. Nearest-first, so the ones
+// you're actually walking into are the ones you see.
+const MAX_RIVALS = 6;
 
 // Marks older than this stop counting toward shapes.
 function liveSince(): Date {
   return new Date(Date.now() - T.markTtlDays * DAY_MS);
+}
+
+// Degree box around a point, for the (lat, lng) index. Always a superset
+// of the true circle — callers still filter by real distance after.
+function bbox(pos: LatLng, radiusM: number) {
+  const dLat = radiusM / 110_540;
+  const dLng = radiusM / (111_320 * Math.max(0.2, Math.cos((pos.lat * Math.PI) / 180)));
+  return {
+    minLat: pos.lat - dLat,
+    maxLat: pos.lat + dLat,
+    minLng: pos.lng - dLng,
+    maxLng: pos.lng + dLng,
+  };
 }
 
 export interface MarkResult {
@@ -50,11 +91,34 @@ export interface MarkResult {
   // Set when this mark is the one that gave its cluster area for the
   // first time — the third of a group. The client makes a moment of it.
   enclosed?: boolean;
+  // How hard this mark landed (1-3). 2+ means it renewed ground you
+  // already held, which is worth its own line from the dog.
+  strength?: number;
+  // How many rival marks this one knocked down, and whether any died.
+  // The difference between "we're sniffing around their edge" and "that
+  // corner is ours now".
+  stolen?: number;
+  captured?: boolean;
 }
 
 export interface TerritoryShape {
   kind: 'area' | 'line';
   points: { lat: number; lng: number }[];
+}
+
+// Someone else's ground, drawn only while you're near it.
+export interface RivalTerritory {
+  ownerId: string;
+  ownerName: string;
+  shapes: TerritoryShape[];
+}
+
+export interface RaidEvent {
+  raiderName: string;
+  lat: number;
+  lng: number;
+  killed: boolean;
+  at: string;
 }
 
 // A user's live marks, oldest first.
@@ -64,6 +128,7 @@ async function liveMarks(userId: string) {
       lat: schema.territoryMarks.lat,
       lng: schema.territoryMarks.lng,
       closedLoop: schema.territoryMarks.closedLoop,
+      strength: schema.territoryMarks.strength,
       at: schema.territoryMarks.createdAt,
     })
     .from(schema.territoryMarks)
@@ -78,12 +143,168 @@ async function liveMarks(userId: string) {
   return rows.reverse();
 }
 
+// Live marks near a point, by everyone or by everyone-but-one. The (lat,
+// lng) index turns this into a box scan; the true-circle filter happens
+// in JS on the handful of rows that come back.
+async function marksNear(
+  pos: LatLng,
+  radiusM: number,
+  opts: { exceptUserId?: string; onlyUserId?: string } = {},
+) {
+  const b = bbox(pos, radiusM);
+  const rows = await db
+    .select({
+      id: schema.territoryMarks.id,
+      userId: schema.territoryMarks.userId,
+      lat: schema.territoryMarks.lat,
+      lng: schema.territoryMarks.lng,
+      strength: schema.territoryMarks.strength,
+    })
+    .from(schema.territoryMarks)
+    .where(
+      and(
+        gte(schema.territoryMarks.createdAt, liveSince()),
+        gte(schema.territoryMarks.lat, b.minLat),
+        lte(schema.territoryMarks.lat, b.maxLat),
+        gte(schema.territoryMarks.lng, b.minLng),
+        lte(schema.territoryMarks.lng, b.maxLng),
+        ...(opts.exceptUserId ? [ne(schema.territoryMarks.userId, opts.exceptUserId)] : []),
+        ...(opts.onlyUserId ? [eq(schema.territoryMarks.userId, opts.onlyUserId)] : []),
+      ),
+    )
+    .limit(T.shapeMarkWindow * 4);
+  return rows
+    .map((r) => ({ ...r, d: distanceMeters(pos, { lat: r.lat, lng: r.lng }) }))
+    .filter((r) => r.d <= radiusM)
+    .sort((a, b2) => a.d - b2.d);
+}
+
+// Drop a mark at pos on behalf of userId, resolving both halves of the
+// contest. Assumes the caller has already decided the dog *should* mark
+// (mood, cooldown and spacing gates live with their owner — the player
+// path checks companion state, the bot path checks its own timer).
+async function placeMark(
+  userId: string,
+  raiderName: string,
+  pos: LatLng,
+  opts: { contest?: boolean } = {},
+): Promise<{ enclosed: boolean; strength: number; stolen: number; captured: boolean }> {
+  // Everything within the wider of the two radii, in one query.
+  const scanM = Math.max(T.refreshM, T.contestM);
+  const near = await marksNear(pos, scanM);
+  const own = near.filter((m) => m.userId === userId && m.d <= T.refreshM);
+  const rivals =
+    opts.contest === false
+      ? []
+      : near.filter((m) => m.userId !== userId && m.d <= T.contestM);
+
+  // Landing on ground you already hold makes the new mark harder to
+  // shift — one step above the best mark already there.
+  const strength = Math.min(
+    T.maxMarkStrength,
+    own.reduce((best, m) => Math.max(best, m.strength + 1), 1),
+  );
+
+  // Does this mark give its cluster area for the first time? Only used
+  // for the bubble and a slightly larger dot — the shape itself is always
+  // derived fresh from the marks, never stored.
+  const prior = await liveMarks(userId);
+  const cluster =
+    clusterPoints([...prior.map((m) => ({ lat: m.lat, lng: m.lng })), pos], T.shapeLinkM).find(
+      (c) => c.some((p) => p.lat === pos.lat && p.lng === pos.lng),
+    ) ?? [];
+  const enclosed = cluster.length === T.shapeMinMarks;
+
+  const hits = rivals.slice(0, T.contestMaxHits);
+  const killedIds = hits.filter((m) => m.strength <= 1).map((m) => m.id);
+  const weakenedIds = hits.filter((m) => m.strength > 1).map((m) => m.id);
+  // One raid per victim, not per mark — losing two marks to one rival
+  // walking past is a single event to the person it happens to.
+  const victims = new Map<string, boolean>();
+  for (const m of hits) {
+    victims.set(m.userId, (victims.get(m.userId) ?? false) || m.strength <= 1);
+  }
+
+  const now = new Date();
+  await db.transaction(async (tx) => {
+    await tx.insert(schema.territoryMarks).values({
+      id: nanoid(),
+      userId,
+      lat: pos.lat,
+      lng: pos.lng,
+      closedLoop: enclosed,
+      strength,
+      createdAt: now,
+    });
+    // Renew what's already yours nearby — the reason to walk the same
+    // streets again rather than only ever pushing outward.
+    if (own.length) {
+      await tx
+        .update(schema.territoryMarks)
+        .set({ createdAt: now })
+        .where(inArray(schema.territoryMarks.id, own.map((m) => m.id)));
+    }
+    if (weakenedIds.length) {
+      await tx
+        .update(schema.territoryMarks)
+        .set({ strength: sql`${schema.territoryMarks.strength} - 1` })
+        .where(inArray(schema.territoryMarks.id, weakenedIds));
+    }
+    if (killedIds.length) {
+      await tx
+        .delete(schema.territoryMarks)
+        .where(inArray(schema.territoryMarks.id, killedIds));
+    }
+    for (const [victimId, killed] of victims) {
+      // Bots don't read their mail.
+      if (isBot(victimId)) continue;
+      await tx.insert(schema.territoryRaids).values({
+        id: nanoid(),
+        victimId,
+        raiderId: userId,
+        raiderName,
+        lat: pos.lat,
+        lng: pos.lng,
+        killed,
+        createdAt: now,
+      });
+    }
+    // Marking costs a little effort and pays back a little joy — the wire
+    // between territory and the bones/paws economy — and stamps the
+    // cooldown/spacing anchor the next call gates on. In the same
+    // transaction as the mark, so a failure here can't leave ground
+    // claimed with no cooldown recorded and the dog marking every tick.
+    // A no-op for bots, which have no companion row.
+    await tx
+      .update(schema.companionState)
+      .set({
+        hunger: sql`GREATEST(${balance.hunger.min}, ${schema.companionState.hunger} - ${T.hungerCost})`,
+        happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${T.happinessGain})`,
+        lastMarkAt: now,
+        lastMarkLat: pos.lat,
+        lastMarkLng: pos.lng,
+      })
+      .where(eq(schema.companionState.userId, userId));
+  });
+
+  return {
+    enclosed,
+    strength,
+    stolen: hits.length,
+    captured: killedIds.length > 0,
+  };
+}
+
 // Should the dog mark here, and if so, record it.
 //
 // Called from /collect/path with a position the server has already
 // validated as reachable — and with the COMPANION's position, since it's
 // the dog that marks, not the walker.
-export async function markIfDue(userId: string, pos: LatLng): Promise<MarkResult> {
+export async function markIfDue(
+  userId: string,
+  pos: LatLng,
+  raiderName: string,
+): Promise<MarkResult> {
   const [state] = await db
     .select({
       hunger: schema.companionState.hunger,
@@ -116,54 +337,88 @@ export async function markIfDue(userId: string, pos: LatLng): Promise<MarkResult
   if (state.happiness < T.minHappiness) return { marked: false, reason: 'grumpy' };
   if (state.hunger < T.minHunger) return { marked: false, reason: 'hungry' };
 
-  // Is this the mark that first gives its cluster area? Only used for the
-  // bubble and a slightly larger dot — the shape itself is always derived
-  // fresh from the marks, never stored.
-  const prior = await liveMarks(userId);
-  const cluster =
-    clusterPoints([...prior.map((m) => ({ lat: m.lat, lng: m.lng })), pos], T.shapeLinkM).find(
-      (c) => c.some((p) => p.lat === pos.lat && p.lng === pos.lng),
-    ) ?? [];
-  const firstArea = cluster.length === T.shapeMinMarks;
+  const outcome = await placeMark(userId, raiderName, pos);
 
-  const markedAt = new Date(now);
-  await db.transaction(async (tx) => {
-    await tx.insert(schema.territoryMarks).values({
-      id: nanoid(),
-      userId,
-      lat: pos.lat,
-      lng: pos.lng,
-      closedLoop: firstArea,
-      createdAt: markedAt,
-    });
-    // Marking costs a little effort and pays back a little joy — the wire
-    // between territory and the bones/paws economy.
-    await tx
-      .update(schema.companionState)
-      .set({
-        hunger: sql`GREATEST(${balance.hunger.min}, ${schema.companionState.hunger} - ${T.hungerCost})`,
-        happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${T.happinessGain})`,
-        lastMarkAt: markedAt,
-        lastMarkLat: pos.lat,
-        lastMarkLng: pos.lng,
-      })
-      .where(eq(schema.companionState.userId, userId));
-  });
-
-  return { marked: true, position: pos, ...(firstArea ? { enclosed: true } : {}) };
+  return {
+    marked: true,
+    position: pos,
+    strength: outcome.strength,
+    ...(outcome.enclosed ? { enclosed: true } : {}),
+    ...(outcome.stolen ? { stolen: outcome.stolen, captured: outcome.captured } : {}),
+  };
 }
 
-// The shapes a user's live marks make. Three or more near each other
+// Bots mark too, so a new city isn't empty ground. Same placement and
+// contest rules; the mood gates don't apply (a bot has no companion
+// state) and the pacing is the caller's timer rather than the dog's.
+//
+// The spacing rule is applied here rather than by the caller, because a
+// bot dwelling in the same park for days would otherwise stack hundreds
+// of marks on one bench. Too close to something it already holds → the
+// visit RENEWS that mark instead of adding another. Same rule a player
+// gets from minDistanceM, and it's what makes a bot's home patch harden
+// over time into ground worth taking.
+export async function markAsBot(botId: string, botName: string, pos: LatLng): Promise<void> {
+  const own = await marksNear(pos, T.minDistanceM, { onlyUserId: botId });
+  if (own.length) {
+    await db
+      .update(schema.territoryMarks)
+      .set({
+        createdAt: new Date(),
+        strength: sql`LEAST(${T.maxMarkStrength}, ${schema.territoryMarks.strength} + 1)`,
+      })
+      .where(inArray(schema.territoryMarks.id, own.map((m) => m.id)));
+    return;
+  }
+  await placeMark(botId, botName, pos);
+}
+
+// Give a bot a starting patch so there's something to raid on day one.
+// No-op once it holds anything, so a restart doesn't keep piling on.
+//
+// Seeding never contests: the whole pool is laid down in one loop at
+// boot, and letting bot N's seed eat bot N-1's would just mean whoever
+// happened to go last ends up holding everything.
+export async function seedBotTerritory(
+  botId: string,
+  botName: string,
+  around: LatLng,
+): Promise<void> {
+  const existing = await db
+    .select({ id: schema.territoryMarks.id })
+    .from(schema.territoryMarks)
+    .where(
+      and(
+        eq(schema.territoryMarks.userId, botId),
+        gte(schema.territoryMarks.createdAt, liveSince()),
+      ),
+    )
+    .limit(1);
+  if (existing.length) return;
+
+  for (let i = 0; i < T.botSeedMarks; i++) {
+    const ang = (i / T.botSeedMarks) * Math.PI * 2 + Math.random() * 0.6;
+    const r = T.botSeedSpreadM * (0.55 + Math.random() * 0.45);
+    await placeMark(
+      botId,
+      botName,
+      {
+        lat: around.lat + (r * Math.cos(ang)) / 110_540,
+        lng:
+          around.lng +
+          (r * Math.sin(ang)) / (111_320 * Math.cos((around.lat * Math.PI) / 180)),
+      },
+      { contest: false },
+    );
+  }
+}
+
+// Build shapes out of a bag of marks. Three or more near each other
 // enclose an area; exactly two are a bare link with no ground; one is
 // just a dot.
-export async function fetchShapes(userId: string): Promise<TerritoryShape[]> {
-  const marks = await liveMarks(userId);
-  if (marks.length === 0) return [];
+function shapesFrom(points: LatLng[]): TerritoryShape[] {
   const out: TerritoryShape[] = [];
-  for (const cluster of clusterPoints(
-    marks.map((m) => ({ lat: m.lat, lng: m.lng })),
-    T.shapeLinkM,
-  )) {
+  for (const cluster of clusterPoints(points, T.shapeLinkM)) {
     if (cluster.length >= T.shapeMinMarks) {
       const hull = convexHull(cluster);
       // Marks in a near-straight line hull to a sliver with no real area —
@@ -176,18 +431,159 @@ export async function fetchShapes(userId: string): Promise<TerritoryShape[]> {
   return out;
 }
 
+// The shapes a user's own live marks make. Always drawn, wherever they are.
+export async function fetchShapes(userId: string): Promise<TerritoryShape[]> {
+  const marks = await liveMarks(userId);
+  if (marks.length === 0) return [];
+  return shapesFrom(marks.map((m) => ({ lat: m.lat, lng: m.lng })));
+}
+
+// Everyone else's ground within sight of you. Deliberately proximity-
+// gated: the map stays yours, and walking into a rival range is an event
+// rather than a permanent layer of other people's paint.
+export async function fetchRivalTerritory(
+  userId: string,
+  pos: LatLng,
+): Promise<RivalTerritory[]> {
+  const near = await marksNear(pos, T.rivalViewRadiusM, { exceptUserId: userId });
+  if (near.length === 0) return [];
+
+  const owners = [...new Set(near.map((m) => m.userId))].slice(0, MAX_RIVALS);
+  // Their marks near you are only part of their range — pull each
+  // owner's full live set so the hull we draw is the real shape's edge,
+  // not a rectangle cut at your view radius. One query for all of them:
+  // this runs on the 15s sync path, so a round-trip per neighbour is a
+  // cost that grows exactly where the city gets busy.
+  const [allMarks, names] = await Promise.all([
+    db
+      .select({
+        userId: schema.territoryMarks.userId,
+        lat: schema.territoryMarks.lat,
+        lng: schema.territoryMarks.lng,
+      })
+      .from(schema.territoryMarks)
+      .where(
+        and(
+          inArray(schema.territoryMarks.userId, owners),
+          gte(schema.territoryMarks.createdAt, liveSince()),
+        ),
+      )
+      .limit(T.shapeMarkWindow * owners.length),
+    ownerNames(owners),
+  ]);
+  const byOwner = new Map<string, LatLng[]>(owners.map((id) => [id, []]));
+  for (const m of allMarks) byOwner.get(m.userId)?.push({ lat: m.lat, lng: m.lng });
+
+  const out: RivalTerritory[] = [];
+  for (const [id, marks] of byOwner) {
+    const shapes = shapesFrom(marks);
+    // Keep only the islands that actually reach you — someone whose home
+    // range happens to touch your view radius shouldn't paint their
+    // patch on the other side of town onto your map.
+    const visible = shapes.filter((s) =>
+      s.points.some((p) => distanceMeters(pos, p) <= T.rivalViewRadiusM * 1.5),
+    );
+    if (visible.length) {
+      out.push({ ownerId: id, ownerName: names.get(id) ?? 'сусід', shapes: visible });
+    }
+  }
+  return out;
+}
+
+// Display names for territory owners. Bots carry their dog name as
+// username, so this reads the same for both.
+async function ownerNames(ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .select({ id: schema.users.id, username: schema.users.username, first: schema.users.telegramFirstName })
+    .from(schema.users)
+    .where(inArray(schema.users.id, ids));
+  return new Map(rows.map((r) => [r.id, r.first || r.username || 'сусід']));
+}
+
+// Raids waiting for this user, delivered once. Marked seen as they go out
+// rather than on an ack: a dropped notification is a smaller cost than a
+// stuck one that replays every 15 seconds.
+export async function takeRaids(userId: string): Promise<RaidEvent[]> {
+  const since = new Date(Date.now() - T.raidTtlHours * HOUR_MS);
+  const rows = await db
+    .select({
+      id: schema.territoryRaids.id,
+      raiderName: schema.territoryRaids.raiderName,
+      lat: schema.territoryRaids.lat,
+      lng: schema.territoryRaids.lng,
+      killed: schema.territoryRaids.killed,
+      at: schema.territoryRaids.createdAt,
+    })
+    .from(schema.territoryRaids)
+    .where(
+      and(
+        eq(schema.territoryRaids.victimId, userId),
+        sql`${schema.territoryRaids.seenAt} IS NULL`,
+        gte(schema.territoryRaids.createdAt, since),
+      ),
+    )
+    .orderBy(desc(schema.territoryRaids.createdAt))
+    .limit(20);
+  if (rows.length === 0) return [];
+
+  await db
+    .update(schema.territoryRaids)
+    .set({ seenAt: new Date() })
+    .where(inArray(schema.territoryRaids.id, rows.map((r) => r.id)));
+
+  return rows.map((r) => ({
+    raiderName: r.raiderName,
+    lat: r.lat,
+    lng: r.lng,
+    killed: r.killed,
+    at: r.at.toISOString(),
+  }));
+}
+
 // The dots to draw. Each carries its age so the client can fade it out
 // shortly after it lands and leave the shape behind.
 export async function fetchMarks(
   userId: string,
-): Promise<{ lat: number; lng: number; closedLoop: boolean; at: string }[]> {
+): Promise<{ lat: number; lng: number; closedLoop: boolean; strength: number; at: string }[]> {
   const rows = await liveMarks(userId);
   return rows.map((r) => ({
     lat: r.lat,
     lng: r.lng,
     closedLoop: r.closedLoop,
+    strength: r.strength,
     at: r.at.toISOString(),
   }));
+}
+
+// Dev affordance: have a bot walk onto the caller's newest mark and do
+// what it would have done anyway. Runs the real contest path — same
+// weakening, same raid row, same notification — so it exercises the
+// mechanic rather than faking its output, and it can only ever damage the
+// caller's own ground. Paired with `?terrRaid=1` on the client.
+export async function simulateRaidOnSelf(userId: string): Promise<boolean> {
+  const [mine] = await db
+    .select({ lat: schema.territoryMarks.lat, lng: schema.territoryMarks.lng })
+    .from(schema.territoryMarks)
+    .where(
+      and(
+        eq(schema.territoryMarks.userId, userId),
+        gte(schema.territoryMarks.createdAt, liveSince()),
+      ),
+    )
+    .orderBy(desc(schema.territoryMarks.createdAt))
+    .limit(1);
+  if (!mine) return false;
+
+  const [bot] = await db
+    .select({ id: schema.users.id, username: schema.users.username })
+    .from(schema.users)
+    .where(sql`${schema.users.id} LIKE ${BOT_PREFIX + '%'}`)
+    .limit(1);
+  if (!bot) return false;
+
+  await placeMark(bot.id, bot.username, { lat: mine.lat, lng: mine.lng });
+  return true;
 }
 
 // Wipe a user's territory. Only ever touches the caller's own marks, so

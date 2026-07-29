@@ -220,5 +220,43 @@ export const balance = {
     // Bound on the geometry work per mark. Older marks past this count
     // are ignored for shape-building (they're near expiry anyway).
     shapeMarkWindow: 300,
+    // CONTEST — the PvP half. Ground changes hands where marks overlap.
+    //
+    // A rival marking this close to one of yours weakens it by one; at
+    // zero it's gone and your shape shrinks to the hull of what's left.
+    // Sized just under the spacing rule so a rival has to actually walk
+    // onto your ground to touch it rather than clip it from across the
+    // street, and so a walk THROUGH your range costs you a mark or two —
+    // not the whole thing.
+    contestM: 110,
+    // Ceiling on how many of your marks one rival mark can hit, nearest
+    // first. Without it a single mark dropped into a dense core would
+    // knock a hole through several at once, which is the opposite of
+    // "the core is expensive to take".
+    contestMaxHits: 2,
+    // REFRESH — the defence. Marking within this distance of your own
+    // live marks restarts their clocks and makes the new mark harder to
+    // remove (strength 2, then 3). So a corner you walk every day becomes
+    // a core that survives raids, while a one-off detour stays soft. This
+    // is what makes recapture a habit rather than a chore.
+    refreshM: 110,
+    maxMarkStrength: 3,
+    // Someone else's ground only exists on your map when you're near it.
+    // Yours is always drawn; theirs appears as you approach and goes away
+    // when you leave, so the map stays yours and running into a rival
+    // range is an event.
+    rivalViewRadiusM: 900,
+    // A raid waits this long to be delivered. Long enough to survive a
+    // night's sleep, short enough that coming back after a week doesn't
+    // dump a month of history on you at once.
+    raidTtlHours: 48,
+    // Bots hold ground too, so there's something to raid before the city
+    // fills with real players. Each bot marks about this often while it's
+    // out walking (they roam via the presence cron), which over an hour
+    // gives every bot a small, defensible patch around the parks it
+    // frequents.
+    botMarkCooldownMs: 6 * 60 * 1000,
+    botSeedMarks: 5,
+    botSeedSpreadM: 260,
   },
 } as const;

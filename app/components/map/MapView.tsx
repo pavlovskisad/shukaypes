@@ -319,6 +319,10 @@ export default function MapViewWeb() {
   const territoryShapes = useGameStore((s) => s.territoryShapes);
   const lastMark = useGameStore((s) => s.lastMark);
   const markMood = useGameStore((s) => s.markMood);
+  // …and the PvP half: whoever else holds ground within sight, plus the
+  // "somebody took your territory, dawg!" notice.
+  const rivalTerritory = useGameStore((s) => s.rivalTerritory);
+  const lastRaid = useGameStore((s) => s.lastRaid);
   // Tracks the map's visible bounds so we can detect when the
   // companion has wandered (or been panned) off-screen and surface a
   // tap-to-recenter indicator at the screen edge.
@@ -589,6 +593,25 @@ export default function MapViewWeb() {
       });
   }, [showBubble]);
 
+  // Dev affordance: `?terrRaid=1` sends a bot onto your newest mark, so
+  // the raid notice can be checked without waiting for one to wander
+  // there. The notice itself still arrives the normal way, on the next
+  // sync — this only causes the raid, it doesn't fake it.
+  const terrRaidRef = useRef(false);
+  useEffect(() => {
+    if (terrRaidRef.current) return;
+    if (typeof window === 'undefined') return;
+    try {
+      if (new URLSearchParams(window.location.search).get('terrRaid') !== '1') return;
+    } catch {
+      return;
+    }
+    terrRaidRef.current = true;
+    void api.raidTest().catch(() => {
+      /* dev-only convenience — nothing to hold means nothing to raid */
+    });
+  }, []);
+
   // Companion barks when sniff mode toggles. Skips the initial mount
   // (sniffMode starts false; we don't want a "back to normal" line on
   // every app load) via a ref guard.
@@ -637,11 +660,35 @@ export default function MapViewWeb() {
   useEffect(() => {
     if (!lastMark || lastMark.seq === markSeqRef.current) return;
     markSeqRef.current = lastMark.seq;
-    // Closing a ring is the payoff — it gets its own line, not a routine
-    // "marked it".
-    const lines = lastMark.enclosed ? t.bubbles.enclosed : t.bubbles.marked;
+    // Most specific outcome wins. Taking a rival's mark outright is the
+    // loudest thing that can happen on a walk, then merely contesting one,
+    // then closing a ring, then renewing ground we already held — and a
+    // plain new mark is the fallback.
+    const lines = lastMark.captured
+      ? t.bubbles.captured
+      : lastMark.stolen > 0
+        ? t.bubbles.contested
+        : lastMark.enclosed
+          ? t.bubbles.enclosed
+          : lastMark.strength > 1
+            ? t.bubbles.renewed
+            : t.bubbles.marked;
     showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3600);
   }, [lastMark, showBubble, t]);
+
+  // Somebody marked over our ground while we were elsewhere. Seq-keyed
+  // like the rest, and init-guarded so a raid delivered on the very first
+  // sync after a cold start doesn't fire before the map has settled.
+  const raidSeqRef = useRef(lastRaid?.seq ?? 0);
+  useEffect(() => {
+    if (!lastRaid || lastRaid.seq === raidSeqRef.current) return;
+    raidSeqRef.current = lastRaid.seq;
+    // Actually losing a mark is a different feeling from someone just
+    // sniffing at the edge — the dog should sound like it.
+    const lines = lastRaid.killed ? t.bubbles.raidedLost : t.bubbles.raided;
+    const line = lines[Math.floor(Math.random() * lines.length)]!;
+    showBubble(line.replace('{name}', lastRaid.raiderName), 4200);
+  }, [lastRaid, showBubble, t]);
 
   // …and grumbles when it's too hungry or too glum to bother. Rate-
   // limited hard: the server reports the mood on every sync it would
@@ -2810,7 +2857,11 @@ export default function MapViewWeb() {
             has claimed. Hidden in supersniff, where the blue search
             beacon owns the ground and a second colour would fight it. */}
         {!(DOG_CAM && dogCam) && onMapScreen ? (
-          <TerritoryLayer shapes={territoryShapes} marks={territoryMarks} />
+          <TerritoryLayer
+            shapes={territoryShapes}
+            marks={territoryMarks}
+            rivals={rivalTerritory}
+          />
         ) : null}
 
         {companionPos ? (

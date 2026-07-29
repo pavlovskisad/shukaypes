@@ -6,6 +6,7 @@ import { redis } from '../db/redis.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, pointToSegmentDistanceM, type LatLng } from '../utils/geo.js';
 import { markIfDue, type MarkResult } from '../services/territory.js';
+import { selfMeta } from '../services/presence.js';
 
 interface PathBody {
   lat: number;
@@ -61,6 +62,13 @@ function markPayload(mark: MarkResult) {
       lng: mark.position.lng,
       // True when this mark is the one that first gave its cluster area.
       enclosed: mark.enclosed === true,
+      // 1 = fresh ground, 2-3 = landed on ground we already held and
+      // renewed it. The client says something different for each.
+      strength: mark.strength ?? 1,
+      // How many rival marks this one knocked down, and whether any of
+      // them died outright ("that corner is ours now").
+      stolen: mark.stolen ?? 0,
+      captured: mark.captured === true,
     };
   }
   return null;
@@ -154,10 +162,15 @@ const plugin: FastifyPluginAsync = async (app) => {
     const markPos =
       dogRaw && distanceMeters(dogRaw, current) <= MAX_DOG_OFFSET_M ? dogRaw : current;
 
-    const mark: MarkResult = await markIfDue(userId, markPos).catch((err) => {
-      req.log.warn({ err }, '[territory] mark failed');
-      return { marked: false } as MarkResult;
-    });
+    // The raider's name is stamped onto any raid this mark causes, so the
+    // victim's notification can say who. Same name the map labels them
+    // with (cached in-process, so this isn't a query per tick).
+    const mark: MarkResult = await selfMeta(userId)
+      .then((meta) => markIfDue(userId, markPos, meta.name))
+      .catch((err) => {
+        req.log.warn({ err }, '[territory] mark failed');
+        return { marked: false } as MarkResult;
+      });
 
     // No real movement (GPS jitter etc) — refresh anchor, skip sweep.
     if (segLen < 5) {

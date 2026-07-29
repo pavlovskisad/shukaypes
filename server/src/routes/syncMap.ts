@@ -17,7 +17,14 @@ import {
   fetchUserState,
 } from '../services/mapData.js';
 import { syncPresence, takePokes } from '../services/presence.js';
-import { fetchMarks, fetchShapes, resetTerritory } from '../services/territory.js';
+import {
+  fetchMarks,
+  fetchRivalTerritory,
+  fetchShapes,
+  resetTerritory,
+  simulateRaidOnSelf,
+  takeRaids,
+} from '../services/territory.js';
 import type { LatLng } from '../utils/geo.js';
 
 // Server kill-switch for multiplayer presence. Off only if explicitly set to
@@ -61,6 +68,14 @@ const plugin: FastifyPluginAsync = async (app) => {
     return { ok: true };
   });
 
+  // Send a bot onto your newest mark so the raid path can be exercised
+  // without waiting for one to wander in on its own. Real contest, real
+  // raid row — and it can only cost the caller their own ground.
+  app.post('/territory/raid-test', async (req) => {
+    const ok = await simulateRaidOnSelf(req.userId);
+    return { ok };
+  });
+
   app.get<{ Querystring: SyncMapQuery }>('/sync/map', async (req, reply) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
@@ -84,7 +99,7 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     const wantPlayers = MULTIPLAYER_ON && req.query.mp === '1';
 
-    const [tokens, food, dogs, state, players, pokes, marks, shapes] =
+    const [tokens, food, dogs, state, players, pokes, marks, shapes, rivals, raids] =
       await Promise.all([
       fetchNearbyTokens(req.userId, pos),
       fetchNearbyFood(req.userId),
@@ -98,6 +113,12 @@ const plugin: FastifyPluginAsync = async (app) => {
       fetchMarks(req.userId).catch(() => []),
       // The drawable geometry those marks make — filled hulls and lines.
       fetchShapes(req.userId).catch(() => []),
+      // Whoever else holds ground within sight. Proximity-gated on
+      // purpose: the map is yours until you walk into someone.
+      fetchRivalTerritory(req.userId, pos).catch(() => []),
+      // "Somebody took your territory, dawg!" — queued in Postgres rather
+      // than Redis so a raid that lands overnight still reaches you.
+      takeRaids(req.userId).catch(() => []),
     ]);
 
     if (!state) {
@@ -105,7 +126,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { error: 'user not found' };
     }
 
-    return { tokens, food, dogs, state, players, pokes, marks, shapes };
+    return { tokens, food, dogs, state, players, pokes, marks, shapes, rivals, raids };
   });
 };
 
