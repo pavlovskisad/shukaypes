@@ -171,7 +171,7 @@ interface GameState {
     captured: boolean;
   } | null;
   // …or declined to, for a reason worth voicing (hungry / not in the mood).
-  markMood: { seq: number; reason: 'hungry' | 'grumpy' } | null;
+  markMood: { seq: number; reason: 'hungry' | 'grumpy' | 'own-ground' } | null;
   // Flips true after the first syncLostDogs call settles (success or
   // failure). Lets the Tasks tab tell "still waiting for the first
   // fetch" apart from "fetched but zero nearby" so the lost-pets

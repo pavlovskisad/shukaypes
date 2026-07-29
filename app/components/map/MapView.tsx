@@ -728,7 +728,11 @@ export default function MapViewWeb() {
     if (Date.now() - lastMoodBubbleRef.current < MOOD_BUBBLE_GAP_MS) return;
     lastMoodBubbleRef.current = Date.now();
     const lines =
-      markMood.reason === 'hungry' ? t.bubbles.tooHungryToMark : t.bubbles.tooGlumToMark;
+      markMood.reason === 'hungry'
+        ? t.bubbles.tooHungryToMark
+        : markMood.reason === 'own-ground'
+          ? t.bubbles.alreadyOursHere
+          : t.bubbles.tooGlumToMark;
     showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3500);
   }, [markMood, showBubble, t]);
 

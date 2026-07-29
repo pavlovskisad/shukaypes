@@ -74,8 +74,13 @@ function markPayload(mark: MarkResult) {
   return null;
 }
 
-function markMood(mark: MarkResult): 'hungry' | 'grumpy' | null {
+function markMood(mark: MarkResult): 'hungry' | 'grumpy' | 'own-ground' | null {
   if (mark.reason === 'hungry' || mark.reason === 'grumpy') return mark.reason;
+  // Worth voicing, unlike cooldown / too-close. Once a range closes around
+  // the streets someone walks, this is the ONLY reason their dog stops
+  // marking — and a dog that silently stops looks broken rather than
+  // finished. The client throttles it to one line every few minutes.
+  if (mark.reason === 'own-ground') return 'own-ground';
   return null;
 }
 

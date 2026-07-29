@@ -63,6 +63,11 @@ export interface AppStrings {
     captured: string[];
     tooHungryToMark: string[];
     tooGlumToMark: string[];
+    // Standing on ground we already hold, so there is nothing to mark.
+    // Without this the dog just silently stops marking once its range
+    // closes around where you walk, which reads as broken rather than as
+    // "go somewhere new".
+    alreadyOursHere: string[];
     // Someone marked over ours while we weren't there. {name} is the
     // raider; the killed variant is for when we actually lost ground.
     raided: string[];
@@ -302,6 +307,11 @@ const uk: AppStrings = {
       'настрою мітити нема… 🐕',
       'щось не хочеться. пограймось?',
       '*зітхає* не той день для міток',
+    ],
+    alreadyOursHere: [
+      'тут уже наше — ходімо далі 🐾',
+      '*нюхає* свій же запах. далі!',
+      'тут нема чого мітити. на край?',
     ],
     raided: [
       '{name} нюхає нашу територію! 😾',
@@ -610,6 +620,11 @@ const en: AppStrings = {
       'not in the mood to mark… 🐕',
       'don\'t feel like it. play with me?',
       '*sighs* wrong day for marking',
+    ],
+    alreadyOursHere: [
+      'already ours here — let\'s go on 🐾',
+      '*sniffs* that\'s my own scent. onward!',
+      'nothing to mark here. to the edge?',
     ],
     raided: [
       '{name} is sniffing round our turf! 😾',
