@@ -378,6 +378,31 @@ export const placesCache = pgTable(
   }),
 );
 
+// Territory marks — the individual spots the dog has marked, in order.
+//
+// The cells table below is the ownership truth; this is the SHAPE of how
+// you got it. The map draws these as dots joined by a line (the route you
+// walked between them), and when that line closes a loop the enclosed
+// area is claimed — so the sequence matters, not just the set of points.
+export const territoryMarks = pgTable(
+  'territory_marks',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    lat: doublePrecision('lat').notNull(),
+    lng: doublePrecision('lng').notNull(),
+    // Set when this mark closed a loop, so the client can draw the ring
+    // it completed and we don't re-claim the same enclosure twice.
+    closedLoop: boolean('closed_loop').notNull().default(false),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userCreatedIdx: index('territory_marks_user_created_idx').on(t.userId, t.createdAt),
+  }),
+);
+
 // Territory cells — who owns which patch of the city.
 //
 // One row per claimed grid cell (~110 m, see utils/territoryGrid.ts).

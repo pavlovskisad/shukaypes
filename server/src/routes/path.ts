@@ -46,6 +46,9 @@ function markPayload(mark: MarkResult) {
       lat: mark.position.lat,
       lng: mark.position.lng,
       cells: mark.cells ?? 0,
+      // Present only when this mark closed a ring — the client makes a
+      // moment of it ("we've got the whole block").
+      enclosed: mark.enclosed?.cells ?? 0,
     };
   }
   return null;

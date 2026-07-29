@@ -54,6 +54,8 @@ export interface AppStrings {
     // Territory: the dog announcing a fresh claim, and the two reasons it
     // won't bother right now.
     marked: string[];
+    // Closing a loop — the ground inside the ring becomes yours.
+    enclosed: string[];
     tooHungryToMark: string[];
     tooGlumToMark: string[];
     questComplete: string;
@@ -245,6 +247,11 @@ const uk: AppStrings = {
       'тепер тут пахне нами 🐽',
       'ще шматок нашої вулиці',
       '*мітка* хай знають, хто тут ходить',
+    ],
+    enclosed: [
+      'коло замкнулось — весь квартал наш! 🐾',
+      '*обійшли по колу* тепер це наша земля',
+      'замкнув коло — все всередині наше 🔵',
     ],
     tooHungryToMark: [
       'нічим мітити — я порожній 🦴',
@@ -505,6 +512,11 @@ const en: AppStrings = {
       'smells like us here now 🐽',
       'another piece of our street',
       '*mark* let them know who walks here',
+    ],
+    enclosed: [
+      'circle closed — the whole block is ours! 🐾',
+      '*walked the loop* this is our land now',
+      'ring complete — everything inside is ours 🔵',
     ],
     tooHungryToMark: [
       'nothing left to mark with — I\'m empty 🦴',

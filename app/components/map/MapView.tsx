@@ -316,6 +316,7 @@ export default function MapViewWeb() {
   // Territory: the ground the dog has claimed, plus the one-shot events
   // for "just marked here" / "not in the mood to mark".
   const territory = useGameStore((s) => s.territory);
+  const territoryMarks = useGameStore((s) => s.territoryMarks);
   const lastMark = useGameStore((s) => s.lastMark);
   const markMood = useGameStore((s) => s.markMood);
   // Tracks the map's visible bounds so we can detect when the
@@ -611,8 +612,10 @@ export default function MapViewWeb() {
   useEffect(() => {
     if (!lastMark || lastMark.seq === markSeqRef.current) return;
     markSeqRef.current = lastMark.seq;
-    const lines = t.bubbles.marked;
-    showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3200);
+    // Closing a ring is the payoff — it gets its own line, not a routine
+    // "marked it".
+    const lines = lastMark.enclosed > 0 ? t.bubbles.enclosed : t.bubbles.marked;
+    showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3600);
   }, [lastMark, showBubble, t]);
 
   // …and grumbles when it's too hungry or too glum to bother. Rate-
@@ -2782,7 +2785,7 @@ export default function MapViewWeb() {
             has claimed. Hidden in supersniff, where the blue search
             beacon owns the ground and a second colour would fight it. */}
         {!(DOG_CAM && dogCam) && onMapScreen ? (
-          <TerritoryLayer cells={territory} />
+          <TerritoryLayer cells={territory} marks={territoryMarks} />
         ) : null}
 
         {companionPos ? (

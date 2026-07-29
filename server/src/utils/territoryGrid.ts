@@ -97,6 +97,56 @@ export function cellsWithinRadius(
   return out;
 }
 
+// Every cell whose centre falls INSIDE a closed ring of lat/lng points.
+// Used by the enclosure claim: walk a loop and the ground it encircles
+// becomes yours, not just the path you trod.
+//
+// Ray casting on the raw lat/lng plane — at city scale the projection
+// distortion is far below one cell, so there's nothing to gain from
+// projecting first. Bounded by `maxCells` because the caller can't know
+// in advance how big a loop someone walked.
+export function cellsInsideRing(
+  ring: { lat: number; lng: number }[],
+  maxCells: number,
+): Cell[] {
+  if (ring.length < 3) return [];
+  let minLat = Infinity, maxLat = -Infinity, minLng = Infinity, maxLng = -Infinity;
+  for (const p of ring) {
+    if (p.lat < minLat) minLat = p.lat;
+    if (p.lat > maxLat) maxLat = p.lat;
+    if (p.lng < minLng) minLng = p.lng;
+    if (p.lng > maxLng) maxLng = p.lng;
+  }
+  const out: Cell[] = [];
+  const latIdxMin = Math.floor(minLat / LAT_STEP);
+  const latIdxMax = Math.floor(maxLat / LAT_STEP);
+  for (let latIdx = latIdxMin; latIdx <= latIdxMax; latIdx++) {
+    const lngStep = lngStepForBand(latIdx);
+    const cLat = (latIdx + 0.5) * LAT_STEP;
+    const lngIdxMin = Math.floor(minLng / lngStep);
+    const lngIdxMax = Math.floor(maxLng / lngStep);
+    for (let lngIdx = lngIdxMin; lngIdx <= lngIdxMax; lngIdx++) {
+      const cLng = (lngIdx + 0.5) * lngStep;
+      let inside = false;
+      for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+        const a = ring[i]!;
+        const b = ring[j]!;
+        if (
+          a.lat > cLat !== b.lat > cLat &&
+          cLng < ((b.lng - a.lng) * (cLat - a.lat)) / (b.lat - a.lat) + a.lng
+        ) {
+          inside = !inside;
+        }
+      }
+      if (inside) {
+        out.push({ id: `${latIdx}.${lngIdx}`, lat: cLat, lng: cLng });
+        if (out.length >= maxCells) return out;
+      }
+    }
+  }
+  return out;
+}
+
 // Are these two cells edge- or corner-adjacent? Used by the connected-range
 // walk (slice 3's bonuses scale with the largest connected region, and an
 // island is worth less than the mainland).

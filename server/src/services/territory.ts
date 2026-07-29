@@ -21,11 +21,12 @@
 // fighting to happen once slice 2 turns stealing on. Nothing decays on a
 // schedule — an untouched cell costs nothing until someone looks at it.
 
-import { and, eq, gte, lte, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, sql } from 'drizzle-orm';
+import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
-import { cellsWithinRadius } from '../utils/territoryGrid.js';
+import { cellsWithinRadius, cellsInsideRing } from '../utils/territoryGrid.js';
 
 const T = balance.territory;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -48,6 +49,9 @@ export interface MarkResult {
   position?: LatLng;
   // Cells claimed by this mark (already live-strength).
   cells?: number;
+  // Set when this mark closed a loop: how much ground the ring enclosed.
+  // The client turns this into the "you closed a loop" moment.
+  enclosed?: { cells: number };
 }
 
 // Live strength for a row, given when it was last marked.
@@ -176,7 +180,45 @@ export async function markIfDue(
   if (cells.length === 0) return { marked: false, reason: 'too-close' };
 
   const markedAt = new Date(now);
+
+  // Does this mark close a loop? Walk back through the recent chain and
+  // take the EARLIEST mark it lands near — the biggest ring wins, so
+  // going around a whole block beats clipping the last corner. Everything
+  // inside that ring becomes yours.
+  const chain = (
+    await db
+      .select({
+        lat: schema.territoryMarks.lat,
+        lng: schema.territoryMarks.lng,
+      })
+      .from(schema.territoryMarks)
+      .where(eq(schema.territoryMarks.userId, userId))
+      .orderBy(desc(schema.territoryMarks.createdAt))
+      .limit(T.loopChainLength)
+  ).reverse(); // oldest → newest
+
+  let ring: LatLng[] | null = null;
+  for (let i = 0; i + T.loopMinMarks <= chain.length; i++) {
+    const p = chain[i]!;
+    if (distanceMeters({ lat: p.lat, lng: p.lng }, pos) <= T.loopCloseM) {
+      ring = [...chain.slice(i).map((c) => ({ lat: c.lat, lng: c.lng })), pos];
+      break;
+    }
+  }
+  const enclosedCells = ring ? cellsInsideRing(ring, T.loopMaxCells) : [];
+
   await db.transaction(async (tx) => {
+    await tx.insert(schema.territoryMarks).values({
+      id: nanoid(),
+      userId,
+      lat: pos.lat,
+      lng: pos.lng,
+      closedLoop: enclosedCells.length > 0,
+      createdAt: markedAt,
+    });
+    if (enclosedCells.length) {
+      await claimCells(tx, userId, enclosedCells, T.loopFillStrength, markedAt);
+    }
     await claimCells(tx, userId, cells, T.strengthPerMark, markedAt);
 
     // Marking costs a little effort and pays back a little joy — the wire
@@ -193,7 +235,31 @@ export async function markIfDue(
       .where(eq(schema.companionState.userId, userId));
   });
 
-  return { marked: true, position: pos, cells: cells.length };
+  return {
+    marked: true,
+    position: pos,
+    cells: cells.length,
+    ...(enclosedCells.length ? { enclosed: { cells: enclosedCells.length } } : {}),
+  };
+}
+
+// The recent chain of marks for the map: dots to draw, and the order to
+// join them in. Capped at the same window the loop check uses, so what
+// you see on screen is exactly what can still close a ring.
+export async function fetchMarks(userId: string): Promise<
+  { lat: number; lng: number; closedLoop: boolean }[]
+> {
+  const rows = await db
+    .select({
+      lat: schema.territoryMarks.lat,
+      lng: schema.territoryMarks.lng,
+      closedLoop: schema.territoryMarks.closedLoop,
+    })
+    .from(schema.territoryMarks)
+    .where(eq(schema.territoryMarks.userId, userId))
+    .orderBy(desc(schema.territoryMarks.createdAt))
+    .limit(T.loopChainLength);
+  return rows.reverse();
 }
 
 // Claimed cells around a point, for the map. Slice 1 returns only the
