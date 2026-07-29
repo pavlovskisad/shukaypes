@@ -264,6 +264,15 @@ export const balance = {
     // border is readable straight off the map instead of depending on a
     // hidden number under each dot.
     refreshM: 110,
+    // A dog only marks where the mark DOES something — outside the ground
+    // its owner already holds. Inside, the hull is unchanged, no border
+    // moves, and the cooldown is spent on a scent nobody can see.
+    //
+    // The consequence is deliberate and worth knowing: territory is no
+    // longer topped up from the inside, so it lives or dies on whether
+    // its owner keeps walking the edge. A patch whose owner stops going
+    // out decays away on markTtlDays like any other.
+    markOnlyOutsideOwnGround: true,
     // How far out other people's ground is drawn. Effectively the whole
     // map view: seeing the city carved up between neighbours is the point
     // of a territory game, and a 900m keyhole (the first cut) meant you

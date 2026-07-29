@@ -31,19 +31,25 @@ export const OWN_COLOR_RGB: [number, number, number] = [0, 60 / 255, 1];
 // brand blue to be mistaken for yours at a glance.
 const HUES = [0, 20, 40, 60, 90, 130, 160, 180, 265, 290, 315, 340];
 
-// Three tones per hue, so a collision on hue is still two different
-// colours. Each varies saturation AND lightness — a pure lightness ramp
-// gives you one colour and two washes of it.
+// Two tones per hue, so a collision on hue is still two different colours.
 //
-// Three and not five. Measured in CIELAB against a 14-zone screen, adding
-// tones stops helping almost immediately: 36 entries leave 2.8 confusable
-// pairs out of 91, 48 leave 2.8, 60 leave 3.5. Past three tones the tones
-// themselves start colliding faster than the extra slots relieve the
-// crowding, which is the thing that made the old scheme unreadable.
+// TWO, not three, and NOTHING DARK. The first cut had a third tone at
+// lightness 0.30 to widen the palette, and on screen those zones did not
+// read as colours at all — they read as shadows cast across the city. The
+// mistake was scoring the palette raw. Nobody sees these colours raw: the
+// fill sits at 42% over pale map paper, so a dark colour composites to a
+// mid grey no matter how saturated it is underneath.
+//
+// Scored the way it is actually seen — composited first, then compared in
+// CIELAB — dropping the dark tier wins on every axis at once: closest pair
+// 6.2 -> 8.7, nothing left that reads as grey, and total confusion on a
+// 14-zone screen 6.5 -> 6.0 pairs. Fewer slots means slightly more exact
+// repeats and far fewer near-misses, which is the better trade: two
+// obviously-identical zones are easier to live with than two that are
+// almost the same.
 const TONES = [
-  { s: 0.72, l: 0.46 },
-  { s: 0.62, l: 0.3 },
-  { s: 0.85, l: 0.68 },
+  { s: 0.95, l: 0.42 },
+  { s: 0.8, l: 0.66 },
 ];
 
 interface Paint {
