@@ -396,15 +396,39 @@ export async function markIfDue(
 export async function markAsBot(botId: string, botName: string, pos: LatLng): Promise<void> {
   const live = await liveMarks(botId);
   if (live.length >= T.botMaxMarks) {
-    // At the ceiling: refresh the oldest instead of claiming more, so the
-    // patch stays alive without creeping across the city.
+    // At the ceiling. What happens next depends on WHERE it's standing.
+    const rivals = await marksNear(pos, T.contestM, { exceptUserId: botId });
+    if (rivals.length === 0) {
+      // Home ground, nothing to fight: refresh the oldest mark so the
+      // patch stays alive without creeping across the city.
+      const oldest = live[0]!;
+      await db
+        .update(schema.territoryMarks)
+        .set({
+          createdAt: new Date(),
+          strength: sql`LEAST(${T.maxMarkStrength}, ${schema.territoryMarks.strength} + 1)`,
+        })
+        .where(
+          and(
+            eq(schema.territoryMarks.userId, botId),
+            eq(schema.territoryMarks.lat, oldest.lat),
+            eq(schema.territoryMarks.lng, oldest.lng),
+          ),
+        );
+      return;
+    }
+    // Standing on somebody else's ground: TAKE IT, and give up the oldest
+    // corner of home to pay for it. The mark count is unchanged, so a bot
+    // that keeps raiding doesn't sprawl — its range MIGRATES toward
+    // whoever it's fighting, which is what an aggressive neighbour should
+    // look like on the map.
+    //
+    // Without this the cap quietly made bots pacifists: at the ceiling
+    // every visit renewed, so a bot could stand in the middle of a rival's
+    // range and never once contest it.
     const oldest = live[0]!;
     await db
-      .update(schema.territoryMarks)
-      .set({
-        createdAt: new Date(),
-        strength: sql`LEAST(${T.maxMarkStrength}, ${schema.territoryMarks.strength} + 1)`,
-      })
+      .delete(schema.territoryMarks)
       .where(
         and(
           eq(schema.territoryMarks.userId, botId),
@@ -412,7 +436,6 @@ export async function markAsBot(botId: string, botName: string, pos: LatLng): Pr
           eq(schema.territoryMarks.lng, oldest.lng),
         ),
       );
-    return;
   }
   await placeMark(botId, botName, pos);
 }

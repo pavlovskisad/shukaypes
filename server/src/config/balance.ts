@@ -268,7 +268,11 @@ export const balance = {
     // out walking (they roam via the presence cron), which over an hour
     // gives every bot a small, defensible patch around the parks it
     // frequents.
-    botMarkCooldownMs: 6 * 60 * 1000,
+    // Cut from 6 minutes: bots raid each other now, and a raid that only
+    // lands every six minutes barely moves a border. At four a walk into
+    // a neighbour's range costs them a mark or two, which is what makes
+    // the map keep shifting.
+    botMarkCooldownMs: 4 * 60 * 1000,
     botSeedMarks: 5,
     botSeedSpreadM: 260,
     // Ceiling on the marks one bot holds at once. Their patch should grow

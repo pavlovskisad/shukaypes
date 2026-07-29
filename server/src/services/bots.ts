@@ -48,10 +48,15 @@ const HOTSPOTS: LatLng[] = [
 // its own marks — which is what keeps it renewing them, and what makes
 // meeting one feel like meeting a neighbour rather than a tourist.
 const HOME_RANGE_M = 300;
-// …and the occasional wider stroll past its own edge, where it might run
-// into the next dog's ground and contest it.
-const HOME_STROLL_M = 620;
-const HOME_STROLL_CHANCE = 0.25;
+// …and RAIDING TRIPS well past its own edge, deep enough to reach the
+// neighbours (homes are ≥420m apart, so 950m puts a bot squarely inside
+// somebody else's range). Nearly half of all outings, because a city
+// where everyone stays politely home has no border war in it — and
+// because a bot at its mark ceiling now takes ground instead of renewing
+// when it's standing on a rival, so these trips actually cost the
+// neighbour something.
+const HOME_STROLL_M = 950;
+const HOME_STROLL_CHANCE = 0.45;
 const SPEED_MIN = 1.1; // m/s
 const SPEED_MAX = 1.9;
 const ARRIVE_M = 22;
@@ -88,8 +93,8 @@ function distM(a: LatLng, b: LatLng): number {
   return Math.sqrt(dN * dN + dE * dE);
 }
 
-// Next destination. Bots WALK THEIR OWN PATCH: mostly a spot inside the
-// ground they hold, sometimes a stroll just past its edge.
+// Next destination. Bots WALK THEIR OWN PATCH — or go and take somebody
+// else's.
 //
 // They used to roam the whole city, hopping between landmarks — which
 // meant the dog you saw walking past had its territory kilometres away
@@ -98,8 +103,10 @@ function distM(a: LatLng, b: LatLng): number {
 // ground it defends, and its marks should land there and keep the patch
 // coherent rather than smearing a thin trail across the map.
 function newTarget(b: Bot): LatLng {
-  // The occasional wider stroll — a dog does leave its block — but still
-  // anchored on home, so it always comes back.
+  // …and about half the time it goes RAIDING instead — far enough out to
+  // be standing in a neighbour's range, where its next mark takes ground
+  // rather than renewing its own. Still anchored on home, so however far
+  // it pushes it always has somewhere to come back to.
   const r = Math.random() < HOME_STROLL_CHANCE ? HOME_STROLL_M : HOME_RANGE_M;
   return offset(b.home, r);
 }
@@ -314,9 +321,17 @@ export function startMultiplayerCron(
           // them in parallel would have bots inside one hotspot contest
           // each other off the same pre-read snapshot.
           for (const b of marking) {
-            await markAsBot(b.id, b.name, b.pos).catch((err) => {
+            try {
+              // A bot driven off its ground entirely goes home and starts
+              // again. Without this, aggression is a one-way ratchet: bots
+              // raid each other to zero, seeding only ever runs at boot,
+              // and the city consolidates into a handful of holders with
+              // most of the map blank. No-ops unless it holds nothing.
+              await seedBotTerritory(b.id, b.name, b.home);
+              await markAsBot(b.id, b.name, b.pos);
+            } catch (err) {
               log.warn({ err, kind: 'mp_bot_mark' }, 'multiplayer: bot mark failed');
-            });
+            }
           }
         }
         await purgeStalePresence(now);
