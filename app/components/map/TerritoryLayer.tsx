@@ -32,16 +32,17 @@ import type { TerritoryMark, TerritoryShape } from '../../services/api';
 
 const AREA_SOURCE = 'territory-area-src';
 const AREA_FILL = 'territory-area-fill';
-const AREA_EDGE = 'territory-area-edge';
 const LINK_SOURCE = 'territory-link-src';
 const LINK_LAYER = 'territory-link';
 const DOTS_SOURCE = 'territory-dots-src';
 const DOTS_LAYER = 'territory-dots';
 
-// Cool sky blue — cyan-ward of the search blue (#2f6bff) so territory and
-// the lost-pet beacon stay distinguishable when both are on screen.
-const BLUE = '#38bdf8';
-const BLUE_DEEP = '#0ea5e9';
+// Brand blue (the CTA pill blue, rgb(0,60,255)). The previous sky-blue
+// was picked to sit clear of the search beacon, but on a pale map it read
+// as water — which the map style already uses blue for, so claimed ground
+// looked like a lake. Brand blue is unmistakably paint, not terrain.
+const BLUE = 'rgb(0,60,255)';
+const BLUE_DEEP = 'rgb(0,60,255)';
 
 // A dot is a moment, not a monument: it shows where the dog just marked,
 // holds while you notice it, then fades out and leaves the territory
@@ -173,17 +174,10 @@ export function TerritoryLayer({
             id: AREA_FILL,
             type: 'fill',
             source: AREA_SOURCE,
-            paint: { 'fill-color': BLUE, 'fill-opacity': 0.28 },
-          },
-          under,
-        );
-        map.addLayer(
-          {
-            id: AREA_EDGE,
-            type: 'line',
-            source: AREA_SOURCE,
-            layout: { 'line-join': 'round' },
-            paint: { 'line-color': BLUE_DEEP, 'line-width': 2, 'line-opacity': 0.75 },
+            // No outline any more, so the fill alone has to describe the
+          // shape's edge — a touch stronger than it was when a stroke was
+          // doing that work.
+          paint: { 'fill-color': BLUE, 'fill-opacity': 0.32 },
           },
           under,
         );
@@ -235,7 +229,7 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [AREA_FILL, AREA_EDGE, LINK_LAYER, DOTS_LAYER]) {
+        for (const id of [AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
         for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {
