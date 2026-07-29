@@ -19,10 +19,12 @@ import type { TerritoryCell } from '../../services/api';
 const SOURCE_ID = 'territory-src';
 const LAYER_ID = 'territory-heat';
 
-// Brand lime. Deliberately NOT the search blue — supersniff and lost-pet
-// zones own that colour, and territory needs to read as a different
-// system at a glance.
-const MINE_RGB = '200, 255, 0';
+// Cool sky-blue. The first cut used the brand lime, which on a pale map
+// read exactly like what a dog actually leaves behind — technically
+// on-theme, aesthetically not. Blue reads as clean scent-mist instead.
+// Shifted noticeably cyan-ward of the search blue (#2f6bff) so territory
+// and the lost-pet beacon still separate when both are on screen.
+const MINE_RGB = '56, 189, 248';
 
 // Yours is one colour, anyone else's is another (fog-of-war style) — no
 // per-player rainbow, so the map's palette survives a crowded district.

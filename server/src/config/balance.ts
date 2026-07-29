@@ -193,6 +193,15 @@ export const balance = {
     // A mark claims every grid cell whose centre falls inside this radius
     // (~1-5 cells at CELL_M=110). Chunky on purpose.
     radiusM: 100,
+    // The TRAIL — the second, weaker tier of claim. Marks are discrete, so
+    // on their own they leave a string of disconnected islands. The ground
+    // you actually walked between them gets a thin claim too, which is
+    // what stitches those islands into one territory (and, later, what
+    // makes a far-flung mark part of your mainland rather than an
+    // orphan). Narrow and weak: a single pass fades within the day, but a
+    // route you walk daily builds into real ground of its own.
+    trailRadiusM: 45,
+    trailStrength: 12,
     // Mood gates. Below the low-happiness threshold the dog isn't feeling
     // it, and an empty stomach means no marking either — which is what
     // wires territory into the existing bones/paws economy.

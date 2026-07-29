@@ -56,6 +56,81 @@ function liveStrength(strength: number, lastMarkedAt: Date, now: number): number
   return strength - days * T.decayPerDay;
 }
 
+// Add `amount` strength to a set of cells for one owner. Shared by both
+// tiers of claim — a mark (strong, discrete) and a trail (weak,
+// continuous) differ only in radius and amount.
+//
+// The upsert folds decay in rather than reading first: a cell you already
+// own keeps whatever strength it has left after time has eaten at it,
+// then this claim stacks on top (capped), and the clock resets. Doing it
+// in SQL keeps the whole thing one round-trip per cell and race-free
+// against a concurrent sync from the same user.
+async function claimCells(
+  tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+  userId: string,
+  cells: { id: string; lat: number; lng: number }[],
+  amount: number,
+  at: Date,
+): Promise<void> {
+  for (const cell of cells) {
+    await tx
+      .insert(schema.territoryCells)
+      .values({
+        cellId: cell.id,
+        ownerId: userId,
+        lat: cell.lat,
+        lng: cell.lng,
+        strength: amount,
+        lastMarkedAt: at,
+        markCount: 1,
+      })
+      .onConflictDoUpdate({
+        target: schema.territoryCells.cellId,
+        set: {
+          strength: sql`LEAST(${T.maxStrength}, GREATEST(0,
+            ${schema.territoryCells.strength}
+              - EXTRACT(EPOCH FROM (${at.toISOString()}::timestamptz - ${schema.territoryCells.lastMarkedAt}))
+                / 86400.0 * ${T.decayPerDay}
+          )::int + ${amount})`,
+          lastMarkedAt: at,
+          markCount: sql`${schema.territoryCells.markCount} + 1`,
+        },
+        // Only the owner refreshes their own cell for now. Someone else's
+        // ground is untouchable until stealing lands in slice 2.
+        setWhere: eq(schema.territoryCells.ownerId, userId),
+      });
+  }
+}
+
+// Lay the weak trail claim along a walked segment. Marks are discrete, so
+// without this the map is a string of disconnected islands — this is the
+// string. Sampled along the line at a fraction of the trail radius so the
+// covered cells form a continuous ribbon with no gaps at walking speed;
+// deduped because consecutive samples overlap heavily.
+export async function claimTrail(
+  userId: string,
+  from: LatLng,
+  to: LatLng,
+): Promise<void> {
+  const segLen = distanceMeters(from, to);
+  if (segLen < 5) return;
+  const steps = Math.min(24, Math.max(1, Math.ceil(segLen / (T.trailRadiusM * 0.8))));
+  const seen = new Map<string, { id: string; lat: number; lng: number }>();
+  for (let i = 0; i <= steps; i++) {
+    const f = i / steps;
+    const lat = from.lat + (to.lat - from.lat) * f;
+    const lng = from.lng + (to.lng - from.lng) * f;
+    for (const c of cellsWithinRadius(lat, lng, T.trailRadiusM)) {
+      if (!seen.has(c.id)) seen.set(c.id, c);
+    }
+  }
+  if (seen.size === 0) return;
+  const at = new Date();
+  await db.transaction(async (tx) => {
+    await claimCells(tx, userId, [...seen.values()], T.trailStrength, at);
+  });
+}
+
 // Should the dog mark here, and if so, claim the ground.
 //
 // Called from /collect/path with a position the server has already
@@ -102,38 +177,7 @@ export async function markIfDue(
 
   const markedAt = new Date(now);
   await db.transaction(async (tx) => {
-    for (const cell of cells) {
-      // Upsert with decay folded in: a cell we already own keeps its
-      // faded strength plus this mark (capped), and re-marking resets the
-      // decay clock. Slice 2 will extend the conflict branch here —
-      // right now a cell owned by someone else is simply left alone.
-      await tx
-        .insert(schema.territoryCells)
-        .values({
-          cellId: cell.id,
-          ownerId: userId,
-          lat: cell.lat,
-          lng: cell.lng,
-          strength: T.strengthPerMark,
-          lastMarkedAt: markedAt,
-          markCount: 1,
-        })
-        .onConflictDoUpdate({
-          target: schema.territoryCells.cellId,
-          set: {
-            strength: sql`LEAST(${T.maxStrength}, GREATEST(0,
-              ${schema.territoryCells.strength}
-                - EXTRACT(EPOCH FROM (${markedAt.toISOString()}::timestamptz - ${schema.territoryCells.lastMarkedAt}))
-                  / 86400.0 * ${T.decayPerDay}
-            )::int + ${T.strengthPerMark})`,
-            lastMarkedAt: markedAt,
-            markCount: sql`${schema.territoryCells.markCount} + 1`,
-          },
-          // Only the owner refreshes their own cell for now. Someone
-          // else's ground is untouchable until stealing lands in slice 2.
-          setWhere: eq(schema.territoryCells.ownerId, userId),
-        });
-    }
+    await claimCells(tx, userId, cells, T.strengthPerMark, markedAt);
 
     // Marking costs a little effort and pays back a little joy — the wire
     // between territory and the bones/paws economy.
