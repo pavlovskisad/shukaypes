@@ -10,18 +10,22 @@ const KYIV_FALLBACK: LatLng = { lat: 50.4501, lng: 30.5234 };
 // reads the same position, so a simulated walk hits the real server code —
 // no faked responses, no test-only branches past this hook.
 //
-// It walks a LOOP around the anchor rather than wandering off in a line.
-// The map doesn't chase the user (you pan it yourself, or tap the dog's
-// bookmark to recentre), so a straight-line walker leaves the camera
-// behind within a couple of minutes and you end up staring at empty map
-// with the dog off-screen. A loop keeps the walker in frame indefinitely
-// while still covering real ground between marks.
+// It WANDERS inside a radius of the anchor rather than walking a line or
+// a ring. A straight-line walker leaves the camera behind within a couple
+// of minutes and you end up staring at empty map; a perfect circle keeps
+// it in frame but retraces one rut, which is the wrong shape for testing
+// territory — every lap re-marks the same ground and you never see a
+// claim spread the way a real walk spreads it.
 //
-// Radius is chosen so successive marks clear the server's minimum
-// spacing: at 150 m and a brisk pace the walker travels ~300 m of chord
-// between marks, comfortably past the 140 m rule. Very slow speeds
-// (< ~1 m/s) shrink that chord enough to starve marking — bump
-// `?simSpeed=` if you want a crawl.
+// So: a heading that drifts, the occasional sharper turn at a "corner",
+// and a steer back toward the anchor once it strays past the radius. The
+// track that produces looks like somebody walking a neighbourhood, and
+// it covers new ground on every pass while staying on screen.
+//
+// The radius is a leash, not a path — a walker inside it still travels
+// well past the server's 140 m minimum mark spacing between claims. Very
+// slow speeds (< ~1 m/s) shrink the distance covered between marks enough
+// to starve marking; bump `?simSpeed=` if you want a crawl.
 //
 // Params: `?sim=1&simSpeed=<m/s>&simRadius=<m>&simLat=&simLng=`.
 // Dev-only ergonomics: no UI, no persistence, gone with the query param.
@@ -83,34 +87,46 @@ export function useLocation(): LocationState {
     // movement-driven mechanics while sitting still.
     const sim = readSimConfig();
     if (sim) {
-      // Angle around the anchor. The radius breathes a little so repeated
-      // laps trace slightly different streets instead of retracing one
-      // rut — which matters for territory, where re-marking the exact
-      // same cells is a different case from claiming fresh ones.
-      let angle = Math.random() * Math.PI * 2;
-      let laps = 0;
+      // Heading (radians, 0 = north) plus a slow drift, so the track
+      // curves the way a person following streets curves rather than
+      // holding a bearing or tracing a circle.
+      let heading = Math.random() * Math.PI * 2;
+      let pos = { ...sim.start };
       const emit = () => {
-        const wobble = 1 + 0.25 * Math.sin(laps * 2.3);
-        const r = sim.radiusM * wobble;
-        const pos = {
-          lat: sim.start.lat + (r * Math.cos(angle)) / 110540,
-          lng:
-            sim.start.lng +
-            (r * Math.sin(angle)) /
-              (111320 * Math.cos((sim.start.lat * Math.PI) / 180)),
-        };
-        setState({ position: pos, error: null, granted: true, usingFallback: false });
+        setState({ position: { ...pos }, error: null, granted: true, usingFallback: false });
       };
       emit();
       const id = setInterval(() => {
-        // Arc length = speed × dt, so the angular step scales with radius:
-        // a bigger loop takes proportionally longer to walk, exactly like
-        // real ground would.
-        const step = sim.speedMps * (SIM_TICK_MS / 1000);
-        angle += step / sim.radiusM;
-        laps = angle / (Math.PI * 2);
+        const stepM = sim.speedMps * (SIM_TICK_MS / 1000);
+
+        // Gentle wander, plus an occasional corner — a real walk is mostly
+        // straight lines with the odd decision at a junction.
+        heading += (Math.random() - 0.5) * 0.5;
+        if (Math.random() < 0.06) heading += (Math.random() - 0.5) * 2.2;
+
+        // The leash: once past the radius, bend back toward the anchor
+        // instead of teleporting or bouncing. Strength grows with how far
+        // out we are, so the walker curves home rather than snapping.
+        const mPerLat = 110540;
+        const mPerLng = 111320 * Math.cos((sim.start.lat * Math.PI) / 180);
+        const dN = (pos.lat - sim.start.lat) * mPerLat;
+        const dE = (pos.lng - sim.start.lng) * mPerLng;
+        const out = Math.hypot(dN, dE);
+        if (out > sim.radiusM) {
+          const home = Math.atan2(-dE, -dN);
+          // Shortest angular difference, so it never turns the long way.
+          let diff = ((home - heading + Math.PI * 3) % (Math.PI * 2)) - Math.PI;
+          const pull = Math.min(1, (out - sim.radiusM) / sim.radiusM + 0.35);
+          heading += diff * pull;
+        }
+
+        pos = {
+          lat: pos.lat + (stepM * Math.cos(heading)) / mPerLat,
+          lng: pos.lng + (stepM * Math.sin(heading)) / mPerLng,
+        };
         emit();
       }, SIM_TICK_MS);
+
       return () => clearInterval(id);
     }
 
