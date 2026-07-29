@@ -195,11 +195,16 @@ export const balance = {
     // row can't land on the same patch and go to waste. Combined with the
     // cooldown this is what actually paces claims on a fast walk.
     minDistanceM: envNum('TERRITORY_MIN_DISTANCE_M', 140),
-    // Mood gates. Below the low-happiness threshold the dog isn't feeling
-    // it, and an empty stomach means no marking either — which is what
-    // wires territory into the existing bones/paws economy.
-    minHappiness: 30,
-    minHunger: 15,
+    // Mood gates — TEMPORARILY OFF (both at 0, so both comparisons are
+    // always satisfied). The idea is that a miserable or starving dog
+    // won't mark, which is what wires territory into the bones/paws
+    // economy. But while the mechanic itself is still being tuned, a walk
+    // that silently stops producing claims is impossible to tell apart
+    // from a bug in the claiming — so the gates come off until the rest
+    // is settled. Restore to roughly 30 / 15 to switch them back on; the
+    // code that reads them is untouched.
+    minHappiness: 0,
+    minHunger: 0,
     // Marking costs a little (effort + water) and gives back a little
     // (dogs love doing it).
     hungerCost: 3,
@@ -266,6 +271,14 @@ export const balance = {
     botMarkCooldownMs: 6 * 60 * 1000,
     botSeedMarks: 5,
     botSeedSpreadM: 260,
+    // Ceiling on the marks one bot holds at once. Their patch should grow
+    // as they walk it and then STOP: a bot pacing the same streets for
+    // days would otherwise stack marks forever and creep across the map.
+    // Sized to what actually fits — a ~300m roaming disc at the 140m
+    // minimum spacing holds about a dozen — so a bot fills its patch and
+    // then spends its time hardening it, which is what makes one worth
+    // taking off it.
+    botMaxMarks: 12,
     // HOME GROUND — why holding territory is worth the walking.
     //
     // All of it is PASSIVE: nothing to activate, nothing to remember.
