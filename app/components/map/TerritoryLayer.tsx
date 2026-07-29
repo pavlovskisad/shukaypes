@@ -33,6 +33,11 @@
 // your shape and as their polygon in their colour. That's why this can be
 // a single fill layer with a data-driven colour rather than a layer per
 // owner with a stacking order to argue about.
+//
+// No outlines anywhere — not around your shape, not between neighbours.
+// Every stroked version of this has read as a diagram of the mechanic
+// rather than paint on the ground, and the map already has plenty of
+// lines in it. The fill colour alone carries the edge.
 
 import { useEffect, useMemo, useState } from 'react';
 import type maplibregl from 'maplibre-gl';
@@ -46,7 +51,6 @@ const LINK_SOURCE = 'territory-link-src';
 const LINK_LAYER = 'territory-link';
 const DOTS_SOURCE = 'territory-dots-src';
 const DOTS_LAYER = 'territory-dots';
-const AREA_EDGE = 'territory-area-edge';
 
 // Brand blue (the CTA pill blue, rgb(0,60,255)). The previous sky-blue
 // was picked to sit clear of the search beacon, but on a pale map it read
@@ -263,24 +267,6 @@ export function TerritoryLayer({
           },
           under,
         );
-        // A hairline in each zone's own colour. With neighbours meeting
-        // along shared borders, two similar hues sitting edge to edge need
-        // something to separate them — and it stops a pocket somebody else
-        // holds from reading as a hole in the map.
-        map.addLayer(
-          {
-            id: AREA_EDGE,
-            type: 'line',
-            source: AREA_SOURCE,
-            layout: { 'line-join': 'round' },
-            paint: {
-              'line-color': ['get', 'color'],
-              'line-width': 1.2,
-              'line-opacity': 0.75,
-            },
-          },
-          under,
-        );
       }
 
       if (!setOr(LINK_SOURCE, links)) {
@@ -329,7 +315,7 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [AREA_EDGE, AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
+        for (const id of [AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
         for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {

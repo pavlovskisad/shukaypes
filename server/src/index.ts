@@ -27,6 +27,7 @@ import { runMemoryCleanupOnce } from './services/memoryCleanup.js';
 import { startScrapeCron } from './services/scrape.js';
 import { startLostDogCleanupCron } from './services/lostDogCleanup.js';
 import { startMultiplayerCron } from './services/bots.js';
+import { clearLeaderboardCache } from './services/territory.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
 import { redis } from './db/redis.js';
@@ -121,6 +122,13 @@ async function main() {
     app.log,
     Number(process.env.MULTIPLAYER_BOTS ?? 0) || 0,
   );
+  // The territory standing is cached in Redis, which survives a deploy —
+  // so a migration that changes the marks (or a rule change that changes
+  // how they're scored) would otherwise keep serving the old city until
+  // the TTL ran out. Boot is exactly when that can have happened.
+  void clearLeaderboardCache().catch(() => {
+    /* stale board for a few minutes is not worth failing a boot over */
+  });
   // One-shot retrofit: strip transcript prefixes from any existing
   // memory notes written before PR #158 added the filter to new
   // writes. Fire-and-forget so it doesn't delay listen().

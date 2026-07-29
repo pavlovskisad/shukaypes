@@ -865,6 +865,20 @@ async function readCachedBoard(): Promise<LeaderboardEntry[] | null> {
   }
 }
 
+// Drop the cached standing so the next reader recomputes. Called on boot,
+// because that's the moment territory can have changed without any
+// request touching it — a migration that wipes the table, or a rule
+// change in the deploy itself. Without this the board keeps quoting
+// yesterday's city for another five minutes.
+export async function clearLeaderboardCache(): Promise<void> {
+  try {
+    if (redis.status !== 'ready') return;
+    await redis.del(BOARD_KEY);
+  } catch {
+    // Worst case the board is stale until the TTL runs out.
+  }
+}
+
 async function writeCachedBoard(board: LeaderboardEntry[]): Promise<void> {
   try {
     if (redis.status !== 'ready') return;
