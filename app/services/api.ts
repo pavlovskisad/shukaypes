@@ -74,6 +74,9 @@ export interface TerritoryMark {
   lat: number;
   lng: number;
   closedLoop: boolean;
+  // ISO timestamp. The dot only shows while the mark is fresh — it fades
+  // out and leaves the territory behind — so the map needs its age.
+  at: string;
 }
 
 export interface NearbyLostDog {

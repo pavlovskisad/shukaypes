@@ -24,9 +24,10 @@
 // server-side (they're what stealing will operate on); this draws the
 // shape a person would draw.
 
-import { useEffect, useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { useMaplibreMap } from './MapContext';
+import { THREE_BUILDINGS_LAYER_ID } from './threeBuildingsLayer';
 import type { TerritoryMark, TerritoryShape } from '../../services/api';
 
 const AREA_SOURCE = 'territory-area-src';
@@ -41,6 +42,14 @@ const DOTS_LAYER = 'territory-dots';
 // the lost-pet beacon stay distinguishable when both are on screen.
 const BLUE = '#38bdf8';
 const BLUE_DEEP = '#0ea5e9';
+
+// A dot is a moment, not a monument: it shows where the dog just marked,
+// holds while you notice it, then fades out and leaves the territory
+// behind. Without this the map slowly fills with a hundred old dots and
+// the shape — the thing that actually matters — gets lost in them.
+const DOT_HOLD_MS = 12_000;
+const DOT_FADE_MS = 8_000;
+const DOT_LIFE_MS = DOT_HOLD_MS + DOT_FADE_MS;
 
 function areaGeoJSON(shapes: TerritoryShape[]): GeoJSON.FeatureCollection {
   return {
@@ -79,15 +88,22 @@ function linkGeoJSON(shapes: TerritoryShape[]): GeoJSON.FeatureCollection {
   };
 }
 
-function dotsGeoJSON(marks: TerritoryMark[]): GeoJSON.FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: marks.map((m) => ({
+function dotsGeoJSON(marks: TerritoryMark[], now: number): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const m of marks) {
+    const age = now - new Date(m.at).getTime();
+    // Guard against a clock skewed into the future — treat it as brand new
+    // rather than letting a negative age make the dot immortal.
+    if (age >= DOT_LIFE_MS) continue;
+    const o =
+      age <= DOT_HOLD_MS ? 1 : 1 - (age - DOT_HOLD_MS) / DOT_FADE_MS;
+    features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [m.lng, m.lat] },
-      properties: { r: m.closedLoop ? 6.5 : 4.5 },
-    })),
-  };
+      properties: { r: m.closedLoop ? 6.5 : 4.5, o: Math.max(0, Math.min(1, o)) },
+    });
+  }
+  return { type: 'FeatureCollection', features };
 }
 
 export function TerritoryLayer({
@@ -112,14 +128,35 @@ export function TerritoryLayer({
     () => marks.map((m) => `${m.lat.toFixed(5)},${m.lng.toFixed(5)}`).join(','),
     [marks],
   );
+  // Dots fade over time, so the layer has to redraw while any of them is
+  // still alive — and only then. Once the last one has gone the timer
+  // stops and the map goes quiet again.
+  const [tick, setTick] = useState(0);
+  const anyAlive = marks.some(
+    (m) => Date.now() - new Date(m.at).getTime() < DOT_LIFE_MS,
+  );
+  useEffect(() => {
+    if (!anyAlive) return;
+    const id = setInterval(() => setTick((n) => n + 1), 900);
+    return () => clearInterval(id);
+  }, [anyAlive, markSig]);
 
   useEffect(() => {
     if (!map) return;
     const areas = areaGeoJSON(shapes);
     const links = linkGeoJSON(shapes);
-    const dots = dotsGeoJSON(marks);
+    const dots = dotsGeoJSON(marks, Date.now());
 
     const apply = () => {
+      // Territory is paint on the FLOOR — it belongs under the city, not
+      // over it. The 3D buildings are their own custom layer, so inserting
+      // beneath it lets them stand on the claimed ground (and occlude it)
+      // instead of the blue washing over their roofs. Falls back to the top
+      // of the stack when the buildings layer isn't present (the flat map
+      // style), where there's nothing to sit under anyway.
+      const under = map.getLayer(THREE_BUILDINGS_LAYER_ID)
+        ? THREE_BUILDINGS_LAYER_ID
+        : undefined;
       const setOr = (id: string, data: GeoJSON.FeatureCollection): boolean => {
         const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
         if (src) {
@@ -131,34 +168,43 @@ export function TerritoryLayer({
       };
 
       if (!setOr(AREA_SOURCE, areas)) {
-        map.addLayer({
-          id: AREA_FILL,
-          type: 'fill',
-          source: AREA_SOURCE,
-          paint: { 'fill-color': BLUE, 'fill-opacity': 0.28 },
-        });
-        map.addLayer({
-          id: AREA_EDGE,
-          type: 'line',
-          source: AREA_SOURCE,
-          layout: { 'line-join': 'round' },
-          paint: { 'line-color': BLUE_DEEP, 'line-width': 2, 'line-opacity': 0.75 },
-        });
+        map.addLayer(
+          {
+            id: AREA_FILL,
+            type: 'fill',
+            source: AREA_SOURCE,
+            paint: { 'fill-color': BLUE, 'fill-opacity': 0.28 },
+          },
+          under,
+        );
+        map.addLayer(
+          {
+            id: AREA_EDGE,
+            type: 'line',
+            source: AREA_SOURCE,
+            layout: { 'line-join': 'round' },
+            paint: { 'line-color': BLUE_DEEP, 'line-width': 2, 'line-opacity': 0.75 },
+          },
+          under,
+        );
       }
 
       if (!setOr(LINK_SOURCE, links)) {
-        map.addLayer({
-          id: LINK_LAYER,
-          type: 'line',
-          source: LINK_SOURCE,
-          layout: { 'line-cap': 'round' },
-          paint: {
-            'line-color': BLUE_DEEP,
-            'line-width': 2,
-            'line-opacity': 0.5,
-            'line-dasharray': [2, 2],
+        map.addLayer(
+          {
+            id: LINK_LAYER,
+            type: 'line',
+            source: LINK_SOURCE,
+            layout: { 'line-cap': 'round' },
+            paint: {
+              'line-color': BLUE_DEEP,
+              'line-width': 2,
+              'line-opacity': 0.5,
+              'line-dasharray': [2, 2],
+            },
           },
-        });
+          under,
+        );
       }
 
       if (!setOr(DOTS_SOURCE, dots)) {
@@ -169,8 +215,10 @@ export function TerritoryLayer({
           paint: {
             'circle-radius': ['get', 'r'],
             'circle-color': BLUE_DEEP,
+            'circle-opacity': ['get', 'o'],
             'circle-stroke-color': '#ffffff',
             'circle-stroke-width': 2,
+            'circle-stroke-opacity': ['get', 'o'],
           },
         });
       }
@@ -179,7 +227,7 @@ export function TerritoryLayer({
     if (map.isStyleLoaded()) apply();
     else map.once('style.load', apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, shapeSig, markSig]);
+  }, [map, shapeSig, markSig, tick]);
 
   // Tear everything down on unmount (tab switch / mode change) so nothing
   // lingers over another screen's map.

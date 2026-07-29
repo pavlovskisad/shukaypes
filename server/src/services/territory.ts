@@ -309,19 +309,28 @@ export async function resetTerritory(userId: string): Promise<void> {
 // join them in. Capped at the same window the loop check uses, so what
 // you see on screen is exactly what can still close a ring.
 export async function fetchMarks(userId: string): Promise<
-  { lat: number; lng: number; closedLoop: boolean }[]
+  { lat: number; lng: number; closedLoop: boolean; at: string }[]
 > {
   const rows = await db
     .select({
       lat: schema.territoryMarks.lat,
       lng: schema.territoryMarks.lng,
       closedLoop: schema.territoryMarks.closedLoop,
+      // The client only shows a dot while the mark is FRESH — it fades out
+      // and leaves the territory behind — so it needs the age, not just
+      // the position.
+      at: schema.territoryMarks.createdAt,
     })
     .from(schema.territoryMarks)
     .where(eq(schema.territoryMarks.userId, userId))
     .orderBy(desc(schema.territoryMarks.createdAt))
     .limit(T.shapeMarkWindow);
-  return rows.reverse();
+  return rows.reverse().map((r) => ({
+    lat: r.lat,
+    lng: r.lng,
+    closedLoop: r.closedLoop,
+    at: r.at.toISOString(),
+  }));
 }
 
 // Claimed cells around a point, for the map. Slice 1 returns only the

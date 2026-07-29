@@ -671,7 +671,10 @@ export const useGameStore = create<GameState>((set, get) => ({
             cells,
             enclosed: enclosed ?? 0,
           },
-          territoryMarks: [...prev.territoryMarks, { lat, lng, closedLoop: false }],
+          territoryMarks: [
+            ...prev.territoryMarks,
+            { lat, lng, closedLoop: false, at: new Date().toISOString() },
+          ],
         }));
         // Marking costs hunger and pays happiness — refresh the meters.
         void get().syncState();
