@@ -138,3 +138,128 @@ export function pointInPolygon(
   }
   return inside;
 }
+
+// ---------------------------------------------------------------------------
+// PARTITION — ground belongs to whoever's mark is nearest.
+//
+// Hulls are built per owner from that owner's marks alone, so nothing stops
+// two of them covering the same block: walk a 700m loop and you claim
+// everything inside it, including the park where someone else's dog actually
+// lives. These helpers cut that back. Each owner keeps their hull MINUS the
+// parts where a rival's mark is closer, which means an uncontested loop still
+// fills completely and a rival patch inside it becomes a pocket in their own
+// colour. No point on the map is ever owned twice.
+//
+// Everything below works in local metres rather than degrees: the clipper
+// assumes a flat plane, and metre-scale coordinates keep it away from the
+// precision trouble that raw lat/lng (six significant digits of which are
+// constant across a city) would give it.
+
+export type Pt = [number, number];
+
+export interface Projection {
+  to: (p: { lat: number; lng: number }) => Pt;
+  from: (p: Pt) => { lat: number; lng: number };
+}
+
+// Equirectangular projection anchored at a reference point. Offsets are
+// relative to the anchor so coordinates stay small near the area of interest.
+export function localProjection(ref: { lat: number; lng: number }): Projection {
+  const mPerLat = 110_540;
+  const mPerLng = 111_320 * Math.cos((ref.lat * Math.PI) / 180);
+  return {
+    to: (p) => [(p.lng - ref.lng) * mPerLng, (p.lat - ref.lat) * mPerLat],
+    from: ([x, y]) => ({ lat: ref.lat + y / mPerLat, lng: ref.lng + x / mPerLng }),
+  };
+}
+
+// Sutherland-Hodgman: keep the part of a CONVEX polygon where ax·x + ay·y <= c.
+// Convexity matters — on a concave polygon this quietly joins separated pieces
+// with a spurious edge. Every caller here passes a hull or something already
+// cut from one, which is convex by construction.
+export function clipHalfPlane(poly: Pt[], ax: number, ay: number, c: number): Pt[] {
+  const n = poly.length;
+  if (n === 0) return poly;
+  const out: Pt[] = [];
+  for (let i = 0; i < n; i++) {
+    const cur = poly[i]!;
+    const prev = poly[(i + n - 1) % n]!;
+    const dCur = ax * cur[0] + ay * cur[1] - c;
+    const dPrev = ax * prev[0] + ay * prev[1] - c;
+    if (dCur <= 0 !== dPrev <= 0) {
+      const t = dPrev / (dPrev - dCur);
+      out.push([prev[0] + t * (cur[0] - prev[0]), prev[1] + t * (cur[1] - prev[1])]);
+    }
+    if (dCur <= 0) out.push(cur);
+  }
+  return out;
+}
+
+// The part of `within` where `site` is closer than every one of `others` —
+// i.e. site's Voronoi cell, bounded by the polygon it's cut from.
+//
+// The bisector of s and o is where |p-s|² = |p-o|². Writing d = o-s and
+// m = (o+s)/2, that reduces to d·(p-m) = 0, so each of `others` contributes
+// one half-plane and the cell is the polygon clipped by all of them. The
+// midpoint form is used rather than the algebraically identical
+// 2p·(o-s) = |o|²-|s|² because the latter subtracts two large squared
+// coordinates and loses precision exactly where the two marks are close —
+// which is the case that matters.
+//
+// `tieWins` decides who gets ground that is EXACTLY equidistant, which
+// happens when two owners hold a mark at the same spot. Both callers must
+// pass opposite answers for the same pair, or the tied ground is taken
+// from both of them and ends up belonging to nobody.
+export function voronoiCellWithin(
+  within: Pt[],
+  site: Pt,
+  others: Pt[],
+  tieWins = false,
+): Pt[] {
+  let poly = within;
+  for (const o of others) {
+    const dx = o[0] - site[0];
+    const dy = o[1] - site[1];
+    if (Math.abs(dx) < 1e-9 && Math.abs(dy) < 1e-9) {
+      // Same spot: no bisector exists, so the tie-break is the whole
+      // answer. Either this constraint says nothing, or it says no.
+      if (tieWins) continue;
+      return [];
+    }
+    poly = clipHalfPlane(
+      poly,
+      dx,
+      dy,
+      (dx * (o[0] + site[0]) + dy * (o[1] + site[1])) / 2,
+    );
+    if (poly.length < 3) return [];
+  }
+  return poly;
+}
+
+// Keep the part of `poly` that lies inside the CONVEX polygon `convex` —
+// Sutherland-Hodgman once per edge. Used to confine one owner's claim to
+// where it actually meets another's, so the partition only ever hands
+// ground from one of them to the other and never to nobody.
+export function clipToConvex(poly: Pt[], convex: Pt[]): Pt[] {
+  if (convex.length < 3) return [];
+  // Don't trust the winding — a reversed ring would clip away everything
+  // instead of everything-but.
+  let area = 0;
+  for (let i = 0, j = convex.length - 1; i < convex.length; j = i++) {
+    area += convex[j]![0] * convex[i]![1] - convex[i]![0] * convex[j]![1];
+  }
+  const ring = area < 0 ? [...convex].reverse() : convex;
+
+  let out = poly;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const a = ring[j]!;
+    const b = ring[i]!;
+    const dx = b[0] - a[0];
+    const dy = b[1] - a[1];
+    // Interior of a counter-clockwise ring is left of each directed edge.
+    out = clipHalfPlane(out, dy, -dx, dy * a[0] - dx * a[1]);
+    if (out.length < 3) return [];
+  }
+  return out;
+}
