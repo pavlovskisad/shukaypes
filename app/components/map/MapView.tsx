@@ -47,7 +47,7 @@ import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
 import { LostDogCardStack } from '../ui/LostDogCardStack';
 import { createBuildingAvoider } from './buildingAvoider';
-import { GAME_RENDER, MULTIPLAYER, DOG_CAM } from '../../constants/experiments';
+import { GAME_RENDER, MULTIPLAYER, DOG_CAM, LOST_DOG_PINS } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { LostDogModal } from '../ui/LostDogModal';
@@ -672,7 +672,7 @@ export default function MapViewWeb() {
         ? t.bubbles.contested
         : lastMark.enclosed
           ? t.bubbles.enclosed
-          : lastMark.strength > 1
+          : lastMark.renewed
             ? t.bubbles.renewed
             : t.bubbles.marked;
     showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3600);
@@ -2613,7 +2613,7 @@ export default function MapViewWeb() {
             while the cinematic dog view is open (a pet selected): only the
             selected pet's BIG pin shows (below), so the framed zone isn't
             cluttered by neighbours. */}
-        {((DOG_CAM && dogCam) || selectedDogId ? [] : clusters).flatMap((c) => {
+        {(!LOST_DOG_PINS || (DOG_CAM && dogCam) || selectedDogId ? [] : clusters).flatMap((c) => {
           if (c.items.length === 1) {
             const d = c.items[0]!.dog;
             const pos = displayPositions.get(d.id) ?? d.lastSeen.position;

@@ -406,11 +406,6 @@ export const territoryMarks = pgTable(
     // Set when this mark closed a loop, so the client can draw the ring
     // it completed and we don't re-claim the same enclosure twice.
     closedLoop: boolean('closed_loop').notNull().default(false),
-    // How well established this mark is. A fresh one is 1; re-marking the
-    // same spot on a later walk hardens it, up to a cap. This is what makes
-    // the core of your range expensive for someone else to take while the
-    // edges stay soft — the border war happens where it should.
-    strength: integer('strength').notNull().default(1),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

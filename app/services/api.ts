@@ -65,9 +65,6 @@ export interface TerritoryMark {
   lat: number;
   lng: number;
   closedLoop: boolean;
-  // 1-3. How many visits have hardened this spot — and therefore how many
-  // rival marks it takes to knock it out.
-  strength: number;
   // ISO timestamp. The dot only shows while the mark is fresh — it fades
   // out and leaves the territory behind — so the map needs its age.
   at: string;
@@ -321,9 +318,9 @@ export const api = {
         lng: number;
         // True when this mark is the one that first gave its cluster area.
         enclosed?: boolean;
-        // 1 = new ground; 2-3 = landed on ground we already held and
-        // renewed it.
-        strength?: number;
+        // Landed on ground we already hold, renewing it rather than
+        // claiming anything new.
+        renewed?: boolean;
         // How many rival marks it knocked down, and whether any died.
         stolen?: number;
         captured?: boolean;

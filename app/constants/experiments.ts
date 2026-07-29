@@ -22,3 +22,11 @@ export const MULTIPLAYER = true;
 // a toggle button; off by default. Flag-gated so we can pull the whole thing
 // with one switch while we feel the dynamics out.
 export const DOG_CAM = true;
+
+// Lost-pet PINS on the main map. Off for now: the search layer is meant to
+// be the quiet half of the app — you meet a lost dog through the companion
+// and the carousel, not through a map peppered with photo pins competing
+// with the territory you're actually walking. The pets are still fetched
+// and still drive supersniff, the carousel and the cinematic pet view;
+// this only hides the scattered pins. Flip back on to restore them.
+export const LOST_DOG_PINS = false;

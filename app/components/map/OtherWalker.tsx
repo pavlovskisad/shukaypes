@@ -4,6 +4,7 @@ import { MapLibreMarker } from './MapLibreMarker';
 import { useMaplibreMap } from './MapContext';
 import { DogSprite } from './DogSprite';
 import { Z } from '../../constants/z';
+import { ownerColorCss } from './territoryColor';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
 import { haptic } from '../../utils/haptics';
@@ -128,11 +129,14 @@ export function OtherWalker({ player }: Props) {
             👋
           </div>
         ) : null}
+        {/* The name chip carries the colour of the ground this dog holds,
+            so "whose zone is that" is answerable by looking at the dog
+            standing on it — the territory layer paints the same hue. */}
         <div
           style={{
             font: `600 10px ${SYSTEM_FONT}`,
-            color: '#2a2a2a',
-            background: 'rgba(255,255,255,0.82)',
+            color: '#ffffff',
+            background: ownerColorCss(player.id),
             borderRadius: 8,
             padding: '1px 6px',
             marginBottom: 2,

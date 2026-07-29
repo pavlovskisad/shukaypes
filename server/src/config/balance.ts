@@ -258,12 +258,12 @@ export const balance = {
     // "the core is expensive to take".
     contestMaxHits: 2,
     // REFRESH — the defence. Marking within this distance of your own
-    // live marks restarts their clocks and makes the new mark harder to
-    // remove (strength 2, then 3). So a corner you walk every day becomes
-    // a core that survives raids, while a one-off detour stays soft. This
-    // is what makes recapture a habit rather than a chore.
+    // live marks restarts their clocks, so a corner you walk every day
+    // never decays out from under you. It does NOT make those marks
+    // harder to take: every mark is worth exactly one, so the state of a
+    // border is readable straight off the map instead of depending on a
+    // hidden number under each dot.
     refreshM: 110,
-    maxMarkStrength: 3,
     // How far out other people's ground is drawn. Effectively the whole
     // map view: seeing the city carved up between neighbours is the point
     // of a territory game, and a 900m keyhole (the first cut) meant you
