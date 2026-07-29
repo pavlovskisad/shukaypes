@@ -379,24 +379,39 @@ export async function markIfDue(
 
 // Bots mark too, so a new city isn't empty ground. Same placement and
 // contest rules; the mood gates don't apply (a bot has no companion
-// state) and the pacing is the caller's timer rather than the dog's.
+// state) and the pacing plus the spacing rule live with the caller, which
+// is the only place a bot's "last mark" is remembered.
 //
-// The spacing rule is applied here rather than by the caller, because a
-// bot dwelling in the same park for days would otherwise stack hundreds
-// of marks on one bench. Too close to something it already holds → the
-// visit RENEWS that mark instead of adding another. Same rule a player
-// gets from minDistanceM, and it's what makes a bot's home patch harden
-// over time into ground worth taking.
+// What's enforced here is a CEILING on how much ground one bot holds.
+// Without it a bot pacing its patch for days would stack hundreds of
+// marks on the same few streets; at the cap it renews its oldest mark
+// instead, so the patch hardens rather than sprawling.
+//
+// An earlier cut put the spacing rule here instead, refusing to mark
+// anywhere within minDistanceM of ANY of the bot's own marks. Combined
+// with bots roaming their own patch — where those marks already are —
+// that meant every visit renewed and none ever added, so bot territory
+// froze at its five seed marks and never grew no matter how far they
+// walked.
 export async function markAsBot(botId: string, botName: string, pos: LatLng): Promise<void> {
-  const own = await marksNear(pos, T.minDistanceM, { onlyUserId: botId });
-  if (own.length) {
+  const live = await liveMarks(botId);
+  if (live.length >= T.botMaxMarks) {
+    // At the ceiling: refresh the oldest instead of claiming more, so the
+    // patch stays alive without creeping across the city.
+    const oldest = live[0]!;
     await db
       .update(schema.territoryMarks)
       .set({
         createdAt: new Date(),
         strength: sql`LEAST(${T.maxMarkStrength}, ${schema.territoryMarks.strength} + 1)`,
       })
-      .where(inArray(schema.territoryMarks.id, own.map((m) => m.id)));
+      .where(
+        and(
+          eq(schema.territoryMarks.userId, botId),
+          eq(schema.territoryMarks.lat, oldest.lat),
+          eq(schema.territoryMarks.lng, oldest.lng),
+        ),
+      );
     return;
   }
   await placeMark(botId, botName, pos);

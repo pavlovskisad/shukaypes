@@ -119,6 +119,11 @@ interface Bot {
   // before the population exists.
   home: LatLng; // the patch they seed and keep coming back to
   lastMarkAt: number;
+  // Where it last marked. Same spacing rule the player's dog gets: never
+  // twice on the same patch in a row, but free to mark near an OLDER mark
+  // (which renews and hardens it). Held here rather than in the database
+  // because it's pacing, not ownership.
+  lastMarkPos: LatLng | null;
 }
 
 // Where each bot keeps its territory: its hotspot if that's still free,
@@ -177,6 +182,7 @@ function spawnBot(i: number, home: LatLng): Bot {
     // Stagger the first marks so a restart doesn't fire the whole pool
     // into the same tick.
     lastMarkAt: Date.now() - rand(0, balance.territory.botMarkCooldownMs),
+    lastMarkPos: null,
   };
   bot.target = newTarget(bot);
   return bot;
@@ -290,8 +296,16 @@ export function startMultiplayerCron(
             // Bots mark where they linger, not mid-stride — same instinct
             // a real dog has at a park, and it keeps their ground where
             // people actually walk instead of smeared along a route.
-            if (b.state === 'dwell' && now - b.lastMarkAt >= balance.territory.botMarkCooldownMs) {
+            if (
+              b.state === 'dwell' &&
+              now - b.lastMarkAt >= balance.territory.botMarkCooldownMs &&
+              // …and not on the patch it just marked, so a patch grows
+              // outward instead of piling onto one bench.
+              (!b.lastMarkPos ||
+                distM(b.pos, b.lastMarkPos) >= balance.territory.minDistanceM)
+            ) {
               b.lastMarkAt = now;
+              b.lastMarkPos = b.pos;
               marking.push(b);
             }
           }
