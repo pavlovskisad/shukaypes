@@ -62,9 +62,9 @@ function markPayload(mark: MarkResult) {
       lng: mark.position.lng,
       // True when this mark is the one that first gave its cluster area.
       enclosed: mark.enclosed === true,
-      // 1 = fresh ground, 2-3 = landed on ground we already held and
-      // renewed it. The client says something different for each.
-      strength: mark.strength ?? 1,
+      // Landed on ground we already hold, renewing it rather than
+      // claiming anything new. The dog has its own line for that.
+      renewed: mark.renewed === true,
       // How many rival marks this one knocked down, and whether any of
       // them died outright ("that corner is ours now").
       stolen: mark.stolen ?? 0,

@@ -52,6 +52,8 @@ const LINK_SOURCE = 'territory-link-src';
 const LINK_LAYER = 'territory-link';
 const DOTS_SOURCE = 'territory-dots-src';
 const DOTS_LAYER = 'territory-dots';
+const LABEL_SOURCE = 'territory-label-src';
+const LABEL_LAYER = 'territory-label';
 
 // Colours live in territoryColor.ts, shared with the 3D buildings layer —
 // the ground under a block and the buildings standing on it have to agree
@@ -111,6 +113,43 @@ function areaGeoJSON(
   return { type: 'FeatureCollection', features };
 }
 
+// A name written across each neighbour's ground. The colours alone say
+// "these are different owners" but not WHICH — you'd see a dog called
+// Рекс standing on a patch and have no way to tell whether the patch was
+// his. Placed at the centroid of the owner's largest shape, so it lands
+// in open ground rather than on an edge.
+//
+// Only neighbours are labelled. Your own ground is the one zone that
+// never needs saying, and writing your name across the middle of the map
+// would be the loudest thing on it.
+function labelGeoJSON(
+  rivals: { ownerId: string; ownerName: string; shapes: TerritoryShape[] }[],
+): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const r of rivals) {
+    let best: { pts: { lat: number; lng: number }[]; span: number } | null = null;
+    for (const s of r.shapes) {
+      if (s.kind !== 'area' || s.points.length < 3) continue;
+      // Bounding-box span as a cheap stand-in for area — we only need to
+      // pick the roomiest piece, not measure it.
+      const lats = s.points.map((p) => p.lat);
+      const lngs = s.points.map((p) => p.lng);
+      const span = (Math.max(...lats) - Math.min(...lats)) * (Math.max(...lngs) - Math.min(...lngs));
+      if (!best || span > best.span) best = { pts: s.points, span };
+    }
+    if (!best) continue;
+    const n = best.pts.length;
+    const lat = best.pts.reduce((a, p) => a + p.lat, 0) / n;
+    const lng = best.pts.reduce((a, p) => a + p.lng, 0) / n;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [lng, lat] },
+      properties: { name: r.ownerName, color: ownerColorCss(r.ownerId) },
+    });
+  }
+  return { type: 'FeatureCollection', features };
+}
+
 // Two marks are a link, not a territory: drawn as a bare line so it's
 // visible that they're related and that a third mark would close a shape.
 function linkGeoJSON(shapes: TerritoryShape[]): GeoJSON.FeatureCollection {
@@ -163,10 +202,10 @@ function dotsGeoJSON(
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [m.lng, m.lat] },
       properties: {
-        // A hardened mark (revisited on a later walk) draws a little
-        // bigger — the only place strength is visible, and it's the
-        // difference between a soft edge and a core you'd defend.
-        r: (m.closedLoop ? 6.5 : 4.5) + Math.max(0, (m.strength ?? 1) - 1) * 1.1,
+        // Every mark is the same size because every mark is worth the
+        // same. Only the one that first enclosed a shape gets to be
+        // bigger, and that's about the moment, not about strength.
+        r: m.closedLoop ? 6.5 : 4.5,
         o: Math.max(0, Math.min(1, o)),
         color: OWN_COLOR_CSS,
       },
@@ -238,6 +277,7 @@ export function TerritoryLayer({
     const areas = areaGeoJSON(areaGroups);
     const links = linkGeoJSON(shapes);
     const dots = dotsGeoJSON(marks, Date.now(), rivalMarks);
+    const labels = labelGeoJSON(rivals);
 
     const apply = () => {
       // Territory is paint on the FLOOR — it belongs under the city, not
@@ -294,6 +334,33 @@ export function TerritoryLayer({
         );
       }
 
+      // Names sit ABOVE the buildings — a label buried under the city
+      // isn't a label. Everything else here is paint on the floor.
+      if (!setOr(LABEL_SOURCE, labels)) {
+        map.addLayer({
+          id: LABEL_LAYER,
+          type: 'symbol',
+          source: LABEL_SOURCE,
+          layout: {
+            'text-field': ['get', 'name'],
+            'text-size': 13,
+            'text-allow-overlap': false,
+            // Let a name drop out rather than shove a neighbour's aside —
+            // a crowded corner should go quiet, not rearrange itself.
+            'text-ignore-placement': false,
+            'text-padding': 6,
+          },
+          paint: {
+            'text-color': ['get', 'color'],
+            // A halo, not a plate: the name has to stay readable over both
+            // its own fill and the pale map, without becoming a chip that
+            // competes with the dogs' own name tags.
+            'text-halo-color': 'rgba(255,255,255,0.9)',
+            'text-halo-width': 1.6,
+          },
+        });
+      }
+
       if (!setOr(DOTS_SOURCE, dots)) {
         map.addLayer({
           id: DOTS_LAYER,
@@ -322,10 +389,10 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
+        for (const id of [AREA_FILL, LINK_LAYER, DOTS_LAYER, LABEL_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
-        for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {
+        for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE, LABEL_SOURCE]) {
           if (map.getSource(id)) map.removeSource(id);
         }
       } catch {

@@ -164,8 +164,8 @@ interface GameState {
     lng: number;
     // True when this mark is the one that first gave its cluster area.
     enclosed: boolean;
-    // 1 = new ground, 2-3 = renewed ground we already held.
-    strength: number;
+    // Landed on ground we already hold rather than claiming new ground.
+    renewed: boolean;
     // How many rival marks it knocked down, and whether any died.
     stolen: number;
     captured: boolean;
@@ -681,7 +681,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       // 15s tick. (The server's own cells arrive on that tick and
       // replace these.)
       if (res.marked) {
-        const { lat, lng, enclosed, strength, stolen, captured } = res.marked;
+        const { lat, lng, enclosed, renewed, stolen, captured } = res.marked;
         // Show the new dot immediately — the shape it belongs to arrives
         // with the next sync, but the dot itself shouldn't lag the bubble.
         set((prev) => ({
@@ -690,7 +690,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             lat,
             lng,
             enclosed: enclosed === true,
-            strength: strength ?? 1,
+            renewed: renewed === true,
             stolen: stolen ?? 0,
             captured: captured === true,
           },
@@ -700,7 +700,6 @@ export const useGameStore = create<GameState>((set, get) => ({
               lat,
               lng,
               closedLoop: false,
-              strength: strength ?? 1,
               at: new Date().toISOString(),
             },
           ],

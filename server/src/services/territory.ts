@@ -30,15 +30,17 @@
 // point: you don't press a "raid" button, you walk somewhere and the dog
 // does what dogs do.
 //
-//   • near YOUR OWN live marks  → they renew (clocks restart) and the new
-//     mark lands harder (strength 2, then 3). A corner you walk daily
-//     becomes a core.
-//   • near a RIVAL's live marks → the nearest couple weaken by one, and
-//     at zero they die and their shape shrinks. A raid row is written so
-//     the loser hears about it on their next sync.
+//   • near YOUR OWN live marks  → they renew: their clocks restart, so
+//     walking the same streets keeps that ground alive against decay.
+//   • near a RIVAL's live marks → the nearest couple are simply GONE, and
+//     their shape shrinks. A raid row is written so the loser hears about
+//     it on their next sync.
 //
-// Soft edges fall to a single visit; a hardened core takes several across
-// separate walks. The border war happens at the border.
+// EVERY MARK IS EQUAL. There was a strength tier once — marks hardened to
+// 3 on repeat visits and took as many rival marks to remove — and it made
+// the state of a border impossible to read or count: two zones touching
+// told you nothing about who was actually winning without knowing the
+// hidden number under each dot. One mark, one claim, one mark to take it.
 //
 // HOME GROUND
 // -----------
@@ -114,9 +116,9 @@ export interface MarkResult {
   // Set when this mark is the one that gave its cluster area for the
   // first time — the third of a group. The client makes a moment of it.
   enclosed?: boolean;
-  // How hard this mark landed (1-3). 2+ means it renewed ground you
-  // already held, which is worth its own line from the dog.
-  strength?: number;
+  // True when this mark landed on ground we already hold, renewing it
+  // rather than claiming anything new — worth its own line from the dog.
+  renewed?: boolean;
   // How many rival marks this one knocked down, and whether any died.
   // The difference between "we're sniffing around their edge" and "that
   // corner is ours now".
@@ -156,7 +158,6 @@ async function liveMarks(userId: string) {
       lat: schema.territoryMarks.lat,
       lng: schema.territoryMarks.lng,
       closedLoop: schema.territoryMarks.closedLoop,
-      strength: schema.territoryMarks.strength,
       at: schema.territoryMarks.createdAt,
     })
     .from(schema.territoryMarks)
@@ -186,7 +187,6 @@ async function marksNear(
       userId: schema.territoryMarks.userId,
       lat: schema.territoryMarks.lat,
       lng: schema.territoryMarks.lng,
-      strength: schema.territoryMarks.strength,
       closedLoop: schema.territoryMarks.closedLoop,
       at: schema.territoryMarks.createdAt,
     })
@@ -218,7 +218,7 @@ async function placeMark(
   raiderName: string,
   pos: LatLng,
   opts: { contest?: boolean } = {},
-): Promise<{ enclosed: boolean; strength: number; stolen: number; captured: boolean }> {
+): Promise<{ enclosed: boolean; renewed: boolean; stolen: number; captured: boolean }> {
   // Everything within the wider of the two radii, in one query.
   const scanM = Math.max(T.refreshM, T.contestM);
   const near = await marksNear(pos, scanM);
@@ -228,12 +228,10 @@ async function placeMark(
       ? []
       : near.filter((m) => m.userId !== userId && m.d <= T.contestM);
 
-  // Landing on ground you already hold makes the new mark harder to
-  // shift — one step above the best mark already there.
-  const strength = Math.min(
-    T.maxMarkStrength,
-    own.reduce((best, m) => Math.max(best, m.strength + 1), 1),
-  );
+  // Landing on ground you already hold renews it rather than hardening
+  // it — every mark is worth exactly one, whoever made it and however
+  // often they come back.
+  const renewed = own.length > 0;
 
   // Does this mark give its cluster area for the first time? Only used
   // for the bubble and a slightly larger dot — the shape itself is always
@@ -245,15 +243,13 @@ async function placeMark(
     ) ?? [];
   const enclosed = cluster.length === T.shapeMinMarks;
 
+  // A rival mark removes what it lands on. No weakening step: one mark,
+  // one claim, one mark to take it.
   const hits = rivals.slice(0, T.contestMaxHits);
-  const killedIds = hits.filter((m) => m.strength <= 1).map((m) => m.id);
-  const weakenedIds = hits.filter((m) => m.strength > 1).map((m) => m.id);
+  const killedIds = hits.map((m) => m.id);
   // One raid per victim, not per mark — losing two marks to one rival
   // walking past is a single event to the person it happens to.
-  const victims = new Map<string, boolean>();
-  for (const m of hits) {
-    victims.set(m.userId, (victims.get(m.userId) ?? false) || m.strength <= 1);
-  }
+  const victims = new Set(hits.map((m) => m.userId));
 
   const now = new Date();
   await db.transaction(async (tx) => {
@@ -263,7 +259,6 @@ async function placeMark(
       lat: pos.lat,
       lng: pos.lng,
       closedLoop: enclosed,
-      strength,
       createdAt: now,
     });
     // Renew what's already yours nearby — the reason to walk the same
@@ -274,18 +269,12 @@ async function placeMark(
         .set({ createdAt: now })
         .where(inArray(schema.territoryMarks.id, own.map((m) => m.id)));
     }
-    if (weakenedIds.length) {
-      await tx
-        .update(schema.territoryMarks)
-        .set({ strength: sql`${schema.territoryMarks.strength} - 1` })
-        .where(inArray(schema.territoryMarks.id, weakenedIds));
-    }
     if (killedIds.length) {
       await tx
         .delete(schema.territoryMarks)
         .where(inArray(schema.territoryMarks.id, killedIds));
     }
-    for (const [victimId, killed] of victims) {
+    for (const victimId of victims) {
       // Bots don't read their mail.
       if (isBot(victimId)) continue;
       await tx.insert(schema.territoryRaids).values({
@@ -295,7 +284,7 @@ async function placeMark(
         raiderName,
         lat: pos.lat,
         lng: pos.lng,
-        killed,
+        killed: true,
         createdAt: now,
       });
     }
@@ -319,7 +308,7 @@ async function placeMark(
 
   return {
     enclosed,
-    strength,
+    renewed,
     stolen: hits.length,
     captured: killedIds.length > 0,
   };
@@ -372,7 +361,7 @@ export async function markIfDue(
   return {
     marked: true,
     position: pos,
-    strength: outcome.strength,
+    ...(outcome.renewed ? { renewed: true } : {}),
     ...(outcome.enclosed ? { enclosed: true } : {}),
     ...(outcome.stolen ? { stolen: outcome.stolen, captured: outcome.captured } : {}),
   };
@@ -405,10 +394,7 @@ export async function markAsBot(botId: string, botName: string, pos: LatLng): Pr
       const oldest = live[0]!;
       await db
         .update(schema.territoryMarks)
-        .set({
-          createdAt: new Date(),
-          strength: sql`LEAST(${T.maxMarkStrength}, ${schema.territoryMarks.strength} + 1)`,
-        })
+        .set({ createdAt: new Date() })
         .where(
           and(
             eq(schema.territoryMarks.userId, botId),
@@ -760,7 +746,7 @@ function isHome(pos: LatLng, shapes: TerritoryShape[]): boolean {
 // is the point: computing them separately is what let two people hold the
 // same block.
 export interface MapTerritory {
-  marks: { lat: number; lng: number; closedLoop: boolean; strength: number; at: string }[];
+  marks: { lat: number; lng: number; closedLoop: boolean; at: string }[];
   shapes: TerritoryShape[];
   // Marks OTHER dogs have just made, so a neighbour's border moving has a
   // visible cause. Without them a rival zone simply changed shape between
@@ -809,7 +795,6 @@ export async function fetchMapTerritory(
         lat: m.lat,
         lng: m.lng,
         closedLoop: m.closedLoop,
-        strength: m.strength,
         at: m.at.toISOString(),
       })),
     shapes,

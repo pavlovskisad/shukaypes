@@ -1,0 +1,11 @@
+-- One health level: every mark is worth exactly one.
+--
+-- Marks used to harden on repeat visits (strength 1..3) and took as many
+-- rival marks to remove. It made the state of a border unreadable — two
+-- zones touching told you nothing about who was winning without knowing
+-- the hidden number under each dot, and it made the whole thing hard to
+-- reason about or count. One mark, one claim, one mark to take it.
+--
+-- Dropping the column rather than pinning it to 1: a column nothing reads
+-- is exactly the kind of thing that drifts back into the logic later.
+ALTER TABLE "territory_marks" DROP COLUMN IF EXISTS "strength";
