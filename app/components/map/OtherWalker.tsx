@@ -26,11 +26,28 @@ interface Props {
 const M_PER_LAT = 110540;
 
 export function OtherWalker({ player }: Props) {
-  // Latest reported (target) position — updated as new presence arrives.
-  const targetRef = useRef(player.position);
-  targetRef.current = player.position;
+  // The current LEG: where this dog was when the last position arrived,
+  // where it is headed, when it set off, and how long it should take.
+  //
+  // Walked at a steady pace across the whole gap between updates, rather
+  // than eased toward the target. Exponential easing covers 90% of the
+  // distance in a fraction of the interval and then stops dead, so once
+  // presence settled at its intended 15s the dog spent about two seconds
+  // walking and thirteen sitting — which is what "all the dogs just sat"
+  // actually looked like. Pacing the leg over the observed gap keeps it
+  // walking right up to the moment the next position lands.
+  const legRef = useRef({
+    from: { ...player.position },
+    to: { ...player.position },
+    startAt: 0,
+    durMs: 0,
+  });
+  // When the previous target arrived, so the next leg can be paced over
+  // however long the gap actually turns out to be. Measured rather than
+  // assumed: bots and real players report at different rates, and the
+  // sync cadence itself changes with how fast the user is moving.
+  const lastTargetAtRef = useRef(0);
 
-  // Animated position that eases toward the target each tick.
   const posRef = useRef({ ...player.position });
   const [pos, setPos] = useState({ ...player.position });
   const [facingLeft, setFacingLeft] = useState(false);
@@ -49,46 +66,64 @@ export function OtherWalker({ player }: Props) {
   const mapRef = useRef(map);
   mapRef.current = map;
 
+  // A new reported position starts a new leg from wherever the dog has
+  // actually got to, paced over however long the last gap was.
   useEffect(() => {
-    let last = typeof performance !== 'undefined' ? performance.now() : 0;
-    // Exponential smoothing at ~20fps — glides to a new target over ~2s.
+    const now = typeof performance !== 'undefined' ? performance.now() : 0;
+    const prevAt = lastTargetAtRef.current;
+    lastTargetAtRef.current = now;
+    // First update has no gap to measure. Clamped at both ends: a burst of
+    // updates shouldn't make the dog sprint, and a long stall shouldn't
+    // leave it creeping across the map for a minute.
+    const gap = prevAt ? now - prevAt : 0;
+    const durMs = gap > 0 ? Math.min(20_000, Math.max(1_500, gap)) : 2_000;
+    legRef.current = {
+      from: { ...posRef.current },
+      to: { ...player.position },
+      startAt: now,
+      durMs,
+    };
+  }, [player.position.lat, player.position.lng]);
+
+  useEffect(() => {
     const id = setInterval(() => {
       const now = typeof performance !== 'undefined' ? performance.now() : 0;
-      const dt = Math.min(0.2, (now - last) / 1000);
-      last = now;
-      const cur = posRef.current;
-      const tgt = targetRef.current;
-      const k = 1 - Math.exp(-1.6 * dt);
-      const dLat = tgt.lat - cur.lat;
-      const dLng = tgt.lng - cur.lng;
-      // Metres of remaining travel (for moving/idle + to stop micro-jitter).
-      const cosLat = Math.cos((cur.lat * Math.PI) / 180) || 1;
-      const remM = Math.hypot(dLat * M_PER_LAT, dLng * M_PER_LAT * cosLat);
-      if (remM < 0.5) {
-        if (movingRef.current) {
-          movingRef.current = false;
-          setMoving(false);
-        }
-        return;
+      const leg = legRef.current;
+      const cosLat = Math.cos((leg.from.lat * Math.PI) / 180) || 1;
+      const legM = Math.hypot(
+        (leg.to.lat - leg.from.lat) * M_PER_LAT,
+        (leg.to.lng - leg.from.lng) * M_PER_LAT * cosLat,
+      );
+      // Fraction of the leg walked. Linear on purpose — a dog crossing the
+      // block at a steady pace is what reads as somebody out walking.
+      const t = leg.durMs > 0 ? Math.min(1, (now - leg.startAt) / leg.durMs) : 1;
+      // Standing still if there was nowhere to go, or we have arrived and
+      // the next position hasn't landed yet.
+      const walking = legM >= 0.5 && t < 1;
+      if (walking !== movingRef.current) {
+        movingRef.current = walking;
+        setMoving(walking);
       }
-      // Face the SCREEN-space direction of travel (project cur → target), so
-      // it's correct even when the map is rotated. World dLng alone faced the
-      // wrong way on a rotated map ("running backwards").
+      if (!walking) return;
+      // Face the SCREEN-space direction of travel, so it's correct even
+      // when the map is rotated. World dLng alone faced the wrong way on a
+      // rotated map ("running backwards").
       const m = mapRef.current;
       if (m) {
         try {
-          const dxPx = m.project([tgt.lng, tgt.lat]).x - m.project([cur.lng, cur.lat]).x;
+          const dxPx =
+            m.project([leg.to.lng, leg.to.lat]).x -
+            m.project([leg.from.lng, leg.from.lat]).x;
           if (dxPx > 0.5) setFacingLeft(false);
           else if (dxPx < -0.5) setFacingLeft(true);
         } catch {
           /* project can throw mid-teardown — keep last facing */
         }
       }
-      if (!movingRef.current) {
-        movingRef.current = true;
-        setMoving(true);
-      }
-      const next = { lat: cur.lat + dLat * k, lng: cur.lng + dLng * k };
+      const next = {
+        lat: leg.from.lat + (leg.to.lat - leg.from.lat) * t,
+        lng: leg.from.lng + (leg.to.lng - leg.from.lng) * t,
+      };
       posRef.current = next;
       setPos(next);
     }, 50);

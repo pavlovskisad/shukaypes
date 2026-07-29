@@ -65,6 +65,13 @@ const DOT_HOLD_MS = 12_000;
 const DOT_FADE_MS = 8_000;
 const DOT_LIFE_MS = DOT_HOLD_MS + DOT_FADE_MS;
 
+// A neighbour's last mark fades much more slowly and stops short of
+// invisible. It is one dot per dog rather than a trail, so it can't pile
+// up the way a full history would — and a faint dot each is what makes
+// "who marked where" answerable at a glance.
+const RIVAL_DOT_FADE_MS = 90_000;
+const RIVAL_DOT_MIN_OPACITY = 0.3;
+
 // GeoJSON rings must close explicitly.
 function ring(pts: { lat: number; lng: number }[]): number[][] {
   return [...pts.map((p) => [p.lng, p.lat]), [pts[0]!.lng, pts[0]!.lat]];
@@ -135,19 +142,28 @@ function dotsGeoJSON(
   rivalMarks: { lat: number; lng: number; ownerId: string; at: string }[] = [],
 ): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
-  // A neighbour's fresh mark, in their colour. Same fade as your own, so
-  // "somebody's dog just claimed that corner" reads the same way yours
-  // does — and the border shifting a moment later has a visible cause.
+  // Each neighbour's LAST mark, in their colour — one dot per dog, and the
+  // server sends exactly that.
+  //
+  // It fades by age but never all the way out. Your own marks vanish after
+  // twenty seconds because they are a "that just happened" flash and the
+  // shape they build is the lasting record; a neighbour's has no such
+  // record on your screen, so dropping it left you unable to see where any
+  // other dog had ever marked. A bot marks once every four minutes, so a
+  // twenty-second window showed one about a fifth of the time. Bright for
+  // the first stretch, then settling to a quiet dot that says "this is the
+  // last place that dog claimed".
   for (const m of rivalMarks) {
     const age = now - new Date(m.at).getTime();
-    if (age >= DOT_LIFE_MS) continue;
-    const o = age <= DOT_HOLD_MS ? 1 : 1 - (age - DOT_HOLD_MS) / DOT_FADE_MS;
+    const fade = Math.min(1, Math.max(0, (age - DOT_HOLD_MS) / RIVAL_DOT_FADE_MS));
     features.push({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [m.lng, m.lat] },
       properties: {
-        r: 4.5,
-        o: Math.max(0, Math.min(1, o)),
+        // Fresh ones are as big as your own so a mark landing still reads
+        // as an event; once faded they shrink to a marker.
+        r: 4.5 - 1.5 * fade,
+        o: 1 - (1 - RIVAL_DOT_MIN_OPACITY) * fade,
         color: ownerColorCss(m.ownerId),
       },
     });
