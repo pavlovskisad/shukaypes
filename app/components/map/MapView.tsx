@@ -69,6 +69,14 @@ import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
 
 const TOKEN_REFRESH_MS = 15000;
+// Extra syncs while actually walking, so a fast mover isn't looking at a
+// fifteen-second-old city. Both gates have to pass: 30m of real ground
+// covered AND 4s since the last one. The time gate is the important half
+// — /sync/map takes over a second to answer, so anything tighter puts a
+// second request on the wire before the first has landed, and then the
+// newest response is not reliably the last one applied.
+const SYNC_MOVE_M = 30;
+const SYNC_MIN_GAP_MS = 4000;
 
 // Two pets within this radius are visually grouped together — either
 // floated in a ring (zone-outline feel) or collapsed behind a cluster
@@ -770,21 +778,59 @@ export default function MapViewWeb() {
   // as collected. Spots stay separate — they're driven by Google
   // Places, not our backend, and the action is movement-gated so most
   // ticks are no-ops anyway.
+  //
+  // Driven by a timer and by DISTANCE WALKED — never by userPos itself.
+  // Listing userPos.lat/lng in the deps meant a new GPS fix tore the
+  // effect down and rebuilt it: the 15s interval was cleared before it
+  // could ever fire, and the immediate sync at the top ran on every fix
+  // instead. Position arrives once a second (watchPosition, and exactly
+  // SIM_TICK_MS in sim), so the app was calling /sync/map and
+  // /collect/path at 1Hz — fifteen times the intended rate, each round
+  // trip taking longer than the gap between them, so several were always
+  // in flight at once and the last one to land won regardless of which
+  // was newest. Other dogs' positions went backwards as often as
+  // forwards, which is why they stopped animating: OtherWalker glides
+  // toward its target and sits when it gets there, and a target that
+  // keeps being reset to an older fix never ends up more than half a
+  // metre away.
+  const hasPos = !!userPos;
   useEffect(() => {
-    if (!userPos || !isFocused) return;
-    void collectPath(userPos, companionPosRef.current);
-    void syncMap(userPos);
+    if (!hasPos || !isFocused) return;
+    let lastAt = 0;
+    let lastPos: { lat: number; lng: number } | null = null;
+
+    const run = () => {
+      const pos = useGameStore.getState().userPosition;
+      if (!pos) return;
+      lastAt = Date.now();
+      lastPos = pos;
+      void collectPath(pos, companionPosRef.current);
+      void syncMap(pos);
+    };
+
+    run();
     // syncSpots is driven separately by the viewport-watcher effect
     // below so the dog finds places where the human is LOOKING, not
     // just where they're standing.
-    const id = setInterval(() => {
+    //
+    // The floor: someone standing still still gets fresh tokens and
+    // neighbours. The watcher on top of it is what keeps a fast walker
+    // current without a request per fix — it needs BOTH real distance
+    // and a minimum gap, so a sprint syncs about every four seconds and
+    // a stroll simply falls through to the floor.
+    const floor = setInterval(run, TOKEN_REFRESH_MS);
+    const watcher = setInterval(() => {
       const pos = useGameStore.getState().userPosition;
-      if (!pos) return;
-      void collectPath(pos, companionPosRef.current);
-      void syncMap(pos);
-    }, TOKEN_REFRESH_MS);
-    return () => clearInterval(id);
-  }, [userPos?.lat, userPos?.lng, isFocused, collectPath, syncMap]);
+      if (!pos || !lastPos) return;
+      if (Date.now() - lastAt < SYNC_MIN_GAP_MS) return;
+      if (distanceMeters(lastPos, pos) < SYNC_MOVE_M) return;
+      run();
+    }, 1000);
+    return () => {
+      clearInterval(floor);
+      clearInterval(watcher);
+    };
+  }, [hasPos, isFocused, collectPath, syncMap]);
 
   // Viewport-driven spots sync. When the user pans to a new
   // neighborhood we want to surface its cafes / vets / pet stores

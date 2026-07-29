@@ -87,6 +87,13 @@ const HOUR_MS = 60 * 60 * 1000;
 const BOT_PREFIX = 'bot:';
 const isBot = (id: string) => id.startsWith(BOT_PREFIX);
 
+// Emergency lever. Set TERRITORY_PARTITION=off on the API and every owner
+// simply keeps their whole claim — zones overlap again, which is wrong but
+// cheap. Exists because the partition is pure synchronous JS on the hot
+// path: when it got too expensive it didn't degrade, it blocked the event
+// loop and took /health down with it. A flag beats a redeploy at 3am.
+const PARTITION_ON = process.env.TERRITORY_PARTITION !== 'off';
+
 
 // Marks older than this stop counting toward shapes.
 function liveSince(): Date {
@@ -535,6 +542,14 @@ function ringAreaM2(ring: Pt[]): number {
 // are exactly what makes the clipper fall over.
 const MIN_BITE_M2 = 20;
 
+// Hand the event loop back for one tick. setImmediate rather than
+// setTimeout(0) or await-a-resolved-promise: a resolved promise only
+// drains the microtask queue and never lets a pending socket be read, so
+// it would look like a yield and starve the server just the same.
+function breathe(): Promise<void> {
+  return new Promise<void>((resolve) => setImmediate(resolve));
+}
+
 // Turn every owner's marks into the shapes they actually hold.
 //
 // Two passes. The first builds every owner's raw hulls; the second cuts
@@ -544,9 +559,20 @@ const MIN_BITE_M2 = 20;
 // rival's full Voronoi cell (the one-pass version) took 100,000m² off a
 // walked loop and handed the neighbour only the 7,500m² their own hull
 // covered, leaving the rest owned by nobody.
-function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
+//
+// Async, and it yields to the event loop between patches. Not because any
+// of this is IO — it's pure CPU — but because pure CPU on the hot path is
+// exactly what took the API down: one long synchronous run starves
+// everything else in the process, so /health, which touches nothing, timed
+// out alongside /sync/map. Yielding turns "the server is gone" into "this
+// one response is slow", which is a survivable failure.
+async function partitionShapes(
+  marks: OwnedMark[],
+  opts: { maxPatches?: number } = {},
+): Promise<Map<string, TerritoryShape[]>> {
   const out = new Map<string, TerritoryShape[]>();
   if (marks.length === 0) return out;
+  const startedAt = Date.now();
 
   const proj = localProjection(marks[0]!);
   const byOwner = new Map<string, LatLng[]>();
@@ -609,11 +635,24 @@ function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
     }
   }
 
+  // Only the nearest handful take part. Marks arrive sorted by distance,
+  // so patch order follows, and what falls off the end is what's furthest
+  // from whoever asked. The pair loop below is quadratic in this number.
+  const considered = patches.slice(0, opts.maxPatches ?? T.partitionMaxPatches);
+
   // Pass 2 — cut each patch back to the ground it is nearest to.
-  for (const patch of patches) {
+  for (const patch of considered) {
+    await breathe();
+    if (!PARTITION_ON) {
+      out.set(patch.ownerId, [
+        ...(out.get(patch.ownerId) ?? []),
+        { kind: 'area', points: patch.claim },
+      ]);
+      continue;
+    }
     const bites: Pt[][] = [];
 
-    for (const other of patches) {
+    for (const other of considered) {
       if (other.ownerId === patch.ownerId) continue;
       // Hulls too far apart to touch can't take anything from each other.
       if (distanceMeters(patch.centre, other.centre) > patch.reachM + other.reachM) continue;
@@ -635,6 +674,15 @@ function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
         const cell = voronoiCellWithin(contested, r, patch.marksXY, tieWins);
         if (cell.length >= 3 && ringAreaM2(cell) >= MIN_BITE_M2) bites.push(cell);
       }
+    }
+
+    // Largest bites first, then capped. A patch surrounded by neighbours
+    // could otherwise hand the clipper one polygon per rival mark — the
+    // shape of input that blocked the event loop — and the ones dropped
+    // are the slivers nobody can see.
+    if (bites.length > T.partitionMaxBites) {
+      bites.sort((a, b) => ringAreaM2(b) - ringAreaM2(a));
+      bites.length = T.partitionMaxBites;
     }
 
     const shapes = out.get(patch.ownerId) ?? [];
@@ -703,7 +751,79 @@ function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
   for (const [ownerId, ls] of lines) {
     out.set(ownerId, [...(out.get(ownerId) ?? []), ...ls]);
   }
+
+  const took = Date.now() - startedAt;
+  if (took >= T.partitionSlowMs) {
+    console.warn(
+      `[territory] partition took ${took}ms for ${marks.length} marks, ` +
+        `${considered.length}/${patches.length} patches`,
+    );
+  }
   return out;
+}
+
+// One partition, shared by everyone looking at the same neighbourhood.
+//
+// The work is identical for two clients standing on the same street, and
+// it's the most expensive thing the sync path does — so it's computed once
+// and handed out. Keyed on a coarse grid cell plus a signature of the
+// marks themselves, so a mark landing anywhere in view invalidates the
+// entry immediately: this can go stale by up to partitionCacheMs on
+// timing, but never on content.
+interface PartitionCacheEntry {
+  sig: string;
+  at: number;
+  // Stored as the promise, not the result, so concurrent callers that miss
+  // together still only compute once — the second one awaits the first
+  // rather than starting its own.
+  work: Promise<Map<string, TerritoryShape[]>>;
+}
+const partitionCache = new Map<string, PartitionCacheEntry>();
+
+// Cheap order-sensitive hash of the mark set. Marks arrive sorted by
+// distance from the caller, so two callers in the same cell see the same
+// order; ids and rounded coordinates are enough to catch a mark placed,
+// taken, or expired.
+function marksSignature(marks: { userId: string; lat: number; lng: number }[]): string {
+  let h = 0x811c9dc5;
+  for (const m of marks) {
+    const s = `${m.userId}|${m.lat.toFixed(5)}|${m.lng.toFixed(5)}`;
+    for (let i = 0; i < s.length; i++) {
+      h ^= s.charCodeAt(i);
+      h = Math.imul(h, 0x01000193);
+    }
+  }
+  return `${marks.length}:${(h >>> 0).toString(36)}`;
+}
+
+async function partitionCached(
+  pos: LatLng,
+  marks: OwnedMark[],
+): Promise<Map<string, TerritoryShape[]>> {
+  const cell = T.partitionCacheCellDeg;
+  const key = `${Math.round(pos.lat / cell)}:${Math.round(pos.lng / cell)}`;
+  const sig = marksSignature(marks);
+  const now = Date.now();
+
+  const hit = partitionCache.get(key);
+  if (hit && hit.sig === sig && now - hit.at < T.partitionCacheMs) return hit.work;
+
+  const work = partitionShapes(marks);
+  partitionCache.set(key, { sig, at: now, work });
+  // A failed partition must not be remembered as the answer for the next
+  // 20 seconds — drop it so the following caller retries.
+  work.catch(() => {
+    if (partitionCache.get(key)?.work === work) partitionCache.delete(key);
+  });
+
+  // Oldest-first eviction. Map preserves insertion order and entries are
+  // re-inserted on recompute, so the head is genuinely the stalest cell.
+  while (partitionCache.size > T.partitionCacheMax) {
+    const oldest = partitionCache.keys().next().value;
+    if (oldest === undefined) break;
+    partitionCache.delete(oldest);
+  }
+  return work;
 }
 
 // How much ground a set of shapes actually holds. Islands are summed and
@@ -770,7 +890,7 @@ export async function fetchMapTerritory(
   if (all.length === 0)
     return { marks: [], shapes: [], rivalMarks: [], home: false, rivals: [] };
 
-  const partitioned = partitionShapes(all);
+  const partitioned = await partitionCached(pos, all);
   const shapes = partitioned.get(userId) ?? [];
 
   // Nearest owners first, so the cap drops the ones furthest from you.
@@ -845,7 +965,20 @@ export interface LeaderboardEntry {
 export async function territoryLeaderboard(): Promise<LeaderboardEntry[]> {
   const cached = await readCachedBoard();
   if (cached) return cached;
+  // Single-flight. The cache is what keeps this off the hot path, so the
+  // moment it expires is exactly the moment every waiting reader misses at
+  // once — and this partition covers the whole city, not one screen. Ten
+  // simultaneous global partitions is how a five-minute cache still
+  // manages to take the process down.
+  boardInFlight ??= computeLeaderboard().finally(() => {
+    boardInFlight = null;
+  });
+  return boardInFlight;
+}
 
+let boardInFlight: Promise<LeaderboardEntry[]> | null = null;
+
+async function computeLeaderboard(): Promise<LeaderboardEntry[]> {
   const rows = await db
     .select({
       userId: schema.territoryMarks.userId,
@@ -855,7 +988,11 @@ export async function territoryLeaderboard(): Promise<LeaderboardEntry[]> {
     .from(schema.territoryMarks)
     .where(gte(schema.territoryMarks.createdAt, liveSince()));
 
-  const scored = [...partitionShapes(rows)]
+  // A far higher patch ceiling than the map view uses: this is the whole
+  // city and cutting it to a screenful would score eighteen owners and
+  // call it a leaderboard. It can afford the work — it runs once per cache
+  // period, not once per sync, and it yields while it runs.
+  const scored = [...(await partitionShapes(rows, { maxPatches: T.leaderboardMaxPatches }))]
     .map(([userId, shapes]) => ({ userId, areaM2: Math.round(totalAreaM2(shapes)) }))
     .filter((e) => e.areaM2 > 0)
     .sort((a, b) => b.areaM2 - a.areaM2)
@@ -892,7 +1029,9 @@ export async function territoryStanding(
     T.rivalViewRadiusM,
     { limit: T.partitionMarkLimit },
   );
-  const shapes = partitionShapes(near).get(userId) ?? [];
+  const shapes = (await partitionCached({ lat: centre.lat, lng: centre.lng }, near)).get(
+    userId,
+  ) ?? [];
   return { areaM2: Math.round(totalAreaM2(shapes)), rank: null };
 }
 

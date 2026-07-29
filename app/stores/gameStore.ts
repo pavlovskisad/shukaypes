@@ -388,6 +388,12 @@ interface GameState {
   refreshDailyTasks: () => Promise<void>;
 }
 
+// Monotonic ticket for /sync/map calls. Only the newest issued call is
+// allowed to write; everything else is a response that arrived too late
+// to be the truth. Module-level rather than store state on purpose —
+// bumping it must not re-render anything.
+let syncMapSeq = 0;
+
 export const useGameStore = create<GameState>((set, get) => ({
   hunger: balance.hunger.start,
   happiness: balance.happiness.start,
@@ -846,11 +852,19 @@ export const useGameStore = create<GameState>((set, get) => ({
       }
     }
 
+    // Discard a response that has been overtaken. /sync/map answers in
+    // over a second, so two calls can be in flight whenever the caller
+    // fires on movement, and without this the one that happens to land
+    // last wins — which is not the same as the newest. Applying an older
+    // snapshot rewinds every position in it, and other dogs read that as
+    // standing still.
+    const seq = ++syncMapSeq;
     try {
       const parkPositions = parks.map((p) => p.position);
       const res = await api.syncMap(pos, {
         parks: parkPositions.length ? parkPositions : undefined,
       });
+      if (seq !== syncMapSeq) return;
       const collected = get().recentlyCollectedIds;
       const filteredTokens = collected.size
         ? res.tokens.filter((t) => !collected.has(t.id))
@@ -910,6 +924,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         };
       });
     } catch (err) {
+      if (seq !== syncMapSeq) return;
       set({ lastSyncError: (err as Error).message });
     }
   },

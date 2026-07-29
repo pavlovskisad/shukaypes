@@ -273,10 +273,39 @@ export const balance = {
     // Past a certain count the map stops saying anything — it's just a
     // quilt — and the payload grows for ranges you can't make out anyway.
     maxRivalsDrawn: 14,
-    // Hard bound on how many marks one partition pass will consider.
-    // Sized well above a busy 5km view; the point is that a pathological
-    // density can't turn a 15s sync into a geometry benchmark.
+    // HARD BOUNDS on the partition. Every one of these exists because the
+    // unbounded version took the API down: buffered claims overlap far more
+    // often than raw hulls did, so a patch could be handed a bite polygon
+    // for every mark of every neighbour — ~170 clip polygons per patch,
+    // across ~30 patches, synchronously, on every 15s sync from every
+    // client. polygon-clipping is pure JS, so that blocks the event loop
+    // outright: /health stopped answering, not just /sync/map.
     partitionMarkLimit: 2500,
+    // Nearest N patches take part. Anything further is off-screen anyway.
+    partitionMaxPatches: 18,
+    // Most bites any one patch can take, largest first. A backstop, not a
+    // working limit: a dense city hands a patch ~145, so 200 almost never
+    // bites. Deliberately loose, because capping it tight is a correctness
+    // bug wearing a performance costume — at 24 the same city came out 49%
+    // over-claimed (10.6km² held against 7.2km² of actual ground), which
+    // on screen is neighbours painted on top of each other, which is the
+    // exact confusion the partition exists to remove. The event loop is
+    // protected by yielding between patches instead, which costs nothing.
+    partitionMaxBites: 200,
+    // Cached partition lifetime. Collapses every client syncing the same
+    // neighbourhood onto one computation instead of one each.
+    partitionCacheMs: 20_000,
+    // Grid the cache is keyed on, in degrees (~1.1km of latitude). Coarse
+    // enough that a walking user reuses a cell for minutes at a time.
+    partitionCacheCellDeg: 0.01,
+    // How many partitions are remembered at once. One per populated cell;
+    // a few dozen cells is a whole city, and each entry is small.
+    partitionCacheMax: 64,
+    // A partition slower than this gets logged with its shape. The bounds
+    // above are guesses about a moving target — bot count, mark density,
+    // how much people walk — so the useful thing is knowing when they stop
+    // holding, before /health does the telling.
+    partitionSlowMs: 400,
     // A raid waits this long to be delivered. Long enough to survive a
     // night's sleep, short enough that coming back after a week doesn't
     // dump a month of history on you at once.
@@ -326,5 +355,9 @@ export const balance = {
     // few minutes of lag is invisible.
     leaderboardSize: 10,
     leaderboardCacheMs: 5 * 60 * 1000,
+    // Patch ceiling for the board's city-wide partition. Much larger than
+    // the map's, because this one is meant to cover everybody — but still
+    // bounded, since the pair loop behind it is quadratic.
+    leaderboardMaxPatches: 150,
   },
 } as const;
