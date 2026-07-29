@@ -59,8 +59,38 @@ export interface TerritoryMark {
   lat: number;
   lng: number;
   closedLoop: boolean;
+  // 1-3. How many visits have hardened this spot — and therefore how many
+  // rival marks it takes to knock it out.
+  strength: number;
   // ISO timestamp. The dot only shows while the mark is fresh — it fades
   // out and leaves the territory behind — so the map needs its age.
+  at: string;
+}
+
+// Someone else's ground. Only sent while you're near it, so this is
+// normally empty and the map is yours alone.
+export interface RivalTerritory {
+  ownerId: string;
+  ownerName: string;
+  shapes: TerritoryShape[];
+}
+
+// A place on the territory board. `bot` marks the simulated walkers, so
+// the UI can label them rather than pass them off as neighbours.
+export interface TerritoryRanking {
+  userId: string;
+  name: string;
+  areaM2: number;
+  bot: boolean;
+}
+
+// Somebody marked over your ground while you weren't looking.
+export interface TerritoryRaid {
+  raiderName: string;
+  lat: number;
+  lng: number;
+  // True when they finished a mark off rather than just weakening it.
+  killed: boolean;
   at: string;
 }
 
@@ -225,6 +255,14 @@ export const api = {
       // server (or a failed territory read) just means an unmarked map.
       marks?: TerritoryMark[];
       shapes?: TerritoryShape[];
+      // Rival ground within sight, and any raids on yours since the last
+      // sync. Both optional for the same reason as above.
+      rivals?: RivalTerritory[];
+      raids?: TerritoryRaid[];
+      // How much ground you hold (m²), and whether the walker is
+      // standing on it right now — the passive perks hang off `home`.
+      areaM2?: number;
+      home?: boolean;
     }>(`/sync/map?${params.toString()}`);
   },
 
@@ -267,6 +305,12 @@ export const api = {
         lng: number;
         // True when this mark is the one that first gave its cluster area.
         enclosed?: boolean;
+        // 1 = new ground; 2-3 = landed on ground we already held and
+        // renewed it.
+        strength?: number;
+        // How many rival marks it knocked down, and whether any died.
+        stolen?: number;
+        captured?: boolean;
       } | null;
       // Why it didn't, when the reason is worth a word from the dog.
       mood?: 'hungry' | 'grumpy' | null;
@@ -287,6 +331,24 @@ export const api = {
   // reset silently 400s and the caller's catch swallows it.
   resetTerritory: () =>
     req<{ ok: true }>('/territory/reset', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
+
+  // Who holds the most of the city, and where you stand. Its own trip
+  // rather than a field on /sync/map — the board is read from the profile
+  // tab, and recomputing a scoreboard on every 15s map poll would be work
+  // nobody is looking at. `rank` is null when you're outside the top ten.
+  territoryLeaderboard: () =>
+    req<{ board: TerritoryRanking[]; you: { areaM2: number; rank: number | null } }>(
+      '/territory/leaderboard',
+    ),
+
+  // Dev affordance (see ?terrRaid=1): send a bot onto your newest mark so
+  // the raid notification can be checked without waiting for one to walk
+  // there on its own. Returns ok:false when you hold no ground yet.
+  raidTest: () =>
+    req<{ ok: boolean }>('/territory/raid-test', {
       method: 'POST',
       body: JSON.stringify({}),
     }),

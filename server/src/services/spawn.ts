@@ -93,6 +93,10 @@ export async function ensureTokensForUser(
   userId: string,
   center: LatLng,
   parks: LatLng[] = [],
+  // `home` is set when the walker is standing on territory they hold.
+  // Their own streets get a bigger user-area pool — the most legible of
+  // the territory perks, because it's the one you can actually see.
+  opts: { home?: boolean } = {},
 ) {
   parks = dedupeParks(parks);
   // Anti-cluster ledger — populated lazily before the first scatter
@@ -150,8 +154,14 @@ export async function ensureTokensForUser(
         ),
       );
     const userLive = userRows[0]?.live ?? 0;
-    if (userLive < balance.tokensInUserArea) {
-      const missing = balance.tokensInUserArea - userLive;
+    // Home ground raises the pool's CEILING rather than the topup rate,
+    // so your streets carry more paws without the refill running any
+    // more often — which is what the movement/cooldown gate above is
+    // there to prevent.
+    const target =
+      balance.tokensInUserArea + (opts.home ? balance.territory.homeExtraPaws : 0);
+    if (userLive < target) {
+      const missing = target - userLive;
       const positions = scatterInRadius(
         center,
         missing,

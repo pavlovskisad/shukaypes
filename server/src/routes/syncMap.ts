@@ -17,7 +17,16 @@ import {
   fetchUserState,
 } from '../services/mapData.js';
 import { syncPresence, takePokes } from '../services/presence.js';
-import { fetchMarks, fetchShapes, resetTerritory } from '../services/territory.js';
+import {
+  fetchRivalTerritory,
+  fetchTerritory,
+  noteHomeGround,
+  resetTerritory,
+  simulateRaidOnSelf,
+  takeRaids,
+  territoryLeaderboard,
+  territoryStanding,
+} from '../services/territory.js';
 import type { LatLng } from '../utils/geo.js';
 
 // Server kill-switch for multiplayer presence. Off only if explicitly set to
@@ -61,6 +70,30 @@ const plugin: FastifyPluginAsync = async (app) => {
     return { ok: true };
   });
 
+  // Send a bot onto your newest mark so the raid path can be exercised
+  // without waiting for one to wander in on its own. Real contest, real
+  // raid row — and it can only cost the caller their own ground.
+  app.post('/territory/raid-test', async (req) => {
+    const ok = await simulateRaidOnSelf(req.userId);
+    return { ok };
+  });
+
+  // Who holds the most of the city, plus where the caller stands. Read
+  // from the profile tab rather than the map, so it's its own trip —
+  // putting it on the 15s sync would recompute a scoreboard nobody is
+  // looking at.
+  app.get('/territory/leaderboard', async (req) => {
+    // Sequential on purpose: the standing needs the board to find your
+    // rank in it, and running both concurrently would have each miss the
+    // cache and recompute every hull in the city twice.
+    const board = await territoryLeaderboard().catch(() => []);
+    const you = await territoryStanding(req.userId, board).catch(() => ({
+      areaM2: 0,
+      rank: null,
+    }));
+    return { board, you };
+  });
+
   app.get<{ Querystring: SyncMapQuery }>('/sync/map', async (req, reply) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
@@ -73,18 +106,29 @@ const plugin: FastifyPluginAsync = async (app) => {
     const pos: LatLng = { lat, lng };
     const parks = parseParks(req.query.parks);
 
-    // Top-up writes first (idempotent), then reads in parallel. The
+    // Your own territory comes FIRST, alone: the spawn topup below needs
+    // to know whether the walker is on home ground (paws are denser
+    // there), and it's one indexed read of your marks that the rest of
+    // the response would have paid for anyway.
+    const territory = await fetchTerritory(req.userId, pos).catch(() => null);
+    const home = territory?.home ?? false;
+
+    // Top-up writes next (idempotent), then reads in parallel. The
     // ensure* calls have to land before the SELECT or the just-spawned
     // rows would miss this response — same ordering the per-resource
     // endpoints used.
     await Promise.all([
-      ensureTokensForUser(req.userId, pos, parks),
+      ensureTokensForUser(req.userId, pos, parks, { home }),
       ensureFoodForUser(req.userId, pos, parks),
+      // Remember home ground for the decay cron, which can branch on a
+      // column but can't compute a hull. Writes only on a change, and
+      // never blocks the map on a hiccup.
+      noteHomeGround(req.userId, home).catch(() => {}),
     ]);
 
     const wantPlayers = MULTIPLAYER_ON && req.query.mp === '1';
 
-    const [tokens, food, dogs, state, players, pokes, marks, shapes] =
+    const [tokens, food, dogs, state, players, pokes, rivals, raids] =
       await Promise.all([
       fetchNearbyTokens(req.userId, pos),
       fetchNearbyFood(req.userId),
@@ -94,10 +138,12 @@ const plugin: FastifyPluginAsync = async (app) => {
       // return no players / pokes.
       wantPlayers ? syncPresence(req.userId, pos).catch(() => []) : Promise.resolve([]),
       wantPlayers ? takePokes(req.userId).catch(() => []) : Promise.resolve([]),
-      // The recent chain of marks — dots + the order to join them in.
-      fetchMarks(req.userId).catch(() => []),
-      // The drawable geometry those marks make — filled hulls and lines.
-      fetchShapes(req.userId).catch(() => []),
+      // Whoever else holds ground within sight. Proximity-gated on
+      // purpose: the map is yours until you walk into someone.
+      fetchRivalTerritory(req.userId, pos).catch(() => []),
+      // "Somebody took your territory, dawg!" — queued in Postgres rather
+      // than Redis so a raid that lands overnight still reaches you.
+      takeRaids(req.userId).catch(() => []),
     ]);
 
     if (!state) {
@@ -105,7 +151,21 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { error: 'user not found' };
     }
 
-    return { tokens, food, dogs, state, players, pokes, marks, shapes };
+    return {
+      tokens,
+      food,
+      dogs,
+      state,
+      players,
+      pokes,
+      marks: territory?.marks ?? [],
+      shapes: territory?.shapes ?? [],
+      // How much ground you hold, and whether you're standing on it.
+      areaM2: territory?.areaM2 ?? 0,
+      home,
+      rivals,
+      raids,
+    };
   });
 };
 

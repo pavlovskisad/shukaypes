@@ -13,6 +13,9 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { writePresenceBatch, purgeStalePresence, type PresenceEntry } from './presence.js';
 import { runCronTick } from './cronUtils.js';
+import { db, schema } from '../db/index.js';
+import { balance } from '../config/balance.js';
+import { markAsBot, seedBotTerritory } from './territory.js';
 
 interface LatLng {
   lat: number;
@@ -100,6 +103,11 @@ interface Bot {
   speed: number;
   state: BotState;
   until: number; // ms timestamp the current dwell/offline ends
+  // Territory. Bots hold ground so a city without real players still has
+  // something to take — and so the PvP half of the mechanic is testable
+  // before the population exists.
+  home: LatLng; // the patch they seed and keep coming back to
+  lastMarkAt: number;
 }
 
 function spawnBot(i: number): Bot {
@@ -112,7 +120,30 @@ function spawnBot(i: number): Bot {
     speed: rand(SPEED_MIN, SPEED_MAX),
     state: 'walk',
     until: 0,
+    // Home patch: a hotspot, nudged off-centre so two bots sharing one
+    // park hold adjacent ground rather than the same ground. Neighbours
+    // with a shared border are the interesting case — identical ranges
+    // would just annihilate each other on the first contest.
+    home: offset(HOTSPOTS[i % HOTSPOTS.length]!, 200),
+    // Stagger the first marks so a restart doesn't fire the whole pool
+    // into the same tick.
+    lastMarkAt: Date.now() - rand(0, balance.territory.botMarkCooldownMs),
   };
+}
+
+// Bots write into the same presence set as people, but owning marks needs
+// a real user row (the FKs are real). They're created once, keyed on the
+// same `bot:N` id, and are otherwise inert: no companion state, no
+// tokens, no sync. `isBot` in the territory service is what keeps them
+// from being sent notifications nobody reads.
+async function ensureBotUsers(bots: Bot[]): Promise<void> {
+  if (!bots.length) return;
+  await db
+    .insert(schema.users)
+    .values(
+      bots.map((b) => ({ id: b.id, deviceId: b.id, username: b.name })),
+    )
+    .onConflictDoNothing();
 }
 
 function stepTowardTarget(b: Bot, dtS: number): void {
@@ -176,6 +207,21 @@ export function startMultiplayerCron(
   if (bots.length) {
     log.info({ kind: 'mp_bots', count: bots.length }, `multiplayer: spawned ${bots.length} bot walkers`);
   }
+  // Give the pool their user rows and a starting patch each, so the very
+  // first walk a real player takes already has ground to run into.
+  // Best-effort: a bot that can't be seeded just walks without marking.
+  if (bots.length) {
+    void (async () => {
+      try {
+        await ensureBotUsers(bots);
+        for (const b of bots) await seedBotTerritory(b.id, b.name, b.home);
+        log.info({ kind: 'mp_bots_territory', count: bots.length }, 'multiplayer: bot territory seeded');
+      } catch (err) {
+        log.warn({ err, kind: 'mp_bots_territory' }, 'multiplayer: bot territory seeding failed');
+      }
+    })();
+  }
+
   let last = Date.now();
   const id = setInterval(() => {
     void runCronTick(
@@ -186,12 +232,27 @@ export function startMultiplayerCron(
         last = now;
         if (bots.length) {
           const online: PresenceEntry[] = [];
+          const marking: Bot[] = [];
           for (const b of bots) {
-            if (tickBot(b, dtS, now)) {
-              online.push({ id: b.id, pos: b.pos, name: b.name, photo: null, bot: true });
+            if (!tickBot(b, dtS, now)) continue;
+            online.push({ id: b.id, pos: b.pos, name: b.name, photo: null, bot: true });
+            // Bots mark where they linger, not mid-stride — same instinct
+            // a real dog has at a park, and it keeps their ground where
+            // people actually walk instead of smeared along a route.
+            if (b.state === 'dwell' && now - b.lastMarkAt >= balance.territory.botMarkCooldownMs) {
+              b.lastMarkAt = now;
+              marking.push(b);
             }
           }
           await writePresenceBatch(online, now);
+          // Sequential: a handful of marks per tick at most, and running
+          // them in parallel would have bots inside one hotspot contest
+          // each other off the same pre-read snapshot.
+          for (const b of marking) {
+            await markAsBot(b.id, b.name, b.pos).catch((err) => {
+              log.warn({ err, kind: 'mp_bot_mark' }, 'multiplayer: bot mark failed');
+            });
+          }
         }
         await purgeStalePresence(now);
       },

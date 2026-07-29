@@ -120,6 +120,20 @@
       "when": 1777260000000,
       "tag": "0016_drop_territory_cells",
       "breakpoints": true
+    },
+    {
+      "idx": 17,
+      "version": "7",
+      "when": 1777270000000,
+      "tag": "0017_territory_pvp",
+      "breakpoints": true
+    },
+    {
+      "idx": 18,
+      "version": "7",
+      "when": 1777280000000,
+      "tag": "0018_home_ground",
+      "breakpoints": true
     }
   ]
 }

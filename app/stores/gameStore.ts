@@ -4,6 +4,7 @@ import type { FoodItem, LatLng, NearbyPlayer, Quest, Token } from '@shukajpes/sh
 import {
   api,
   type NearbyLostDog,
+  type RivalTerritory,
   type TerritoryMark,
   type TerritoryShape,
 } from '../services/api';
@@ -139,6 +140,19 @@ interface GameState {
   territoryMarks: TerritoryMark[];
   // The drawable geometry those marks make — filled hulls and links.
   territoryShapes: TerritoryShape[];
+  // Other people's ground, but only while you're near it. Normally empty:
+  // the map is yours until you walk into someone else's range.
+  rivalTerritory: RivalTerritory[];
+  // Somebody marked over your ground (seq bumps once per delivery so the
+  // map fires the "somebody took your territory, dawg!" notice once).
+  lastRaid: { seq: number; raiderName: string; killed: boolean; count: number } | null;
+  // How much ground you hold, in m². Drawn as km² once it's big enough
+  // to deserve it.
+  territoryAreaM2: number;
+  // Standing on your own ground right now. Paws are denser here and the
+  // dog's happiness drains slower — both passive, both server-side; this
+  // is only so the UI can say so.
+  onHomeGround: boolean;
   // The dog just marked a spot (seq bumps once per mark so the map can
   // bubble + pop the scent exactly once).
   lastMark: {
@@ -147,6 +161,11 @@ interface GameState {
     lng: number;
     // True when this mark is the one that first gave its cluster area.
     enclosed: boolean;
+    // 1 = new ground, 2-3 = renewed ground we already held.
+    strength: number;
+    // How many rival marks it knocked down, and whether any died.
+    stolen: number;
+    captured: boolean;
   } | null;
   // …or declined to, for a reason worth voicing (hungry / not in the mood).
   markMood: { seq: number; reason: 'hungry' | 'grumpy' } | null;
@@ -388,6 +407,10 @@ export const useGameStore = create<GameState>((set, get) => ({
   incomingPoke: null,
   territoryMarks: [],
   territoryShapes: [],
+  rivalTerritory: [],
+  lastRaid: null,
+  territoryAreaM2: 0,
+  onHomeGround: false,
   lastMark: null,
   markMood: null,
   lostDogsLoaded: false,
@@ -654,7 +677,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       // 15s tick. (The server's own cells arrive on that tick and
       // replace these.)
       if (res.marked) {
-        const { lat, lng, enclosed } = res.marked;
+        const { lat, lng, enclosed, strength, stolen, captured } = res.marked;
         // Show the new dot immediately — the shape it belongs to arrives
         // with the next sync, but the dot itself shouldn't lag the bubble.
         set((prev) => ({
@@ -663,10 +686,19 @@ export const useGameStore = create<GameState>((set, get) => ({
             lat,
             lng,
             enclosed: enclosed === true,
+            strength: strength ?? 1,
+            stolen: stolen ?? 0,
+            captured: captured === true,
           },
           territoryMarks: [
             ...prev.territoryMarks,
-            { lat, lng, closedLoop: false, at: new Date().toISOString() },
+            {
+              lat,
+              lng,
+              closedLoop: false,
+              strength: strength ?? 1,
+              at: new Date().toISOString(),
+            },
           ],
         }));
         // Marking costs hunger and pays happiness — refresh the meters.
@@ -854,6 +886,22 @@ export const useGameStore = create<GameState>((set, get) => ({
           companionName: res.state.companion.name,
           territoryMarks: res.marks ?? prev.territoryMarks,
           territoryShapes: res.shapes ?? prev.territoryShapes,
+          rivalTerritory: res.rivals ?? [],
+          territoryAreaM2: res.areaM2 ?? prev.territoryAreaM2,
+          onHomeGround: res.home === true,
+          // Raids are delivered once by the server, so a batch arriving
+          // here is news. Announce the most recent one and say how many
+          // came with it rather than queueing a bubble per raid — five
+          // notices in a row for one rival's walk-through is noise.
+          lastRaid:
+            res.raids && res.raids.length
+              ? {
+                  seq: (prev.lastRaid?.seq ?? 0) + 1,
+                  raiderName: res.raids[0]!.raiderName,
+                  killed: res.raids.some((r) => r.killed),
+                  count: res.raids.length,
+                }
+              : prev.lastRaid,
           lastSyncError: null,
         };
       });
