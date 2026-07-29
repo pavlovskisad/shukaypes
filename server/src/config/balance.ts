@@ -319,12 +319,6 @@ export const balance = {
     // How many partitions are remembered at once. One per populated cell;
     // a few dozen cells is a whole city, and each entry is small.
     partitionCacheMax: 64,
-    // Floor on how often one cell can be dropped from the partition cache
-    // by a mark landing in it. Without it, a busy hotspot invalidates its
-    // own cell faster than the partition rebuilds and the cache stops
-    // paying for itself — the exact failure it already had once. Sized at
-    // one sync interval: the border still moves within a tick of the mark.
-    partitionInvalidateMinMs: 15_000,
     // A partition slower than this gets logged with its shape. The bounds
     // above are guesses about a moving target — bot count, mark density,
     // how much people walk — so the useful thing is knowing when they stop

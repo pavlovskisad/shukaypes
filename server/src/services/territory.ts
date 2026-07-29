@@ -835,7 +835,17 @@ interface PartitionCacheEntry {
   // together still only compute once — the second one awaits the first
   // rather than starting its own.
   work: Promise<Map<string, TerritoryShape[]>>;
+  // The last SUCCESSFULLY resolved partition for this cell, kept so a
+  // caller arriving mid-rebuild can be handed something immediately.
+  value: Map<string, TerritoryShape[]> | null;
+  // A mark landed here, so `value` is behind the world. Still worth
+  // serving — see below.
+  stale: boolean;
+  rebuilding: boolean;
 }
+// Keyed by CELL alone, not cell+bucket: an entry has to outlive its own
+// freshness window so its last good value is still there to serve while
+// the replacement is being built.
 const partitionCache = new Map<string, PartitionCacheEntry>();
 
 // Which grid cell a position falls in. Shared by the reader and the
@@ -845,82 +855,87 @@ function cellOf(pos: LatLng): string {
   return `${Math.round(pos.lat / cell)}:${Math.round(pos.lng / cell)}`;
 }
 
-// A mark just landed here, so anything cached for this cell is now a lie.
+// A mark just landed here, so what is cached for this cell is now behind.
 // Deliberately ONE cell — see the note above about why invalidating the
 // whole visible radius would empty the cache permanently.
 //
-// THROTTLED, because invalidation and marking pull against each other. The
-// cache exists so a sync costs 1.1s instead of 3.6s; every invalidation
-// hands the next caller the 3.6s version back. That was a fair trade at one
-// mark per bot every seven minutes, and it stops being one as the bots get
-// busier — a hotspot with several bots working it could otherwise bust its
-// cell faster than the partition can be rebuilt, which is how this cache
-// managed to be useless the first time round.
-//
-// One rebuild per cell per window. A border therefore moves within a
-// window of the mark that caused it, which is no worse than the sync
-// interval a client is watching it through anyway.
-const lastInvalidated = new Map<string, number>();
-
+// Marks the entry stale rather than deleting it. Deleting was measurably
+// wrong: at Maidan, where several bots work the same block, back-to-back
+// syncs came back 5.22s / 1.05s / 3.89s / 1.24s — the cache was doing its
+// job (4x) and then being thrown away every other request by a bot marking
+// nearby. Both numbers are real, and which one a player gets was down to
+// luck.
 function invalidatePartitionCell(pos: LatLng): void {
-  const cell = cellOf(pos);
-  const now = Date.now();
-  const prev = lastInvalidated.get(cell) ?? 0;
-  if (now - prev < T.partitionInvalidateMinMs) return;
-  lastInvalidated.set(cell, now);
-  const prefix = `${cell}:`;
-  for (const key of partitionCache.keys()) {
-    if (key.startsWith(prefix)) partitionCache.delete(key);
-  }
-  // Bounded alongside the cache it guards — same cells, same lifetime.
-  if (lastInvalidated.size > T.partitionCacheMax) {
-    for (const [k, at] of lastInvalidated) {
-      if (now - at > T.partitionCacheMs) lastInvalidated.delete(k);
-    }
-  }
+  const hit = partitionCache.get(cellOf(pos));
+  if (hit) hit.stale = true;
 }
 
+// STALE-WHILE-REVALIDATE.
+//
+// Fresh → serve it. Stale but we have a previous answer → serve THAT and
+// rebuild behind the caller. Nothing at all → wait, because there is
+// nothing else to give.
+//
+// The alternative, throttling how often a cell may be invalidated, trades
+// the same latency for staleness on a fixed timer and still makes somebody
+// wait for the rebuild. This way nobody waits: the cost of a mark landing
+// next to you is that your borders are a couple of seconds behind, not
+// that your sync takes five seconds.
 async function partitionCached(
   pos: LatLng,
   marks: OwnedMark[],
 ): Promise<Map<string, TerritoryShape[]>> {
   const now = Date.now();
-  // Keyed on the cell AND a time bucket — deliberately NOT on the marks.
-  //
-  // The first version invalidated whenever any mark in view changed, which
-  // sounded strictly better and in practice meant the cache never hit at
-  // all: the radius is 5km and thirty bots between them mark every eight
-  // seconds, so the mark set is essentially never the same twice. Every
-  // sync paid full price, which is what put a shared vCPU permanently at
-  // its limit.
-  //
-  // A time bucket bounds staleness to partitionCacheMs instead. That is
-  // less than the sync interval, so a shape is at worst one tick behind —
-  // and the mark dot itself is drawn from the collect response the moment
-  // it lands, so nothing the player did is ever waiting on this.
-  const bucket = Math.floor(now / T.partitionCacheMs);
-  const key = `${cellOf(pos)}:${bucket}`;
-
+  const key = cellOf(pos);
   const hit = partitionCache.get(key);
-  if (hit) return hit.work;
 
-  const work = partitionShapes(marks);
-  partitionCache.set(key, { at: now, work });
-  // A failed partition must not be remembered as the answer for the rest
-  // of the bucket — drop it so the following caller retries.
-  work.catch(() => {
-    if (partitionCache.get(key)?.work === work) partitionCache.delete(key);
-  });
+  const rebuild = (): Promise<Map<string, TerritoryShape[]>> => {
+    const work = partitionShapes(marks);
+    const entry: PartitionCacheEntry = {
+      at: now,
+      work,
+      value: hit?.value ?? null,
+      stale: false,
+      rebuilding: true,
+    };
+    partitionCache.set(key, entry);
+    // Oldest-first eviction. Map preserves insertion order and an entry is
+    // re-inserted on every rebuild, so the head is genuinely the cell
+    // nobody has looked at for longest.
+    while (partitionCache.size > T.partitionCacheMax) {
+      const oldest = partitionCache.keys().next().value;
+      if (oldest === undefined || oldest === key) break;
+      partitionCache.delete(oldest);
+    }
+    work
+      .then((v) => {
+        entry.value = v;
+        entry.rebuilding = false;
+      })
+      .catch(() => {
+        // Keep whatever we had — a failed rebuild must not erase a good
+        // answer — but drop the freshness claim so the next call retries.
+        entry.rebuilding = false;
+        entry.stale = true;
+      });
+    return work;
+  };
 
-  // Oldest-first eviction. Map preserves insertion order and entries are
-  // re-inserted on recompute, so the head is genuinely the stalest cell.
-  while (partitionCache.size > T.partitionCacheMax) {
-    const oldest = partitionCache.keys().next().value;
-    if (oldest === undefined) break;
-    partitionCache.delete(oldest);
+  if (hit && !hit.stale && now - hit.at < T.partitionCacheMs) return hit.work;
+
+  // Stale or expired, but there IS a previous answer: hand it over and
+  // refresh behind. One rebuild at a time per cell — a burst of syncs
+  // during a rebuild all get the old value rather than each starting
+  // their own partition, which is what would put the machine back where
+  // it started.
+  if (hit?.value) {
+    if (!hit.rebuilding) void rebuild();
+    return hit.value;
   }
-  return work;
+
+  return rebuild();
 }
+
 
 // How much ground a set of shapes actually holds. Islands are summed and
 // pockets somebody else holds are subtracted; a line contributes nothing,
