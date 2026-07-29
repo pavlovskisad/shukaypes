@@ -298,7 +298,15 @@ export const api = {
 
   // Wipe your own territory — marks and claimed ground. Dev affordance for
   // re-testing the mechanic from scratch (see ?terrReset=1).
-  resetTerritory: () => req<{ ok: true }>('/territory/reset', { method: 'POST' }),
+  // Empty object rather than no body at all: `req` always sets a JSON
+  // content-type, and Fastify rejects a POST that declares JSON and then
+  // sends nothing (FST_ERR_CTP_EMPTY_JSON_BODY → 400). Without this the
+  // reset silently 400s and the caller's catch swallows it.
+  resetTerritory: () =>
+    req<{ ok: true }>('/territory/reset', {
+      method: 'POST',
+      body: JSON.stringify({}),
+    }),
 
   getChatHistory: () => req<{ messages: ChatMessage[] }>('/chat/history'),
 
