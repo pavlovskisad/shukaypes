@@ -29,7 +29,9 @@ export const OWN_COLOR_RGB: [number, number, number] = [0, 60 / 255, 1];
 // resolves well and 0 vs 20 is plainly two. 180-200 is skipped as well as
 // the reserved band itself, so no neighbour gets a cyan close enough to
 // brand blue to be mistaken for yours at a glance.
-const HUES = [0, 20, 40, 60, 90, 130, 160, 180, 265, 290, 315, 340];
+const HUES = [
+  0, 15, 30, 45, 60, 80, 100, 125, 150, 170, 185, 262, 280, 300, 320, 340,
+];
 
 // Two tones per hue, so a collision on hue is still two different colours.
 //
@@ -43,10 +45,7 @@ const HUES = [0, 20, 40, 60, 90, 130, 160, 180, 265, 290, 315, 340];
 // Scored the way it is actually seen — composited first, then compared in
 // CIELAB — dropping the dark tier wins on every axis at once: closest pair
 // 6.2 -> 8.7, nothing left that reads as grey, and total confusion on a
-// 14-zone screen 6.5 -> 6.0 pairs. Fewer slots means slightly more exact
-// repeats and far fewer near-misses, which is the better trade: two
-// obviously-identical zones are easier to live with than two that are
-// almost the same.
+// 14-zone screen 6.5 -> 6.0 pairs.
 const TONES = [
   { s: 0.95, l: 0.42 },
   { s: 0.8, l: 0.66 },
@@ -62,23 +61,42 @@ const PALETTE: Paint[] = TONES.flatMap((t) =>
   HUES.map((hue) => ({ hue, sat: t.s, light: t.l })),
 );
 
+// Which of the 32 slots an owner gets.
+//
+// BOTS ARE NUMBERED, SO THEY ARE NOT HASHED. bot:0..bot:N is a dense
+// sequence, and stepping through the palette by a stride coprime with its
+// length turns that into a bijection — thirty bots, thirty different
+// colours, guaranteed, with consecutive ids landing far apart rather than
+// on neighbouring hues. Hashing them instead put four pairs of IDENTICAL
+// zones on a fourteen-zone screen, which is the birthday problem doing
+// exactly what it always does and precisely the confusion the palette
+// exists to prevent.
+//
+// The stride matters because bots are seeded by cycling hotspots, so ids
+// that are close together tend to be neighbours on the map. Consecutive
+// slots would hand adjacent patches adjacent hues.
+//
+// Real accounts still hash: there is no dense index to use, and a hash is
+// what keeps a colour stable across sessions and devices with nothing
+// stored. They can still collide with a bot — the durable fix is for the
+// server to hand out an index per owner, which is worth doing once real
+// players outnumber the pool.
+const BOT_ID = /^bot:(\d+)$/;
+const STRIDE = 7;
+
 function paintFor(id: string): Paint {
+  const bot = BOT_ID.exec(id);
+  if (bot) return PALETTE[(Number(bot[1]) * STRIDE) % PALETTE.length]!;
+
   let h = 2166136261;
   for (let i = 0; i < id.length; i++) {
     h ^= id.charCodeAt(i);
     h = Math.imul(h, 16777619);
   }
   // Hashed, not assigned in arrival order, so an owner keeps their colour
-  // across sessions and devices with nothing stored anywhere — and, more
-  // to the point, a zone doesn't change colour when a neighbour at the far
-  // edge of the view scrolls in or out.
-  //
-  // The price is that 14 zones drawn from 36 slots will sometimes hand two
-  // of them the same paint (~2.5 pairs per screen, by birthday). Handing
-  // out slots so the drawn set never repeats would need the assignment to
-  // depend on who is currently on screen — and then walking far enough to
-  // push one neighbour out of view would recolour another, which destroys
-  // the mapping this whole file exists to keep.
+  // across sessions and devices — and a zone doesn't change colour when a
+  // neighbour at the far edge of the view scrolls in or out, which is what
+  // any set-dependent assignment would cost.
   return PALETTE[(h >>> 0) % PALETTE.length]!;
 }
 
