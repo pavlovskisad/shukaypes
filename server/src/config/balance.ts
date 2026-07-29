@@ -209,27 +209,29 @@ export const balance = {
     // the entire point of having one. Keep this comfortably above 78.
     trailRadiusM: 85,
     trailStrength: 12,
-    // ENCLOSURE — the payoff move. When the chain of marks loops back on
-    // itself, everything inside the ring becomes yours, not just the path
-    // you walked. That's what turns "a line of dots" into "a piece of the
-    // city", and it gives walking a deliberate shape: go around the block
-    // and the block is yours.
+    // SHAPES — territory is a function of the MARKS, not of the path
+    // walked between them. Three marks near each other make a triangle of
+    // ground; every mark after that grows the shape outward. Nothing to
+    // close, nothing to time right — you can't "almost" get it.
     //
-    // A new mark closes the loop when it lands within this distance of an
-    // earlier mark in the chain.
-    loopCloseM: 170,
-    // …provided at least this many marks separate them, so two marks in a
-    // row can't count as a "loop".
-    loopMinMarks: 3,
-    // Only the recent chain is considered, so a mark you left across town
-    // last week doesn't suddenly enclose half of Kyiv.
-    loopChainLength: 40,
-    // Enclosed ground comes in solid but not maxed: you own it, and
-    // walking it properly is still what makes it a core.
-    loopFillStrength: 30,
-    // Hard ceiling on how much one enclosure can claim, so a very long
-    // loop can't spend a minute of server time filling thousands of cells.
-    loopMaxCells: 1500,
+    // Marks join the same shape when they're within this of another mark
+    // in it. Beyond that a mark starts its own island, which is what stops
+    // one stray mark across town from stretching a single triangle over
+    // half the city.
+    shapeLinkM: 350,
+    // A shape needs at least this many marks before it encloses anything.
+    // Two marks are a line with no area; three are a piece of the city.
+    shapeMinMarks: 3,
+    // How many recent marks are considered when rebuilding shapes. Old
+    // ground doesn't vanish (its cells decay on their own schedule) —
+    // this just bounds the geometry work per mark.
+    shapeMarkWindow: 300,
+    // Ground inside a shape comes in solid but not maxed: you own it, and
+    // actually walking it is still what turns it into a core.
+    shapeFillStrength: 30,
+    // Ceiling per shape, so a very spread-out cluster can't spend a minute
+    // of server time filling tens of thousands of cells.
+    shapeMaxCells: 2500,
     // Mood gates. Below the low-happiness threshold the dog isn't feeling
     // it, and an empty stomach means no marking either — which is what
     // wires territory into the existing bones/paws economy.

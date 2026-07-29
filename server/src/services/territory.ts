@@ -26,7 +26,12 @@ import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
-import { cellsWithinRadius, cellsInsideRing } from '../utils/territoryGrid.js';
+import {
+  cellsWithinRadius,
+  cellsInsideRing,
+  convexHull,
+  clusterPoints,
+} from '../utils/territoryGrid.js';
 
 const T = balance.territory;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -49,8 +54,9 @@ export interface MarkResult {
   position?: LatLng;
   // Cells claimed by this mark (already live-strength).
   cells?: number;
-  // Set when this mark closed a loop: how much ground the ring enclosed.
-  // The client turns this into the "you closed a loop" moment.
+  // How much ground the shape this mark belongs to now encloses. Set
+  // whenever the mark's cluster has enough marks to have area at all —
+  // the client makes a moment of the first one.
   enclosed?: { cells: number };
 }
 
@@ -181,31 +187,31 @@ export async function markIfDue(
 
   const markedAt = new Date(now);
 
-  // Does this mark close a loop? Walk back through the recent chain and
-  // take the EARLIEST mark it lands near — the biggest ring wins, so
-  // going around a whole block beats clipping the last corner. Everything
-  // inside that ring becomes yours.
-  const chain = (
-    await db
-      .select({
-        lat: schema.territoryMarks.lat,
-        lng: schema.territoryMarks.lng,
-      })
-      .from(schema.territoryMarks)
-      .where(eq(schema.territoryMarks.userId, userId))
-      .orderBy(desc(schema.territoryMarks.createdAt))
-      .limit(T.loopChainLength)
-  ).reverse(); // oldest → newest
+  // Territory is a function of the MARKS, not of the route walked between
+  // them: marks near each other form a shape, and everything inside that
+  // shape is yours. Three marks make a triangle; every mark after that
+  // grows it. Recomputed from scratch on each new mark rather than
+  // patched incrementally — it's a few hundred points of geometry, and
+  // deriving it fresh means the shape can never drift out of sync with
+  // the marks the user can see on screen.
+  const priorMarks = await db
+    .select({ lat: schema.territoryMarks.lat, lng: schema.territoryMarks.lng })
+    .from(schema.territoryMarks)
+    .where(eq(schema.territoryMarks.userId, userId))
+    .orderBy(desc(schema.territoryMarks.createdAt))
+    .limit(T.shapeMarkWindow);
 
-  let ring: LatLng[] | null = null;
-  for (let i = 0; i + T.loopMinMarks <= chain.length; i++) {
-    const p = chain[i]!;
-    if (distanceMeters({ lat: p.lat, lng: p.lng }, pos) <= T.loopCloseM) {
-      ring = [...chain.slice(i).map((c) => ({ lat: c.lat, lng: c.lng })), pos];
-      break;
-    }
-  }
-  const enclosedCells = ring ? cellsInsideRing(ring, T.loopMaxCells) : [];
+  // Only the cluster this mark actually belongs to needs refilling — the
+  // shapes elsewhere in the city are unchanged by a mark over here.
+  const all = [...priorMarks.map((m) => ({ lat: m.lat, lng: m.lng })), pos];
+  const myCluster =
+    clusterPoints(all, T.shapeLinkM).find((c) =>
+      c.some((p) => p.lat === pos.lat && p.lng === pos.lng),
+    ) ?? [];
+  const enclosedCells =
+    myCluster.length >= T.shapeMinMarks
+      ? cellsInsideRing(convexHull(myCluster), T.shapeMaxCells)
+      : [];
 
   await db.transaction(async (tx) => {
     await tx.insert(schema.territoryMarks).values({
@@ -213,11 +219,13 @@ export async function markIfDue(
       userId,
       lat: pos.lat,
       lng: pos.lng,
-      closedLoop: enclosedCells.length > 0,
+      // Flags the mark that first gave its cluster area (3rd in a group),
+      // so the map can mark the moment a shape came into being.
+      closedLoop: enclosedCells.length > 0 && myCluster.length === T.shapeMinMarks,
       createdAt: markedAt,
     });
     if (enclosedCells.length) {
-      await claimCells(tx, userId, enclosedCells, T.loopFillStrength, markedAt);
+      await claimCells(tx, userId, enclosedCells, T.shapeFillStrength, markedAt);
     }
     await claimCells(tx, userId, cells, T.strengthPerMark, markedAt);
 
@@ -258,7 +266,7 @@ export async function fetchMarks(userId: string): Promise<
     .from(schema.territoryMarks)
     .where(eq(schema.territoryMarks.userId, userId))
     .orderBy(desc(schema.territoryMarks.createdAt))
-    .limit(T.loopChainLength);
+    .limit(T.shapeMarkWindow);
   return rows.reverse();
 }
 

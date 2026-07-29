@@ -54,7 +54,7 @@ export interface AppStrings {
     // Territory: the dog announcing a fresh claim, and the two reasons it
     // won't bother right now.
     marked: string[];
-    // Closing a loop — the ground inside the ring becomes yours.
+    // A third mark near two others: the dots become a piece of the city.
     enclosed: string[];
     tooHungryToMark: string[];
     tooGlumToMark: string[];
@@ -249,9 +249,9 @@ const uk: AppStrings = {
       '*мітка* хай знають, хто тут ходить',
     ],
     enclosed: [
-      'коло замкнулось — весь квартал наш! 🐾',
-      '*обійшли по колу* тепер це наша земля',
-      'замкнув коло — все всередині наше 🔵',
+      'три мітки — і цей шматок наш! 🐾',
+      '*обнюхав кути* тепер це наша земля',
+      'ділянка наша — все між мітками 🔵',
     ],
     tooHungryToMark: [
       'нічим мітити — я порожній 🦴',
@@ -514,9 +514,9 @@ const en: AppStrings = {
       '*mark* let them know who walks here',
     ],
     enclosed: [
-      'circle closed — the whole block is ours! 🐾',
-      '*walked the loop* this is our land now',
-      'ring complete — everything inside is ours 🔵',
+      'three marks — this patch is ours! 🐾',
+      '*sniffed the corners* this is our land now',
+      'the ground between them is ours 🔵',
     ],
     tooHungryToMark: [
       'nothing left to mark with — I\'m empty 🦴',

@@ -1,5 +1,4 @@
-// Territory rendering — dots, the line joining them, and the ground you
-// enclosed.
+// Territory rendering — the dog's marks, and the ground they enclose.
 //
 // The first cut drew a soft heat-glow over owned cells. It looked like
 // weather: you couldn't tell where a claim started, why it was there, or
@@ -7,11 +6,16 @@
 // instead of an impression of it:
 //
 //   • a DOT wherever the dog actually marked
-//   • a LINE joining them in the order you walked
 //   • a solid FILL over every cell you own
 //
-// So the story reads off the map directly: dots appear, the line grows,
-// and the moment it loops back on itself the enclosed block floods blue.
+// Territory is a function of the MARKS, not of the route walked between
+// them — three marks near each other enclose a triangle of ground, and
+// every mark after that grows the shape. So the story reads off the map
+// directly: dots appear, and the ground between them fills in.
+//
+// Deliberately NO line joining the marks in walk order. An earlier cut
+// drew one, and it implied the path mattered — which sent the eye looking
+// for a loop to close instead of just watching the shape grow.
 //
 // The fill is drawn from the ownership cells themselves — real squares,
 // not a blur — so what you see is exactly what the server says you own.
@@ -26,8 +30,6 @@ import type { TerritoryCell, TerritoryMark } from '../../services/api';
 const FILL_SOURCE = 'territory-fill-src';
 const FILL_LAYER = 'territory-fill';
 const EDGE_LAYER = 'territory-edge';
-const CHAIN_SOURCE = 'territory-chain-src';
-const CHAIN_LAYER = 'territory-chain';
 const DOTS_SOURCE = 'territory-dots-src';
 const DOTS_LAYER = 'territory-dots';
 
@@ -89,31 +91,14 @@ function fillGeoJSON(cells: TerritoryCell[]): GeoJSON.FeatureCollection {
   return { type: 'FeatureCollection', features };
 }
 
-function chainGeoJSON(marks: TerritoryMark[]): GeoJSON.FeatureCollection {
-  if (marks.length < 2) return { type: 'FeatureCollection', features: [] };
-  return {
-    type: 'FeatureCollection',
-    features: [
-      {
-        type: 'Feature',
-        geometry: {
-          type: 'LineString',
-          coordinates: marks.map((m) => [m.lng, m.lat]),
-        },
-        properties: {},
-      },
-    ],
-  };
-}
-
 function dotsGeoJSON(marks: TerritoryMark[]): GeoJSON.FeatureCollection {
   return {
     type: 'FeatureCollection',
     features: marks.map((m) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [m.lng, m.lat] },
-      // The mark that closed a ring reads a touch bigger — it's the one
-      // that won you the block.
+      // The mark that first gave its cluster area reads a touch bigger —
+      // it's the one that turned a pair of dots into a piece of the city.
       properties: { r: m.closedLoop ? 7 : 4.5 },
     })),
   };
@@ -142,7 +127,6 @@ export function TerritoryLayer({
   useEffect(() => {
     if (!map) return;
     const fill = fillGeoJSON(cells);
-    const chain = chainGeoJSON(marks);
     const dots = dotsGeoJSON(marks);
 
     const apply = () => {
@@ -181,16 +165,6 @@ export function TerritoryLayer({
         });
       }
 
-      if (!setOr(CHAIN_SOURCE, chain)) {
-        map.addLayer({
-          id: CHAIN_LAYER,
-          type: 'line',
-          source: CHAIN_SOURCE,
-          layout: { 'line-cap': 'round', 'line-join': 'round' },
-          paint: { 'line-color': BLUE_DEEP, 'line-width': 3, 'line-opacity': 0.85 },
-        });
-      }
-
       if (!setOr(DOTS_SOURCE, dots)) {
         map.addLayer({
           id: DOTS_LAYER,
@@ -217,10 +191,10 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [FILL_LAYER, EDGE_LAYER, CHAIN_LAYER, DOTS_LAYER]) {
+        for (const id of [FILL_LAYER, EDGE_LAYER, DOTS_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
-        for (const id of [FILL_SOURCE, CHAIN_SOURCE, DOTS_SOURCE]) {
+        for (const id of [FILL_SOURCE, DOTS_SOURCE]) {
           if (map.getSource(id)) map.removeSource(id);
         }
       } catch {
