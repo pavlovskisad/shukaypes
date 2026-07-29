@@ -172,8 +172,14 @@ export const balance = {
     sightingsGraceMs: 30 * 24 * 60 * 60 * 1000,
   },
   // Territory marking — the dog claims ground the way a real one does.
-  // The companion decides on its own; the human's only lever is walking
-  // it somewhere worth marking and keeping it in the mood.
+  // The companion decides; the human's only lever is walking it somewhere
+  // worth marking and keeping it in the mood.
+  //
+  // MARKS ARE THE ONLY TRUTH. Territory is the hull of your live marks —
+  // there is no separate ownership record to drift out of sync with what
+  // the map draws. An earlier cut kept per-cell ownership alongside the
+  // shapes and the two diverged immediately: you owned a trail ribbon and
+  // a blob around each mark that were never drawn.
   territory: {
     // The dog marks at most this often. Sized so a 30-minute walk yields
     // roughly 8-13 marks — enough that a walk visibly grows your range,
@@ -183,55 +189,12 @@ export const balance = {
     // feel of the mechanic lives in these two numbers, and finding the
     // right pair takes walking around with them — not a redeploy per
     // guess. Set TERRITORY_COOLDOWN_MS / TERRITORY_MIN_DISTANCE_M on the
-    // API (e.g. 20000 / 60 to watch a ribbon build in a couple of
-    // minutes) and unset them to fall back to the tuned defaults.
+    // API and unset them to fall back to the tuned defaults.
     cooldownMs: envNum('TERRITORY_COOLDOWN_MS', 150_000),
     // …and never within this distance of its last mark, so two marks in a
     // row can't land on the same patch and go to waste. Combined with the
     // cooldown this is what actually paces claims on a fast walk.
     minDistanceM: envNum('TERRITORY_MIN_DISTANCE_M', 140),
-    // A mark claims every grid cell whose centre falls inside this radius
-    // (~1-5 cells at CELL_M=110). Chunky on purpose.
-    radiusM: 100,
-    // The TRAIL — the second, weaker tier of claim. Marks are discrete, so
-    // on their own they leave a string of disconnected islands. The ground
-    // you actually walked between them gets a thin claim too, which is
-    // what stitches those islands into one territory (and, later, what
-    // makes a far-flung mark part of your mainland rather than an
-    // orphan). Narrow and weak: a single pass fades within the day, but a
-    // route you walk daily builds into real ground of its own.
-    //
-    // The radius is NOT free to tune down: a point can sit up to half a
-    // cell diagonal (78m at CELL_M=110) from its own cell's centre, so
-    // any radius below that claims nothing at all while you walk near a
-    // cell corner — and the ribbon comes out with holes in it. Measured
-    // at 45m: ~1 walk in 4 produced a disconnected trail, which defeats
-    // the entire point of having one. Keep this comfortably above 78.
-    trailRadiusM: 85,
-    trailStrength: 12,
-    // SHAPES — territory is a function of the MARKS, not of the path
-    // walked between them. Three marks near each other make a triangle of
-    // ground; every mark after that grows the shape outward. Nothing to
-    // close, nothing to time right — you can't "almost" get it.
-    //
-    // Marks join the same shape when they're within this of another mark
-    // in it. Beyond that a mark starts its own island, which is what stops
-    // one stray mark across town from stretching a single triangle over
-    // half the city.
-    shapeLinkM: 350,
-    // A shape needs at least this many marks before it encloses anything.
-    // Two marks are a line with no area; three are a piece of the city.
-    shapeMinMarks: 3,
-    // How many recent marks are considered when rebuilding shapes. Old
-    // ground doesn't vanish (its cells decay on their own schedule) —
-    // this just bounds the geometry work per mark.
-    shapeMarkWindow: 300,
-    // Ground inside a shape comes in solid but not maxed: you own it, and
-    // actually walking it is still what turns it into a core.
-    shapeFillStrength: 30,
-    // Ceiling per shape, so a very spread-out cluster can't spend a minute
-    // of server time filling tens of thousands of cells.
-    shapeMaxCells: 2500,
     // Mood gates. Below the low-happiness threshold the dog isn't feeling
     // it, and an empty stomach means no marking either — which is what
     // wires territory into the existing bones/paws economy.
@@ -241,16 +204,21 @@ export const balance = {
     // (dogs love doing it).
     hungerCost: 3,
     happinessGain: 4,
-    // Claim strength. One mark puts `strengthPerMark` into every cell it
-    // covers, capped at `maxStrength`; strength then bleeds away at
-    // `decayPerDay`. So a single mark fades to nothing in ~1.5 days,
-    // while a spot marked repeatedly (a core) holds for ~4 — edges go
-    // soft first, exactly where we want the fighting to happen.
-    strengthPerMark: 40,
-    maxStrength: 100,
-    decayPerDay: 25,
-    // Viewport radius for the territory the map asks for each sync.
-    fetchRadiusM: 3000,
-    maxCellsPerFetch: 900,
+    // DECAY, at the level of the mark rather than the ground. A mark's
+    // scent lasts this long; after that it stops counting and the shape
+    // shrinks to the hull of what's left. Visible, unlike a per-cell
+    // strength nobody could see — you watch your edge recede — and it
+    // gives marking inside your own territory a purpose: it doesn't
+    // expand the shape, it renews it.
+    markTtlDays: 4,
+    // SHAPES. Marks near each other form one shape; three of them enclose
+    // ground. Beyond the link distance a mark starts its own island,
+    // which is what stops one stray mark across town from stretching a
+    // single triangle over half the city.
+    shapeLinkM: 350,
+    shapeMinMarks: 3,
+    // Bound on the geometry work per mark. Older marks past this count
+    // are ignored for shape-building (they're near expiry anyway).
+    shapeMarkWindow: 300,
   },
 } as const;

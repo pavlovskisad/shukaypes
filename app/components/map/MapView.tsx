@@ -581,7 +581,7 @@ export default function MapViewWeb() {
     void api
       .resetTerritory()
       .then(() => {
-        useGameStore.setState({ territoryMarks: [], territoryShapes: [], territory: [] });
+        useGameStore.setState({ territoryMarks: [], territoryShapes: [] });
         showBubble('*починаємо з чистого аркуша* 🐾', 3000);
       })
       .catch(() => {
@@ -639,7 +639,7 @@ export default function MapViewWeb() {
     markSeqRef.current = lastMark.seq;
     // Closing a ring is the payoff — it gets its own line, not a routine
     // "marked it".
-    const lines = lastMark.enclosed > 0 ? t.bubbles.enclosed : t.bubbles.marked;
+    const lines = lastMark.enclosed ? t.bubbles.enclosed : t.bubbles.marked;
     showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3600);
   }, [lastMark, showBubble, t]);
 

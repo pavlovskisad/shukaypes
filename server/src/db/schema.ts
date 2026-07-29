@@ -402,36 +402,3 @@ export const territoryMarks = pgTable(
     userCreatedIdx: index('territory_marks_user_created_idx').on(t.userId, t.createdAt),
   }),
 );
-
-// Territory cells — who owns which patch of the city.
-//
-// One row per claimed grid cell (~110 m, see utils/territoryGrid.ts).
-// A cell has exactly one owner; a mark claims every cell whose centre
-// falls inside its radius. `strength` is the value AT `lastMarkedAt` —
-// the live value is that minus decay for the elapsed time, computed on
-// read (see services/territory.ts). Storing it decayed-at-a-timestamp
-// rather than running a cron means a cell costs nothing while nobody is
-// looking at it, and the map can't show stale ownership.
-export const territoryCells = pgTable(
-  'territory_cells',
-  {
-    cellId: text('cell_id').primaryKey(),
-    ownerId: text('owner_id')
-      .notNull()
-      .references(() => users.id, { onDelete: 'cascade' }),
-    // Cell centre, denormalised so the viewport query is a plain bbox
-    // scan and the client can render without decoding cell ids.
-    lat: doublePrecision('lat').notNull(),
-    lng: doublePrecision('lng').notNull(),
-    strength: integer('strength').notNull(),
-    lastMarkedAt: timestamp('last_marked_at', { withTimezone: true }).notNull().defaultNow(),
-    // How many times this cell has ever been marked by its current owner —
-    // a core the user walks daily reads differently from a one-off claim.
-    markCount: integer('mark_count').notNull().default(1),
-  },
-  (t) => ({
-    ownerIdx: index('territory_owner_idx').on(t.ownerId),
-    // Viewport lookups filter on lat then lng.
-    bboxIdx: index('territory_bbox_idx').on(t.lat, t.lng),
-  }),
-);
