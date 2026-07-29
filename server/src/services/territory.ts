@@ -593,6 +593,13 @@ function ringAreaM2(ring: Pt[]): number {
 // are exactly what makes the clipper fall over.
 const MIN_BITE_M2 = 20;
 
+// …and a resulting PIECE smaller than this is dropped too. 200m2 is a
+// square about 14m on a side — smaller than the buildings it would sit
+// between, and well under a pixel of real estate at the zoom anyone looks
+// at a district from. A territory is somewhere a dog walked, not a seam
+// left over from clipping two of them together.
+const MIN_PIECE_M2 = 200;
+
 // Hand the event loop back for one tick. setImmediate rather than
 // setTimeout(0) or await-a-resolved-promise: a resolved promise only
 // drains the microtask queue and never lets a pending socket be read, so
@@ -789,10 +796,32 @@ async function partitionShapes(
     for (const poly of pieces) {
       const [outer, ...holes] = poly;
       if (!outer || outer.length < 4) continue;
+      // Drop the crumbs. Cutting one claim by a dozen neighbours leaves
+      // slivers along every seam — sub-100m2 fragments a few metres across
+      // that nobody can see and nobody walked to. Measured on prod, they
+      // were most of the output: one owner came back as 13 pieces of which
+      // 9 were under 0.05ha, another 11 of which 5 were.
+      //
+      // They are not free. Every one carries vertices into the payload, and
+      // back into the NEXT partition as part of a claim, which is a slow
+      // ratchet on the most expensive thing this service does — the rival
+      // vertex count was climbing 636 -> 774 over an hour of watching.
+      //
+      // Bites are already filtered on the way IN at MIN_BITE_M2; this is the
+      // same idea on the way out, and the threshold is deliberately larger
+      // because a piece has to be big enough to be worth DRAWING, not just
+      // big enough not to break the clipper.
+      if (ringAreaM2(outer as Pt[]) < MIN_PIECE_M2) continue;
       shapes.push({
         kind: 'area',
         points: outer.slice(0, -1).map(proj.from),
-        ...(holes.length ? { holes: holes.map((h) => h.slice(0, -1).map(proj.from)) } : {}),
+        ...(holes.length
+          ? {
+              holes: holes
+                .filter((h) => ringAreaM2(h as Pt[]) >= MIN_PIECE_M2)
+                .map((h) => h.slice(0, -1).map(proj.from)),
+            }
+          : {}),
       });
     }
     out.set(patch.ownerId, shapes);
@@ -1024,27 +1053,39 @@ export async function fetchMapTerritory(
   }
   const names = await ownerNames(rivalIds);
 
-  // ONE mark per neighbour: the last place they marked, whenever that was.
+  // The last few places each neighbour marked, newest first.
   //
-  // This used to be every rival mark newer than rivalMarkFlashMs, which in
-  // practice meant nothing was ever on screen — the flash window is 45s and
-  // a bot marks once every four minutes, so the odds of catching one were
-  // about one in five, per neighbour, per look. "Where did that dog last
-  // lift its leg" is a question with a permanent answer, so it gets a
-  // permanent dot, and the client fades it by age instead of dropping it.
-  const latest = new Map<string, (typeof all)[number]>();
+  // This was every rival mark under rivalMarkFlashMs (45s), which in
+  // practice showed nothing — a bot marks every few minutes, so the odds of
+  // catching one were about one in five per neighbour per look. Then it was
+  // exactly ONE per neighbour, which showed too little in a different way:
+  // a patch needs at least three marks to exist at all, so a single dot
+  // beside a zone reads as though one mark conjured it, and a zone with its
+  // dot somewhere else reads as though it came from nowhere.
+  //
+  // A few each is what makes the shape legible: you can see the cluster the
+  // hull was drawn around. Capped per owner AND faded by age on the client,
+  // so this cannot grow into a scatter of everyone's history.
+  const byOwner = new Map<string, typeof all>();
   for (const m of all) {
     if (m.userId === userId) continue;
-    const cur = latest.get(m.userId);
-    if (!cur || m.at.getTime() > cur.at.getTime()) latest.set(m.userId, m);
+    const list = byOwner.get(m.userId);
+    if (list) list.push(m);
+    else byOwner.set(m.userId, [m]);
   }
   return {
-    rivalMarks: rivalIds.flatMap((id) => {
-      const m = latest.get(id);
-      return m
-        ? [{ lat: m.lat, lng: m.lng, ownerId: m.userId, at: m.at.toISOString() }]
-        : [];
-    }),
+    rivalMarks: rivalIds.flatMap((id) =>
+      (byOwner.get(id) ?? [])
+        .slice()
+        .sort((a, b) => b.at.getTime() - a.at.getTime())
+        .slice(0, T.rivalMarksPerOwner)
+        .map((m) => ({
+          lat: m.lat,
+          lng: m.lng,
+          ownerId: m.userId,
+          at: m.at.toISOString(),
+        })),
+    ),
     marks: all
       .filter((m) => m.userId === userId)
       .map((m) => ({
