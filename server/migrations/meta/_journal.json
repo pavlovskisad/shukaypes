@@ -134,6 +134,13 @@
       "when": 1777280000000,
       "tag": "0018_home_ground",
       "breakpoints": true
+    },
+    {
+      "idx": 19,
+      "version": "7",
+      "when": 1777290000000,
+      "tag": "0019_territory_reset",
+      "breakpoints": true
     }
   ]
 }

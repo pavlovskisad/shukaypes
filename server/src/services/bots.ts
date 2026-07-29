@@ -110,24 +110,47 @@ interface Bot {
   lastMarkAt: number;
 }
 
-// Where bot i keeps its territory: hotspot i%10, then a ring position
-// determined by which lap round the hotspot list it is. Deterministic, so
-// the layout is the same on every boot and a restart doesn't reshuffle
-// who lives where.
-const HOME_RING_M = 320;
-function homePatch(i: number): LatLng {
-  const spot = HOTSPOTS[i % HOTSPOTS.length]!;
-  const lap = Math.floor(i / HOTSPOTS.length);
-  if (lap === 0) return spot;
-  // Lap 1 goes to one side, lap 2 to another, and so on around the ring.
-  const ang = (lap * 2.399963) % (Math.PI * 2); // golden angle — spreads evenly for any count
-  return {
-    lat: spot.lat + (HOME_RING_M * Math.cos(ang)) / mPerLat,
-    lng: spot.lng + (HOME_RING_M * Math.sin(ang)) / mPerLng(spot.lat),
-  };
+// Where each bot keeps its territory: its hotspot if that's still free,
+// otherwise outward around a ring until it finds room.
+//
+// Deterministic — same layout on every boot, so a restart doesn't
+// reshuffle who lives where — and, more importantly, SEPARATED. Two bots
+// whose patches sit on top of each other spend their lives contesting the
+// same marks (a rival mark within contestM knocks yours down), so neither
+// ever holds anything and the map just shows them flickering. A naive
+// per-hotspot ring isn't enough: rings around two nearby hotspots can
+// collide, which put two bots 20m apart in the first cut.
+const HOME_RING_M = 450;
+const HOME_MIN_SEP_M = 420;
+// Golden angle: successive attempts land on different bearings instead of
+// marching along one line, so a crowded hotspot fills evenly.
+const GOLDEN_ANGLE = 2.399963;
+
+function planHomes(count: number): LatLng[] {
+  const homes: LatLng[] = [];
+  const clear = (c: LatLng) => homes.every((h) => distM(h, c) >= HOME_MIN_SEP_M);
+  for (let i = 0; i < count; i++) {
+    const spot = HOTSPOTS[i % HOTSPOTS.length]!;
+    let chosen: LatLng | null = clear(spot) ? spot : null;
+    for (let step = 1; step <= 64 && !chosen; step++) {
+      // Widen the ring every eighth attempt, so we exhaust the bearings
+      // at one radius before pushing further from the park.
+      const r = HOME_RING_M * (1 + Math.floor((step - 1) / 8));
+      const ang = step * GOLDEN_ANGLE;
+      const cand: LatLng = {
+        lat: spot.lat + (r * Math.cos(ang)) / mPerLat,
+        lng: spot.lng + (r * Math.sin(ang)) / mPerLng(spot.lat),
+      };
+      if (clear(cand)) chosen = cand;
+    }
+    // Nowhere clear within 8 rings — take the hotspot and accept the
+    // crowding rather than pushing a bot out to the edge of the city.
+    homes.push(chosen ?? spot);
+  }
+  return homes;
 }
 
-function spawnBot(i: number): Bot {
+function spawnBot(i: number, home: LatLng): Bot {
   const pos = offset(KYIV, SPREAD_M);
   return {
     id: `bot:${i}`,
@@ -137,14 +160,7 @@ function spawnBot(i: number): Bot {
     speed: rand(SPEED_MIN, SPEED_MAX),
     state: 'walk',
     until: 0,
-    // Home patch: a hotspot, offset DETERMINISTICALLY so the bots sharing
-    // one park spread around it instead of piling onto the same block.
-    // With 30 bots over 10 hotspots that's three per park at 120° and
-    // 320m out — neighbours with a shared border, which is the
-    // interesting case. A random offset (the first cut) let two of them
-    // land nearly on top of each other, and a pair of near-identical
-    // ranges is just a mess to look at and to test against.
-    home: homePatch(i),
+    home,
     // Stagger the first marks so a restart doesn't fire the whole pool
     // into the same tick.
     lastMarkAt: Date.now() - rand(0, balance.territory.botMarkCooldownMs),
@@ -221,9 +237,9 @@ export function startMultiplayerCron(
   log: FastifyBaseLogger,
   botCount: number,
 ): () => void {
-  const bots: Bot[] = Array.from({ length: Math.max(0, botCount) }, (_, i) =>
-    spawnBot(i),
-  );
+  const count = Math.max(0, botCount);
+  const homes = planHomes(count);
+  const bots: Bot[] = Array.from({ length: count }, (_, i) => spawnBot(i, homes[i]!));
   if (bots.length) {
     log.info({ kind: 'mp_bots', count: bots.length }, `multiplayer: spawned ${bots.length} bot walkers`);
   }
