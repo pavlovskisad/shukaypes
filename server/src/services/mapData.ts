@@ -11,6 +11,7 @@ import { db, schema } from '../db/index.js';
 import type { LatLng } from '../utils/geo.js';
 import { xpProgress, MAX_LEVEL } from '../lib/xp.js';
 import { buildPhotoUrl } from './photoUrl.js';
+import { balance } from '../config/balance.js';
 
 // Mirrors /tokens/nearby's TOKEN_VIEW_RADIUS_M — keep in sync.
 const TOKEN_VIEW_RADIUS_M = 2000;
@@ -183,6 +184,8 @@ export interface UserStateResponse {
     hunger: number;
     happiness: number;
     lastFedAt: string | null;
+    // Due to mark — see fetchUserState for what this does and doesn't gate on.
+    markReady: boolean;
   };
 }
 
@@ -218,6 +221,20 @@ export async function fetchUserState(userId: string): Promise<UserStateResponse 
       hunger: companion.hunger,
       happiness: companion.happiness,
       lastFedAt: companion.lastFedAt?.toISOString() ?? null,
+      // Is the dog due to mark? The client uses this to send it out to a
+      // wider ring to go and find a spot, so a claim visibly comes from
+      // the DOG rather than appearing under the walker's own GPS dot —
+      // on its normal ~25m orbit the two are indistinguishable on screen.
+      //
+      // Only the mood and cooldown gates, not the spacing rule: where the
+      // dog ends up is the whole point of the excursion, so it can't be
+      // part of deciding whether to go. The server still has the final
+      // say when the mark actually arrives.
+      markReady:
+        (!companion.lastMarkAt ||
+          Date.now() - companion.lastMarkAt.getTime() >= balance.territory.cooldownMs) &&
+        companion.happiness >= balance.territory.minHappiness &&
+        companion.hunger >= balance.territory.minHunger,
     },
   };
 }

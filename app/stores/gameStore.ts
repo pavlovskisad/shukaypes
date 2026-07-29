@@ -146,6 +146,9 @@ interface GameState {
   // Somebody marked over your ground (seq bumps once per delivery so the
   // map fires the "somebody took your territory, dawg!" notice once).
   lastRaid: { seq: number; raiderName: string; killed: boolean; count: number } | null;
+  // The dog is due to mark, so it heads out to a wider ring to find a
+  // spot. Server-decided: it owns the cooldown and the mood gates.
+  markReady: boolean;
   // Standing on your own ground right now. Paws are denser here and the
   // dog's happiness drains slower — both passive, both server-side; this
   // is only so the UI can say so.
@@ -406,6 +409,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   territoryShapes: [],
   rivalTerritory: [],
   lastRaid: null,
+  markReady: false,
   onHomeGround: false,
   lastMark: null,
   markMood: null,
@@ -880,6 +884,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           hunger: res.state.companion.hunger,
           happiness: res.state.companion.happiness,
           companionName: res.state.companion.name,
+          markReady: res.state.companion.markReady === true,
           territoryMarks: res.marks ?? prev.territoryMarks,
           territoryShapes: res.shapes ?? prev.territoryShapes,
           rivalTerritory: res.rivals ?? [],

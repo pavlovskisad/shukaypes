@@ -154,6 +154,12 @@ export interface StateResponse {
     hunger: number;
     happiness: number;
     lastFedAt: string | null;
+    // The dog is due to mark. Drives the companion's excursion out to a
+    // wider ring to go find a spot — on its normal ~25m orbit a mark
+    // lands on top of the walker's own GPS dot and reads as the HUMAN
+    // marking, which is not the game. Optional so an older server just
+    // means the dog never makes the trip.
+    markReady?: boolean;
   };
 }
 

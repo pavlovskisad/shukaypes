@@ -49,6 +49,23 @@ const ROAM_MIN_MS = 12000;
 const ROAM_JITTER_MS = 14000;
 const ROAM_ARC_MAX = 0.35; // radians of arc per hop (~12 m on the ring)
 
+// GOING TO MARK. The idle ring is only ~21-33 m out, which on screen puts
+// the dog nearly on top of the walker's own GPS dot — so a mark placed at
+// the dog's feet looked like the HUMAN had made it, which is the one thing
+// the whole mechanic must not read as.
+//
+// When the server says the dog is due (state.companion.markReady), it
+// heads out to this much wider ring, finds its spot, marks, and comes back
+// once the cooldown restarts. The trip is what makes the claim legibly the
+// dog's.
+//
+// Sized against the two server rules it has to live inside: comfortably
+// past the 140 m minimum spacing is impossible from a ring this size
+// alone, but the walker's own movement supplies the rest — and well under
+// the 160 m the server allows between walker and dog, so an excursion
+// never gets its mark rejected as an implausible offset.
+const MARK_RING_M = 90;
+
 // To stop the dog "walking in place" from GPS jitter while the user stands
 // still, the orbit CENTRE follows the user's live position only while they're
 // actually moving (drifted > MOVE_THRESHOLD_M within STILL_AFTER_MS). Once
@@ -142,6 +159,9 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
   const moveAnchorRef = useRef<LatLng | null>(null);
   const lastMoveAtRef = useRef<number>(0);
   const nextRoamAtRef = useRef<number>(0);
+  // Edge-detect "due to mark" so the trip out starts on the transition
+  // rather than being re-triggered every tick it stays true.
+  const wasMarkReadyRef = useRef(false);
 
   useEffect(() => {
     if (!userPos || !enabled) return;
@@ -156,8 +176,16 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
     }
 
     const id = setInterval(() => {
-      const { menuOpen, tokens, foodItems, collectPulse, dogCam, searchTarget, searchRoute } =
-        useGameStore.getState();
+      const {
+        menuOpen,
+        tokens,
+        foodItems,
+        collectPulse,
+        dogCam,
+        searchTarget,
+        searchRoute,
+        markReady,
+      } = useGameStore.getState();
       if (menuOpen) return;
 
       const now = Date.now();
@@ -213,18 +241,44 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
       // stops and the sprite settles to sitting — the walk cycle only plays
       // while it's actually travelling (to the next spot, or keeping pace with
       // a walking user). No continuous drift/wobble → no walking in place.
+      // The moment the dog becomes due to mark, send it off in a fresh
+      // direction instead of letting it finish the current rest — the trip
+      // out is the part that reads as "it's going to find a spot", and
+      // waiting up to 26s for the next hop would swallow it.
+      if (markReady && !wasMarkReadyRef.current) {
+        angleRef.current = Math.random() * Math.PI * 2;
+        nextRoamAtRef.current = now + ROAM_MIN_MS;
+      }
+      wasMarkReadyRef.current = markReady;
+
       if (now >= nextRoamAtRef.current) {
         // Amble a short, random arc around the ring — either direction, and
         // sometimes barely at all — so it reads as an organic shuffle rather
-        // than a fixed mechanical step.
+        // than a fixed mechanical step. On the wide marking ring the same
+        // arc covers more ground, which reads as casting about for a spot.
         angleRef.current += (Math.random() - 0.5) * 2 * ROAM_ARC_MAX;
         nextRoamAtRef.current =
           now + ROAM_MIN_MS + Math.random() * ROAM_JITTER_MS;
       }
-      const orbitPos: LatLng = {
-        lat: center.lat + Math.sin(angleRef.current) * balance.roamRadius,
-        lng: center.lng + Math.cos(angleRef.current) * balance.roamRadius,
-      };
+      // Due to mark? Swing out to the wide ring and stay there until the
+      // server takes the mark (which restarts the cooldown and clears
+      // this), so the claim visibly comes from the dog rather than from
+      // under the walker's feet. The ring still tracks the walker, so a
+      // dog that's gone looking never falls outside the offset the server
+      // will accept — it ranges wide, it doesn't get left behind.
+      const ringM = markReady ? MARK_RING_M : null;
+      const orbitPos: LatLng = ringM
+        ? {
+            lat: center.lat + (ringM * Math.sin(angleRef.current)) / 110540,
+            lng:
+              center.lng +
+              (ringM * Math.cos(angleRef.current)) /
+                (111320 * Math.cos((center.lat * Math.PI) / 180)),
+          }
+        : {
+            lat: center.lat + Math.sin(angleRef.current) * balance.roamRadius,
+            lng: center.lng + Math.cos(angleRef.current) * balance.roamRadius,
+          };
 
       if (hunt) {
         setPos((prev) => lerpStep(prev ?? userPos, hunt, HUNT_STEP_M));

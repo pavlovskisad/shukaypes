@@ -35,6 +35,7 @@ import type {
   Map as MlMap,
 } from 'maplibre-gl';
 import { useGameStore } from '../../stores/gameStore';
+import { OWN_COLOR_RGB, ownerColorRgb, pointInRing } from './territoryColor';
 import { DOG_CAM } from '../../constants/experiments';
 import { jitterInRadius } from '../../utils/cluster';
 
@@ -282,12 +283,79 @@ export function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number
   return [x, y, z];
 }
 
+// A building standing on claimed ground takes its owner's colour. The
+// ground fill alone stops at the pavement, so at the pitched angles this
+// map is normally viewed at the city itself stayed neutral and the claim
+// read as a rug thrown under it rather than a neighbourhood belonging to
+// someone. Painting the blocks is what makes a territory look held.
+//
+// Ownership is decided per BUILDING, off its footprint centre, against the
+// same partitioned shapes the ground fill draws — so a block is never one
+// colour underfoot and another above it.
+// How strongly a claim tints the building it holds. Deliberately gentle:
+// the buildings are the city, not the scoreboard, and at full strength a
+// neighbourhood turns into a solid block of colour that buries the
+// architecture the whole map is built to show. Enough to read whose street
+// you're on at a glance, not enough to stop it looking like a street.
+const TERRITORY_PAINT = 0.45;
+
+// One building's slice of the merged vertex buffer, plus where it stands.
+interface BuildingSpan {
+  start: number; // first vertex index
+  count: number; // how many vertices
+  lat: number;
+  lng: number;
+}
+
+interface PaintPoly {
+  outer: { lat: number; lng: number }[];
+  holes: { lat: number; lng: number }[][];
+  rgb: [number, number, number];
+}
+
+function territoryPaintPolys(): PaintPoly[] {
+  const { territoryShapes, rivalTerritory } = useGameStore.getState();
+  const out: PaintPoly[] = [];
+  for (const r of rivalTerritory) {
+    const rgb = ownerColorRgb(r.ownerId);
+    for (const sh of r.shapes) {
+      if (sh.kind !== 'area' || sh.points.length < 3) continue;
+      out.push({ outer: sh.points, holes: sh.holes ?? [], rgb });
+    }
+  }
+  // Yours last so it wins any tie — the partition means there shouldn't be
+  // one, but "which bit is mine" is the answer that matters most.
+  for (const sh of territoryShapes) {
+    if (sh.kind !== 'area' || sh.points.length < 3) continue;
+    out.push({ outer: sh.points, holes: sh.holes ?? [], rgb: OWN_COLOR_RGB });
+  }
+  return out;
+}
+
+function paintAt(lat: number, lng: number, polys: PaintPoly[]): PaintPoly | null {
+  // Last match wins, so the loop can't stop early — see the ordering note
+  // above.
+  let hit: PaintPoly | null = null;
+  for (const p of polys) {
+    if (!pointInRing(lat, lng, p.outer)) continue;
+    if (p.holes.some((h) => pointInRing(lat, lng, h))) continue;
+    hit = p;
+  }
+  return hit;
+}
+
 export function createThreeBuildingsLayer(
   // Live getter for the companion (dog) position — drives the always-on orb that
   // keeps buildings dissolved right around the dog so it never sits inside a wall.
   getDogPos?: () => { lat: number; lng: number } | null,
 ): CustomLayerInterface {
   let renderer: THREE.WebGLRenderer | null = null;
+  // Territory painting state. `paintedShapes`/`paintedRivals` hold the array
+  // references last painted; the store swaps them on every sync, so an
+  // identity check is enough to notice a change and costs nothing per frame.
+  let buildingSpans: BuildingSpan[] = [];
+  let paintedShapes: unknown = null;
+  let paintedRivals: unknown = null;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
 
@@ -360,17 +428,22 @@ export function createThreeBuildingsLayer(
     shader.uniforms.u_dogLocal = fogUniforms.u_dogLocal;
     shader.uniforms.u_dogActive = fogUniforms.u_dogActive;
     shader.vertexShader =
-      'varying vec3 vLocalPos;\n' +
+      'varying vec3 vLocalPos;\nattribute vec4 aTerr;\nvarying vec4 vTerr;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\n  vLocalPos = position;',
+        '#include <begin_vertex>\n  vLocalPos = position;\n  vTerr = aTerr;',
       );
     shader.fragmentShader =
-      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nuniform vec3 u_dogLocal;\nuniform float u_dogActive;\nvarying vec3 vLocalPos;\n' +
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nuniform vec3 u_dogLocal;\nuniform float u_dogActive;\nvarying vec3 vLocalPos;\nvarying vec4 vTerr;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         [
           '#include <dithering_fragment>',
+          // Claimed ground tints the building that stands on it. Applied
+          // BEFORE the fog and the see-through orb so a painted block still
+          // fades into the distance and still dissolves around the dog —
+          // territory is a coat of paint on the city, not a layer over it.
+          `  gl_FragColor.rgb = mix(gl_FragColor.rgb, vTerr.rgb, vTerr.a * ${TERRITORY_PAINT.toFixed(2)});`,
           '  float _dist = length(vLocalPos - u_camLocal);',
           // Exponential distance fog — the "wall" that swallows the far.
           '  float _distFog = 1.0 - exp(-u_fogDensity * max(0.0, _dist - u_fogNear));',
@@ -597,6 +670,10 @@ export function createThreeBuildingsLayer(
 
       const positions: number[] = [];
       const normals: number[] = [];
+      // Which vertices belong to which building, plus where that building
+      // stands. Kept so territory can be REPAINTED without rebuilding the
+      // whole city: claims change every sync, geometry only when you pan.
+      const spans: BuildingSpan[] = [];
       // Ground drop-shadow geometry (flat quads swept toward the sun). Shadow
       // ground direction + length-per-height from the same azimuth/elevation
       // the building light uses.
@@ -664,6 +741,17 @@ export function createThreeBuildingsLayer(
 
           const shape = shapeFromRings(rings, originX, originY, mPerUnit);
           if (!shape) continue;
+          const spanStart = positions.length / 3;
+          // Footprint centre, in lng/lat — what decides whose ground this
+          // building is on.
+          let cLng = 0;
+          let cLat = 0;
+          const outerRing = rings[0] ?? [];
+          const n = Math.max(1, outerRing.length - 1); // last point repeats the first
+          for (let i = 0; i < n; i++) {
+            cLng += outerRing[i]![0] / n;
+            cLat += outerRing[i]![1] / n;
+          }
           let geo: THREE.ExtrudeGeometry;
           try {
             geo = new THREE.ExtrudeGeometry(shape, {
@@ -688,6 +776,8 @@ export function createThreeBuildingsLayer(
           }
           geo.dispose();
           ni.dispose();
+          const spanCount = positions.length / 3 - spanStart;
+          if (spanCount > 0) spans.push({ start: spanStart, count: spanCount, lat: cLat, lng: cLng });
         }
       }
 
@@ -705,12 +795,19 @@ export function createThreeBuildingsLayer(
         'normal',
         new THREE.Float32BufferAttribute(normals, 3),
       );
+      // rgb = the owner's colour, a = how strongly to paint (0 = unclaimed).
+      merged.setAttribute(
+        'aTerr',
+        new THREE.Float32BufferAttribute(new Float32Array((positions.length / 3) * 4), 4),
+      );
 
       if (mesh) {
         scene.remove(mesh);
         mesh.geometry.dispose();
       }
       mesh = new THREE.Mesh(merged, material);
+      buildingSpans = spans;
+      paintedShapes = null; // force a paint pass against the fresh geometry
       // We drive placement entirely through camera.projectionMatrix, so the
       // mesh stays at the identity origin. Frustum culling would use its
       // (untransformed) local bounds and wrongly cull it — turn it off.
@@ -786,6 +883,36 @@ export function createThreeBuildingsLayer(
     if (moved > REBUILD_MOVE_M || dz > REBUILD_ZOOM_D) rebuild();
   };
 
+  // Recolour the buildings from the current claims. Cheap enough to run on
+  // any change (a few thousand footprints against a handful of polygons)
+  // and far cheaper than re-extruding the city, which is why the colour
+  // lives in its own attribute rather than in the geometry.
+  function repaintTerritory(): void {
+    if (!mesh) return;
+    const attr = mesh.geometry.getAttribute('aTerr') as
+      | THREE.BufferAttribute
+      | undefined;
+    if (!attr) return;
+    const polys = territoryPaintPolys();
+    const arr = attr.array as Float32Array;
+    arr.fill(0);
+    if (polys.length) {
+      for (const span of buildingSpans) {
+        const hit = paintAt(span.lat, span.lng, polys);
+        if (!hit) continue;
+        const [r, g, b] = hit.rgb;
+        const end = (span.start + span.count) * 4;
+        for (let o = span.start * 4; o < end; o += 4) {
+          arr[o] = r;
+          arr[o + 1] = g;
+          arr[o + 2] = b;
+          arr[o + 3] = 1;
+        }
+      }
+    }
+    attr.needsUpdate = true;
+  }
+
   return {
     id: THREE_BUILDINGS_LAYER_ID,
     type: 'custom',
@@ -838,6 +965,17 @@ export function createThreeBuildingsLayer(
     ) {
       if (!renderer || !mesh) return;
       try {
+        // Claims change on the 15s sync, geometry only when you pan — so
+        // watch the store's array identities (swapped on every sync) and
+        // repaint just the colour attribute when they move. An identity
+        // check per frame is free; re-extruding the city would not be.
+        const gs = useGameStore.getState();
+        if (gs.territoryShapes !== paintedShapes || gs.rivalTerritory !== paintedRivals) {
+          paintedShapes = gs.territoryShapes;
+          paintedRivals = gs.rivalTerritory;
+          repaintTerritory();
+        }
+
         // Day/night follows sniff mode — swap mist, light + material tones.
         const sniff = useGameStore.getState().sniffMode;
         const tone = sniff ? NIGHT : DAY;
