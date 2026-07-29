@@ -142,13 +142,14 @@ export function pointInPolygon(
 // ---------------------------------------------------------------------------
 // PARTITION — ground belongs to whoever's mark is nearest.
 //
-// Hulls are built per owner from that owner's marks alone, so nothing stops
-// two of them covering the same block: walk a 700m loop and you claim
-// everything inside it, including the park where someone else's dog actually
-// lives. These helpers cut that back. Each owner keeps their hull MINUS the
-// parts where a rival's mark is closer, which means an uncontested loop still
-// fills completely and a rival patch inside it becomes a pocket in their own
-// colour. No point on the map is ever owned twice.
+// Each owner CLAIMS the hull of their marks grown outward by a fixed reach,
+// then keeps whatever part of that claim their marks are nearest to. Two
+// things fall out of it. Claims overlap, so neighbouring ranges meet along
+// the bisector between their marks instead of leaving a strip of nobody's
+// ground between two hulls — a border reads as a line, not a gap. And an
+// uncontested loop still fills completely, while a rival patch inside it
+// becomes a pocket in their own colour. No point on the map is ever owned
+// twice.
 //
 // Everything below works in local metres rather than degrees: the clipper
 // assumes a flat plane, and metre-scale coordinates keep it away from the
@@ -262,4 +263,33 @@ export function clipToConvex(poly: Pt[], convex: Pt[]): Pt[] {
     if (out.length < 3) return [];
   }
   return out;
+}
+
+// Grow a CONVEX ring outward by `padM` metres, staying convex.
+//
+// This is what lets two neighbouring ranges actually meet. A claim used to
+// stop dead at the hull of its own marks, so unless two owners' hulls
+// happened to overlap there was a strip between them belonging to nobody —
+// a no-man's-land that made a border look like a gap rather than a line.
+// Grown claims overlap, the partition splits the overlap along the
+// bisector, and what's left is a shared edge.
+//
+// Minkowski sum with a disc, approximated: replace every vertex with a
+// ring of points at `padM` and re-hull. Convexity is preserved, which
+// matters because every clipper here (clipHalfPlane, clipToConvex,
+// voronoiCellWithin) quietly assumes it.
+export function bufferConvex(ring: Pt[], padM: number, steps = 10): Pt[] {
+  if (ring.length < 3 || padM <= 0) return ring;
+  const pts: Pt[] = [];
+  for (const [x, y] of ring) {
+    for (let i = 0; i < steps; i++) {
+      const a = (i / steps) * Math.PI * 2;
+      pts.push([x + padM * Math.cos(a), y + padM * Math.sin(a)]);
+    }
+  }
+  // convexHull works on {lat,lng}; the projected plane is just another
+  // pair of axes, so map through it rather than duplicating the algorithm.
+  return convexHull(pts.map(([x, y]) => ({ lat: y, lng: x }))).map(
+    (p) => [p.lng, p.lat] as Pt,
+  );
 }

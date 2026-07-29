@@ -129,8 +129,29 @@ function linkGeoJSON(shapes: TerritoryShape[]): GeoJSON.FeatureCollection {
   };
 }
 
-function dotsGeoJSON(marks: TerritoryMark[], now: number): GeoJSON.FeatureCollection {
+function dotsGeoJSON(
+  marks: TerritoryMark[],
+  now: number,
+  rivalMarks: { lat: number; lng: number; ownerId: string; at: string }[] = [],
+): GeoJSON.FeatureCollection {
   const features: GeoJSON.Feature[] = [];
+  // A neighbour's fresh mark, in their colour. Same fade as your own, so
+  // "somebody's dog just claimed that corner" reads the same way yours
+  // does — and the border shifting a moment later has a visible cause.
+  for (const m of rivalMarks) {
+    const age = now - new Date(m.at).getTime();
+    if (age >= DOT_LIFE_MS) continue;
+    const o = age <= DOT_HOLD_MS ? 1 : 1 - (age - DOT_HOLD_MS) / DOT_FADE_MS;
+    features.push({
+      type: 'Feature',
+      geometry: { type: 'Point', coordinates: [m.lng, m.lat] },
+      properties: {
+        r: 4.5,
+        o: Math.max(0, Math.min(1, o)),
+        color: ownerColorCss(m.ownerId),
+      },
+    });
+  }
   for (const m of marks) {
     const age = now - new Date(m.at).getTime();
     // Guard against a clock skewed into the future — treat it as brand new
@@ -147,6 +168,7 @@ function dotsGeoJSON(marks: TerritoryMark[], now: number): GeoJSON.FeatureCollec
         // difference between a soft edge and a core you'd defend.
         r: (m.closedLoop ? 6.5 : 4.5) + Math.max(0, (m.strength ?? 1) - 1) * 1.1,
         o: Math.max(0, Math.min(1, o)),
+        color: OWN_COLOR_CSS,
       },
     });
   }
@@ -157,10 +179,15 @@ export function TerritoryLayer({
   shapes,
   marks,
   rivals,
+  rivalMarks,
 }: {
   shapes: TerritoryShape[];
   marks: TerritoryMark[];
   rivals: RivalTerritory[];
+  // Neighbours' just-made marks, drawn in their owner's colour and gone
+  // again in seconds. Without them a rival border moved between syncs
+  // with nothing on screen to explain it.
+  rivalMarks: { lat: number; lng: number; ownerId: string; at: string }[];
 }) {
   const map = useMaplibreMap();
   // One group per owner, each with its own colour. Yours goes LAST so
@@ -187,16 +214,19 @@ export function TerritoryLayer({
   const rivalSig = useMemo(() => rivals.map((r) => `${r.ownerId}~${shapesSig(r.shapes)}`).join(','), [rivals]);
   const shapeSig = useMemo(() => shapesSig(shapes), [shapes]);
   const markSig = useMemo(
-    () => marks.map((m) => `${m.lat.toFixed(5)},${m.lng.toFixed(5)}`).join(','),
-    [marks],
+    () =>
+      marks.map((m) => `${m.lat.toFixed(5)},${m.lng.toFixed(5)}`).join(',') +
+      '~' +
+      rivalMarks.map((m) => `${m.ownerId}:${m.at}`).join(','),
+    [marks, rivalMarks],
   );
   // Dots fade over time, so the layer has to redraw while any of them is
   // still alive — and only then. Once the last one has gone the timer
   // stops and the map goes quiet again.
   const [tick, setTick] = useState(0);
-  const anyAlive = marks.some(
-    (m) => Date.now() - new Date(m.at).getTime() < DOT_LIFE_MS,
-  );
+  const anyAlive =
+    marks.some((m) => Date.now() - new Date(m.at).getTime() < DOT_LIFE_MS) ||
+    rivalMarks.some((m) => Date.now() - new Date(m.at).getTime() < DOT_LIFE_MS);
   useEffect(() => {
     if (!anyAlive) return;
     const id = setInterval(() => setTick((n) => n + 1), 900);
@@ -207,7 +237,7 @@ export function TerritoryLayer({
     if (!map) return;
     const areas = areaGeoJSON(areaGroups);
     const links = linkGeoJSON(shapes);
-    const dots = dotsGeoJSON(marks, Date.now());
+    const dots = dotsGeoJSON(marks, Date.now(), rivalMarks);
 
     const apply = () => {
       // Territory is paint on the FLOOR — it belongs under the city, not
@@ -271,7 +301,7 @@ export function TerritoryLayer({
           source: DOTS_SOURCE,
           paint: {
             'circle-radius': ['get', 'r'],
-            'circle-color': OWN_COLOR_CSS,
+            'circle-color': ['get', 'color'],
             'circle-opacity': ['get', 'o'],
             'circle-stroke-color': '#ffffff',
             'circle-stroke-width': 2,

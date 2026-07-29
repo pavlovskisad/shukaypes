@@ -35,6 +35,18 @@ const LERP_TAIL = 0.2;
 // out-paces a normal walker, so the dog keeps up without ever sprinting.
 const CATCHUP_M = 28;
 
+// A dog can never be slower than the person it's walking with. Both step
+// caps above are absolute — IDLE is 1.8 m/s and even a full run is 6.7 —
+// so anyone moving faster than that left the dog permanently trailing,
+// drifting further behind every tick and never catching up. That's the
+// normal case on a simulated walk (`?simSpeed=8`), and it's reachable on
+// a bike or a fast GPS reacquisition too.
+//
+// So the cap floors at a multiple of how fast the WALKER is actually
+// moving, measured from their own position samples. The dog keeps its
+// lazy trot when you're strolling and simply matches you when you're not.
+const KEEPUP_FACTOR = 1.35;
+
 // Search-mode lead distance: how far AHEAD of the user (along the route) the
 // companion positions itself while leading. Enough to read as "follow me,"
 // small enough that it never abandons you and paces your walk.
@@ -158,6 +170,10 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
   const centerRef = useRef<LatLng | null>(null);
   const moveAnchorRef = useRef<LatLng | null>(null);
   const lastMoveAtRef = useRef<number>(0);
+  // Walker speed in m/s, smoothed, measured from consecutive positions —
+  // the dog's step cap floors on this so it can always keep up.
+  const walkerSpeedRef = useRef<number>(0);
+  const lastSampleRef = useRef<{ pos: LatLng; at: number } | null>(null);
   const nextRoamAtRef = useRef<number>(0);
   // Edge-detect "due to mark" so the trip out starts on the transition
   // rather than being re-triggered every tick it stays true.
@@ -174,6 +190,19 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
       moveAnchorRef.current = userPos;
       lastMoveAtRef.current = Date.now();
     }
+
+    // Smoothed walker speed. Exponential so one jumpy GPS fix doesn't send
+    // the dog sprinting, and so it decays back down when you stop.
+    const nowSample = Date.now();
+    const prevSample = lastSampleRef.current;
+    if (prevSample) {
+      const dt = (nowSample - prevSample.at) / 1000;
+      if (dt > 0.05) {
+        const v = distanceMeters(prevSample.pos, userPos) / dt;
+        walkerSpeedRef.current = walkerSpeedRef.current * 0.6 + Math.min(30, v) * 0.4;
+      }
+    }
+    lastSampleRef.current = { pos: userPos, at: nowSample };
 
     const id = setInterval(() => {
       const {
@@ -292,8 +321,12 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
       setPos((prev) => {
         const from = prev ?? orbitPos;
         const distToOrbitM = distanceMeters(from, orbitPos);
-        const stepCap = distToOrbitM > CATCHUP_M ? HUNT_STEP_M : IDLE_STEP_M;
-        return lerpStep(from, orbitPos, stepCap);
+        // Per-tick metres the walker is covering, plus a margin so the dog
+        // gains rather than merely holding station.
+        const keepUp =
+          (walkerSpeedRef.current * KEEPUP_FACTOR * balance.roamTick) / 1000;
+        const base = distToOrbitM > CATCHUP_M ? HUNT_STEP_M : IDLE_STEP_M;
+        return lerpStep(from, orbitPos, Math.max(base, keepUp));
       });
     }, balance.roamTick);
 

@@ -270,6 +270,10 @@ export const api = {
       // Rival ground within sight, and any raids on yours since the last
       // sync. Both optional for the same reason as above.
       rivals?: RivalTerritory[];
+      // Marks other dogs have JUST made. Without them a neighbour's border
+      // simply changed shape between one sync and the next and you never
+      // saw why — the dogs looked like they were doing nothing.
+      rivalMarks?: { lat: number; lng: number; ownerId: string; at: string }[];
       raids?: TerritoryRaid[];
       // Whether the walker is standing on ground they hold — the passive
       // perks hang off this. Area held comes from the standing endpoint,

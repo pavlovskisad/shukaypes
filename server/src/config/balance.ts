@@ -225,6 +225,24 @@ export const balance = {
     // Bound on the geometry work per mark. Older marks past this count
     // are ignored for shape-building (they're near expiry anyway).
     shapeMarkWindow: 300,
+    // How far a claim reaches PAST the hull of its own marks.
+    //
+    // Without it a range stopped dead at the hull, so unless two owners'
+    // hulls happened to overlap there was a strip between them belonging
+    // to nobody — a border that read as a gap. Grown claims overlap, and
+    // the partition splits the overlap along the bisector, so neighbours
+    // end up sharing an edge and a mark landing near it visibly pushes
+    // that edge rather than punching a hole and leaving no-man's-land.
+    //
+    // Sized against the spacing rules around it: bot homes sit ≥420m
+    // apart and their patches run to ~260m, so 150m is enough for
+    // neighbours to actually meet without a lone mark laying claim to
+    // half a district.
+    claimReachM: 150,
+    // How long a rival's fresh mark is worth showing. Long enough that a
+    // 15s sync can't miss one, short enough that it reads as "that just
+    // happened" rather than a scatter of everyone's history.
+    rivalMarkFlashMs: 45_000,
     // CONTEST — the PvP half. Ground changes hands where marks overlap.
     //
     // A rival marking this close to one of yours weakens it by one; at
