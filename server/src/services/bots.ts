@@ -1,11 +1,17 @@
 // Bot walkers for the multiplayer presence system.
 //
 // A pool of simulated dogs that behave like people out walking: they roam,
-// LINGER at parks/landmarks ("hotspots"), and go OFFLINE for a while then come
-// back — so the live population breathes (connect/reconnect) and clusters
-// where you'd expect, instead of drifting uniformly forever. They write into
-// the SAME Redis presence set as real players, so to a client they're
-// indistinguishable. Enabled via MULTIPLAYER_BOTS=<count> (0 = off).
+// linger, and go OFFLINE for a while then come back — so the live population
+// breathes (connect/reconnect) instead of drifting uniformly forever. They
+// write into the SAME Redis presence set as real players, so to a client
+// they're indistinguishable. Enabled via MULTIPLAYER_BOTS=<count> (0 = off).
+//
+// Each bot LIVES ON ITS OWN PATCH. Its home is picked once from the hotspot
+// list (separated from every other bot's), it seeds territory there, and it
+// walks that ground rather than touring the city. Before that, the dog you
+// met on the street had its zone kilometres away, which made the territory
+// layer read as unrelated scenery — and its marks smeared a thin trail
+// across the map instead of building anything worth taking.
 //
 // The same cron also purges stale presence, so real-player presence works
 // even with 0 bots.
@@ -22,7 +28,6 @@ interface LatLng {
   lng: number;
 }
 
-const KYIV: LatLng = { lat: 50.4501, lng: 30.5234 };
 // Central Kyiv parks / squares / landmarks the bots gravitate to and linger
 // at, so they cluster like real walkers do rather than scattering evenly.
 const HOTSPOTS: LatLng[] = [
@@ -38,11 +43,15 @@ const HOTSPOTS: LatLng[] = [
   { lat: 50.4330, lng: 30.5215 }, // Olimpiiska
 ];
 
-const SPREAD_M = 5500; // initial scatter radius
-const ROAM_MIN_M = 300;
-const ROAM_MAX_M = 900;
-const HOTSPOT_JITTER_M = 70; // spread within a hotspot so they don't stack
-const HOTSPOT_BIAS = 0.55; // chance the next destination is a hotspot
+// How far a bot wanders from the patch it holds. Sized against
+// botSeedSpreadM (260m), so a bot on an ordinary outing is walking over
+// its own marks — which is what keeps it renewing them, and what makes
+// meeting one feel like meeting a neighbour rather than a tourist.
+const HOME_RANGE_M = 300;
+// …and the occasional wider stroll past its own edge, where it might run
+// into the next dog's ground and contest it.
+const HOME_STROLL_M = 620;
+const HOME_STROLL_CHANCE = 0.25;
 const SPEED_MIN = 1.1; // m/s
 const SPEED_MAX = 1.9;
 const ARRIVE_M = 22;
@@ -79,18 +88,20 @@ function distM(a: LatLng, b: LatLng): number {
   return Math.sqrt(dN * dN + dE * dE);
 }
 
-function nearHotspot(): LatLng {
-  const h = HOTSPOTS[Math.floor(Math.random() * HOTSPOTS.length)]!;
-  return offset(h, HOTSPOT_JITTER_M);
-}
-
-// Next destination: usually a park/landmark (so bots congregate), otherwise a
-// short local wander. Kept within the city envelope.
-function newTarget(from: LatLng): LatLng {
-  if (Math.random() < HOTSPOT_BIAS) return nearHotspot();
-  const t = offset(from, rand(ROAM_MIN_M, ROAM_MAX_M));
-  if (distM(t, KYIV) > SPREAD_M) return nearHotspot();
-  return t;
+// Next destination. Bots WALK THEIR OWN PATCH: mostly a spot inside the
+// ground they hold, sometimes a stroll just past its edge.
+//
+// They used to roam the whole city, hopping between landmarks — which
+// meant the dog you saw walking past had its territory kilometres away
+// (Марс was 3.7km from its own zone). Nothing about that read as
+// "neighbours holding ground". A dog you meet should be standing on the
+// ground it defends, and its marks should land there and keep the patch
+// coherent rather than smearing a thin trail across the map.
+function newTarget(b: Bot): LatLng {
+  // The occasional wider stroll — a dog does leave its block — but still
+  // anchored on home, so it always comes back.
+  const r = Math.random() < HOME_STROLL_CHANCE ? HOME_STROLL_M : HOME_RANGE_M;
+  return offset(b.home, r);
 }
 
 type BotState = 'walk' | 'dwell' | 'offline';
@@ -151,11 +162,13 @@ function planHomes(count: number): LatLng[] {
 }
 
 function spawnBot(i: number, home: LatLng): Bot {
-  const pos = offset(KYIV, SPREAD_M);
-  return {
+  // Start at home, not scattered across the city — a bot's first marks
+  // should land on the patch it's going to defend.
+  const pos = offset(home, HOME_RANGE_M);
+  const bot: Bot = {
     id: `bot:${i}`,
     pos,
-    target: newTarget(pos),
+    target: pos,
     name: NAMES[i % NAMES.length]!,
     speed: rand(SPEED_MIN, SPEED_MAX),
     state: 'walk',
@@ -165,6 +178,8 @@ function spawnBot(i: number, home: LatLng): Bot {
     // into the same tick.
     lastMarkAt: Date.now() - rand(0, balance.territory.botMarkCooldownMs),
   };
+  bot.target = newTarget(bot);
+  return bot;
 }
 
 // Bots write into the same presence set as people, but owning marks needs
@@ -200,9 +215,9 @@ function tickBot(b: Bot, dtS: number, now: number): boolean {
   switch (b.state) {
     case 'offline':
       if (now >= b.until) {
-        // Come back "online" fresh at a hotspot (like logging in somewhere).
-        b.pos = nearHotspot();
-        b.target = newTarget(b.pos);
+        // Come back "online" on their own patch — they live there.
+        b.pos = offset(b.home, HOME_RANGE_M);
+        b.target = newTarget(b);
         b.speed = rand(SPEED_MIN, SPEED_MAX);
         b.state = 'walk';
         return true;
@@ -216,7 +231,7 @@ function tickBot(b: Bot, dtS: number, now: number): boolean {
           return false; // stops publishing → expires from presence → vanishes
         }
         b.state = 'walk';
-        b.target = newTarget(b.pos);
+        b.target = newTarget(b);
       }
       return true;
     case 'walk':

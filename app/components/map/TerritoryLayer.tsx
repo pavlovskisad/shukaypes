@@ -44,6 +44,7 @@ import type maplibregl from 'maplibre-gl';
 import { useMaplibreMap } from './MapContext';
 import { THREE_BUILDINGS_LAYER_ID } from './threeBuildingsLayer';
 import type { RivalTerritory, TerritoryMark, TerritoryShape } from '../../services/api';
+import { OWN_COLOR_CSS, ownerColorCss } from './territoryColor';
 
 const AREA_SOURCE = 'territory-area-src';
 const AREA_FILL = 'territory-area-fill';
@@ -52,38 +53,9 @@ const LINK_LAYER = 'territory-link';
 const DOTS_SOURCE = 'territory-dots-src';
 const DOTS_LAYER = 'territory-dots';
 
-// Brand blue (the CTA pill blue, rgb(0,60,255)). The previous sky-blue
-// was picked to sit clear of the search beacon, but on a pale map it read
-// as water — which the map style already uses blue for, so claimed ground
-// looked like a lake. Brand blue is unmistakably paint, not terrain.
-const BLUE = 'rgb(0,60,255)';
-const BLUE_DEEP = 'rgb(0,60,255)';
-
-// Every neighbour gets their OWN colour, derived from their id so it's
-// the same one on every device and across sessions — the city reads as a
-// patchwork of who holds what, which is the whole appeal of a territory
-// game. Yours stays brand blue and nobody else can be issued it.
-//
-// Hue comes off a hash of the id, then gets pushed out of the band around
-// brand blue (~226°) so no neighbour can be mistaken for you. Saturation
-// and lightness are fixed, so twenty owners still read as one family of
-// paint rather than a bag of highlighters.
-const OWN_HUE_LO = 200;
-const OWN_HUE_HI = 252;
-function ownerColor(id: string): string {
-  let h = 2166136261;
-  for (let i = 0; i < id.length; i++) {
-    h ^= id.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  let hue = (h >>> 0) % 360;
-  // Fold the reserved band away rather than clamping to its edges, which
-  // would pile several owners onto the same two hues.
-  if (hue >= OWN_HUE_LO && hue < OWN_HUE_HI) {
-    hue = (hue + (OWN_HUE_HI - OWN_HUE_LO)) % 360;
-  }
-  return `hsl(${hue}, 62%, 45%)`;
-}
+// Colours live in territoryColor.ts, shared with the 3D buildings layer —
+// the ground under a block and the buildings standing on it have to agree
+// on whose it is, or one claim reads as two.
 
 // A dot is a moment, not a monument: it shows where the dog just marked,
 // holds while you notice it, then fades out and leaves the territory
@@ -96,6 +68,22 @@ const DOT_LIFE_MS = DOT_HOLD_MS + DOT_FADE_MS;
 // GeoJSON rings must close explicitly.
 function ring(pts: { lat: number; lng: number }[]): number[][] {
   return [...pts.map((p) => [p.lng, p.lat]), [pts[0]!.lng, pts[0]!.lat]];
+}
+
+// A signature that changes whenever the drawn geometry does — every
+// vertex, both axes, holes included. Five decimals is about a metre,
+// which is finer than any territory edge anyone can see, and coarse
+// enough that float noise doesn't force a pointless re-upload.
+function shapesSig(shapes: TerritoryShape[]): string {
+  return shapes
+    .map(
+      (s) =>
+        `${s.kind}:${s.points.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|')}` +
+        (s.holes ?? [])
+          .map((h) => `#${h.map((p) => `${p.lat.toFixed(5)},${p.lng.toFixed(5)}`).join('|')}`)
+          .join(''),
+    )
+    .join(';');
 }
 
 // `color` rides on each feature so one fill layer can paint every owner
@@ -181,34 +169,23 @@ export function TerritoryLayer({
   // disagrees, the answer the user cares about is "which bit is mine".
   const areaGroups = useMemo(
     () => [
-      ...rivals.map((r) => ({ shapes: r.shapes, color: ownerColor(r.ownerId) })),
-      { shapes, color: BLUE },
+      ...rivals.map((r) => ({ shapes: r.shapes, color: ownerColorCss(r.ownerId) })),
+      { shapes, color: OWN_COLOR_CSS },
     ],
     [rivals, shapes],
   );
   // The store hands us fresh array references every 15s sync even when
   // nothing changed; re-uploading geometry each tick would stutter the 3D
   // city. Signatures keep uploads to real changes.
-  const rivalSig = useMemo(
-    () =>
-      rivals
-        .map(
-          (r) =>
-            `${r.ownerId}:${r.shapes.length}:${r.shapes.reduce((n, s) => n + s.points.length + (s.holes?.length ?? 0), 0)}`,
-        )
-        .join(','),
-    [rivals],
-  );
-  const shapeSig = useMemo(
-    () =>
-      shapes
-        .map(
-          (s) =>
-            `${s.kind}:${s.points.map((p) => p.lat.toFixed(5)).join('|')}:${s.holes?.length ?? 0}`,
-        )
-        .join(','),
-    [shapes],
-  );
+  //
+  // They have to cover the actual GEOMETRY, both axes. Two earlier cuts
+  // didn't and the map quietly stopped being live: your own signature
+  // hashed latitude only, so a shape that shifted purely east-west never
+  // redrew, and the rivals' hashed nothing but owner ids and vertex
+  // counts — which is exactly what a neighbour's hull does when it grows
+  // or gets bitten into and keeps the same number of corners.
+  const rivalSig = useMemo(() => rivals.map((r) => `${r.ownerId}~${shapesSig(r.shapes)}`).join(','), [rivals]);
+  const shapeSig = useMemo(() => shapesSig(shapes), [shapes]);
   const markSig = useMemo(
     () => marks.map((m) => `${m.lat.toFixed(5)},${m.lng.toFixed(5)}`).join(','),
     [marks],
@@ -277,7 +254,7 @@ export function TerritoryLayer({
             source: LINK_SOURCE,
             layout: { 'line-cap': 'round' },
             paint: {
-              'line-color': BLUE_DEEP,
+              'line-color': OWN_COLOR_CSS,
               'line-width': 2,
               'line-opacity': 0.5,
               'line-dasharray': [2, 2],
@@ -294,7 +271,7 @@ export function TerritoryLayer({
           source: DOTS_SOURCE,
           paint: {
             'circle-radius': ['get', 'r'],
-            'circle-color': BLUE_DEEP,
+            'circle-color': OWN_COLOR_CSS,
             'circle-opacity': ['get', 'o'],
             'circle-stroke-color': '#ffffff',
             'circle-stroke-width': 2,
