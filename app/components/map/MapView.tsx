@@ -273,6 +273,8 @@ export default function MapViewWeb() {
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  // When the user last dragged the map by hand (0 = never).
+  const userPannedAtRef = useRef(0);
   // Stored in state too so React-tree children (markers) can be wired
   // to the map via MapContext when it's ready.
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
@@ -331,31 +333,47 @@ export default function MapViewWeb() {
   // Hints pause while moving and resume once it settles.
   const [mapMoving, setMapMoving] = useState(false);
 
-  // Simulated walk (?sim=1) only: pan back to the dog whenever it leaves
-  // the frame. A real walker moves at human speed and decides for
-  // themselves when to recentre (the edge bookmark is right there); a
-  // simulated one crosses the viewport on its own and strands you looking
-  // at empty map — which is exactly what happened the first time out. The
-  // loop it walks has to be wider than a phone screen at street zoom
-  // (anything tighter would put marks closer together than the server's
-  // spacing rule allows), so following is the only way to keep it in
-  // view. No behaviour change for real users — isSimulatedWalk() is false
-  // without the query param.
+  // Simulated walk (?sim=1) only: nudge the camera back when the dog
+  // leaves the frame, so a simulated walker doesn't stroll off-screen
+  // while you watch empty map.
+  //
+  // Three things this has to avoid, all learned the hard way:
+  //   - Reacting to `companionPos` (which ticks ~3×/s) restarted the pan
+  //     animation faster than it could finish, so the camera never
+  //     arrived and every gesture was fought off mid-drag.
+  //   - Reading `mapBounds` state was worse than useless: it only
+  //     refreshes on the map's `idle` event, and a constantly-restarting
+  //     animation means `idle` never fires — so the bounds stayed stale,
+  //     "off-screen" stayed true, and the pan loop wedged itself on
+  //     forever. Live `map.getBounds()` has no such feedback path.
+  //   - Following unconditionally makes panning around impossible. After
+  //     any drag the camera stands down for a while so you can look
+  //     wherever you like; it only resumes once you've stopped.
   const simWalk = isSimulatedWalk();
   useEffect(() => {
-    if (!simWalk || !companionPos || !mapBounds) return;
-    const inView =
-      companionPos.lat <= mapBounds.n &&
-      companionPos.lat >= mapBounds.s &&
-      companionPos.lng <= mapBounds.e &&
-      companionPos.lng >= mapBounds.w;
-    if (inView) return;
-    try {
-      mapRef.current?.panTo(companionPos);
-    } catch {
-      /* map tearing down */
-    }
-  }, [simWalk, companionPos, mapBounds]);
+    if (!simWalk) return;
+    const CHECK_MS = 3000;
+    const AFTER_GESTURE_MS = 12_000;
+    const id = setInterval(() => {
+      const map = mapRef.current;
+      const dog = companionPosRef.current;
+      if (!map || !dog) return;
+      if (Date.now() - userPannedAtRef.current < AFTER_GESTURE_MS) return;
+      try {
+        const b = map.getBounds();
+        const inView =
+          dog.lat <= b.getNorth() &&
+          dog.lat >= b.getSouth() &&
+          dog.lng <= b.getEast() &&
+          dog.lng >= b.getWest();
+        if (inView) return;
+        map.easeTo({ center: [dog.lng, dog.lat], duration: 600 });
+      } catch {
+        /* map tearing down */
+      }
+    }, CHECK_MS);
+    return () => clearInterval(id);
+  }, [simWalk]);
   // Active collect-burst FX — one transient pop per paw/bone pickup,
   // keyed by the store's lastCollect.seq. Each self-removes after the
   // animation (~800ms) via the effect below.
@@ -1943,6 +1961,15 @@ export default function MapViewWeb() {
           // steep default pitch even if a load-time re-style briefly
           // re-showed them.
           syncStreetLabels();
+        });
+        // Hand-driven pans. Only used by the simulated-walk follow camera,
+        // which stands down for a while after you touch the map so you can
+        // look around without being dragged back to the dog.
+        map.on('dragstart', () => {
+          userPannedAtRef.current = Date.now();
+        });
+        map.on('dragend', () => {
+          userPannedAtRef.current = Date.now();
         });
         // Track camera animation so hints can hold off until the map
         // settles (sniff jumps, snaps, pans all fire move start/end).
