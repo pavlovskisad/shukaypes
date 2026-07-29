@@ -6,6 +6,7 @@ import {
   type NearbyLostDog,
   type TerritoryCell,
   type TerritoryMark,
+  type TerritoryShape,
 } from '../services/api';
 import {
   fetchNearbySpots,
@@ -140,6 +141,8 @@ interface GameState {
   // The dog's recent marks in walk order — dots on the map, joined by the
   // route walked between them.
   territoryMarks: TerritoryMark[];
+  // The drawable geometry those marks make — filled hulls and links.
+  territoryShapes: TerritoryShape[];
   // The dog just marked a spot (seq bumps once per mark so the map can
   // bubble + pop the scent exactly once).
   lastMark: {
@@ -291,7 +294,7 @@ interface GameState {
   // while the tab was suspended (or just between 100ms loop ticks).
   // Server diff'ed against its own Redis-stored last position, so this
   // only ever credits a real corridor, not a teleport.
-  collectPath: (pos: LatLng) => Promise<void>;
+  collectPath: (pos: LatLng, dogPos?: LatLng | null) => Promise<void>;
   syncTokens: (pos: LatLng) => Promise<void>;
   syncFood: (pos: LatLng) => Promise<void>;
   syncLostDogs: (pos: LatLng) => Promise<void>;
@@ -390,6 +393,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   incomingPoke: null,
   territory: [],
   territoryMarks: [],
+  territoryShapes: [],
   lastMark: null,
   markMood: null,
   lostDogsLoaded: false,
@@ -642,9 +646,9 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  collectPath: async (pos) => {
+  collectPath: async (pos, dogPos) => {
     try {
-      const res = await api.collectPath(pos);
+      const res = await api.collectPath(pos, dogPos);
       // If anything got swept, the server bumped points / counters /
       // companion stats — pull the fresh values so the HUD updates.
       if (res.tokensCollected > 0 || res.foodConsumed > 0) {
@@ -657,6 +661,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       // replace these.)
       if (res.marked) {
         const { lat, lng, cells, enclosed } = res.marked;
+        // Show the new dot immediately — the shape it belongs to arrives
+        // with the next sync, but the dot itself shouldn't lag the bubble.
         set((prev) => ({
           lastMark: {
             seq: (prev.lastMark?.seq ?? 0) + 1,
@@ -665,18 +671,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             cells,
             enclosed: enclosed ?? 0,
           },
-          territory: prev.territory.some((c) => c.cellId === `pending:${lat},${lng}`)
-            ? prev.territory
-            : [
-                ...prev.territory,
-                {
-                  cellId: `pending:${lat},${lng}`,
-                  lat,
-                  lng,
-                  strength: 40,
-                  mine: true,
-                },
-              ],
+          territoryMarks: [...prev.territoryMarks, { lat, lng, closedLoop: false }],
         }));
         // Marking costs hunger and pays happiness — refresh the meters.
         void get().syncState();
@@ -865,6 +860,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           // entirely — keep whatever we had rather than clearing the map.
           territory: res.territory ?? prev.territory,
           territoryMarks: res.marks ?? prev.territoryMarks,
+          territoryShapes: res.shapes ?? prev.territoryShapes,
           lastSyncError: null,
         };
       });
