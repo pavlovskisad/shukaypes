@@ -903,12 +903,27 @@ export async function fetchMapTerritory(
   }
   const names = await ownerNames(rivalIds);
 
-  const freshSince = Date.now() - T.rivalMarkFlashMs;
+  // ONE mark per neighbour: the last place they marked, whenever that was.
+  //
+  // This used to be every rival mark newer than rivalMarkFlashMs, which in
+  // practice meant nothing was ever on screen — the flash window is 45s and
+  // a bot marks once every four minutes, so the odds of catching one were
+  // about one in five, per neighbour, per look. "Where did that dog last
+  // lift its leg" is a question with a permanent answer, so it gets a
+  // permanent dot, and the client fades it by age instead of dropping it.
+  const latest = new Map<string, (typeof all)[number]>();
+  for (const m of all) {
+    if (m.userId === userId) continue;
+    const cur = latest.get(m.userId);
+    if (!cur || m.at.getTime() > cur.at.getTime()) latest.set(m.userId, m);
+  }
   return {
-    rivalMarks: all
-      .filter((m) => m.userId !== userId && m.at.getTime() >= freshSince)
-      .slice(0, 40)
-      .map((m) => ({ lat: m.lat, lng: m.lng, ownerId: m.userId, at: m.at.toISOString() })),
+    rivalMarks: rivalIds.flatMap((id) => {
+      const m = latest.get(id);
+      return m
+        ? [{ lat: m.lat, lng: m.lng, ownerId: m.userId, at: m.at.toISOString() }]
+        : [];
+    }),
     marks: all
       .filter((m) => m.userId === userId)
       .map((m) => ({
