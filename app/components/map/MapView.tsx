@@ -322,6 +322,7 @@ export default function MapViewWeb() {
   // …and the PvP half: whoever else holds ground within sight, plus the
   // "somebody took your territory, dawg!" notice.
   const rivalTerritory = useGameStore((s) => s.rivalTerritory);
+  const rivalMarks = useGameStore((s) => s.rivalMarks);
   const lastRaid = useGameStore((s) => s.lastRaid);
   const onHomeGround = useGameStore((s) => s.onHomeGround);
   // Tracks the map's visible bounds so we can detect when the
@@ -2877,6 +2878,7 @@ export default function MapViewWeb() {
             shapes={territoryShapes}
             marks={territoryMarks}
             rivals={rivalTerritory}
+            rivalMarks={rivalMarks}
           />
         ) : null}
 

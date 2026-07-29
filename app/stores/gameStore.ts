@@ -143,6 +143,9 @@ interface GameState {
   // Other people's ground, but only while you're near it. Normally empty:
   // the map is yours until you walk into someone else's range.
   rivalTerritory: RivalTerritory[];
+  // …and the marks they've just made, so a border moving has a visible
+  // cause instead of a zone silently changing shape between syncs.
+  rivalMarks: { lat: number; lng: number; ownerId: string; at: string }[];
   // Somebody marked over your ground (seq bumps once per delivery so the
   // map fires the "somebody took your territory, dawg!" notice once).
   lastRaid: { seq: number; raiderName: string; killed: boolean; count: number } | null;
@@ -408,6 +411,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   territoryMarks: [],
   territoryShapes: [],
   rivalTerritory: [],
+  rivalMarks: [],
   lastRaid: null,
   markReady: false,
   onHomeGround: false,
@@ -888,6 +892,7 @@ export const useGameStore = create<GameState>((set, get) => ({
           territoryMarks: res.marks ?? prev.territoryMarks,
           territoryShapes: res.shapes ?? prev.territoryShapes,
           rivalTerritory: res.rivals ?? [],
+          rivalMarks: res.rivalMarks ?? [],
           onHomeGround: res.home === true,
           // Raids are delivered once by the server, so a batch arriving
           // here is news. Announce the most recent one and say how many

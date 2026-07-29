@@ -157,6 +157,8 @@ const plugin: FastifyPluginAsync = async (app) => {
       pokes,
       marks: territory?.marks ?? [],
       shapes: territory?.shapes ?? [],
+      // Neighbours' just-made marks, so a border moving has a visible cause.
+      rivalMarks: territory?.rivalMarks ?? [],
       // Everyone else's ground in view, each tagged with its owner so the
       // client can give them their own colour.
       rivals: territory?.rivals ?? [],

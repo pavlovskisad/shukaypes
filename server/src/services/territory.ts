@@ -70,6 +70,7 @@ import {
   localProjection,
   voronoiCellWithin,
   clipToConvex,
+  bufferConvex,
   type Pt,
 } from '../utils/territoryShapes.js';
 import { redis } from '../db/redis.js';
@@ -572,8 +573,12 @@ function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
   // Pass 1 — raw shapes, before anyone's claim is cut back.
   interface Patch {
     ownerId: string;
-    hull: LatLng[];
-    hullXY: Pt[];
+    // What this owner is CLAIMING: the hull of their marks grown outward
+    // by reachM, so neighbouring ranges overlap and the partition below
+    // can draw a shared border through the overlap. Un-grown hulls left a
+    // strip of nobody's ground between every pair of patches.
+    claim: LatLng[];
+    claimXY: Pt[];
     marksXY: Pt[];
     centre: LatLng;
     reachM: number;
@@ -605,13 +610,15 @@ function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
         (a, p) => ({ lat: a.lat + p.lat / hull.length, lng: a.lng + p.lng / hull.length }),
         { lat: 0, lng: 0 },
       );
+      const claimXY = bufferConvex(hull.map(proj.to), T.claimReachM);
       patches.push({
         ownerId,
-        hull,
-        hullXY: hull.map(proj.to),
+        claim: claimXY.map(proj.from),
+        claimXY,
         marksXY: cluster.map(proj.to),
         centre,
-        reachM: hull.reduce((r, p) => Math.max(r, distanceMeters(centre, p)), 0),
+        reachM:
+          hull.reduce((r, p) => Math.max(r, distanceMeters(centre, p)), 0) + T.claimReachM,
       });
     }
   }
@@ -624,8 +631,10 @@ function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
       if (other.ownerId === patch.ownerId) continue;
       // Hulls too far apart to touch can't take anything from each other.
       if (distanceMeters(patch.centre, other.centre) > patch.reachM + other.reachM) continue;
-      // Only the ground the two actually share is ever in dispute.
-      const contested = clipToConvex(patch.hullXY, other.hullXY);
+      // Only the ground the two actually share is ever in dispute. With
+      // grown claims that overlap is a real band rather than an occasional
+      // accident, which is what turns a gap between ranges into a border.
+      const contested = clipToConvex(patch.claimXY, other.claimXY);
       if (contested.length < 3) continue;
       // Inside that, whichever of THEIR marks beats all of ours takes it.
       // Their cells overlap each other, which is fine — the difference
@@ -644,7 +653,7 @@ function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
 
     const shapes = out.get(patch.ownerId) ?? [];
     if (bites.length === 0) {
-      shapes.push({ kind: 'area', points: patch.hull });
+      shapes.push({ kind: 'area', points: patch.claim });
       out.set(patch.ownerId, shapes);
       continue;
     }
@@ -657,7 +666,7 @@ function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
     // A metre of slop on a territory border is not something anyone can
     // see, let alone care about.
     const cut = (gridM: number): polygonClipping.MultiPolygon | null => {
-      const subject = prepareRing(patch.hullXY, gridM);
+      const subject = prepareRing(patch.claimXY, gridM);
       if (!subject) return null;
       const clips = bites
         .map((c) => prepareRing(c, gridM))
@@ -682,11 +691,11 @@ function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
         // LOUD on purpose. A quiet fallback here is indistinguishable
         // from "there was nothing to clip", so a broken clipper would
         // just look like the feature was never built.
-        console.warn('[territory] partition failed, falling back to raw hull:', err);
+        console.warn('[territory] partition failed, falling back to raw claim:', err);
       }
     }
     if (!pieces) {
-      shapes.push({ kind: 'area', points: patch.hull });
+      shapes.push({ kind: 'area', points: patch.claim });
       out.set(patch.ownerId, shapes);
       continue;
     }
@@ -753,6 +762,12 @@ function isHome(pos: LatLng, shapes: TerritoryShape[]): boolean {
 export interface MapTerritory {
   marks: { lat: number; lng: number; closedLoop: boolean; strength: number; at: string }[];
   shapes: TerritoryShape[];
+  // Marks OTHER dogs have just made, so a neighbour's border moving has a
+  // visible cause. Without them a rival zone simply changed shape between
+  // one sync and the next and you never saw why — the dogs were walking
+  // around apparently doing nothing. Only the very recent ones: this is a
+  // "that just happened" signal, not their history.
+  rivalMarks: { lat: number; lng: number; ownerId: string; at: string }[];
   // Is the walker standing on ground they hold? The passive perks —
   // denser paws, slower happiness drain — hang off this.
   home: boolean;
@@ -766,7 +781,8 @@ export async function fetchMapTerritory(
 ): Promise<MapTerritory> {
   const radius = Math.min(radiusM, T.rivalViewRadiusM);
   const all = await marksNear(pos, radius, { limit: T.partitionMarkLimit });
-  if (all.length === 0) return { marks: [], shapes: [], home: false, rivals: [] };
+  if (all.length === 0)
+    return { marks: [], shapes: [], rivalMarks: [], home: false, rivals: [] };
 
   const partitioned = partitionShapes(all);
   const shapes = partitioned.get(userId) ?? [];
@@ -781,7 +797,12 @@ export async function fetchMapTerritory(
   }
   const names = await ownerNames(rivalIds);
 
+  const freshSince = Date.now() - T.rivalMarkFlashMs;
   return {
+    rivalMarks: all
+      .filter((m) => m.userId !== userId && m.at.getTime() >= freshSince)
+      .slice(0, 40)
+      .map((m) => ({ lat: m.lat, lng: m.lng, ownerId: m.userId, at: m.at.toISOString() })),
     marks: all
       .filter((m) => m.userId === userId)
       .map((m) => ({
