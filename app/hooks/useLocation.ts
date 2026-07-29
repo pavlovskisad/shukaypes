@@ -4,6 +4,41 @@ import type { LatLng } from '@shukajpes/shared';
 
 const KYIV_FALLBACK: LatLng = { lat: 50.4501, lng: 30.5234 };
 
+// Walk simulator — `?sim=1` on the URL replaces GPS with a synthetic
+// walker that wanders the city from the Kyiv anchor (or `?simLat=&simLng=`).
+// Everything downstream (path sweep, auto-collect, territory marking) reads
+// the same position, so a simulated walk exercises the real server code —
+// no faked responses, no test-only branches past this hook.
+//
+// Speed defaults to a brisk walk; `?simSpeed=<m/s>` covers ground faster
+// when you want to see a long ribbon of territory without waiting.
+// Deliberately dev-only ergonomics: no UI, no persistence, gone the moment
+// you drop the query param.
+const SIM_TICK_MS = 1000;
+
+interface SimConfig {
+  start: LatLng;
+  speedMps: number;
+}
+
+function readSimConfig(): SimConfig | null {
+  if (typeof window === 'undefined') return null;
+  try {
+    const q = new URLSearchParams(window.location.search);
+    if (q.get('sim') !== '1') return null;
+    const lat = Number(q.get('simLat'));
+    const lng = Number(q.get('simLng'));
+    const speed = Number(q.get('simSpeed'));
+    return {
+      start:
+        Number.isFinite(lat) && Number.isFinite(lng) ? { lat, lng } : KYIV_FALLBACK,
+      speedMps: Number.isFinite(speed) && speed > 0 ? Math.min(speed, 30) : 1.6,
+    };
+  } catch {
+    return null;
+  }
+}
+
 export interface LocationState {
   position: LatLng | null;
   error: string | null;
@@ -20,6 +55,30 @@ export function useLocation(): LocationState {
   });
 
   useEffect(() => {
+    // Simulated walk takes precedence over real GPS — the point is to test
+    // movement-driven mechanics while sitting still.
+    const sim = readSimConfig();
+    if (sim) {
+      let pos = { ...sim.start };
+      // Heading drifts a little each tick so the walker wanders through
+      // streets instead of marching in a dead-straight line off the map.
+      let heading = Math.random() * Math.PI * 2;
+      setState({ position: pos, error: null, granted: true, usingFallback: false });
+      const id = setInterval(() => {
+        heading += (Math.random() - 0.5) * 0.6;
+        const step = sim.speedMps * (SIM_TICK_MS / 1000);
+        pos = {
+          lat: pos.lat + (step * Math.cos(heading)) / 110540,
+          lng:
+            pos.lng +
+            (step * Math.sin(heading)) /
+              (111320 * Math.cos((pos.lat * Math.PI) / 180)),
+        };
+        setState({ position: pos, error: null, granted: true, usingFallback: false });
+      }, SIM_TICK_MS);
+      return () => clearInterval(id);
+    }
+
     if (Platform.OS === 'web') {
       if (typeof navigator === 'undefined' || !navigator.geolocation) {
         setState({

@@ -5,6 +5,7 @@ import { db, schema } from '../db/index.js';
 import { redis } from '../db/redis.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, pointToSegmentDistanceM, type LatLng } from '../utils/geo.js';
+import { markIfDue, type MarkResult } from '../services/territory.js';
 
 interface PathBody {
   lat: number;
@@ -33,6 +34,26 @@ interface RedisLastPos {
 
 function lastPosKey(userId: string): string {
   return `path:last:${userId}`;
+}
+
+// Wire shape for the territory outcome. Only a successful mark carries a
+// payload; the mood refusals surface as a reason so the companion can say
+// something about being hungry / not in the mood, and the boring ones
+// (cooldown, spacing) send nothing at all.
+function markPayload(mark: MarkResult) {
+  if (mark.marked && mark.position) {
+    return {
+      lat: mark.position.lat,
+      lng: mark.position.lng,
+      cells: mark.cells ?? 0,
+    };
+  }
+  return null;
+}
+
+function markMood(mark: MarkResult): 'hungry' | 'grumpy' | null {
+  if (mark.reason === 'hungry' || mark.reason === 'grumpy') return mark.reason;
+  return null;
 }
 
 async function readLastPos(userId: string): Promise<RedisLastPos | null> {
@@ -80,23 +101,49 @@ const plugin: FastifyPluginAsync = async (app) => {
     // First sync ever — just record current and skip. No segment to sweep.
     if (!last) {
       await writeLastPos(userId, current);
-      return { tokensCollected: 0, foodConsumed: 0, reason: 'no-anchor' };
+      return { tokensCollected: 0, foodConsumed: 0, reason: 'no-anchor', marked: null };
     }
 
     const lastPos: LatLng = { lat: last.lat, lng: last.lng };
     const segLen = distanceMeters(lastPos, current);
 
+    // Looks like a teleport — skip the sweep AND the territory mark (the
+    // whole point of the anchor is that you can't claim ground you didn't
+    // walk to), but still bump the anchor so later syncs work from here.
+    if (segLen > MAX_SEGMENT_M) {
+      await writeLastPos(userId, current);
+      return {
+        tokensCollected: 0,
+        foodConsumed: 0,
+        reason: 'segment-too-long',
+        marked: null,
+      };
+    }
+
+    // Territory: the dog decides whether to mark here. Runs on every
+    // validated position — including standing still, since a dog marking
+    // the corner it's sitting on is exactly right, and the service's own
+    // spacing rule stops it from claiming the same patch twice.
+    //
+    // Never allowed to break the sweep: path collection is what credits a
+    // backgrounded walk's paws and bones, and a territory hiccup (or a
+    // deploy that lands before its migration) must not cost the user
+    // those. Failure just means no mark this tick.
+    const mark: MarkResult = await markIfDue(userId, current).catch((err) => {
+      req.log.warn({ err }, '[territory] mark failed');
+      return { marked: false } as MarkResult;
+    });
+
     // No real movement (GPS jitter etc) — refresh anchor, skip sweep.
     if (segLen < 5) {
       await writeLastPos(userId, current);
-      return { tokensCollected: 0, foodConsumed: 0, reason: 'no-movement' };
-    }
-
-    // Looks like a teleport — skip the sweep but still bump the
-    // anchor so subsequent syncs work normally from here.
-    if (segLen > MAX_SEGMENT_M) {
-      await writeLastPos(userId, current);
-      return { tokensCollected: 0, foodConsumed: 0, reason: 'segment-too-long' };
+      return {
+        tokensCollected: 0,
+        foodConsumed: 0,
+        reason: 'no-movement',
+        marked: markPayload(mark),
+        mood: markMood(mark),
+      };
     }
 
     // Pull all uncollected tokens + uneaten bones for this user. The
@@ -152,7 +199,12 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     if (tokenHits.length === 0 && foodHits.length === 0) {
       await writeLastPos(userId, current);
-      return { tokensCollected: 0, foodConsumed: 0 };
+      return {
+        tokensCollected: 0,
+        foodConsumed: 0,
+        marked: markPayload(mark),
+        mood: markMood(mark),
+      };
     }
 
     const now = new Date();
@@ -242,6 +294,8 @@ const plugin: FastifyPluginAsync = async (app) => {
     return {
       tokensCollected: tokenHits.length,
       foodConsumed: foodHits.length,
+      marked: markPayload(mark),
+      mood: markMood(mark),
     };
   });
 };

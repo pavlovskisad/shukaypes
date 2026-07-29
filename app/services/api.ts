@@ -47,6 +47,18 @@ export interface ChatNearbySpot {
   distM: number;
 }
 
+// One claimed patch of ground (~110 m grid cell, see the server's
+// utils/territoryGrid.ts). `strength` arrives with decay already applied,
+// so a cell that's been left alone for days comes back faint — the map
+// renders it thinner rather than the client tracking any decay itself.
+export interface TerritoryCell {
+  cellId: string;
+  lat: number;
+  lng: number;
+  strength: number;
+  mine: boolean;
+}
+
 export interface NearbyLostDog {
   id: string;
   name: string;
@@ -204,6 +216,9 @@ export const api = {
       // Present only when mp=1; older servers omit these (default []).
       players?: NearbyPlayer[];
       pokes?: Poke[];
+      // Your claimed ground near this position. Optional so an older
+      // server (or a failed territory read) just means an unmarked map.
+      territory?: TerritoryCell[];
     }>(`/sync/map?${params.toString()}`);
   },
 
@@ -236,6 +251,11 @@ export const api = {
       tokensCollected: number;
       foodConsumed: number;
       reason?: string;
+      // Set when the dog marked territory on this sync — the server
+      // decides, we just announce it and refresh the map.
+      marked?: { lat: number; lng: number; cells: number } | null;
+      // Why it didn't, when the reason is worth a word from the dog.
+      mood?: 'hungry' | 'grumpy' | null;
     }>('/collect/path', {
       method: 'POST',
       body: JSON.stringify({ lat: pos.lat, lng: pos.lng }),

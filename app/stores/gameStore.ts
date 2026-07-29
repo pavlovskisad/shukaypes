@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { balance } from '../constants/balance';
 import type { FoodItem, LatLng, NearbyPlayer, Quest, Token } from '@shukajpes/shared';
-import { api, type NearbyLostDog } from '../services/api';
+import { api, type NearbyLostDog, type TerritoryCell } from '../services/api';
 import {
   fetchNearbySpots,
   fetchNearbyParks,
@@ -129,6 +129,14 @@ interface GameState {
   // Latest incoming poke (seq bumps when a new one arrives so the UI can
   // trigger the notification + haptic once per poke).
   incomingPoke: { seq: number; fromName: string; position: LatLng | null } | null;
+  // Ground the dog has claimed around here — server-computed, decay
+  // already applied, refreshed each /sync/map tick.
+  territory: TerritoryCell[];
+  // The dog just marked a spot (seq bumps once per mark so the map can
+  // bubble + pop the scent exactly once).
+  lastMark: { seq: number; lat: number; lng: number; cells: number } | null;
+  // …or declined to, for a reason worth voicing (hungry / not in the mood).
+  markMood: { seq: number; reason: 'hungry' | 'grumpy' } | null;
   // Flips true after the first syncLostDogs call settles (success or
   // failure). Lets the Tasks tab tell "still waiting for the first
   // fetch" apart from "fetched but zero nearby" so the lost-pets
@@ -365,6 +373,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   lostDogs: [],
   nearbyPlayers: [],
   incomingPoke: null,
+  territory: [],
+  lastMark: null,
+  markMood: null,
   lostDogsLoaded: false,
   selectedDogId: null,
   spots: [],
@@ -623,6 +634,35 @@ export const useGameStore = create<GameState>((set, get) => ({
       if (res.tokensCollected > 0 || res.foodConsumed > 0) {
         void get().syncState();
       }
+      // The dog marked here. Bump a seq so the map fires the bubble +
+      // scent-pop exactly once, and drop the fresh cells straight into
+      // the layer so the new patch glows now rather than on the next
+      // 15s tick. (The server's own cells arrive on that tick and
+      // replace these.)
+      if (res.marked) {
+        const { lat, lng, cells } = res.marked;
+        set((prev) => ({
+          lastMark: { seq: (prev.lastMark?.seq ?? 0) + 1, lat, lng, cells },
+          territory: prev.territory.some((c) => c.cellId === `pending:${lat},${lng}`)
+            ? prev.territory
+            : [
+                ...prev.territory,
+                {
+                  cellId: `pending:${lat},${lng}`,
+                  lat,
+                  lng,
+                  strength: 40,
+                  mine: true,
+                },
+              ],
+        }));
+        // Marking costs hunger and pays happiness — refresh the meters.
+        void get().syncState();
+      } else if (res.mood) {
+        set((prev) => ({
+          markMood: { seq: (prev.markMood?.seq ?? 0) + 1, reason: res.mood! },
+        }));
+      }
     } catch (err) {
       // Path collection is a convenience layer — don't surface a
       // failure as a hard error; the regular foreground auto-collect
@@ -799,6 +839,9 @@ export const useGameStore = create<GameState>((set, get) => ({
           hunger: res.state.companion.hunger,
           happiness: res.state.companion.happiness,
           companionName: res.state.companion.name,
+          // Claimed ground around here. An older server omits the field
+          // entirely — keep whatever we had rather than clearing the map.
+          territory: res.territory ?? prev.territory,
           lastSyncError: null,
         };
       });
