@@ -25,7 +25,7 @@ import {
   installPaperOverlaySync,
 } from './crayonStyle';
 import type { Spot } from '../../services/places';
-import { useLocation } from '../../hooks/useLocation';
+import { useLocation, isSimulatedWalk } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
 import { useGameLoop } from '../../hooks/useGameLoop';
 import { distanceMeters, pointAheadOnRoute } from '../../utils/geo';
@@ -330,6 +330,32 @@ export default function MapViewWeb() {
   // True while the camera is animating (sniff jump, snap, pan, zoom).
   // Hints pause while moving and resume once it settles.
   const [mapMoving, setMapMoving] = useState(false);
+
+  // Simulated walk (?sim=1) only: pan back to the dog whenever it leaves
+  // the frame. A real walker moves at human speed and decides for
+  // themselves when to recentre (the edge bookmark is right there); a
+  // simulated one crosses the viewport on its own and strands you looking
+  // at empty map — which is exactly what happened the first time out. The
+  // loop it walks has to be wider than a phone screen at street zoom
+  // (anything tighter would put marks closer together than the server's
+  // spacing rule allows), so following is the only way to keep it in
+  // view. No behaviour change for real users — isSimulatedWalk() is false
+  // without the query param.
+  const simWalk = isSimulatedWalk();
+  useEffect(() => {
+    if (!simWalk || !companionPos || !mapBounds) return;
+    const inView =
+      companionPos.lat <= mapBounds.n &&
+      companionPos.lat >= mapBounds.s &&
+      companionPos.lng <= mapBounds.e &&
+      companionPos.lng >= mapBounds.w;
+    if (inView) return;
+    try {
+      mapRef.current?.panTo(companionPos);
+    } catch {
+      /* map tearing down */
+    }
+  }, [simWalk, companionPos, mapBounds]);
   // Active collect-burst FX — one transient pop per paw/bone pickup,
   // keyed by the store's lastCollect.seq. Each self-removes after the
   // animation (~800ms) via the effect below.
@@ -2366,6 +2392,7 @@ export default function MapViewWeb() {
     if (!companionPos || !mapRef.current) return;
     mapRef.current.panTo(companionPos);
   };
+
 
 
   const formatDistance = (m: number): string => {
