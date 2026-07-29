@@ -241,11 +241,19 @@ export const balance = {
     // is what makes recapture a habit rather than a chore.
     refreshM: 110,
     maxMarkStrength: 3,
-    // Someone else's ground only exists on your map when you're near it.
-    // Yours is always drawn; theirs appears as you approach and goes away
-    // when you leave, so the map stays yours and running into a rival
-    // range is an event.
-    rivalViewRadiusM: 900,
+    // How far out other people's ground is drawn. Effectively the whole
+    // map view: seeing the city carved up between neighbours is the point
+    // of a territory game, and a 900m keyhole (the first cut) meant you
+    // only ever saw your own paint plus a sliver.
+    rivalViewRadiusM: 5000,
+    // Ceiling on how many neighbours are drawn at once, nearest first.
+    // Past a certain count the map stops saying anything — it's just a
+    // quilt — and the payload grows for ranges you can't make out anyway.
+    maxRivalsDrawn: 14,
+    // Hard bound on how many marks one partition pass will consider.
+    // Sized well above a busy 5km view; the point is that a pathological
+    // density can't turn a 15s sync into a geometry benchmark.
+    partitionMarkLimit: 2500,
     // A raid waits this long to be delivered. Long enough to survive a
     // night's sleep, short enough that coming back after a week doesn't
     // dump a month of history on you at once.

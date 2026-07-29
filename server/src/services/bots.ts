@@ -110,6 +110,23 @@ interface Bot {
   lastMarkAt: number;
 }
 
+// Where bot i keeps its territory: hotspot i%10, then a ring position
+// determined by which lap round the hotspot list it is. Deterministic, so
+// the layout is the same on every boot and a restart doesn't reshuffle
+// who lives where.
+const HOME_RING_M = 320;
+function homePatch(i: number): LatLng {
+  const spot = HOTSPOTS[i % HOTSPOTS.length]!;
+  const lap = Math.floor(i / HOTSPOTS.length);
+  if (lap === 0) return spot;
+  // Lap 1 goes to one side, lap 2 to another, and so on around the ring.
+  const ang = (lap * 2.399963) % (Math.PI * 2); // golden angle — spreads evenly for any count
+  return {
+    lat: spot.lat + (HOME_RING_M * Math.cos(ang)) / mPerLat,
+    lng: spot.lng + (HOME_RING_M * Math.sin(ang)) / mPerLng(spot.lat),
+  };
+}
+
 function spawnBot(i: number): Bot {
   const pos = offset(KYIV, SPREAD_M);
   return {
@@ -120,11 +137,14 @@ function spawnBot(i: number): Bot {
     speed: rand(SPEED_MIN, SPEED_MAX),
     state: 'walk',
     until: 0,
-    // Home patch: a hotspot, nudged off-centre so two bots sharing one
-    // park hold adjacent ground rather than the same ground. Neighbours
-    // with a shared border are the interesting case — identical ranges
-    // would just annihilate each other on the first contest.
-    home: offset(HOTSPOTS[i % HOTSPOTS.length]!, 200),
+    // Home patch: a hotspot, offset DETERMINISTICALLY so the bots sharing
+    // one park spread around it instead of piling onto the same block.
+    // With 30 bots over 10 hotspots that's three per park at 120° and
+    // 320m out — neighbours with a shared border, which is the
+    // interesting case. A random offset (the first cut) let two of them
+    // land nearly on top of each other, and a pair of near-identical
+    // ranges is just a mess to look at and to test against.
+    home: homePatch(i),
     // Stagger the first marks so a restart doesn't fire the whole pool
     // into the same tick.
     lastMarkAt: Date.now() - rand(0, balance.territory.botMarkCooldownMs),

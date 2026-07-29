@@ -6,7 +6,7 @@
 // instead of an impression of it:
 //
 //   • a DOT wherever the dog actually marked
-//   • a solid FILL over every cell you own
+//   • a solid FILL over the ground those marks hold
 //
 // Territory is a function of the MARKS, not of the route walked between
 // them — three marks near each other enclose a triangle of ground, and
@@ -23,10 +23,16 @@
 // enclose. The cells are gone now; the marks are the only ownership
 // truth, so what's drawn and what's owned can't drift apart.
 //
-// Rival ground is the fourth thing on this layer, and it's deliberately
-// quiet: one graphite colour for everyone else, thinner than yours, only
-// present while you're near it. The map is yours; running into someone
-// else's edge should be an event, not a permanent second layer of paint.
+// EVERYONE'S ground is drawn, each owner in their own colour, across the
+// whole map view — a city carved up between neighbours, which is the
+// thing a territory game is actually about. An earlier cut showed rivals
+// in one grey and only within 900m, and the map just looked empty.
+//
+// Zones never overlap: the server partitions all ground by nearest mark,
+// so a patch someone else holds inside your range arrives as a HOLE in
+// your shape and as their polygon in their colour. That's why this can be
+// a single fill layer with a data-driven colour rather than a layer per
+// owner with a stacking order to argue about.
 
 import { useEffect, useMemo, useState } from 'react';
 import type maplibregl from 'maplibre-gl';
@@ -40,9 +46,7 @@ const LINK_SOURCE = 'territory-link-src';
 const LINK_LAYER = 'territory-link';
 const DOTS_SOURCE = 'territory-dots-src';
 const DOTS_LAYER = 'territory-dots';
-const RIVAL_SOURCE = 'territory-rival-src';
-const RIVAL_FILL = 'territory-rival-fill';
-const RIVAL_EDGE = 'territory-rival-edge';
+const AREA_EDGE = 'territory-area-edge';
 
 // Brand blue (the CTA pill blue, rgb(0,60,255)). The previous sky-blue
 // was picked to sit clear of the search beacon, but on a pale map it read
@@ -51,15 +55,31 @@ const RIVAL_EDGE = 'territory-rival-edge';
 const BLUE = 'rgb(0,60,255)';
 const BLUE_DEEP = 'rgb(0,60,255)';
 
-// Rival ground. ONE colour for everyone else, not a colour per player —
-// the question the map has to answer is "is this mine or not", and a
-// palette of owners turns that into a legend you have to learn. Graphite
-// reads as "someone's been here" without competing with the brand blue
-// for attention, and it's the only other paint on the floor, so there's
-// never any doubt which one is yours. Drawn thinner than your own fill
-// and given the outline yours doesn't have, so at a glance it's clearly
-// somebody else's edge you're walking up to.
-const RIVAL = 'rgb(72,78,96)';
+// Every neighbour gets their OWN colour, derived from their id so it's
+// the same one on every device and across sessions — the city reads as a
+// patchwork of who holds what, which is the whole appeal of a territory
+// game. Yours stays brand blue and nobody else can be issued it.
+//
+// Hue comes off a hash of the id, then gets pushed out of the band around
+// brand blue (~226°) so no neighbour can be mistaken for you. Saturation
+// and lightness are fixed, so twenty owners still read as one family of
+// paint rather than a bag of highlighters.
+const OWN_HUE_LO = 200;
+const OWN_HUE_HI = 252;
+function ownerColor(id: string): string {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  let hue = (h >>> 0) % 360;
+  // Fold the reserved band away rather than clamping to its edges, which
+  // would pile several owners onto the same two hues.
+  if (hue >= OWN_HUE_LO && hue < OWN_HUE_HI) {
+    hue = (hue + (OWN_HUE_HI - OWN_HUE_LO)) % 360;
+  }
+  return `hsl(${hue}, 62%, 45%)`;
+}
 
 // A dot is a moment, not a monument: it shows where the dog just marked,
 // holds while you notice it, then fades out and leaves the territory
@@ -69,23 +89,34 @@ const DOT_HOLD_MS = 12_000;
 const DOT_FADE_MS = 8_000;
 const DOT_LIFE_MS = DOT_HOLD_MS + DOT_FADE_MS;
 
-function areaGeoJSON(shapes: TerritoryShape[]): GeoJSON.FeatureCollection {
-  return {
-    type: 'FeatureCollection',
-    features: shapes
-      .filter((s) => s.kind === 'area' && s.points.length >= 3)
-      .map((s) => ({
+// GeoJSON rings must close explicitly.
+function ring(pts: { lat: number; lng: number }[]): number[][] {
+  return [...pts.map((p) => [p.lng, p.lat]), [pts[0]!.lng, pts[0]!.lat]];
+}
+
+// `color` rides on each feature so one fill layer can paint every owner
+// in their own colour via a data-driven expression, instead of a layer
+// per neighbour.
+function areaGeoJSON(
+  groups: { shapes: TerritoryShape[]; color: string }[],
+): GeoJSON.FeatureCollection {
+  const features: GeoJSON.Feature[] = [];
+  for (const g of groups) {
+    for (const s of g.shapes) {
+      if (s.kind !== 'area' || s.points.length < 3) continue;
+      features.push({
         type: 'Feature',
         geometry: {
           type: 'Polygon',
-          // GeoJSON rings must close explicitly.
-          coordinates: [
-            [...s.points.map((p) => [p.lng, p.lat]), [s.points[0]!.lng, s.points[0]!.lat]],
-          ],
+          // Holes are ground a neighbour holds inside this shape — the
+          // server has already decided whose it is, so we just cut it out.
+          coordinates: [ring(s.points), ...(s.holes ?? []).map(ring)],
         },
-        properties: {},
-      })),
-  };
+        properties: { color: g.color },
+      });
+    }
+  }
+  return { type: 'FeatureCollection', features };
 }
 
 // Two marks are a link, not a territory: drawn as a bare line so it's
@@ -140,23 +171,37 @@ export function TerritoryLayer({
   rivals: RivalTerritory[];
 }) {
   const map = useMaplibreMap();
-  // Rival ground only arrives while you're near it, so most of the time
-  // this is an empty list and the layer is a no-op.
-  const rivalShapes = useMemo(() => rivals.flatMap((r) => r.shapes), [rivals]);
-  const rivalSig = useMemo(
-    () =>
-      rivals
-        .map((r) => `${r.ownerId}:${r.shapes.length}:${r.shapes[0]?.points[0]?.lat.toFixed(5) ?? ''}`)
-        .join(','),
-    [rivals],
+  // One group per owner, each with its own colour. Yours goes LAST so
+  // that if two ever did overlap, yours is the one on top — the server
+  // partitions the ground so they shouldn't, but if the geometry ever
+  // disagrees, the answer the user cares about is "which bit is mine".
+  const areaGroups = useMemo(
+    () => [
+      ...rivals.map((r) => ({ shapes: r.shapes, color: ownerColor(r.ownerId) })),
+      { shapes, color: BLUE },
+    ],
+    [rivals, shapes],
   );
   // The store hands us fresh array references every 15s sync even when
   // nothing changed; re-uploading geometry each tick would stutter the 3D
   // city. Signatures keep uploads to real changes.
+  const rivalSig = useMemo(
+    () =>
+      rivals
+        .map(
+          (r) =>
+            `${r.ownerId}:${r.shapes.length}:${r.shapes.reduce((n, s) => n + s.points.length + (s.holes?.length ?? 0), 0)}`,
+        )
+        .join(','),
+    [rivals],
+  );
   const shapeSig = useMemo(
     () =>
       shapes
-        .map((s) => `${s.kind}:${s.points.map((p) => p.lat.toFixed(5)).join('|')}`)
+        .map(
+          (s) =>
+            `${s.kind}:${s.points.map((p) => p.lat.toFixed(5)).join('|')}:${s.holes?.length ?? 0}`,
+        )
         .join(','),
     [shapes],
   );
@@ -179,10 +224,9 @@ export function TerritoryLayer({
 
   useEffect(() => {
     if (!map) return;
-    const areas = areaGeoJSON(shapes);
+    const areas = areaGeoJSON(areaGroups);
     const links = linkGeoJSON(shapes);
     const dots = dotsGeoJSON(marks, Date.now());
-    const rivalAreas = areaGeoJSON(rivalShapes);
 
     const apply = () => {
       // Territory is paint on the FLOOR — it belongs under the city, not
@@ -204,41 +248,36 @@ export function TerritoryLayer({
         return false;
       };
 
-      // Rivals go down FIRST so your own fill paints over theirs where the
-      // two overlap — the contested strip should read as yours-with-a-
-      // shadow, not as theirs-on-top-of-yours.
-      if (!setOr(RIVAL_SOURCE, rivalAreas)) {
-        map.addLayer(
-          {
-            id: RIVAL_FILL,
-            type: 'fill',
-            source: RIVAL_SOURCE,
-            paint: { 'fill-color': RIVAL, 'fill-opacity': 0.18 },
-          },
-          under,
-        );
-        map.addLayer(
-          {
-            id: RIVAL_EDGE,
-            type: 'line',
-            source: RIVAL_SOURCE,
-            layout: { 'line-join': 'round' },
-            paint: { 'line-color': RIVAL, 'line-width': 1.5, 'line-opacity': 0.55 },
-          },
-          under,
-        );
-      }
-
+      // Yours and everyone else's live in ONE source, coloured per
+      // feature. The ground is partitioned server-side so no two zones
+      // overlap, which means there's no stacking order to get right — and
+      // one layer is what lets an arbitrary number of neighbours be drawn
+      // without adding a layer each time somebody new walks past.
       if (!setOr(AREA_SOURCE, areas)) {
         map.addLayer(
           {
             id: AREA_FILL,
             type: 'fill',
             source: AREA_SOURCE,
-            // No outline any more, so the fill alone has to describe the
-          // shape's edge — a touch stronger than it was when a stroke was
-          // doing that work.
-          paint: { 'fill-color': BLUE, 'fill-opacity': 0.32 },
+            paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.3 },
+          },
+          under,
+        );
+        // A hairline in each zone's own colour. With neighbours meeting
+        // along shared borders, two similar hues sitting edge to edge need
+        // something to separate them — and it stops a pocket somebody else
+        // holds from reading as a hole in the map.
+        map.addLayer(
+          {
+            id: AREA_EDGE,
+            type: 'line',
+            source: AREA_SOURCE,
+            layout: { 'line-join': 'round' },
+            paint: {
+              'line-color': ['get', 'color'],
+              'line-width': 1.2,
+              'line-opacity': 0.75,
+            },
           },
           under,
         );
@@ -290,10 +329,10 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [RIVAL_EDGE, RIVAL_FILL, AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
+        for (const id of [AREA_EDGE, AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
-        for (const id of [RIVAL_SOURCE, AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {
+        for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {
           if (map.getSource(id)) map.removeSource(id);
         }
       } catch {

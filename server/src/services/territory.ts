@@ -54,11 +54,23 @@ import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
+// Default import, NOT `import * as`: the package's .d.ts advertises named
+// exports but the build is CJS with everything hanging off `default`, so a
+// namespace import typechecks fine and then hands back `undefined` at
+// runtime. That cost an afternoon once — the difference() call threw, the
+// catch below swallowed it, and every territory silently came back
+// unclipped and overlapping, which looks exactly like "the partition
+// isn't implemented yet".
+import polygonClipping from 'polygon-clipping';
 import {
   convexHull,
   clusterPoints,
   polygonAreaM2,
   pointInPolygon,
+  localProjection,
+  voronoiCellWithin,
+  clipToConvex,
+  type Pt,
 } from '../utils/territoryShapes.js';
 import { redis } from '../db/redis.js';
 
@@ -72,11 +84,6 @@ const HOUR_MS = 60 * 60 * 1000;
 const BOT_PREFIX = 'bot:';
 const isBot = (id: string) => id.startsWith(BOT_PREFIX);
 
-// Ceiling on how many neighbours' ground we'll draw at once. A busy
-// hotspot could have a dozen overlapping ranges, and past a handful the
-// map stops saying anything — it's just grey. Nearest-first, so the ones
-// you're actually walking into are the ones you see.
-const MAX_RIVALS = 6;
 
 // Marks older than this stop counting toward shapes.
 function liveSince(): Date {
@@ -118,10 +125,15 @@ export interface MarkResult {
 
 export interface TerritoryShape {
   kind: 'area' | 'line';
+  // 'area' — the outer boundary. 'line' — the two marks it joins.
   points: { lat: number; lng: number }[];
+  // Pockets inside this shape that somebody else holds, because their mark
+  // is nearer to that ground than any of ours. Only on 'area'.
+  holes?: { lat: number; lng: number }[][];
 }
 
-// Someone else's ground, drawn only while you're near it.
+// Someone else's ground. `ownerId` is what the client turns into a colour,
+// so each neighbour's range reads as theirs.
 export interface RivalTerritory {
   ownerId: string;
   ownerName: string;
@@ -164,7 +176,7 @@ async function liveMarks(userId: string) {
 async function marksNear(
   pos: LatLng,
   radiusM: number,
-  opts: { exceptUserId?: string; onlyUserId?: string } = {},
+  opts: { exceptUserId?: string; onlyUserId?: string; limit?: number } = {},
 ) {
   const b = bbox(pos, radiusM);
   const rows = await db
@@ -174,6 +186,8 @@ async function marksNear(
       lat: schema.territoryMarks.lat,
       lng: schema.territoryMarks.lng,
       strength: schema.territoryMarks.strength,
+      closedLoop: schema.territoryMarks.closedLoop,
+      at: schema.territoryMarks.createdAt,
     })
     .from(schema.territoryMarks)
     .where(
@@ -187,7 +201,7 @@ async function marksNear(
         ...(opts.onlyUserId ? [eq(schema.territoryMarks.userId, opts.onlyUserId)] : []),
       ),
     )
-    .limit(T.shapeMarkWindow * 4);
+    .limit(opts.limit ?? T.shapeMarkWindow * 4);
   return rows
     .map((r) => ({ ...r, d: distanceMeters(pos, { lat: r.lat, lng: r.lng }) }))
     .filter((r) => r.d <= radiusM)
@@ -428,86 +442,325 @@ export async function seedBotTerritory(
   }
 }
 
-// Build shapes out of a bag of marks. Three or more near each other
-// enclose an area; exactly two are a bare link with no ground; one is
-// just a dot.
-function shapesFrom(points: LatLng[]): TerritoryShape[] {
-  const out: TerritoryShape[] = [];
-  for (const cluster of clusterPoints(points, T.shapeLinkM)) {
-    if (cluster.length >= T.shapeMinMarks) {
+// SHAPES, PARTITIONED
+// -------------------
+// A cluster of three or more marks encloses a hull; two are a bare link
+// with no ground; one is just a dot.
+//
+// But a hull built from one owner's marks alone over-claims. Walk a 700m
+// loop and it hands you everything inside — including the park where
+// somebody else's dog actually lives. So every hull is then cut back to
+// the ground its owner is NEAREST to: rival marks inside (or near) the
+// hull carve out their own Voronoi cells, and what's left is what you
+// hold. Uncontested, the loop still fills completely. Contested, the
+// rival's patch becomes a pocket drawn in their colour.
+//
+// The partition is computed from ONE bag of marks covering every owner,
+// so it's consistent by construction — the same bisector that gives you
+// a hole gives your neighbour their pocket, and no ground is ever
+// claimed twice.
+
+interface OwnedMark {
+  userId: string;
+  lat: number;
+  lng: number;
+}
+
+// Prepare a ring for the clipper: snap to a grid, drop points the snap
+// made duplicates of, and close it.
+//
+// The snapping is not cosmetic. Adjacent Voronoi cells are cut from the
+// same hull by different half-planes, so an edge two of them share comes
+// out at slightly different coordinates in each — and polygon-clipping
+// reacts to that kind of near-degenerate input by throwing "Unable to
+// find segment ... in SweepLine tree" from deep inside its sweep. Landing
+// both copies on the same grid point makes the shared edge actually
+// shared. A centimetre is far below anything visible on a map.
+function prepareRing(ring: Pt[], gridM = 0.01): Pt[] | null {
+  const snapped: Pt[] = [];
+  for (const p of ring) {
+    const q: Pt = [Math.round(p[0] / gridM) * gridM, Math.round(p[1] / gridM) * gridM];
+    const prev = snapped[snapped.length - 1];
+    if (prev && prev[0] === q[0] && prev[1] === q[1]) continue;
+    snapped.push(q);
+  }
+  while (
+    snapped.length > 1 &&
+    snapped[0]![0] === snapped[snapped.length - 1]![0] &&
+    snapped[0]![1] === snapped[snapped.length - 1]![1]
+  ) {
+    snapped.pop();
+  }
+  if (snapped.length < 3) return null;
+  return [...snapped, snapped[0]!];
+}
+
+// Shoelace area of a projected ring, in m². Used to throw away bites too
+// small to see, which are also the ones most likely to be slivers the
+// clipper chokes on.
+function ringAreaM2(ring: Pt[]): number {
+  let acc = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    acc += ring[j]![0] * ring[i]![1] - ring[i]![0] * ring[j]![1];
+  }
+  return Math.abs(acc) / 2;
+}
+
+// A bite smaller than this is dropped: invisible on the map, and slivers
+// are exactly what makes the clipper fall over.
+const MIN_BITE_M2 = 20;
+
+// Turn every owner's marks into the shapes they actually hold.
+//
+// Two passes. The first builds every owner's raw hulls; the second cuts
+// each hull back where a neighbour's hull overlaps it and their mark is
+// the nearer one. Two passes rather than one because a bite out of your
+// range has to be exactly the ground your neighbour gains — subtracting a
+// rival's full Voronoi cell (the one-pass version) took 100,000m² off a
+// walked loop and handed the neighbour only the 7,500m² their own hull
+// covered, leaving the rest owned by nobody.
+function partitionShapes(marks: OwnedMark[]): Map<string, TerritoryShape[]> {
+  const out = new Map<string, TerritoryShape[]>();
+  if (marks.length === 0) return out;
+
+  const proj = localProjection(marks[0]!);
+  const byOwner = new Map<string, LatLng[]>();
+  for (const m of marks) {
+    const list = byOwner.get(m.userId);
+    if (list) list.push({ lat: m.lat, lng: m.lng });
+    else byOwner.set(m.userId, [{ lat: m.lat, lng: m.lng }]);
+  }
+
+  // Pass 1 — raw shapes, before anyone's claim is cut back.
+  interface Patch {
+    ownerId: string;
+    hull: LatLng[];
+    hullXY: Pt[];
+    marksXY: Pt[];
+    centre: LatLng;
+    reachM: number;
+  }
+  const patches: Patch[] = [];
+  const lines = new Map<string, TerritoryShape[]>();
+
+  const addLine = (ownerId: string, points: LatLng[]) => {
+    const list = lines.get(ownerId);
+    if (list) list.push({ kind: 'line', points });
+    else lines.set(ownerId, [{ kind: 'line', points }]);
+  };
+
+  for (const [ownerId, own] of byOwner) {
+    for (const cluster of clusterPoints(own, T.shapeLinkM)) {
+      if (cluster.length === 2) {
+        addLine(ownerId, cluster);
+        continue;
+      }
+      if (cluster.length < T.shapeMinMarks) continue;
       const hull = convexHull(cluster);
       // Marks in a near-straight line hull to a sliver with no real area —
-      // draw those as a line rather than a degenerate polygon.
-      out.push({ kind: hull.length >= 3 ? 'area' : 'line', points: hull });
-    } else if (cluster.length === 2) {
-      out.push({ kind: 'line', points: cluster });
+      // draw those as a link rather than a degenerate polygon.
+      if (hull.length < 3) {
+        addLine(ownerId, hull);
+        continue;
+      }
+      const centre = hull.reduce(
+        (a, p) => ({ lat: a.lat + p.lat / hull.length, lng: a.lng + p.lng / hull.length }),
+        { lat: 0, lng: 0 },
+      );
+      patches.push({
+        ownerId,
+        hull,
+        hullXY: hull.map(proj.to),
+        marksXY: cluster.map(proj.to),
+        centre,
+        reachM: hull.reduce((r, p) => Math.max(r, distanceMeters(centre, p)), 0),
+      });
     }
+  }
+
+  // Pass 2 — cut each patch back to the ground it is nearest to.
+  for (const patch of patches) {
+    const bites: Pt[][] = [];
+
+    for (const other of patches) {
+      if (other.ownerId === patch.ownerId) continue;
+      // Hulls too far apart to touch can't take anything from each other.
+      if (distanceMeters(patch.centre, other.centre) > patch.reachM + other.reachM) continue;
+      // Only the ground the two actually share is ever in dispute.
+      const contested = clipToConvex(patch.hullXY, other.hullXY);
+      if (contested.length < 3) continue;
+      // Inside that, whichever of THEIR marks beats all of ours takes it.
+      // Their cells overlap each other, which is fine — the difference
+      // below unions them anyway.
+      //
+      // Ground exactly equidistant (two owners marked the same spot) goes
+      // to whichever id sorts first. The comparison is the same from both
+      // sides, so the pair agrees on who gets it — without that they both
+      // concede and the ground belongs to nobody.
+      const tieWins = other.ownerId < patch.ownerId;
+      for (const r of other.marksXY) {
+        const cell = voronoiCellWithin(contested, r, patch.marksXY, tieWins);
+        if (cell.length >= 3 && ringAreaM2(cell) >= MIN_BITE_M2) bites.push(cell);
+      }
+    }
+
+    const shapes = out.get(patch.ownerId) ?? [];
+    if (bites.length === 0) {
+      shapes.push({ kind: 'area', points: patch.hull });
+      out.set(patch.ownerId, shapes);
+      continue;
+    }
+
+    // Cut them all out at once. One hull can come back as several
+    // polygons if a neighbour's claim slices clean through it.
+    //
+    // Retried on a coarser grid before giving up: the clipper's failures
+    // are precision failures, and rounding harder is what fixes them.
+    // A metre of slop on a territory border is not something anyone can
+    // see, let alone care about.
+    const cut = (gridM: number): polygonClipping.MultiPolygon | null => {
+      const subject = prepareRing(patch.hullXY, gridM);
+      if (!subject) return null;
+      const clips = bites
+        .map((c) => prepareRing(c, gridM))
+        .filter((c): c is Pt[] => c !== null)
+        .map((c) => [c] as polygonClipping.Polygon);
+      if (clips.length === 0) return null;
+      return polygonClipping.difference([subject], ...clips);
+    };
+
+    let pieces: polygonClipping.MultiPolygon | null = null;
+    for (const grid of [0.01, 1]) {
+      try {
+        pieces = cut(grid);
+        break;
+      } catch (err) {
+        if (grid !== 1) continue;
+        // Both passes failed. Falling back to the uncut hull is
+        // wrong-but-visible (that ground now reads as claimed twice);
+        // dropping the shape would make someone's territory silently
+        // vanish, which is worse.
+        //
+        // LOUD on purpose. A quiet fallback here is indistinguishable
+        // from "there was nothing to clip", so a broken clipper would
+        // just look like the feature was never built.
+        console.warn('[territory] partition failed, falling back to raw hull:', err);
+      }
+    }
+    if (!pieces) {
+      shapes.push({ kind: 'area', points: patch.hull });
+      out.set(patch.ownerId, shapes);
+      continue;
+    }
+
+    for (const poly of pieces) {
+      const [outer, ...holes] = poly;
+      if (!outer || outer.length < 4) continue;
+      shapes.push({
+        kind: 'area',
+        points: outer.slice(0, -1).map(proj.from),
+        ...(holes.length ? { holes: holes.map((h) => h.slice(0, -1).map(proj.from)) } : {}),
+      });
+    }
+    out.set(patch.ownerId, shapes);
+  }
+
+  // Links last — they own no ground, so they take no part in the
+  // partition, but they still belong to their owner's shape list.
+  for (const [ownerId, ls] of lines) {
+    out.set(ownerId, [...(out.get(ownerId) ?? []), ...ls]);
   }
   return out;
 }
 
-// The shapes a user's own live marks make. Always drawn, wherever they are.
-export async function fetchShapes(userId: string): Promise<TerritoryShape[]> {
-  const marks = await liveMarks(userId);
-  if (marks.length === 0) return [];
-  return shapesFrom(marks.map((m) => ({ lat: m.lat, lng: m.lng })));
-}
-
-// How much ground a set of shapes actually holds. Islands are summed;
-// a line contributes nothing, which is the same thing it looks like.
-//
-// Overlapping hulls would be double-counted, but clusterPoints only ever
-// emits disjoint groups of marks, so two hulls can only touch where their
-// clusters interleave — and single-linkage at shapeLinkM means they'd
-// have been one cluster if they did.
+// How much ground a set of shapes actually holds. Islands are summed and
+// pockets somebody else holds are subtracted; a line contributes nothing,
+// which is the same thing it looks like. Because the partition makes
+// shapes disjoint, this never double-counts.
 function totalAreaM2(shapes: TerritoryShape[]): number {
-  return shapes.reduce((s, sh) => s + (sh.kind === 'area' ? polygonAreaM2(sh.points) : 0), 0);
+  let total = 0;
+  for (const s of shapes) {
+    if (s.kind !== 'area') continue;
+    total += polygonAreaM2(s.points);
+    for (const h of s.holes ?? []) total -= polygonAreaM2(h);
+  }
+  return Math.max(0, total);
 }
 
-// Everything the map needs about YOUR territory, off one read of your
-// marks. The sync path used to call fetchMarks and fetchShapes side by
-// side and pay for the same query twice; area and home ground would have
-// made it four.
-export interface OwnTerritory {
-  marks: { lat: number; lng: number; closedLoop: boolean; strength: number; at: string }[];
-  shapes: TerritoryShape[];
-  areaM2: number;
-  // Is the walker standing on ground they hold? The passive perks —
-  // denser paws, slower happiness drain — hang off this.
-  home: boolean;
-}
-
-export async function fetchTerritory(userId: string, pos: LatLng): Promise<OwnTerritory> {
-  const rows = await liveMarks(userId);
-  const shapes = shapesFrom(rows.map((m) => ({ lat: m.lat, lng: m.lng })));
-  return {
-    marks: rows.map((r) => ({
-      lat: r.lat,
-      lng: r.lng,
-      closedLoop: r.closedLoop,
-      strength: r.strength,
-      at: r.at.toISOString(),
-    })),
-    shapes,
-    areaM2: Math.round(totalAreaM2(shapes)),
-    home: isHome(pos, shapes),
-  };
-}
-
-// Standing on your own ground — inside one of your shapes, or within a
-// short grace band of its edge. The band exists so the perk doesn't
-// strobe on and off while the dog wanders along a border, which is
-// exactly where a walker naturally spends their time.
+// Standing on your own ground — inside one of your shapes but not inside
+// a pocket someone else holds, or within a short grace band of the edge.
+// The band exists so the perk doesn't strobe on and off while the dog
+// wanders along a border, which is exactly where a walker naturally
+// spends their time.
 function isHome(pos: LatLng, shapes: TerritoryShape[]): boolean {
   for (const s of shapes) {
     if (s.kind !== 'area') continue;
-    if (pointInPolygon(pos, s.points)) return true;
-    // Cheap outside-but-close test: any vertex within the grace band.
-    // A long edge whose midpoint you're standing near won't match, and
+    if (pointInPolygon(pos, s.points)) {
+      if ((s.holes ?? []).some((h) => pointInPolygon(pos, h))) continue;
+      return true;
+    }
+    // Cheap outside-but-close test: any vertex within the grace band. A
+    // long edge whose midpoint you're standing near won't match, and
     // that's fine — this is a courtesy margin, not a second geometry.
     if (s.points.some((p) => distanceMeters(pos, p) <= T.homeEdgeM)) return true;
   }
   return false;
+}
+
+// Everything the map draws, off ONE read of every mark in view.
+//
+// Your ground and your neighbours' come out of the same partition, which
+// is the point: computing them separately is what let two people hold the
+// same block.
+export interface MapTerritory {
+  marks: { lat: number; lng: number; closedLoop: boolean; strength: number; at: string }[];
+  shapes: TerritoryShape[];
+  // Is the walker standing on ground they hold? The passive perks —
+  // denser paws, slower happiness drain — hang off this.
+  home: boolean;
+  rivals: RivalTerritory[];
+}
+
+export async function fetchMapTerritory(
+  userId: string,
+  pos: LatLng,
+  radiusM: number,
+): Promise<MapTerritory> {
+  const radius = Math.min(radiusM, T.rivalViewRadiusM);
+  const all = await marksNear(pos, radius, { limit: T.partitionMarkLimit });
+  if (all.length === 0) return { marks: [], shapes: [], home: false, rivals: [] };
+
+  const partitioned = partitionShapes(all);
+  const shapes = partitioned.get(userId) ?? [];
+
+  // Nearest owners first, so the cap drops the ones furthest from you.
+  const rivalIds: string[] = [];
+  for (const m of all) {
+    if (m.userId === userId || rivalIds.includes(m.userId)) continue;
+    if (!partitioned.has(m.userId)) continue;
+    rivalIds.push(m.userId);
+    if (rivalIds.length >= T.maxRivalsDrawn) break;
+  }
+  const names = await ownerNames(rivalIds);
+
+  return {
+    marks: all
+      .filter((m) => m.userId === userId)
+      .map((m) => ({
+        lat: m.lat,
+        lng: m.lng,
+        closedLoop: m.closedLoop,
+        strength: m.strength,
+        at: m.at.toISOString(),
+      })),
+    shapes,
+    home: isHome(pos, shapes),
+    rivals: rivalIds.map((id) => ({
+      ownerId: id,
+      ownerName: names.get(id) ?? 'сусід',
+      shapes: partitioned.get(id) ?? [],
+    })),
+  };
 }
 
 // Remember whether the dog is at home, for the decay cron — which is one
@@ -533,9 +786,14 @@ export interface LeaderboardEntry {
   bot: boolean;
 }
 
-// Who holds the most of the city. Recomputing every hull is real work, so
-// this is CACHED — a standing, not a live scoreboard, and a few minutes
-// of lag is invisible at the scale it's read.
+// Who holds the most of the city. Partitioned the same way the map is, so
+// the number on the board is the ground you can actually see yourself
+// holding — the alternative is a score that counts territory the map
+// gives to somebody else.
+//
+// Recomputing every hull is real work, so this is CACHED: a standing, not
+// a live scoreboard, and a few minutes of lag is invisible at the scale
+// it's read.
 //
 // Everything is derived from live marks, so a player who stops walking
 // slides down the board on their own as their marks expire. Nothing to
@@ -553,15 +811,8 @@ export async function territoryLeaderboard(): Promise<LeaderboardEntry[]> {
     .from(schema.territoryMarks)
     .where(gte(schema.territoryMarks.createdAt, liveSince()));
 
-  const byUser = new Map<string, LatLng[]>();
-  for (const r of rows) {
-    const list = byUser.get(r.userId);
-    if (list) list.push({ lat: r.lat, lng: r.lng });
-    else byUser.set(r.userId, [{ lat: r.lat, lng: r.lng }]);
-  }
-
-  const scored = [...byUser]
-    .map(([userId, pts]) => ({ userId, areaM2: Math.round(totalAreaM2(shapesFrom(pts))) }))
+  const scored = [...partitionShapes(rows)]
+    .map(([userId, shapes]) => ({ userId, areaM2: Math.round(totalAreaM2(shapes)) }))
     .filter((e) => e.areaM2 > 0)
     .sort((a, b) => b.areaM2 - a.areaM2)
     .slice(0, T.leaderboardSize);
@@ -576,17 +827,29 @@ export async function territoryLeaderboard(): Promise<LeaderboardEntry[]> {
   return board;
 }
 
-// Where a given user stands, and how much they hold. Computed off their
-// own marks rather than read out of the cached board, so someone outside
-// the top ten still gets a real number for their own ground.
+// Where a given user stands, and how much they hold. Recomputed from the
+// same global partition rather than read out of the board, so someone
+// outside the top ten still gets a real number for their own ground.
 export async function territoryStanding(
   userId: string,
   board: LeaderboardEntry[],
 ): Promise<{ areaM2: number; rank: number | null }> {
-  const own = await fetchShapes(userId);
-  const areaM2 = Math.round(totalAreaM2(own));
   const idx = board.findIndex((e) => e.userId === userId);
-  return { areaM2, rank: idx >= 0 ? idx + 1 : null };
+  if (idx >= 0) return { areaM2: board[idx]!.areaM2, rank: idx + 1 };
+
+  // Off the board — partition their own neighbourhood to get an honest
+  // number. Scoped to their marks plus everyone near them, since only
+  // neighbours can take ground off them.
+  const own = await liveMarks(userId);
+  if (own.length === 0) return { areaM2: 0, rank: null };
+  const centre = own[0]!;
+  const near = await marksNear(
+    { lat: centre.lat, lng: centre.lng },
+    T.rivalViewRadiusM,
+    { limit: T.partitionMarkLimit },
+  );
+  const shapes = partitionShapes(near).get(userId) ?? [];
+  return { areaM2: Math.round(totalAreaM2(shapes)), rank: null };
 }
 
 const BOARD_KEY = 'terr:leaderboard';
@@ -614,58 +877,6 @@ async function writeCachedBoard(board: LeaderboardEntry[]): Promise<void> {
   } catch {
     // Losing the write just means the next reader recomputes.
   }
-}
-
-// Everyone else's ground within sight of you. Deliberately proximity-
-// gated: the map stays yours, and walking into a rival range is an event
-// rather than a permanent layer of other people's paint.
-export async function fetchRivalTerritory(
-  userId: string,
-  pos: LatLng,
-): Promise<RivalTerritory[]> {
-  const near = await marksNear(pos, T.rivalViewRadiusM, { exceptUserId: userId });
-  if (near.length === 0) return [];
-
-  const owners = [...new Set(near.map((m) => m.userId))].slice(0, MAX_RIVALS);
-  // Their marks near you are only part of their range — pull each
-  // owner's full live set so the hull we draw is the real shape's edge,
-  // not a rectangle cut at your view radius. One query for all of them:
-  // this runs on the 15s sync path, so a round-trip per neighbour is a
-  // cost that grows exactly where the city gets busy.
-  const [allMarks, names] = await Promise.all([
-    db
-      .select({
-        userId: schema.territoryMarks.userId,
-        lat: schema.territoryMarks.lat,
-        lng: schema.territoryMarks.lng,
-      })
-      .from(schema.territoryMarks)
-      .where(
-        and(
-          inArray(schema.territoryMarks.userId, owners),
-          gte(schema.territoryMarks.createdAt, liveSince()),
-        ),
-      )
-      .limit(T.shapeMarkWindow * owners.length),
-    ownerNames(owners),
-  ]);
-  const byOwner = new Map<string, LatLng[]>(owners.map((id) => [id, []]));
-  for (const m of allMarks) byOwner.get(m.userId)?.push({ lat: m.lat, lng: m.lng });
-
-  const out: RivalTerritory[] = [];
-  for (const [id, marks] of byOwner) {
-    const shapes = shapesFrom(marks);
-    // Keep only the islands that actually reach you — someone whose home
-    // range happens to touch your view radius shouldn't paint their
-    // patch on the other side of town onto your map.
-    const visible = shapes.filter((s) =>
-      s.points.some((p) => distanceMeters(pos, p) <= T.rivalViewRadiusM * 1.5),
-    );
-    if (visible.length) {
-      out.push({ ownerId: id, ownerName: names.get(id) ?? 'сусід', shapes: visible });
-    }
-  }
-  return out;
 }
 
 // Display names for territory owners. Bots carry their dog name as

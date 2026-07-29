@@ -52,7 +52,13 @@ export interface ChatNearbySpot {
 // no ground yet).
 export interface TerritoryShape {
   kind: 'area' | 'line';
+  // 'area' — the outer boundary. 'line' — the two marks it joins.
   points: { lat: number; lng: number }[];
+  // Pockets inside this shape that a neighbour holds, because their mark
+  // is nearer to that ground than any of ours. The server partitions all
+  // territory by nearest mark, so these are exactly the other owner's
+  // shapes seen from the other side — no ground belongs to two people.
+  holes?: { lat: number; lng: number }[][];
 }
 
 export interface TerritoryMark {
@@ -259,9 +265,9 @@ export const api = {
       // sync. Both optional for the same reason as above.
       rivals?: RivalTerritory[];
       raids?: TerritoryRaid[];
-      // How much ground you hold (m²), and whether the walker is
-      // standing on it right now — the passive perks hang off `home`.
-      areaM2?: number;
+      // Whether the walker is standing on ground they hold — the passive
+      // perks hang off this. Area held comes from the standing endpoint,
+      // not from here: one number, one place that computes it.
       home?: boolean;
     }>(`/sync/map?${params.toString()}`);
   },
