@@ -921,6 +921,16 @@ async function partitionCached(
     return work;
   };
 
+  // A REBUILD IN FLIGHT IS NOT SOMETHING TO WAIT FOR. This has to come
+  // first. Starting a rebuild stamps the entry fresh, so checking
+  // freshness before this would send the next caller down the fresh path
+  // to await `work` — the very partition being rebuilt — and they would
+  // sit through the whole thing. Measured on prod, that was 3 syncs in 10
+  // still stalling, one of them for 12.87s, every one of them landing
+  // exactly when the territory had just changed. Which is to say: the
+  // requests that hurt were precisely the ones this was built to protect.
+  if (hit?.value && hit.rebuilding) return hit.value;
+
   if (hit && !hit.stale && now - hit.at < T.partitionCacheMs) return hit.work;
 
   // Stale or expired, but there IS a previous answer: hand it over and
