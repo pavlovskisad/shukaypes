@@ -61,6 +61,33 @@ function parseParks(raw?: string): LatLng[] {
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
+  // POSITIONS ONLY, and nothing else — no Postgres, no territory, no
+  // partition. One Redis geo read.
+  //
+  // Split out because /sync/map bundles the most latency-sensitive data
+  // with the least. Measured on prod: other dogs' positions are 3.7KB of a
+  // 66.4KB payload (6%), while the territory in the other 94% only changes
+  // every few minutes — and the partition behind it costs 2.47s of a 3.57s
+  // sync. Polling the whole thing faster to make the dogs smoother would
+  // have meant 80MB/hour of mobile data and five times the query load, to
+  // refresh polygons that had not moved.
+  //
+  // The floor on how fresh this can be is the SIMULATION, not the
+  // transport: bots step on a 3.5s server tick and real GPS lands about
+  // once a second, so there is nothing to gain below ~3s and no protocol
+  // that could find it.
+  app.get<{ Querystring: { lat: string; lng: string } }>('/presence', async (req) => {
+    if (!MULTIPLAYER_ON) return { players: [] };
+    const lat = Number(req.query.lat);
+    const lng = Number(req.query.lng);
+    if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { players: [] };
+    // Same call /sync/map makes, so the two can never disagree about who
+    // is nearby: it publishes the caller's own position and reads back the
+    // neighbours in one trip.
+    const players = await syncPresence(req.userId, { lat, lng }).catch(() => []);
+    return { players };
+  });
+
   // Wipe the caller's own territory. Only ever touches your own ground, so
   // it needs no special guard — and it makes the mechanic re-testable from
   // a clean slate without going near the database.

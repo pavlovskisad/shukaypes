@@ -326,6 +326,11 @@ interface GameState {
   // only need one slice (Quests tab refreshing the lost-pet list,
   // etc).
   syncMap: (pos: LatLng) => Promise<void>;
+  // Positions only, on its own much faster loop than syncMap. Separate
+  // because other dogs' positions are 6% of a sync payload and change
+  // every few seconds, while the territory in the other 94% changes every
+  // few minutes and is expensive to compute.
+  syncPresence: (pos: LatLng) => Promise<void>;
   pokePlayer: (targetId: string) => Promise<void>;
   setSelectedDog: (id: string | null) => void;
   syncSpots: (pos: LatLng) => Promise<void>;
@@ -393,6 +398,16 @@ interface GameState {
 // to be the truth. Module-level rather than store state on purpose —
 // bumping it must not re-render anything.
 let syncMapSeq = 0;
+
+// A SEPARATE ticket, covering only nearbyPlayers.
+//
+// Two callers write that field — the 15s full sync and the 3s presence
+// poll — so they need an ordering guard between them. It has to be its own
+// counter: sharing syncMapSeq would mean every presence tick invalidated
+// whatever full sync was in flight, and since presence fires every 3s
+// while a sync takes 1-3.5s, essentially NO full sync would ever be
+// allowed to write its tokens, food, dogs or territory.
+let playersSeq = 0;
 
 export const useGameStore = create<GameState>((set, get) => ({
   hunger: balance.hunger.start,
@@ -829,6 +844,22 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
+  syncPresence: async (pos) => {
+    // Overtaking guard on the players ticket only — a slow presence reply
+    // must not land on top of a fresher one, or on top of a full sync that
+    // was issued after it, and walk every dog backwards.
+    const seq = ++playersSeq;
+    try {
+      const res = await api.presence(pos);
+      if (seq !== playersSeq) return;
+      set({ nearbyPlayers: res.players ?? [] });
+    } catch {
+      // Best effort. A dropped presence tick just means the dogs glide on
+      // their existing leg until the next one — far better than surfacing
+      // an error for something that retries in three seconds.
+    }
+  },
+
   syncMap: async (pos) => {
     // Lazy-fetch / refresh parks first so the bulk sync can pass them
     // along — same logic syncFood used to own. Places returns parks
@@ -859,6 +890,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     // snapshot rewinds every position in it, and other dogs read that as
     // standing still.
     const seq = ++syncMapSeq;
+    const pseq = ++playersSeq;
     try {
       const parkPositions = parks.map((p) => p.position);
       const res = await api.syncMap(pos, {
@@ -886,7 +918,10 @@ export const useGameStore = create<GameState>((set, get) => ({
           tokens: filteredTokens,
           foodItems: res.food,
           lostDogs: keepSelected ? [...dogs, keepSelected] : dogs,
-          nearbyPlayers: res.players ?? [],
+          // Only if no presence poll has been issued since this sync went
+          // out. The fast loop is the usual source of this field; the sync
+          // is here for the first paint and for when presence is failing.
+          nearbyPlayers: pseq === playersSeq ? (res.players ?? []) : prev.nearbyPlayers,
           // Surface the most recent poke (bump seq so the UI fires once).
           incomingPoke:
             res.pokes && res.pokes.length

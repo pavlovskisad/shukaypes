@@ -77,6 +77,9 @@ const TOKEN_REFRESH_MS = 15000;
 // newest response is not reliably the last one applied.
 const SYNC_MOVE_M = 30;
 const SYNC_MIN_GAP_MS = 4000;
+// How often other dogs' positions refresh. Matched to the bot simulation
+// tick (3.5s) — polling faster cannot return anything newer.
+const PRESENCE_MS = 3000;
 
 // Two pets within this radius are visually grouped together — either
 // floated in a ring (zone-outline feel) or collapsed behind a cluster
@@ -466,6 +469,7 @@ export default function MapViewWeb() {
   const lastCollect = useGameStore((s) => s.lastCollect);
   const setUserPosition = useGameStore((s) => s.setUserPosition);
   const syncMap = useGameStore((s) => s.syncMap);
+  const syncPresence = useGameStore((s) => s.syncPresence);
   const syncSpots = useGameStore((s) => s.syncSpots);
   const setViewportCenter = useGameStore((s) => s.setViewportCenter);
   const collectPath = useGameStore((s) => s.collectPath);
@@ -835,6 +839,27 @@ export default function MapViewWeb() {
       clearInterval(watcher);
     };
   }, [hasPos, isFocused, collectPath, syncMap]);
+
+  // Other dogs, on their own much faster loop.
+  //
+  // Positions are 6% of a sync payload and change every few seconds; the
+  // territory in the other 94% changes every few minutes and costs most of
+  // the sync to compute. Polling the whole thing at this rate to make the
+  // dogs smoother would refresh polygons that had not moved, for ~80MB an
+  // hour of mobile data. This trip is one Redis read and about 4KB.
+  //
+  // PRESENCE_MS is not arbitrary: bots step on a 3.5s server tick and real
+  // GPS lands about once a second, so below ~3s there is simply nothing
+  // newer to fetch.
+  useEffect(() => {
+    if (!hasPos || !isFocused || !MULTIPLAYER) return;
+    const tick = () => {
+      const pos = useGameStore.getState().userPosition;
+      if (pos) void syncPresence(pos);
+    };
+    const id = setInterval(tick, PRESENCE_MS);
+    return () => clearInterval(id);
+  }, [hasPos, isFocused, syncPresence]);
 
   // Viewport-driven spots sync. When the user pans to a new
   // neighborhood we want to surface its cafes / vets / pet stores

@@ -301,9 +301,18 @@ export const balance = {
     // exact confusion the partition exists to remove. The event loop is
     // protected by yielding between patches instead, which costs nothing.
     partitionMaxBites: 200,
-    // Cached partition lifetime. Collapses every client syncing the same
-    // neighbourhood onto one computation instead of one each.
-    partitionCacheMs: 20_000,
+    // Cached partition lifetime.
+    //
+    // Was 20s, against a client that syncs every 15s — almost perfectly
+    // tuned to miss, so a real client paid for a fresh partition nearly
+    // every time. Measured on prod: 3.57s per sync on a miss against 1.10s
+    // on a hit, with the partition itself 2.47s of it. At 60s, three syncs
+    // in four hit and the median sync roughly halves.
+    //
+    // Safe to make this long only because a mark landing in a cell drops
+    // that cell explicitly (see invalidatePartitionCell). Without that, a
+    // border could sit still for a minute after someone visibly marked.
+    partitionCacheMs: 60_000,
     // Grid the cache is keyed on, in degrees (~1.1km of latitude). Coarse
     // enough that a walking user reuses a cell for minutes at a time.
     partitionCacheCellDeg: 0.01,
