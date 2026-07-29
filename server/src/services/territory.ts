@@ -848,10 +848,35 @@ function cellOf(pos: LatLng): string {
 // A mark just landed here, so anything cached for this cell is now a lie.
 // Deliberately ONE cell — see the note above about why invalidating the
 // whole visible radius would empty the cache permanently.
+//
+// THROTTLED, because invalidation and marking pull against each other. The
+// cache exists so a sync costs 1.1s instead of 3.6s; every invalidation
+// hands the next caller the 3.6s version back. That was a fair trade at one
+// mark per bot every seven minutes, and it stops being one as the bots get
+// busier — a hotspot with several bots working it could otherwise bust its
+// cell faster than the partition can be rebuilt, which is how this cache
+// managed to be useless the first time round.
+//
+// One rebuild per cell per window. A border therefore moves within a
+// window of the mark that caused it, which is no worse than the sync
+// interval a client is watching it through anyway.
+const lastInvalidated = new Map<string, number>();
+
 function invalidatePartitionCell(pos: LatLng): void {
-  const prefix = `${cellOf(pos)}:`;
+  const cell = cellOf(pos);
+  const now = Date.now();
+  const prev = lastInvalidated.get(cell) ?? 0;
+  if (now - prev < T.partitionInvalidateMinMs) return;
+  lastInvalidated.set(cell, now);
+  const prefix = `${cell}:`;
   for (const key of partitionCache.keys()) {
     if (key.startsWith(prefix)) partitionCache.delete(key);
+  }
+  // Bounded alongside the cache it guards — same cells, same lifetime.
+  if (lastInvalidated.size > T.partitionCacheMax) {
+    for (const [k, at] of lastInvalidated) {
+      if (now - at > T.partitionCacheMs) lastInvalidated.delete(k);
+    }
   }
 }
 

@@ -47,7 +47,7 @@ const HOTSPOTS: LatLng[] = [
 // botSeedSpreadM (260m), so a bot on an ordinary outing is walking over
 // its own marks — which is what keeps it renewing them, and what makes
 // meeting one feel like meeting a neighbour rather than a tourist.
-const HOME_RANGE_M = 300;
+const HOME_RANGE_M = 240;
 // …and RAIDING TRIPS well past its own edge, deep enough to reach the
 // neighbours (homes are ≥420m apart, so 950m puts a bot squarely inside
 // somebody else's range). Nearly half of all outings, because a city
@@ -55,13 +55,34 @@ const HOME_RANGE_M = 300;
 // because a bot at its mark ceiling now takes ground instead of renewing
 // when it's standing on a rival, so these trips actually cost the
 // neighbour something.
-const HOME_STROLL_M = 950;
-const HOME_STROLL_CHANCE = 0.45;
-const SPEED_MIN = 1.1; // m/s
-const SPEED_MAX = 1.9;
+const HOME_STROLL_M = 620;
+// MOST outings go out rather than round the block.
+//
+// Was 0.45, and that was set before marks were refused on your own ground.
+// Once they were, a home-range trip stopped producing anything visible —
+// the bot arrives inside its own hull, declines to mark, and waits out
+// another cycle. Combined with a ~7 minute round trip that meant watching
+// one dog showed you nothing for the best part of ten minutes, which is
+// not a territory war, it is a screensaver.
+//
+// At 0.7 the majority of trips end at the frontier or inside a neighbour's
+// range, which are the two places a mark actually does something.
+const HOME_STROLL_CHANCE = 0.75;
+// A trotting dog with somewhere to be, not an amble.
+//
+// Travel dominates the cycle, so speed is the cheapest lever on tempo that
+// does not shrink the ground they cover. Shortening the trips instead
+// looked equivalent and was not: cutting strolls to 480m stopped them
+// reaching neighbours 420m away, and the share of marks that land in a
+// rival's range fell from 82% to 56% — more marking, less fighting, which
+// is the opposite of the point. Closing the homes up would have restored
+// it, at the cost of more overlapping claims for the partition to resolve
+// on a machine with one shared vCPU. Speed buys the same tempo for free.
+const SPEED_MIN = 2.0; // m/s
+const SPEED_MAX = 3.0;
 const ARRIVE_M = 22;
-const DWELL_MIN_MS = 15_000; // linger at a destination
-const DWELL_MAX_MS = 90_000;
+const DWELL_MIN_MS = 8_000; // linger at a destination
+const DWELL_MAX_MS = 30_000;
 const OFFLINE_CHANCE = 0.14; // after a dwell, chance to "log off"
 const OFFLINE_MIN_MS = 60_000;
 const OFFLINE_MAX_MS = 240_000;

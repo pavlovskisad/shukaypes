@@ -319,6 +319,12 @@ export const balance = {
     // How many partitions are remembered at once. One per populated cell;
     // a few dozen cells is a whole city, and each entry is small.
     partitionCacheMax: 64,
+    // Floor on how often one cell can be dropped from the partition cache
+    // by a mark landing in it. Without it, a busy hotspot invalidates its
+    // own cell faster than the partition rebuilds and the cache stops
+    // paying for itself — the exact failure it already had once. Sized at
+    // one sync interval: the border still moves within a tick of the mark.
+    partitionInvalidateMinMs: 15_000,
     // A partition slower than this gets logged with its shape. The bounds
     // above are guesses about a moving target — bot count, mark density,
     // how much people walk — so the useful thing is knowing when they stop
@@ -333,11 +339,16 @@ export const balance = {
     // out walking (they roam via the presence cron), which over an hour
     // gives every bot a small, defensible patch around the parks it
     // frequents.
-    // Cut from 6 minutes: bots raid each other now, and a raid that only
-    // lands every six minutes barely moves a border. At four a walk into
-    // a neighbour's range costs them a mark or two, which is what makes
-    // the map keep shifting.
-    botMarkCooldownMs: 4 * 60 * 1000,
+    // Cut 6 -> 4 -> 2 minutes. Bots raid each other, and a raid that only
+    // lands every few minutes barely moves a border.
+    //
+    // Note this is a CEILING, not the rate. What actually paces a bot is
+    // the round trip: pick a target, walk to it, linger, mark. That cycle
+    // runs several minutes, so this gate is rarely the thing being waited
+    // on — it is here to stop a bot that happens to arrive somewhere twice
+    // in quick succession from stacking marks, not to set the tempo. The
+    // tempo lives in bots.ts (stroll chance, speed, dwell).
+    botMarkCooldownMs: 2 * 60 * 1000,
     botSeedMarks: 5,
     botSeedSpreadM: 260,
     // Ceiling on the marks one bot holds at once. Their patch should grow
