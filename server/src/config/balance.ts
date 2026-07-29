@@ -258,5 +258,30 @@ export const balance = {
     botMarkCooldownMs: 6 * 60 * 1000,
     botSeedMarks: 5,
     botSeedSpreadM: 260,
+    // HOME GROUND — why holding territory is worth the walking.
+    //
+    // All of it is PASSIVE: nothing to activate, nothing to remember.
+    // You walk your own streets and the city is quietly better there,
+    // which is the reward that survives a player who forgets the
+    // mechanic exists.
+    //
+    // Standing inside your own shape counts as home. The edge gets a
+    // small grace band so the perk doesn't flicker on and off while the
+    // dog wanders along a border.
+    homeEdgeM: 60,
+    // Paws are denser on your ground — the most legible of the perks,
+    // because you can see it. Raises the user-area pool target rather
+    // than the spawn rate, so it lifts the ceiling without changing how
+    // often the topup runs.
+    homeExtraPaws: 10,
+    // The dog is relaxed at home: happiness drains at this fraction of
+    // the usual rate. Hunger is deliberately untouched — that's the
+    // bones economy, and slowing it would take the point out of parks.
+    homeHappinessDecayFactor: 0.5,
+    // Leaderboard. Recomputing everyone's hulls is real work, so the
+    // board is cached — it's a standing, not a live scoreboard, and a
+    // few minutes of lag is invisible.
+    leaderboardSize: 10,
+    leaderboardCacheMs: 5 * 60 * 1000,
   },
 } as const;

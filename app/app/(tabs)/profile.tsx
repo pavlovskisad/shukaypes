@@ -10,7 +10,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
-import { api } from '../../services/api';
+import { api, type TerritoryRanking } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import type { SceneMode } from '../../components/profile/ProfileSceneBackdrop';
 import { HERO, CHIP } from '../../constants/sizing';
@@ -53,6 +53,13 @@ interface ProfileData {
     questsAbandoned: number;
     sightingsReported: number;
   };
+}
+
+// The territory board plus where the viewer stands on it. `rank` is null
+// when they're outside the top ten (or hold no ground at all).
+interface TerritoryBoard {
+  board: TerritoryRanking[];
+  you: { areaM2: number; rank: number | null };
 }
 
 function formatDistance(m: number): string {
@@ -104,6 +111,10 @@ export default function ProfileScreen() {
   const companionName = useGameStore((s) => s.companionName);
   const [data, setData] = useState<ProfileData | null>(null);
   const [error, setError] = useState<string | null>(null);
+  // Territory standing. Its own fetch rather than a field on /profile/me
+  // because the board is cached server-side on a different clock — and
+  // a failure here should cost the territory card, not the whole page.
+  const [board, setBoard] = useState<TerritoryBoard | null>(null);
 
   // Mount the dog scene only when this tab is BOTH the focused screen
   // AND the document is visible. Without this, the scene runs forever
@@ -146,6 +157,14 @@ export default function ProfileScreen() {
       setError(null);
     } catch (err) {
       setError((err as Error).message);
+    }
+    // Territory is a separate trip and a separate failure: if the board
+    // is unreachable the card just shows dashes, and the rest of the
+    // profile is unaffected.
+    try {
+      setBoard(await api.territoryLeaderboard());
+    } catch {
+      setBoard(null);
     }
   }, []);
 
@@ -222,6 +241,40 @@ export default function ProfileScreen() {
         ),
       },
       {
+        id: 'territory',
+        content: (
+          <View style={styles.sectionCard}>
+            <Text style={styles.sectionTitle}>{t.profile.stats.territory}</Text>
+            <StatRow
+              label={t.profile.stats.territoryArea}
+              value={board ? t.profile.areaValue(board.you.areaM2) : undefined}
+            />
+            <StatRow
+              label={t.profile.stats.territoryRank}
+              value={
+                board
+                  ? board.you.rank != null
+                    ? t.profile.rankValue(board.you.rank)
+                    : t.profile.unranked
+                  : undefined
+              }
+            />
+            {/* Who's ahead. One name is enough on a card this size — the
+                point is "someone holds more than you", not a full board. */}
+            <StatRow
+              label={t.profile.stats.territoryTop}
+              value={
+                board
+                  ? board.board.length
+                    ? `${board.board[0]!.name} · ${t.profile.areaValue(board.board[0]!.areaM2)}`
+                    : t.profile.unranked
+                  : undefined
+              }
+            />
+          </View>
+        ),
+      },
+      {
         id: 'helping',
         content: (
           <View style={styles.sectionCard}>
@@ -239,7 +292,7 @@ export default function ProfileScreen() {
         ),
       },
     ],
-    [t, data, companionName],
+    [t, data, board, companionName],
   );
 
   const skyColor = sceneMode === 'day' ? '#dbeaf4' : '#1c2a44';

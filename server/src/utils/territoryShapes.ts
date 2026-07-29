@@ -87,3 +87,54 @@ export function clusterPoints<T extends { lat: number; lng: number }>(
   return clusters;
 }
 
+
+// Area of a closed ring, in square metres.
+//
+// Shoelace in a local equirectangular projection: lat/lng are converted
+// to metres against the ring's own mean latitude, so the longitude
+// squeeze is right for where the shape actually is rather than for the
+// equator. Over a city block that's exact to well under a percent, which
+// is far tighter than a number rendered as "0.4 km²" needs.
+//
+// Returns 0 for anything with fewer than three points — a line owns no
+// ground, which is the same thing the shapes say.
+export function polygonAreaM2(ring: { lat: number; lng: number }[]): number {
+  if (ring.length < 3) return 0;
+  const meanLat = ring.reduce((s, p) => s + p.lat, 0) / ring.length;
+  const mPerLng = 111_320 * Math.cos((meanLat * Math.PI) / 180);
+  let acc = 0;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const xi = ring[i]!.lng * mPerLng;
+    const yi = ring[i]!.lat * 110_540;
+    const xj = ring[j]!.lng * mPerLng;
+    const yj = ring[j]!.lat * 110_540;
+    acc += xj * yi - xi * yj;
+  }
+  return Math.abs(acc) / 2;
+}
+
+// Is the point inside the ring? Standard even-odd ray cast, in raw
+// degrees — the projection cancels out of an inside/outside test, so
+// there's no need to convert.
+//
+// Boundary cases are deliberately not special-cased: a point exactly on
+// an edge can land either way, and callers here are asking "is the dog
+// standing on our ground", where a metre of ambiguity at the edge means
+// nothing.
+export function pointInPolygon(
+  p: { lat: number; lng: number },
+  ring: { lat: number; lng: number }[],
+): boolean {
+  if (ring.length < 3) return false;
+  let inside = false;
+  for (let i = 0, j = ring.length - 1; i < ring.length; j = i++) {
+    const yi = ring[i]!.lat;
+    const xi = ring[i]!.lng;
+    const yj = ring[j]!.lat;
+    const xj = ring[j]!.lng;
+    if (yi > p.lat !== yj > p.lat && p.lng < ((xj - xi) * (p.lat - yi)) / (yj - yi) + xi) {
+      inside = !inside;
+    }
+  }
+  return inside;
+}

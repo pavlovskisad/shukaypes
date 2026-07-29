@@ -59,6 +59,12 @@ export const companionState = pgTable('companion_state', {
   lastMarkAt: timestamp('last_mark_at', { withTimezone: true }),
   lastMarkLat: doublePrecision('last_mark_lat'),
   lastMarkLng: doublePrecision('last_mark_lng'),
+  // Is the dog standing on ground we hold? Written on each map sync,
+  // where the territory shapes are already in hand. Denormalised onto
+  // the companion because the DECAY CRON needs it: that's one bulk
+  // UPDATE across every row, and it can branch on a column but can't go
+  // and compute a hull per user.
+  onHomeGround: boolean('on_home_ground').notNull().default(false),
 });
 
 // Tokens — scattered around user home zones. PostGIS point added via raw SQL migration.

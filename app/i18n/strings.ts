@@ -67,6 +67,10 @@ export interface AppStrings {
     // raider; the killed variant is for when we actually lost ground.
     raided: string[];
     raidedLost: string[];
+    // Stepping onto our own ground — where the paws are thicker and the
+    // dog is relaxed. Said on arrival only, never while we're standing
+    // in it.
+    homeGround: string[];
     questComplete: string;
     questAdvance: string;
     simpleWoof: string;
@@ -137,7 +141,17 @@ export interface AppStrings {
       sightingsReported: string;
       companionStats: string;
       luckyPaw: string;
+      // Territory card: how much ground you hold and where that puts you.
+      territory: string;
+      territoryArea: string;
+      territoryRank: string;
+      territoryTop: string;
     };
+    // Rank shown as "#3"; null rank (outside the board) reads as a dash.
+    rankValue: (n: number) => string;
+    unranked: string;
+    // Area, already scaled: under a km² it's in m², above it in km².
+    areaValue: (m2: number) => string;
     luckyActive: string;
     luckyInactive: string;
     language: {
@@ -299,6 +313,12 @@ const uk: AppStrings = {
       '*виє* ми втратили шматок — це {name}',
       '{name} стер нашу мітку. йдемо повертати 🐾',
     ],
+    homeGround: [
+      '*розслабляється* тут усе наше 🏠',
+      'ми вдома — тут і лапок більше 🐾',
+      '*вдихає* знайомий запах. наша земля',
+      'на своєму завжди спокійніше 🐽',
+    ],
     questComplete: 'знайшли! квест виконано 🎉',
     questAdvance: 'слід тут — рухаємось далі 🐾',
     simpleWoof: 'гав 🐾',
@@ -390,7 +410,17 @@ const uk: AppStrings = {
       sightingsReported: 'повідомлень про знахідки',
       companionStats: 'твій пес',
       luckyPaw: 'лапка на удачу',
+      territory: 'наша територія',
+      territoryArea: 'площа',
+      territoryRank: 'місце',
+      territoryTop: 'тримає найбільше',
     },
+    rankValue: (n) => `#${n}`,
+    unranked: '—',
+    areaValue: (m2) =>
+      m2 >= 1_000_000
+        ? `${(m2 / 1_000_000).toFixed(2)} км²`
+        : `${Math.round(m2).toLocaleString('uk-UA')} м²`,
     luckyActive: 'активна',
     luckyInactive: 'щастя ≥ 70%',
     language: {
@@ -591,6 +621,12 @@ const en: AppStrings = {
       '*howls* we lost a piece — that\'s {name}',
       '{name} wiped our mark. let\'s go take it back 🐾',
     ],
+    homeGround: [
+      '*relaxes* this is all ours 🏠',
+      'we\'re home — more paws around here 🐾',
+      '*breathes in* familiar smell. our ground',
+      'always easier on our own turf 🐽',
+    ],
     questComplete: 'found something! quest complete 🎉',
     questAdvance: "paw print here — let's keep going 🐾",
     simpleWoof: 'woof 🐾',
@@ -682,7 +718,17 @@ const en: AppStrings = {
       sightingsReported: 'sightings reported',
       companionStats: 'your pet',
       luckyPaw: 'lucky paw',
+      territory: 'our territory',
+      territoryArea: 'area held',
+      territoryRank: 'rank',
+      territoryTop: 'holds the most',
     },
+    rankValue: (n) => `#${n}`,
+    unranked: '—',
+    areaValue: (m2) =>
+      m2 >= 1_000_000
+        ? `${(m2 / 1_000_000).toFixed(2)} km²`
+        : `${Math.round(m2).toLocaleString('en-US')} m²`,
     luckyActive: 'active',
     luckyInactive: 'happiness ≥ 70%',
     language: {

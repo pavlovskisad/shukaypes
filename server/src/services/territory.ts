@@ -39,13 +39,28 @@
 //
 // Soft edges fall to a single visit; a hardened core takes several across
 // separate walks. The border war happens at the border.
+//
+// HOME GROUND
+// -----------
+// Holding ground pays, and all of it is passive: on your own streets the
+// paws are denser and the dog's happiness drains at half rate. Nothing to
+// activate and nothing to remember — the reward still lands on a player
+// who never learns the mechanic has a name. Plus the standing, which is
+// the part that makes people care: total area held, ranked, derived from
+// live marks so a player who stops walking slides down on their own.
 
 import { and, desc, eq, gte, lte, ne, sql, inArray } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
-import { convexHull, clusterPoints } from '../utils/territoryShapes.js';
+import {
+  convexHull,
+  clusterPoints,
+  polygonAreaM2,
+  pointInPolygon,
+} from '../utils/territoryShapes.js';
+import { redis } from '../db/redis.js';
 
 const T = balance.territory;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -438,6 +453,169 @@ export async function fetchShapes(userId: string): Promise<TerritoryShape[]> {
   return shapesFrom(marks.map((m) => ({ lat: m.lat, lng: m.lng })));
 }
 
+// How much ground a set of shapes actually holds. Islands are summed;
+// a line contributes nothing, which is the same thing it looks like.
+//
+// Overlapping hulls would be double-counted, but clusterPoints only ever
+// emits disjoint groups of marks, so two hulls can only touch where their
+// clusters interleave — and single-linkage at shapeLinkM means they'd
+// have been one cluster if they did.
+function totalAreaM2(shapes: TerritoryShape[]): number {
+  return shapes.reduce((s, sh) => s + (sh.kind === 'area' ? polygonAreaM2(sh.points) : 0), 0);
+}
+
+// Everything the map needs about YOUR territory, off one read of your
+// marks. The sync path used to call fetchMarks and fetchShapes side by
+// side and pay for the same query twice; area and home ground would have
+// made it four.
+export interface OwnTerritory {
+  marks: { lat: number; lng: number; closedLoop: boolean; strength: number; at: string }[];
+  shapes: TerritoryShape[];
+  areaM2: number;
+  // Is the walker standing on ground they hold? The passive perks —
+  // denser paws, slower happiness drain — hang off this.
+  home: boolean;
+}
+
+export async function fetchTerritory(userId: string, pos: LatLng): Promise<OwnTerritory> {
+  const rows = await liveMarks(userId);
+  const shapes = shapesFrom(rows.map((m) => ({ lat: m.lat, lng: m.lng })));
+  return {
+    marks: rows.map((r) => ({
+      lat: r.lat,
+      lng: r.lng,
+      closedLoop: r.closedLoop,
+      strength: r.strength,
+      at: r.at.toISOString(),
+    })),
+    shapes,
+    areaM2: Math.round(totalAreaM2(shapes)),
+    home: isHome(pos, shapes),
+  };
+}
+
+// Standing on your own ground — inside one of your shapes, or within a
+// short grace band of its edge. The band exists so the perk doesn't
+// strobe on and off while the dog wanders along a border, which is
+// exactly where a walker naturally spends their time.
+function isHome(pos: LatLng, shapes: TerritoryShape[]): boolean {
+  for (const s of shapes) {
+    if (s.kind !== 'area') continue;
+    if (pointInPolygon(pos, s.points)) return true;
+    // Cheap outside-but-close test: any vertex within the grace band.
+    // A long edge whose midpoint you're standing near won't match, and
+    // that's fine — this is a courtesy margin, not a second geometry.
+    if (s.points.some((p) => distanceMeters(pos, p) <= T.homeEdgeM)) return true;
+  }
+  return false;
+}
+
+// Remember whether the dog is at home, for the decay cron — which is one
+// bulk UPDATE over every companion and can branch on a column but can't
+// compute a hull. Only writes on a CHANGE, so a walk inside your own
+// range isn't an UPDATE every 15 seconds.
+export async function noteHomeGround(userId: string, home: boolean): Promise<void> {
+  await db
+    .update(schema.companionState)
+    .set({ onHomeGround: home })
+    .where(
+      and(
+        eq(schema.companionState.userId, userId),
+        ne(schema.companionState.onHomeGround, home),
+      ),
+    );
+}
+
+export interface LeaderboardEntry {
+  userId: string;
+  name: string;
+  areaM2: number;
+  bot: boolean;
+}
+
+// Who holds the most of the city. Recomputing every hull is real work, so
+// this is CACHED — a standing, not a live scoreboard, and a few minutes
+// of lag is invisible at the scale it's read.
+//
+// Everything is derived from live marks, so a player who stops walking
+// slides down the board on their own as their marks expire. Nothing to
+// reset, no season to run.
+export async function territoryLeaderboard(): Promise<LeaderboardEntry[]> {
+  const cached = await readCachedBoard();
+  if (cached) return cached;
+
+  const rows = await db
+    .select({
+      userId: schema.territoryMarks.userId,
+      lat: schema.territoryMarks.lat,
+      lng: schema.territoryMarks.lng,
+    })
+    .from(schema.territoryMarks)
+    .where(gte(schema.territoryMarks.createdAt, liveSince()));
+
+  const byUser = new Map<string, LatLng[]>();
+  for (const r of rows) {
+    const list = byUser.get(r.userId);
+    if (list) list.push({ lat: r.lat, lng: r.lng });
+    else byUser.set(r.userId, [{ lat: r.lat, lng: r.lng }]);
+  }
+
+  const scored = [...byUser]
+    .map(([userId, pts]) => ({ userId, areaM2: Math.round(totalAreaM2(shapesFrom(pts))) }))
+    .filter((e) => e.areaM2 > 0)
+    .sort((a, b) => b.areaM2 - a.areaM2)
+    .slice(0, T.leaderboardSize);
+
+  const names = await ownerNames(scored.map((e) => e.userId));
+  const board = scored.map((e) => ({
+    ...e,
+    name: names.get(e.userId) ?? 'сусід',
+    bot: isBot(e.userId),
+  }));
+  await writeCachedBoard(board);
+  return board;
+}
+
+// Where a given user stands, and how much they hold. Computed off their
+// own marks rather than read out of the cached board, so someone outside
+// the top ten still gets a real number for their own ground.
+export async function territoryStanding(
+  userId: string,
+  board: LeaderboardEntry[],
+): Promise<{ areaM2: number; rank: number | null }> {
+  const own = await fetchShapes(userId);
+  const areaM2 = Math.round(totalAreaM2(own));
+  const idx = board.findIndex((e) => e.userId === userId);
+  return { areaM2, rank: idx >= 0 ? idx + 1 : null };
+}
+
+const BOARD_KEY = 'terr:leaderboard';
+
+async function readCachedBoard(): Promise<LeaderboardEntry[] | null> {
+  try {
+    if (redis.status !== 'ready') return null;
+    const raw = await redis.get(BOARD_KEY);
+    return raw ? (JSON.parse(raw) as LeaderboardEntry[]) : null;
+  } catch {
+    // A cache miss and a broken cache are the same thing here: recompute.
+    return null;
+  }
+}
+
+async function writeCachedBoard(board: LeaderboardEntry[]): Promise<void> {
+  try {
+    if (redis.status !== 'ready') return;
+    await redis.set(
+      BOARD_KEY,
+      JSON.stringify(board),
+      'PX',
+      T.leaderboardCacheMs,
+    );
+  } catch {
+    // Losing the write just means the next reader recomputes.
+  }
+}
+
 // Everyone else's ground within sight of you. Deliberately proximity-
 // gated: the map stays yours, and walking into a rival range is an event
 // rather than a permanent layer of other people's paint.
@@ -537,21 +715,6 @@ export async function takeRaids(userId: string): Promise<RaidEvent[]> {
     lat: r.lat,
     lng: r.lng,
     killed: r.killed,
-    at: r.at.toISOString(),
-  }));
-}
-
-// The dots to draw. Each carries its age so the client can fade it out
-// shortly after it lands and leave the shape behind.
-export async function fetchMarks(
-  userId: string,
-): Promise<{ lat: number; lng: number; closedLoop: boolean; strength: number; at: string }[]> {
-  const rows = await liveMarks(userId);
-  return rows.map((r) => ({
-    lat: r.lat,
-    lng: r.lng,
-    closedLoop: r.closedLoop,
-    strength: r.strength,
     at: r.at.toISOString(),
   }));
 }

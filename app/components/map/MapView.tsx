@@ -323,6 +323,7 @@ export default function MapViewWeb() {
   // "somebody took your territory, dawg!" notice.
   const rivalTerritory = useGameStore((s) => s.rivalTerritory);
   const lastRaid = useGameStore((s) => s.lastRaid);
+  const onHomeGround = useGameStore((s) => s.onHomeGround);
   // Tracks the map's visible bounds so we can detect when the
   // companion has wandered (or been panned) off-screen and surface a
   // tap-to-recenter indicator at the screen edge.
@@ -689,6 +690,21 @@ export default function MapViewWeb() {
     const line = lines[Math.floor(Math.random() * lines.length)]!;
     showBubble(line.replace('{name}', lastRaid.raiderName), 4200);
   }, [lastRaid, showBubble, t]);
+
+  // Stepping ONTO home ground — where paws are denser and the dog's
+  // happiness drains slower. Both perks are passive and server-side; this
+  // line is the only thing that tells you they're on. Fires on the
+  // transition only (never on the initial value, or every walk would open
+  // with it), and no line for leaving: the map going back to normal is
+  // its own signal, and a goodbye every time you cross an edge is nagging.
+  const homeRef = useRef<boolean | null>(null);
+  useEffect(() => {
+    const was = homeRef.current;
+    homeRef.current = onHomeGround;
+    if (was !== false || !onHomeGround) return;
+    const lines = t.bubbles.homeGround;
+    showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3400);
+  }, [onHomeGround, showBubble, t]);
 
   // …and grumbles when it's too hungry or too glum to bother. Rate-
   // limited hard: the server reports the mood on every sync it would

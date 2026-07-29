@@ -75,6 +75,15 @@ export interface RivalTerritory {
   shapes: TerritoryShape[];
 }
 
+// A place on the territory board. `bot` marks the simulated walkers, so
+// the UI can label them rather than pass them off as neighbours.
+export interface TerritoryRanking {
+  userId: string;
+  name: string;
+  areaM2: number;
+  bot: boolean;
+}
+
 // Somebody marked over your ground while you weren't looking.
 export interface TerritoryRaid {
   raiderName: string;
@@ -250,6 +259,10 @@ export const api = {
       // sync. Both optional for the same reason as above.
       rivals?: RivalTerritory[];
       raids?: TerritoryRaid[];
+      // How much ground you hold (m²), and whether the walker is
+      // standing on it right now — the passive perks hang off `home`.
+      areaM2?: number;
+      home?: boolean;
     }>(`/sync/map?${params.toString()}`);
   },
 
@@ -321,6 +334,15 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({}),
     }),
+
+  // Who holds the most of the city, and where you stand. Its own trip
+  // rather than a field on /sync/map — the board is read from the profile
+  // tab, and recomputing a scoreboard on every 15s map poll would be work
+  // nobody is looking at. `rank` is null when you're outside the top ten.
+  territoryLeaderboard: () =>
+    req<{ board: TerritoryRanking[]; you: { areaM2: number; rank: number | null } }>(
+      '/territory/leaderboard',
+    ),
 
   // Dev affordance (see ?terrRaid=1): send a bot onto your newest mark so
   // the raid notification can be checked without waiting for one to walk
