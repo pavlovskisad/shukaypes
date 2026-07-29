@@ -17,7 +17,12 @@ import {
   fetchUserState,
 } from '../services/mapData.js';
 import { syncPresence, takePokes } from '../services/presence.js';
-import { fetchTerritoryNear, fetchMarks } from '../services/territory.js';
+import {
+  fetchTerritoryNear,
+  fetchMarks,
+  fetchShapes,
+  resetTerritory,
+} from '../services/territory.js';
 import type { LatLng } from '../utils/geo.js';
 
 // Server kill-switch for multiplayer presence. Off only if explicitly set to
@@ -53,6 +58,14 @@ function parseParks(raw?: string): LatLng[] {
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
+  // Wipe the caller's own territory. Only ever touches your own ground, so
+  // it needs no special guard — and it makes the mechanic re-testable from
+  // a clean slate without going near the database.
+  app.post('/territory/reset', async (req) => {
+    await resetTerritory(req.userId);
+    return { ok: true };
+  });
+
   app.get<{ Querystring: SyncMapQuery }>('/sync/map', async (req, reply) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
@@ -76,7 +89,8 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     const wantPlayers = MULTIPLAYER_ON && req.query.mp === '1';
 
-    const [tokens, food, dogs, state, players, pokes, territory, marks] = await Promise.all([
+    const [tokens, food, dogs, state, players, pokes, territory, marks, shapes] =
+      await Promise.all([
       fetchNearbyTokens(req.userId, pos),
       fetchNearbyFood(req.userId),
       fetchNearbyLostDogs(pos, radiusM),
@@ -90,6 +104,8 @@ const plugin: FastifyPluginAsync = async (app) => {
       fetchTerritoryNear(req.userId, pos).catch(() => []),
       // The recent chain of marks — dots + the order to join them in.
       fetchMarks(req.userId).catch(() => []),
+      // The drawable geometry those marks make — filled hulls and lines.
+      fetchShapes(req.userId).catch(() => []),
     ]);
 
     if (!state) {
@@ -97,7 +113,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { error: 'user not found' };
     }
 
-    return { tokens, food, dogs, state, players, pokes, territory, marks };
+    return { tokens, food, dogs, state, players, pokes, territory, marks, shapes };
   });
 };
 

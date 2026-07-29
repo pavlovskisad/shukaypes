@@ -17,19 +17,23 @@
 // drew one, and it implied the path mattered — which sent the eye looking
 // for a loop to close instead of just watching the shape grow.
 //
-// The fill is drawn from the ownership cells themselves — real squares,
-// not a blur — so what you see is exactly what the server says you own.
-// Adjacent cells share edges exactly, so they merge into one clean shape
-// with no seams and no dissolve step.
+// The fill is the ACTUAL hull of the marks, not the ownership cells. An
+// earlier cut drew the cells as squares and it came out as blocky
+// rectangles bolted around each dot — nothing like the clean triangle
+// three marks ought to enclose. Cells remain the ownership truth
+// server-side (they're what stealing will operate on); this draws the
+// shape a person would draw.
 
 import { useEffect, useMemo } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { useMaplibreMap } from './MapContext';
-import type { TerritoryCell, TerritoryMark } from '../../services/api';
+import type { TerritoryMark, TerritoryShape } from '../../services/api';
 
-const FILL_SOURCE = 'territory-fill-src';
-const FILL_LAYER = 'territory-fill';
-const EDGE_LAYER = 'territory-edge';
+const AREA_SOURCE = 'territory-area-src';
+const AREA_FILL = 'territory-area-fill';
+const AREA_EDGE = 'territory-area-edge';
+const LINK_SOURCE = 'territory-link-src';
+const LINK_LAYER = 'territory-link';
 const DOTS_SOURCE = 'territory-dots-src';
 const DOTS_LAYER = 'territory-dots';
 
@@ -38,57 +42,41 @@ const DOTS_LAYER = 'territory-dots';
 const BLUE = '#38bdf8';
 const BLUE_DEEP = '#0ea5e9';
 
-// Grid constants, mirrored from the server's utils/territoryGrid.ts. The
-// cell id encodes its indices, so corners are derived rather than sent —
-// and derived with the SAME band formula, so squares tile exactly and the
-// fill has no hairline seams between them.
-const CELL_M = 110;
-const M_PER_DEG_LAT = 110540;
-const M_PER_DEG_LNG_EQ = 111320;
-const LAT_STEP = CELL_M / M_PER_DEG_LAT;
-
-function lngStepForBand(latIdx: number): number {
-  const bandLat = (latIdx + 0.5) * LAT_STEP;
-  const cos = Math.max(0.05, Math.cos((bandLat * Math.PI) / 180));
-  return CELL_M / (M_PER_DEG_LNG_EQ * cos);
+function areaGeoJSON(shapes: TerritoryShape[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: shapes
+      .filter((s) => s.kind === 'area' && s.points.length >= 3)
+      .map((s) => ({
+        type: 'Feature',
+        geometry: {
+          type: 'Polygon',
+          // GeoJSON rings must close explicitly.
+          coordinates: [
+            [...s.points.map((p) => [p.lng, p.lat]), [s.points[0]!.lng, s.points[0]!.lat]],
+          ],
+        },
+        properties: {},
+      })),
+  };
 }
 
-function cellSquare(cellId: string): [number, number][] | null {
-  const dot = cellId.indexOf('.');
-  if (dot < 0) return null;
-  const latIdx = Number(cellId.slice(0, dot));
-  const lngIdx = Number(cellId.slice(dot + 1));
-  if (!Number.isFinite(latIdx) || !Number.isFinite(lngIdx)) return null;
-  const lngStep = lngStepForBand(latIdx);
-  const s = latIdx * LAT_STEP;
-  const n = (latIdx + 1) * LAT_STEP;
-  const w = lngIdx * lngStep;
-  const e = (lngIdx + 1) * lngStep;
-  return [
-    [w, s],
-    [e, s],
-    [e, n],
-    [w, n],
-    [w, s],
-  ];
-}
-
-function fillGeoJSON(cells: TerritoryCell[]): GeoJSON.FeatureCollection {
-  const features: GeoJSON.Feature[] = [];
-  for (const c of cells) {
-    // Optimistic client-side cells (added the instant the dog marks, before
-    // the server's own list arrives) carry no real cell id — skip them here
-    // rather than drawing a square in the wrong place.
-    const ring = cellSquare(c.cellId);
-    if (!ring) continue;
-    features.push({
-      type: 'Feature',
-      geometry: { type: 'Polygon', coordinates: [ring] },
-      // Faded ground draws thinner, so the map shows you where to walk again.
-      properties: { o: Math.max(0.12, Math.min(0.4, (c.strength / 100) * 0.4)) },
-    });
-  }
-  return { type: 'FeatureCollection', features };
+// Two marks are a link, not a territory: drawn as a bare line so it's
+// visible that they're related and that a third mark would close a shape.
+function linkGeoJSON(shapes: TerritoryShape[]): GeoJSON.FeatureCollection {
+  return {
+    type: 'FeatureCollection',
+    features: shapes
+      .filter((s) => s.kind === 'line' && s.points.length >= 2)
+      .map((s) => ({
+        type: 'Feature',
+        geometry: {
+          type: 'LineString',
+          coordinates: s.points.map((p) => [p.lng, p.lat]),
+        },
+        properties: {},
+      })),
+  };
 }
 
 function dotsGeoJSON(marks: TerritoryMark[]): GeoJSON.FeatureCollection {
@@ -97,27 +85,28 @@ function dotsGeoJSON(marks: TerritoryMark[]): GeoJSON.FeatureCollection {
     features: marks.map((m) => ({
       type: 'Feature',
       geometry: { type: 'Point', coordinates: [m.lng, m.lat] },
-      // The mark that first gave its cluster area reads a touch bigger —
-      // it's the one that turned a pair of dots into a piece of the city.
-      properties: { r: m.closedLoop ? 7 : 4.5 },
+      properties: { r: m.closedLoop ? 6.5 : 4.5 },
     })),
   };
 }
 
 export function TerritoryLayer({
-  cells,
+  shapes,
   marks,
 }: {
-  cells: TerritoryCell[];
+  shapes: TerritoryShape[];
   marks: TerritoryMark[];
 }) {
   const map = useMaplibreMap();
   // The store hands us fresh array references every 15s sync even when
-  // nothing changed; re-uploading hundreds of polygons each tick would
-  // stutter the 3D city. Signatures keep the uploads to real changes.
-  const cellSig = useMemo(
-    () => cells.map((c) => `${c.cellId}:${c.strength}`).join(','),
-    [cells],
+  // nothing changed; re-uploading geometry each tick would stutter the 3D
+  // city. Signatures keep uploads to real changes.
+  const shapeSig = useMemo(
+    () =>
+      shapes
+        .map((s) => `${s.kind}:${s.points.map((p) => p.lat.toFixed(5)).join('|')}`)
+        .join(','),
+    [shapes],
   );
   const markSig = useMemo(
     () => marks.map((m) => `${m.lat.toFixed(5)},${m.lng.toFixed(5)}`).join(','),
@@ -126,7 +115,8 @@ export function TerritoryLayer({
 
   useEffect(() => {
     if (!map) return;
-    const fill = fillGeoJSON(cells);
+    const areas = areaGeoJSON(shapes);
+    const links = linkGeoJSON(shapes);
     const dots = dotsGeoJSON(marks);
 
     const apply = () => {
@@ -140,27 +130,33 @@ export function TerritoryLayer({
         return false;
       };
 
-      if (!setOr(FILL_SOURCE, fill)) {
-        // Claimed ground: flat translucent blue, per-feature opacity from
-        // strength. No outline on the squares themselves — only the shape's
-        // outer edge is drawn (below), so a region reads as one area rather
-        // than a grid.
+      if (!setOr(AREA_SOURCE, areas)) {
         map.addLayer({
-          id: FILL_LAYER,
+          id: AREA_FILL,
           type: 'fill',
-          source: FILL_SOURCE,
-          paint: { 'fill-color': BLUE, 'fill-opacity': ['get', 'o'] },
+          source: AREA_SOURCE,
+          paint: { 'fill-color': BLUE, 'fill-opacity': 0.28 },
         });
         map.addLayer({
-          id: EDGE_LAYER,
+          id: AREA_EDGE,
           type: 'line',
-          source: FILL_SOURCE,
+          source: AREA_SOURCE,
+          layout: { 'line-join': 'round' },
+          paint: { 'line-color': BLUE_DEEP, 'line-width': 2, 'line-opacity': 0.75 },
+        });
+      }
+
+      if (!setOr(LINK_SOURCE, links)) {
+        map.addLayer({
+          id: LINK_LAYER,
+          type: 'line',
+          source: LINK_SOURCE,
+          layout: { 'line-cap': 'round' },
           paint: {
             'line-color': BLUE_DEEP,
-            'line-width': 1,
-            // Very faint: interior seams between neighbouring cells would
-            // otherwise draw the grid we're trying to hide.
-            'line-opacity': 0.18,
+            'line-width': 2,
+            'line-opacity': 0.5,
+            'line-dasharray': [2, 2],
           },
         });
       }
@@ -183,7 +179,7 @@ export function TerritoryLayer({
     if (map.isStyleLoaded()) apply();
     else map.once('style.load', apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, cellSig, markSig]);
+  }, [map, shapeSig, markSig]);
 
   // Tear everything down on unmount (tab switch / mode change) so nothing
   // lingers over another screen's map.
@@ -191,10 +187,10 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [FILL_LAYER, EDGE_LAYER, DOTS_LAYER]) {
+        for (const id of [AREA_FILL, AREA_EDGE, LINK_LAYER, DOTS_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
-        for (const id of [FILL_SOURCE, DOTS_SOURCE]) {
+        for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {
           if (map.getSource(id)) map.removeSource(id);
         }
       } catch {

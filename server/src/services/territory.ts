@@ -251,6 +251,60 @@ export async function markIfDue(
   };
 }
 
+// The SHAPES a user's marks make, as real geometry for the map to draw.
+//
+// The client used to render the ownership cells as squares, which came
+// out as blocky rectangles bolted around each dot — nothing like the
+// clean triangle three marks ought to enclose. Cells stay the ownership
+// truth (they're what stealing will operate on), but what gets DRAWN is
+// the actual hull: a filled polygon for three or more marks, a bare line
+// for two, and nothing at all for one.
+export interface TerritoryShape {
+  kind: 'area' | 'line';
+  points: { lat: number; lng: number }[];
+}
+
+export async function fetchShapes(userId: string): Promise<TerritoryShape[]> {
+  const marks = await db
+    .select({ lat: schema.territoryMarks.lat, lng: schema.territoryMarks.lng })
+    .from(schema.territoryMarks)
+    .where(eq(schema.territoryMarks.userId, userId))
+    .orderBy(desc(schema.territoryMarks.createdAt))
+    .limit(T.shapeMarkWindow);
+  if (marks.length === 0) return [];
+  const out: TerritoryShape[] = [];
+  for (const cluster of clusterPoints(
+    marks.map((m) => ({ lat: m.lat, lng: m.lng })),
+    T.shapeLinkM,
+  )) {
+    if (cluster.length >= T.shapeMinMarks) {
+      const hull = convexHull(cluster);
+      // Three marks in a near-straight line hull to a sliver with no real
+      // area — draw those as a line too rather than a degenerate polygon.
+      if (hull.length >= 3) out.push({ kind: 'area', points: hull });
+      else out.push({ kind: 'line', points: hull });
+    } else if (cluster.length === 2) {
+      out.push({ kind: 'line', points: cluster });
+    }
+  }
+  return out;
+}
+
+// Wipe a user's territory — every mark and every cell they own. Exposed so
+// the mechanic can be re-tested from a clean slate without hunting rows in
+// the database, and harmless by construction: it only ever touches the
+// caller's own ground.
+export async function resetTerritory(userId: string): Promise<void> {
+  await db.transaction(async (tx) => {
+    await tx.delete(schema.territoryMarks).where(eq(schema.territoryMarks.userId, userId));
+    await tx.delete(schema.territoryCells).where(eq(schema.territoryCells.ownerId, userId));
+    await tx
+      .update(schema.companionState)
+      .set({ lastMarkAt: null, lastMarkLat: null, lastMarkLng: null })
+      .where(eq(schema.companionState.userId, userId));
+  });
+}
+
 // The recent chain of marks for the map: dots to draw, and the order to
 // join them in. Capped at the same window the loop check uses, so what
 // you see on screen is exactly what can still close a ring.

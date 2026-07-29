@@ -62,6 +62,14 @@ export interface TerritoryCell {
 // One spot the dog marked, in walk order. Dots on the map; the line
 // joining them is the route walked, and a mark that closed a ring is
 // flagged so the map can make more of it.
+// A drawable piece of territory: the hull of a cluster of marks. 'area'
+// for three or more (a filled shape), 'line' for exactly two (a link with
+// no ground yet).
+export interface TerritoryShape {
+  kind: 'area' | 'line';
+  points: { lat: number; lng: number }[];
+}
+
 export interface TerritoryMark {
   lat: number;
   lng: number;
@@ -229,6 +237,7 @@ export const api = {
       // server (or a failed territory read) just means an unmarked map.
       territory?: TerritoryCell[];
       marks?: TerritoryMark[];
+      shapes?: TerritoryShape[];
     }>(`/sync/map?${params.toString()}`);
   },
 
@@ -256,7 +265,10 @@ export const api = {
   // sent here, and credits any token / bone within auto-collect
   // radius of that segment. Lets the foreground app catch up after
   // a backgrounded walk where the JS timers were paused by Safari.
-  collectPath: (pos: LatLng) =>
+  // `dogPos` is where the companion sprite currently stands. The dog is
+  // what marks territory, so the server prefers this over the walker's own
+  // position (clamping it to a plausible offset first).
+  collectPath: (pos: LatLng, dogPos?: LatLng | null) =>
     req<{
       tokensCollected: number;
       foodConsumed: number;
@@ -274,8 +286,16 @@ export const api = {
       mood?: 'hungry' | 'grumpy' | null;
     }>('/collect/path', {
       method: 'POST',
-      body: JSON.stringify({ lat: pos.lat, lng: pos.lng }),
+      body: JSON.stringify({
+        lat: pos.lat,
+        lng: pos.lng,
+        ...(dogPos ? { dogLat: dogPos.lat, dogLng: dogPos.lng } : {}),
+      }),
     }),
+
+  // Wipe your own territory — marks and claimed ground. Dev affordance for
+  // re-testing the mechanic from scratch (see ?terrReset=1).
+  resetTerritory: () => req<{ ok: true }>('/territory/reset', { method: 'POST' }),
 
   getChatHistory: () => req<{ messages: ChatMessage[] }>('/chat/history'),
 

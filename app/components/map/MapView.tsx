@@ -56,7 +56,7 @@ import { getDeepLinkDogId } from '../../services/telegram';
 import { useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
 import { fetchWalkingRoute } from '../../services/directions';
-import type { NearbyLostDog } from '../../services/api';
+import { api, type NearbyLostDog } from '../../services/api';
 import { PoiMarker } from './PoiMarker';
 import { PoiCluster } from './PoiCluster';
 import { WaypointMarker } from './WaypointMarker';
@@ -315,8 +315,8 @@ export default function MapViewWeb() {
   const setSearchPreview = useGameStore((s) => s.setSearchPreview);
   // Territory: the ground the dog has claimed, plus the one-shot events
   // for "just marked here" / "not in the mood to mark".
-  const territory = useGameStore((s) => s.territory);
   const territoryMarks = useGameStore((s) => s.territoryMarks);
+  const territoryShapes = useGameStore((s) => s.territoryShapes);
   const lastMark = useGameStore((s) => s.lastMark);
   const markMood = useGameStore((s) => s.markMood);
   // Tracks the map's visible bounds so we can detect when the
@@ -564,6 +564,31 @@ export default function MapViewWeb() {
 
   useGameLoop(showBubble);
 
+  // Dev affordance: `?terrReset=1` wipes YOUR territory once on load, so
+  // the mechanic can be re-tested from a clean slate without hunting rows
+  // in the database. Ref-guarded so a re-render can't fire it twice, and
+  // it only ever touches the caller's own ground.
+  const terrResetRef = useRef(false);
+  useEffect(() => {
+    if (terrResetRef.current) return;
+    if (typeof window === 'undefined') return;
+    try {
+      if (new URLSearchParams(window.location.search).get('terrReset') !== '1') return;
+    } catch {
+      return;
+    }
+    terrResetRef.current = true;
+    void api
+      .resetTerritory()
+      .then(() => {
+        useGameStore.setState({ territoryMarks: [], territoryShapes: [], territory: [] });
+        showBubble('*починаємо з чистого аркуша* 🐾', 3000);
+      })
+      .catch(() => {
+        /* dev-only convenience — a failure just means nothing was wiped */
+      });
+  }, [showBubble]);
+
   // Companion barks when sniff mode toggles. Skips the initial mount
   // (sniffMode starts false; we don't want a "back to normal" line on
   // every app load) via a ref guard.
@@ -683,7 +708,7 @@ export default function MapViewWeb() {
   // ticks are no-ops anyway.
   useEffect(() => {
     if (!userPos || !isFocused) return;
-    void collectPath(userPos);
+    void collectPath(userPos, companionPosRef.current);
     void syncMap(userPos);
     // syncSpots is driven separately by the viewport-watcher effect
     // below so the dog finds places where the human is LOOKING, not
@@ -691,7 +716,7 @@ export default function MapViewWeb() {
     const id = setInterval(() => {
       const pos = useGameStore.getState().userPosition;
       if (!pos) return;
-      void collectPath(pos);
+      void collectPath(pos, companionPosRef.current);
       void syncMap(pos);
     }, TOKEN_REFRESH_MS);
     return () => clearInterval(id);
@@ -2785,7 +2810,7 @@ export default function MapViewWeb() {
             has claimed. Hidden in supersniff, where the blue search
             beacon owns the ground and a second colour would fight it. */}
         {!(DOG_CAM && dogCam) && onMapScreen ? (
-          <TerritoryLayer cells={territory} marks={territoryMarks} />
+          <TerritoryLayer shapes={territoryShapes} marks={territoryMarks} />
         ) : null}
 
         {companionPos ? (

@@ -10,7 +10,21 @@ import { markIfDue, claimTrail, type MarkResult } from '../services/territory.js
 interface PathBody {
   lat: number;
   lng: number;
+  // Where the COMPANION is right now. The dog roams its own orbit around
+  // the walker, and it's the dog that marks — so a mark landing on the GPS
+  // dot reads as the human marking, not the pet. The client sends the
+  // sprite's live position and the server clamps it (below) to a plausible
+  // distance from the movement-verified user position, so this can't be
+  // used to claim ground the pair never walked to.
+  dogLat?: number;
+  dogLng?: number;
 }
+
+// How far from the walker the companion is allowed to be when it marks.
+// Comfortably above the roam radius the hook actually uses, so honest
+// clients are never clipped, and far below anything that would let a
+// tampered one reach interesting ground of its own choosing.
+const MAX_DOG_OFFSET_M = 160;
 
 // Auto-collect radii reused on the server for the path sweep. Mirror
 // the client's autoCollect* in app/constants/balance.ts so foreground
@@ -132,7 +146,17 @@ const plugin: FastifyPluginAsync = async (app) => {
     // backgrounded walk's paws and bones, and a territory hiccup (or a
     // deploy that lands before its migration) must not cost the user
     // those. Failure just means no mark this tick.
-    const mark: MarkResult = await markIfDue(userId, current).catch((err) => {
+    // Mark where the DOG is standing, not where the human is — falling
+    // back to the user's own position when the client sends nothing, or
+    // sends something implausible.
+    const dogRaw =
+      Number.isFinite(req.body?.dogLat) && Number.isFinite(req.body?.dogLng)
+        ? { lat: req.body.dogLat as number, lng: req.body.dogLng as number }
+        : null;
+    const markPos =
+      dogRaw && distanceMeters(dogRaw, current) <= MAX_DOG_OFFSET_M ? dogRaw : current;
+
+    const mark: MarkResult = await markIfDue(userId, markPos).catch((err) => {
       req.log.warn({ err }, '[territory] mark failed');
       return { marked: false } as MarkResult;
     });
