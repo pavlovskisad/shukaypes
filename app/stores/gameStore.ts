@@ -4,7 +4,6 @@ import type { FoodItem, LatLng, NearbyPlayer, Quest, Token } from '@shukajpes/sh
 import {
   api,
   type NearbyLostDog,
-  type TerritoryCell,
   type TerritoryMark,
   type TerritoryShape,
 } from '../services/api';
@@ -135,9 +134,6 @@ interface GameState {
   // Latest incoming poke (seq bumps when a new one arrives so the UI can
   // trigger the notification + haptic once per poke).
   incomingPoke: { seq: number; fromName: string; position: LatLng | null } | null;
-  // Ground the dog has claimed around here — server-computed, decay
-  // already applied, refreshed each /sync/map tick.
-  territory: TerritoryCell[];
   // The dog's recent marks in walk order — dots on the map, joined by the
   // route walked between them.
   territoryMarks: TerritoryMark[];
@@ -149,9 +145,8 @@ interface GameState {
     seq: number;
     lat: number;
     lng: number;
-    cells: number;
-    // >0 when this mark closed a loop and captured the ground inside.
-    enclosed: number;
+    // True when this mark is the one that first gave its cluster area.
+    enclosed: boolean;
   } | null;
   // …or declined to, for a reason worth voicing (hungry / not in the mood).
   markMood: { seq: number; reason: 'hungry' | 'grumpy' } | null;
@@ -391,7 +386,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   lostDogs: [],
   nearbyPlayers: [],
   incomingPoke: null,
-  territory: [],
   territoryMarks: [],
   territoryShapes: [],
   lastMark: null,
@@ -660,7 +654,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       // 15s tick. (The server's own cells arrive on that tick and
       // replace these.)
       if (res.marked) {
-        const { lat, lng, cells, enclosed } = res.marked;
+        const { lat, lng, enclosed } = res.marked;
         // Show the new dot immediately — the shape it belongs to arrives
         // with the next sync, but the dot itself shouldn't lag the bubble.
         set((prev) => ({
@@ -668,8 +662,7 @@ export const useGameStore = create<GameState>((set, get) => ({
             seq: (prev.lastMark?.seq ?? 0) + 1,
             lat,
             lng,
-            cells,
-            enclosed: enclosed ?? 0,
+            enclosed: enclosed === true,
           },
           territoryMarks: [
             ...prev.territoryMarks,
@@ -859,9 +852,6 @@ export const useGameStore = create<GameState>((set, get) => ({
           hunger: res.state.companion.hunger,
           happiness: res.state.companion.happiness,
           companionName: res.state.companion.name,
-          // Claimed ground around here. An older server omits the field
-          // entirely — keep whatever we had rather than clearing the map.
-          territory: res.territory ?? prev.territory,
           territoryMarks: res.marks ?? prev.territoryMarks,
           territoryShapes: res.shapes ?? prev.territoryShapes,
           lastSyncError: null,

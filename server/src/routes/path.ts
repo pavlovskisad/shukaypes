@@ -5,7 +5,7 @@ import { db, schema } from '../db/index.js';
 import { redis } from '../db/redis.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, pointToSegmentDistanceM, type LatLng } from '../utils/geo.js';
-import { markIfDue, claimTrail, type MarkResult } from '../services/territory.js';
+import { markIfDue, type MarkResult } from '../services/territory.js';
 
 interface PathBody {
   lat: number;
@@ -59,10 +59,8 @@ function markPayload(mark: MarkResult) {
     return {
       lat: mark.position.lat,
       lng: mark.position.lng,
-      cells: mark.cells ?? 0,
-      // Present only when this mark closed a ring — the client makes a
-      // moment of it ("we've got the whole block").
-      enclosed: mark.enclosed?.cells ?? 0,
+      // True when this mark is the one that first gave its cluster area.
+      enclosed: mark.enclosed === true,
     };
   }
   return null;
@@ -159,14 +157,6 @@ const plugin: FastifyPluginAsync = async (app) => {
     const mark: MarkResult = await markIfDue(userId, markPos).catch((err) => {
       req.log.warn({ err }, '[territory] mark failed');
       return { marked: false } as MarkResult;
-    });
-
-    // …and lay the weak trail claim along the ground just walked. This is
-    // what turns a string of discrete marks into one connected territory
-    // rather than scattered islands. Same defensive posture as the mark:
-    // the paw/bone sweep below must never pay for a territory failure.
-    await claimTrail(userId, lastPos, current).catch((err) => {
-      req.log.warn({ err }, '[territory] trail failed');
     });
 
     // No real movement (GPS jitter etc) — refresh anchor, skip sweep.

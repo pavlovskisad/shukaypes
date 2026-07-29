@@ -47,21 +47,6 @@ export interface ChatNearbySpot {
   distM: number;
 }
 
-// One claimed patch of ground (~110 m grid cell, see the server's
-// utils/territoryGrid.ts). `strength` arrives with decay already applied,
-// so a cell that's been left alone for days comes back faint — the map
-// renders it thinner rather than the client tracking any decay itself.
-export interface TerritoryCell {
-  cellId: string;
-  lat: number;
-  lng: number;
-  strength: number;
-  mine: boolean;
-}
-
-// One spot the dog marked, in walk order. Dots on the map; the line
-// joining them is the route walked, and a mark that closed a ring is
-// flagged so the map can make more of it.
 // A drawable piece of territory: the hull of a cluster of marks. 'area'
 // for three or more (a filled shape), 'line' for exactly two (a link with
 // no ground yet).
@@ -238,7 +223,6 @@ export const api = {
       pokes?: Poke[];
       // Your claimed ground near this position. Optional so an older
       // server (or a failed territory read) just means an unmarked map.
-      territory?: TerritoryCell[];
       marks?: TerritoryMark[];
       shapes?: TerritoryShape[];
     }>(`/sync/map?${params.toString()}`);
@@ -281,9 +265,8 @@ export const api = {
       marked?: {
         lat: number;
         lng: number;
-        cells: number;
-        // >0 when this mark closed a loop and claimed the ground inside.
-        enclosed?: number;
+        // True when this mark is the one that first gave its cluster area.
+        enclosed?: boolean;
       } | null;
       // Why it didn't, when the reason is worth a word from the dog.
       mood?: 'hungry' | 'grumpy' | null;
