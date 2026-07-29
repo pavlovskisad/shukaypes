@@ -568,7 +568,7 @@ function breathe(): Promise<void> {
 // one response is slow", which is a survivable failure.
 async function partitionShapes(
   marks: OwnedMark[],
-  opts: { maxPatches?: number } = {},
+  opts: { maxPatches?: number; maxBites?: number } = {},
 ): Promise<Map<string, TerritoryShape[]>> {
   const out = new Map<string, TerritoryShape[]>();
   if (marks.length === 0) return out;
@@ -680,9 +680,10 @@ async function partitionShapes(
     // could otherwise hand the clipper one polygon per rival mark — the
     // shape of input that blocked the event loop — and the ones dropped
     // are the slivers nobody can see.
-    if (bites.length > T.partitionMaxBites) {
+    const maxBites = opts.maxBites ?? T.partitionMaxBites;
+    if (bites.length > maxBites) {
       bites.sort((a, b) => ringAreaM2(b) - ringAreaM2(a));
-      bites.length = T.partitionMaxBites;
+      bites.length = maxBites;
     }
 
     const shapes = out.get(patch.ownerId) ?? [];
@@ -771,7 +772,6 @@ async function partitionShapes(
 // entry immediately: this can go stale by up to partitionCacheMs on
 // timing, but never on content.
 interface PartitionCacheEntry {
-  sig: string;
   at: number;
   // Stored as the promise, not the result, so concurrent callers that miss
   // together still only compute once — the second one awaits the first
@@ -780,38 +780,35 @@ interface PartitionCacheEntry {
 }
 const partitionCache = new Map<string, PartitionCacheEntry>();
 
-// Cheap order-sensitive hash of the mark set. Marks arrive sorted by
-// distance from the caller, so two callers in the same cell see the same
-// order; ids and rounded coordinates are enough to catch a mark placed,
-// taken, or expired.
-function marksSignature(marks: { userId: string; lat: number; lng: number }[]): string {
-  let h = 0x811c9dc5;
-  for (const m of marks) {
-    const s = `${m.userId}|${m.lat.toFixed(5)}|${m.lng.toFixed(5)}`;
-    for (let i = 0; i < s.length; i++) {
-      h ^= s.charCodeAt(i);
-      h = Math.imul(h, 0x01000193);
-    }
-  }
-  return `${marks.length}:${(h >>> 0).toString(36)}`;
-}
-
 async function partitionCached(
   pos: LatLng,
   marks: OwnedMark[],
 ): Promise<Map<string, TerritoryShape[]>> {
   const cell = T.partitionCacheCellDeg;
-  const key = `${Math.round(pos.lat / cell)}:${Math.round(pos.lng / cell)}`;
-  const sig = marksSignature(marks);
   const now = Date.now();
+  // Keyed on the cell AND a time bucket — deliberately NOT on the marks.
+  //
+  // The first version invalidated whenever any mark in view changed, which
+  // sounded strictly better and in practice meant the cache never hit at
+  // all: the radius is 5km and thirty bots between them mark every eight
+  // seconds, so the mark set is essentially never the same twice. Every
+  // sync paid full price, which is what put a shared vCPU permanently at
+  // its limit.
+  //
+  // A time bucket bounds staleness to partitionCacheMs instead. That is
+  // less than the sync interval, so a shape is at worst one tick behind —
+  // and the mark dot itself is drawn from the collect response the moment
+  // it lands, so nothing the player did is ever waiting on this.
+  const bucket = Math.floor(now / T.partitionCacheMs);
+  const key = `${Math.round(pos.lat / cell)}:${Math.round(pos.lng / cell)}:${bucket}`;
 
   const hit = partitionCache.get(key);
-  if (hit && hit.sig === sig && now - hit.at < T.partitionCacheMs) return hit.work;
+  if (hit) return hit.work;
 
   const work = partitionShapes(marks);
-  partitionCache.set(key, { sig, at: now, work });
-  // A failed partition must not be remembered as the answer for the next
-  // 20 seconds — drop it so the following caller retries.
+  partitionCache.set(key, { at: now, work });
+  // A failed partition must not be remembered as the answer for the rest
+  // of the bucket — drop it so the following caller retries.
   work.catch(() => {
     if (partitionCache.get(key)?.work === work) partitionCache.delete(key);
   });
@@ -977,18 +974,38 @@ export interface LeaderboardEntry {
 // Everything is derived from live marks, so a player who stops walking
 // slides down the board on their own as their marks expire. Nothing to
 // reset, no season to run.
+// NEVER computed on the request path. A reader gets whatever is cached,
+// and a miss returns an empty board while the work happens behind them.
+//
+// This is not belt-and-braces, it is the whole point. Partitioning the
+// city is by far the most expensive thing this service does, and awaiting
+// it inside a request meant one HTTP call could hold a shared vCPU for a
+// minute: /territory/leaderboard timed out at 60s and /health — which
+// touches nothing at all — answered 503 after 38s right behind it. The
+// board is a standing, nobody is watching it tick, and an empty first
+// response that fills in seconds later is a far better failure than an
+// API that stops answering.
+//
+// Cold start returns nothing, deliberately: clearLeaderboardCache() runs
+// on boot, so the alternative is that the first reader after every single
+// deploy pays for the whole city.
 export async function territoryLeaderboard(): Promise<LeaderboardEntry[]> {
   const cached = await readCachedBoard();
   if (cached) return cached;
-  // Single-flight. The cache is what keeps this off the hot path, so the
-  // moment it expires is exactly the moment every waiting reader misses at
-  // once — and this partition covers the whole city, not one screen. Ten
-  // simultaneous global partitions is how a five-minute cache still
+  // Single-flight — on a miss every waiting reader misses at once, and ten
+  // simultaneous city-wide partitions is how a five-minute cache still
   // manages to take the process down.
-  boardInFlight ??= computeLeaderboard().finally(() => {
-    boardInFlight = null;
-  });
-  return boardInFlight;
+  boardInFlight ??= computeLeaderboard()
+    .catch((err) => {
+      console.warn('[territory] leaderboard compute failed:', err);
+      return [] as LeaderboardEntry[];
+    })
+    .finally(() => {
+      boardInFlight = null;
+    });
+  // Started, not awaited.
+  void boardInFlight;
+  return [];
 }
 
 let boardInFlight: Promise<LeaderboardEntry[]> | null = null;
@@ -1003,11 +1020,17 @@ async function computeLeaderboard(): Promise<LeaderboardEntry[]> {
     .from(schema.territoryMarks)
     .where(gte(schema.territoryMarks.createdAt, liveSince()));
 
-  // A far higher patch ceiling than the map view uses: this is the whole
-  // city and cutting it to a screenful would score eighteen owners and
-  // call it a leaderboard. It can afford the work — it runs once per cache
-  // period, not once per sync, and it yields while it runs.
-  const scored = [...(await partitionShapes(rows, { maxPatches: T.leaderboardMaxPatches }))]
+  // Wider than the map view — a board cut to a screenful would score
+  // eighteen owners and call it a leaderboard — but bitten far more
+  // coarsely. The map needs exact borders because you are looking straight
+  // at them; a ranking needs the ORDER to be right, and dropping the small
+  // bites moves an area by a few percent without moving anyone up or down.
+  // That trade is what makes this affordable on one shared vCPU, where the
+  // uncapped version ran for over a minute.
+  const scored = [...(await partitionShapes(rows, {
+    maxPatches: T.leaderboardMaxPatches,
+    maxBites: T.leaderboardMaxBites,
+  }))]
     .map(([userId, shapes]) => ({ userId, areaM2: Math.round(totalAreaM2(shapes)) }))
     .filter((e) => e.areaM2 > 0)
     .sort((a, b) => b.areaM2 - a.areaM2)

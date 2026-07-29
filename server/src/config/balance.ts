@@ -355,9 +355,16 @@ export const balance = {
     // few minutes of lag is invisible.
     leaderboardSize: 10,
     leaderboardCacheMs: 5 * 60 * 1000,
-    // Patch ceiling for the board's city-wide partition. Much larger than
-    // the map's, because this one is meant to cover everybody — but still
-    // bounded, since the pair loop behind it is quadratic.
-    leaderboardMaxPatches: 150,
+    // Patch ceiling for the board's city-wide partition. Larger than the
+    // map's, because this one is meant to cover everybody — but nothing
+    // like unbounded: the pair loop behind it is quadratic and the machine
+    // it runs on is a single shared vCPU, where the 150-patch version took
+    // over a minute and starved everything else in the process.
+    leaderboardMaxPatches: 60,
+    // And a much tighter bite cap than the map's 200. The map needs exact
+    // borders because you are looking straight at them; the board needs
+    // the ORDER to be right, and the dropped bites are small enough to
+    // move an area a few percent without moving anyone up or down.
+    leaderboardMaxBites: 24,
   },
 } as const;
