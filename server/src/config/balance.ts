@@ -239,6 +239,14 @@ export const balance = {
     // neighbours to actually meet without a lone mark laying claim to
     // half a district.
     claimReachM: 150,
+    // How many of each neighbour's marks the map draws, newest first.
+    //
+    // A shape needs shapeMinMarks to exist, so showing fewer than that
+    // makes territory look like it appeared from nothing — which is
+    // exactly how one dot beside a zone reads. Enough to see the cluster
+    // the hull was drawn around, few enough that fourteen neighbours are
+    // still a map rather than a scatter plot.
+    rivalMarksPerOwner: 4,
     // How long a rival's fresh mark is worth showing. Long enough that a
     // 15s sync can't miss one, short enough that it reads as "that just
     // happened" rather than a scatter of everyone's history.
