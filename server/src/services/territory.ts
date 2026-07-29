@@ -322,6 +322,11 @@ async function placeMark(
       .where(eq(schema.companionState.userId, userId));
   });
 
+  // Ground here just changed, so any partition cached for this cell is
+  // stale. Dropping it costs nothing and means the border moves on the
+  // very next sync instead of waiting out the bucket.
+  invalidatePartitionCell(pos);
+
   return {
     enclosed,
     renewed,
@@ -812,11 +817,18 @@ async function partitionShapes(
 // One partition, shared by everyone looking at the same neighbourhood.
 //
 // The work is identical for two clients standing on the same street, and
-// it's the most expensive thing the sync path does — so it's computed once
-// and handed out. Keyed on a coarse grid cell plus a signature of the
-// marks themselves, so a mark landing anywhere in view invalidates the
-// entry immediately: this can go stale by up to partitionCacheMs on
-// timing, but never on content.
+// it is BY FAR the most expensive thing the sync path does — measured on
+// prod, 2.47s of a 3.57s sync, 69%. So it is computed once and handed out.
+//
+// Keyed on a coarse grid cell and a time bucket, with one explicit
+// invalidation: a mark landing inside a cell drops that cell immediately.
+// That combination is the point. A pure time bucket is cheap but lets a
+// border sit still for a minute after someone visibly marked; invalidating
+// on ANY mark anywhere in view is correct and useless, because the view is
+// 5km across and thirty bots between them mark every eight seconds, so
+// nothing would ever survive to be reused. Narrow invalidation gives
+// freshness exactly where something happened and cheapness everywhere
+// else.
 interface PartitionCacheEntry {
   at: number;
   // Stored as the promise, not the result, so concurrent callers that miss
@@ -826,11 +838,27 @@ interface PartitionCacheEntry {
 }
 const partitionCache = new Map<string, PartitionCacheEntry>();
 
+// Which grid cell a position falls in. Shared by the reader and the
+// invalidator so the two can never disagree about what a cell is.
+function cellOf(pos: LatLng): string {
+  const cell = T.partitionCacheCellDeg;
+  return `${Math.round(pos.lat / cell)}:${Math.round(pos.lng / cell)}`;
+}
+
+// A mark just landed here, so anything cached for this cell is now a lie.
+// Deliberately ONE cell — see the note above about why invalidating the
+// whole visible radius would empty the cache permanently.
+function invalidatePartitionCell(pos: LatLng): void {
+  const prefix = `${cellOf(pos)}:`;
+  for (const key of partitionCache.keys()) {
+    if (key.startsWith(prefix)) partitionCache.delete(key);
+  }
+}
+
 async function partitionCached(
   pos: LatLng,
   marks: OwnedMark[],
 ): Promise<Map<string, TerritoryShape[]>> {
-  const cell = T.partitionCacheCellDeg;
   const now = Date.now();
   // Keyed on the cell AND a time bucket — deliberately NOT on the marks.
   //
@@ -846,7 +874,7 @@ async function partitionCached(
   // and the mark dot itself is drawn from the collect response the moment
   // it lands, so nothing the player did is ever waiting on this.
   const bucket = Math.floor(now / T.partitionCacheMs);
-  const key = `${Math.round(pos.lat / cell)}:${Math.round(pos.lng / cell)}:${bucket}`;
+  const key = `${cellOf(pos)}:${bucket}`;
 
   const hit = partitionCache.get(key);
   if (hit) return hit.work;

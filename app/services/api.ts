@@ -240,6 +240,16 @@ export const api = {
   // /dogs/nearby + /state calls. One round-trip instead of four; the
   // client store can also collapse the resulting state into a single
   // set() so subscribers re-render once instead of four times.
+  // Positions only. Cheap enough to poll several times faster than the
+  // full sync — see the server route for why the two are split.
+  presence: (pos: LatLng) => {
+    const params = new URLSearchParams({
+      lat: String(pos.lat),
+      lng: String(pos.lng),
+    });
+    return req<{ players: NearbyPlayer[] }>(`/presence?${params.toString()}`);
+  },
+
   syncMap: (pos: LatLng, opts?: { parks?: LatLng[]; radiusM?: number }) => {
     const params = new URLSearchParams({
       lat: String(pos.lat),
