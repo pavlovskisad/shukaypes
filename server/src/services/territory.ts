@@ -356,39 +356,68 @@ async function placeMark(
 // Called from /collect/path with a position the server has already
 // validated as reachable — and with the COMPANION's position, since it's
 // the dog that marks, not the walker.
-// Is this spot ground the owner ACTUALLY HOLDS right now?
+// Is this spot ground the owner still holds?
 //
-// Asked of the partition — the same computation that decides what gets
-// painted — and not of the hull of their own marks. That distinction is
-// the whole point, and getting it wrong stranded a real player:
+// The rule it serves — don't spend a mark where it changes nothing — used
+// to ask whether the spot was inside the hull of the owner's OWN MARKS.
+// That was an adequate proxy while marking DELETED a rival's marks,
+// because losing ground meant losing the marks that drew it. It stopped
+// being one the moment nothing gets deleted, and it stranded a real player:
 //
-//   they held a patch, logged off, a neighbour walked in and took it. Their
-//   marks all still stood, because nothing is deleted any more, so the hull
-//   of their own dots still enclosed the spot. The old test asked only that
-//   question, answered "yes, yours", and refused to mark — forever. The dog
-//   wandered its own former territory declining to reclaim it, while the map
-//   plainly showed the ground as somebody else's.
+//   they held a patch, logged off, a neighbour walked in and took it. Every
+//   mark of theirs still stood, so the hull still enclosed the spot, so the
+//   answer stayed "yours" forever. The dog wandered its own former
+//   territory declining to reclaim it, while the map plainly showed the
+//   ground as somebody else's. Reproduced: hull says mine, ground actually
+//   held 0.00 ha.
 //
-// A rule about whether marking would change anything has to be read off
-// the thing that draws the borders. Anything else can disagree with what
-// the player is looking at, and when it does the dog appears broken.
+// So it now also asks whether anyone NEWER is nearby, because that is what
+// decides the overlap. Deliberately a cheap, conservative approximation of
+// the partition rather than the partition itself: asking the real thing
+// means a 5km mark scan plus a fresh partition per attempt, in a different
+// cell each time, which at thirty bots is fifteen a minute that all miss
+// the cache and evict the cell a player is actually looking at. That is how
+// the CPU problem this file spent a day escaping would come straight back.
 //
-// No grace band here, unlike isHome: an edge you are standing ON is
-// exactly where a mark should be allowed to land, because that is how a
-// territory grows.
+// The approximation errs toward ALLOWING marks, which is the safe
+// direction: a mark that turns out to be redundant costs one cooldown, and
+// a mark wrongly refused is a dog that looks broken.
 async function standsOnHeldGround(userId: string, pos: LatLng): Promise<boolean> {
-  const all = await marksNear(pos, T.rivalViewRadiusM, { limit: T.partitionMarkLimit });
-  if (all.length === 0) return false;
-  const shapes = (await partitionCached(pos, all)).get(userId) ?? [];
-  for (const s of shapes) {
-    if (s.kind !== 'area') continue;
-    if (!pointInPolygon(pos, s.points)) continue;
-    // Standing in a pocket a neighbour holds inside our own shape is not
-    // standing on our ground.
-    if ((s.holes ?? []).some((h) => pointInPolygon(pos, h))) continue;
-    return true;
+  const own = await liveMarks(userId);
+  if (own.length < T.shapeMinMarks) return false;
+
+  const freshestAt = new Map<string, number>();
+  for (const m of own) {
+    const k = `${m.lat.toFixed(5)},${m.lng.toFixed(5)}`;
+    freshestAt.set(k, Math.max(freshestAt.get(k) ?? 0, m.at.getTime()));
   }
-  return false;
+
+  // Which of our own territories covers this spot, and how fresh it is.
+  let ourNewest = 0;
+  for (const cluster of clusterPoints(
+    own.map((m) => ({ lat: m.lat, lng: m.lng })),
+    T.shapeLinkM,
+  )) {
+    if (cluster.length < T.shapeMinMarks) continue;
+    const hull = convexHull(cluster);
+    if (hull.length < 3 || !pointInPolygon(pos, hull)) continue;
+    ourNewest = cluster.reduce(
+      (t, p) => Math.max(t, freshestAt.get(`${p.lat.toFixed(5)},${p.lng.toFixed(5)}`) ?? 0),
+      0,
+    );
+    break;
+  }
+  if (ourNewest === 0) return false;
+
+  // Anyone who marked here more recently has the overlap, so this ground is
+  // theirs and marking it takes it back. Scoped to shapeLinkM: that is how
+  // far marks reach to form one territory, so it is the range within which
+  // a neighbour's shape could plausibly cover this spot.
+  const rivals = await marksNear(pos, T.shapeLinkM, { exceptUserId: userId });
+  for (const r of rivals) {
+    if (r.at.getTime() > ourNewest) return false;
+  }
+  return true;
 }
 
 export async function markIfDue(
