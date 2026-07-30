@@ -496,6 +496,12 @@ export async function seedBotTerritory(
   botName: string,
   around: LatLng,
 ): Promise<void> {
+  // Seeding off entirely — bots earn their ground by walking. Checked
+  // before the query, because this runs on every bot's marking tick and a
+  // round trip to learn "nothing to do" thirty times a minute is a
+  // round trip wasted.
+  if (T.botSeedMarks <= 0) return;
+
   const existing = await db
     .select({ id: schema.territoryMarks.id })
     .from(schema.territoryMarks)

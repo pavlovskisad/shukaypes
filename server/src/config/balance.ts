@@ -351,7 +351,20 @@ export const balance = {
     // in quick succession from stacking marks, not to set the tempo. The
     // tempo lives in bots.ts (stroll chance, speed, dwell).
     botMarkCooldownMs: 2 * 60 * 1000,
-    botSeedMarks: 5,
+    // Bots start with NOTHING and claim by walking, like a player does.
+    //
+    // Was 5, which handed every bot a finished patch the instant the
+    // process booted — five marks clears the three-mark minimum outright,
+    // and buffering the hull turns it into ~500m of ground before the dog
+    // has taken a step. Useful when the point was having something to raid
+    // on day one; the wrong thing entirely when the point is watching a
+    // city get claimed.
+    //
+    // At 0 a bot needs three marks before it holds anything at all, so the
+    // map fills over roughly the first quarter of an hour instead of in the
+    // first second. It also makes elimination mean something: a bot driven
+    // off its ground has to walk it back rather than respawning a patch.
+    botSeedMarks: 0,
     botSeedSpreadM: 260,
     // Ceiling on the marks one bot holds at once. Their patch should grow
     // as they walk it and then STOP: a bot pacing the same streets for
