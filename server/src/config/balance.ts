@@ -220,7 +220,20 @@ export const balance = {
     // ground. Beyond the link distance a mark starts its own island,
     // which is what stops one stray mark across town from stretching a
     // single triangle over half the city.
-    shapeLinkM: 350,
+    // How far apart two marks can be and still count as ONE territory.
+    //
+    // Raised 350 -> 1000 so a dog builds a main territory rather than a
+    // scatter of separate patches. At 350 anything past a few streets
+    // started a new island, which with the halo gone looked like confetti;
+    // at 1000 a normal day's walking links into one shape.
+    //
+    // Worth knowing what this buys and costs, because it is a convex hull:
+    // linking two marks a kilometre apart claims the whole span between
+    // them, including ground never walked. That is the same over-claiming
+    // the 150m halo was doing, just earned by walking further rather than
+    // handed out for free — and it is bounded by where the dog has actually
+    // been at both ends, which the halo never was.
+    shapeLinkM: 1000,
     shapeMinMarks: 3,
     // Bound on the geometry work per mark. Older marks past this count
     // are ignored for shape-building (they're near expiry anyway).

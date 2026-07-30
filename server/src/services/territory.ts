@@ -356,27 +356,37 @@ async function placeMark(
 // Called from /collect/path with a position the server has already
 // validated as reachable — and with the COMPANION's position, since it's
 // the dog that marks, not the walker.
-// Is this spot already inside ground the owner holds?
+// Is this spot ground the owner ACTUALLY HOLDS right now?
 //
-// Marking there does nothing anyone can see: the hull is unchanged, so no
-// border moves, and the only effect is that the cooldown is spent. The dog
-// stands in the middle of its own park announcing it has refreshed a scent
-// while the map sits still. Every mark should either take ground or extend
-// it, which means the dog has to be at the frontier to make one.
+// Asked of the partition — the same computation that decides what gets
+// painted — and not of the hull of their own marks. That distinction is
+// the whole point, and getting it wrong stranded a real player:
 //
-// Tested against the raw hull of the owner's live marks, deliberately NOT
-// the buffered claim the map draws. The claim reaches claimReachM past the
-// hull, so testing against that would forbid marking anywhere within 150m
-// of the edge — and since a mark just outside the hull is exactly how a
-// territory grows, that would not slow expansion down, it would stop it.
-async function insideOwnGround(userId: string, pos: LatLng): Promise<boolean> {
-  const own = await liveMarks(userId);
-  if (own.length < T.shapeMinMarks) return false;
-  const pts = own.map((m) => ({ lat: m.lat, lng: m.lng }));
-  for (const cluster of clusterPoints(pts, T.shapeLinkM)) {
-    if (cluster.length < T.shapeMinMarks) continue;
-    const hull = convexHull(cluster);
-    if (hull.length >= 3 && pointInPolygon(pos, hull)) return true;
+//   they held a patch, logged off, a neighbour walked in and took it. Their
+//   marks all still stood, because nothing is deleted any more, so the hull
+//   of their own dots still enclosed the spot. The old test asked only that
+//   question, answered "yes, yours", and refused to mark — forever. The dog
+//   wandered its own former territory declining to reclaim it, while the map
+//   plainly showed the ground as somebody else's.
+//
+// A rule about whether marking would change anything has to be read off
+// the thing that draws the borders. Anything else can disagree with what
+// the player is looking at, and when it does the dog appears broken.
+//
+// No grace band here, unlike isHome: an edge you are standing ON is
+// exactly where a mark should be allowed to land, because that is how a
+// territory grows.
+async function standsOnHeldGround(userId: string, pos: LatLng): Promise<boolean> {
+  const all = await marksNear(pos, T.rivalViewRadiusM, { limit: T.partitionMarkLimit });
+  if (all.length === 0) return false;
+  const shapes = (await partitionCached(pos, all)).get(userId) ?? [];
+  for (const s of shapes) {
+    if (s.kind !== 'area') continue;
+    if (!pointInPolygon(pos, s.points)) continue;
+    // Standing in a pocket a neighbour holds inside our own shape is not
+    // standing on our ground.
+    if ((s.holes ?? []).some((h) => pointInPolygon(pos, h))) continue;
+    return true;
   }
   return false;
 }
@@ -419,7 +429,7 @@ export async function markIfDue(
   if (state.hunger < T.minHunger) return { marked: false, reason: 'hungry' };
   // Last, because it costs a query — and by here the cooldown has already
   // elapsed, so this runs at most once per cooldown rather than per sync.
-  if (T.markOnlyOutsideOwnGround && (await insideOwnGround(userId, pos))) {
+  if (T.markOnlyOutsideOwnGround && (await standsOnHeldGround(userId, pos))) {
     return { marked: false, reason: 'own-ground' };
   }
 
@@ -458,7 +468,7 @@ export async function markAsBot(botId: string, botName: string, pos: LatLng): Pr
   // neighbour, instead of it circling its own park topping up a scent
   // nobody can see. Checked before the ceiling logic below, so the
   // at-cap renewal can't smuggle a home-ground mark back in.
-  if (T.markOnlyOutsideOwnGround && (await insideOwnGround(botId, pos))) return;
+  if (T.markOnlyOutsideOwnGround && (await standsOnHeldGround(botId, pos))) return;
   if (live.length >= T.botMaxMarks) {
     // At the ceiling. What happens next depends on WHERE it's standing.
     const rivals = await marksNear(pos, T.contestM, { exceptUserId: botId });
