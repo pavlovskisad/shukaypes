@@ -277,7 +277,7 @@ export function clipToConvex(poly: Pt[], convex: Pt[]): Pt[] {
 // Minkowski sum with a disc, approximated: replace every vertex with a
 // ring of points at `padM` and re-hull. Convexity is preserved, which
 // matters because every clipper here (clipHalfPlane, clipToConvex,
-// voronoiCellWithin) quietly assumes it.
+// clipToConvex) quietly assumes it.
 export function bufferConvex(ring: Pt[], padM: number, steps = 10): Pt[] {
   if (ring.length < 3 || padM <= 0) return ring;
   const pts: Pt[] = [];

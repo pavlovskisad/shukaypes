@@ -33,9 +33,16 @@
 //   • near YOUR OWN live marks  → they renew: their clocks restart, so
 //     walking the same streets keeps that ground alive against decay.
 //     Only at the EDGE, though — see below.
-//   • near a RIVAL's live marks → the nearest couple are simply GONE, and
-//     their shape shrinks. A raid row is written so the loser hears about
-//     it on their next sync.
+//   • inside a RIVAL's range     → nothing of theirs is touched. Your dots
+//     and theirs both stand, and the ground the two shapes both cover goes
+//     to whoever marked there most recently — so your new shape takes
+//     exactly the piece it covers and theirs is redrawn around it. A raid
+//     row is written so they hear you were there.
+//
+// TERRITORY IS THE POLYGON BETWEEN YOUR DOTS. Nothing is grown outward and
+// nothing is inflated to meet a neighbour. Two owners share a border when
+// one of them has actually walked into the other's ground, and open
+// country between two dogs that never meet stays open country.
 //
 // NO MARKING ON GROUND YOU ALREADY HOLD. A mark inside your own hull
 // moves no border and changes nothing anyone can see — it just spends the
@@ -79,7 +86,6 @@ import {
   polygonAreaM2,
   pointInPolygon,
   localProjection,
-  voronoiCellWithin,
   clipToConvex,
   bufferConvex,
   type Pt,
@@ -259,12 +265,22 @@ async function placeMark(
     ) ?? [];
   const enclosed = cluster.length === T.shapeMinMarks;
 
-  // A rival mark removes what it lands on. No weakening step: one mark,
-  // one claim, one mark to take it.
+  // NOTHING IS DELETED. A mark next to a rival's used to remove it, which
+  // meant the only way to take ground was to erase the evidence somebody
+  // else had ever been there — and it made a border impossible to read,
+  // because what you saw was the wreckage of past visits rather than who
+  // currently holds what.
+  //
+  // Ground changes hands by GEOMETRY instead: your dots and theirs both
+  // stand, both hulls are drawn, and wherever the two overlap it goes to
+  // whoever marked there most recently (see the partition). So walking
+  // into someone's range and dropping a couple of dots takes exactly the
+  // piece your new shape covers and redraws theirs around it — and they
+  // take it back by walking in themselves, not by out-deleting you.
   const hits = rivals.slice(0, T.contestMaxHits);
-  const killedIds = hits.map((m) => m.id);
-  // One raid per victim, not per mark — losing two marks to one rival
-  // walking past is a single event to the person it happens to.
+  // Still worth telling them somebody was here. One raid per rival, not
+  // per mark: a neighbour walking through is a single event to the person
+  // it happens to.
   const victims = new Set(hits.map((m) => m.userId));
 
   const now = new Date();
@@ -285,11 +301,6 @@ async function placeMark(
         .set({ createdAt: now })
         .where(inArray(schema.territoryMarks.id, own.map((m) => m.id)));
     }
-    if (killedIds.length) {
-      await tx
-        .delete(schema.territoryMarks)
-        .where(inArray(schema.territoryMarks.id, killedIds));
-    }
     for (const victimId of victims) {
       // Bots don't read their mail.
       if (isBot(victimId)) continue;
@@ -300,7 +311,9 @@ async function placeMark(
         raiderName,
         lat: pos.lat,
         lng: pos.lng,
-        killed: true,
+        // Nothing of theirs was destroyed — this says "somebody was on
+        // your ground", which is now what a raid actually is.
+        killed: false,
         createdAt: now,
       });
     }
@@ -330,8 +343,11 @@ async function placeMark(
   return {
     enclosed,
     renewed,
+    // How many of their dots we stood among. Not a kill count any more —
+    // a measure of how deep into someone else's range this landed, which
+    // is what decides how much of it the new shape takes.
     stolen: hits.length,
-    captured: killedIds.length > 0,
+    captured: hits.length > 0,
   };
 }
 
@@ -496,6 +512,12 @@ export async function seedBotTerritory(
   botName: string,
   around: LatLng,
 ): Promise<void> {
+  // Seeding off entirely — bots earn their ground by walking. Checked
+  // before the query, because this runs on every bot's marking tick and a
+  // round trip to learn "nothing to do" thirty times a minute is a
+  // round trip wasted.
+  if (T.botSeedMarks <= 0) return;
+
   const existing = await db
     .select({ id: schema.territoryMarks.id })
     .from(schema.territoryMarks)
@@ -547,6 +569,9 @@ interface OwnedMark {
   userId: string;
   lat: number;
   lng: number;
+  // When it was made. The partition needs this: where two territories
+  // overlap, the ground goes to whoever marked there most recently.
+  at: Date;
 }
 
 // Prepare a ring for the clipper: snap to a grid, drop points the snap
@@ -610,13 +635,17 @@ function breathe(): Promise<void> {
 
 // Turn every owner's marks into the shapes they actually hold.
 //
-// Two passes. The first builds every owner's raw hulls; the second cuts
-// each hull back where a neighbour's hull overlaps it and their mark is
-// the nearer one. Two passes rather than one because a bite out of your
-// range has to be exactly the ground your neighbour gains — subtracting a
-// rival's full Voronoi cell (the one-pass version) took 100,000m² off a
-// walked loop and handed the neighbour only the 7,500m² their own hull
-// covered, leaving the rest owned by nobody.
+// Two passes. The first builds every owner's hulls; the second cuts each
+// hull back wherever a neighbour's hull overlaps it AND that neighbour
+// marked there more recently. What one side loses is exactly what the
+// other side's own shape covers, so the two always sum to the union of the
+// hulls — nothing is double-claimed and nothing is orphaned.
+//
+// An earlier version split the shared ground by a Voronoi cell per rival
+// mark, which put a border halfway between two dogs' dots rather than
+// along the shape either of them had walked. It was also what made this
+// expensive: a patch ringed by neighbours was handed ~145 clip polygons,
+// against at most one per neighbour now.
 //
 // Async, and it yields to the event loop between patches. Not because any
 // of this is IO — it's pure CPU — but because pure CPU on the hot path is
@@ -633,25 +662,34 @@ async function partitionShapes(
   const startedAt = Date.now();
 
   const proj = localProjection(marks[0]!);
-  const byOwner = new Map<string, LatLng[]>();
+  const byOwner = new Map<string, OwnedMark[]>();
   for (const m of marks) {
     const list = byOwner.get(m.userId);
-    if (list) list.push({ lat: m.lat, lng: m.lng });
-    else byOwner.set(m.userId, [{ lat: m.lat, lng: m.lng }]);
+    if (list) list.push(m);
+    else byOwner.set(m.userId, [m]);
+  }
+  // Newest mark at a given spot, so a cluster can be dated. Keyed loosely
+  // (5 decimal places, about a metre) because the hull's vertices are
+  // copies of mark positions, not the mark objects themselves.
+  const markedAt = new Map<string, number>();
+  for (const m of marks) {
+    const k = `${m.lat.toFixed(5)},${m.lng.toFixed(5)}`;
+    markedAt.set(k, Math.max(markedAt.get(k) ?? 0, m.at.getTime()));
   }
 
   // Pass 1 — raw shapes, before anyone's claim is cut back.
   interface Patch {
     ownerId: string;
-    // What this owner is CLAIMING: the hull of their marks grown outward
-    // by reachM, so neighbouring ranges overlap and the partition below
-    // can draw a shared border through the overlap. Un-grown hulls left a
-    // strip of nobody's ground between every pair of patches.
+    // What this owner holds: the polygon between their own dots, grown by
+    // claimReachM — which is now 0, so in practice exactly the hull.
     claim: LatLng[];
     claimXY: Pt[];
     marksXY: Pt[];
     centre: LatLng;
     reachM: number;
+    // The freshest mark in this cluster. Decides who keeps ground two
+    // territories both cover.
+    newestAt: number;
   }
   const patches: Patch[] = [];
   const lines = new Map<string, TerritoryShape[]>();
@@ -662,7 +700,8 @@ async function partitionShapes(
     else lines.set(ownerId, [{ kind: 'line', points }]);
   };
 
-  for (const [ownerId, own] of byOwner) {
+  for (const [ownerId, ownMarks] of byOwner) {
+    const own = ownMarks.map((m) => ({ lat: m.lat, lng: m.lng }));
     for (const cluster of clusterPoints(own, T.shapeLinkM)) {
       if (cluster.length === 2) {
         addLine(ownerId, cluster);
@@ -689,6 +728,10 @@ async function partitionShapes(
         centre,
         reachM:
           hull.reduce((r, p) => Math.max(r, distanceMeters(centre, p)), 0) + T.claimReachM,
+        newestAt: cluster.reduce(
+          (t, p) => Math.max(t, markedAt.get(`${p.lat.toFixed(5)},${p.lng.toFixed(5)}`) ?? 0),
+          0,
+        ),
       });
     }
   }
@@ -712,26 +755,41 @@ async function partitionShapes(
 
     for (const other of considered) {
       if (other.ownerId === patch.ownerId) continue;
-      // Hulls too far apart to touch can't take anything from each other.
+      // Territories too far apart to touch can't take anything from each
+      // other.
       if (distanceMeters(patch.centre, other.centre) > patch.reachM + other.reachM) continue;
-      // Only the ground the two actually share is ever in dispute. With
-      // grown claims that overlap is a real band rather than an occasional
-      // accident, which is what turns a gap between ranges into a border.
-      const contested = clipToConvex(patch.claimXY, other.claimXY);
-      if (contested.length < 3) continue;
-      // Inside that, whichever of THEIR marks beats all of ours takes it.
-      // Their cells overlap each other, which is fine — the difference
-      // below unions them anyway.
+
+      // NEWEST DOTS WIN THE OVERLAP.
       //
-      // Ground exactly equidistant (two owners marked the same spot) goes
-      // to whichever id sorts first. The comparison is the same from both
-      // sides, so the pair agrees on who gets it — without that they both
-      // concede and the ground belongs to nobody.
-      const tieWins = other.ownerId < patch.ownerId;
-      for (const r of other.marksXY) {
-        const cell = voronoiCellWithin(contested, r, patch.marksXY, tieWins);
-        if (cell.length >= 3 && ringAreaM2(cell) >= MIN_BITE_M2) bites.push(cell);
-      }
+      // Both hulls are real and both stay drawn; the only question is who
+      // keeps the ground they both cover. Whoever marked there most
+      // recently does. So walking into someone's range and dropping a
+      // couple of dots extends your hull over part of theirs and takes
+      // exactly that piece, and their polygon is redrawn around it — and
+      // they take it back the same way, by walking in, not by deleting
+      // anything of yours.
+      //
+      // Ties (both marked in the same millisecond) go to whichever id
+      // sorts first. The comparison reads identically from both sides, so
+      // the pair always agrees on the answer — without that they would
+      // both concede and the ground would belong to nobody.
+      const theirsIsNewer =
+        other.newestAt > patch.newestAt ||
+        (other.newestAt === patch.newestAt && other.ownerId < patch.ownerId);
+      if (!theirsIsNewer) continue;
+
+      // One clip polygon per overlapping neighbour — the intersection of
+      // two convex hulls, which is itself convex.
+      //
+      // This replaced a Voronoi cell per rival MARK, which is the same
+      // answer to a question nobody was asking: it split the shared ground
+      // by proximity, so a border sat halfway between two dogs' dots
+      // rather than along the shape either of them had actually walked.
+      // It was also what made this expensive — a patch ringed by
+      // neighbours was handed ~145 clip polygons, and it is now handed one
+      // per neighbour.
+      const overlap = clipToConvex(patch.claimXY, other.claimXY);
+      if (overlap.length >= 3 && ringAreaM2(overlap) >= MIN_BITE_M2) bites.push(overlap);
     }
 
     // Largest bites first, then capped. A patch surrounded by neighbours
@@ -1181,6 +1239,7 @@ async function computeLeaderboard(): Promise<LeaderboardEntry[]> {
       userId: schema.territoryMarks.userId,
       lat: schema.territoryMarks.lat,
       lng: schema.territoryMarks.lng,
+      at: schema.territoryMarks.createdAt,
     })
     .from(schema.territoryMarks)
     .where(gte(schema.territoryMarks.createdAt, liveSince()));
