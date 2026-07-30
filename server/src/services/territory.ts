@@ -33,9 +33,16 @@
 //   • near YOUR OWN live marks  → they renew: their clocks restart, so
 //     walking the same streets keeps that ground alive against decay.
 //     Only at the EDGE, though — see below.
-//   • near a RIVAL's live marks → the nearest couple are simply GONE, and
-//     their shape shrinks. A raid row is written so the loser hears about
-//     it on their next sync.
+//   • inside a RIVAL's range     → nothing of theirs is touched. Your dots
+//     and theirs both stand, and the ground the two shapes both cover goes
+//     to whoever marked there most recently — so your new shape takes
+//     exactly the piece it covers and theirs is redrawn around it. A raid
+//     row is written so they hear you were there.
+//
+// TERRITORY IS THE POLYGON BETWEEN YOUR DOTS. Nothing is grown outward and
+// nothing is inflated to meet a neighbour. Two owners share a border when
+// one of them has actually walked into the other's ground, and open
+// country between two dogs that never meet stays open country.
 //
 // NO MARKING ON GROUND YOU ALREADY HOLD. A mark inside your own hull
 // moves no border and changes nothing anyone can see — it just spends the
@@ -628,13 +635,17 @@ function breathe(): Promise<void> {
 
 // Turn every owner's marks into the shapes they actually hold.
 //
-// Two passes. The first builds every owner's raw hulls; the second cuts
-// each hull back where a neighbour's hull overlaps it and their mark is
-// the nearer one. Two passes rather than one because a bite out of your
-// range has to be exactly the ground your neighbour gains — subtracting a
-// rival's full Voronoi cell (the one-pass version) took 100,000m² off a
-// walked loop and handed the neighbour only the 7,500m² their own hull
-// covered, leaving the rest owned by nobody.
+// Two passes. The first builds every owner's hulls; the second cuts each
+// hull back wherever a neighbour's hull overlaps it AND that neighbour
+// marked there more recently. What one side loses is exactly what the
+// other side's own shape covers, so the two always sum to the union of the
+// hulls — nothing is double-claimed and nothing is orphaned.
+//
+// An earlier version split the shared ground by a Voronoi cell per rival
+// mark, which put a border halfway between two dogs' dots rather than
+// along the shape either of them had walked. It was also what made this
+// expensive: a patch ringed by neighbours was handed ~145 clip polygons,
+// against at most one per neighbour now.
 //
 // Async, and it yields to the event loop between patches. Not because any
 // of this is IO — it's pure CPU — but because pure CPU on the hot path is
