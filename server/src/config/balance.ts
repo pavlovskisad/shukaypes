@@ -227,18 +227,22 @@ export const balance = {
     shapeMarkWindow: 300,
     // How far a claim reaches PAST the hull of its own marks.
     //
-    // Without it a range stopped dead at the hull, so unless two owners'
-    // hulls happened to overlap there was a strip between them belonging
-    // to nobody — a border that read as a gap. Grown claims overlap, and
-    // the partition splits the overlap along the bisector, so neighbours
-    // end up sharing an edge and a mark landing near it visibly pushes
-    // that edge rather than punching a hole and leaving no-man's-land.
+    // ZERO. A territory is the polygon between your dots and nothing more.
     //
-    // Sized against the spacing rules around it: bot homes sit ≥420m
-    // apart and their patches run to ~260m, so 150m is enough for
-    // neighbours to actually meet without a lone mark laying claim to
-    // half a district.
-    claimReachM: 150,
+    // This was 150m, on the theory that claims had to overlap for
+    // neighbours to share a border rather than leave a strip of nobody's
+    // ground between them. That solved the wrong problem, and expensively:
+    // on a minimal three-dot patch, 94% of the ground claimed was halo
+    // rather than anywhere the dog had walked (13.66 ha against 0.85), and
+    // even a 400m walked loop came out 65% halo. It is what made three
+    // dots look like an island.
+    //
+    // Borders now come from territories genuinely overlapping — you walked
+    // into someone's range — rather than from inflating everyone until
+    // they bump into each other. Two neighbours who never walk near each
+    // other simply do not share a border, which is honest: there is open
+    // ground between them because neither has been there.
+    claimReachM: 0,
     // How many of each neighbour's marks the map draws, newest first.
     //
     // A shape needs shapeMinMarks to exist, so showing fewer than that
@@ -253,17 +257,14 @@ export const balance = {
     rivalMarkFlashMs: 45_000,
     // CONTEST — the PvP half. Ground changes hands where marks overlap.
     //
-    // A rival marking this close to one of yours weakens it by one; at
-    // zero it's gone and your shape shrinks to the hull of what's left.
-    // Sized just under the spacing rule so a rival has to actually walk
-    // onto your ground to touch it rather than clip it from across the
-    // street, and so a walk THROUGH your range costs you a mark or two —
-    // not the whole thing.
+    // How close a rival's dot has to be for this mark to count as landing
+    // ON them — which no longer removes anything, it just decides whether
+    // they hear about it and whether the dog says something. Ground
+    // actually changes hands through the hulls overlapping, not here.
     contestM: 110,
-    // Ceiling on how many of your marks one rival mark can hit, nearest
-    // first. Without it a single mark dropped into a dense core would
-    // knock a hole through several at once, which is the opposite of
-    // "the core is expensive to take".
+    // Ceiling on how many of their dots one mark counts as landing among,
+    // nearest first. Only affects the 'how deep in are we' number behind
+    // the bubble now that nothing is deleted.
     contestMaxHits: 2,
     // REFRESH — the defence. Marking within this distance of your own
     // live marks restarts their clocks, so a corner you walk every day
