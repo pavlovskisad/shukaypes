@@ -22,6 +22,7 @@ import { runCronTick } from './cronUtils.js';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { markAsBot, seedBotTerritory } from './territory.js';
+import { isOnWater } from '../data/kyivWater.js';
 
 interface LatLng {
   lat: number;
@@ -123,13 +124,28 @@ function distM(a: LatLng, b: LatLng): number {
 // "neighbours holding ground". A dog you meet should be standing on the
 // ground it defends, and its marks should land there and keep the patch
 // coherent rather than smearing a thin trail across the map.
+// Somewhere on LAND within r of the anchor.
+//
+// Without this the bots walked into the Dnipro and claimed it — a fifth of
+// the box they roam is open water, so it happened constantly and a river
+// full of territory is the one thing on the map that can't be walked to.
+// Tries a handful of bearings and gives up onto the anchor itself, which is
+// always dry: homes are placed on land in the first place.
+function landNear(anchor: LatLng, r: number): LatLng {
+  for (let i = 0; i < 8; i++) {
+    const c = offset(anchor, r);
+    if (!isOnWater(c)) return c;
+  }
+  return anchor;
+}
+
 function newTarget(b: Bot): LatLng {
   // …and about half the time it goes RAIDING instead — far enough out to
   // be standing in a neighbour's range, where its next mark takes ground
   // rather than renewing its own. Still anchored on home, so however far
   // it pushes it always has somewhere to come back to.
   const r = Math.random() < HOME_STROLL_CHANCE ? HOME_STROLL_M : HOME_RANGE_M;
-  return offset(b.home, r);
+  return landNear(b.home, r);
 }
 
 type BotState = 'walk' | 'dwell' | 'offline';
@@ -172,7 +188,10 @@ const GOLDEN_ANGLE = 2.399963;
 
 function planHomes(count: number): LatLng[] {
   const homes: LatLng[] = [];
-  const clear = (c: LatLng) => homes.every((h) => distM(h, c) >= HOME_MIN_SEP_M);
+  // A home in the river gives a bot a patch nobody can reach and a range it
+  // spends its life swimming across. One of thirty landed there before this.
+  const clear = (c: LatLng) =>
+    !isOnWater(c) && homes.every((h) => distM(h, c) >= HOME_MIN_SEP_M);
   for (let i = 0; i < count; i++) {
     const spot = HOTSPOTS[i % HOTSPOTS.length]!;
     let chosen: LatLng | null = clear(spot) ? spot : null;
@@ -188,7 +207,8 @@ function planHomes(count: number): LatLng[] {
       if (clear(cand)) chosen = cand;
     }
     // Nowhere clear within 8 rings — take the hotspot and accept the
-    // crowding rather than pushing a bot out to the edge of the city.
+    // crowding rather than pushing a bot out to the edge of the city. The
+    // hotspots are all real landmarks, so that fallback is always dry.
     homes.push(chosen ?? spot);
   }
   return homes;
@@ -197,7 +217,7 @@ function planHomes(count: number): LatLng[] {
 function spawnBot(i: number, home: LatLng): Bot {
   // Start at home, not scattered across the city — a bot's first marks
   // should land on the patch it's going to defend.
-  const pos = offset(home, HOME_RANGE_M);
+  const pos = landNear(home, HOME_RANGE_M);
   const bot: Bot = {
     id: `bot:${i}`,
     pos,
@@ -250,7 +270,7 @@ function tickBot(b: Bot, dtS: number, now: number): boolean {
     case 'offline':
       if (now >= b.until) {
         // Come back "online" on their own patch — they live there.
-        b.pos = offset(b.home, HOME_RANGE_M);
+        b.pos = landNear(b.home, HOME_RANGE_M);
         b.target = newTarget(b);
         b.speed = rand(SPEED_MIN, SPEED_MAX);
         b.state = 'walk';

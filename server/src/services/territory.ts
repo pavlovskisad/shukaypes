@@ -90,6 +90,7 @@ import {
   type Pt,
 } from '../utils/territoryShapes.js';
 import { redis } from '../db/redis.js';
+import { isOnWater } from '../data/kyivWater.js';
 
 const T = balance.territory;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -132,7 +133,14 @@ export interface MarkResult {
   // Why the dog passed, for the caller's bubble. 'cooldown' / 'too-close'
   // are the boring ones (stay silent); 'hungry' / 'grumpy' are worth
   // voicing occasionally.
-  reason?: 'cooldown' | 'too-close' | 'hungry' | 'grumpy' | 'no-state' | 'own-ground';
+  reason?:
+    | 'cooldown'
+    | 'too-close'
+    | 'hungry'
+    | 'grumpy'
+    | 'no-state'
+    | 'own-ground'
+    | 'water';
   position?: LatLng;
   // Set when this mark is the one that gave its cluster area for the
   // first time — the third of a group. The client makes a moment of it.
@@ -457,6 +465,12 @@ export async function markIfDue(
   }
   if (state.happiness < T.minHappiness) return { marked: false, reason: 'grumpy' };
   if (state.hunger < T.minHunger) return { marked: false, reason: 'hungry' };
+  // Nobody claims the river. The dog's position is clamped to within
+  // MAX_DOG_OFFSET_M of a movement-verified walker, so this is not an
+  // anti-cheat measure — it stops a walk along the embankment from putting
+  // a mark out in open water, and with it a territory nobody could ever
+  // walk to in order to take back.
+  if (isOnWater(pos)) return { marked: false, reason: 'water' };
   // Last, because it costs a query — and by here the cooldown has already
   // elapsed, so this runs at most once per cooldown rather than per sync.
   if (T.markOnlyOutsideOwnGround && (await standsOnHeldGround(userId, pos))) {
@@ -491,6 +505,8 @@ export async function markIfDue(
 // froze at its five seed marks and never grew no matter how far they
 // walked.
 export async function markAsBot(botId: string, botName: string, pos: LatLng): Promise<void> {
+  // Same rule the player's dog follows — no claiming open water.
+  if (isOnWater(pos)) return;
   const live = await liveMarks(botId);
   // Same rule the player's dog follows: no marking on ground you already
   // hold. A bot's stroll radius is wider than its patch, so this turns
