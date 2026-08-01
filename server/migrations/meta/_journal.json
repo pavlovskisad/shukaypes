@@ -169,6 +169,13 @@
       "when": 1777310020000,
       "tag": "0023_territory_reset_4",
       "breakpoints": true
+    },
+    {
+      "idx": 24,
+      "version": "7",
+      "when": 1777310030000,
+      "tag": "0024_territory_reset_5",
+      "breakpoints": true
     }
   ]
 }
