@@ -222,18 +222,44 @@ export const balance = {
     // single triangle over half the city.
     // How far apart two marks can be and still count as ONE territory.
     //
-    // Raised 350 -> 1000 so a dog builds a main territory rather than a
-    // scatter of separate patches. At 350 anything past a few streets
-    // started a new island, which with the halo gone looked like confetti;
-    // at 1000 a normal day's walking links into one shape.
+    // 350 -> 1000 -> 500. The middle value was wrong and the reason is
+    // worth keeping, because it is not obvious.
     //
-    // Worth knowing what this buys and costs, because it is a convex hull:
-    // linking two marks a kilometre apart claims the whole span between
-    // them, including ground never walked. That is the same over-claiming
-    // the 150m halo was doing, just earned by walking further rather than
-    // handed out for free — and it is bounded by where the dog has actually
-    // been at both ends, which the halo never was.
-    shapeLinkM: 1000,
+    // 350 left confetti once the halo was gone, so this went to 1000 to
+    // build one main territory. That worked and brought a new complaint
+    // with it: a single new mark could appear to hand over ground nowhere
+    // near it. What happens is the mark BRIDGES two clusters that were
+    // separate, they merge, and the shape spanning them swallows
+    // everything in between at a stroke.
+    //
+    // The obvious fix — a boundary that follows the walk instead of
+    // spanning it — does not work here, and it took building one to find
+    // out. A hull is computed from POINTS, and it cannot carve out a
+    // region that contains none: a U-shaped walk came back at 64.0 ha at
+    // every concavity setting tried, because the middle of the U has no
+    // marks to pull the boundary toward. Two clusters a kilometre apart
+    // have nothing between them either, which is exactly the case here.
+    //
+    // So the bridge length is bounded by not linking that far in the first
+    // place. At 500 a normal walk (marks 140-350m apart) still links into
+    // one territory, and the worst a single mark can bridge is half what
+    // it was.
+    shapeLinkM: 500,
+    // Longest edge a territory's boundary may have before it gets pulled
+    // inward onto a nearer mark.
+    //
+    // This is what stops a shape spanning ground nobody walked. Linking
+    // marks within a kilometre builds one main territory, and without this
+    // the convex hull across that cluster also swallowed everything
+    // between its arms — a single new mark could appear to hand over a
+    // block nowhere near it. Measured on live territories, 9% of hull
+    // edges ran past 400m against a 140m minimum spacing, topping out at
+    // 679m; every one of those was a bridge, not a walk.
+    //
+    // Sized comfortably above minDistanceM (140m) so an ordinary run of
+    // marks along a street is never dug into, and below the distances that
+    // read as a jump.
+    shapeEdgeMaxM: 350,
     shapeMinMarks: 3,
     // Bound on the geometry work per mark. Older marks past this count
     // are ignored for shape-building (they're near expiry anyway).

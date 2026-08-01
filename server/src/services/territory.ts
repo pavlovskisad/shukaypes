@@ -81,12 +81,11 @@ import { distanceMeters, type LatLng } from '../utils/geo.js';
 // isn't implemented yet".
 import polygonClipping from 'polygon-clipping';
 import {
-  convexHull,
+  concaveHull,
   clusterPoints,
   polygonAreaM2,
   pointInPolygon,
   localProjection,
-  clipToConvex,
   bufferConvex,
   type Pt,
 } from '../utils/territoryShapes.js';
@@ -399,7 +398,9 @@ async function standsOnHeldGround(userId: string, pos: LatLng): Promise<boolean>
     T.shapeLinkM,
   )) {
     if (cluster.length < T.shapeMinMarks) continue;
-    const hull = convexHull(cluster);
+    // Same shape the map draws, or the dog's rule and the player's eyes
+    // disagree again — the exact failure that stranded one.
+    const hull = concaveHull(cluster, T.shapeEdgeMaxM);
     if (hull.length < 3 || !pointInPolygon(pos, hull)) continue;
     ourNewest = cluster.reduce(
       (t, p) => Math.max(t, freshestAt.get(`${p.lat.toFixed(5)},${p.lng.toFixed(5)}`) ?? 0),
@@ -747,7 +748,7 @@ async function partitionShapes(
         continue;
       }
       if (cluster.length < T.shapeMinMarks) continue;
-      const hull = convexHull(cluster);
+      const hull = concaveHull(cluster, T.shapeEdgeMaxM);
       // Marks in a near-straight line hull to a sliver with no real area —
       // draw those as a link rather than a degenerate polygon.
       if (hull.length < 3) {
@@ -817,18 +818,14 @@ async function partitionShapes(
         (other.newestAt === patch.newestAt && other.ownerId < patch.ownerId);
       if (!theirsIsNewer) continue;
 
-      // One clip polygon per overlapping neighbour — the intersection of
-      // two convex hulls, which is itself convex.
+      // Subtract their whole shape, not the overlap.
       //
-      // This replaced a Voronoi cell per rival MARK, which is the same
-      // answer to a question nobody was asking: it split the shared ground
-      // by proximity, so a border sat halfway between two dogs' dots
-      // rather than along the shape either of them had actually walked.
-      // It was also what made this expensive — a patch ringed by
-      // neighbours was handed ~145 clip polygons, and it is now handed one
-      // per neighbour.
-      const overlap = clipToConvex(patch.claimXY, other.claimXY);
-      if (overlap.length >= 3 && ringAreaM2(overlap) >= MIN_BITE_M2) bites.push(overlap);
+      // (patch minus (patch ∩ other)) and (patch minus other) are the same
+      // set, so computing the intersection first was work for nothing —
+      // and it needed both shapes to be convex, which they no longer are
+      // now that hulls follow the walk. Handing the clipper the neighbour's
+      // polygon directly is cheaper AND drops the convexity assumption.
+      bites.push(other.claimXY);
     }
 
     // Largest bites first, then capped. A patch surrounded by neighbours

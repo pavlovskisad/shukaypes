@@ -20,6 +20,13 @@
 // Degenerate input (fewer than 3 points, or all collinear) returns the
 // input's extremes, which encloses no area — correct: two marks are a
 // line, and a line owns nothing.
+// How willing the boundary is to cut inward. 2 is concaveman's own
+// default and reads as "follow the shape but don't chase every stray dot";
+// 1 hugs so tightly that a normal street of marks turns into a zigzag.
+import concaveman from 'concaveman';
+
+const CONCAVITY = 2;
+
 export function convexHull<T extends { lat: number; lng: number }>(
   points: T[],
 ): { lat: number; lng: number }[] {
@@ -292,4 +299,71 @@ export function bufferConvex(ring: Pt[], padM: number, steps = 10): Pt[] {
   return convexHull(pts.map(([x, y]) => ({ lat: y, lng: x }))).map(
     (p) => [p.lng, p.lat] as Pt,
   );
+}
+
+// The polygon that actually follows where the dog went.
+//
+// A convex hull is the wrong shape for a walk. Walk an L and it fills the
+// corner; walk out and back by another street and it claims every block
+// between. Measured on live territories, 9% of hull edges ran past 400m
+// against a 140m minimum spacing between marks — up to 679m — and every one
+// of those is the boundary jumping a gap rather than tracing a route. That
+// is what makes a single new mark appear to hand over ground nowhere near
+// it: the mark joins a cluster, and the hull spanning that cluster swallows
+// everything in between.
+//
+// concaveman rather than something hand-rolled here, deliberately. Two
+// attempts at the greedy dig-in algorithm both produced SELF-INTERSECTING
+// rings on real input — 60 of 300 random mark sets on the first, 141 on the
+// second after relaxing the crossing test to cope with marks lying exactly
+// along a street. A folded ring has no meaningful area and breaks the
+// clipper the partition runs on, so it would have corrupted territories
+// rather than merely drawn them oddly. This is a solved problem with sharp
+// edges around collinear and duplicate points, and it belongs in a library
+// that has already met them.
+//
+// `concavity` is a ratio, not a distance: the algorithm will not cut in
+// along an edge unless doing so is worth it relative to the local point
+// spacing. lengthThreshold is the hard floor in metres — edges shorter than
+// this are left alone regardless.
+export function concaveHull<T extends { lat: number; lng: number }>(
+  points: T[],
+  maxEdgeM: number,
+): { lat: number; lng: number }[] {
+  const hull = convexHull(points);
+  if (hull.length < 3) return hull;
+
+  const proj = localProjection(points[0]!);
+  // Deduplicate: repeated marks at one spot are degenerate input for any
+  // hull algorithm, and the dog does revisit its own corners.
+  const seen = new Set<string>();
+  const xy: [number, number][] = [];
+  for (const p of points) {
+    const k = `${p.lat.toFixed(7)},${p.lng.toFixed(7)}`;
+    if (seen.has(k)) continue;
+    seen.add(k);
+    const [x, y] = proj.to(p);
+    xy.push([x, y]);
+  }
+  if (xy.length < 4) return hull;
+
+  let ring: number[][];
+  try {
+    ring = concaveman(xy, CONCAVITY, maxEdgeM);
+  } catch {
+    // Never let a hull failure lose someone's territory — the convex
+    // version is too generous, which is visible and survivable, where
+    // returning nothing is a zone that silently vanishes.
+    return hull;
+  }
+  // concaveman repeats the first point at the end; our rings are implicit.
+  if (
+    ring.length > 3 &&
+    ring[0]![0] === ring[ring.length - 1]![0] &&
+    ring[0]![1] === ring[ring.length - 1]![1]
+  ) {
+    ring = ring.slice(0, -1);
+  }
+  if (ring.length < 3) return hull;
+  return ring.map((r) => proj.from([r[0]!, r[1]!]));
 }
