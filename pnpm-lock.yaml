@@ -126,6 +126,9 @@ importers:
       cheerio:
         specifier: ^1.2.0
         version: 1.2.0
+      concaveman:
+        specifier: ^2.0.0
+        version: 2.0.0
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
@@ -151,6 +154,9 @@ importers:
         specifier: ^3.4.5
         version: 3.4.9
     devDependencies:
+      '@types/concaveman':
+        specifier: ^1.1.6
+        version: 1.1.6
       '@types/node':
         specifier: ^22.9.0
         version: 22.19.17
@@ -1902,6 +1908,9 @@ packages:
   '@types/babel__traverse@7.28.0':
     resolution: {integrity: sha512-8PvcXf70gTDZBgt9ptxJ8elBeBjcLOAcOtoO/mPJjtji1+CdGbHgm77om1GrsPxsiE+uXIpNSK64UYaIwQXd4Q==}
 
+  '@types/concaveman@1.1.6':
+    resolution: {integrity: sha512-3shTHRmSStvc+91qrFlQv2UmrOB0sZ6biDQo7YzY+9tV1mNLpdzuZal4D3hTYXYWig49K01lCvYDpnh+txToXw==}
+
   '@types/esrecurse@4.3.1':
     resolution: {integrity: sha512-xJBAbDifo5hpffDBuHl0Y8ywswbiAp/Wi7Y/GtAgSlZyIABppyurxVueOPE8LUQOxdlgi6Zqce7uoEpqNTeiUw==}
 
@@ -2491,6 +2500,9 @@ packages:
 
   concat-map@0.0.1:
     resolution: {integrity: sha512-/Srv4dswyQNBfohGpz9o6Yb3Gz3SrUDqBH5rTuhGR7ahtlbYKnVxw2bCFMRljaA7EXHaXZ8wsHdodFvbkhKmqg==}
+
+  concaveman@2.0.0:
+    resolution: {integrity: sha512-3a9C//4G44/boNehBPZMRh8XxrwBvTXlhENUim+GMm207WoDie/Vq89U5lkhLn3kKA+vxwmwfdQPWIRwjQWoLA==}
 
   connect@3.7.0:
     resolution: {integrity: sha512-ZqRXc+tZukToSNmh5C2iWMSoV3X1YUcPbqEM4DkEG5tNQXrQUZCNVGGv3IuicnkMtPfGf3Xtp8WCXs295iQ1pQ==}
@@ -4225,6 +4237,9 @@ packages:
     resolution: {integrity: sha512-NCrCHhWmnQklfH4MtJMRjZ2a8c80qXeMlQMv2uVp9ISJMTt562SbGd6n2oq0PaPgKm7Z6pL9E2UlLIhC+SHL3w==}
     engines: {node: '>=4.0.0'}
 
+  point-in-polygon@1.1.0:
+    resolution: {integrity: sha512-3ojrFwjnnw8Q9242TzgXuTD+eKiutbzyslcq1ydfu82Db2y+Ogbmyrkpv0Hgj31qwT3lbS9+QAAO/pIQM35XRw==}
+
   points-on-curve@0.2.0:
     resolution: {integrity: sha512-0mYKnYYe9ZcqMCWhUjItv/oHjvgEsfKvnUTg8sAtnHr3GVy7rGkXCb6d5cSyqrWqL4k81b9CPg3urd+T7aop3A==}
 
@@ -4324,6 +4339,9 @@ packages:
   range-parser@1.2.1:
     resolution: {integrity: sha512-Hrgsx+orqoygnmhFbKaHE6c296J+HTAQXoxEF6gNupROmmGJRoyzfG3ccAveqCBrwr/2yxQ5BVd/GTl5agOwSg==}
     engines: {node: '>= 0.6'}
+
+  rbush@4.0.1:
+    resolution: {integrity: sha512-IP0UpfeWQujYC8Jg162rMNc01Rf0gWMMAb2Uxus/Q0qOFw4lCcq6ZnQEZwUoJqWyUGJ9th7JjwI4yIWo+uvoAQ==}
 
   rc@1.2.8:
     resolution: {integrity: sha512-y3bGgqKj3QBdxLbLkomlohkvsA8gdAiUQlSBJnBhfn+BPxg4bc62d8TcBW15wavDfgexCgccckhcZvywyQYPOw==}
@@ -7364,6 +7382,8 @@ snapshots:
     dependencies:
       '@babel/types': 7.29.0
 
+  '@types/concaveman@1.1.6': {}
+
   '@types/esrecurse@4.3.1': {}
 
   '@types/estree@1.0.9': {}
@@ -8038,6 +8058,13 @@ snapshots:
       - supports-color
 
   concat-map@0.0.1: {}
+
+  concaveman@2.0.0:
+    dependencies:
+      point-in-polygon: 1.1.0
+      rbush: 4.0.1
+      robust-predicates: 3.0.3
+      tinyqueue: 3.0.0
 
   connect@3.7.0:
     dependencies:
@@ -9940,6 +9967,8 @@ snapshots:
 
   pngjs@3.4.0: {}
 
+  point-in-polygon@1.1.0: {}
+
   points-on-curve@0.2.0: {}
 
   points-on-path@0.2.1:
@@ -10032,6 +10061,10 @@ snapshots:
   quickselect@3.0.0: {}
 
   range-parser@1.2.1: {}
+
+  rbush@4.0.1:
+    dependencies:
+      quickselect: 3.0.0
 
   rc@1.2.8:
     dependencies:
