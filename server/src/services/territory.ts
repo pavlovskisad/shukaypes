@@ -1140,6 +1140,27 @@ export interface MapTerritory {
   rivals: RivalTerritory[];
 }
 
+// Trim a coordinate to the metre on the way out of the door.
+//
+// A float64 latitude serialises as ~17 digits, and every one past the
+// fifth is describing something smaller than a centimetre — of a border
+// drawn around dots a hundred metres apart. Over a whole map payload that
+// noise is 12% of the bytes, which is most of what sending every rival
+// mark costs.
+//
+// Emit-time only, and copied rather than edited in place: the shapes
+// arrive from the partition cache and the next reader wants them whole.
+const COORD_DP = 1e5; // ~1.1m north/south, ~0.7m east/west in Kyiv
+const trim = (v: number): number => Math.round(v * COORD_DP) / COORD_DP;
+const trimPoints = (points: { lat: number; lng: number }[]) =>
+  points.map((p) => ({ lat: trim(p.lat), lng: trim(p.lng) }));
+const trimShapes = (shapes: TerritoryShape[]): TerritoryShape[] =>
+  shapes.map((s) => ({
+    kind: s.kind,
+    points: trimPoints(s.points),
+    ...(s.holes ? { holes: s.holes.map(trimPoints) } : {}),
+  }));
+
 export async function fetchMapTerritory(
   userId: string,
   pos: LatLng,
@@ -1163,7 +1184,7 @@ export async function fetchMapTerritory(
   }
   const names = await ownerNames(rivalIds);
 
-  // The last few places each neighbour marked, newest first.
+  // Every mark each drawn neighbour holds, newest first.
   //
   // This was every rival mark under rivalMarkFlashMs (45s), which in
   // practice showed nothing — a bot marks every few minutes, so the odds of
@@ -1173,9 +1194,16 @@ export async function fetchMapTerritory(
   // beside a zone reads as though one mark conjured it, and a zone with its
   // dot somewhere else reads as though it came from nowhere.
   //
-  // A few each is what makes the shape legible: you can see the cluster the
-  // hull was drawn around. Capped per owner AND faded by age on the client,
-  // so this cannot grow into a scatter of everyone's history.
+  // Then it was the newest four each, which sounded like "enough to see the
+  // cluster" and was the wrong four: a hull is held up by the OUTERMOST
+  // marks and the newest ones usually sit inside the range already held.
+  // Measured on live shapes, 199 of 200 zone corners were on a mark the
+  // client had never received — so a territory could shift with nothing on
+  // screen accounting for it.
+  //
+  // Sending all of them means the corners of a zone have dots on them. The
+  // client fades by age, so the recent ones still read as "that just
+  // happened" while the rest quietly show what the shape is made of.
   const byOwner = new Map<string, typeof all>();
   for (const m of all) {
     if (m.userId === userId) continue;
@@ -1190,8 +1218,8 @@ export async function fetchMapTerritory(
         .sort((a, b) => b.at.getTime() - a.at.getTime())
         .slice(0, T.rivalMarksPerOwner)
         .map((m) => ({
-          lat: m.lat,
-          lng: m.lng,
+          lat: trim(m.lat),
+          lng: trim(m.lng),
           ownerId: m.userId,
           at: m.at.toISOString(),
         })),
@@ -1199,17 +1227,19 @@ export async function fetchMapTerritory(
     marks: all
       .filter((m) => m.userId === userId)
       .map((m) => ({
-        lat: m.lat,
-        lng: m.lng,
+        lat: trim(m.lat),
+        lng: trim(m.lng),
         closedLoop: m.closedLoop,
         at: m.at.toISOString(),
       })),
-    shapes,
+    shapes: trimShapes(shapes),
+    // Off the untrimmed shapes: standing a metre inside your own border is
+    // still standing inside it, and this decides a perk, not a picture.
     home: isHome(pos, shapes),
     rivals: rivalIds.map((id) => ({
       ownerId: id,
       ownerName: names.get(id) ?? 'сусід',
-      shapes: partitioned.get(id) ?? [],
+      shapes: trimShapes(partitioned.get(id) ?? []),
     })),
   };
 }

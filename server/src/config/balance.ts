@@ -282,14 +282,24 @@ export const balance = {
     // other simply do not share a border, which is honest: there is open
     // ground between them because neither has been there.
     claimReachM: 0,
-    // How many of each neighbour's marks the map draws, newest first.
+    // How many of each neighbour's marks the map draws.
     //
-    // A shape needs shapeMinMarks to exist, so showing fewer than that
-    // makes territory look like it appeared from nothing — which is
-    // exactly how one dot beside a zone reads. Enough to see the cluster
-    // the hull was drawn around, few enough that fourteen neighbours are
-    // still a map rather than a scatter plot.
-    rivalMarksPerOwner: 4,
+    // Was 4, chosen as "enough to see the cluster". Measured against live
+    // shapes, that was wrong in a way worth spelling out: 199 of 200 zone
+    // CORNERS sat on a mark the client had never been sent.
+    //
+    // Not because four is too few — because it was the wrong four. A hull
+    // is defined by the OUTERMOST marks, and the four being sent were the
+    // NEWEST. A dog's latest mark is usually somewhere inside the range it
+    // already holds, so the dots on screen were almost never the ones
+    // holding the shape up. Territory appeared to lurch with nothing
+    // visible to explain it, because the marks that explained it were the
+    // ones being dropped.
+    //
+    // Now high enough to carry every mark a bot can own (botMaxMarks is
+    // 12), so what is drawn is what the shape is made of. Still capped for
+    // a real player, who has no such ceiling.
+    rivalMarksPerOwner: 24,
     // How long a rival's fresh mark is worth showing. Long enough that a
     // 15s sync can't miss one, short enough that it reads as "that just
     // happened" rather than a scatter of everyone's history.
