@@ -20,13 +20,21 @@
 //
 // So ground lives in territory_ground, and a mark does two things to it:
 //
-//   GROW — the hull of the mark's cluster is unioned into what you hold
+//   GROW — the hull of the mark and its NEARBY marks (within claimNeighbourM
+//          of it) is unioned into what the owner holds
 //   CUT  — the same hull is subtracted from every rival piece it covers
 //
 // Both happen ONCE, at the moment of marking. Two owners can therefore
 // never overlap, a loss is permanent without anything having to remember
 // it later, and a sync is a box query instead of a city-wide partition —
 // which is where all the CPU used to go.
+//
+// A claim is LOCAL. It was the hull of the whole transitive cluster,
+// which under stored ground meant every mark re-claiming everywhere the
+// dog had ever walked — districts of paint, and captures on the far side
+// of the city from a mark made here. The union is what accumulates a
+// territory now, so a claim only has to cover the ground around the mark
+// that made it.
 //
 // DECAY
 // -----
@@ -78,7 +86,7 @@ import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
-import { concaveHull, clusterPoints } from '../utils/territoryShapes.js';
+import { concaveHull } from '../utils/territoryShapes.js';
 // Ground is stored, and everything that changes or reads it lives there.
 // The polygon clipping this file used to do on every sync went with it.
 import {
@@ -252,19 +260,35 @@ async function placeMark(
   // often they come back.
   const renewed = own.length > 0;
 
-  // THE SHAPE THIS MARK DRAWS.
+  // THE SHAPE THIS MARK DRAWS — and how far it can reach.
   //
-  // Same hull as ever — the cluster this mark joins, marks up to
-  // shapeLinkM apart, outlined at shapeEdgeMaxM. What changed is what
-  // happens to it: it used to be rebuilt on every read and thrown away,
-  // and now it is unioned into ground that persists. Under shapeMinMarks
-  // it draws nothing, so the first two marks of a patch are a promise
-  // rather than a claim.
+  // This used to be the hull of the whole CLUSTER: every mark chained to
+  // every other through neighbours within claimNeighbourM, transitively. That
+  // was right while ground was recomputed on every read, because the
+  // cluster hull WAS the territory and had to be redrawn whole each time.
+  //
+  // Carried into stored ground it is badly wrong. A chain of marks 200m
+  // apart spans as far as the dog has ever walked, so every single mark
+  // re-claimed that entire span — painting ground nowhere near the dog
+  // and cutting neighbours on the far side of the city, from a mark it
+  // made here. Which is exactly what it looked like: zones covering
+  // whole districts, and captures where no dog had been.
+  //
+  // Stored ground does not need the whole territory redrawn, because the
+  // union remembers. So a mark claims LOCALLY: the hull of itself and the
+  // marks within claimNeighbourM OF IT. A walk paints piece by piece and the
+  // territory is what those pieces add up to.
+  //
+  // It also ends the bridging problem for free. No single claim can span
+  // a walk, so a V-shaped route no longer gets its mouth sealed by a hull
+  // stretched across two arms the dog never walked between.
   const prior = await liveMarks(userId);
-  const cluster =
-    clusterPoints([...prior.map((m) => ({ lat: m.lat, lng: m.lng })), pos], T.shapeLinkM).find(
-      (c) => c.some((p) => p.lat === pos.lat && p.lng === pos.lng),
-    ) ?? [];
+  const cluster = [
+    ...prior
+      .filter((m) => distanceMeters(pos, { lat: m.lat, lng: m.lng }) <= T.claimNeighbourM)
+      .map((m) => ({ lat: m.lat, lng: m.lng })),
+    pos,
+  ];
   const enclosed = cluster.length === T.shapeMinMarks;
   const hull = cluster.length >= T.shapeMinMarks ? concaveHull(cluster, T.shapeEdgeMaxM) : [];
 
