@@ -386,14 +386,24 @@ export const placesCache = pgTable(
 
 // Territory marks — the individual spots a dog has marked.
 //
-// These are the ONLY ownership record: a territory is the convex hull of
-// a cluster of live marks, derived fresh on every read. There is no cells
-// table any more (0016 dropped it) — keeping one alongside the drawn
-// shapes meant the two diverged, and "someone took territory that never
-// looked like mine" is not a bug you want once ground can be stolen.
+// Marks used to BE the ownership record: a territory was the hull of a
+// cluster of live marks, rebuilt from scratch on every read. That model
+// could not express the one thing territory has to be able to do — lose a
+// piece and keep the rest. A shape recomputed from dots has nowhere to
+// remember a bite out of it, so a dot that got overrun could only survive
+// (and hand the ground back later), die (and collapse the whole shape,
+// down to nothing at three dots), or move (and change the shape into
+// something that was never the cut).
+//
+// So ground lives in territory_ground now, and marks do what a dog's mark
+// actually does: they GROW the ground, and they show where the dog has
+// been. What they no longer do is define it, which is why losing one can
+// no longer delete it.
 //
 // Decay is a read-time filter on created_at rather than a sweep, so an
-// untouched mark costs nothing until someone looks at it.
+// untouched mark costs nothing until someone looks at it. It only limits
+// the hull the NEXT mark draws — expiring marks never take back ground
+// already held.
 export const territoryMarks = pgTable(
   'territory_marks',
   {
@@ -413,6 +423,47 @@ export const territoryMarks = pgTable(
     // Rivals' marks are looked up by area, not by owner: "whose marks are
     // near this point" for both contesting and for drawing their ground.
     bboxIdx: index('territory_marks_bbox_idx').on(t.lat, t.lng),
+  }),
+);
+
+// Territory ground — the ground itself, one row per piece.
+//
+// THE source of truth for who holds what. Two owners can never overlap:
+// where they would, the cut has already been applied at mark time, so a
+// read is a read. That is also what makes it affordable — the old model
+// clustered marks, built hulls and ran polygon subtraction for everyone
+// in view on EVERY sync, which was the whole CPU problem. The same work
+// now happens once, when a dog marks.
+//
+// A piece is a ring plus its holes, in [lng, lat] order — the winding
+// polygon-clipping and GeoJSON both use, so it goes in and out of the
+// clipper without conversion.
+//
+// bbox columns rather than PostGIS: the question is only ever "which
+// pieces are in this view", a plain range scan answers it, and the
+// deployment does not have to grow an extension. area_m2 is stored
+// because the leaderboard wants a SUM, not a geometry library.
+export const territoryGround = pgTable(
+  'territory_ground',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    ring: jsonb('ring').$type<[number, number][]>().notNull(),
+    holes: jsonb('holes').$type<[number, number][][]>(),
+    minLat: doublePrecision('min_lat').notNull(),
+    maxLat: doublePrecision('max_lat').notNull(),
+    minLng: doublePrecision('min_lng').notNull(),
+    maxLng: doublePrecision('max_lng').notNull(),
+    areaM2: doublePrecision('area_m2').notNull(),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userIdx: index('territory_ground_user_idx').on(t.userId),
+    // "What is in this box" — the only spatial question asked.
+    bboxIdx: index('territory_ground_bbox_idx').on(t.minLat, t.maxLat, t.minLng, t.maxLng),
   }),
 );
 

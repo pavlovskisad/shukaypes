@@ -264,24 +264,6 @@ export const balance = {
     // Bound on the geometry work per mark. Older marks past this count
     // are ignored for shape-building (they're near expiry anyway).
     shapeMarkWindow: 300,
-    // How far a claim reaches PAST the hull of its own marks.
-    //
-    // ZERO. A territory is the polygon between your dots and nothing more.
-    //
-    // This was 150m, on the theory that claims had to overlap for
-    // neighbours to share a border rather than leave a strip of nobody's
-    // ground between them. That solved the wrong problem, and expensively:
-    // on a minimal three-dot patch, 94% of the ground claimed was halo
-    // rather than anywhere the dog had walked (13.66 ha against 0.85), and
-    // even a 400m walked loop came out 65% halo. It is what made three
-    // dots look like an island.
-    //
-    // Borders now come from territories genuinely overlapping — you walked
-    // into someone's range — rather than from inflating everyone until
-    // they bump into each other. Two neighbours who never walk near each
-    // other simply do not share a border, which is honest: there is open
-    // ground between them because neither has been there.
-    claimReachM: 0,
     // How many of each neighbour's marks the map draws.
     //
     // Was 4, chosen as "enough to see the cluster". Measured against live
@@ -300,6 +282,18 @@ export const balance = {
     // 12), so what is drawn is what the shape is made of. Still capped for
     // a real player, who has no such ceiling.
     rivalMarksPerOwner: 24,
+    // GROUND — the stored territory, and the two bounds that keep a read
+    // and a write from ever being unbounded.
+    //
+    // How many pieces one view can return. Fourteen neighbours with a few
+    // pieces each, plus room for a city that has been fought over; past
+    // this the far ones are dropped, and they are the ones off the edge of
+    // the screen anyway.
+    groundPiecesInView: 240,
+    // How many pieces one mark can touch. The claim is a hull over marks
+    // within shapeLinkM, so this is "how many separate territories can
+    // possibly overlap one walk" — generous, and still a bound.
+    groundPiecesPerClaim: 64,
     // How long a rival's fresh mark is worth showing. Long enough that a
     // 15s sync can't miss one, short enough that it reads as "that just
     // happened" rather than a scatter of everyone's history.
@@ -311,10 +305,6 @@ export const balance = {
     // they hear about it and whether the dog says something. Ground
     // actually changes hands through the hulls overlapping, not here.
     contestM: 110,
-    // Ceiling on how many of their dots one mark counts as landing among,
-    // nearest first. Only affects the 'how deep in are we' number behind
-    // the bubble now that nothing is deleted.
-    contestMaxHits: 2,
     // REFRESH — the defence. Marking within this distance of your own
     // live marks restarts their clocks, so a corner you walk every day
     // never decays out from under you. It does NOT make those marks
@@ -348,40 +338,6 @@ export const balance = {
     // client. polygon-clipping is pure JS, so that blocks the event loop
     // outright: /health stopped answering, not just /sync/map.
     partitionMarkLimit: 2500,
-    // Nearest N patches take part. Anything further is off-screen anyway.
-    partitionMaxPatches: 18,
-    // Most bites any one patch can take, largest first. A backstop, not a
-    // working limit: a dense city hands a patch ~145, so 200 almost never
-    // bites. Deliberately loose, because capping it tight is a correctness
-    // bug wearing a performance costume — at 24 the same city came out 49%
-    // over-claimed (10.6km² held against 7.2km² of actual ground), which
-    // on screen is neighbours painted on top of each other, which is the
-    // exact confusion the partition exists to remove. The event loop is
-    // protected by yielding between patches instead, which costs nothing.
-    partitionMaxBites: 200,
-    // Cached partition lifetime.
-    //
-    // Was 20s, against a client that syncs every 15s — almost perfectly
-    // tuned to miss, so a real client paid for a fresh partition nearly
-    // every time. Measured on prod: 3.57s per sync on a miss against 1.10s
-    // on a hit, with the partition itself 2.47s of it. At 60s, three syncs
-    // in four hit and the median sync roughly halves.
-    //
-    // Safe to make this long only because a mark landing in a cell drops
-    // that cell explicitly (see invalidatePartitionCell). Without that, a
-    // border could sit still for a minute after someone visibly marked.
-    partitionCacheMs: 60_000,
-    // Grid the cache is keyed on, in degrees (~1.1km of latitude). Coarse
-    // enough that a walking user reuses a cell for minutes at a time.
-    partitionCacheCellDeg: 0.01,
-    // How many partitions are remembered at once. One per populated cell;
-    // a few dozen cells is a whole city, and each entry is small.
-    partitionCacheMax: 64,
-    // A partition slower than this gets logged with its shape. The bounds
-    // above are guesses about a moving target — bot count, mark density,
-    // how much people walk — so the useful thing is knowing when they stop
-    // holding, before /health does the telling.
-    partitionSlowMs: 400,
     // A raid waits this long to be delivered. Long enough to survive a
     // night's sleep, short enough that coming back after a week doesn't
     // dump a month of history on you at once.
@@ -400,7 +356,13 @@ export const balance = {
     // on — it is here to stop a bot that happens to arrive somewhere twice
     // in quick succession from stacking marks, not to set the tempo. The
     // tempo lives in bots.ts (stroll chance, speed, dwell).
-    botMarkCooldownMs: 2 * 60 * 1000,
+    //
+    // TEST TEMPO — 2 minutes while tuning. Stored ground is a new mechanic
+    // and watching it at walking pace means one border move every few
+    // minutes; at 15s a whole city's worth of grow-and-cut happens while
+    // you're looking at it. Put this back to 2 * 60 * 1000, together with
+    // the speed and dwell in bots.ts, before this is in front of anyone.
+    botMarkCooldownMs: 15 * 1000,
     // Bots start with NOTHING and claim by walking, like a player does.
     //
     // Was 5, which handed every bot a finished patch the instant the
@@ -449,16 +411,5 @@ export const balance = {
     // few minutes of lag is invisible.
     leaderboardSize: 10,
     leaderboardCacheMs: 5 * 60 * 1000,
-    // Patch ceiling for the board's city-wide partition. Larger than the
-    // map's, because this one is meant to cover everybody — but nothing
-    // like unbounded: the pair loop behind it is quadratic and the machine
-    // it runs on is a single shared vCPU, where the 150-patch version took
-    // over a minute and starved everything else in the process.
-    leaderboardMaxPatches: 60,
-    // And a much tighter bite cap than the map's 200. The map needs exact
-    // borders because you are looking straight at them; the board needs
-    // the ORDER to be right, and the dropped bites are small enough to
-    // move an area a few percent without moving anyone up or down.
-    leaderboardMaxBites: 24,
   },
 } as const;
