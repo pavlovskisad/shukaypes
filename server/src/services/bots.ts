@@ -79,20 +79,22 @@ const HOME_STROLL_CHANCE = 0.75;
 // is the opposite of the point. Closing the homes up would have restored
 // it, at the cost of more overlapping claims for the partition to resolve
 // on a machine with one shared vCPU. Speed buys the same tempo for free.
-// TEST TEMPO. Walking pace is 2-3 m/s with an 8-30s dwell, which is a
-// mark every few minutes per dog — right for a city being lived in, far
-// too slow for watching a brand new claim rule take effect. At 9-12 m/s
-// with a 2-6s dwell a dog covers the 140m spacing gate in about fifteen
-// seconds, so borders move while you are looking at them.
+// Walking pace, and back off the sprint the last pass put in.
 //
-// Restore to SPEED 2.0/3.0 and DWELL 8_000/30_000 (with
-// botMarkCooldownMs back to 2 minutes) before this is in front of anyone
-// — at this speed the dogs are visibly sprinting.
-const SPEED_MIN = 9.0; // m/s — TEST, walking pace is 2.0
-const SPEED_MAX = 12.0; // TEST, walking pace is 3.0
+// That existed because a mark took minutes to arrive and there was a new
+// claim rule to watch; 9-12 m/s got a city's worth of borders moving
+// while you looked at it, at the cost of dogs that were visibly running.
+// The cadence does that job now — a mark every 20s per dog is thirty
+// dogs claiming twice a second between them — and the sprint actively
+// works against it: at 10 m/s a 20s cooldown puts marks 200m apart,
+// which is the wide-polygon look the whole change is trying to leave
+// behind. Speed has to stay under the spacing gate for the gate to be
+// what paces a claim.
+const SPEED_MIN = 2.0; // m/s
+const SPEED_MAX = 3.0;
 const ARRIVE_M = 22;
-const DWELL_MIN_MS = 2_000; // TEST, lifelike is 8_000
-const DWELL_MAX_MS = 6_000; // TEST, lifelike is 30_000
+const DWELL_MIN_MS = 8_000; // linger at a destination
+const DWELL_MAX_MS = 30_000;
 const OFFLINE_CHANCE = 0.14; // after a dwell, chance to "log off"
 const OFFLINE_MIN_MS = 60_000;
 const OFFLINE_MAX_MS = 240_000;
@@ -238,7 +240,7 @@ function spawnBot(i: number, home: LatLng): Bot {
     home,
     // Stagger the first marks so a restart doesn't fire the whole pool
     // into the same tick.
-    lastMarkAt: Date.now() - rand(0, balance.territory.botMarkCooldownMs),
+    lastMarkAt: Date.now() - rand(0, balance.territory.cooldownMs),
     lastMarkPos: null,
   };
   bot.target = newTarget(bot);
@@ -350,12 +352,19 @@ export function startMultiplayerCron(
           for (const b of bots) {
             if (!tickBot(b, dtS, now)) continue;
             online.push({ id: b.id, pos: b.pos, name: b.name, photo: null, bot: true });
-            // Bots mark where they linger, not mid-stride — same instinct
-            // a real dog has at a park, and it keeps their ground where
-            // people actually walk instead of smeared along a route.
+            // EXACTLY the gate a player's dog gets, and nothing else.
+            //
+            // There were two extra conditions here, and both made a bot
+            // claim on different terms from the person it is meant to be
+            // a rival to: its own cooldown (botMarkCooldownMs), and a
+            // rule that it may only mark while lingering, never
+            // mid-stride. The second one sounds like a real dog and works
+            // against what territory is now — marks along a route are
+            // exactly what draws a boundary that follows the walk, and
+            // marks only at destinations are what leaves it a wide
+            // polygon between a handful of stopping points.
             if (
-              b.state === 'dwell' &&
-              now - b.lastMarkAt >= balance.territory.botMarkCooldownMs &&
+              now - b.lastMarkAt >= balance.territory.cooldownMs &&
               // …and not on the patch it just marked, so a patch grows
               // outward instead of piling onto one bench.
               (!b.lastMarkPos ||
