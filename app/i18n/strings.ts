@@ -114,7 +114,6 @@ export interface AppStrings {
     unknownPet: string;
     territoryBoard: string;
     boardYou: string;
-    boardBot: string;
     boardEmpty: string;
     boardUnranked: (n: number) => string;
   };
@@ -394,7 +393,6 @@ const uk: AppStrings = {
     unknownPet: 'невідомий пес',
     territoryBoard: 'хто тримає місто',
     boardYou: 'ти',
-    boardBot: 'бот',
     boardEmpty: 'місто ще нічиє — познач перший',
     boardUnranked: (n) => `ти поза топ-${n}`,
   },
@@ -723,7 +721,6 @@ const en: AppStrings = {
     unknownPet: 'unknown pet',
     territoryBoard: 'who holds the city',
     boardYou: 'you',
-    boardBot: 'bot',
     boardEmpty: 'nobody holds the city yet — go and mark',
     boardUnranked: (n) => `you're outside the top ${n}`,
   },
