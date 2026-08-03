@@ -197,6 +197,13 @@
       "when": 1777310060000,
       "tag": "0027_territory_ground",
       "breakpoints": true
+    },
+    {
+      "idx": 28,
+      "version": "7",
+      "when": 1777310070000,
+      "tag": "0028_territory_reset_8",
+      "breakpoints": true
     }
   ]
 }
