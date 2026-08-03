@@ -181,20 +181,35 @@ export const balance = {
   // shapes and the two diverged immediately: you owned a trail ribbon and
   // a blob around each mark that were never drawn.
   territory: {
-    // The dog marks at most this often. Sized so a 30-minute walk yields
-    // roughly 8-13 marks — enough that a walk visibly grows your range,
-    // few enough that each one is a real claim you can't spam.
+    // THE CADENCE — one pair of numbers, and the same pair for everybody.
     //
-    // This and the spacing below are env-overridable because the whole
-    // feel of the mechanic lives in these two numbers, and finding the
-    // right pair takes walking around with them — not a redeploy per
-    // guess. Set TERRITORY_COOLDOWN_MS / TERRITORY_MIN_DISTANCE_M on the
-    // API and unset them to fall back to the tuned defaults.
-    cooldownMs: envNum('TERRITORY_COOLDOWN_MS', 150_000),
-    // …and never within this distance of its last mark, so two marks in a
-    // row can't land on the same patch and go to waste. Combined with the
-    // cooldown this is what actually paces claims on a fast walk.
-    minDistanceM: envNum('TERRITORY_MIN_DISTANCE_M', 140),
+    // Bots used to run on their own cooldown and only share the spacing,
+    // plus a rule that they could mark while lingering but never
+    // mid-stride. Three dials for one behaviour, so a bot and the player
+    // it is supposed to be a rival to claimed on different terms, and
+    // every tuning pass had to be done twice. One pair now, both paths.
+    //
+    // 150s / 140m -> 20s / 40m. The old pair was sized around a mark being
+    // a rare, deliberate claim: 8-13 on a 30-minute walk, each one a big
+    // step of a border. It made territory out of a handful of far-apart
+    // points, so every outline was a wide polygon between four or five
+    // dots — the straight-edged look.
+    //
+    // Marks 40m apart draw a boundary that follows the walk instead of
+    // spanning it: the hull has a dozen points around a corner rather than
+    // one, so ground comes out curved and shaped like the streets somebody
+    // actually walked. Marking is the loop now, not a rare event.
+    //
+    // 20s is set BELOW the spacing for an ordinary walker (40m at 1.4 m/s
+    // is ~29s), deliberately: distance should be what paces a claim, so a
+    // dog that stands still claims nothing however long it waits, and one
+    // that covers ground claims as fast as it covers it.
+    //
+    // Both env-overridable, because the whole feel of the mechanic lives
+    // here and finding the right pair takes walking around with it, not a
+    // redeploy per guess. TERRITORY_COOLDOWN_MS / TERRITORY_MIN_DISTANCE_M.
+    cooldownMs: envNum('TERRITORY_COOLDOWN_MS', 20_000),
+    minDistanceM: envNum('TERRITORY_MIN_DISTANCE_M', 40),
     // Mood gates — TEMPORARILY OFF (both at 0, so both comparisons are
     // always satisfied). The idea is that a miserable or starving dog
     // won't mark, which is what wires territory into the bones/paws
@@ -207,8 +222,15 @@ export const balance = {
     minHunger: 0,
     // Marking costs a little (effort + water) and gives back a little
     // (dogs love doing it).
-    hungerCost: 3,
-    happinessGain: 4,
+    //
+    // 3 / 4 -> 1 / 1, because the cadence changed under them. At a mark
+    // every 40m a half-hour walk is around sixty marks rather than a
+    // dozen, and 3 hunger apiece is 180 — the dog would starve before the
+    // walk was over, from doing the thing the game is about. One each
+    // keeps the wire to the bones economy intact at a third of what a
+    // walk used to cost in total.
+    hungerCost: 1,
+    happinessGain: 1,
     // DECAY, at the level of the mark rather than the ground. A mark's
     // scent lasts this long; after that it stops counting and the shape
     // shrinks to the hull of what's left. Visible, unlike a per-cell
@@ -236,27 +258,38 @@ export const balance = {
     // edge quietly re-cutting a neighbour on the far side. Measured on
     // prod, pieces spanned up to 1184m.
     //
-    // At 250, with marks at least minDistanceM (140m) apart, a claim is the
-    // polygon between the mark and the one or two either side of it along
-    // the walk. A route paints a corridor rather than a disc, and a loop
-    // still fills, because the marks around it are what the hull is drawn
-    // from. Territory is where the dog went.
+    // At 250, with marks landing every ~55m, a claim is the polygon around
+    // the eight or ten marks nearest the one that made it. A route paints
+    // a corridor rather than a disc, and a loop still fills, because the
+    // marks around it are what the hull is drawn from. Territory is where
+    // the dog went.
+    //
+    // Tried 120 as well, and it is too tight for this spacing: only three
+    // or four marks land in range, which is barely shapeMinMarks, so most
+    // claims came out as slivers or nothing. The same six minutes gave
+    // 10ha against 250's 34ha. The radius has to hold enough marks to make
+    // a shape.
     claimNeighbourM: 250,
-    // Longest edge a territory's boundary may have before it gets pulled
-    // inward onto a nearer mark.
+    // Longest edge a boundary may have before the hull digs inward onto a
+    // nearer mark. This is the CURVE dial: it decides how closely an
+    // outline follows the marks instead of cutting the corner between them.
     //
-    // This is what stops a shape spanning ground nobody walked. Linking
-    // marks within a kilometre builds one main territory, and without this
-    // the convex hull across that cluster also swallowed everything
-    // between its arms — a single new mark could appear to hand over a
-    // block nowhere near it. Measured on live territories, 9% of hull
-    // edges ran past 400m against a 140m minimum spacing, topping out at
-    // 679m; every one of those was a bridge, not a walk.
+    // 350 was sized against marks 140m apart, where its job was stopping a
+    // hull from spanning ground nobody walked. At 40m spacing it is eight
+    // times the gap, so the boundary sails straight past every corner and
+    // ground comes out as flat-sided polygons — the look this change is
+    // trying to leave behind.
     //
-    // Sized comfortably above minDistanceM (140m) so an ordinary run of
-    // marks along a street is never dug into, and below the distances that
-    // read as a jump.
-    shapeEdgeMaxM: 350,
+    // 120 is about twice the gap marks actually land at (~55m, since the
+    // cooldown paces a walker slightly past the 40m minimum). Measured over
+    // the same six minutes of thirty dogs: average corners per piece
+    // 7.5 -> 9.0, largest ring 13 -> 14, ground claimed unchanged at ~35ha.
+    // Curvier for free.
+    //
+    // Do not take it below the spacing itself. An edge limit shorter than
+    // the gap between marks has nothing to dig toward and collapses the
+    // shape.
+    shapeEdgeMaxM: 120,
     shapeMinMarks: 3,
     // Bound on the geometry work per mark. Older marks past this count
     // are ignored for shape-building (they're near expiry anyway).
@@ -339,27 +372,7 @@ export const balance = {
     // night's sleep, short enough that coming back after a week doesn't
     // dump a month of history on you at once.
     raidTtlHours: 48,
-    // Bots hold ground too, so there's something to raid before the city
-    // fills with real players. Each bot marks about this often while it's
-    // out walking (they roam via the presence cron), which over an hour
-    // gives every bot a small, defensible patch around the parks it
-    // frequents.
-    // Cut 6 -> 4 -> 2 minutes. Bots raid each other, and a raid that only
-    // lands every few minutes barely moves a border.
-    //
-    // Note this is a CEILING, not the rate. What actually paces a bot is
-    // the round trip: pick a target, walk to it, linger, mark. That cycle
-    // runs several minutes, so this gate is rarely the thing being waited
-    // on — it is here to stop a bot that happens to arrive somewhere twice
-    // in quick succession from stacking marks, not to set the tempo. The
-    // tempo lives in bots.ts (stroll chance, speed, dwell).
-    //
-    // TEST TEMPO — 2 minutes while tuning. Stored ground is a new mechanic
-    // and watching it at walking pace means one border move every few
-    // minutes; at 15s a whole city's worth of grow-and-cut happens while
-    // you're looking at it. Put this back to 2 * 60 * 1000, together with
-    // the speed and dwell in bots.ts, before this is in front of anyone.
-    botMarkCooldownMs: 15 * 1000,
+
     // Bots start with NOTHING and claim by walking, like a player does.
     //
     // Was 5, which handed every bot a finished patch the instant the
