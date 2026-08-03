@@ -193,6 +193,14 @@ export default function TasksScreen() {
 
   const doneCount = TASKS.filter((row) => dailyTasks[row.key] >= row.target).length;
 
+  // Which snap-cards are on screen at all. The observer below re-arms on
+  // this and nothing else — hoisted into named flags because the linter
+  // cannot check an expression written inline in a dependency array, and
+  // getting this set wrong means the pop animation silently stops.
+  const noLostDogs = lostDogsLoaded && sortedDogs.length === 0;
+  const hasHistory = history.length > 0;
+  const hasBoard = board != null;
+
   // Pop the dominant snap-card when it changes. Uses
   // IntersectionObserver against the cards' stable nativeIDs to
   // detect which card is currently dominant, then drives a pop
@@ -292,14 +300,97 @@ export default function TasksScreen() {
     // the skeleton placeholder, so the dogs fetch settling no
     // longer flips this — the same DOM node carries the data
     // swap without needing a fresh observer.
-  }, [lostDogsLoaded && sortedDogs.length === 0, history.length > 0]);
+  }, [noLostDogs, hasHistory, hasBoard]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} style={styles.scroller}>
-        {/* Lost pets nearby — promoted to the top of the tab so the
-            most actionable thing on the screen is the first thing
-            the user sees. Always rendered (even while the dogs
+        {/* Who holds the city. Territory is the one thing on the map
+            that is directly competitive, and until now the only place
+            you could see it was three summary rows on the profile tab
+            — your area, your rank, and the single name above you. A
+            standing needs the list: seeing four names between you and
+            the top is what makes the number mean something.
+
+            Bars are relative to the leader rather than absolute, so
+            the shape of the race reads at a glance on a card this
+            narrow — whether the top is running away with it or the
+            first five are neck and neck.
+
+            Bots are not labelled. They hold real ground under exactly
+            the rules a player does, and a tag saying which neighbours
+            are simulated is the sort of honesty nobody asked for — it
+            tells you the city is scenery. They are on the board because
+            they earned the ground; who is behind a name is not the
+            board's business. */}
+        {board ? (
+          <View nativeID="snap-card-board" style={styles.card}>
+            <View style={styles.cardHeaderRow}>
+              <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
+              <Text style={styles.cardHeaderCount}>
+                {t.profile.areaValue(board.you.areaM2)}
+              </Text>
+            </View>
+            {board.board.length === 0 ? (
+              <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
+            ) : (
+              <>
+                {board.board.map((row, i) => {
+                  // The viewer is whoever sits at their own rank — the
+                  // board carries no id for you, and it doesn't need to.
+                  const isYou = board.you.rank === i + 1;
+                  const top = board.board[0]!.areaM2 || 1;
+                  return (
+                    <View
+                      key={row.userId}
+                      style={[styles.boardRow, i > 0 && styles.taskDivider]}
+                    >
+                      <View style={styles.row}>
+                        <Text style={[styles.boardRank, isYou && styles.boardYouText]}>
+                          {i + 1}
+                        </Text>
+                        <Text
+                          style={[styles.boardName, isYou && styles.boardYouText]}
+                          numberOfLines={1}
+                        >
+                          {isYou ? t.tasks.boardYou : row.name}
+                        </Text>
+                        <Text style={[styles.boardArea, isYou && styles.boardYouText]}>
+                          {t.profile.areaValue(row.areaM2)}
+                        </Text>
+                      </View>
+                      <View style={styles.barTrack}>
+                        <View
+                          style={[
+                            styles.barFill,
+                            {
+                              width: `${Math.max(2, Math.round((row.areaM2 / top) * 100))}%` as unknown as number,
+                              backgroundColor: isYou
+                                ? 'rgba(0,60,255,0.85)'
+                                : 'rgba(0,0,0,0.45)',
+                            },
+                          ]}
+                        />
+                      </View>
+                    </View>
+                  );
+                })}
+                {/* Off the board entirely — say where you actually are
+                    rather than leaving the card looking like it has
+                    nothing to do with you. */}
+                {board.you.rank == null ? (
+                  <Text style={styles.boardEmpty}>
+                    {t.tasks.boardUnranked(board.board.length)} ·{' '}
+                    {t.profile.areaValue(board.you.areaM2)}
+                  </Text>
+                ) : null}
+              </>
+            )}
+          </View>
+        ) : null}
+
+        {/* Lost pets nearby — the most actionable thing on the screen,
+            under the standing. Always rendered (even while the dogs
             fetch is in flight) with a skeleton placeholder inside
             so the snap order is stable from first paint — without
             this the daily-quests card briefly takes the top slot
@@ -398,90 +489,6 @@ export default function TasksScreen() {
             );
           })}
         </View>
-
-        {/* Who holds the city. Territory is the one thing on the map
-            that is directly competitive, and until now the only place
-            you could see it was three summary rows on the profile tab
-            — your area, your rank, and the single name above you. A
-            standing needs the list: seeing four names between you and
-            the top is what makes the number mean something.
-
-            Bars are relative to the leader rather than absolute, so
-            the shape of the race reads at a glance on a card this
-            narrow — whether the top is running away with it or the
-            first five are neck and neck.
-
-            Bots are labelled. They hold real ground under the same
-            rules, so leaving them in is honest, but passing one off
-            as a neighbour would not be. */}
-        {board ? (
-          <View nativeID="snap-card-board" style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
-              <Text style={styles.cardHeaderCount}>
-                {t.profile.areaValue(board.you.areaM2)}
-              </Text>
-            </View>
-            {board.board.length === 0 ? (
-              <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
-            ) : (
-              <>
-                {board.board.map((row, i) => {
-                  // The viewer is whoever sits at their own rank — the
-                  // board carries no id for you, and it doesn't need to.
-                  const isYou = board.you.rank === i + 1;
-                  const top = board.board[0]!.areaM2 || 1;
-                  return (
-                    <View
-                      key={row.userId}
-                      style={[styles.boardRow, i > 0 && styles.taskDivider]}
-                    >
-                      <View style={styles.row}>
-                        <Text style={[styles.boardRank, isYou && styles.boardYouText]}>
-                          {i + 1}
-                        </Text>
-                        <Text
-                          style={[styles.boardName, isYou && styles.boardYouText]}
-                          numberOfLines={1}
-                        >
-                          {isYou ? t.tasks.boardYou : row.name}
-                        </Text>
-                        {row.bot && !isYou ? (
-                          <Text style={styles.boardBot}>{t.tasks.boardBot}</Text>
-                        ) : null}
-                        <Text style={[styles.boardArea, isYou && styles.boardYouText]}>
-                          {t.profile.areaValue(row.areaM2)}
-                        </Text>
-                      </View>
-                      <View style={styles.barTrack}>
-                        <View
-                          style={[
-                            styles.barFill,
-                            {
-                              width: `${Math.max(2, Math.round((row.areaM2 / top) * 100))}%` as unknown as number,
-                              backgroundColor: isYou
-                                ? 'rgba(0,60,255,0.85)'
-                                : 'rgba(0,0,0,0.45)',
-                            },
-                          ]}
-                        />
-                      </View>
-                    </View>
-                  );
-                })}
-                {/* Off the board entirely — say where you actually are
-                    rather than leaving the card looking like it has
-                    nothing to do with you. */}
-                {board.you.rank == null ? (
-                  <Text style={styles.boardEmpty}>
-                    {t.tasks.boardUnranked(board.board.length)} ·{' '}
-                    {t.profile.areaValue(board.you.areaM2)}
-                  </Text>
-                ) : null}
-              </>
-            )}
-          </View>
-        ) : null}
 
         {/* Past searches — completed/abandoned quests, most recent
             first. Only renders the card when there's something to
@@ -665,11 +672,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: TYPE.body,
     color: colors.black,
-  },
-  boardBot: {
-    fontSize: TYPE.small,
-    color: '#aaa',
-    marginRight: S.s,
   },
   boardArea: {
     fontSize: TYPE.small,
