@@ -204,6 +204,13 @@
       "when": 1777310070000,
       "tag": "0028_territory_reset_8",
       "breakpoints": true
+    },
+    {
+      "idx": 29,
+      "version": "7",
+      "when": 1777310080000,
+      "tag": "0029_sweep_ground_slivers",
+      "breakpoints": true
     }
   ]
 }
