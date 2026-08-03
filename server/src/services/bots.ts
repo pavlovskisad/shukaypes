@@ -79,11 +79,20 @@ const HOME_STROLL_CHANCE = 0.75;
 // is the opposite of the point. Closing the homes up would have restored
 // it, at the cost of more overlapping claims for the partition to resolve
 // on a machine with one shared vCPU. Speed buys the same tempo for free.
-const SPEED_MIN = 2.0; // m/s
-const SPEED_MAX = 3.0;
+// TEST TEMPO. Walking pace is 2-3 m/s with an 8-30s dwell, which is a
+// mark every few minutes per dog — right for a city being lived in, far
+// too slow for watching a brand new claim rule take effect. At 9-12 m/s
+// with a 2-6s dwell a dog covers the 140m spacing gate in about fifteen
+// seconds, so borders move while you are looking at them.
+//
+// Restore to SPEED 2.0/3.0 and DWELL 8_000/30_000 (with
+// botMarkCooldownMs back to 2 minutes) before this is in front of anyone
+// — at this speed the dogs are visibly sprinting.
+const SPEED_MIN = 9.0; // m/s — TEST, walking pace is 2.0
+const SPEED_MAX = 12.0; // TEST, walking pace is 3.0
 const ARRIVE_M = 22;
-const DWELL_MIN_MS = 8_000; // linger at a destination
-const DWELL_MAX_MS = 30_000;
+const DWELL_MIN_MS = 2_000; // TEST, lifelike is 8_000
+const DWELL_MAX_MS = 6_000; // TEST, lifelike is 30_000
 const OFFLINE_CHANCE = 0.14; // after a dwell, chance to "log off"
 const OFFLINE_MIN_MS = 60_000;
 const OFFLINE_MAX_MS = 240_000;
