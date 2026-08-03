@@ -71,10 +71,35 @@ const MERGE_M = 3;
 //    would keep the noise.
 const MAX_RING_POINTS = 120;
 
-// Below this a piece is a sliver from the clipper, not ground: the width of
-// a doorway, the seam where two shapes touched. Nobody can see it and
-// nobody can walk it.
-const MIN_PIECE_M2 = 200;
+// Below this a piece is confetti, not ground.
+//
+// 200 -> 2000 (a 45m square), and the reason is a measurement. On prod,
+// 64 of 133 pieces in view were under 2000m²: HALF the pieces on the map,
+// holding 5.5ha of 208 — 2.6% of the ground and 18% of the corners. The
+// smallest were 196-264m², sitting right on the old threshold. A dog
+// cutting across a neighbour at a mark every 40m shatters them, and with
+// nothing decaying the shards stay forever.
+//
+// None of it is visible: 200m² at city zoom is a few pixels. What it does
+// instead is make the payload — 111KB, 57% of it polygons — and the piece
+// count that the view ceiling is measured against.
+//
+// This is a real cost, stated plainly: an owner loses any fragment smaller
+// than this rather than keeping it, and nobody gains it. A gap on the map
+// is fine. Two owners on one block is not, which is why holes are held to
+// a different rule below.
+const MIN_PIECE_M2 = 2000;
+
+// Holes are NOT subject to that, and the difference matters.
+//
+// A hole is ground somebody else took out of the middle of this piece. If
+// a hole is dropped for being small, its owner keeps their piece AND the
+// original owner's ring closes back over it — both holding the same
+// ground, which is the one thing the model cannot allow. A piece dropped
+// for being small leaves a gap; a hole dropped for being small leaves an
+// overlap. So this is effectively "only discard a hole with no area at
+// all".
+const MIN_HOLE_M2 = 1;
 
 function simplifyRing(ring: Pt[]): Pt[] {
   if (ring.length < 4) return ring;
@@ -125,7 +150,7 @@ function toPieces(result: Pt[][][]): { ring: Pt[]; holes: Pt[][]; areaM2: number
     if (ring.length < 3) continue;
     const keptHoles = holes
       .map(simplifyRing)
-      .filter((h) => h.length >= 3 && polygonAreaM2(asLatLng(h)) >= MIN_PIECE_M2);
+      .filter((h) => h.length >= 3 && polygonAreaM2(asLatLng(h)) >= MIN_HOLE_M2);
     const areaM2 =
       polygonAreaM2(asLatLng(ring)) -
       keptHoles.reduce((s, h) => s + polygonAreaM2(asLatLng(h)), 0);
@@ -410,7 +435,11 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
     // Nothing moved: the hull was already inside ground we hold, and no
     // rival lost anything either. Leave the rows alone rather than
     // rewriting identical geometry.
-    if (victims.size === 0 && heldAfter - heldBefore < MIN_PIECE_M2) {
+    // 50m², not MIN_PIECE_M2: this is "did anything change", not "is this
+    // a real piece". Ground added onto a patch you already hold is real
+    // whether or not it would stand alone, and at a mark every 40m a lot
+    // of growth arrives in small increments.
+    if (victims.size === 0 && heldAfter - heldBefore < 50) {
       return { gainedM2: 0, victims, changed: false };
     }
 
