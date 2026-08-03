@@ -30,16 +30,39 @@ const MAP_FONT = 'Annex Fam Normal';
 // Palette tuned to the in-app pixel-art home screen: pastel grass green,
 // pale sky blue, soft cards. Keeps crayon dark for legibility but the
 // nature fills move from "vivid sticker" to "pastel storybook".
+//
+// GEOGRAPHY IS THE BACKGROUND NOW. Territory is painted over all of this
+// in a dozen saturated colours, and grass and water were competing with
+// it — a vivid green park read as somebody's claim rather than as a park.
+// Saturation is cut by 45% and lightness raised toward the paper, so the
+// city recedes to a tinted sketch and the only strong colour on screen is
+// somebody's ground.
+//
+// HOW FAR TO GO IS A MEASUREMENT, not a taste, because paling everything
+// toward white also pales it toward EACH OTHER. Pushed harder (saturation
+// x0.42) the river and the parks landed dE 18 apart — still visible, but a
+// river that reads the same tone as a lawn is a worse map. At x0.55 they
+// sit 25 apart, roughly ten times a just-noticeable difference, while the
+// base is barely half as saturated as it was:
+//
+//              water vs park   vs paper   base saturation
+//   before          66           34/57         0.48
+//   here            25           20/27         0.26
+//   too far         18           18/23         0.20
+//
+// And the thing that actually matters is untouched: painted ground still
+// separates from unpainted by dE ~48, composited at the 0.42 the territory
+// layer draws at.
 export const LIGHT_PALETTE = {
   paper: '#ffffff',
   crayon: '#2a2a2a',
   greyRoad: '#d4d4d4',
-  green: '#9fcc6e',
-  greenDark: '#6ea846',
-  greenLight: '#d9ecbb',
-  blue: '#88c5e4',
-  blueDark: '#5aa2c8',
-  blueLight: '#cae6f3',
+  green: '#bfcfad',
+  greenDark: '#a3ba92',
+  greenLight: '#e2e9d6',
+  blue: '#bcd3df',
+  blueDark: '#a2bdca',
+  blueLight: '#deeaef',
   // Road wobble clone colours — kept close to greyRoad so the offset
   // copies read as a subtle "double line" texture instead of as a
   // stack of dark cables crossing the city.
