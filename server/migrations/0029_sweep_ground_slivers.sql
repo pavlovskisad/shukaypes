@@ -1,0 +1,21 @@
+-- Sweep the confetti the old floor let through.
+--
+-- MIN_PIECE_M2 went 200 -> 2000m² so new fragments are never written, but
+-- a piece already in the table is only ever rewritten when a claim happens
+-- to touch it. Measured on prod straight after that deploy: 65 of 132
+-- pieces in view were still under the floor — half the map — holding 5.35
+-- of 248 hectares. They would have sat there for weeks.
+--
+-- So this is the other half of that change rather than a new rule: apply
+-- the floor once to what is already stored.
+--
+-- The cost is 2% of everyone's ground, all of it in fragments smaller than
+-- a 45m square, which at city zoom is a few pixels. What it buys is half
+-- the pieces on the map, and with them a large share of the polygon
+-- payload and of the count that the per-view ceiling is measured against.
+--
+-- Deleting a piece can only ever leave a GAP, never an overlap — nobody
+-- gains what is removed here. (That asymmetry is exactly why holes are not
+-- swept: dropping a hole would close its owner's ring back over ground
+-- somebody else holds. Holes are left alone.)
+DELETE FROM "territory_ground" WHERE "area_m2" < 2000;
