@@ -42,6 +42,11 @@
 // hull the NEXT mark draws — it never takes back ground already held.
 // Ground changes hands one way: somebody walks in and marks over it.
 //
+// WHAT YOU SEE IS WHAT YOU HOLD. A mark only ever sits on ground its
+// owner holds or on nobody's, because a capture takes the marks inside it
+// along with the ground. No dot is quietly waiting under someone else's
+// colour to spring the border back.
+//
 // CONTEST
 // -------
 // Marking is the same gesture for attack and defence, which is the whole
@@ -50,10 +55,11 @@
 //
 //   • near YOUR OWN live marks  → they renew, and the hull they draw
 //     extends whatever you already hold.
-//   • over a RIVAL's ground     → nothing of theirs is deleted. Their
-//     dots all still stand and the rest of their ground is untouched.
-//     They lose exactly the piece your new shape covers, and they take it
-//     back the same way, by walking in.
+//   • over a RIVAL's ground     → they lose exactly the piece your new
+//     shape covers, and the marks inside it go with it. Everything
+//     outside stands: their other ground, their other dots. To take it
+//     back they walk it and mark it out again, which is what it cost to
+//     take in the first place.
 //
 // TERRITORY IS THE POLYGON BETWEEN YOUR DOTS. Nothing is grown outward and
 // nothing is inflated to meet a neighbour. Two owners share a border when
@@ -86,7 +92,7 @@ import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
-import { concaveHull } from '../utils/territoryShapes.js';
+import { concaveHull, pointInPolygon } from '../utils/territoryShapes.js';
 // Ground is stored, and everything that changes or reads it lives there.
 // The polygon clipping this file used to do on every sync went with it.
 import {
@@ -329,9 +335,8 @@ async function placeMark(
   });
 
   // THE GROUND ITSELF: grown by this hull, and cut out of whoever it
-  // covers. NOTHING OF THEIRS IS DELETED — their dots all still stand and
-  // their remaining ground is untouched. They lose exactly the piece the
-  // new shape covers, and they take it back the same way, by walking in.
+  // covers. They keep every piece outside the cut, however many marks
+  // they have left — that is the whole reason ground is stored.
   //
   // Its own transaction, deliberately after the mark is safely down: a
   // clipper failure must not roll back the dog's mark. Ground can be
@@ -340,6 +345,42 @@ async function placeMark(
     hull.length >= 3
       ? await claimGround(userId, hull)
       : { gainedM2: 0, victims: new Map<string, number>(), changed: false };
+
+  // TAKING THE GROUND TAKES THE SCENT WITH IT.
+  //
+  // Every rival mark inside the claimed shape is removed. This is the
+  // exact rule an earlier cut rejected, and it is worth being clear about
+  // why it is right NOW and was wrong THEN: a territory used to BE the
+  // hull of its marks, so deleting one collapsed the shape — at three
+  // marks it deleted the entire zone, and losing a corner cost a
+  // neighbour everything. Ground is stored now. Deleting a mark removes
+  // no ground whatsoever; it only removes that dot as an input to some
+  // future claim.
+  //
+  // What it buys is a rule with no hidden state. Before this, a dot under
+  // somebody else's paint still counted, so one mark beside it re-drew
+  // the old hull and took the whole piece back at a stroke — a comeback
+  // with nothing on screen to explain it, off dots that looked like they
+  // belonged to ground their owner plainly did not hold. Now: what you
+  // see is what you hold, and taking a zone back costs what taking it
+  // cost in the first place — walking it and marking it out again.
+  //
+  // Scoped to the claimed shape, not the neighbourhood: marks outside it
+  // are on ground nobody just took, and they stand.
+  if (claimed.changed && hull.length >= 3) {
+    const reachM = hull.reduce((r, p) => Math.max(r, distanceMeters(pos, p)), 0);
+    const doomed = (await marksNear(pos, reachM + 1, { exceptUserId: userId })).filter((m) =>
+      pointInPolygon({ lat: m.lat, lng: m.lng }, hull),
+    );
+    if (doomed.length) {
+      await db.delete(schema.territoryMarks).where(
+        inArray(
+          schema.territoryMarks.id,
+          doomed.map((m) => m.id),
+        ),
+      );
+    }
+  }
 
   // One raid per victim, not per mark — a neighbour walking through is a
   // single event to the person it happens to. Driven by ground actually
@@ -355,9 +396,9 @@ async function placeMark(
         raiderName,
         lat: pos.lat,
         lng: pos.lng,
-        // Nothing of theirs was destroyed — this says "somebody was on
-        // your ground", which is what a raid now is.
-        killed: false,
+        // Their marks in the taken piece went with it, so this is a real
+        // loss rather than a visit.
+        killed: true,
         createdAt: now,
       })),
     );

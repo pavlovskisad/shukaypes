@@ -352,9 +352,35 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
 
     const mine = rows.filter((r) => r.userId === userId);
     const theirs = rows.filter((r) => r.userId !== userId);
+    const heldBefore = mine.reduce((s, r) => s + r.areaM2, 0);
 
-    // CUT FIRST, so what we measure as gained is what actually changed
-    // hands rather than ground we already held.
+    // CAN THIS CLAIM HOLD GROUND AT ALL? Asked BEFORE anything is cut.
+    //
+    // A claim smaller than MIN_PIECE_M2 that touches none of the
+    // claimant's own ground cannot be stored — toPieces drops it. Cutting
+    // first and discovering that afterwards meant a claim too small to
+    // hold ground could still destroy it: the victim's piece was carved,
+    // the claimant's own piece was dropped for being a sliver, and the
+    // ground ended up belonging to NOBODY. Reproduced end to end — a dog
+    // walked a small triangle inside a rival's block and the block came
+    // back owner null.
+    //
+    // So the size test comes first. A claim that cannot become ground
+    // does nothing whatsoever.
+    let dryRun: Pt[][][];
+    try {
+      dryRun = polygonClipping.union(
+        claimPoly as never,
+        ...(mine.map((r) => [toPoly(r)]) as never[]),
+      ) as Pt[][][];
+    } catch {
+      return empty;
+    }
+    if (toPieces(dryRun).reduce((s, p) => s + p.areaM2, 0) - heldBefore < 50) return empty;
+
+    // CUT, now that we know the claim is real. Measured before the grow,
+    // so what counts as gained is what changed hands rather than ground
+    // already held.
     const victims = new Map<string, number>();
     // Ground somebody else holds that we could not cut. We must not take
     // it either — see below.
@@ -419,7 +445,6 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
     // GROW: fold the claim into everything of ours it touches, so a walk
     // that joins two of your own patches leaves one piece, not two
     // overlapping ones.
-    const heldBefore = mine.reduce((s, r) => s + r.areaM2, 0);
     let merged: Pt[][][];
     try {
       merged = polygonClipping.union(
