@@ -369,7 +369,18 @@ export function startMultiplayerCron(
               // and the city consolidates into a handful of holders with
               // most of the map blank. No-ops unless it holds nothing.
               await seedBotTerritory(b.id, b.name, b.home);
-              await markAsBot(b.id, b.name, b.pos);
+              const pruned = await markAsBot(b.id, b.name, b.pos);
+              // A bot found holding more than the ceiling. The mark path
+              // corrects it on its own, but it should never happen, and
+              // prod says it does — so say so rather than quietly tidying
+              // up, or the next person to look finds a city that's fine
+              // and no record that it wasn't.
+              if (pruned > 0) {
+                log.warn(
+                  { kind: 'mp_bot_over_cap', bot: b.id, pruned, cap: balance.territory.botMaxMarks },
+                  `multiplayer: ${b.id} was over the mark ceiling by ${pruned}`,
+                );
+              }
             } catch (err) {
               log.warn({ err, kind: 'mp_bot_mark' }, 'multiplayer: bot mark failed');
             }

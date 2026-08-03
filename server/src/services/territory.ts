@@ -184,6 +184,7 @@ export interface RaidEvent {
 async function liveMarks(userId: string) {
   const rows = await db
     .select({
+      id: schema.territoryMarks.id,
       lat: schema.territoryMarks.lat,
       lng: schema.territoryMarks.lng,
       closedLoop: schema.territoryMarks.closedLoop,
@@ -504,35 +505,69 @@ export async function markIfDue(
 // that meant every visit renewed and none ever added, so bot territory
 // froze at its five seed marks and never grew no matter how far they
 // walked.
-export async function markAsBot(botId: string, botName: string, pos: LatLng): Promise<void> {
+// Returns how many over-ceiling marks it had to clear, so the caller can
+// say so out loud. Normally 0.
+export async function markAsBot(botId: string, botName: string, pos: LatLng): Promise<number> {
   // Same rule the player's dog follows — no claiming open water.
-  if (isOnWater(pos)) return;
-  const live = await liveMarks(botId);
+  if (isOnWater(pos)) return 0;
+  let live = await liveMarks(botId);
+
+  // THE CEILING IS AN INVARIANT, NOT A GATE.
+  //
+  // Everything below only refuses to GROW past botMaxMarks: at the cap it
+  // renews a mark, or trades one for another, both net zero. That holds a
+  // bot at twelve only if it never got above twelve — and prod says they
+  // all did. Twenty-four hours after a full wipe, every one of the thirty
+  // bots was serving the full 24-mark payload cap, meaning each held at
+  // least twice the ceiling, on distinct positions.
+  //
+  // I could not reproduce it. The same code, config and database, running
+  // the real cron with thirty bots in the same city, holds every bot at
+  // exactly 12 through hundreds of marks and raids — checked with slow
+  // walking and with movement compressed 30x. Nor is it two machines
+  // racing: presence shows one simulator per bot (every bot moves 8-10m
+  // between 3s reads, never a jump), and it isn't a stale image either
+  // (0 of 751 live marks sit in water, so the marking code is current).
+  //
+  // So stop trying to prevent the leak and correct for it instead:
+  // whatever a bot is carrying when it goes to mark, the oldest above the
+  // ceiling go. Self-healing, which a guard is not — the city repairs
+  // itself over the next round of marking rather than needing a wipe, and
+  // if the leak is still there it can only ever be one mark deep.
+  let pruned = 0;
+  if (live.length > T.botMaxMarks) {
+    const excess = live.slice(0, live.length - T.botMaxMarks);
+    await db.delete(schema.territoryMarks).where(
+      inArray(
+        schema.territoryMarks.id,
+        excess.map((m) => m.id),
+      ),
+    );
+    live = live.slice(excess.length);
+    pruned = excess.length;
+  }
   // Same rule the player's dog follows: no marking on ground you already
   // hold. A bot's stroll radius is wider than its patch, so this turns
   // most of its walking into either expansion at the edge or a raid on a
   // neighbour, instead of it circling its own park topping up a scent
   // nobody can see. Checked before the ceiling logic below, so the
   // at-cap renewal can't smuggle a home-ground mark back in.
-  if (T.markOnlyOutsideOwnGround && (await standsOnHeldGround(botId, pos))) return;
+  if (T.markOnlyOutsideOwnGround && (await standsOnHeldGround(botId, pos))) return pruned;
   if (live.length >= T.botMaxMarks) {
     // At the ceiling. What happens next depends on WHERE it's standing.
     const rivals = await marksNear(pos, T.contestM, { exceptUserId: botId });
     if (rivals.length === 0) {
       // Home ground, nothing to fight: refresh the oldest mark so the
       // patch stays alive without creeping across the city.
+      //
+      // By id, not by position: two marks a metre apart round to the same
+      // place often enough, and "renew the oldest" meant to move one row.
       const oldest = live[0]!;
       await db
         .update(schema.territoryMarks)
         .set({ createdAt: new Date() })
-        .where(
-          and(
-            eq(schema.territoryMarks.userId, botId),
-            eq(schema.territoryMarks.lat, oldest.lat),
-            eq(schema.territoryMarks.lng, oldest.lng),
-          ),
-        );
-      return;
+        .where(eq(schema.territoryMarks.id, oldest.id));
+      return pruned;
     }
     // Standing on somebody else's ground: TAKE IT, and give up the oldest
     // corner of home to pay for it. The mark count is unchanged, so a bot
@@ -544,17 +579,10 @@ export async function markAsBot(botId: string, botName: string, pos: LatLng): Pr
     // every visit renewed, so a bot could stand in the middle of a rival's
     // range and never once contest it.
     const oldest = live[0]!;
-    await db
-      .delete(schema.territoryMarks)
-      .where(
-        and(
-          eq(schema.territoryMarks.userId, botId),
-          eq(schema.territoryMarks.lat, oldest.lat),
-          eq(schema.territoryMarks.lng, oldest.lng),
-        ),
-      );
+    await db.delete(schema.territoryMarks).where(eq(schema.territoryMarks.id, oldest.id));
   }
   await placeMark(botId, botName, pos);
+  return pruned;
 }
 
 // Give a bot a starting patch so there's something to raid on day one.
