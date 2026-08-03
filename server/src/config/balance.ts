@@ -216,35 +216,32 @@ export const balance = {
     // gives marking inside your own territory a purpose: it doesn't
     // expand the shape, it renews it.
     markTtlDays: 4,
-    // SHAPES. Marks near each other form one shape; three of them enclose
-    // ground. Beyond the link distance a mark starts its own island,
-    // which is what stops one stray mark across town from stretching a
-    // single triangle over half the city.
-    // How far apart two marks can be and still count as ONE territory.
+    // HOW FAR ONE MARK CLAIMS — the radius of the owner's own marks that a
+    // new mark draws its hull from, and therefore half the widest a single
+    // claim can possibly be.
     //
-    // 350 -> 1000 -> 500. The middle value was wrong and the reason is
-    // worth keeping, because it is not obvious.
+    // 350 -> 1000 -> 500 -> 250, and the last step is the one that matters,
+    // because what this number MEANS changed underneath it.
     //
-    // 350 left confetti once the halo was gone, so this went to 1000 to
-    // build one main territory. That worked and brought a new complaint
-    // with it: a single new mark could appear to hand over ground nowhere
-    // near it. What happens is the mark BRIDGES two clusters that were
-    // separate, they merge, and the shape spanning them swallows
-    // everything in between at a stroke.
+    // While a territory was recomputed from marks, this was the LINKING
+    // distance: how far apart two marks could be and still belong to one
+    // shape. It had to be generous or a walk came out as confetti, and the
+    // price was that one mark could bridge two clusters and swallow
+    // everything between them at a stroke.
     //
-    // The obvious fix — a boundary that follows the walk instead of
-    // spanning it — does not work here, and it took building one to find
-    // out. A hull is computed from POINTS, and it cannot carve out a
-    // region that contains none: a U-shaped walk came back at 64.0 ha at
-    // every concavity setting tried, because the middle of the U has no
-    // marks to pull the boundary toward. Two clusters a kilometre apart
-    // have nothing between them either, which is exactly the case here.
+    // Ground is stored now, so linking is not this number's job — the union
+    // is what turns many claims into one territory. All it decides is how
+    // far from the dog a single mark paints. At 500 that was a disc up to a
+    // kilometre across per mark: whole screens of colour, and a mark on one
+    // edge quietly re-cutting a neighbour on the far side. Measured on
+    // prod, pieces spanned up to 1184m.
     //
-    // So the bridge length is bounded by not linking that far in the first
-    // place. At 500 a normal walk (marks 140-350m apart) still links into
-    // one territory, and the worst a single mark can bridge is half what
-    // it was.
-    shapeLinkM: 500,
+    // At 250, with marks at least minDistanceM (140m) apart, a claim is the
+    // polygon between the mark and the one or two either side of it along
+    // the walk. A route paints a corridor rather than a disc, and a loop
+    // still fills, because the marks around it are what the hull is drawn
+    // from. Territory is where the dog went.
+    claimNeighbourM: 250,
     // Longest edge a territory's boundary may have before it gets pulled
     // inward onto a nearer mark.
     //
@@ -291,7 +288,7 @@ export const balance = {
     // the screen anyway.
     groundPiecesInView: 240,
     // How many pieces one mark can touch. The claim is a hull over marks
-    // within shapeLinkM, so this is "how many separate territories can
+    // within claimNeighbourM, so this is "how many separate territories can
     // possibly overlap one walk" — generous, and still a bound.
     groundPiecesPerClaim: 64,
     // How long a rival's fresh mark is worth showing. Long enough that a

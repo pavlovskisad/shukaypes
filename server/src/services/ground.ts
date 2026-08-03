@@ -26,7 +26,7 @@
 // Everything here works in [lng, lat] pairs — the order polygon-clipping
 // and GeoJSON both use, so rings go in and out of the clipper untouched.
 
-import { and, eq, gte, lte, ne, inArray, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, lte, ne, inArray, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
@@ -257,20 +257,42 @@ export interface ClaimResult {
   changed: boolean;
 }
 
+// Which ~1km cells a box touches. Claims are serialised per cell, so two
+// dogs on opposite sides of the city never wait on each other.
+const LOCK_CELL_DEG = 0.01;
+function lockKeys(box: { minLat: number; maxLat: number; minLng: number; maxLng: number }) {
+  const keys: number[] = [];
+  for (let a = Math.floor(box.minLat / LOCK_CELL_DEG); a <= Math.floor(box.maxLat / LOCK_CELL_DEG); a++) {
+    for (let b = Math.floor(box.minLng / LOCK_CELL_DEG); b <= Math.floor(box.maxLng / LOCK_CELL_DEG); b++) {
+      keys.push(a * 100_000 + b);
+    }
+  }
+  // Ascending, always: two claims wanting the same pair of cells must ask
+  // for them in the same order or they deadlock against each other.
+  return keys.sort((x, y) => x - y);
+}
+
 // Claim the ground under a hull.
 //
-// Runs in ONE transaction: two dogs marking the same block at the same
-// moment would otherwise both read the old rings and the second write would
-// silently restore what the first one cut.
+// Runs in ONE transaction, and takes an advisory lock on every cell the
+// claim touches first. The transaction alone is not enough, and prod
+// proved it: two owners were holding the same block, ninety metres deep.
+// SELECT ... FOR UPDATE locks the rows it FINDS, which says nothing about
+// rows that do not exist yet — so two dogs claiming the same corner at the
+// same moment each saw the other holding nothing there, and both inserted.
+// A lock on the ground itself is what that needs, not a lock on rows.
 export async function claimGround(userId: string, hull: LatLng[]): Promise<ClaimResult> {
   const empty: ClaimResult = { gainedM2: 0, victims: new Map(), changed: false };
   if (hull.length < 3) return empty;
 
   const claim: Pt[] = hull.map((p) => [p.lng, p.lat]);
   const box = bboxOf(claim);
-  const claimPoly: Poly[] = [[claim]];
+  let claimPoly: Poly[] = [[claim]];
 
   return db.transaction(async (tx) => {
+    for (const key of lockKeys(box)) {
+      await tx.execute(sql`SELECT pg_advisory_xact_lock(${key})`);
+    }
     const rows = await tx
       .select({
         id: schema.territoryGround.id,
@@ -288,8 +310,20 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
           lte(schema.territoryGround.minLng, box.maxLng),
         ),
       )
+      // Biggest first, so if the ceiling below ever bites it drops the
+      // slivers rather than a neighbour's whole range.
+      .orderBy(desc(schema.territoryGround.areaM2))
       .for('update')
       .limit(T.groundPiecesPerClaim);
+
+    // The ceiling is a bound on one write, not a silent truncation: every
+    // piece it drops is a piece that does not get cut, which is another
+    // way to end up with two owners on one block. Say so.
+    if (rows.length >= T.groundPiecesPerClaim) {
+      console.warn(
+        `[ground] claim by ${userId} touched the ${T.groundPiecesPerClaim}-piece ceiling; some ground may not have been cut`,
+      );
+    }
 
     const mine = rows.filter((r) => r.userId === userId);
     const theirs = rows.filter((r) => r.userId !== userId);
@@ -297,18 +331,24 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
     // CUT FIRST, so what we measure as gained is what actually changed
     // hands rather than ground we already held.
     const victims = new Map<string, number>();
+    // Ground somebody else holds that we could not cut. We must not take
+    // it either — see below.
+    const uncut: Poly[] = [];
     for (const row of theirs) {
       let cut: Pt[][][];
       try {
         cut = polygonClipping.difference([toPoly(row)] as never, claimPoly as never) as Pt[][][];
       } catch {
-        // A ring the clipper won't accept keeps its ground. Losing a piece
-        // to a numerical hiccup is worse than a border that stays put.
+        // A ring the clipper won't accept keeps its ground.
+        uncut.push(toPoly(row));
         continue;
       }
       const left = toPieces(cut);
       const lost = row.areaM2 - left.reduce((s, p) => s + p.areaM2, 0);
-      if (lost <= MIN_PIECE_M2) continue;
+      // A metre, not MIN_PIECE_M2: skipping here leaves the victim's ring
+      // exactly as it was, so anything skipped is ground BOTH of us hold.
+      // A square metre of that is rounding; two hundred is a doorway.
+      if (lost <= 1) continue;
       victims.set(row.userId, (victims.get(row.userId) ?? 0) + lost);
 
       await tx.delete(schema.territoryGround).where(eq(schema.territoryGround.id, row.id));
@@ -321,6 +361,33 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
           areaM2: piece.areaM2,
           ...bboxOf(piece.ring),
         });
+      }
+    }
+
+    // NEVER TAKE WHAT WE COULD NOT CUT.
+    //
+    // If the clipper refused a victim's ring, their ground stands — and
+    // the claim has to give up that piece too, or both of us hold it. The
+    // catch above used to be the whole story, and it is how two owners
+    // ended up ninety metres deep in the same block on prod: one throw
+    // deep inside polygon-clipping, silently swallowed, and the claimant
+    // grew over ground the victim never gave up.
+    //
+    // The safe direction is unambiguous. A border that does not move is a
+    // dog that walked somewhere for nothing; two owners on one block is a
+    // map that cannot be read.
+    if (uncut.length) {
+      try {
+        claimPoly = polygonClipping.difference(
+          claimPoly as never,
+          ...(uncut as never[]),
+        ) as unknown as Poly[];
+      } catch {
+        // Could not even subtract them. Take nothing this time.
+        return { gainedM2: 0, victims, changed: victims.size > 0 };
+      }
+      if (claimPoly.length === 0) {
+        return { gainedM2: 0, victims, changed: victims.size > 0 };
       }
     }
 
