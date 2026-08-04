@@ -20,24 +20,19 @@ const HUD_ICON_SIZE = 59;
 // future visits. Cheap onboarding without server state.
 const ABOUT_SEEN_KEY = 'shukajpes:aboutSeen';
 
-// Bubble keyframes for HUD pills + edge chips when sniff mode toggles.
-// Used by both this file (HUD pills) and MapView (edge chips) so
-// transitions feel coordinated. Slight overshoot easing on the way in
-// reads as "popping into place".
+// Bubble easing for the HUD pills as supersniff toggles. Slight
+// overshoot on the way in reads as "popping into place"; the keyframes
+// themselves live in MapView, which is always mounted here.
 const POP_IN = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 
 export default function MapScreen() {
   const aboutOpen = useGameStore((s) => s.aboutOpen);
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
-  const sniffMode = useGameStore((s) => s.sniffMode);
-  // Supersniff IS the dog-cam sniff-and-lead mode now — the corner-logo button
-  // toggles it. The old chip-based sniffMode is retired (stays false /
-  // unreachable), so its visuals (logo invert, status-bar collapse) never fire.
+  // Supersniff — the corner-logo button toggles it.
   const dogCam = useGameStore((s) => s.dogCam);
   const toggleDogCam = useGameStore((s) => s.toggleDogCam);
-  // Immersive = the HUD bubbles out. Search mode (dogCam) reuses the old
-  // supersniff hide (sniffMode is unreachable now, but keep it in the OR).
-  const immersive = sniffMode || dogCam;
+  // Immersive = the HUD bubbles out.
+  const immersive = dogCam;
   // When a logo-targeting hint is showing, pulse the logo so the spoken
   // line has a target: 'map:supersniff' calls the user to TRY the mode,
   // 'map:supersniff-exit' shows modal-arrived searchers the way BACK to
@@ -122,10 +117,9 @@ export default function MapScreen() {
             {pulseLogo ? <PillPulseRing /> : null}
             {/* Corner logo — plain <div> with backgroundImage so CSS
                 `filter: invert(1)` works reliably (the previous RN
-                <Image> wrapper ate the filter on iOS Safari). Sniff
-                mode flips the black logo to white so it stays
-                visible against the dark map. SVG was potrace-traced
-                from the original PNG for crisp scaling. */}
+                <Image> wrapper ate the filter on iOS Safari). SVG was
+                potrace-traced from the original PNG for crisp
+                scaling. */}
             <div
               style={{
                 width: HUD_ICON_SIZE,
@@ -134,8 +128,6 @@ export default function MapScreen() {
                 backgroundRepeat: 'no-repeat',
                 backgroundSize: 'contain',
                 backgroundPosition: 'center',
-                filter: sniffMode ? 'invert(1)' : undefined,
-                transition: 'filter 220ms ease-out',
                 animation: pulseLogo
                   ? 'hint-logo-pop 1.4s ease-in-out infinite'
                   : undefined,
@@ -206,10 +198,10 @@ const styles = StyleSheet.create({
     top: 0,
     left: 0,
     right: 0,
-    // Was 10, but the off-screen lost-pet chips and companion-bookmark
-    // overlay (rendered inside MapView) had zIndex 24/25 yet still
-    // weren't intercepting taps in PWA/iOS Safari — the HUD wins hit
-    // Lower than HUD_CHIPS so off-screen chip overlays still win.
+    // Was 10, but the companion-bookmark overlay (rendered inside
+    // MapView) had zIndex 24/25 yet still wasn't intercepting taps in
+    // PWA/iOS Safari — the HUD wins hit
+    // Lower than HUD_CHIPS so the off-screen chip overlay still wins.
     // Higher than markers so the HUD pills paint above the map.
     zIndex: Z.HUD_PILLS,
   },

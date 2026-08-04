@@ -6,30 +6,19 @@ import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { MapLibreMarker } from './MapLibreMarker';
 
-// Neutral halo — every urgency uses the same shadow / ring
-// recipe, matching the off-screen sniff chips. The urgency
-// signal still lives elsewhere (sniff-chip badge fill, on-map
-// pin's own emoji / photo). Light map gets a dark drop shadow;
-// sniff-mode dark map gets an inverse white halo so the pin
-// stays lifted against the bg.
-function getHalo(inverted: boolean) {
-  return inverted
-    ? {
-        glow: '0 0 14px rgba(255,255,255,0.35), 0 2px 6px rgba(255,255,255,0.10)',
-        ring: 'rgba(255,255,255,0.7)',
-      }
-    : {
-        glow: '0 4px 14px rgba(0,0,0,0.22)',
-        ring: 'rgba(0,0,0,0.5)',
-      };
-}
+// Neutral halo — every urgency uses the same shadow / ring recipe. The
+// urgency signal lives in the pin's own emoji / photo instead.
+const HALO = {
+  glow: '0 4px 14px rgba(0,0,0,0.22)',
+  ring: 'rgba(0,0,0,0.5)',
+};
 
 // Wander was removed — pins now sit STATIC at their displayPositions
 // (zone-jittered by dog id). The earlier turtle-pace drift offset the
-// pin from its actual lat/lng, so tapping the off-screen sniff-mode
-// chip would pan to a near-empty spot beside the visible pin. Static
-// pins make tap-to-pet land on the pet, and the zone jitter still
-// keeps multiple pets from overlapping at the same landmark.
+// pin from its actual lat/lng, so a tap could pan to a near-empty spot
+// beside the visible pin. Static pins make tap-to-pet land on the pet,
+// and the zone jitter still keeps multiple pets from overlapping at the
+// same landmark.
 //
 // SOS beep: a soft two-ring ripple emanates from the pet on its own
 // cadence. Each pet gets a unique period inside [BEEP_PERIOD_MIN_MS,
@@ -53,7 +42,6 @@ interface LostDogMarkerProps {
   // to white-on-black-shadow so it stays legible against the dark
   // map style. Other marker pieces (the photo disc, the urgency glow)
   // already read fine on dark.
-  inverted?: boolean;
   // True when the marker's underlying lat/lng is inside the current
   // viewport. False when it's mounted but off-screen (still in the
   // 2km render radius). Off-screen markers skip their wander +
@@ -77,8 +65,6 @@ const DISC_SELECTED_PX = 110;
 
 const NAME_COLOUR_DAY = '#1a1a1a';
 const NAME_SHADOW_DAY = '0 1px 4px rgba(255,255,255,0.95)';
-const NAME_COLOUR_NIGHT = '#f5f5f5';
-const NAME_SHADOW_NIGHT = '0 1px 4px rgba(0,0,0,0.95)';
 
 // Dog pin — white circle with emoji, urgency-colored glow, handwritten name
 // label below. Memoized because ~20 of these render on the map.
@@ -90,10 +76,10 @@ const NAME_SHADOW_NIGHT = '0 1px 4px rgba(0,0,0,0.95)';
 //
 // Beep: a translucent ring expands out of the pin every ~22s. Per-pet
 // random phase so they don't synchronize across the map.
-function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, active = true, inverted = false, selected = false }: LostDogMarkerProps) {
+function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, active = true, selected = false }: LostDogMarkerProps) {
   const [beeping, setBeeping] = useState(false);
   const beepTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const halo = getHalo(inverted);
+  const halo = HALO;
   const disc = selected ? DISC_SELECTED_PX : DISC_PX;
 
   // SOS beep. Each pet rolls its own period at mount (inside the
@@ -262,8 +248,8 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.body,
               fontWeight: 700,
-              color: inverted ? NAME_COLOUR_NIGHT : NAME_COLOUR_DAY,
-              textShadow: inverted ? NAME_SHADOW_NIGHT : NAME_SHADOW_DAY,
+              color: NAME_COLOUR_DAY,
+              textShadow: NAME_SHADOW_DAY,
               whiteSpace: 'nowrap',
             }}
           >

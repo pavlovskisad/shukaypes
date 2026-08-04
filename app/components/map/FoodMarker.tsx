@@ -12,20 +12,16 @@ function bobDelay(p: LatLng): number {
 
 // 🦴 bone — a live game pickup matching the paw treatment: gentle float,
 // soft ground shadow, warm amber glow. Memoized — ~8 render but the map
-// re-renders on every pan. `inverted` flips the silhouette to white on
-// sniff mode's dark map.
+// re-renders on every pan.
 function FoodMarkerImpl({
   position,
   onTap,
-  inverted = false,
 }: {
   position: LatLng;
   onTap: () => void;
-  inverted?: boolean;
 }) {
-  const filter = inverted
-    ? 'invert(1) drop-shadow(0 0 5px rgba(255,255,255,0.55))'
-    : 'drop-shadow(0 1px 1.5px rgba(0,0,0,0.3)) drop-shadow(0 0 5px rgba(245,180,70,0.8))';
+  const filter =
+    'drop-shadow(0 1px 1.5px rgba(0,0,0,0.3)) drop-shadow(0 0 5px rgba(245,180,70,0.8))';
   return (
     <MapLibreMarker position={position} onClick={onTap} cullNearHorizon>
       <div

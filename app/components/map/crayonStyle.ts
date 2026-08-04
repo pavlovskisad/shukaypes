@@ -2,8 +2,7 @@
 // production map import from here.
 //
 // Direction:
-//   - Palette: BLACK / WHITE / GREEN / BLUE (+ greys for roads), or
-//     dark mirrors for sniff mode.
+//   - Palette: BLACK / WHITE / GREEN / BLUE (+ greys for roads).
 //   - Roads: light-grey crayon-textured strokes with offset wobble
 //     clones (lighter + darker shade).
 //   - Buildings: 3D walls + thin dark crayon outline traced from above.
@@ -86,45 +85,6 @@ export const LIGHT_PALETTE = {
     skyColor: '#dbe8f7',
     horizonColor: '#e6eaee',
     fogColor: '#e9ebed',
-  },
-};
-
-export const DARK_PALETTE = {
-  paper: '#1a1a1a',
-  crayon: '#e0e0e0',
-  greyRoad: '#a8a8a8',
-  // Greens + blues pulled way down in saturation so sniff mode reads
-  // as a hushed low-light scene, not a stained-glass map. Each accent
-  // sits close to the paper grey with just enough hue to register —
-  // your eye should track lost-pet chips first, geography second.
-  green: '#3d5a35',
-  greenDark: '#243a20',
-  greenLight: '#2d4a28',
-  blue: '#2e4f63',
-  blueDark: '#1a3344',
-  blueLight: '#3d5566',
-  // Road wobble clones — light/dark relative to greyRoad on dark bg.
-  roadWobbleLight: '#d0d0d0',
-  roadWobbleDark: '#646464',
-  // No paper-tooth multiply on dark (would just darken the already-
-  // dark canvas). Use 'screen' blend in installPaperOverlay instead.
-  paperSpeckleA: '#2c2c2c',
-  paperSpeckleB: '#4a4a4a',
-  labelText: '#e8e8e8',
-  labelHalo: '#0a0a0a',
-  // Water labels muted to match the new water fill.
-  labelWater: '#6f96a8',
-  labelStreet: '#c8c8c8',
-  // Lower opacity on dark — the multiply/screen overlay is subtler.
-  paperOpacity: 0.35,
-  // Sniff mode: a deep night-blue dome fading to a horizon glow + haze
-  // that is LIGHTER than the near-black buildings, so the dark city
-  // recedes into atmosphere as visible silhouettes instead of vanishing
-  // into a same-tone fog.
-  sky: {
-    skyColor: '#0d1626',
-    horizonColor: '#3d4960',
-    fogColor: '#2c3646',
   },
 };
 
@@ -327,10 +287,10 @@ function clear(map: maplibregl.Map, id: string, prop: string) {
 }
 
 // ---------------------------------------------------------------------
-// Style override entry point. Idempotent — safe to call again on sniff
-// toggle with a different palette. Re-styles existing liberty layers
-// and injects our own (polygon softening outlines, road wobble clones,
-// building outlines).
+// Style override entry point. Idempotent — safe to call again with a
+// different palette. Re-styles existing liberty layers and injects our
+// own (polygon softening outlines, road wobble clones, building
+// outlines).
 // ---------------------------------------------------------------------
 
 export function applyCrayonOverride(

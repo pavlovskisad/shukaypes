@@ -17,7 +17,6 @@ import { useGameStore } from '../../stores/gameStore';
 import { MapContext } from './MapContext';
 import {
   LIGHT_PALETTE,
-  DARK_PALETTE,
   applyCrayonOverride,
   setStreetLabelsVisible,
   fetchCrayonStyleSpec,
@@ -271,7 +270,7 @@ function hideMapLibreBuildings(map: maplibregl.Map): void {
 
 export default function MapViewWeb() {
   const location = useLocation();
-  // Top-edge chips have to clear the iOS status bar (clock, signal,
+  // A top-edge chip has to clear the iOS status bar (clock, signal,
   // battery) — taps inside that strip are intercepted by the system
   // (scroll-to-top), so a chip overlapping it feels dead. The HUD
   // SafeAreaView already accounts for this via edges={['top']}; chip
@@ -312,7 +311,7 @@ export default function MapViewWeb() {
   const isFocused = useIsFocused();
 
   const companionPos = useCompanion(userPos, isFocused);
-  // Dog-cam prototype (toggled by the old supersniff button — see index.tsx).
+  // Supersniff (the logo toggle — see index.tsx).
   // Drives the low chase-camera follow effect + DOGCAM_* constants below.
   const dogCam = useGameStore((s) => s.dogCam);
   // Sniff-and-lead search mode assignment (which lost dog + spot). Set by the
@@ -423,44 +422,6 @@ export default function MapViewWeb() {
   const spots = useGameStore((s) => s.spots);
   const spotsVisible = useGameStore((s) => s.spotsVisible);
   const nearbyPlayers = useGameStore((s) => s.nearbyPlayers);
-  const sniffMode = useGameStore((s) => s.sniffMode);
-  // The chip pop animations should ONLY play during the brief window
-  // around an actual sniff-mode toggle. Without this, two leaks happen:
-  //
-  // 1. Initial app load (sniffMode = false): if we always attach
-  //    `animation: chip-pop-out`, the keyframe's 0% (scale 1, opacity 1)
-  //    overrides the static styles during playback — so chips briefly
-  //    flash visible before shrinking to 0.
-  //
-  // 2. Mid-session in NORMAL mode: a pet that was on-screen exits the
-  //    viewport (e.g., user pans, companion minimizes), so a new chip
-  //    DOM node mounts. If it mounts with `chip-pop-out` attached, same
-  //    flash — chip pops in for one keyframe before disappearing.
-  //
-  // Fix: use a `sniffJustChanged` flag that goes true on toggle and
-  // clears after the animation duration. New mounts during the rest
-  // of the session get `animation: none` and rely purely on static
-  // styles (opacity / scale) keyed off `sniffMode`.
-  const [sniffJustChanged, setSniffJustChanged] = useState(false);
-  const sniffInitRef = useRef(true);
-  // useLayoutEffect (not useEffect) so `sniffJustChanged` flips in the
-  // same paint cycle as sniffMode. With useEffect there's a one-frame
-  // gap where the new sniffMode static styles paint without the
-  // animation attached — chips/HUD snap to their target state for a
-  // frame, then the animation kicks in and re-animates from the 0%
-  // keyframe, producing a visible blink before the animation runs.
-  useLayoutEffect(() => {
-    if (sniffInitRef.current) {
-      sniffInitRef.current = false;
-      return;
-    }
-    setSniffJustChanged(true);
-    // 700ms covers the staggered timeline: one leg runs 0-320ms,
-    // the other leg runs 200-560ms with an animation-delay so HUD
-    // and chips don't fight for attention in the same instant.
-    const t = setTimeout(() => setSniffJustChanged(false), 700);
-    return () => clearTimeout(t);
-  }, [sniffMode]);
   const spotsCategoryFilter = useGameStore((s) => s.spotsCategoryFilter);
   const selectedSpotId = useGameStore((s) => s.selectedSpotId);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
@@ -626,17 +587,6 @@ export default function MapViewWeb() {
     });
   }, []);
 
-  // Companion barks when sniff mode toggles. Skips the initial mount
-  // (sniffMode starts false; we don't want a "back to normal" line on
-  // every app load) via a ref guard.
-  const sniffBubbleInitRef = useRef(true);
-  useEffect(() => {
-    if (sniffBubbleInitRef.current) {
-      sniffBubbleInitRef.current = false;
-      return;
-    }
-    showBubble(sniffMode ? t.bubbles.sniffOn : t.bubbles.sniffOff, 3500);
-  }, [sniffMode, showBubble, t]);
 
   // Mode-relevant bark on EVERY supersniff toggle. Exit: "back to walks"
   // lines. Entry: the FIRST entry per session is announced by the swipe/tap
@@ -1321,7 +1271,6 @@ export default function MapViewWeb() {
   const hintsAllowed =
     onMapScreen &&
     !mapMoving &&
-    !sniffMode &&
     !selectedDogId &&
     !selectedSpotId &&
     // Nothing the user is actively reading/doing on the map: no sniff
@@ -1442,21 +1391,10 @@ export default function MapViewWeb() {
     [30.28, 50.30],
     [30.85, 50.62],
   ];
-  // Paper-tooth overlay URL. Light + dark variants exist; we pick the
-  // active one from sniffMode below.
-  const paperUrlLight = useMemo(
-    () => generatePaperTextureUrl(LIGHT_PALETTE),
-    [],
-  );
-  const paperUrlDark = useMemo(
-    () => generatePaperTextureUrl(DARK_PALETTE),
-    [],
-  );
-  const paperUrl = sniffMode ? paperUrlDark : paperUrlLight;
-  const paperOpacity = sniffMode
-    ? DARK_PALETTE.paperOpacity
-    : LIGHT_PALETTE.paperOpacity;
-  const paperBlend = sniffMode ? 'screen' : 'multiply';
+  // Paper-tooth overlay URL.
+  const paperUrl = useMemo(() => generatePaperTextureUrl(LIGHT_PALETTE), []);
+  const paperOpacity = LIGHT_PALETTE.paperOpacity;
+  const paperBlend = 'multiply';
 
   // Map-only distance cull. Full lists live in the store (Quests tab,
   // auto-collect loops, sync diff math); only the rendered DOM is
@@ -1495,10 +1433,8 @@ export default function MapViewWeb() {
   }, [lostDogs, userLatBucket, userLngBucket]);
   const visibleLostDogs = useMemo(() => {
     if (!userPos) return lostDogs;
-    // Lost pets are the SNIFF (locate) flow. On the normal map only show the
-    // closest few so they don't clutter it; sniff mode reveals the full set
-    // within the render radius (plus the off-screen locate chips).
-    const radius = sniffMode ? MAP_RENDER_RADIUS_M : NORMAL_LOSTDOG_RADIUS_M;
+    // Only the closest few, so the map doesn't clutter.
+    const radius = NORMAL_LOSTDOG_RADIUS_M;
     return lostDogs.filter(
       (d) =>
         // Always keep the currently-selected dog visible — when a
@@ -1510,7 +1446,7 @@ export default function MapViewWeb() {
         distanceMeters(userPos, d.lastSeen.position) <= radius,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos on purpose; see comment above
-  }, [lostDogs, userLatBucket, userLngBucket, selectedDogId, sniffMode]);
+  }, [lostDogs, userLatBucket, userLngBucket, selectedDogId]);
   // Building avoidance (game render): nudges the DISPLAY position of
   // collectibles + other dogs out of building footprints. Rebuilt on idle as
   // tiles stream; bumping the version re-runs the nudged memos below.
@@ -2058,7 +1994,7 @@ export default function MapViewWeb() {
         });
         mapRef.current = map;
         map.on('style.load', () => {
-          applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
+          applyCrayonOverride(map, LIGHT_PALETTE, lang);
           syncStreetLabels();
           // The game render (Three.js buildings + one unified mist) needs
           // WebGL2, so it can fail on old devices. We build it defensively:
@@ -2173,9 +2109,6 @@ export default function MapViewWeb() {
     return () => {
       cancelled = true;
     };
-    // sniffMode read inside but intentionally not a dep — the sniff
-    // toggle re-applies the override via its own effect below.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userPos]);
 
   // Map destruction — runs only on unmount, NOT on every effect re-run.
@@ -2201,7 +2134,7 @@ export default function MapViewWeb() {
     // sets both paint colours AND text-field language, so a lang flip
     // from the profile toggle re-localises street/place labels live.
     const apply = () => {
-      applyCrayonOverride(map, sniffMode ? DARK_PALETTE : LIGHT_PALETTE, lang);
+      applyCrayonOverride(map, LIGHT_PALETTE, lang);
       // applyCrayonOverride resets transportation_name visibility to
       // 'visible', so re-apply the pitch-based hide right after.
       syncStreetLabels();
@@ -2229,253 +2162,7 @@ export default function MapViewWeb() {
     return () => {
       map.off('idle', apply);
     };
-  }, [sniffMode, lang, syncStreetLabels]);
-
-  // Off-screen lost-pet edge-chip layout. Memoised so the per-pet
-  // ray-cast / spread pass doesn't re-run on every companion lerp
-  // tick (3.3Hz) — that loop iterating over visibleLostDogs (50+
-  // pets in dense Kyiv) was the most likely cause of the lag the
-  // user reported showing up after the second map-rendering pass.
-  // Early-skip when sniff mode is off AND not in the toggle window
-  // means chips don't even render in normal-mode steady state. The
-  // `sniffJustChanged` window keeps them mounted long enough for
-  // the bubble-out animation to complete on toggle off.
-  const offscreenDogIndicators = useMemo(() => {
-    // Portaled to document.body — suppress entirely off the map tab so
-    // the chips don't paint over other screens.
-    if (!onMapScreen) return [];
-    if (!sniffMode && !sniffJustChanged) return [];
-    if (!mapBounds || !userPos) return [];
-    const { n, s, e, w } = mapBounds;
-    // Reserves clear the actual UI elements:
-    // - top: small bump to clear the OS status bar / dynamic island.
-    //   `topLeftSkip` separately keeps the leftmost chunk of the top
-    //   edge clear of the corner logo (which lives at top-left).
-    // - bottom: clears the dashboard tab bar (~10% of typical phone
-    //   viewport including the home-indicator strip).
-    // - sides: small padding so chips don't graze the screen edges.
-    // Not perfectly symmetric, but the asymmetry follows the actual
-    // UI footprint instead of being arbitrary.
-    // Bumped 0.05 → 0.02 — chips on left / right edges sat well
-    // inside the viewport before, leaving a visible inset strip
-    // between the chip and the screen edge that read as "wasted"
-    // margin. 2% sits the chips almost flush with the edge.
-    const sideReserve = 0.02;
-    // Was 0.04 — chips on the top edge ended up directly under the
-    // Chips on the top edge now sit at the actual top of the
-    // viewport so 'this pet is far north' reads as far north, not
-    // 'just outside the visible area.' Chips have higher z than the
-    // HUD pills and the corner logo, so a chip overlapping either
-    // catches the tap. Just enough top inset to clear the iPhone
-    // dynamic island / status bar.
-    const topReserve = 0.02;
-    // In sniff mode the dashboard (tab bar) is hidden, so the locate chips get
-    // the full screen height — drop the bottom reserve to the same small edge
-    // inset as the top. (Outside sniff — the brief toggle-off window — keep the
-    // reserve that clears the returning tab bar.)
-    const bottomReserve = sniffMode ? 0.02 : 0.10;
-    const chipHalfPct = 0.04;
-    const SPACING_ALONG = 0.12;
-    // Used to be 0.18 to dodge the corner logo. Dropped to a small
-    // inset since chip z-index already wins over the logo zone — the
-    // chip floats above the logo when they collide. Still skip a
-    // tiny edge so chips don't sit flush against the screen corner.
-    const topLeftSkip = 0.03;
-
-    type EdgeName = 'top' | 'right' | 'bottom' | 'left';
-    interface Chip {
-      id: string;
-      emoji: string;
-      photoUrl: string | null;
-      urgency: UrgencyLevel;
-      name: string;
-      distanceM: number;
-      target: LatLng;
-      edge: EdgeName;
-      along: number;
-      crossPct: number;
-    }
-
-    const chips: Chip[] = [];
-    for (const d of visibleLostDogs) {
-      // Use the JITTERED display position for both the bound check
-      // AND the ray-cast — that's where the on-screen LostDogMarker
-      // actually renders, so chip and pin agree on visibility:
-      // when the pin is in viewport, no chip; when it's out, chip
-      // points to where the pin actually is (not the raw lastSeen
-      // coord, which can be hundreds of meters away after jitter).
-      // The previous bound check used `lastSeen.position` and was
-      // the cause of "tap chip → both chip and pin showing".
-      const p = displayPositions.get(d.id) ?? d.lastSeen.position;
-      if (p.lat <= n && p.lat >= s && p.lng <= e && p.lng >= w) continue;
-      const nx = (p.lng - w) / (e - w);
-      const ny = (n - p.lat) / (n - s);
-      const dx = nx - 0.5;
-      const dy = ny - 0.5;
-      const xBound = dx > 0 ? (1 - sideReserve) - 0.5 : 0.5 - sideReserve;
-      const yBound = dy > 0 ? (1 - bottomReserve) - 0.5 : 0.5 - topReserve;
-      const tx = Math.abs(xBound / Math.max(Math.abs(dx), 1e-6));
-      const ty = Math.abs(yBound / Math.max(Math.abs(dy), 1e-6));
-      let edge: EdgeName;
-      let along: number;
-      let crossPct: number;
-      if (tx < ty) {
-        edge = dx > 0 ? 'right' : 'left';
-        along = 0.5 + dy * tx;
-        crossPct = edge === 'right' ? 1 - sideReserve : sideReserve;
-      } else {
-        edge = dy > 0 ? 'bottom' : 'top';
-        along = 0.5 + dx * ty;
-        crossPct = edge === 'bottom' ? 1 - bottomReserve : topReserve;
-      }
-      chips.push({
-        id: d.id,
-        emoji: d.emoji,
-        photoUrl: d.photoUrl ?? null,
-        urgency: d.urgency,
-        name: d.name,
-        distanceM: distanceMeters(userPos, p),
-        // p is already the jittered display position (see top of loop).
-        target: p,
-        edge,
-        along,
-        crossPct,
-      });
-    }
-    chips.sort((a, b) => a.distanceM - b.distanceM);
-    const limited = chips.slice(0, 8);
-
-    // Companion bookmark's edge + along position (if it's also
-    // off-screen). Treated below as a "no-fly zone" so dog chips
-    // don't visually pile on top of the bookmark on a shared
-    // edge — they get nudged left or right of it along the edge.
-    // Inline computation rather than reading offscreenIndicator
-    // because that's an IIFE that runs LATER in the render.
-    let companionEdgeAlong: { edge: EdgeName; along: number } | null = null;
-    if (
-      companionPos &&
-      (companionPos.lat > n ||
-        companionPos.lat < s ||
-        companionPos.lng > e ||
-        companionPos.lng < w)
-    ) {
-      const cnx = (companionPos.lng - w) / (e - w);
-      const cny = (n - companionPos.lat) / (n - s);
-      const cdx = cnx - 0.5;
-      const cdy = cny - 0.5;
-      // Companion's own reserves (matches the IIFE below).
-      const cSide = 0.01;
-      const cTop = 0.02;
-      const cBottom = 0.08;
-      const cxBound = cdx > 0 ? 1 - cSide - 0.5 : 0.5 - cSide;
-      const cyBound = cdy > 0 ? 1 - cBottom - 0.5 : 0.5 - cTop;
-      const ctx = Math.abs(cxBound / Math.max(Math.abs(cdx), 1e-6));
-      const cty = Math.abs(cyBound / Math.max(Math.abs(cdy), 1e-6));
-      if (ctx < cty) {
-        companionEdgeAlong = {
-          edge: cdx > 0 ? 'right' : 'left',
-          along: 0.5 + cdy * ctx,
-        };
-      } else {
-        companionEdgeAlong = {
-          edge: cdy > 0 ? 'bottom' : 'top',
-          along: 0.5 + cdx * cty,
-        };
-      }
-    }
-
-    const groups: Record<EdgeName, Chip[]> = {
-      top: [], right: [], bottom: [], left: [],
-    };
-    for (const c of limited) groups[c.edge].push(c);
-    const edges: EdgeName[] = ['top', 'right', 'bottom', 'left'];
-    for (const edgeName of edges) {
-      const g = groups[edgeName];
-      if (g.length === 0) continue;
-      g.sort((a, b) => a.along - b.along);
-      const lo =
-        edgeName === 'left' || edgeName === 'right'
-          ? topReserve + chipHalfPct
-          : edgeName === 'top'
-            ? topLeftSkip + chipHalfPct
-            : sideReserve + chipHalfPct;
-      const hi =
-        edgeName === 'left' || edgeName === 'right'
-          ? 1 - bottomReserve - chipHalfPct
-          : 1 - sideReserve - chipHalfPct;
-      // No-fly zone around the companion bookmark on this edge.
-      // Dog chips inside the zone are pushed to the nearer side
-      // of it; the regular SPACING_ALONG cascade below then
-      // re-spaces them so two chips never overlap each other
-      // either.
-      if (companionEdgeAlong && companionEdgeAlong.edge === edgeName) {
-        const COMPANION_NOFLY = SPACING_ALONG; // one slot wide
-        const ca = companionEdgeAlong.along;
-        for (const c of g) {
-          const delta = c.along - ca;
-          if (Math.abs(delta) < COMPANION_NOFLY) {
-            c.along = delta < 0 ? ca - COMPANION_NOFLY : ca + COMPANION_NOFLY;
-          }
-        }
-        // Re-sort after the shifts so the spacing cascade below
-        // walks them in their new along-order.
-        g.sort((a, b) => a.along - b.along);
-      }
-      for (let i = 1; i < g.length; i++) {
-        g[i]!.along = Math.max(g[i]!.along, g[i - 1]!.along + SPACING_ALONG);
-      }
-      if (g[g.length - 1]!.along > hi) {
-        g[g.length - 1]!.along = hi;
-        for (let i = g.length - 2; i >= 0; i--) {
-          g[i]!.along = Math.min(g[i]!.along, g[i + 1]!.along - SPACING_ALONG);
-        }
-      }
-      if (g[0]!.along < lo) {
-        g[0]!.along = lo;
-        for (let i = 1; i < g.length; i++) {
-          g[i]!.along = Math.max(g[i]!.along, g[i - 1]!.along + SPACING_ALONG);
-        }
-      }
-    }
-
-    return limited.map((c) => {
-      const leftPct = c.edge === 'left' || c.edge === 'right' ? c.crossPct : c.along;
-      const topPct = c.edge === 'left' || c.edge === 'right' ? c.along : c.crossPct;
-      return {
-        id: c.id,
-        emoji: c.emoji,
-        photoUrl: c.photoUrl,
-        urgency: c.urgency,
-        name: c.name,
-        distanceM: c.distanceM,
-        target: c.target,
-        edge: c.edge,
-        left: `${leftPct * 100}%`,
-        // Push top-edge chips down by the iOS safe-area inset so
-        // they clear the system status bar (clock/signal/battery).
-        // Taps inside the status-bar strip get intercepted by iOS,
-        // so a chip sitting in it feels dead.
-        top:
-          c.edge === 'top'
-            ? `calc(${topPct * 100}% + ${insets.top}px)`
-            : `${topPct * 100}%`,
-      };
-    });
-  }, [
-    onMapScreen,
-    mapBounds,
-    userPos?.lat,
-    userPos?.lng,
-    visibleLostDogs,
-    displayPositions,
-    sniffMode,
-    sniffJustChanged,
-    // companionPos so the no-fly zone follows the companion
-    // bookmark when the dog wanders along an edge.
-    companionPos?.lat,
-    companionPos?.lng,
-    insets.top,
-  ]);
+  }, [lang, syncStreetLabels]);
 
   // Nearby players (real + bots) to render as other dogs — only in view, and
   // capped to the nearest N for perf (each walker runs a glide loop + sprite).
@@ -2708,7 +2395,6 @@ export default function MapViewWeb() {
                 photoUrl={d.photoUrl}
                 onTap={petTapHandlers.get(d.id)!}
                 active={inView}
-                inverted={sniffMode}
               />,
             ];
           }
@@ -2736,8 +2422,7 @@ export default function MapViewWeb() {
                   photoUrl={d.photoUrl}
                   onTap={petTapHandlers.get(d.id)!}
                   active={inView}
-                  inverted={sniffMode}
-                />
+                  />
               );
             });
           }
@@ -2778,8 +2463,7 @@ export default function MapViewWeb() {
                   onTap={() => setSelectedDog(null)}
                   active
                   selected
-                  inverted={sniffMode}
-                />
+                  />
               ))
           : null}
 
@@ -2788,7 +2472,6 @@ export default function MapViewWeb() {
             key={t.id}
             position={t.position}
             onTap={tokenTapHandlers.get(t.id)!}
-            inverted={sniffMode}
           />
         ))}
 
@@ -2797,7 +2480,6 @@ export default function MapViewWeb() {
             key={f.id}
             position={f.position}
             onTap={foodTapHandlers.get(f.id)!}
-            inverted={sniffMode}
           />
         ))}
 
@@ -2956,7 +2638,7 @@ export default function MapViewWeb() {
             the ordinary map and noise on top of a search — same paint,
             different job. See threeBuildingsLayer.territoryPaintHidden,
             which mutes the blocks for the same reason. */}
-        {!(DOG_CAM && dogCam) && !sniffMode && !selectedDogId && onMapScreen ? (
+        {!(DOG_CAM && dogCam) && !selectedDogId && onMapScreen ? (
           <TerritoryLayer
             shapes={territoryShapes}
             marks={territoryMarks}
@@ -3163,11 +2845,9 @@ export default function MapViewWeb() {
         >
           <div
             style={{
-              // Adaptive to mode — dark chip + inverted white logo
-              // on the light map (pops against the pastel bg), light
-              // chip + black logo on sniff mode (pops against the
-              // dark bg). Matches the corner logo's same recipe.
-              background: sniffMode ? '#ffffff' : '#1a1a1a',
+              // Dark chip + inverted white logo, which pops against
+              // the pastel map. Matches the corner logo's recipe.
+              background: '#1a1a1a',
               borderRadius: R.pill,
               width: 56,
               height: 56,
@@ -3175,9 +2855,7 @@ export default function MapViewWeb() {
               alignItems: 'center',
               justifyContent: 'center',
               boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
-              border: sniffMode
-                ? '2px solid rgba(0,0,0,0.06)'
-                : '2px solid rgba(255,255,255,0.08)',
+              border: '2px solid rgba(255,255,255,0.08)',
             }}
           >
             {/* Wrapper div carries the CSS invert filter when we need
@@ -3189,7 +2867,7 @@ export default function MapViewWeb() {
             style={{
               width: 38,
               height: 38,
-              filter: sniffMode ? undefined : 'invert(1)',
+              filter: 'invert(1)',
             }}
           >
             <Image
@@ -3245,205 +2923,10 @@ export default function MapViewWeb() {
         </div>
       ) : null}
 
-      {/* Off-screen lost-pet bookmarks (sniff mode only). Three nested
-          divs:
-            1. Outer — absolute position + edge-anchor transform +
-               smooth `left`/`top` transition while panning.
-            2. Pop-anim — runs the bubble-pop scale keyframe on mount
-               so chips bubble in when sniff mode flips on.
-            3. Disc-wrapper — sized to the chip; the actual disc
-               (with `overflow: hidden` for image cropping) lives
-               here as one child, the urgency-coloured distance
-               badge sits next to it as a SIBLING — i.e. NOT inside
-               the overflow-hidden disc, so the bottom-right badge
-               doesn't get cropped at the disc edge. */}
-      {/* Portaled to document.body — same fix as the companion
-          chip. Without the portal, these top-edge chips were
-          trapped behind the HUD pills (parent stacking context
-          capped their z-index) and couldn't be tapped. Position
-          changes from absolute to fixed inside the chip; the
-          `left` / `top` percentages were already viewport-
-          relative via offscreenDogIndicators. */}
-      {typeof document !== 'undefined' && offscreenDogIndicators.length > 0
-        ? createPortal(
-            <>{offscreenDogIndicators.map((d) => {
-        // Mirror the on-screen LostDogMarker halo so chips visually
-        // echo the actual map pins. Medium-urgency BADGE swapped from
-        // amber `rgba(217,160,48,...)` (read as gold + clashed with
-        // the photo edges) to a vibrant orange `rgba(255,140,0,...)`
-        // — same "warning" bucket but doesn't read as a gold rim.
-        // The disc's GLOW stays amber so the on-screen ↔ off-screen
-        // urgency cue still ties together.
-        // Solid badge fills — no rgba alpha so urgent / medium /
-        // low all read as plain coloured pills rather than tinted
-        // translucent ones. Low-urgency uses black instead of grey
-        // per the "no grey backgrounds" rule.
-        // Per-urgency badge fill stays (red / orange / black) —
-        // that's the actual urgency signal. The shadow / glow
-        // dropped its urgency tint per user request: every chip
-        // now uses the same neutral shadow recipe — dark drop
-        // shadow on the light map, inverse white halo in
-        // supersniff (dark) mode so the chip still lifts off
-        // the bg. Family-consistent with companion chip + card
-        // shadows across the rest of the app.
-        const halo = {
-          glow: sniffMode
-            ? '0 0 14px rgba(255,255,255,0.35), 0 2px 6px rgba(255,255,255,0.10)'
-            : '0 4px 14px rgba(0,0,0,0.22)',
-          badge:
-            d.urgency === 'urgent'
-              ? '#e84040'
-              : d.urgency === 'medium'
-                ? '#ff8c00'
-                : '#1a1a1a',
-        };
-        const edgeTransform =
-          d.edge === 'top'
-            ? 'translate(-50%, 0)'
-            : d.edge === 'bottom'
-              ? 'translate(-50%, -100%)'
-              : d.edge === 'left'
-                ? 'translate(0, -50%)'
-                : 'translate(-100%, -50%)';
-        return (
-          <div
-            key={`offscreen-dog-${d.id}`}
-            onClick={(e) => {
-              // Pop the FIRST CHILD (the visual wrapper) not the
-              // outer — outer holds the position transform
-              // (translate(-50%, -100%) etc. for edge anchoring)
-              // and a scale on it would teleport the chip to the
-              // anchor point. Same pattern as MapLibreMarker.
-              playPop(e.currentTarget.firstElementChild as HTMLElement | null);
-              panToDog(d.target);
-            }}
-            role="button"
-            aria-label={`pan to ${d.name}, ${formatDistance(d.distanceM)} away`}
-            style={{
-              position: 'fixed',
-              left: d.left,
-              top: d.top,
-              transform: edgeTransform,
-              transition:
-                'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-              // Portaled to document.body (see wrapping createPortal),
-              // so z lives at the page root above the in-#root HUD.
-              // HUD_CHIPS (35) sits one tier below the companion chip
-              // (HUD_CHIP_COMPANION = 38) so the bookmark wins when both
-              // pin to the same edge, and below the modal tiers so the
-              // lost-dog / spot modals cover the chips.
-              zIndex: Z.HUD_CHIPS,
-              cursor: 'pointer',
-              userSelect: 'none',
-            }}
-          >
-            <div
-              style={{
-                position: 'relative',
-                width: 54,
-                height: 54,
-                // Static styles match the steady state for the current
-                // sniff mode. Animation only attached during the
-                // toggle window — see the `sniffJustChanged` comment
-                // above for why (mid-session chip mounts in normal
-                // mode were flashing visible-then-fade).
-                opacity: sniffMode ? 1 : 0,
-                transform: sniffMode ? 'scale(1)' : 'scale(0)',
-                // Stagger so chips bubble in AFTER the HUD finishes
-                // collapsing on sniff-on (200ms delay), and pop OUT
-                // immediately on sniff-off (HUD then bubbles back in
-                // with its own delay). `both` fill mode applies the
-                // 0% keyframe during the delay window so chips don't
-                // flash visible before the animation starts.
-                animation: sniffJustChanged
-                  ? sniffMode
-                    ? 'pop-in 360ms cubic-bezier(0.34, 1.56, 0.64, 1) 200ms both'
-                    : 'pop-out 280ms ease-in forwards'
-                  : 'none',
-                pointerEvents: sniffMode ? 'auto' : 'none',
-              }}
-            >
-              <div
-                style={{
-                  position: 'absolute',
-                  inset: 0,
-                  borderRadius: R.pill,
-                  background: '#ffffff',
-                  // No urgency-coloured ring border — that read as a
-                  // gold rim around medium-urgency chips and dominated
-                  // the chip's look. The urgency-coloured glow + the
-                  // distance badge carry the urgency signal alone, same
-                  // as the on-screen LostDogMarker.
-                  boxShadow: halo.glow,
-                  overflow: 'hidden',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontSize: TYPE.display,
-                }}
-              >
-                <span style={{ position: 'absolute' }}>{d.emoji}</span>
-                {d.photoUrl ? (
-                  <img
-                    src={d.photoUrl}
-                    alt={d.name}
-                    draggable={false}
-                    referrerPolicy="no-referrer"
-                    loading="lazy"
-                    style={{
-                      position: 'relative',
-                      width: '100%',
-                      height: '100%',
-                      objectFit: 'cover',
-                      transform: 'scale(1.2)',
-                    }}
-                    onError={(e) => {
-                      (e.currentTarget as HTMLImageElement).style.display = 'none';
-                    }}
-                  />
-                ) : null}
-              </div>
-              {/* Distance badge — same shape language as the spot
-                  cluster count chip but urgency-coloured. Sibling of
-                  the disc so the negative offset isn't clipped by
-                  `overflow: hidden`. */}
-              <div
-                style={{
-                  position: 'absolute',
-                  bottom: -4,
-                  right: -6,
-                  minWidth: 22,
-                  height: 18,
-                  paddingLeft: S.xs,
-                  paddingRight: S.xs,
-                  borderRadius: R.sm,
-                  background: halo.badge,
-                  color: '#ffffff',
-                  fontFamily: SYSTEM_FONT,
-                  fontSize: TYPE.caption,
-                  fontWeight: 700,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  boxShadow: '0 2px 4px rgba(0,0,0,0.18)',
-                }}
-              >
-                {formatDistance(d.distanceM)}
-              </div>
-            </div>
-          </div>
-        );
-      })}</>,
-            document.body,
-          )
-        : null}
-
-      {/* Unified bubble keyframes shared by the off-screen chips
-          AND the HUD pills (StatusBar / QuestPill). The previous
-          `chip-pop-out` / `hud-pop-out` were already identical;
-          `chip-pop-in` / `hud-pop-in` differed only in the overshoot
-          magnitude (1.12 vs 1.08) which read the same on screen.
-          One pair of keyframes, less to keep in sync. */}
+      {/* Bubble keyframes for the HUD pills (StatusBar / QuestPill),
+          which bubble out on entering supersniff and back in on
+          leaving. Defined here rather than beside them because this is
+          the one component always mounted on the map screen. */}
       <style>{`
         @keyframes pop-in {
           0%   { transform: scale(0);    opacity: 0; }

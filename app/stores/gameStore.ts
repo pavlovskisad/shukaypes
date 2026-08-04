@@ -201,16 +201,9 @@ interface GameState {
   // whether spots are loaded into the array — the user can declutter
   // the map without losing the cached Places fetch.
   spotsVisible: boolean;
-  // Sniff mode — toggled by tapping the logo. When ON, the HUD pills
-  // bubble out and off-screen lost-pet edge chips bubble in around the
-  // viewport so the user gets a heightened "where are all the nearby
-  // missing pets" view. On-screen pets render normally in either mode.
-  // Off in normal play; the user opts in. Toggling on stashes the
-  // spots-visible state and clears the spots layer (sniff mode is
-  // about pets, not places); toggling off restores the prior state.
-  sniffMode: boolean;
-  spotsVisibleBeforeSniff: boolean | null;
-  // Dog-cam prototype (wired to the old supersniff toggle button).
+  // Supersniff — toggled by tapping the logo. The camera drops behind the
+  // dog, the city goes see-through around it, and the nearby lost pets
+  // come up as a carousel to pick a search from.
   dogCam: boolean;
   // True when the CURRENT supersniff session was entered from the lost-dog
   // modal's "start search" (not the logo). Those users never touched the
@@ -336,8 +329,6 @@ interface GameState {
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
-  setSniffMode: (on: boolean) => void;
-  toggleSniffMode: () => void;
   toggleDogCam: () => void;
   setDogCamViaSearch: (dogCamViaSearch: boolean) => void;
   setSearchTarget: (t: { dogId: string; spot: LatLng } | null) => void;
@@ -448,8 +439,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Default OFF — the app opens on a clean 3D city view; users turn the
   // spots layer on via the HUD pin toggle (there's a one-shot hint for it).
   spotsVisible: false,
-  sniffMode: false,
-  spotsVisibleBeforeSniff: null,
   dogCam: false,
   dogCamViaSearch: false,
   searchTarget: null,
@@ -1011,39 +1000,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
-  setSniffMode: (sniffMode) =>
-    set((s) => {
-      if (sniffMode === s.sniffMode) return s;
-      if (sniffMode) {
-        return {
-          sniffMode: true,
-          spotsVisibleBeforeSniff: s.spotsVisible,
-          spotsVisible: false,
-        };
-      }
-      return {
-        sniffMode: false,
-        spotsVisible: s.spotsVisibleBeforeSniff ?? s.spotsVisible,
-        spotsVisibleBeforeSniff: null,
-      };
-    }),
-  toggleSniffMode: () =>
-    set((s) => {
-      if (s.sniffMode) {
-        return {
-          sniffMode: false,
-          spotsVisible: s.spotsVisibleBeforeSniff ?? s.spotsVisible,
-          spotsVisibleBeforeSniff: null,
-        };
-      }
-      return {
-        sniffMode: true,
-        spotsVisibleBeforeSniff: s.spotsVisible,
-        spotsVisible: false,
-      };
-    }),
-  // Dog-cam prototype: the supersniff toggle is wired to this instead (see
-  // index.tsx) so supersniff is unreachable for now. Camera-only mode.
   // Toggling the mode always clears the assignment; the search controller
   // (MapView) picks a fresh target when the mode turns on.
   toggleDogCam: () =>

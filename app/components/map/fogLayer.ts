@@ -140,13 +140,6 @@ const DAY: FogTones = {
   sun: [1.0, 0.955, 0.83],
   sunStrength: 0.85,
 };
-const NIGHT: FogTones = {
-  fog: [0.17, 0.19, 0.22],
-  sky: [0.12, 0.15, 0.23],
-  skyTop: [0.07, 0.1, 0.17],
-  sun: [0.6, 0.71, 0.88],
-  sunStrength: 0.35,
-};
 
 // Fixed world azimuth the sun "comes from" (deg, from north, clockwise).
 // The on-screen sun position is derived from this vs the camera bearing,
@@ -260,8 +253,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         const pitchT = Math.max(0, Math.min(1, (pitch - minPitch) / (fullPitch - minPitch)));
         if (pitchT <= 0) return;
 
-        const sniff = useGameStore.getState().sniffMode;
-        const tones = sniff ? NIGHT : DAY;
+        const tones = DAY;
 
         // Anchor particles to the map so they drift with panning rather than
         // sticking to the screen. Project the map centre to pixels.
