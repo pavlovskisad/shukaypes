@@ -48,7 +48,6 @@ import { OWN_COLOR_CSS, ownerColorCss } from './territoryColor';
 
 const AREA_SOURCE = 'territory-area-src';
 const AREA_FILL = 'territory-area-fill';
-const AREA_EDGE = 'territory-area-edge';
 const LINK_SOURCE = 'territory-link-src';
 const LINK_LAYER = 'territory-link';
 const DOTS_SOURCE = 'territory-dots-src';
@@ -294,47 +293,36 @@ export function TerritoryLayer({
             // in the same colour to close the loop. That leaves the fill
             // carrying the identity by itself, so it has to read as a
             // colour rather than a tint of the map underneath.
-            paint: { 'fill-color': ['get', 'color'], 'fill-opacity': 0.42 },
-          },
-          under,
-        );
-        // A hairline of each zone's own colour, drawn on its own border.
-        //
-        // Two neighbours' borders are the same line in the data — a cut
-        // gives the victim exactly the claimant's edge — but they arrive
-        // as separate polygons rounded to five decimals, so at close zoom
-        // a thread of white paper shows between them. On a map that is
-        // otherwise solid colour those threads read as litter, or worse,
-        // as slivers of ground nobody holds, which is a thing that also
-        // genuinely exists and should not be confused with a rendering
-        // seam.
-        //
-        // UNDER the fill, and that is the whole trick.
-        //
-        // Drawn on top — which is where it went first — the line and the
-        // fill are the same colour at the same 0.42, so where they overlap
-        // the alpha composites to about 0.66 and every zone gains a darker
-        // rim of itself. That is precisely the map-of-fences this was
-        // supposed to avoid, arrived at by stacking alpha rather than by
-        // choosing a colour.
-        //
-        // Beneath the fill, the inner half of the stroke is covered and
-        // only the outer half shows, at exactly the fill's own alpha. The
-        // border reads as one flat colour that happens to reach half a
-        // pixel further, which is all that is needed to close the thread.
-        map.addLayer(
-          {
-            id: AREA_EDGE,
-            type: 'line',
-            source: AREA_SOURCE,
-            layout: { 'line-join': 'round', 'line-cap': 'round' },
             paint: {
-              'line-color': ['get', 'color'],
-              'line-width': 1.5,
-              'line-opacity': 0.42,
+              'fill-color': ['get', 'color'],
+              'fill-opacity': 0.42,
+              // NO BORDERS, and no white threads between zones either.
+              //
+              // The thread is an artefact of fill antialiasing: MapLibre
+              // feathers each polygon's edge, and two neighbours sharing a
+              // border each feather away from it, so a hairline of the
+              // paper underneath shows through the gap between them.
+              //
+              // Drawing a stroke to cover it was the wrong instinct and
+              // took two tries to disprove. Every zone lives in ONE fill
+              // layer, so a stroke in one zone's colour extends outward
+              // UNDER its neighbour's fill — red beneath purple composites
+              // to crimson, and the map grows a hard coloured line along
+              // every shared border. There is no stroke colour that avoids
+              // this, because the problem is that two zones' paint meets,
+              // not which paint it is.
+              //
+              // Turning the feathering off makes the two polygons meet
+              // exactly, which is what they already do in the data — a cut
+              // hands the victim the claimant's own edge. Borders go back
+              // to being where one colour stops and the next begins, with
+              // nothing drawn on them at all. The cost is a slightly
+              // harder edge, which on translucent ground at city zoom is
+              // not something you can see.
+              'fill-antialias': false,
             },
           },
-          AREA_FILL,
+          under,
         );
       }
 
@@ -384,7 +372,7 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [AREA_FILL, AREA_EDGE, LINK_LAYER, DOTS_LAYER]) {
+        for (const id of [AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
         for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {
