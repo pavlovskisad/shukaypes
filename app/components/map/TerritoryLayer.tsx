@@ -61,16 +61,34 @@ const DOTS_LAYER = 'territory-dots';
 // holds while you notice it, then fades out and leaves the territory
 // behind. Without this the map slowly fills with a hundred old dots and
 // the shape — the thing that actually matters — gets lost in them.
-const DOT_HOLD_MS = 12_000;
-const DOT_FADE_MS = 8_000;
+const DOT_HOLD_MS = 4_000;
+const DOT_FADE_MS = 4_000;
 const DOT_LIFE_MS = DOT_HOLD_MS + DOT_FADE_MS;
+
+// How big a dot is. Small, and no white ring around it.
+//
+// The ring was there to lift a dot off whatever it landed on, back when a
+// mark might sit alone on bare map. It doesn't any more: marks come every
+// forty metres now, so what the ring actually did was weld neighbouring
+// dots into a chain of white beads that read as a drawn path — the one
+// thing the layer's own notes say not to imply. Colour alone separates a
+// dot from the ground under it well enough at this size.
+const DOT_R = 3;
+const DOT_R_CLOSING = 4.5;
 
 // A neighbour's last mark fades much more slowly and stops short of
 // invisible. It is one dot per dog rather than a trail, so it can't pile
 // up the way a full history would — and a faint dot each is what makes
 // "who marked where" answerable at a glance.
-const RIVAL_DOT_FADE_MS = 90_000;
-const RIVAL_DOT_MIN_OPACITY = 0.3;
+const RIVAL_DOT_FADE_MS = 20_000;
+// Rival dots now go all the way out. They used to settle at 0.3 and stay
+// there forever, because a neighbour's mark left no other trace on your
+// screen — that was true when territory was recomputed from marks and a
+// rival's claim only existed as a hull. Ground is stored and drawn now,
+// so their claim IS the record, and the permanent dot on top of it was
+// just clutter that accumulated one dog at a time.
+const RIVAL_DOT_MIN_OPACITY = 0;
+const RIVAL_DOT_LIFE_MS = DOT_HOLD_MS + RIVAL_DOT_FADE_MS;
 
 // GeoJSON rings must close explicitly.
 function ring(pts: { lat: number; lng: number }[]): number[][] {
@@ -155,6 +173,7 @@ function dotsGeoJSON(
   // last place that dog claimed".
   for (const m of rivalMarks) {
     const age = now - new Date(m.at).getTime();
+    if (age >= RIVAL_DOT_LIFE_MS) continue;
     const fade = Math.min(1, Math.max(0, (age - DOT_HOLD_MS) / RIVAL_DOT_FADE_MS));
     features.push({
       type: 'Feature',
@@ -162,7 +181,7 @@ function dotsGeoJSON(
       properties: {
         // Fresh ones are as big as your own so a mark landing still reads
         // as an event; once faded they shrink to a marker.
-        r: 4.5 - 1.5 * fade,
+        r: DOT_R - 1 * fade,
         o: 1 - (1 - RIVAL_DOT_MIN_OPACITY) * fade,
         color: ownerColorCss(m.ownerId),
       },
@@ -182,7 +201,7 @@ function dotsGeoJSON(
         // Every mark is the same size because every mark is worth the
         // same. Only the one that first enclosed a shape gets to be
         // bigger, and that's about the moment, not about strength.
-        r: m.closedLoop ? 6.5 : 4.5,
+        r: m.closedLoop ? DOT_R_CLOSING : DOT_R,
         o: Math.max(0, Math.min(1, o)),
         color: OWN_COLOR_CSS,
       },
@@ -240,9 +259,15 @@ export function TerritoryLayer({
   // still alive — and only then. Once the last one has gone the timer
   // stops and the map goes quiet again.
   const [tick, setTick] = useState(0);
+  // Each side against its OWN lifetime. Rivals fade over a longer window
+  // than your own dots, and measuring them with DOT_LIFE_MS stopped the
+  // timer while they were still mid-fade — harmless when they settled at
+  // 0.3 and stayed visible anyway, but they go to nothing now, so a
+  // frozen one would sit there at half opacity until the next sync
+  // happened to redraw it.
   const anyAlive =
     marks.some((m) => Date.now() - new Date(m.at).getTime() < DOT_LIFE_MS) ||
-    rivalMarks.some((m) => Date.now() - new Date(m.at).getTime() < DOT_LIFE_MS);
+    rivalMarks.some((m) => Date.now() - new Date(m.at).getTime() < RIVAL_DOT_LIFE_MS);
   useEffect(() => {
     if (!anyAlive) return;
     const id = setInterval(() => setTick((n) => n + 1), 900);
@@ -353,9 +378,6 @@ export function TerritoryLayer({
             'circle-radius': ['get', 'r'],
             'circle-color': ['get', 'color'],
             'circle-opacity': ['get', 'o'],
-            'circle-stroke-color': '#ffffff',
-            'circle-stroke-width': 2,
-            'circle-stroke-opacity': ['get', 'o'],
           },
         });
       }

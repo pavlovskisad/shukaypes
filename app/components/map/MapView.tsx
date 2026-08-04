@@ -2946,9 +2946,17 @@ export default function MapViewWeb() {
         <SniffPress />
 
         {/* Your dog's scent on the city — a soft wash over the ground it
-            has claimed. Hidden in supersniff, where the blue search
-            beacon owns the ground and a second colour would fight it. */}
-        {!(DOG_CAM && dogCam) && onMapScreen ? (
+            has claimed.
+
+            Off in the two views that are ABOUT a specific place rather
+            than about the city: supersniff, and the lost-dog view. Both
+            put a blue beacon on the ground to say "here", and a city
+            carved into a dozen owner colours underneath it turns that
+            into one more patch among many. The claims are the subject on
+            the ordinary map and noise on top of a search — same paint,
+            different job. See threeBuildingsLayer.territoryPaintHidden,
+            which mutes the blocks for the same reason. */}
+        {!(DOG_CAM && dogCam) && !sniffMode && !selectedDogId && onMapScreen ? (
           <TerritoryLayer
             shapes={territoryShapes}
             marks={territoryMarks}

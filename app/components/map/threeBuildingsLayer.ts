@@ -313,7 +313,20 @@ interface PaintPoly {
   rgb: [number, number, number];
 }
 
+// Two views turn the claims off entirely: supersniff, and the lost-dog
+// view. Both are about ONE place — a beacon lit on the ground saying
+// "here" — and a city carved into a dozen owner colours underneath makes
+// that beacon one more coloured patch among many. The ground fill goes
+// with it (see MapView's TerritoryLayer gate); muting one without the
+// other leaves the pavement neutral under painted blocks, which reads as
+// a rendering fault rather than a decision.
+function territoryPaintHidden(): boolean {
+  const s = useGameStore.getState();
+  return s.sniffMode || s.selectedDogId != null;
+}
+
 function territoryPaintPolys(): PaintPoly[] {
+  if (territoryPaintHidden()) return [];
   const { territoryShapes, rivalTerritory } = useGameStore.getState();
   const out: PaintPoly[] = [];
   for (const r of rivalTerritory) {
@@ -356,6 +369,11 @@ export function createThreeBuildingsLayer(
   let buildingSpans: BuildingSpan[] = [];
   let paintedShapes: unknown = null;
   let paintedRivals: unknown = null;
+  // Whether the last paint pass ran with the claims muted. Entering or
+  // leaving supersniff / the lost-dog view changes what should be on
+  // screen without touching either array, so the identity check alone
+  // would leave the blocks painted until the next sync swapped them.
+  let paintedHidden = false;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
 
@@ -970,9 +988,15 @@ export function createThreeBuildingsLayer(
         // repaint just the colour attribute when they move. An identity
         // check per frame is free; re-extruding the city would not be.
         const gs = useGameStore.getState();
-        if (gs.territoryShapes !== paintedShapes || gs.rivalTerritory !== paintedRivals) {
+        const terrHidden = territoryPaintHidden();
+        if (
+          gs.territoryShapes !== paintedShapes ||
+          gs.rivalTerritory !== paintedRivals ||
+          terrHidden !== paintedHidden
+        ) {
           paintedShapes = gs.territoryShapes;
           paintedRivals = gs.rivalTerritory;
+          paintedHidden = terrHidden;
           repaintTerritory();
         }
 
