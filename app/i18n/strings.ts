@@ -44,8 +44,6 @@ export interface AppStrings {
   };
   bubbles: {
     greeting: string;
-    sniffOn: string;
-    sniffOff: string;
     // Varied "leaving supersniff" lines so repeated toggles don't feel canned.
     backToWalks: string[];
     // Varied "entering supersniff" lines for repeat entries. The FIRST entry
@@ -258,8 +256,6 @@ const uk: AppStrings = {
   },
   bubbles: {
     greeting: 'гав! натисни на мене — розкажу, що до чого 🐾',
-    sniffOn: '*глибокий вдих* супернюх увімкнено 👀',
-    sniffOff: 'добре, повертаємось гуляти 🐾',
     backToWalks: [
       'добре, повертаємось гуляти 🐾',
       'ніс відпочине — просто гуляємо 🐕',
@@ -585,8 +581,6 @@ const en: AppStrings = {
   },
   bubbles: {
     greeting: "woof! tap me to learn what's what 🐾",
-    sniffOn: '*deep sniff* supersniff mode 👀',
-    sniffOff: 'okay, back to walks 🐾',
     backToWalks: [
       'okay, back to walks 🐾',
       'nose off duty — just strolling now 🐕',

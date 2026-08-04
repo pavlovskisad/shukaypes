@@ -23,9 +23,9 @@ export const Z = {
   // The dog. Sits above other markers in dense areas — when the
   // map's covered in POI clusters the companion should still be
   // the visual anchor. Bumped 15 → 42 so it (and the SpeechBubble
-  // inside its marker container) paints ABOVE the off-screen
-  // lost-pet chips (HUD_CHIPS = 35) when the dog speaks near the
-  // viewport edge. Still well below MODAL_MAP (60).
+  // inside its marker container) paints ABOVE the off-screen chips
+  // (HUD_CHIPS = 35) when the dog speaks near the viewport edge.
+  // Still well below MODAL_MAP (60).
   MARKER_COMPANION: 42,
   // Spiderified children of an expanded cluster — local to the
   // cluster's stacking context, but bumped here so they paint
@@ -38,9 +38,8 @@ export const Z = {
   // StatusBar pills (sun% / bone% / paws), sniff toggle, corner
   // logo. Sit above markers so they're always reachable.
   HUD_PILLS: 30,
-  // Off-screen lost-pet chips (sniff mode) + companion bookmark.
-  // Above the HUD pills so a chip overlapping the pill row still
-  // catches the tap.
+  // The off-screen companion bookmark. Above the HUD pills so a chip
+  // overlapping the pill row still catches the tap.
   HUD_CHIPS: 35,
   // Bubble that mirrors the dog's current remark next to the
   // off-screen companion chip. One notch above chips so it reads

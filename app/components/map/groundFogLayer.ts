@@ -24,10 +24,9 @@ import type {
   Map as MlMap,
 } from 'maplibre-gl';
 import { useGameStore } from '../../stores/gameStore';
-import { LIGHT_PALETTE, DARK_PALETTE } from './crayonStyle';
+import { LIGHT_PALETTE } from './crayonStyle';
 import {
   DAY,
-  NIGHT,
   POOL_STRENGTH,
   SUN_AZIMUTH,
   clearBubbleForCamera,
@@ -66,16 +65,6 @@ const DAY_G: GroundTone = {
   // reads as ambient warmth, not a spotlight.
   sun: rgbNum(0xffdaa6),
   sunStrength: 0.5,
-};
-const NIGHT_G: GroundTone = {
-  fog: rgbNum(NIGHT.fog),
-  fogNear: NIGHT.fogNear,
-  fogDensity: NIGHT.fogDensity,
-  skyTop: rgbHex(DARK_PALETTE.sky.skyColor),
-  skyHorizon: rgbHex(DARK_PALETTE.sky.horizonColor),
-  // A soft cool moon-glow at night.
-  sun: rgbNum(0xacc0e0),
-  sunStrength: 0.26,
 };
 
 const VERT = `
@@ -257,8 +246,7 @@ export function createGroundFogLayer(): CustomLayerInterface {
       try {
         if (!program || !buffer || !mapRef) return;
         const map = mapRef;
-        const sniff = useGameStore.getState().sniffMode;
-        const tone = sniff ? NIGHT_G : DAY_G;
+        const tone = DAY_G;
 
         const mmArr = Array.from(args.defaultProjectionData.mainMatrix);
         invMat.fromArray(mmArr).invert();

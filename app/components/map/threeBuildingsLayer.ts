@@ -56,9 +56,9 @@ const DEFAULT_HEIGHT = 6;
 const REBUILD_MOVE_M = 180;
 const REBUILD_ZOOM_D = 0.6;
 
-// Day / night (sniff) tones. Buildings are the same paper-white as the 2D
-// map so the two building treatments would be interchangeable; fog + light
-// colours match the sky/haze palette in crayonStyle so the Three fog blends
+// Daylight tones. Buildings are the same paper-white as the 2D map so the
+// two building treatments would be interchangeable; fog + light colours
+// match the sky/haze palette in crayonStyle so the Three fog blends
 // seamlessly into the screen-space atmosphere at the horizon.
 interface Tone {
   building: number; // mesh base colour
@@ -87,16 +87,6 @@ export const DAY: Tone = {
   ambientI: 2.4,
   sun: 0xffe9c4,
   sunI: 1.9,
-};
-export const NIGHT: Tone = {
-  building: 0x20242c,
-  fog: 0x2c3646,
-  fogNear: 470,
-  fogDensity: 0.011,
-  ambient: 0x2a3550,
-  ambientI: 1.6,
-  sun: 0x9fb4d8,
-  sunI: 1.3,
 };
 
 // Fixed world azimuth the sun comes from (deg from north, clockwise) —
@@ -321,15 +311,12 @@ interface PaintPoly {
 // other leaves the pavement neutral under painted blocks, which reads as
 // a rendering fault rather than a decision.
 // `dogCam` is the one that matters for supersniff — it is the state the
-// current supersniff actually sets. `sniffMode` is the OLD sniff toggle,
-// still in the store and still false throughout the mode you can reach
-// today, which is why gating on it alone left every block painted while
-// the ground fill underneath had already gone (MapView's fill gate has
-// always checked dogCam). Both are listed so this keeps working whichever
-// one a future sniff mode settles on.
+// current supersniff actually sets — MapView's ground-fill gate has always
+// checked the same one, and the two have to agree or the pavement goes
+// neutral under painted blocks.
 function territoryPaintHidden(): boolean {
   const s = useGameStore.getState();
-  return (DOG_CAM && s.dogCam) || s.sniffMode || s.selectedDogId != null;
+  return (DOG_CAM && s.dogCam) || s.selectedDogId != null;
 }
 
 function territoryPaintPolys(): PaintPoly[] {
@@ -551,7 +538,7 @@ export function createThreeBuildingsLayer(
   // Cheap ground "drop shadows": flat quads swept from each footprint toward
   // the sun, merged into one mesh (one draw call — no shadow-map pass). Blended
   // with MIN so overlapping shadows don't compound into black; faded into the
-  // mist with distance; hidden at night (sniff) via u_strength.
+  // mist with distance via u_strength.
   const shadowUniforms = {
     u_camLocal: fogUniforms.u_camLocal, // shared — updated each frame
     u_fogColor: fogUniforms.u_fogColor,
@@ -1007,9 +994,7 @@ export function createThreeBuildingsLayer(
           repaintTerritory();
         }
 
-        // Day/night follows sniff mode — swap mist, light + material tones.
-        const sniff = useGameStore.getState().sniffMode;
-        const tone = sniff ? NIGHT : DAY;
+        const tone = DAY;
         // The see-through dissolve is always on (u_dogActive below); this flag
         // only adds its animated shimmer/banding while the dog-cam chase view
         // is active and close enough for the effect to be front-and-centre.
@@ -1062,9 +1047,7 @@ export function createThreeBuildingsLayer(
         sun.color.setHex(tone.sun);
         sun.intensity = tone.sunI;
         material.color.setHex(tone.building);
-        // Ground shadows fade out at night (dark ground would swallow them
-        // anyway, but this makes it explicit + free).
-        shadowUniforms.u_strength.value = sniff ? 0 : SHADOW_DAY_STRENGTH;
+        shadowUniforms.u_strength.value = SHADOW_DAY_STRENGTH;
 
         const mmArr = Array.from(args.defaultProjectionData.mainMatrix);
 

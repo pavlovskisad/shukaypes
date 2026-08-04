@@ -112,10 +112,6 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   const spots = useGameStore((s) => s.spots);
   const userPosition = useGameStore((s) => s.userPosition);
-  // Sniff mode uses a dark map; the existing light-frosted menu reads
-  // well there. On the light (normal) map a light menu disappeared
-  // into the background, so invert the menu theme when sniff is off.
-  const sniffMode = useGameStore((s) => s.sniffMode);
   // Supersniff (dog-cam search) mode — used to fire the one-time "how it works"
   // intro hint on entry.
   const dogCam = useGameStore((s) => s.dogCam);
@@ -746,7 +742,9 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           open={menuOpen}
           actions={currentActions}
           onSelect={handleSelect}
-          inverted={!sniffMode}
+          // The map is light, so the menu is dark — a light-frosted menu
+          // disappeared into it.
+          inverted
           // Show readable names at the named-spot leaves only — every
           // other level has self-explanatory icons and a label below
           // each ring item would clutter the cardinal slots.
