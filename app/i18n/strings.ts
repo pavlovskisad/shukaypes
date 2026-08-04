@@ -115,7 +115,6 @@ export interface AppStrings {
     territoryBoard: string;
     boardYou: string;
     boardEmpty: string;
-    boardUnranked: (n: number) => string;
   };
   spots: {
     nearbySpots: string;
@@ -159,8 +158,8 @@ export interface AppStrings {
     // Rank shown as "#3"; null rank (outside the board) reads as a dash.
     rankValue: (n: number) => string;
     unranked: string;
-    // Area, already scaled: m² for a patch too small to describe in km²,
-    // km² to two decimals for anything that is really a territory.
+    // Area as km² to two decimals, always — one unit down the whole
+    // column so two rows can be compared without doing arithmetic.
     areaValue: (m2: number) => string;
     luckyActive: string;
     luckyInactive: string;
@@ -394,7 +393,6 @@ const uk: AppStrings = {
     territoryBoard: 'хто тримає місто',
     boardYou: 'ти',
     boardEmpty: 'місто ще нічиє — познач перший',
-    boardUnranked: (n) => `ти поза топ-${n}`,
   },
   spots: {
     nearbySpots: 'місця поряд',
@@ -436,21 +434,19 @@ const uk: AppStrings = {
     },
     rankValue: (n) => `#${n}`,
     unranked: '—',
-    // km² with two decimals as soon as there is a real zone to describe.
+    // ONE UNIT, ALWAYS. km² to two decimals, even when that reads 0.00.
     //
-    // This used to switch to km² only past a full square kilometre, which
-    // is far above where territories actually live — so a bot holding a
-    // third of a km² read as "300 996 м²": six digits and a hairline
-    // superscript, indistinguishable from a bug. One decimal is not enough
-    // either, because most of the board would collapse onto "0.2" and
-    // "0.3" and the ranking would stop matching the numbers beside it.
+    // It used to drop into m² under 0.01 km², on the reasoning that two
+    // decimals have nothing to say about a patch that small. True in
+    // isolation, wrong in a column: the board came out as a stack of
+    // "0.16 км²" with a "2 856 м²" among them, and two numbers in
+    // different units cannot be compared at a glance — which is the entire
+    // job of a leaderboard.
     //
-    // Below 0.01 km² there is nothing for two decimals to say, so a patch
-    // that small stays in m² where it reads exactly.
-    areaValue: (m2) =>
-      m2 >= 10_000
-        ? `${(m2 / 1_000_000).toFixed(2)} км²`
-        : `${Math.round(m2).toLocaleString('uk-UA')} м²`,
+    // A row reading 0.00 is not a failure to inform, it IS the
+    // information: you are on the board and you hold almost nothing yet.
+    // Same shape as every row above it, and it grows into them.
+    areaValue: (m2) => `${(m2 / 1_000_000).toFixed(2)} км²`,
     luckyActive: 'активна',
     luckyInactive: 'щастя ≥ 70%',
     language: {
@@ -722,7 +718,6 @@ const en: AppStrings = {
     territoryBoard: 'who holds the city',
     boardYou: 'you',
     boardEmpty: 'nobody holds the city yet — go and mark',
-    boardUnranked: (n) => `you're outside the top ${n}`,
   },
   spots: {
     nearbySpots: 'nearby spots',
@@ -764,10 +759,7 @@ const en: AppStrings = {
     },
     rankValue: (n) => `#${n}`,
     unranked: '—',
-    areaValue: (m2) =>
-      m2 >= 10_000
-        ? `${(m2 / 1_000_000).toFixed(2)} km²`
-        : `${Math.round(m2).toLocaleString('en-US')} m²`,
+    areaValue: (m2) => `${(m2 / 1_000_000).toFixed(2)} km²`,
     luckyActive: 'active',
     luckyInactive: 'happiness ≥ 70%',
     language: {

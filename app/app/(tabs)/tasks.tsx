@@ -40,6 +40,24 @@ function relativeWhen(iso: string): string {
   return `${diffD}d ago`;
 }
 
+// THE PODIUM. Gold, silver, bronze — as metal, not as three flat colours.
+//
+// What makes a metal read as metal is that its lightness swings along the
+// surface: a dark rim, a bright band, a mid tone, another bright band. A
+// single hex fill of #ffd700 reads as yellow plastic no matter how well
+// the hue is chosen, so each of these is a gradient with its own highlight
+// running across it, and the highlight then sweeps.
+//
+// The tones are pulled toward the muted, slightly warm palette the rest of
+// the app uses rather than the saturated trophy colours — bright enough to
+// be unmistakably precious metal, dull enough to sit next to a pastel map
+// without shouting.
+const MEDALS: { rim: string; dark: string; mid: string; light: string; text: string }[] = [
+  { rim: '#8a6a12', dark: '#b8860b', mid: '#e3b23c', light: '#fff0b8', text: '#6b5210' },
+  { rim: '#7d838a', dark: '#9aa1a9', mid: '#c4ccd4', light: '#f4f8fb', text: '#5c6269' },
+  { rim: '#8a5124', dark: '#a9662f', mid: '#c98b53', light: '#f0c9a3', text: '#6d3f1c' },
+];
+
 type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings';
 
 interface TaskRow {
@@ -191,6 +209,25 @@ export default function TasksScreen() {
     }, []),
   );
 
+  // The shine that travels along a podium bar. One stylesheet for the
+  // whole tab, injected once — same pattern the card deck's shimmer uses.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (document.getElementById('board-medal-style')) return;
+    const el = document.createElement('style');
+    el.id = 'board-medal-style';
+    el.textContent = `
+      @keyframes board-medal-sweep {
+        0%   { transform: translateX(-60%) skewX(-18deg); opacity: 0; }
+        12%  { opacity: 0.85; }
+        55%  { opacity: 0.85; }
+        70%  { transform: translateX(340%) skewX(-18deg); opacity: 0; }
+        100% { transform: translateX(340%) skewX(-18deg); opacity: 0; }
+      }
+    `;
+    document.head.appendChild(el);
+  }, []);
+
   const doneCount = TASKS.filter((row) => dailyTasks[row.key] >= row.target).length;
 
   // Which snap-cards are on screen at all. The observer below re-arms on
@@ -325,11 +362,29 @@ export default function TasksScreen() {
             board's business. */}
         {board ? (
           <View nativeID="snap-card-board" style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
-              <Text style={styles.cardHeaderCount}>
-                {t.profile.areaValue(board.you.areaM2)}
-              </Text>
+            <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
+            {/* YOU, first and always.
+                The number used to sit small and grey in the header, which
+                put the one figure a player came to read in the least
+                readable place on the card — and left you hunting the list
+                for your own row, or finding you were not in it at all.
+                Here it is a row in the same three columns as the board
+                below, so your rank, your name and your ground line up with
+                everyone else's and can be compared without moving your
+                eyes. Unranked reads as a dash, which is honest: you are
+                not on the board, and here is what you hold anyway. */}
+            <View style={[styles.boardRow, styles.boardYouRow]}>
+              <View style={styles.row}>
+                <Text style={[styles.boardRank, styles.boardYouText]}>
+                  {board.you.rank != null ? t.profile.rankValue(board.you.rank) : t.profile.unranked}
+                </Text>
+                <Text style={[styles.boardName, styles.boardYouText]} numberOfLines={1}>
+                  {t.tasks.boardYou}
+                </Text>
+                <Text style={[styles.boardArea, styles.boardYouText]}>
+                  {t.profile.areaValue(board.you.areaM2)}
+                </Text>
+              </View>
             </View>
             {board.board.length === 0 ? (
               <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
@@ -340,13 +395,20 @@ export default function TasksScreen() {
                   // board carries no id for you, and it doesn't need to.
                   const isYou = board.you.rank === i + 1;
                   const top = board.board[0]!.areaM2 || 1;
+                  const medal = MEDALS[i];
                   return (
                     <View
                       key={row.userId}
                       style={[styles.boardRow, i > 0 && styles.taskDivider]}
                     >
                       <View style={styles.row}>
-                        <Text style={[styles.boardRank, isYou && styles.boardYouText]}>
+                        <Text
+                          style={[
+                            styles.boardRank,
+                            isYou && styles.boardYouText,
+                            medal ? { color: medal.text, fontWeight: '700' } : null,
+                          ]}
+                        >
                           {i + 1}
                         </Text>
                         <Text
@@ -363,27 +425,45 @@ export default function TasksScreen() {
                         <View
                           style={[
                             styles.barFill,
-                            {
-                              width: `${Math.max(2, Math.round((row.areaM2 / top) * 100))}%` as unknown as number,
-                              backgroundColor: isYou
-                                ? 'rgba(0,60,255,0.85)'
-                                : 'rgba(0,0,0,0.45)',
-                            },
+                            { width: `${Math.max(2, Math.round((row.areaM2 / top) * 100))}%` as unknown as number },
+                            medal
+                              ? ({
+                                  // Rim, body, highlight band, body, rim —
+                                  // the lightness swing is what reads as
+                                  // metal rather than as a colour.
+                                  backgroundImage: `linear-gradient(100deg, ${medal.rim} 0%, ${medal.dark} 14%, ${medal.mid} 34%, ${medal.light} 50%, ${medal.mid} 66%, ${medal.dark} 86%, ${medal.rim} 100%)`,
+                                  overflow: 'hidden',
+                                } as unknown as object)
+                              : {
+                                  backgroundColor: isYou
+                                    ? 'rgba(0,60,255,0.85)'
+                                    : 'rgba(0,0,0,0.45)',
+                                },
                           ]}
-                        />
+                        >
+                          {/* The travelling glint. Staggered per place so
+                              the three bars catch the light one after the
+                              other instead of flashing in unison. */}
+                          {medal ? (
+                            <View
+                              style={
+                                {
+                                  position: 'absolute',
+                                  top: 0,
+                                  bottom: 0,
+                                  width: '34%',
+                                  backgroundImage:
+                                    'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0) 100%)',
+                                  animation: `board-medal-sweep 4.2s ${i * 0.45}s ease-in-out infinite`,
+                                } as unknown as object
+                              }
+                            />
+                          ) : null}
+                        </View>
                       </View>
                     </View>
                   );
                 })}
-                {/* Off the board entirely — say where you actually are
-                    rather than leaving the card looking like it has
-                    nothing to do with you. */}
-                {board.you.rank == null ? (
-                  <Text style={styles.boardEmpty}>
-                    {t.tasks.boardUnranked(board.board.length)} ·{' '}
-                    {t.profile.areaValue(board.you.areaM2)}
-                  </Text>
-                ) : null}
               </>
             )}
           </View>
@@ -661,6 +741,15 @@ const styles = StyleSheet.create({
   // label, value, bar — so the two cards read as one language.
   boardRow: {
     paddingVertical: S.m,
+  },
+  // Your own line, set apart from the ranking under it: tinted, inset,
+  // and rounded so it reads as a summary of you rather than as position
+  // zero on the board.
+  boardYouRow: {
+    backgroundColor: 'rgba(0,60,255,0.06)',
+    borderRadius: R.sm,
+    paddingHorizontal: S.m,
+    marginBottom: S.s,
   },
   boardRank: {
     width: 22,
