@@ -52,9 +52,15 @@ function relativeWhen(iso: string): string {
 // the app uses rather than the saturated trophy colours — bright enough to
 // be unmistakably precious metal, dull enough to sit next to a pastel map
 // without shouting.
+// Silver's rim is the darkest of the three relative to its own body on
+// purpose. Gold and bronze are coloured metals — they are unmistakable at
+// any contrast because nothing else on the board is that hue. Silver is
+// grey, and so is every bar under it, so the ONLY thing separating second
+// place from fourth is the lightness swing across the bar. Give it the
+// widest one: near-black rim to a white highlight.
 const MEDALS: { rim: string; dark: string; mid: string; light: string; text: string }[] = [
   { rim: '#8a6a12', dark: '#b8860b', mid: '#e3b23c', light: '#fff0b8', text: '#6b5210' },
-  { rim: '#7d838a', dark: '#9aa1a9', mid: '#c4ccd4', light: '#f4f8fb', text: '#5c6269' },
+  { rim: '#575e66', dark: '#8b939c', mid: '#ccd4dc', light: '#ffffff', text: '#4a5158' },
   { rim: '#8a5124', dark: '#a9662f', mid: '#c98b53', light: '#f0c9a3', text: '#6d3f1c' },
 ];
 
@@ -396,6 +402,12 @@ export default function TasksScreen() {
                   const isYou = board.you.rank === i + 1;
                   const top = board.board[0]!.areaM2 || 1;
                   const medal = MEDALS[i];
+                  // The rest of the field, dimmed. A podium is only a
+                  // podium if there is a crowd below it — with every row
+                  // at full contrast the metals read as three coloured
+                  // bars in a list of bars, and silver, being grey,
+                  // barely reads at all.
+                  const faded = !medal && !isYou;
                   return (
                     <View
                       key={row.userId}
@@ -405,6 +417,7 @@ export default function TasksScreen() {
                         <Text
                           style={[
                             styles.boardRank,
+                            faded && styles.boardFadedRank,
                             isYou && styles.boardYouText,
                             medal ? { color: medal.text, fontWeight: '700' } : null,
                           ]}
@@ -412,12 +425,22 @@ export default function TasksScreen() {
                           {i + 1}
                         </Text>
                         <Text
-                          style={[styles.boardName, isYou && styles.boardYouText]}
+                          style={[
+                            styles.boardName,
+                            faded && styles.boardFadedName,
+                            isYou && styles.boardYouText,
+                          ]}
                           numberOfLines={1}
                         >
                           {isYou ? t.tasks.boardYou : row.name}
                         </Text>
-                        <Text style={[styles.boardArea, isYou && styles.boardYouText]}>
+                        <Text
+                          style={[
+                            styles.boardArea,
+                            faded && styles.boardFadedArea,
+                            isYou && styles.boardYouText,
+                          ]}
+                        >
                           {t.profile.areaValue(row.areaM2)}
                         </Text>
                       </View>
@@ -435,9 +458,14 @@ export default function TasksScreen() {
                                   overflow: 'hidden',
                                 } as unknown as object)
                               : {
+                                  // A third of the ink the podium bars
+                                  // carry, and barely above the track it
+                                  // sits in — enough to compare fourth
+                                  // against fifth, not enough to compete
+                                  // with a medal.
                                   backgroundColor: isYou
                                     ? 'rgba(0,60,255,0.85)'
-                                    : 'rgba(0,0,0,0.45)',
+                                    : 'rgba(0,0,0,0.16)',
                                 },
                           ]}
                         >
@@ -771,6 +799,11 @@ const styles = StyleSheet.create({
     color: 'rgba(0,60,255,0.85)',
     fontWeight: '700',
   },
+  // Fourth place down. Still legible at arm's length — you can find your
+  // rival's name — but no longer competing with the podium for the eye.
+  boardFadedRank: { color: '#c4c4c4' },
+  boardFadedName: { color: '#9a9a9a' },
+  boardFadedArea: { color: '#b0b0b0' },
   boardEmpty: {
     fontSize: TYPE.small,
     color: '#777',

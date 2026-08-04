@@ -667,17 +667,29 @@ export interface MapTerritory {
   rivals: RivalTerritory[];
 }
 
-// Trim a coordinate to the metre on the way out of the door.
+// Trim a coordinate on the way out of the door.
 //
-// A float64 latitude serialises as ~17 digits, and every one past the
-// fifth is describing something smaller than a centimetre — of a border
-// drawn around dots a hundred metres apart. Over a whole map payload that
-// noise is 12% of the bytes, which is most of what sending every rival
-// mark costs.
+// A float64 latitude serialises as ~17 digits, and almost all of them are
+// describing something smaller than a centimetre — of a border drawn
+// around dots a hundred metres apart. Over a whole map payload that noise
+// is 12% of the bytes, which is most of what sending every rival mark
+// costs.
 //
-// Emit-time only, and copied rather than edited in place: the shapes
-// arrive from the partition cache and the next reader wants them whole.
-const COORD_DP = 1e5; // ~1.1m north/south, ~0.7m east/west in Kyiv
+// Sixth decimal, not the fifth, and the reason is the hairline threads
+// between touching pieces. Trimming snaps every vertex onto a grid. A
+// vertex the two pieces SHARE lands in the same place for both — same
+// input, same output — but a vertex that sat partway along the
+// neighbour's straight edge gets nudged off that line by up to half a
+// cell, and the sliver it opens either shows the map through it or gets
+// painted twice and goes dark. On a 1e5 grid that is up to 0.55m, which
+// is a visible thread once you are zoomed in past a metre per pixel; on
+// 1e6 it is 0.055m, under a tenth of a pixel at any zoom the app allows.
+// Measured on a live payload: +0.2KB on 87KB, so the precision is very
+// nearly free and the fifth decimal was a false economy.
+//
+// Emit-time only, and copied rather than edited in place: the next reader
+// of these shapes wants them whole.
+const COORD_DP = 1e6; // ~0.11m north/south, ~0.07m east/west in Kyiv
 const trim = (v: number): number => Math.round(v * COORD_DP) / COORD_DP;
 const trimPoints = (points: { lat: number; lng: number }[]) =>
   points.map((p) => ({ lat: trim(p.lat), lng: trim(p.lng) }));
