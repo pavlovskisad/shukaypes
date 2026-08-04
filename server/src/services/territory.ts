@@ -684,8 +684,15 @@ export interface MapTerritory {
 // painted twice and goes dark. On a 1e5 grid that is up to 0.55m, which
 // is a visible thread once you are zoomed in past a metre per pixel; on
 // 1e6 it is 0.055m, under a tenth of a pixel at any zoom the app allows.
-// Measured on a live payload: +0.2KB on 87KB, so the precision is very
-// nearly free and the fifth decimal was a false economy.
+//
+// Measured after the switch, on a live payload: near-contact vertices
+// that were spread over 0.1-0.6m now sit almost entirely under 0.05m
+// (144 of ~190, against 15 before), and the handful left past a metre
+// are pieces that genuinely do not touch. The cost is 2.9KB on 92KB —
+// about 3%, which buys the artefact away and is the honest figure. An
+// earlier note here claimed 0.2KB; that came from re-rounding an
+// already-5dp payload UP to six decimals, which is a no-op and measured
+// nothing.
 //
 // Emit-time only, and copied rather than edited in place: the next reader
 // of these shapes wants them whole.
