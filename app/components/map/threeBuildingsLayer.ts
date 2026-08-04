@@ -320,9 +320,16 @@ interface PaintPoly {
 // with it (see MapView's TerritoryLayer gate); muting one without the
 // other leaves the pavement neutral under painted blocks, which reads as
 // a rendering fault rather than a decision.
+// `dogCam` is the one that matters for supersniff — it is the state the
+// current supersniff actually sets. `sniffMode` is the OLD sniff toggle,
+// still in the store and still false throughout the mode you can reach
+// today, which is why gating on it alone left every block painted while
+// the ground fill underneath had already gone (MapView's fill gate has
+// always checked dogCam). Both are listed so this keeps working whichever
+// one a future sniff mode settles on.
 function territoryPaintHidden(): boolean {
   const s = useGameStore.getState();
-  return s.sniffMode || s.selectedDogId != null;
+  return (DOG_CAM && s.dogCam) || s.sniffMode || s.selectedDogId != null;
 }
 
 function territoryPaintPolys(): PaintPoly[] {
