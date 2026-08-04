@@ -158,8 +158,10 @@ export interface AppStrings {
     // Rank shown as "#3"; null rank (outside the board) reads as a dash.
     rankValue: (n: number) => string;
     unranked: string;
-    // Area as km² to two decimals, always — one unit down the whole
-    // column so two rows can be compared without doing arithmetic.
+    // Area in square kilometres to two decimals, always — one unit down
+    // the whole column so two rows compare without arithmetic, and the
+    // unit spelled out because the superscript glyph is missing from the
+    // app's font and silently turned areas into distances.
     areaValue: (m2: number) => string;
     luckyActive: string;
     luckyInactive: string;
@@ -434,19 +436,21 @@ const uk: AppStrings = {
     },
     rankValue: (n) => `#${n}`,
     unranked: '—',
-    // ONE UNIT, ALWAYS. km² to two decimals, even when that reads 0.00.
+    // ONE UNIT, ALWAYS, AND NO SUPERSCRIPT.
     //
-    // It used to drop into m² under 0.01 km², on the reasoning that two
-    // decimals have nothing to say about a patch that small. True in
-    // isolation, wrong in a column: the board came out as a stack of
-    // "0.16 км²" with a "2 856 м²" among them, and two numbers in
-    // different units cannot be compared at a glance — which is the entire
-    // job of a leaderboard.
+    // Two decimals of km² even when that reads 0.00. It used to drop into
+    // m² below 0.01 km², which is right in isolation and wrong in a
+    // column: the board came out as a stack of "0.16" with a "2 856"
+    // among them, and two numbers in different units cannot be compared
+    // at a glance, which is the entire job of a leaderboard. A row reading
+    // 0.00 is not a failure to inform — it says you are on the board and
+    // hold almost nothing yet, in the same shape as every row above it.
     //
-    // A row reading 0.00 is not a failure to inform, it IS the
-    // information: you are on the board and you hold almost nothing yet.
-    // Same shape as every row above it, and it grows into them.
-    areaValue: (m2) => `${(m2 / 1_000_000).toFixed(2)} км²`,
+    // "кв. км" rather than "км²" because the ² was not rendering on
+    // device: the app's face has no U+00B2, so it dropped silently and an
+    // AREA read as a DISTANCE — "0.16 км" is a number you could walk.
+    // Spelled out, it cannot fail on a font.
+    areaValue: (m2) => `${(m2 / 1_000_000).toFixed(2)} кв. км`,
     luckyActive: 'активна',
     luckyInactive: 'щастя ≥ 70%',
     language: {
@@ -759,7 +763,7 @@ const en: AppStrings = {
     },
     rankValue: (n) => `#${n}`,
     unranked: '—',
-    areaValue: (m2) => `${(m2 / 1_000_000).toFixed(2)} km²`,
+    areaValue: (m2) => `${(m2 / 1_000_000).toFixed(2)} sq km`,
     luckyActive: 'active',
     luckyInactive: 'happiness ≥ 70%',
     language: {

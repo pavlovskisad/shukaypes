@@ -99,6 +99,7 @@ import {
   claimGround,
   groundIn,
   groundOf,
+  groundStanding,
   groundTotals,
   ownerAt,
   pieceCovers,
@@ -858,17 +859,25 @@ export async function territoryLeaderboard(): Promise<LeaderboardEntry[]> {
   }));
 }
 
-// Where a given user stands, and how much they hold. Read straight off
-// their own rows when they're outside the top ten, so a player nobody can
-// see on the board still gets an honest number for their own ground.
+// Where a given user stands, and how much they hold.
+//
+// ALWAYS A REAL POSITION. This used to return the index in the top ten and
+// null for anybody outside it, and null rendered as a dash — which tells a
+// player they do not register rather than where they are. Counting the
+// owners ahead of them costs one GROUP BY over a stored column, the same
+// shape the board itself is, so there was never a reason to withhold it.
+//
+// Holding nothing still gets a rank: last, alongside everyone else who
+// holds nothing. That is a truthful thing to be told and a much better
+// starting point than a dash.
 export async function territoryStanding(
   userId: string,
   board: LeaderboardEntry[],
 ): Promise<{ areaM2: number; rank: number | null }> {
   const idx = board.findIndex((e) => e.userId === userId);
   if (idx >= 0) return { areaM2: board[idx]!.areaM2, rank: idx + 1 };
-  const mine = await groundOf(userId);
-  return { areaM2: Math.round(mine.reduce((s, p) => s + p.areaM2, 0)), rank: null };
+  const standing = await groundStanding(userId);
+  return { areaM2: Math.round(standing.areaM2), rank: standing.rank };
 }
 
 // Display names for territory owners. Bots carry their dog name as
