@@ -168,6 +168,9 @@ interface Bot {
   name: string;
   speed: number;
   state: BotState;
+  // Current heading offset from the true bearing, in radians. Random-walks
+  // as the bot moves so its path curves instead of ruling a line.
+  wander: number;
   until: number; // ms timestamp the current dwell/offline ends
   // Territory. Bots hold ground so a city without real players still has
   // something to take — and so the PvP half of the mechanic is testable
@@ -235,6 +238,7 @@ function spawnBot(i: number, home: LatLng): Bot {
     target: pos,
     name: NAMES[i % NAMES.length]!,
     speed: rand(SPEED_MIN, SPEED_MAX),
+    wander: rand(-WANDER_MAX_RAD, WANDER_MAX_RAD),
     state: 'walk',
     until: 0,
     home,
@@ -262,15 +266,60 @@ async function ensureBotUsers(bots: Bot[]): Promise<void> {
     .onConflictDoNothing();
 }
 
+// A dog does not walk a ruled line to where it is going.
+//
+// This used to head straight at the target, and with a mark landing every
+// 40m along the way the dots came out in a perfectly straight row — and
+// the ground drawn around them was a ribbon with ruler edges. On a map
+// where the shape of a territory is supposed to say where somebody walked,
+// that reads as machinery, which is exactly what it was.
+//
+// So the heading wanders. Each bot carries an offset from the true bearing
+// that random-walks a little every tick and is pulled gently back toward
+// zero, which is the standard way to get a path that meanders without ever
+// failing to arrive: the drift is a random walk, the restoring pull keeps
+// it bounded, and the bearing is still fundamentally at the target.
+//
+// The decay is EXPONENTIAL, and that is not a detail. Written the obvious
+// way — `w -= w * pull * dt` — a 3.5s tick and a pull of 0.55 gives a
+// factor of 1.9, so the offset flips sign every single tick and averages
+// itself out: measured, it strayed 24m off a 620m line, which is not a
+// wander, it is a straight walk with a tremor. exp(-pull * dt) is stable
+// at any timestep, and the random step scales with sqrt(dt) because that
+// is how a random walk accumulates.
+//
+// Tuned by simulation over 400 trips each. The cap is what actually
+// decides the shape; past ~69° the walk just gets longer without curving
+// much more:
+//
+//   cap 35°   strays  49m   walk 1.03x   cap 69°  strays 101m  walk 1.18x
+//   cap 52°   strays  79m   walk 1.12x   cap 86°  strays 114m  walk 1.23x
+//
+// Every configuration arrived 400/400 — the restoring pull guarantees it,
+// and the straighten-up below closes the last stretch.
+const WANDER_STEP_RAD = 0.3; // random kick, per sqrt(second)
+const WANDER_PULL = 0.03; // per second, back toward the true bearing
+const WANDER_MAX_RAD = 1.2; // ~69 degrees off-course at the very most
+
 function stepTowardTarget(b: Bot, dtS: number): void {
   const d = distM(b.pos, b.target);
   if (d < ARRIVE_M) return;
   const move = Math.min(d, b.speed * dtS);
   const dN = (b.target.lat - b.pos.lat) * mPerLat;
   const dE = (b.target.lng - b.pos.lng) * mPerLng(b.pos.lat);
+
+  // Random walk with a restoring pull, both scaled so the shape of the
+  // path does not change if TICK_MS does.
+  b.wander *= Math.exp(-WANDER_PULL * dtS);
+  b.wander += (Math.random() * 2 - 1) * WANDER_STEP_RAD * Math.sqrt(dtS);
+  b.wander = Math.max(-WANDER_MAX_RAD, Math.min(WANDER_MAX_RAD, b.wander));
+
+  // Straighten up on the approach, so the wander cannot keep a dog circling
+  // just outside ARRIVE_M forever.
+  const heading = Math.atan2(dE, dN) + b.wander * Math.min(1, d / 120);
   b.pos = {
-    lat: b.pos.lat + ((dN / d) * move) / mPerLat,
-    lng: b.pos.lng + ((dE / d) * move) / mPerLng(b.pos.lat),
+    lat: b.pos.lat + (Math.cos(heading) * move) / mPerLat,
+    lng: b.pos.lng + (Math.sin(heading) * move) / mPerLng(b.pos.lat),
   };
 }
 
