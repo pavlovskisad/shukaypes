@@ -309,11 +309,19 @@ export function TerritoryLayer({
         // genuinely exists and should not be confused with a rendering
         // seam.
         //
-        // Half a pixel of the fill's own colour on each side closes the
-        // thread and cannot mislead: the colour is the zone's, so the
-        // border can only ever grow into itself. Deliberately NOT a
-        // darker outline — that would draw every border as a line and
-        // turn a map of ground into a map of fences.
+        // UNDER the fill, and that is the whole trick.
+        //
+        // Drawn on top — which is where it went first — the line and the
+        // fill are the same colour at the same 0.42, so where they overlap
+        // the alpha composites to about 0.66 and every zone gains a darker
+        // rim of itself. That is precisely the map-of-fences this was
+        // supposed to avoid, arrived at by stacking alpha rather than by
+        // choosing a colour.
+        //
+        // Beneath the fill, the inner half of the stroke is covered and
+        // only the outer half shows, at exactly the fill's own alpha. The
+        // border reads as one flat colour that happens to reach half a
+        // pixel further, which is all that is needed to close the thread.
         map.addLayer(
           {
             id: AREA_EDGE,
@@ -326,7 +334,7 @@ export function TerritoryLayer({
               'line-opacity': 0.42,
             },
           },
-          under,
+          AREA_FILL,
         );
       }
 
