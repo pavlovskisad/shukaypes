@@ -48,6 +48,7 @@ import { OWN_COLOR_CSS, ownerColorCss } from './territoryColor';
 
 const AREA_SOURCE = 'territory-area-src';
 const AREA_FILL = 'territory-area-fill';
+const AREA_EDGE = 'territory-area-edge';
 const LINK_SOURCE = 'territory-link-src';
 const LINK_LAYER = 'territory-link';
 const DOTS_SOURCE = 'territory-dots-src';
@@ -297,6 +298,36 @@ export function TerritoryLayer({
           },
           under,
         );
+        // A hairline of each zone's own colour, drawn on its own border.
+        //
+        // Two neighbours' borders are the same line in the data — a cut
+        // gives the victim exactly the claimant's edge — but they arrive
+        // as separate polygons rounded to five decimals, so at close zoom
+        // a thread of white paper shows between them. On a map that is
+        // otherwise solid colour those threads read as litter, or worse,
+        // as slivers of ground nobody holds, which is a thing that also
+        // genuinely exists and should not be confused with a rendering
+        // seam.
+        //
+        // Half a pixel of the fill's own colour on each side closes the
+        // thread and cannot mislead: the colour is the zone's, so the
+        // border can only ever grow into itself. Deliberately NOT a
+        // darker outline — that would draw every border as a line and
+        // turn a map of ground into a map of fences.
+        map.addLayer(
+          {
+            id: AREA_EDGE,
+            type: 'line',
+            source: AREA_SOURCE,
+            layout: { 'line-join': 'round', 'line-cap': 'round' },
+            paint: {
+              'line-color': ['get', 'color'],
+              'line-width': 1.5,
+              'line-opacity': 0.42,
+            },
+          },
+          under,
+        );
       }
 
       if (!setOr(LINK_SOURCE, links)) {
@@ -345,7 +376,7 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
+        for (const id of [AREA_FILL, AREA_EDGE, LINK_LAYER, DOTS_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
         for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {

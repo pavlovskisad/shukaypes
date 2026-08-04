@@ -577,6 +577,32 @@ export async function groundTotals(): Promise<{ userId: string; areaM2: number }
   return rows.map((r) => ({ userId: r.userId, areaM2: Number(r.areaM2) }));
 }
 
+// How many owners hold strictly more ground than this one, and how much
+// this one holds. rank = that count + 1.
+//
+// Counted rather than looked up in the top ten, because a player outside
+// it still wants a number: "you are 47th" is a position in a city, while
+// a dash is being told you do not register. One GROUP BY over a stored
+// column, which is the same shape as the board itself.
+export async function groundStanding(
+  userId: string,
+): Promise<{ areaM2: number; rank: number }> {
+  const rows = await db
+    .select({
+      userId: schema.territoryGround.userId,
+      areaM2: sql<number>`sum(${schema.territoryGround.areaM2})`,
+    })
+    .from(schema.territoryGround)
+    .groupBy(schema.territoryGround.userId);
+
+  let mine = 0;
+  for (const r of rows) if (r.userId === userId) mine = Number(r.areaM2);
+  // Ties share the better rank, the way a scoreboard reads: two owners on
+  // the same area are both "5th", and the next one down is 7th.
+  const ahead = rows.filter((r) => Number(r.areaM2) > mine).length;
+  return { areaM2: mine, rank: ahead + 1 };
+}
+
 export async function clearGround(userId: string): Promise<void> {
   await db.delete(schema.territoryGround).where(eq(schema.territoryGround.userId, userId));
 }
