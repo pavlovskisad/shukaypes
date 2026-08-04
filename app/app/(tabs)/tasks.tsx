@@ -362,11 +362,29 @@ export default function TasksScreen() {
             board's business. */}
         {board ? (
           <View nativeID="snap-card-board" style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
-              <Text style={styles.cardHeaderCount}>
-                {t.profile.areaValue(board.you.areaM2)}
-              </Text>
+            <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
+            {/* YOU, first and always.
+                The number used to sit small and grey in the header, which
+                put the one figure a player came to read in the least
+                readable place on the card — and left you hunting the list
+                for your own row, or finding you were not in it at all.
+                Here it is a row in the same three columns as the board
+                below, so your rank, your name and your ground line up with
+                everyone else's and can be compared without moving your
+                eyes. Unranked reads as a dash, which is honest: you are
+                not on the board, and here is what you hold anyway. */}
+            <View style={[styles.boardRow, styles.boardYouRow]}>
+              <View style={styles.row}>
+                <Text style={[styles.boardRank, styles.boardYouText]}>
+                  {board.you.rank != null ? t.profile.rankValue(board.you.rank) : t.profile.unranked}
+                </Text>
+                <Text style={[styles.boardName, styles.boardYouText]} numberOfLines={1}>
+                  {t.tasks.boardYou}
+                </Text>
+                <Text style={[styles.boardArea, styles.boardYouText]}>
+                  {t.profile.areaValue(board.you.areaM2)}
+                </Text>
+              </View>
             </View>
             {board.board.length === 0 ? (
               <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
@@ -446,15 +464,6 @@ export default function TasksScreen() {
                     </View>
                   );
                 })}
-                {/* Off the board entirely — say where you actually are
-                    rather than leaving the card looking like it has
-                    nothing to do with you. */}
-                {board.you.rank == null ? (
-                  <Text style={styles.boardEmpty}>
-                    {t.tasks.boardUnranked(board.board.length)} ·{' '}
-                    {t.profile.areaValue(board.you.areaM2)}
-                  </Text>
-                ) : null}
               </>
             )}
           </View>
@@ -732,6 +741,15 @@ const styles = StyleSheet.create({
   // label, value, bar — so the two cards read as one language.
   boardRow: {
     paddingVertical: S.m,
+  },
+  // Your own line, set apart from the ranking under it: tinted, inset,
+  // and rounded so it reads as a summary of you rather than as position
+  // zero on the board.
+  boardYouRow: {
+    backgroundColor: 'rgba(0,60,255,0.06)',
+    borderRadius: R.sm,
+    paddingHorizontal: S.m,
+    marginBottom: S.s,
   },
   boardRank: {
     width: 22,
