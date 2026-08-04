@@ -101,6 +101,19 @@ const MIN_PIECE_M2 = 2000;
 // all".
 const MIN_HOLE_M2 = 1;
 
+// The largest empty pocket inside your own ground that gets closed up.
+//
+// Deliberately tiny, and the same number as the piece floor. Pockets are
+// not a defect — the hull digging inward is what shows where a dog
+// actually walked, and a block with a hole in the middle is telling you
+// nobody went through the middle. Filling those would be erasing the
+// truth of the walk to tidy up the picture.
+//
+// What closes is only what is beneath noticing: if a fragment under
+// MIN_PIECE_M2 is too small to be ground, a hole that size is too small
+// to be a hole. Call it a rounding error in the walker's favour.
+const MAX_POCKET_M2 = MIN_PIECE_M2;
+
 function simplifyRing(ring: Pt[]): Pt[] {
   if (ring.length < 4) return ring;
   const meanLat = ring.reduce((s, p) => s + p[1]!, 0) / ring.length;
@@ -140,9 +153,20 @@ function simplifyRing(ring: Pt[]): Pt[] {
   return keep.map((i) => out[i]!);
 }
 
-// A clipper result (MultiPolygon) back into storable pieces, slivers gone.
-function toPieces(result: Pt[][][]): { ring: Pt[]; holes: Pt[][]; areaM2: number }[] {
-  const out: { ring: Pt[]; holes: Pt[][]; areaM2: number }[] = [];
+interface Piece {
+  ring: Pt[];
+  holes: Pt[][];
+  areaM2: number;
+}
+
+// A clipper result (MultiPolygon) back into storable pieces.
+//
+// Returns the slivers as well as the keepers, because a sliver is ground
+// and has to end up SOMEWHERE. Dropping it on the floor is what put the
+// white shards on the map.
+function toPieces(result: Pt[][][]): { kept: Piece[]; slivers: Piece[] } {
+  const kept: Piece[] = [];
+  const slivers: Piece[] = [];
   for (const poly of result) {
     const [outer, ...holes] = poly;
     if (!outer || outer.length < 3) continue;
@@ -154,10 +178,9 @@ function toPieces(result: Pt[][][]): { ring: Pt[]; holes: Pt[][]; areaM2: number
     const areaM2 =
       polygonAreaM2(asLatLng(ring)) -
       keptHoles.reduce((s, h) => s + polygonAreaM2(asLatLng(h)), 0);
-    if (areaM2 < MIN_PIECE_M2) continue;
-    out.push({ ring, holes: keptHoles, areaM2 });
+    (areaM2 < MIN_PIECE_M2 ? slivers : kept).push({ ring, holes: keptHoles, areaM2 });
   }
-  return out;
+  return { kept, slivers };
 }
 
 function bboxOf(ring: Pt[]) {
@@ -376,7 +399,7 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
     } catch {
       return empty;
     }
-    if (toPieces(dryRun).reduce((s, p) => s + p.areaM2, 0) - heldBefore < 50) return empty;
+    if (toPieces(dryRun).kept.reduce((s, p) => s + p.areaM2, 0) - heldBefore < 50) return empty;
 
     // CUT, now that we know the claim is real. Measured before the grow,
     // so what counts as gained is what changed hands rather than ground
@@ -385,6 +408,9 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
     // Ground somebody else holds that we could not cut. We must not take
     // it either — see below.
     const uncut: Poly[] = [];
+    // Fragments of a victim's ground too small to stand on their own.
+    // Folded into the claim below rather than dropped.
+    const absorbed: Poly[] = [];
     for (const row of theirs) {
       let cut: Pt[][][];
       try {
@@ -394,8 +420,22 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
         uncut.push(toPoly(row));
         continue;
       }
-      const left = toPieces(cut);
+      const { kept: left, slivers } = toPieces(cut);
       const lost = row.areaM2 - left.reduce((s, p) => s + p.areaM2, 0);
+      // WHAT IS LEFT OF THEIR PIECE, IF IT IS TOO SMALL TO BE GROUND,
+      // GOES TO WHOEVER CUT IT.
+      //
+      // These used to be dropped, on the reasoning that a gap beats an
+      // overlap. That was a false choice — it is only ever a gap because
+      // nothing was picking the fragment up. On the map it showed as
+      // white shards along every contested border: ground that had an
+      // owner a moment ago and now has none, in the middle of a block
+      // two dogs are fighting over.
+      //
+      // Handing them to the claimant conserves the ground, closes the
+      // seam, and reads correctly: they cut the piece down to nothing,
+      // so they take the remainder with it.
+      absorbed.push(...slivers.map((p) => [p.ring, ...p.holes] as Poly));
       // A metre, not MIN_PIECE_M2: skipping here leaves the victim's ring
       // exactly as it was, so anything skipped is ground BOTH of us hold.
       // A square metre of that is rounding; two hundred is a doorway.
@@ -442,19 +482,50 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
       }
     }
 
-    // GROW: fold the claim into everything of ours it touches, so a walk
-    // that joins two of your own patches leaves one piece, not two
-    // overlapping ones.
+    // GROW: fold the claim, anything absorbed from a victim, and
+    // everything of ours it touches into one shape — so a walk that joins
+    // two of your own patches leaves one piece, not two overlapping ones.
     let merged: Pt[][][];
     try {
       merged = polygonClipping.union(
         claimPoly as never,
+        ...(absorbed.map((p) => [p]) as never[]),
         ...(mine.map((r) => [toPoly(r)]) as never[]),
       ) as Pt[][][];
     } catch {
       return { gainedM2: 0, victims, changed: victims.size > 0 };
     }
-    const pieces = toPieces(merged);
+    // Close the pockets too small to mean anything. Everything bigger
+    // stays open, because a hole in the middle of a block is the map
+    // telling you nobody walked through the middle.
+    //
+    // Never a pocket a rival might hold: a hole whose box touches any
+    // neighbour's piece is left exactly alone, since closing it would be
+    // taking their ground without a claim. The bbox test is deliberately
+    // conservative that way — a false "keep" is a small gap, a false
+    // "fill" is two owners on one block.
+    const theirBoxes = theirs.map((r) => bboxOf(r.ring));
+    const pieces = toPieces(merged).kept.map((piece) => {
+      if (!piece.holes.length) return piece;
+      const holes = piece.holes.filter((h) => {
+        const a = polygonAreaM2(asLatLng(h));
+        if (a >= MAX_POCKET_M2) return true;
+        const hb = bboxOf(h);
+        return theirBoxes.some(
+          (t) =>
+            t.maxLat >= hb.minLat && t.minLat <= hb.maxLat &&
+            t.maxLng >= hb.minLng && t.minLng <= hb.maxLng,
+        );
+      });
+      if (holes.length === piece.holes.length) return piece;
+      return {
+        ring: piece.ring,
+        holes,
+        areaM2:
+          polygonAreaM2(asLatLng(piece.ring)) -
+          holes.reduce((sum, h) => sum + polygonAreaM2(asLatLng(h)), 0),
+      };
+    });
     const heldAfter = pieces.reduce((s, p) => s + p.areaM2, 0);
 
     // Nothing moved: the hull was already inside ground we hold, and no
