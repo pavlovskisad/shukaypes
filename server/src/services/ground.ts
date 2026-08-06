@@ -256,7 +256,20 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
     // the worker would not start. Treat it exactly like a claim that
     // decided to do nothing: no cut, no growth, no half-applied map. The
     // dog marked and the ground did not move.
-    if (!plan || plan.kind === 'noop') return empty;
+    if (!plan || plan.kind === 'noop') {
+      // A claim that cut rivals and then could not take the result now
+      // abandons the cut instead of vacating the ground (see
+      // groundGeometry.abandon). Say so — this is polygon-clipping failing
+      // on real geometry, and the only symptom otherwise is a slowly
+      // growing scatter of unowned slivers nobody can explain.
+      if (plan?.abandoned) {
+        console.warn(
+          `[ground] claim by ${userId} abandoned: ${plan.abandoned.reason} ` +
+            `(${plan.abandoned.victims} rival piece(s), ${plan.abandoned.m2}m2 left untouched)`,
+        );
+      }
+      return empty;
+    }
 
     // APPLY. Ordinary writes from here down — every decision was made in
     // the worker, and this is the transcription.
@@ -274,13 +287,6 @@ export async function claimGround(userId: string, hull: LatLng[]): Promise<Claim
           ...bboxOf(piece.ring),
         });
       }
-    }
-
-    // Rivals were cut, but the claimant takes nothing — the uncut rule, or
-    // a clipper that refused the merge. Their loss stands; our gain does
-    // not.
-    if (plan.kind === 'cut-only') {
-      return { gainedM2: 0, victims, changed: victims.size > 0 };
     }
 
     if (mine.length) {
