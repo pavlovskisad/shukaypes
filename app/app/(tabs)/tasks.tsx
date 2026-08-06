@@ -50,10 +50,13 @@ function relativeWhen(iso: string): string {
 // purple in the north" without you having to tap anything, and reading
 // the map teaches you the board and back again.
 //
-// Rank still reads, it just isn't the bar's job any more: the top three
-// get a travelling shine, and everyone below fourth has their text
-// dimmed. Colour for identity, movement and contrast for position.
-const PODIUM = 3;
+// Every row gets the same treatment — full-contrast text and a
+// travelling shine. An earlier cut dimmed everyone below fourth and
+// reserved the shine for the podium, on the theory that a podium needs a
+// crowd beneath it to be a podium. It doesn't, here: the standing is a
+// list of dogs holding parts of a city, and dimming seven of them said
+// "these ones don't matter" about players who very much do. The number
+// and the bar length carry position perfectly well on their own.
 
 type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings';
 
@@ -214,9 +217,9 @@ export default function TasksScreen() {
     }, []),
   );
 
-  // The shine that travels along a podium bar. One stylesheet for the
-  // whole tab, injected once — same pattern the card deck's shimmer uses.
-  // Only the top three get it; below that the bar is a plain colour.
+  // The shine that travels along every bar in the standing. One
+  // stylesheet for the whole tab, injected once — same pattern the card
+  // deck's shimmer uses.
   useEffect(() => {
     if (typeof document === 'undefined') return;
     if (document.getElementById('board-sweep-style')) return;
@@ -401,12 +404,6 @@ export default function TasksScreen() {
                   // board carries no id for you, and it doesn't need to.
                   const isYou = board.you.rank === i + 1;
                   const top = board.board[0]!.areaM2 || 1;
-                  const podium = i < PODIUM;
-                  // The rest of the field, dimmed — in the TEXT only. A
-                  // podium is only a podium if there is a crowd below it,
-                  // but the bars all keep their full colour because that
-                  // colour is what ties a row to a patch of the map.
-                  const faded = !podium && !isYou;
                   // Yours in the brand blue the map paints your ground
                   // with; everyone else in the hue theirs is painted.
                   const barColor = isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId);
@@ -419,9 +416,8 @@ export default function TasksScreen() {
                         <Text
                           style={[
                             styles.boardRank,
-                            faded && styles.boardFadedRank,
+                            styles.boardRankStrong,
                             isYou && styles.boardYouText,
-                            podium ? styles.boardPodiumRank : null,
                           ]}
                         >
                           {i + 1}
@@ -429,7 +425,6 @@ export default function TasksScreen() {
                         <Text
                           style={[
                             styles.boardName,
-                            faded && styles.boardFadedName,
                             isYou && styles.boardYouText,
                           ]}
                           numberOfLines={1}
@@ -439,7 +434,6 @@ export default function TasksScreen() {
                         <Text
                           style={[
                             styles.boardArea,
-                            faded && styles.boardFadedArea,
                             isYou && styles.boardYouText,
                           ]}
                         >
@@ -452,27 +446,27 @@ export default function TasksScreen() {
                             styles.barFill,
                             { width: `${Math.max(2, Math.round((row.areaM2 / top) * 100))}%` as unknown as number },
                             { backgroundColor: barColor },
-                            podium ? ({ overflow: 'hidden' } as unknown as object) : null,
+                            { overflow: 'hidden' } as unknown as object,
                           ]}
                         >
                           {/* The travelling glint. Staggered per place so
-                              the three bars catch the light one after the
-                              other instead of flashing in unison. */}
-                          {podium ? (
-                            <View
-                              style={
-                                {
-                                  position: 'absolute',
-                                  top: 0,
-                                  bottom: 0,
-                                  width: '34%',
-                                  backgroundImage:
-                                    'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0) 100%)',
-                                  animation: `board-sweep 4.2s ${i * 0.45}s ease-in-out infinite`,
-                                } as unknown as object
-                              }
-                            />
-                          ) : null}
+                              the bars catch the light one after another
+                              down the list instead of flashing in unison
+                              — with every row lit, in-unison would read
+                              as the whole card blinking. */}
+                          <View
+                            style={
+                              {
+                                position: 'absolute',
+                                top: 0,
+                                bottom: 0,
+                                width: '34%',
+                                backgroundImage:
+                                  'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0) 100%)',
+                                animation: `board-sweep 4.2s ${i * 0.45}s ease-in-out infinite`,
+                              } as unknown as object
+                            }
+                          />
                         </View>
                       </View>
                     </View>
@@ -785,15 +779,10 @@ const styles = StyleSheet.create({
     color: 'rgba(0,60,255,0.85)',
     fontWeight: '700',
   },
-  // Fourth place down. Still legible at arm's length — you can find your
-  // rival's name — but no longer competing with the podium for the eye.
-  // Top three: the digit gets weight, not colour — the bar beside it is
-  // already carrying the owner's hue and two colours competing in one row
-  // reads as decoration.
-  boardPodiumRank: { color: colors.black, fontWeight: '700' },
-  boardFadedRank: { color: '#c4c4c4' },
-  boardFadedName: { color: '#9a9a9a' },
-  boardFadedArea: { color: '#b0b0b0' },
+  // The digit gets weight, not colour — the bar beside it is already
+  // carrying the owner's hue and two colours competing in one row reads
+  // as decoration.
+  boardRankStrong: { color: colors.black, fontWeight: '700' },
   boardEmpty: {
     fontSize: TYPE.small,
     color: '#777',
