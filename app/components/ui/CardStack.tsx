@@ -218,24 +218,57 @@ export function CardStack<T>({
   // ~31 px gap between the centre's right edge and the peek's left.
   const STEP = ((cardWidth * 290) / CARD_W) * peekScale;
 
-  // Reset when the underlying list changes. Skips the mount run —
-  // effects fire after the first paint, and resetting there would
-  // clobber the initialId anchor the state initialised with.
   const ids = useMemo(() => items.map(getId).join(','), [items, getId]);
   const idsInitRef = useRef(true);
-  useEffect(() => {
-    if (idsInitRef.current) {
-      idsInitRef.current = false;
-      return;
-    }
-    setVirtualBase(0);
-    currentPos.value = 0;
-    virtualBaseSV.value = 0;
-  }, [ids]);
 
   const N = items.length;
   const topItemIndex = N > 0 ? ((virtualBase % N) + N) % N : 0;
   const topItem = N > 0 ? items[topItemIndex] : undefined;
+
+  // FOLLOW THE CARD, DON'T RESET TO THE FIRST ONE.
+  //
+  // `ids` is the ORDERED id list, and these decks are sorted by distance
+  // from a moving user. Two pets a few metres apart swap places on an
+  // ordinary GPS tick — same pets, same count, different string — and the
+  // old behaviour sent the deck back to card 0 for it. That is the "it
+  // jumps back to the first dog" report: nothing had appeared or
+  // disappeared, the list had merely been re-sorted underneath you.
+  //
+  // So instead of resetting, find the card that was on top and put it
+  // back on top at its new index. A reorder becomes invisible, which is
+  // what it should always have been. Only if that card genuinely left the
+  // list do we fall back to the front.
+  //
+  // Declared BEFORE the tracker below on purpose: effects run in
+  // declaration order, so this one still sees the PREVIOUS top card when
+  // both fire on the same commit.
+  const topIdRef = useRef<string | undefined>(undefined);
+  useEffect(() => {
+    // Skips the mount run — effects fire after the first paint, and
+    // re-anchoring there would clobber the initialId the state
+    // initialised with.
+    if (idsInitRef.current) {
+      idsInitRef.current = false;
+      return;
+    }
+    const wanted = topIdRef.current;
+    const found = wanted == null ? -1 : items.findIndex((it) => getId(it) === wanted);
+    const anchor = found >= 0 ? found : 0;
+    // All three together: the integer state, the float the translate
+    // animates from, and the worklet mirror the pan handler reads.
+    setVirtualBase(anchor);
+    currentPos.value = anchor;
+    virtualBaseSV.value = anchor;
+    // `items`/`getId` deliberately out of the deps: the store hands back a
+    // fresh array every 15s sync, and depending on it would re-anchor on
+    // every one of those. `ids` changes exactly when the contents do.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ids]);
+
+  // Remember what is on top, for the next list change to aim at.
+  useEffect(() => {
+    topIdRef.current = topItem ? getId(topItem) : undefined;
+  });
 
   // Pre-warm photos for upcoming items. On web we use
   // HTMLImageElement.decode() instead of RN's Image.prefetch:

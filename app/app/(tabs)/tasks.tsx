@@ -122,6 +122,13 @@ export default function TasksScreen() {
   // top of the "see all" modal feed) — matches the spots tab's
   // sort and is the most intuitive reading of "by proximity". No
   // GPS yet → keep server order.
+  // Bucketed to a ~110m grid, the same way the map's search carousel does
+  // it. On raw lat/lng this re-sorted on every GPS tick, so two pets at
+  // similar distance traded places constantly and the deck churned for no
+  // visible reason. The distance ON the cards is unaffected — those read
+  // the live position straight from the store.
+  const userLatBucket = userPos ? Math.round(userPos.lat * 1000) / 1000 : null;
+  const userLngBucket = userPos ? Math.round(userPos.lng * 1000) / 1000 : null;
   const sortedDogs = useMemo(
     () => {
       if (!userPos) return lostDogs;
@@ -131,7 +138,8 @@ export default function TasksScreen() {
           distanceMeters(userPos, b.lastSeen.position),
       );
     },
-    [lostDogs, userPos?.lat, userPos?.lng],
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos on purpose; see above
+    [lostDogs, userLatBucket, userLngBucket],
   );
 
   // Soft fan-out, step 3: nudge that the lost-pets deck is swipeable.
