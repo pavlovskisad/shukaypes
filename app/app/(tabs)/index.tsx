@@ -16,10 +16,6 @@ import { useGameStore } from '../../stores/gameStore';
 // rather than dominating the map.
 const HUD_ICON_SIZE = 59;
 
-// localStorage flag — once dismissed, the about sheet doesn't pop on
-// future visits. Cheap onboarding without server state.
-const ABOUT_SEEN_KEY = 'shukajpes:aboutSeen';
-
 // Bubble easing for the HUD pills as supersniff toggles. Slight
 // overshoot on the way in reads as "popping into place"; the keyframes
 // themselves live in MapView, which is always mounted here.
@@ -67,29 +63,12 @@ export default function MapScreen() {
     useGameStore.getState().setScreen('map');
   }, []));
 
-  // Auto-open the about sheet on the first ever visit. Wrapped in
-  // try/catch in case localStorage is unavailable (private mode etc) —
-  // failing silent is fine, the user can still tap the "?" button in
-  // the companion's radial menu.
-  useEffect(() => {
-    try {
-      if (typeof window === 'undefined') return;
-      if (!window.localStorage.getItem(ABOUT_SEEN_KEY)) {
-        setAboutOpen(true);
-      }
-    } catch {
-      // ignore
-    }
-  }, [setAboutOpen]);
-
-  const handleAboutClose = useCallback(() => {
-    setAboutOpen(false);
-    try {
-      window.localStorage.setItem(ABOUT_SEEN_KEY, '1');
-    } catch {
-      // ignore
-    }
-  }, [setAboutOpen]);
+  // The about sheet is on demand only — the "?" in the companion's
+  // radial menu. It used to open itself on a first-ever visit, which put
+  // a wall of text between a new player and the thing that actually
+  // explains the game, which is the dog standing in a coloured city. Let
+  // them look at it first and read about it when they choose to.
+  const handleAboutClose = useCallback(() => setAboutOpen(false), [setAboutOpen]);
 
   return (
     <View style={styles.root}>

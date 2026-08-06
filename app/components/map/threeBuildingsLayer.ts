@@ -174,7 +174,11 @@ const SHADOW_DAY_STRENGTH = 0.15;
 // bubble ~with the visible extent: close to 2×/zoom-level out, plus extra at
 // steep pitch, so a steep zoomed-out view keeps a big clear island instead of
 // fogging the whole city.
-const ZOOM_REF = 17.5; // matches balance.mapZoomDefault
+// The zoom at which the clear bubble is its base size. Deliberately NOT
+// tied to balance.mapZoomDefault: this is "as close as the camera
+// meaningfully gets", and the default game zoom pulling back should GROW
+// the bubble, which is exactly what the subtraction below does.
+const ZOOM_REF = 17.5;
 export function clearBubbleForCamera(
   zoom: number,
   pitch: number,
