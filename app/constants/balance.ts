@@ -40,8 +40,19 @@ export const balance = {
   subMenuRadius: 124,
   mapZoomMin: 12,
   mapZoomMax: 19,
-  // Closer default so the app opens right down in the 3D city (paired
-  // with the steep default pitch below).
-  mapZoomDefault: 17.5,
+  // The game camera: how far out the map sits on load, and what it
+  // returns to after a dog view or supersniff hands the camera back.
+  //
+  // Was 17.5, which opened almost on top of the dog — a few hundred
+  // metres of city and not much else. Territory changed what the map is
+  // for: the interesting thing on screen is now who holds which blocks
+  // around you, and at 17.5 you could see about two of them. 15.6 shows
+  // roughly a kilometre across, which is enough neighbours to read the
+  // shape of the fight while the dog is still clearly the subject.
+  //
+  // Pitch stays at 74 (see MapView) — the steep tilt is what makes it a
+  // world you look across rather than a map you look at, and pulling
+  // back doesn't change that.
+  mapZoomDefault: 15.6,
   gpsCircleRadius: 60,
 } as const;
