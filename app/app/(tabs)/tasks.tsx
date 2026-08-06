@@ -90,6 +90,44 @@ const TASKS: TaskRow[] = [
   },
 ];
 
+// One bar on the standing: the owner's colour, a length, and the shine.
+//
+// A component rather than JSX repeated twice, because the row for YOU and
+// the rows for everyone else have to be the same thing. They used to be
+// written out separately and drifted immediately — yours ended up with no
+// bar at all, sitting in a tinted card that made your own standing look
+// like a different kind of object from the list it belongs to.
+function BoardBar({ color, pct, delayS }: { color: string; pct: number; delayS: number }) {
+  return (
+    <View style={styles.barTrack}>
+      <View
+        style={[
+          styles.barFill,
+          { width: `${pct}%` as unknown as number },
+          { backgroundColor: color, overflow: 'hidden' } as unknown as object,
+        ]}
+      >
+        {/* The travelling glint. Staggered down the list so the bars
+            catch the light one after another rather than in unison,
+            which would read as the whole card blinking. */}
+        <View
+          style={
+            {
+              position: 'absolute',
+              top: 0,
+              bottom: 0,
+              width: '34%',
+              backgroundImage:
+                'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0) 100%)',
+              animation: `board-sweep 4.2s ${delayS}s ease-in-out infinite`,
+            } as unknown as object
+          }
+        />
+      </View>
+    </View>
+  );
+}
+
 export default function TasksScreen() {
   const t = useStrings();
   const router = useRouter();
@@ -237,6 +275,13 @@ export default function TasksScreen() {
     document.head.appendChild(el);
   }, []);
 
+  // The longest bar on the standing sets the scale for every other one —
+  // including yours, which is the whole reason it is hoisted out of the
+  // map below. A bar drawn against a different maximum would be a
+  // different chart sharing a card with this one.
+  const boardTop = board?.board[0]?.areaM2 || 1;
+  const youPct = board ? Math.max(2, Math.round((board.you.areaM2 / boardTop) * 100)) : 0;
+
   const doneCount = TASKS.filter((row) => dailyTasks[row.key] >= row.target).length;
 
   // Which snap-cards are on screen at all. The observer below re-arms on
@@ -377,15 +422,19 @@ export default function TasksScreen() {
                 put the one figure a player came to read in the least
                 readable place on the card — and left you hunting the list
                 for your own row, or finding you were not in it at all.
-                Here it is a row in the same three columns as the board
-                below, so your rank, your name and your ground line up with
-                everyone else's and can be compared without moving your
-                eyes. Unranked reads as a dash, which is honest: you are
-                not on the board, and here is what you hold anyway. */}
+                It is now literally the same row as the ones below it —
+                same columns, same bar drawn against the same leader's
+                area, same shine — separated by a gap and a rule instead
+                of by being a different kind of object. Unranked reads as
+                a dash, which is honest: you are not on the board, and
+                here is what you hold anyway. */}
             <View style={[styles.boardRow, styles.boardYouRow]}>
               <View style={styles.row}>
-                <Text style={[styles.boardRank, styles.boardYouText]}>
-                  {board.you.rank != null ? t.profile.rankValue(board.you.rank) : t.profile.unranked}
+                <Text
+                  style={[styles.boardRank, styles.boardRankStrong, styles.boardYouText]}
+                  numberOfLines={1}
+                >
+                  {board.you.rank ?? t.profile.unranked}
                 </Text>
                 <Text style={[styles.boardName, styles.boardYouText]} numberOfLines={1}>
                   {t.tasks.boardYou}
@@ -394,6 +443,7 @@ export default function TasksScreen() {
                   {t.profile.areaValue(board.you.areaM2)}
                 </Text>
               </View>
+              <BoardBar color={OWN_COLOR_CSS} pct={youPct} delayS={0} />
             </View>
             {board.board.length === 0 ? (
               <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
@@ -403,7 +453,6 @@ export default function TasksScreen() {
                   // The viewer is whoever sits at their own rank — the
                   // board carries no id for you, and it doesn't need to.
                   const isYou = board.you.rank === i + 1;
-                  const top = board.board[0]!.areaM2 || 1;
                   // Yours in the brand blue the map paints your ground
                   // with; everyone else in the hue theirs is painted.
                   const barColor = isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId);
@@ -440,35 +489,11 @@ export default function TasksScreen() {
                           {t.profile.areaValue(row.areaM2)}
                         </Text>
                       </View>
-                      <View style={styles.barTrack}>
-                        <View
-                          style={[
-                            styles.barFill,
-                            { width: `${Math.max(2, Math.round((row.areaM2 / top) * 100))}%` as unknown as number },
-                            { backgroundColor: barColor },
-                            { overflow: 'hidden' } as unknown as object,
-                          ]}
-                        >
-                          {/* The travelling glint. Staggered per place so
-                              the bars catch the light one after another
-                              down the list instead of flashing in unison
-                              — with every row lit, in-unison would read
-                              as the whole card blinking. */}
-                          <View
-                            style={
-                              {
-                                position: 'absolute',
-                                top: 0,
-                                bottom: 0,
-                                width: '34%',
-                                backgroundImage:
-                                  'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0) 100%)',
-                                animation: `board-sweep 4.2s ${i * 0.45}s ease-in-out infinite`,
-                              } as unknown as object
-                            }
-                          />
-                        </View>
-                      </View>
+                      <BoardBar
+                        color={barColor}
+                        pct={Math.max(2, Math.round((row.areaM2 / boardTop) * 100))}
+                        delayS={(i + 1) * 0.45}
+                      />
                     </View>
                   );
                 })}
@@ -753,14 +778,24 @@ const styles = StyleSheet.create({
   // Your own line, set apart from the ranking under it: tinted, inset,
   // and rounded so it reads as a summary of you rather than as position
   // zero on the board.
+  // YOU: the same row as everyone else, set apart by a gap and a rule
+  // rather than by being built differently. The tinted rounded card it
+  // used to sit in made your own standing read as a header ABOUT the
+  // board instead of a line IN it — and, having no bar, gave you no way
+  // to see how far behind the leader you actually were.
   boardYouRow: {
-    backgroundColor: 'rgba(0,60,255,0.06)',
-    borderRadius: R.sm,
-    paddingHorizontal: S.m,
-    marginBottom: S.s,
+    marginBottom: S.m,
+    paddingBottom: S.m,
+    borderBottomWidth: 2,
+    borderBottomColor: '#eee',
   },
   boardRank: {
-    width: 22,
+    // 22 fitted a single digit and nothing else, so a two-character rank
+    // wrapped onto a second line and pushed the row's height out — which
+    // is exactly what "#30" did in the you-row. Wide enough for three
+    // digits, since a real city will have more than ninety-nine dogs in
+    // it, and the column is invisible whitespace until it is needed.
+    width: 30,
     fontSize: TYPE.small,
     fontWeight: '700',
     color: '#999',
