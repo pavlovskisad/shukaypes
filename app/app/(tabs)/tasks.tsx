@@ -572,7 +572,10 @@ export default function TasksScreen() {
             const progress = Math.min(value / row.target, 1);
             const complete = value >= row.target;
             return (
-              <View key={row.key} style={[styles.task, i > 0 && styles.taskDivider]}>
+              // No rule between rows — same as the standing. Each row
+              // ends in its own progress bar, which separates it from the
+              // next one without a second line above it saying so.
+              <View key={row.key} style={styles.task}>
                 <View style={styles.row}>
                   {row.iconName ? (
                     <View style={styles.iconWrap}>
@@ -758,6 +761,9 @@ const styles = StyleSheet.create({
   task: {
     paddingVertical: S.l,
   },
+  // The last place a rule still earns its keep: quest history rows are
+  // the only list on this tab with no bar of their own, so without this
+  // they run together.
   taskDivider: {
     borderTopWidth: 1,
     borderTopColor: 'rgba(0,0,0,0.05)',
