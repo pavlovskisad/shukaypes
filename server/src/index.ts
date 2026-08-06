@@ -22,6 +22,8 @@ import placesRoute from './routes/places.js';
 import photosRoute from './routes/photos.js';
 import telegramRoute, { registerTelegramWebhook } from './routes/telegram.js';
 import { startDecayCron } from './services/decay.js';
+import { startWatchdog } from './services/watchdog.js';
+import { warmGroundWorker } from './services/groundWorker.js';
 import { startZoneExpansionCron } from './services/searchZoneExpansion.js';
 import { runMemoryCleanupOnce } from './services/memoryCleanup.js';
 import { startScrapeCron } from './services/scrape.js';
@@ -110,6 +112,15 @@ async function main() {
   }
   // Boot-seed dropped — pilot now runs on real scraped pets only.
   // The seedLostDogs() CLI in db/seed-dogs.ts still works for local dev.
+
+  // First thing armed, last thing stood down: everything below this line
+  // is something that could hang, and a hang is what took the server out
+  // for eleven hours on 2026-08-05. See services/watchdog.ts.
+  const stopWatchdog = startWatchdog();
+  // Pay the worker's spawn cost here rather than inside the first claim's
+  // transaction, where it would be held under the advisory locks.
+  warmGroundWorker();
+
   const stopDecay = startDecayCron(app.log);
   const stopScrape = startScrapeCron(app.log);
   const stopZoneExpansion = startZoneExpansionCron(app.log);
@@ -140,6 +151,7 @@ async function main() {
     stopZoneExpansion();
     stopLostDogCleanup();
     stopMultiplayer();
+    stopWatchdog();
     process.exit(1);
   }
 
@@ -149,7 +161,12 @@ async function main() {
     stopLostDogCleanup();
     stopZoneExpansion();
     stopMultiplayer();
+    // The watchdog stays armed THROUGH app.close(), and is only stood down
+    // once we know we got past it. A close that hangs is the same outage
+    // as any other hang — the machine stays up, unreachable, looking fine.
+    // Better it gets killed and restarted.
     await app.close();
+    stopWatchdog();
     process.exit(0);
   };
   process.on('SIGINT', shutdown);
