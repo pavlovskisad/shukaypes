@@ -200,10 +200,12 @@ export interface ClaimPlanInput {
 }
 
 export type ClaimPlan =
-  /** The claim does nothing at all — too small to hold ground, or refused. */
-  | { kind: 'noop' }
-  /** Rivals were cut but the claimant takes nothing (see the uncut rule). */
-  | { kind: 'cut-only'; victims: VictimRewrite[] }
+  /**
+   * The claim does nothing at all. `vacated` is set when the claim HAD cut
+   * rivals and then could not take what it cut — see the note at the first
+   * such return for why that now abandons the cut too, and what it costs.
+   */
+  | { kind: 'noop'; abandoned?: { reason: string; victims: number; m2: number } }
   /** The full move: rivals cut, and the claimant's ground rewritten. */
   | {
       kind: 'claim';
@@ -212,6 +214,35 @@ export type ClaimPlan =
       pieces: Piece[];
       gainedM2: number;
     };
+
+// A claim that cut rivals and then could not take what it cut.
+//
+// This used to apply the cuts anyway, and it is where the white slivers
+// inside otherwise solid territory came from. The reasoning was that a
+// raid should count for something even if the raider cannot hold the
+// result — but the ground did not go to the raider, it went to NOBODY,
+// and it stayed nobody's, because nothing in this game returns ground to
+// neutral on purpose. Every one of those was a permanent hole punched in
+// the map by a clipper failure a player never saw.
+//
+// The claimant writes nothing on this path, so skipping the cut cannot
+// produce an overlap — the thing the cut existed to prevent. Both sides
+// simply keep what they had, which is the honest outcome of "the geometry
+// did not work": nothing happened.
+//
+// The reason travels back so it can be logged. This is a clipper failing
+// on real data and we should know how often, not discover it months later
+// as a map full of holes.
+function abandon(reason: string, victims: VictimRewrite[]): ClaimPlan {
+  return {
+    kind: 'noop',
+    abandoned: {
+      reason,
+      victims: victims.length,
+      m2: Math.round(victims.reduce((s, v) => s + v.lostM2, 0)),
+    },
+  };
+}
 
 export function planClaim(input: ClaimPlanInput): ClaimPlan {
   const { claim, mine, theirs } = input;
@@ -286,9 +317,9 @@ export function planClaim(input: ClaimPlanInput): ClaimPlan {
         ...(uncut as never[]),
       ) as unknown as Poly[];
     } catch {
-      return { kind: 'cut-only', victims };
+      return abandon('subtracting uncut ground threw', victims);
     }
-    if (claimPoly.length === 0) return { kind: 'cut-only', victims };
+    if (claimPoly.length === 0) return abandon('claim lay entirely on uncut ground', victims);
   }
 
   // GROW: fold the claim, anything absorbed from a victim, and everything
@@ -302,7 +333,7 @@ export function planClaim(input: ClaimPlanInput): ClaimPlan {
       ...(mine.map((r) => [toPoly(r)]) as never[]),
     ) as Pt[][][];
   } catch {
-    return { kind: 'cut-only', victims };
+    return abandon('the grow union threw', victims);
   }
 
   // Close the pockets too small to mean anything. Everything bigger stays
