@@ -459,7 +459,11 @@ export default function TasksScreen() {
                   return (
                     <View
                       key={row.userId}
-                      style={[styles.boardRow, i > 0 && styles.taskDivider]}
+                      // No rule between rows. Every row already carries a
+                      // full-width coloured bar, so a hairline above it was
+                      // a second horizontal line doing the same job worse —
+                      // the bars separate the rows on their own.
+                      style={styles.boardRow}
                     >
                       <View style={styles.row}>
                         <Text
@@ -784,10 +788,10 @@ const styles = StyleSheet.create({
   // board instead of a line IN it — and, having no bar, gave you no way
   // to see how far behind the leader you actually were.
   boardYouRow: {
-    marginBottom: S.m,
-    paddingBottom: S.m,
-    borderBottomWidth: 2,
-    borderBottomColor: '#eee',
+    // Set apart by air alone. A rule here read as one more of the
+    // hairlines that used to run between every row, rather than as the
+    // one meaningful break on the card.
+    marginBottom: S.l,
   },
   boardRank: {
     // 22 fitted a single digit and nothing else, so a two-character rank
