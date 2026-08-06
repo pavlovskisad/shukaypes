@@ -19,6 +19,7 @@ import { SwipeHintCallout } from '../../components/ui/SwipeHintCallout';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
+import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColor';
 import { useHint } from '../../hooks/useHint';
 
 interface QuestHistoryRow {
@@ -40,29 +41,19 @@ function relativeWhen(iso: string): string {
   return `${diffD}d ago`;
 }
 
-// THE PODIUM. Gold, silver, bronze — as metal, not as three flat colours.
+// THE BOARD IS COLOURED LIKE THE MAP.
 //
-// What makes a metal read as metal is that its lightness swings along the
-// surface: a dark rim, a bright band, a mid tone, another bright band. A
-// single hex fill of #ffd700 reads as yellow plastic no matter how well
-// the hue is chosen, so each of these is a gradient with its own highlight
-// running across it, and the highlight then sweeps.
+// Bars used to be gold, silver, bronze and then a row of identical greys,
+// which told you the order and nothing else. Every one of these dogs owns
+// a colour you can see out of the window — the same hue their ground is
+// painted in — so the bar carries it. Now the board answers "who is that
+// purple in the north" without you having to tap anything, and reading
+// the map teaches you the board and back again.
 //
-// The tones are pulled toward the muted, slightly warm palette the rest of
-// the app uses rather than the saturated trophy colours — bright enough to
-// be unmistakably precious metal, dull enough to sit next to a pastel map
-// without shouting.
-// Silver's rim is the darkest of the three relative to its own body on
-// purpose. Gold and bronze are coloured metals — they are unmistakable at
-// any contrast because nothing else on the board is that hue. Silver is
-// grey, and so is every bar under it, so the ONLY thing separating second
-// place from fourth is the lightness swing across the bar. Give it the
-// widest one: near-black rim to a white highlight.
-const MEDALS: { rim: string; dark: string; mid: string; light: string; text: string }[] = [
-  { rim: '#8a6a12', dark: '#b8860b', mid: '#e3b23c', light: '#fff0b8', text: '#6b5210' },
-  { rim: '#575e66', dark: '#8b939c', mid: '#ccd4dc', light: '#ffffff', text: '#4a5158' },
-  { rim: '#8a5124', dark: '#a9662f', mid: '#c98b53', light: '#f0c9a3', text: '#6d3f1c' },
-];
+// Rank still reads, it just isn't the bar's job any more: the top three
+// get a travelling shine, and everyone below fourth has their text
+// dimmed. Colour for identity, movement and contrast for position.
+const PODIUM = 3;
 
 type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings';
 
@@ -225,13 +216,14 @@ export default function TasksScreen() {
 
   // The shine that travels along a podium bar. One stylesheet for the
   // whole tab, injected once — same pattern the card deck's shimmer uses.
+  // Only the top three get it; below that the bar is a plain colour.
   useEffect(() => {
     if (typeof document === 'undefined') return;
-    if (document.getElementById('board-medal-style')) return;
+    if (document.getElementById('board-sweep-style')) return;
     const el = document.createElement('style');
-    el.id = 'board-medal-style';
+    el.id = 'board-sweep-style';
     el.textContent = `
-      @keyframes board-medal-sweep {
+      @keyframes board-sweep {
         0%   { transform: translateX(-60%) skewX(-18deg); opacity: 0; }
         12%  { opacity: 0.85; }
         55%  { opacity: 0.85; }
@@ -409,13 +401,15 @@ export default function TasksScreen() {
                   // board carries no id for you, and it doesn't need to.
                   const isYou = board.you.rank === i + 1;
                   const top = board.board[0]!.areaM2 || 1;
-                  const medal = MEDALS[i];
-                  // The rest of the field, dimmed. A podium is only a
-                  // podium if there is a crowd below it — with every row
-                  // at full contrast the metals read as three coloured
-                  // bars in a list of bars, and silver, being grey,
-                  // barely reads at all.
-                  const faded = !medal && !isYou;
+                  const podium = i < PODIUM;
+                  // The rest of the field, dimmed — in the TEXT only. A
+                  // podium is only a podium if there is a crowd below it,
+                  // but the bars all keep their full colour because that
+                  // colour is what ties a row to a patch of the map.
+                  const faded = !podium && !isYou;
+                  // Yours in the brand blue the map paints your ground
+                  // with; everyone else in the hue theirs is painted.
+                  const barColor = isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId);
                   return (
                     <View
                       key={row.userId}
@@ -427,7 +421,7 @@ export default function TasksScreen() {
                             styles.boardRank,
                             faded && styles.boardFadedRank,
                             isYou && styles.boardYouText,
-                            medal ? { color: medal.text, fontWeight: '700' } : null,
+                            podium ? styles.boardPodiumRank : null,
                           ]}
                         >
                           {i + 1}
@@ -457,30 +451,14 @@ export default function TasksScreen() {
                           style={[
                             styles.barFill,
                             { width: `${Math.max(2, Math.round((row.areaM2 / top) * 100))}%` as unknown as number },
-                            medal
-                              ? ({
-                                  // Rim, body, highlight band, body, rim —
-                                  // the lightness swing is what reads as
-                                  // metal rather than as a colour.
-                                  backgroundImage: `linear-gradient(100deg, ${medal.rim} 0%, ${medal.dark} 14%, ${medal.mid} 34%, ${medal.light} 50%, ${medal.mid} 66%, ${medal.dark} 86%, ${medal.rim} 100%)`,
-                                  overflow: 'hidden',
-                                } as unknown as object)
-                              : {
-                                  // A third of the ink the podium bars
-                                  // carry, and barely above the track it
-                                  // sits in — enough to compare fourth
-                                  // against fifth, not enough to compete
-                                  // with a medal.
-                                  backgroundColor: isYou
-                                    ? 'rgba(0,60,255,0.85)'
-                                    : 'rgba(0,0,0,0.16)',
-                                },
+                            { backgroundColor: barColor },
+                            podium ? ({ overflow: 'hidden' } as unknown as object) : null,
                           ]}
                         >
                           {/* The travelling glint. Staggered per place so
                               the three bars catch the light one after the
                               other instead of flashing in unison. */}
-                          {medal ? (
+                          {podium ? (
                             <View
                               style={
                                 {
@@ -490,7 +468,7 @@ export default function TasksScreen() {
                                   width: '34%',
                                   backgroundImage:
                                     'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0) 100%)',
-                                  animation: `board-medal-sweep 4.2s ${i * 0.45}s ease-in-out infinite`,
+                                  animation: `board-sweep 4.2s ${i * 0.45}s ease-in-out infinite`,
                                 } as unknown as object
                               }
                             />
@@ -809,6 +787,10 @@ const styles = StyleSheet.create({
   },
   // Fourth place down. Still legible at arm's length — you can find your
   // rival's name — but no longer competing with the podium for the eye.
+  // Top three: the digit gets weight, not colour — the bar beside it is
+  // already carrying the owner's hue and two colours competing in one row
+  // reads as decoration.
+  boardPodiumRank: { color: colors.black, fontWeight: '700' },
   boardFadedRank: { color: '#c4c4c4' },
   boardFadedName: { color: '#9a9a9a' },
   boardFadedArea: { color: '#b0b0b0' },
