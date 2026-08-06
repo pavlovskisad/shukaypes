@@ -359,7 +359,17 @@ export const balance = {
     // Ceiling on how many neighbours are drawn at once, nearest first.
     // Past a certain count the map stops saying anything — it's just a
     // quilt — and the payload grows for ranges you can't make out anyway.
-    maxRivalsDrawn: 14,
+    // How many RIVAL PIECES the map may draw, nearest corner first.
+    //
+    // Replaces a cap on owners, which dropped a neighbour's whole holding
+    // — including ground under your feet — the moment they fell outside
+    // the nearest fourteen. See fetchMapTerritory for the measurements.
+    //
+    // 140 against roughly 78 drawn today, so there is room for the
+    // fragmentation to keep going before this bites. The sync is ~130KB at
+    // 78 pieces and vertices dominate it, so treat this as the payload
+    // dial: it is very nearly linear.
+    rivalPiecesDrawn: 140,
     // HARD BOUNDS on the partition. Every one of these exists because the
     // unbounded version took the API down: buffered claims overlap far more
     // often than raw hulls did, so a patch could be handed a bite polygon

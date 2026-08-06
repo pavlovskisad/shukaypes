@@ -739,29 +739,53 @@ export async function fetchMapTerritory(
       : {}),
   });
 
+  // WHAT GETS DRAWN, AND WHY IT IS COUNTED IN PIECES RATHER THAN OWNERS.
+  //
+  // The budget used to be the nearest 14 OWNERS, and every piece they held
+  // came along. That is the wrong unit, and it produced the white gaps in
+  // the middle of a painted city: a far-flung scrap belonging to a
+  // neighbour who happened to rank 12th was sent, while the block directly
+  // under your feet, held by the 15th, was not. Its ground rendered as
+  // bare map — fixed in place, surviving a pan, indistinguishable from
+  // land nobody had ever claimed.
+  //
+  // Measured before changing it: every view returned exactly 14 owners, so
+  // the cap was binding everywhere, and four viewpoints a few hundred
+  // metres apart saw 25 distinct owners between them. Roughly eleven
+  // neighbours were invisible from any given spot.
+  //
+  // Counting pieces instead costs the same bytes — a piece is a piece
+  // whoever owns it — and puts the missing ground where missing ground is
+  // legible: at the far edge of the view, reading as distance rather than
+  // as a hole beside you. Nobody vanishes wholesale any more.
   const shapes: TerritoryShape[] = [];
-  const byOwnerGround = new Map<string, TerritoryShape[]>();
-  const nearestOf = new Map<string, number>();
+  const rivalPieces: { ownerId: string; shape: TerritoryShape; d: number }[] = [];
   for (const piece of pieces) {
     if (piece.userId === userId) {
       shapes.push(asShape(piece));
       continue;
     }
-    const list = byOwnerGround.get(piece.userId);
-    if (list) list.push(asShape(piece));
-    else byOwnerGround.set(piece.userId, [asShape(piece)]);
-    // Nearest corner, for deciding which neighbours survive the cap.
+    // Nearest corner. A big piece whose centre is far can still have an
+    // edge at your feet, and that edge is the part you would notice
+    // missing.
     const d = piece.ring.reduce(
       (best, [lng, lat]) => Math.min(best, distanceMeters(pos, { lat: lat!, lng: lng! })),
       Infinity,
     );
-    nearestOf.set(piece.userId, Math.min(nearestOf.get(piece.userId) ?? Infinity, d));
+    rivalPieces.push({ ownerId: piece.userId, shape: asShape(piece), d });
   }
+  rivalPieces.sort((a, b) => a.d - b.d);
+  const drawn = rivalPieces.slice(0, T.rivalPiecesDrawn);
 
-  // Nearest owners first, so the cap drops the ones furthest from you.
-  const rivalIds = [...byOwnerGround.keys()]
-    .sort((a, b) => (nearestOf.get(a) ?? Infinity) - (nearestOf.get(b) ?? Infinity))
-    .slice(0, T.maxRivalsDrawn);
+  const byOwnerGround = new Map<string, TerritoryShape[]>();
+  for (const p of drawn) {
+    const list = byOwnerGround.get(p.ownerId);
+    if (list) list.push(p.shape);
+    else byOwnerGround.set(p.ownerId, [p.shape]);
+  }
+  // Owners in nearest-piece order, so the colour legend and the marks
+  // below follow the same "closest first" logic the pieces did.
+  const rivalIds = [...byOwnerGround.keys()];
   const names = await ownerNames(rivalIds);
 
   // Every mark each drawn neighbour holds, newest first.
