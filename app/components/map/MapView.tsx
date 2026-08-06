@@ -154,8 +154,20 @@ const DOG_VIEW_ZOOM = 14.6;
 // the top-anchored stack this makes HUD → bubble → pills → pin one snug
 // centred column.
 const DOG_VIEW_PIN_TOP_PX = 405;
-// Streets-level game camera to fly back to when the view closes.
-const GAME_PITCH = 74;
+// THE GAME CAMERA'S TILT. One constant, used by the map's opening pitch,
+// the return from a dog view, and the return from supersniff — those were
+// three separate literals until they disagreed.
+//
+// 74° was chosen when the map opened at zoom 17.5, right down among the
+// buildings, where a steep tilt is what gave the street any depth at all.
+// Pulling the default back to 15.6 changed the arithmetic: at that
+// distance 74° stacks a kilometre of city into the top third of the
+// screen and everything past the near blocks reads as haze. 65° spreads
+// the same ground over more of the frame, so the neighbours you are
+// meant to be looking at have room to be seen.
+//
+// Still a tilt, not a plan view. The point is a world you look ACROSS.
+const GAME_PITCH = 65;
 
 // Safe-area top inset in CSS px, measured once via an env() probe —
 // SafeAreaView values aren't reachable here and the inset differs
@@ -1013,7 +1025,12 @@ export default function MapViewWeb() {
       map.off('rotatestart', onUserRotate);
       map.off('rotate', onUserRotate);
       try {
-        map.easeTo({ bearing: 0, pitch: 74, zoom: balance.mapZoomDefault, duration: 500 });
+        map.easeTo({
+          bearing: 0,
+          pitch: GAME_PITCH,
+          zoom: balance.mapZoomDefault,
+          duration: 500,
+        });
       } catch {
         /* map tearing down */
       }
@@ -1960,11 +1977,10 @@ export default function MapViewWeb() {
           maxZoom: balance.mapZoomMax,
           maxBounds: MAP_MAX_BOUNDS,
           // Game-camera tilt: a 3D world you look across, not a flat map.
-          // Opens at 74° — steep for real depth + a low horizon with plenty of
-          // far city, while still tilted enough that the plaza/foreground
-          // reads (the "hero" framing). Users can still tilt up to maxPitch
-          // 80. (Default maxPitch is 60, so it must be raised.)
-          pitch: 74,
+          // See GAME_PITCH for why it is what it is. Users can still tilt
+          // all the way to maxPitch 80 — and MapLibre's own default cap is
+          // 60, so it has to be raised for that to be possible.
+          pitch: GAME_PITCH,
           maxPitch: 80,
           // Drop both attribution branding + the MapLibre wordmark
           // logo. Tile/data attribution is a legal requirement for
