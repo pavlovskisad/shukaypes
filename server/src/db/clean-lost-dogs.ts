@@ -200,21 +200,40 @@ async function main() {
   console.log('');
 
   const deadPhoto: Row[] = [];
+  const photoUnchecked: { row: Row; why: string }[] = [];
   const wrongCity: { row: Row; hint: string }[] = [];
   const sourceGone: Row[] = [];
-  const unverifiable: Row[] = [];
+  const noPermalink: Row[] = [];
+  const adFetchFailed: { row: Row; why: string }[] = [];
+  let adFetched = 0;
 
   for (const row of rows) {
     if (row.photoUrl) {
       const res = await get(row.photoUrl, false);
-      if (!res.ok) deadPhoto.push(row);
+      // ONLY a definitive 404/410 counts as dead.
+      //
+      // This used to treat any failed request as a dead photo, which is
+      // the one genuinely dangerous thing in this script: a CDN 429, a
+      // 503, or a timed-out socket would have nulled the photo of a pet
+      // whose picture was fine, and the URL is not recoverable
+      // afterwards. Rate limiting is exactly the condition a sweep like
+      // this provokes, so the failure mode was not hypothetical.
+      //
+      // Anything that isn't a clear "gone" is reported and left alone.
+      if (!res.ok) {
+        if (res.status === 404 || res.status === 410) deadPhoto.push(row);
+        else photoUnchecked.push({ row, why: res.error });
+      }
       await sleep(REQUEST_GAP_MS);
     }
 
+    // "We never had a link" and "we had a link and couldn't load it" are
+    // different facts and were being counted as one number. That number
+    // came back 253 of 261 and said nothing about which — while
+    // "not in kyiv: 0" sat above it looking like a clean bill of health,
+    // when what it actually meant was that the check never ran.
     if (!row.sourceUrl) {
-      // No permalink means no page to ask, so there is nothing this
-      // script can honestly conclude about the pet's city.
-      unverifiable.push(row);
+      noPermalink.push(row);
       continue;
     }
 
@@ -222,9 +241,10 @@ async function main() {
     await sleep(REQUEST_GAP_MS);
     if (!page.ok) {
       if (page.status === 404 || page.status === 410) sourceGone.push(row);
-      else unverifiable.push(row);
+      else adFetchFailed.push({ row, why: page.error });
       continue;
     }
+    adFetched++;
     if (looksNotKyiv(page.body)) {
       // Pull the city out of the page for the log — the operator should
       // be able to sanity-check the call without opening every link.
@@ -237,13 +257,38 @@ async function main() {
 
   const pad = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
 
-  console.log(`dead photos: ${deadPhoto.length}`);
+  console.log(`dead photos (404/410 — will be nulled): ${deadPhoto.length}`);
   for (const r of deadPhoto) console.log(`   ${pad(r.name, 22)} ${r.photoUrl}`);
-  console.log(`\nnot in kyiv: ${wrongCity.length}`);
+  console.log(`\nphoto check inconclusive (LEFT ALONE): ${photoUnchecked.length}`);
+  for (const p of photoUnchecked) console.log(`   ${pad(p.row.name, 22)} ${p.why}`);
+  if (photoUnchecked.length > deadPhoto.length) {
+    console.log('   ^ more failures than 404s — likely rate limiting, re-run later');
+  }
+  console.log(`\nnot in kyiv (of ${adFetched} ads actually read): ${wrongCity.length}`);
   for (const w of wrongCity) console.log(`   ${pad(w.row.name, 22)} ${w.hint}  ${w.row.sourceUrl}`);
   console.log(`\nsource ad gone (REPORT ONLY, not touched): ${sourceGone.length}`);
   for (const r of sourceGone) console.log(`   ${pad(r.name, 22)} ${r.sourceUrl}`);
-  console.log(`\nno permalink / unreachable, city unknown: ${unverifiable.length}`);
+  console.log(`\nno permalink at all, nothing to ask: ${noPermalink.length}`);
+  console.log(`ad fetch failed: ${adFetchFailed.length}`);
+  const byErr = new Map<string, number>();
+  for (const f of adFetchFailed) byErr.set(f.why, (byErr.get(f.why) ?? 0) + 1);
+  for (const [why, n] of [...byErr].sort((a, b) => b[1] - a[1]).slice(0, 8)) {
+    console.log(`     ${n}\t${why}`);
+  }
+  // The headline number the operator actually needs: a city check that
+  // read nothing is not a city check that found nothing.
+  if (adFetched === 0) {
+    console.log(
+      `\n!! THE CITY CHECK READ ZERO ADS — "not in kyiv: 0" above means nothing.\n` +
+        `   OLX likely blocks this host. Run the sweep from a normal connection\n` +
+        `   instead: DATABASE_URL=<prod url> pnpm --filter @shukajpes/server clean:lost-dogs`,
+    );
+  } else if (adFetchFailed.length > adFetched) {
+    console.log(
+      `\n!! more ad fetches failed (${adFetchFailed.length}) than succeeded (${adFetched}).\n` +
+        `   Treat the city result as a sample, not a sweep.`,
+    );
+  }
 
   if (!apply) {
     console.log('\n✓ dry run, nothing written.');
