@@ -434,7 +434,7 @@ export const api = {
     req<{
       ok: true;
       seen: boolean;
-      awarded: number;
+      paws: number;
       sightingId: string | null;
       sourceUrl: string | null;
     }>('/sightings/search-result', {

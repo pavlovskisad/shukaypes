@@ -16,6 +16,8 @@ import { db, schema } from '../db/index.js';
 
 const MAX_NOTE_CHARS = 200;
 const TRUST_MULTIPLIER = 2; // 2x search radius = "close enough" to move the pin
+// What one paw is worth in points, matching a token picked up off the map.
+const PAW_POINTS = 3;
 
 interface ReportBody {
   dogId?: string;
@@ -187,9 +189,19 @@ const plugin: FastifyPluginAsync = async (app) => {
         return { error: 'dog not found' };
       }
 
-      // A walked zone is worth a fraction of a find. Enough that saying
-      // "no" is never the answer you regret giving.
-      const awarded = seen ? dog.reward : Math.max(10, Math.round(dog.reward * 0.25));
+      // PAID IN PAWS, NOT IN POINTS.
+      //
+      // "+200 points" is a number with no place in the world — nothing
+      // else in the game is denominated in it and nobody can picture it.
+      // Paws are the thing you spend all day picking up off the pavement,
+      // so a handful of them at the end of a search is a reward you
+      // already know the size of.
+      //
+      // 20 for a find, 10 for a zone walked and found empty. Flat rather
+      // than scaled off the pet's rewardPoints, because a reward you can
+      // count in your head is worth more than one that is technically
+      // proportional — and the pet's own number was never shown anywhere.
+      const paws = seen ? 20 : 10;
 
       let sightingId: string | null = null;
       if (seen && typeof lat === 'number' && typeof lng === 'number') {
@@ -212,9 +224,15 @@ const plugin: FastifyPluginAsync = async (app) => {
       }
 
       if (req.userId) {
+        // Same two columns a real pickup moves, so the HUD counter and
+        // the score stay one story. PAW_POINTS mirrors what a token on
+        // the ground is worth.
         await db
           .update(schema.users)
-          .set({ points: sql`${schema.users.points} + ${awarded}` })
+          .set({
+            totalTokens: sql`${schema.users.totalTokens} + ${paws}`,
+            points: sql`${schema.users.points} + ${paws * PAW_POINTS}`,
+          })
           .where(eq(schema.users.id, req.userId));
       }
 
@@ -228,10 +246,10 @@ const plugin: FastifyPluginAsync = async (app) => {
         .limit(1);
 
       req.log.info(
-        { kind: 'search_result', dogId, seen, awarded, sightingId },
+        { kind: 'search_result', dogId, seen, paws, sightingId },
         'search closed',
       );
-      return { ok: true, seen, awarded, sightingId, sourceUrl: src?.url ?? null };
+      return { ok: true, seen, paws, sightingId, sourceUrl: src?.url ?? null };
     },
   );
 };

@@ -52,8 +52,8 @@ export interface AppStrings {
     arrivedAsk: (name: string) => string;
     yes: string;
     no: string;
-    thanksSeen: (points: number) => string;
-    thanksMissed: (points: number) => string;
+    thanksSeen: (paws: number) => string;
+    thanksMissed: (paws: number) => string;
     contactAsk: string;
     contactOpen: string;
     contactLater: string;
@@ -279,8 +279,8 @@ const uk: AppStrings = {
     arrivedAsk: (name) => `ми на місці! бачив ${name} десь тут?`,
     yes: 'так, бачив',
     no: 'ні, нікого',
-    thanksSeen: (points) => `записав! +${points} балів 🐾`,
-    thanksMissed: (points) => `теж важливо — тепер знаємо, що тут порожньо. +${points} балів`,
+    thanksSeen: (paws) => `записав! +${paws} лапок 🐾`,
+    thanksMissed: (paws) => `теж важливо — тепер знаємо, що тут порожньо. +${paws} лапок 🐾`,
     contactAsk: 'показати оголошення? там є контакти власника',
     contactOpen: 'відкрити оголошення',
     contactLater: 'пізніше',
@@ -619,8 +619,8 @@ const en: AppStrings = {
     arrivedAsk: (name) => `we're here! did you see ${name} around?`,
     yes: 'yes, I did',
     no: 'no, nobody',
-    thanksSeen: (points) => `logged it! +${points} points 🐾`,
-    thanksMissed: (points) => `still useful — now we know this patch is empty. +${points} points`,
+    thanksSeen: (paws) => `logged it! +${paws} paws 🐾`,
+    thanksMissed: (paws) => `still useful — now we know this patch is empty. +${paws} paws 🐾`,
     contactAsk: 'open the original post? the owner left their contact there',
     contactOpen: 'open the post',
     contactLater: 'later',
