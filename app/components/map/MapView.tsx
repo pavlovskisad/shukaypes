@@ -2845,11 +2845,15 @@ export default function MapViewWeb() {
         >
           {focusDog ? (
             <View style={{ width: 288, height: 252, marginBottom: 30 }} pointerEvents="none">
+              {/* No `active` glow here. That pulsing blue ring exists to
+                  pick THIS pet out of a deck of others — and there is no
+                  deck any more, just the one card. Marking the only
+                  thing on screen as the chosen one is noise, and the
+                  ring read as a border around the photo. */}
               <LostDogCardView
                 dog={focusDog}
                 t={t}
                 userPos={userPos}
-                active
                 strongShadow
                 chips={false}
               />
