@@ -37,7 +37,7 @@
 //                fly ssh console -a shukajpes-api -C "node dist/db/clean-lost-dogs.js --apply"
 
 import 'dotenv/config';
-import { and, eq, isNotNull, sql } from 'drizzle-orm';
+import { and, eq, isNotNull, ne } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { looksNotKyiv } from '../pipeline/sources/olx.js';
@@ -85,33 +85,77 @@ interface Row {
   name: string;
   photoUrl: string | null;
   urgency: string;
-  sourceUrl: string | null;
+  source: string;
+  // Filled in from scrape_log after the main query, not selected with it.
+  sourceUrl?: string | null;
 }
 
 async function main() {
   const apply = process.argv.includes('--apply');
   console.log(apply ? '▶ APPLY — writes are real' : '▶ dry run — pass --apply to write');
 
-  // Only scraped pets. A pet somebody reported in the app has no source
-  // page to check and no CDN to expire, and second-guessing a human's
-  // own report is not this script's job.
+  // Everything EXCEPT pets somebody reported in the app — those have no
+  // source page to check and no CDN to expire, and second-guessing a
+  // human's own report is not this script's job.
+  //
+  // Matched by excluding 'in_app' rather than by naming the scrapers.
+  // lost_dogs.source stores whatever the ingest was called — 'olx',
+  // 'telegram:<channel>', 'admin-sideload' — never the literal 'scrape'
+  // the column comment implies. The first version of this filtered for
+  // ==='scrape', matched nothing, and would have printed "0 active
+  // scraped pets" as though that were a clean bill of health. Hence the
+  // per-source breakdown below: a filter that quietly matches nothing
+  // should be visible, not indistinguishable from a tidy database.
   const rows: Row[] = await db
     .select({
       id: schema.lostDogs.id,
       name: schema.lostDogs.name,
       photoUrl: schema.lostDogs.photoUrl,
       urgency: schema.lostDogs.urgency,
-      sourceUrl: sql<string | null>`(
-        SELECT url FROM ${schema.scrapeLog}
-        WHERE ${schema.scrapeLog}.dog_id = ${schema.lostDogs}.id
-        ORDER BY ${schema.scrapeLog}.created_at ASC
-        LIMIT 1
-      )`,
+      source: schema.lostDogs.source,
     })
     .from(schema.lostDogs)
-    .where(and(eq(schema.lostDogs.status, 'active'), eq(schema.lostDogs.source, 'scrape')));
+    .where(and(eq(schema.lostDogs.status, 'active'), ne(schema.lostDogs.source, 'in_app')));
 
-  console.log(`  ${rows.length} active scraped pets\n`);
+  // Permalinks in a second query, joined in memory.
+  //
+  // This started as a correlated subquery in a raw sql`` fragment and
+  // was wrong twice: once on a column that doesn't exist (scrape_log
+  // has first_seen_at, not created_at), and once invisibly — drizzle
+  // renders interpolated columns UNQUALIFIED inside a raw fragment, so
+  // `WHERE scrape_log.dog_id = lost_dogs.id` came out as
+  // `WHERE "dog_id" = "id"`. That happens to resolve correctly today
+  // only because scrape_log has no `id` column of its own; the day it
+  // gains one, the subquery matches nothing and every pet silently
+  // looks permalink-less.
+  //
+  // Two plain queries and a Map are immune to all of that, and at a few
+  // hundred rows the cost is nothing.
+  const logs = await db
+    .select({
+      dogId: schema.scrapeLog.dogId,
+      url: schema.scrapeLog.url,
+      firstSeenAt: schema.scrapeLog.firstSeenAt,
+    })
+    .from(schema.scrapeLog)
+    .where(isNotNull(schema.scrapeLog.dogId));
+  const urlByDog = new Map<string, string>();
+  for (const l of logs.sort((a, b) => a.firstSeenAt.getTime() - b.firstSeenAt.getTime())) {
+    // Earliest wins: the ad we first ingested the pet from.
+    if (l.dogId && !urlByDog.has(l.dogId)) urlByDog.set(l.dogId, l.url);
+  }
+  for (const r of rows) r.sourceUrl = urlByDog.get(r.id) ?? null;
+
+  const bySource = new Map<string, number>();
+  for (const r of rows) bySource.set(r.source, (bySource.get(r.source) ?? 0) + 1);
+  console.log(`  ${rows.length} active pets to check`);
+  for (const [src, n] of [...bySource].sort((a, b) => b[1] - a[1])) {
+    console.log(`     ${n}\t${src}`);
+  }
+  if (rows.length === 0) {
+    console.log('  (nothing matched — check lost_dogs.source values before trusting this)');
+  }
+  console.log('');
 
   const deadPhoto: Row[] = [];
   const wrongCity: { row: Row; hint: string }[] = [];
