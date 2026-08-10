@@ -6,7 +6,7 @@ import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
-import { View, Text, StyleSheet, Image } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
@@ -45,6 +45,7 @@ import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
 import { LostDogCardStack } from '../ui/LostDogCardStack';
+import { DogPrompt } from './DogPrompt';
 import { createBuildingAvoider } from './buildingAvoider';
 import { GAME_RENDER, MULTIPLAYER, DOG_CAM, LOST_DOG_PINS } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
@@ -329,6 +330,21 @@ export default function MapViewWeb() {
   // Sniff-and-lead search mode assignment (which lost dog + spot). Set by the
   // search controller below while dogCam is on.
   const searchTarget = useGameStore((s) => s.searchTarget);
+  // WHAT THE DOG IS ASKING RIGHT NOW.
+  //
+  // One state for every decision point in a search, because they are one
+  // interaction wearing four hats: confirm a target, leave early, arrive,
+  // and find the owner. Null means the dog is just walking.
+  const [prompt, setPrompt] = useState<
+    | null
+    | { kind: 'confirm'; dog: NearbyLostDog }
+    | { kind: 'leave'; dog: NearbyLostDog }
+    | { kind: 'arrived'; dog: NearbyLostDog }
+    | { kind: 'done'; text: string; sourceUrl: string | null }
+  >(null);
+  // Read inside effects that must not re-run on every render.
+  const promptRef = useRef(prompt);
+  promptRef.current = prompt;
   const setSearchTarget = useGameStore((s) => s.setSearchTarget);
   const searchRoute = useGameStore((s) => s.searchRoute);
   const setSearchRoute = useGameStore((s) => s.setSearchRoute);
@@ -1146,6 +1162,35 @@ export default function MapViewWeb() {
     [setSearchPreview, setSearchTarget, setSearchRoute, spotInZone, userPos, showBubble],
   );
 
+  // Closing a search — the same call whether you arrived or gave up, and
+  // whether or not you saw anything. The server decides what it is worth;
+  // the client only reports what happened.
+  const finishSearch = useCallback(
+    async (dog: NearbyLostDog, seen: boolean) => {
+      setSearchTarget(null);
+      setSearchRoute(null);
+      let awarded = 0;
+      let sourceUrl: string | null = null;
+      try {
+        const res = await api.finishSearch(dog.id, seen, userPosRef.current);
+        awarded = res.awarded;
+        sourceUrl = res.sourceUrl;
+      } catch {
+        // Offline or the server said no. The search still ends — stranding
+        // someone in a quest because a request failed is the worse outcome
+        // — they just do not get told a number.
+      }
+      if (seen) useGameStore.getState().tickDailyTask('sightings');
+      setPrompt({
+        kind: 'done',
+        text: seen ? t.search.thanksSeen(awarded) : t.search.thanksMissed(awarded),
+        // Only offered when the pet came from a post that still exists.
+        sourceUrl: seen ? sourceUrl : null,
+      });
+    },
+    [setSearchTarget, setSearchRoute, t],
+  );
+
   // Preview (carousel SWIPE, or the initial mode-on pick): pick the candidate
   // quest spot now and glow a small FRAGMENT of the zone around it — NO route,
   // NO API call. The camera stays tied to the dog, just zoomed out and turned to
@@ -1215,12 +1260,17 @@ export default function MapViewWeb() {
   useEffect(() => {
     if (!DOG_CAM || !dogCam || !searchTarget || !userPos) return;
     if (distanceMeters(userPos, searchTarget.spot) > SEARCH_REACH_M) return;
+    // Ask ONCE. This effect re-runs on every GPS tick, and the target
+    // stays set until the question is answered, so without this the
+    // prompt object is rebuilt every few seconds for as long as you stand
+    // there deciding.
+    if (promptRef.current) return;
     const dog = lostDogs.find((d) => d.id === searchTarget.dogId);
-    showBubble(
-      dog ? `found the spot for ${dog.name} 🐾 sniffing out another…` : 'nice find! 🐾',
-      3500,
-    );
-    if (dog) assignSearch(dog, false);
+    // Arriving used to bark "found the spot" and silently deal you the next
+    // pet, which threw away the only thing the walk was for: you were just
+    // there, and nobody asked you what you saw. Now the dog asks, and the
+    // search stays open until you answer.
+    if (dog) setPrompt({ kind: 'arrived', dog });
     else setSearchTarget(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [userPos, searchTarget, dogCam]);
@@ -2709,35 +2759,132 @@ export default function MapViewWeb() {
         />
       ) : null}
 
-      {/* Search mode: the same swipeable card stack as the Quests tab (same
-          size + layout). Swipe previews a dog's zone; tap picks up the trail.
-          Once committed, that dog's card gets a slowly-pulsing blue glow via
-          activeId so it's clear which one you're hunting. */}
+      {/* THE BOTTOM OF THE SCREEN DURING SUPERSNIFF.
+          Three states, one at a time:
+            • the dog is asking something  → the prompt, nothing else
+            • a search is running          → nothing but a small way out.
+              The carousel is deliberately gone: a deck of other pets to
+              swipe through is an invitation to abandon the one you are
+              walking to, and it covered the map you are supposed to be
+              reading.
+            • otherwise                    → pick a pet. */}
       {DOG_CAM && dogCam && onMapScreen ? (
         <View
           style={{
             position: 'absolute',
             left: 0,
             right: 0,
-            bottom: -14,
+            bottom: prompt ? 24 : -14,
             alignItems: 'center',
             zIndex: Z.HUD_CHIPS,
           }}
           pointerEvents="box-none"
         >
-          <LostDogCardStack
-            dogs={searchDogs}
-            onTap={assignSearch}
-            onSwipe={previewSearch}
-            showCounter={false}
-            activeId={searchTarget?.dogId}
-            // Deck mounts on mode entry; when entry came pre-committed
-            // (modal's "start search") the chosen dog's card starts on top.
-            initialId={searchTarget?.dogId}
-            cardWidth={288}
-            cardHeight={252}
-            strongShadow
-          />
+          {prompt ? (
+            <DogPrompt
+              text={
+                prompt.kind === 'confirm'
+                  ? t.search.confirm(prompt.dog.name)
+                  : prompt.kind === 'leave'
+                    ? t.search.leaveAsk
+                    : prompt.kind === 'arrived'
+                      ? t.search.arrivedAsk(prompt.dog.name)
+                      : prompt.text
+              }
+              actions={
+                prompt.kind === 'confirm'
+                  ? [
+                      { label: t.search.confirmBack, onPress: () => setPrompt(null) },
+                      {
+                        label: t.search.confirmGo,
+                        primary: true,
+                        onPress: () => {
+                          const d = prompt.dog;
+                          setPrompt(null);
+                          assignSearch(d);
+                        },
+                      },
+                    ]
+                  : prompt.kind === 'leave' || prompt.kind === 'arrived'
+                    ? [
+                        {
+                          label: t.search.no,
+                          onPress: () => {
+                            const d = prompt.dog;
+                            // Leaving early with nothing seen is the one
+                            // answer that pays nothing: the walk was not
+                            // finished, so there is no walked zone to
+                            // report. Arriving and seeing nobody is a
+                            // result, and does pay.
+                            if (prompt.kind === 'leave') {
+                              setSearchTarget(null);
+                              setSearchRoute(null);
+                              setPrompt(null);
+                            } else {
+                              void finishSearch(d, false);
+                            }
+                          },
+                        },
+                        {
+                          label: t.search.yes,
+                          primary: true,
+                          onPress: () => void finishSearch(prompt.dog, true),
+                        },
+                      ]
+                    : [
+                        ...(prompt.sourceUrl
+                          ? [
+                              {
+                                label: t.search.contactOpen,
+                                primary: true,
+                                onPress: () => {
+                                  window.open(prompt.sourceUrl!, '_blank', 'noopener');
+                                  setPrompt(null);
+                                },
+                              },
+                            ]
+                          : []),
+                        {
+                          label: prompt.sourceUrl ? t.search.contactLater : t.search.close,
+                          onPress: () => setPrompt(null),
+                        },
+                      ]
+              }
+            />
+          ) : searchTarget ? (
+            <Pressable
+              onPress={() => {
+                const d = lostDogs.find((x) => x.id === searchTarget.dogId);
+                if (d) setPrompt({ kind: 'leave', dog: d });
+                else {
+                  setSearchTarget(null);
+                  setSearchRoute(null);
+                }
+              }}
+              style={{
+                width: 52,
+                height: 52,
+                borderRadius: R.pill,
+                backgroundColor: '#ffffff',
+                alignItems: 'center',
+                justifyContent: 'center',
+                marginBottom: 26,
+                boxShadow: '0 4px 14px rgba(0,0,0,0.22)' as unknown as undefined,
+              }}
+            >
+              <Text style={{ fontSize: 22, fontWeight: '700', color: '#1a1a1a' }}>✕</Text>
+            </Pressable>
+          ) : (
+            <LostDogCardStack
+              dogs={searchDogs}
+              onTap={(dog) => setPrompt({ kind: 'confirm', dog })}
+              onSwipe={previewSearch}
+              showCounter={false}
+              cardWidth={288}
+              cardHeight={252}
+              strongShadow
+            />
+          )}
         </View>
       ) : null}
 

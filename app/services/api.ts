@@ -426,6 +426,22 @@ export const api = {
       body: JSON.stringify({ dogId, lat: pos.lat, lng: pos.lng, note }),
     }),
 
+  // Closing a supersniff search. Both answers pay — see the route for
+  // why "no" is a result worth recording rather than a failure. Returns
+  // the permalink of the post the pet came from when there is one, so
+  // the finder can reach the owner without us holding their contact.
+  finishSearch: (dogId: string, seen: boolean, pos: LatLng | null) =>
+    req<{
+      ok: true;
+      seen: boolean;
+      awarded: number;
+      sightingId: string | null;
+      sourceUrl: string | null;
+    }>('/sightings/search-result', {
+      method: 'POST',
+      body: JSON.stringify({ dogId, seen, lat: pos?.lat, lng: pos?.lng }),
+    }),
+
   // Detective quest endpoints. Response shape matches shared Quest
   // (currentWaypoint, waypoints as Waypoint[]) plus a `status` field
   // the client branches on. Start and advance also include `narration`

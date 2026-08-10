@@ -10,7 +10,7 @@
 //   the pin — probably a different pet or a misclick.
 
 import type { FastifyPluginAsync } from 'fastify';
-import { and, desc, eq } from 'drizzle-orm';
+import { and, desc, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 
@@ -131,6 +131,107 @@ const plugin: FastifyPluginAsync = async (app) => {
           at: r.at.toISOString(),
         })),
       };
+    },
+  );
+
+  // CLOSING A SEARCH.
+  //
+  // The dog asks one question at the end of a supersniff — did you see
+  // them? — and both answers are worth something. "No" is a real result:
+  // somebody walked that zone and the pet was not there, which is exactly
+  // the information a search needs and nobody ever bothers to record.
+  // Paying only for a find would train people to lie.
+  //
+  // "Yes" additionally writes a sighting (same rules as /sightings: the
+  // pin only moves if the report is close enough and the pet is still
+  // listed) and hands back where the original post lives.
+  //
+  // ON THE SOURCE LINK, AND WHY IT IS A LINK.
+  //
+  // We hold no owner contacts. The ingest parser strips phone numbers,
+  // names and handles on purpose, so there is nothing here to hand over
+  // and nothing to leak. What we do keep is the permalink of the post the
+  // pet came from, and the owner's own contact is already in it, publicly,
+  // written by them.
+  //
+  // Sending the finder to that post beats extracting the number for them:
+  // no personal data passes through us, the contact arrives in its own
+  // context (photo, date, the owner's wording), and it works the same for
+  // every source. Scraping it on demand would also be less reliable, not
+  // more — t.me/s only renders the last ~20 messages of a channel, so an
+  // older post cannot be re-read even though its permalink still opens
+  // perfectly well in a browser.
+  app.post<{ Body: { dogId?: string; seen?: boolean; lat?: number; lng?: number } }>(
+    '/sightings/search-result',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      const { dogId, seen, lat, lng } = req.body ?? {};
+      if (!dogId || typeof seen !== 'boolean') {
+        reply.code(400);
+        return { error: 'dogId and seen required' };
+      }
+      const [dog] = await db
+        .select({
+          id: schema.lostDogs.id,
+          lat: schema.lostDogs.lastSeenLat,
+          lng: schema.lostDogs.lastSeenLng,
+          radiusM: schema.lostDogs.searchZoneRadiusM,
+          reward: schema.lostDogs.rewardPoints,
+          status: schema.lostDogs.status,
+        })
+        .from(schema.lostDogs)
+        .where(eq(schema.lostDogs.id, dogId))
+        .limit(1);
+      if (!dog) {
+        reply.code(404);
+        return { error: 'dog not found' };
+      }
+
+      // A walked zone is worth a fraction of a find. Enough that saying
+      // "no" is never the answer you regret giving.
+      const awarded = seen ? dog.reward : Math.max(10, Math.round(dog.reward * 0.25));
+
+      let sightingId: string | null = null;
+      if (seen && typeof lat === 'number' && typeof lng === 'number') {
+        sightingId = nanoid();
+        await db.insert(schema.sightings).values({
+          id: sightingId,
+          dogId,
+          reporterId: req.userId || null,
+          lat,
+          lng,
+          note: null,
+        });
+        const dist = haversineM(dog.lat, dog.lng, lat, lng);
+        if (dist <= dog.radiusM * TRUST_MULTIPLIER && dog.status === 'active') {
+          await db
+            .update(schema.lostDogs)
+            .set({ lastSeenLat: lat, lastSeenLng: lng, lastSeenAt: new Date() })
+            .where(eq(schema.lostDogs.id, dogId));
+        }
+      }
+
+      if (req.userId) {
+        await db
+          .update(schema.users)
+          .set({ points: sql`${schema.users.points} + ${awarded}` })
+          .where(eq(schema.users.id, req.userId));
+      }
+
+      // Where the pet was posted, if it came from a scrape. In-app reports
+      // have no permalink and get null — the client offers nothing rather
+      // than a dead button.
+      const [src] = await db
+        .select({ url: schema.scrapeLog.url })
+        .from(schema.scrapeLog)
+        .where(eq(schema.scrapeLog.dogId, dogId))
+        .limit(1);
+
+      req.log.info(
+        { kind: 'search_result', dogId, seen, awarded, sightingId },
+        'search closed',
+      );
+      return { ok: true, seen, awarded, sightingId, sourceUrl: src?.url ?? null };
     },
   );
 };
