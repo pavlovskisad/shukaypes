@@ -144,6 +144,36 @@ export function SniffPress() {
   }, [discovered, sniffingAt, setSniffActive]);
   useEffect(() => () => setSniffActive(false), [setSniffActive]);
 
+  // A discovery belongs to the mode it was sniffed in. Flipping to
+  // supersniff (or back) used to leave the story bubble and its ring
+  // hanging over the new view — the press was over, but nothing ever
+  // told this component the world had changed underneath it. Skip the
+  // first run so mounting doesn't count as a flip.
+  const overlayEpoch = useGameStore((s) => s.overlayEpoch);
+  const flipInitRef = useRef(true);
+  useEffect(() => {
+    if (flipInitRef.current) {
+      flipInitRef.current = false;
+      return;
+    }
+    setDiscovered(null);
+    setSniffingAt(null);
+    setMoreOpen(false);
+    pressLatLngRef.current = null;
+    if (rafRef.current != null) {
+      cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
+    }
+    if (bubbleTimerRef.current != null) {
+      clearTimeout(bubbleTimerRef.current);
+      bubbleTimerRef.current = null;
+    }
+    // The press ring is painted on the map itself, not in the React
+    // tree, so clearing state alone would leave it burnt on.
+    if (map?.getLayer(fillId)) map.setPaintProperty(fillId, 'fill-opacity', 0);
+    if (map?.getLayer(lineId)) map.setPaintProperty(lineId, 'line-opacity', 0);
+  }, [overlayEpoch, map, fillId, lineId]);
+
   // Source + layer lifecycle. Created once when the map style is
   // ready, removed on unmount. Data is mutated in place during the
   // animation via setData.

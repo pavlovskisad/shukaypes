@@ -50,7 +50,9 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
           onClick={a.onPress}
           style={{
             appearance: 'none',
-            border: a.primary ? 'none' : '2px solid rgba(0,0,0,0.12)',
+            // The house hairline (modals, spot cards): 1px at 0.06 alpha.
+            // Anything heavier reads as a different design language.
+            border: a.primary ? 'none' : '1px solid rgba(0,0,0,0.06)',
             background: a.primary ? 'rgb(0,60,255)' : '#ffffff',
             color: a.primary ? '#ffffff' : '#1a1a1a',
             fontFamily: SYSTEM_FONT,

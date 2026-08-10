@@ -443,9 +443,31 @@ export default function MapViewWeb() {
   // key (sorted item ids); cleared by the floating "collapse all" pill
   // that appears at the top of the map while any cluster is open.
   const [expandedSpotKeys, setExpandedSpotKeys] = useState<Set<string>>(() => new Set());
+  // A half-answered question does not survive leaving the mode it was
+  // asked in, and neither does a fan of expanded pins. The store drops
+  // the search itself on a flip; this drops what MapView holds of its
+  // own. Skip the first run so mounting doesn't count as a flip.
+  const overlayEpoch = useGameStore((s) => s.overlayEpoch);
+  const overlayEpochInitRef = useRef(true);
+  useEffect(() => {
+    if (overlayEpochInitRef.current) {
+      overlayEpochInitRef.current = false;
+      return;
+    }
+    setPrompt(null);
+    setExpandedSpotKeys((prev) => (prev.size === 0 ? prev : new Set()));
+  }, [overlayEpoch]);
   const tokens = useGameStore((s) => s.tokens);
   const foodItems = useGameStore((s) => s.foodItems);
   const lostDogs = useGameStore((s) => s.lostDogs);
+  // Whose card belongs on screen: the pet being confirmed, or the pet
+  // being walked to. Null means neither, and the deck comes back.
+  const focusDog =
+    prompt && prompt.kind !== 'done'
+      ? prompt.dog
+      : searchTarget
+        ? (lostDogs.find((d) => d.id === searchTarget.dogId) ?? null)
+        : null;
   // Whether the map tab is the active screen. The offscreen companion
   // chip + offscreen dog indicators are portaled to document.body, so
   // they'd otherwise stay painted over the other tabs (tasks, chat,
@@ -2628,7 +2650,11 @@ export default function MapViewWeb() {
           ];
         })}
 
-        {activeQuest ? (
+        {/* Hidden — not cancelled — in supersniff. A detective quest is
+            a server-tracked commitment, so tapping the logo must not
+            throw it away; it just steps out of the way of the search
+            and is still running when you come back. */}
+        {activeQuest && !(DOG_CAM && dogCam) ? (
           <>
             {/* Walking route through the waypoints. When the Directions
                 API answers, we draw the street-hugging path — a bit
@@ -2785,129 +2811,31 @@ export default function MapViewWeb() {
         />
       ) : null}
 
-      {/* THE BOTTOM OF THE SCREEN DURING SUPERSNIFF.
-          Three states, one at a time:
-            • the dog is asking something  → the prompt, nothing else
-            • a search is running          → nothing but a small way out.
-              The carousel is deliberately gone: a deck of other pets to
-              swipe through is an invitation to abandon the one you are
-              walking to, and it covered the map you are supposed to be
-              reading.
-            • otherwise                    → pick a pet. */}
+      {/* THE PET, ALWAYS. Whichever pet is in question — the one being
+          confirmed, or the one being walked to — its card sits in the
+          slot the carousel used to occupy. What went away is the pets
+          on either SIDE of it: a deck to swipe through is an invitation
+          to abandon the one you are on, and it covered the map.
+
+          LostDogCardView is width/height 100%, so it has to be given a
+          box. Rendered bare it collapses to nothing, which is exactly
+          what it did — the card was there the whole time with no size. */}
       {DOG_CAM && dogCam && onMapScreen ? (
         <View
           style={{
             position: 'absolute',
             left: 0,
             right: 0,
-            bottom: prompt ? 24 : -14,
+            bottom: -14,
             alignItems: 'center',
             zIndex: Z.HUD_CHIPS,
           }}
           pointerEvents="box-none"
         >
-          {prompt ? (
-            <DogPrompt
-              actions={
-                prompt.kind === 'confirm'
-                  ? [
-                      { label: t.search.confirmBack, onPress: () => setPrompt(null) },
-                      {
-                        label: t.search.confirmGo,
-                        primary: true,
-                        onPress: () => {
-                          const d = prompt.dog;
-                          setPrompt(null);
-                          assignSearch(d);
-                        },
-                      },
-                    ]
-                  : prompt.kind === 'leave' || prompt.kind === 'arrived'
-                    ? [
-                        {
-                          label: t.search.no,
-                          onPress: () => {
-                            const d = prompt.dog;
-                            // Leaving early with nothing seen is the one
-                            // answer that pays nothing: the walk was not
-                            // finished, so there is no walked zone to
-                            // report. Arriving and seeing nobody is a
-                            // result, and does pay.
-                            if (prompt.kind === 'leave') {
-                              setSearchTarget(null);
-                              setSearchRoute(null);
-                              setPrompt(null);
-                            } else {
-                              void finishSearch(d, false);
-                            }
-                          },
-                        },
-                        {
-                          label: t.search.yes,
-                          primary: true,
-                          onPress: () => void finishSearch(prompt.dog, true),
-                        },
-                      ]
-                    : [
-                        ...(prompt.sourceUrl
-                          ? [
-                              {
-                                label: t.search.contactOpen,
-                                primary: true,
-                                onPress: () => {
-                                  window.open(prompt.sourceUrl!, '_blank', 'noopener');
-                                  setPrompt(null);
-                                },
-                              },
-                            ]
-                          : []),
-                        {
-                          label: prompt.sourceUrl ? t.search.contactLater : t.search.close,
-                          onPress: () => setPrompt(null),
-                        },
-                      ]
-              }
-            />
-          ) : searchTarget ? (
-            <>
-              {/* THE PET YOU ARE WALKING TO STAYS ON SCREEN.
-                  Hiding the whole deck also hid the one card that matters:
-                  the face you are out here looking for. A search with no
-                  picture of its subject is a blue line to a coordinate.
-                  The SIDE cards are what had to go — a deck to swipe
-                  through is an invitation to abandon this one — so the
-                  chosen pet is rendered alone, same card, no neighbours. */}
-              {(() => {
-                const dog = lostDogs.find((x) => x.id === searchTarget.dogId);
-                return dog ? (
-                  <View style={{ marginBottom: S.m }} pointerEvents="none">
-                    <LostDogCardView dog={dog} t={t} userPos={userPos} active strongShadow />
-                  </View>
-                ) : null;
-              })()}
-              <Pressable
-              onPress={() => {
-                const d = lostDogs.find((x) => x.id === searchTarget.dogId);
-                if (d) setPrompt({ kind: 'leave', dog: d });
-                else {
-                  setSearchTarget(null);
-                  setSearchRoute(null);
-                }
-              }}
-              style={{
-                width: 52,
-                height: 52,
-                borderRadius: R.pill,
-                backgroundColor: '#ffffff',
-                alignItems: 'center',
-                justifyContent: 'center',
-                marginBottom: 26,
-                boxShadow: '0 4px 14px rgba(0,0,0,0.22)' as unknown as undefined,
-              }}
-            >
-                <Text style={{ fontSize: 22, fontWeight: '700', color: '#1a1a1a' }}>✕</Text>
-              </Pressable>
-            </>
+          {focusDog ? (
+            <View style={{ width: 288, height: 252, marginBottom: 30 }} pointerEvents="none">
+              <LostDogCardView dog={focusDog} t={t} userPos={userPos} active strongShadow />
+            </View>
           ) : (
             <LostDogCardStack
               dogs={searchDogs}
@@ -2922,11 +2850,129 @@ export default function MapViewWeb() {
         </View>
       ) : null}
 
+      {/* THE ANSWERS SIT UNDER THE DOG, not at the foot of the screen.
+          The dog is asking; its words come out of its mouth and the
+          replies belong directly beneath them. The dog rides at true
+          screen centre in supersniff, so this is a fixed offset below
+          that rather than anything that has to track the sprite. */}
+      {DOG_CAM && dogCam && onMapScreen && prompt ? (
+        <View
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: '56%',
+            alignItems: 'center',
+            zIndex: Z.HUD_CHIPS + 1,
+          }}
+          pointerEvents="box-none"
+        >
+          <DogPrompt
+            actions={
+              prompt.kind === 'confirm'
+                ? [
+                    { label: t.search.confirmBack, onPress: () => setPrompt(null) },
+                    {
+                      label: t.search.confirmGo,
+                      primary: true,
+                      onPress: () => {
+                        const d = prompt.dog;
+                        setPrompt(null);
+                        assignSearch(d);
+                      },
+                    },
+                  ]
+                : prompt.kind === 'leave' || prompt.kind === 'arrived'
+                  ? [
+                      {
+                        label: t.search.no,
+                        onPress: () => {
+                          const d = prompt.dog;
+                          // Leaving early with nothing seen pays nothing:
+                          // the walk was not finished, so there is no
+                          // walked zone to report. Arriving and seeing
+                          // nobody IS a result, and does pay.
+                          if (prompt.kind === 'leave') {
+                            setSearchTarget(null);
+                            setSearchRoute(null);
+                            setPrompt(null);
+                          } else {
+                            void finishSearch(d, false);
+                          }
+                        },
+                      },
+                      {
+                        label: t.search.yes,
+                        primary: true,
+                        onPress: () => void finishSearch(prompt.dog, true),
+                      },
+                    ]
+                  : [
+                      ...(prompt.sourceUrl
+                        ? [
+                            {
+                              label: t.search.contactOpen,
+                              primary: true,
+                              onPress: () => {
+                                window.open(prompt.sourceUrl!, '_blank', 'noopener');
+                                setPrompt(null);
+                              },
+                            },
+                          ]
+                        : []),
+                      {
+                        label: prompt.sourceUrl ? t.search.contactLater : t.search.close,
+                        onPress: () => setPrompt(null),
+                      },
+                    ]
+            }
+          />
+        </View>
+      ) : null}
+
+      {/* The way out of a running search. Only while one IS running —
+          during a question the buttons above are the way out. */}
+      {DOG_CAM && dogCam && onMapScreen && searchTarget && !prompt ? (
+        <View
+          style={{
+            position: 'absolute',
+            left: 0,
+            right: 0,
+            top: '56%',
+            alignItems: 'center',
+            zIndex: Z.HUD_CHIPS + 1,
+          }}
+          pointerEvents="box-none"
+        >
+          <Pressable
+            onPress={() => {
+              const d = lostDogs.find((x) => x.id === searchTarget.dogId);
+              if (d) setPrompt({ kind: 'leave', dog: d });
+              else {
+                setSearchTarget(null);
+                setSearchRoute(null);
+              }
+            }}
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: R.pill,
+              backgroundColor: '#ffffff',
+              alignItems: 'center',
+              justifyContent: 'center',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.22)' as unknown as undefined,
+            }}
+          >
+            <Text style={{ fontSize: 22, fontWeight: '700', color: '#1a1a1a' }}>✕</Text>
+          </Pressable>
+        </View>
+      ) : null}
+
       {/* Cancel pills — small floating chips that drop in below the
           HUD when a route or quest is active. Stacked vertically so
           both can show at once (rare but valid: a walk + a separate
           quest). Tapping a pill clears the corresponding state. */}
-      {(walkRoute || activeQuest) ? (
+      {(walkRoute || activeQuest) && !(DOG_CAM && dogCam) ? (
         <div
           style={{
             position: 'absolute',
