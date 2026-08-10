@@ -16,7 +16,8 @@
     "seed:lore": "tsx src/db/seed-lore.ts",
     "seed:gazetteer": "tsx src/db/seed-gazetteer.ts",
     "backfill:landmarks": "tsx src/db/backfill-landmark-jitter.ts",
-    "wipe:stats": "tsx src/db/wipe-stats.ts"
+    "wipe:stats": "tsx src/db/wipe-stats.ts",
+    "clean:lost-dogs": "tsx src/db/clean-lost-dogs.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

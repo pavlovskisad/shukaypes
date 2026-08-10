@@ -205,6 +205,11 @@ interface GameState {
   // dog, the city goes see-through around it, and the nearby lost pets
   // come up as a carousel to pick a search from.
   dogCam: boolean;
+  // Bumped on every supersniff flip. Components that keep transient
+  // state of their own — the long-press discovery, the dog's question
+  // prompt, expanded map clusters — watch this and drop it, so a mode
+  // change wipes the screen as thoroughly as it wipes the store.
+  overlayEpoch: number;
   // True when the CURRENT supersniff session was entered from the lost-dog
   // modal's "start search" (not the logo). Those users never touched the
   // logo, so the Companion shows a one-shot "tap the logo to get back to
@@ -445,6 +450,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   // spots layer on via the HUD pin toggle (there's a one-shot hint for it).
   spotsVisible: false,
   dogCam: false,
+  overlayEpoch: 0,
   dogCamViaSearch: false,
   searchTarget: null,
   searchRoute: null,
@@ -568,7 +574,27 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setMenuOpen: (menuOpen) => set({ menuOpen }),
-  setScreen: (currentScreen) => set({ currentScreen }),
+  // Same clean-slate rule one level up: MapView stays MOUNTED behind the
+  // other tabs, so anything mid-interaction when you walk away from the
+  // map is still sitting there when you come back — a radial menu, a
+  // camera override pointed at nothing, a sniffed landmark's story from
+  // several minutes ago. Only the transient half goes; a search
+  // assignment survives on purpose, because checking the quests tab
+  // mid-walk is a normal thing to do and shouldn't cost you the lead.
+  setScreen: (currentScreen) =>
+    set((s) => {
+      if (currentScreen === s.currentScreen) return { currentScreen };
+      if (s.currentScreen !== 'map') return { currentScreen };
+      return {
+        currentScreen,
+        menuOpen: false,
+        menuCamera: null,
+        activeHint: null,
+        selectedSpotId: null,
+        selectedDogId: null,
+        overlayEpoch: s.overlayEpoch + 1,
+      };
+    }),
   setActiveQuest: (activeQuest) => set({ activeQuest }),
 
   syncActiveQuest: async () => {
@@ -1005,8 +1031,24 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
-  // Toggling the mode always clears the assignment; the search controller
-  // (MapView) picks a fresh target when the mode turns on.
+  // FLIPPING THE MODE CLEARS THE SCREEN.
+  //
+  // Supersniff and walking are two different views of the city, and
+  // everything transient belongs to the one it was opened in. The
+  // toggle used to clear only its own half (the search assignment), so
+  // anything opened in walk mode — a sniffed landmark's story, a spot
+  // card, a lost-pet preview, the about sheet, a walking route — stayed
+  // up and floated over the search, or waited invisibly to reappear
+  // when you came back. That reads as the app losing track of itself.
+  //
+  // So: one flip, one clean slate, in BOTH directions (same toggle, so
+  // leaving supersniff clears just as thoroughly as entering it).
+  //
+  // The one thing deliberately NOT cleared is `activeQuest`. A detective
+  // quest is a multi-waypoint commitment tracked on the server; dropping
+  // it because someone tapped the logo would destroy real progress. It
+  // is hidden while in supersniff instead, and is still there when you
+  // come back.
   toggleDogCam: () =>
     set((s) => ({
       dogCam: !s.dogCam,
@@ -1020,6 +1062,22 @@ export const useGameStore = create<GameState>((set, get) => ({
       searchTarget: null,
       searchRoute: null,
       searchPreview: null,
+      // Previews and sheets from the other mode.
+      selectedSpotId: null,
+      selectedDogId: null,
+      aboutOpen: false,
+      // A suggested walking line is client-side only — nothing banked,
+      // nothing to lose by dropping it.
+      walkRoute: null,
+      walkRouteMeta: null,
+      // Cues that were pointing at something in the old mode.
+      activeHint: null,
+      menuCamera: null,
+      // Bumped so components holding their OWN transient state (the
+      // long-press discovery, the dog's question prompt) can clear it
+      // too. A counter rather than a flag: subscribers compare with
+      // === and never have to reset it.
+      overlayEpoch: s.overlayEpoch + 1,
     })),
   setDogCamViaSearch: (dogCamViaSearch) => set({ dogCamViaSearch }),
   setSearchTarget: (searchTarget) => set({ searchTarget }),

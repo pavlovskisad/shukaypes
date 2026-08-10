@@ -443,6 +443,20 @@ export default function MapViewWeb() {
   // key (sorted item ids); cleared by the floating "collapse all" pill
   // that appears at the top of the map while any cluster is open.
   const [expandedSpotKeys, setExpandedSpotKeys] = useState<Set<string>>(() => new Set());
+  // A half-answered question does not survive leaving the mode it was
+  // asked in, and neither does a fan of expanded pins. The store drops
+  // the search itself on a flip; this drops what MapView holds of its
+  // own. Skip the first run so mounting doesn't count as a flip.
+  const overlayEpoch = useGameStore((s) => s.overlayEpoch);
+  const overlayEpochInitRef = useRef(true);
+  useEffect(() => {
+    if (overlayEpochInitRef.current) {
+      overlayEpochInitRef.current = false;
+      return;
+    }
+    setPrompt(null);
+    setExpandedSpotKeys((prev) => (prev.size === 0 ? prev : new Set()));
+  }, [overlayEpoch]);
   const tokens = useGameStore((s) => s.tokens);
   const foodItems = useGameStore((s) => s.foodItems);
   const lostDogs = useGameStore((s) => s.lostDogs);
@@ -2636,7 +2650,11 @@ export default function MapViewWeb() {
           ];
         })}
 
-        {activeQuest ? (
+        {/* Hidden — not cancelled — in supersniff. A detective quest is
+            a server-tracked commitment, so tapping the logo must not
+            throw it away; it just steps out of the way of the search
+            and is still running when you come back. */}
+        {activeQuest && !(DOG_CAM && dogCam) ? (
           <>
             {/* Walking route through the waypoints. When the Directions
                 API answers, we draw the street-hugging path — a bit
@@ -2954,7 +2972,7 @@ export default function MapViewWeb() {
           HUD when a route or quest is active. Stacked vertically so
           both can show at once (rare but valid: a walk + a separate
           quest). Tapping a pill clears the corresponding state. */}
-      {(walkRoute || activeQuest) ? (
+      {(walkRoute || activeQuest) && !(DOG_CAM && dogCam) ? (
         <div
           style={{
             position: 'absolute',
