@@ -80,7 +80,17 @@ export default function MapScreen() {
           top safe-area inset via `edges={['top']}` so the logo / pills
           aren't sitting under the OS status bar. */}
       <SafeAreaView style={styles.hud} pointerEvents="box-none" edges={['top']}>
-        <View style={styles.hudRow}>
+        {/* box-none, not the default auto. This row is a full-width
+            strip across the top of the screen with a logo at one end
+            and the status pill at the other — the empty middle is
+            layout, not a surface, and it was swallowing every tap that
+            landed there. Nothing lived in that strip until the search
+            HUD did, and raising the HUD's z-index is no way out: the
+            map's parent stacking contexts trap MapView's children
+            below this container regardless of the number (see the
+            portal comment on the off-screen companion chip). Its two
+            real children keep their own hit areas. */}
+        <View style={styles.hudRow} pointerEvents="box-none">
           <Pressable
             onPress={toggleDogCam}
             onPressIn={popPressableEvent}
