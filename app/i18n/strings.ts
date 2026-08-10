@@ -42,6 +42,23 @@ export interface AppStrings {
     locating: string;
     usingKyivFallback: string;
   };
+  // The dog's questions during a search, and the answers under them.
+  // Every decision point in supersniff is one of these.
+  search: {
+    confirm: (name: string) => string;
+    confirmGo: string;
+    confirmBack: string;
+    leaveAsk: string;
+    arrivedAsk: (name: string) => string;
+    yes: string;
+    no: string;
+    thanksSeen: (points: number) => string;
+    thanksMissed: (points: number) => string;
+    contactAsk: string;
+    contactOpen: string;
+    contactLater: string;
+    close: string;
+  };
   bubbles: {
     greeting: string;
     // Varied "leaving supersniff" lines so repeated toggles don't feel canned.
@@ -253,6 +270,21 @@ const uk: AppStrings = {
     recenterOnCompanion: 'повернутись до пса',
     locating: 'шукаю себе…',
     usingKyivFallback: 'опускаюсь на Київ',
+  },
+  search: {
+    confirm: (name) => `йдемо шукати ${name}?`,
+    confirmGo: 'го, шукати →',
+    confirmBack: 'ще подивлюсь',
+    leaveAsk: 'закінчуємо пошук. бачив когось схожого?',
+    arrivedAsk: (name) => `ми на місці! бачив ${name} десь тут?`,
+    yes: 'так, бачив',
+    no: 'ні, нікого',
+    thanksSeen: (points) => `записав! +${points} балів 🐾`,
+    thanksMissed: (points) => `теж важливо — тепер знаємо, що тут порожньо. +${points} балів`,
+    contactAsk: 'показати оголошення? там є контакти власника',
+    contactOpen: 'відкрити оголошення',
+    contactLater: 'пізніше',
+    close: 'завершити',
   },
   bubbles: {
     greeting: 'гав! натисни на мене — розкажу, що до чого 🐾',
@@ -578,6 +610,21 @@ const en: AppStrings = {
     recenterOnCompanion: 'recenter on companion',
     locating: 'locating…',
     usingKyivFallback: 'using kyiv fallback',
+  },
+  search: {
+    confirm: (name) => `go looking for ${name}?`,
+    confirmGo: "let's go →",
+    confirmBack: 'still browsing',
+    leaveAsk: 'wrapping up. did you see anyone like them?',
+    arrivedAsk: (name) => `we're here! did you see ${name} around?`,
+    yes: 'yes, I did',
+    no: 'no, nobody',
+    thanksSeen: (points) => `logged it! +${points} points 🐾`,
+    thanksMissed: (points) => `still useful — now we know this patch is empty. +${points} points`,
+    contactAsk: 'open the original post? the owner left their contact there',
+    contactOpen: 'open the post',
+    contactLater: 'later',
+    close: 'finish',
   },
   bubbles: {
     greeting: "woof! tap me to learn what's what 🐾",
