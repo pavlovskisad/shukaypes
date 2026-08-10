@@ -17,6 +17,56 @@ function toRad(deg: number): number {
   return (deg * Math.PI) / 180;
 }
 
+// "X m" for sub-1km, "X.X km" beyond. Snapped to 50m below 1km so a
+// label doesn't jitter on small GPS drift — which matters more now
+// that one of these sits in the nav HUD and is read while walking.
+export function formatDistance(m: number): string {
+  if (m < 1000) return `${Math.round(m / 50) * 50} m`;
+  return `${(m / 1000).toFixed(1)} km`;
+}
+
+// How much of `route` is still ahead of `from`: the distance to the
+// nearest point on the polyline, plus every segment after it.
+//
+// Straight-line-to-destination would be the easy answer and it is the
+// wrong one for a nav readout — it barely moves while you walk the long
+// way around a block, so the number reads as broken. Returns null when
+// there's no usable route, and the caller falls back to the crow line.
+export function remainingRouteMeters(route: LatLng[] | null, from: LatLng): number | null {
+  if (!route || route.length < 2) return null;
+  let bestSeg = 0;
+  let bestT = 0;
+  let bestD = Infinity;
+  for (let i = 0; i < route.length - 1; i++) {
+    const a = route[i]!;
+    const b = route[i + 1]!;
+    // Project onto the segment in degree space. Fine at city scale:
+    // we only need to pick the right segment and roughly where on it.
+    const dLat = b.lat - a.lat;
+    const dLng = b.lng - a.lng;
+    const len2 = dLat * dLat + dLng * dLng;
+    const t =
+      len2 === 0
+        ? 0
+        : Math.max(
+            0,
+            Math.min(1, ((from.lat - a.lat) * dLat + (from.lng - a.lng) * dLng) / len2),
+          );
+    const d = distanceMeters(from, lerpLL(a, b, t));
+    if (d < bestD) {
+      bestD = d;
+      bestSeg = i;
+      bestT = t;
+    }
+  }
+  const foot = lerpLL(route[bestSeg]!, route[bestSeg + 1]!, bestT);
+  let total = distanceMeters(foot, route[bestSeg + 1]!);
+  for (let i = bestSeg + 1; i < route.length - 1; i++) {
+    total += distanceMeters(route[i]!, route[i + 1]!);
+  }
+  return total;
+}
+
 function lerpLL(a: LatLng, b: LatLng, t: number): LatLng {
   return { lat: a.lat + (b.lat - a.lat) * t, lng: a.lng + (b.lng - a.lng) * t };
 }

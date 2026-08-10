@@ -27,7 +27,12 @@ import type { Spot } from '../../services/places';
 import { useLocation, isSimulatedWalk } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
 import { useGameLoop } from '../../hooks/useGameLoop';
-import { distanceMeters, pointAheadOnRoute } from '../../utils/geo';
+import {
+  distanceMeters,
+  formatDistance,
+  pointAheadOnRoute,
+  remainingRouteMeters,
+} from '../../utils/geo';
 import { playPop } from '../../utils/popOnTap';
 import { Companion } from './Companion';
 import { CrayonRoute } from './CrayonRoute';
@@ -468,6 +473,17 @@ export default function MapViewWeb() {
       : searchTarget
         ? (lostDogs.find((d) => d.id === searchTarget.dogId) ?? null)
         : null;
+  // How far is left to walk. Route-remaining rather than crow-flies:
+  // walking the long way round a block barely moves a straight line,
+  // so the readout would sit still while you were plainly making
+  // progress. Falls back to the crow line before the route lands.
+  const navDistance =
+    searchTarget && userPos
+      ? formatDistance(
+          remainingRouteMeters(searchRoute, userPos) ??
+            distanceMeters(userPos, searchTarget.spot),
+        )
+      : null;
   // Whether the map tab is the active screen. The offscreen companion
   // chip + offscreen dog indicators are portaled to document.body, so
   // they'd otherwise stay painted over the other tabs (tasks, chat,
@@ -2386,11 +2402,6 @@ export default function MapViewWeb() {
 
 
 
-  const formatDistance = (m: number): string => {
-    if (m < 1000) return `${Math.round(m / 10) * 10}m`;
-    return `${(m / 1000).toFixed(m < 10000 ? 1 : 0)}km`;
-  };
-
   const panToDog = (target: LatLng) => {
     if (!mapRef.current) return;
     mapRef.current.panTo(target);
@@ -2834,7 +2845,14 @@ export default function MapViewWeb() {
         >
           {focusDog ? (
             <View style={{ width: 288, height: 252, marginBottom: 30 }} pointerEvents="none">
-              <LostDogCardView dog={focusDog} t={t} userPos={userPos} active strongShadow />
+              <LostDogCardView
+                dog={focusDog}
+                t={t}
+                userPos={userPos}
+                active
+                strongShadow
+                chips={false}
+              />
             </View>
           ) : (
             <LostDogCardStack
@@ -2930,22 +2948,55 @@ export default function MapViewWeb() {
         </View>
       ) : null}
 
-      {/* The way out of a running search. Only while one IS running —
-          during a question the buttons above are the way out. */}
+      {/* NAV HUD. A running search is turn-by-turn navigation wearing a
+          dog, so it borrows the shape every maps app has trained people
+          on: how far is left, up top and centred; the way out in the
+          top-right corner. Both were on the card before — the distance
+          competing with the pet's face for the same 288px, the ✕ sitting
+          on top of it — which read as decoration on a photo rather than
+          as a HUD you glance at while walking.
+
+          Only while a search IS running. During a question the buttons
+          under the dog are the way out, and there is nothing to walk to
+          yet. Offset from the safe-area inset so it clears the notch and
+          sits on the corner logo's line. */}
       {DOG_CAM && dogCam && onMapScreen && searchTarget && !prompt ? (
-        <View
+        <div
           style={{
             position: 'absolute',
-            left: 0,
-            right: 0,
-            top: '56%',
+            // Lands the row's midline on the corner logo's, so the
+            // three read as one HUD line rather than three floaters:
+            // the HUD's own paddingTop (S.xxl) + half the 59px logo,
+            // less half this row's ~40px height.
+            top: 'calc(env(safe-area-inset-top, 0px) + 34px)',
+            left: S.m,
+            right: S.m,
+            display: 'flex',
             alignItems: 'center',
-            zIndex: Z.HUD_CHIPS + 1,
+            justifyContent: 'center',
+            zIndex: Z.HUD_PILLS_OVERLAY,
+            pointerEvents: 'none',
           }}
-          pointerEvents="box-none"
         >
-          <Pressable
-            onPress={() => {
+          <div
+            style={{
+              padding: '10px 18px',
+              background: '#ffffff',
+              color: '#1a1a1a',
+              borderRadius: R.pill,
+              fontFamily: SYSTEM_FONT,
+              fontSize: TYPE.body,
+              fontWeight: 800,
+              letterSpacing: 0.3,
+              boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+            }}
+          >
+            {navDistance ?? '…'}
+          </div>
+          <div
+            role="button"
+            aria-label={t.search.close}
+            onClick={() => {
               const d = lostDogs.find((x) => x.id === searchTarget.dogId);
               if (d) setPrompt({ kind: 'leave', dog: d });
               else {
@@ -2954,18 +3005,27 @@ export default function MapViewWeb() {
               }
             }}
             style={{
-              width: 52,
-              height: 52,
+              position: 'absolute',
+              right: 0,
+              pointerEvents: 'auto',
+              cursor: 'pointer',
+              width: 44,
+              height: 44,
               borderRadius: R.pill,
-              backgroundColor: '#ffffff',
+              background: '#ffffff',
+              display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.22)' as unknown as undefined,
+              fontFamily: SYSTEM_FONT,
+              fontSize: 20,
+              fontWeight: 700,
+              color: '#1a1a1a',
+              boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
             }}
           >
-            <Text style={{ fontSize: 22, fontWeight: '700', color: '#1a1a1a' }}>✕</Text>
-          </Pressable>
-        </View>
+            ✕
+          </div>
+        </div>
       ) : null}
 
       {/* Cancel pills — small floating chips that drop in below the
