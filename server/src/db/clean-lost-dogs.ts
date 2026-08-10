@@ -200,6 +200,7 @@ async function main() {
   console.log('');
 
   const deadPhoto: Row[] = [];
+  const photoUnchecked: { row: Row; why: string }[] = [];
   const wrongCity: { row: Row; hint: string }[] = [];
   const sourceGone: Row[] = [];
   const unverifiable: Row[] = [];
@@ -207,7 +208,20 @@ async function main() {
   for (const row of rows) {
     if (row.photoUrl) {
       const res = await get(row.photoUrl, false);
-      if (!res.ok) deadPhoto.push(row);
+      // ONLY a definitive 404/410 counts as dead.
+      //
+      // This used to treat any failed request as a dead photo, which is
+      // the one genuinely dangerous thing in this script: a CDN 429, a
+      // 503, or a timed-out socket would have nulled the photo of a pet
+      // whose picture was fine, and the URL is not recoverable
+      // afterwards. Rate limiting is exactly the condition a sweep like
+      // this provokes, so the failure mode was not hypothetical.
+      //
+      // Anything that isn't a clear "gone" is reported and left alone.
+      if (!res.ok) {
+        if (res.status === 404 || res.status === 410) deadPhoto.push(row);
+        else photoUnchecked.push({ row, why: res.error });
+      }
       await sleep(REQUEST_GAP_MS);
     }
 
@@ -237,8 +251,13 @@ async function main() {
 
   const pad = (s: string, n: number) => (s.length > n ? `${s.slice(0, n - 1)}…` : s.padEnd(n));
 
-  console.log(`dead photos: ${deadPhoto.length}`);
+  console.log(`dead photos (404/410 — will be nulled): ${deadPhoto.length}`);
   for (const r of deadPhoto) console.log(`   ${pad(r.name, 22)} ${r.photoUrl}`);
+  console.log(`\nphoto check inconclusive (LEFT ALONE): ${photoUnchecked.length}`);
+  for (const p of photoUnchecked) console.log(`   ${pad(p.row.name, 22)} ${p.why}`);
+  if (photoUnchecked.length > deadPhoto.length) {
+    console.log('   ^ more failures than 404s — likely rate limiting, re-run later');
+  }
   console.log(`\nnot in kyiv: ${wrongCity.length}`);
   for (const w of wrongCity) console.log(`   ${pad(w.row.name, 22)} ${w.hint}  ${w.row.sourceUrl}`);
   console.log(`\nsource ad gone (REPORT ONLY, not touched): ${sourceGone.length}`);
