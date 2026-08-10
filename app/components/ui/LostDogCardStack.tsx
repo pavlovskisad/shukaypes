@@ -12,7 +12,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
-import { distanceMeters } from '../../utils/geo';
+import { distanceMeters, formatDistance } from '../../utils/geo';
 import type { LatLng } from '@shukajpes/shared';
 import { CardStack, CardStackSkeleton } from './CardStack';
 
@@ -35,13 +35,6 @@ interface Props {
   // Heavier drop shadow so cards separate cleanly from a busy background (the
   // 3D map in supersniff). Off by default — the Quests tab keeps its lighter one.
   strongShadow?: boolean;
-}
-
-// "X m" for sub-1km, "X.X km" beyond. Snapped to 50m below 1km so
-// the chip doesn't jitter on small GPS drift.
-function formatDistance(m: number): string {
-  if (m < 1000) return `${Math.round(m / 50) * 50} m`;
-  return `${(m / 1000).toFixed(1)} km`;
 }
 
 export function LostDogCardStack({
@@ -107,6 +100,7 @@ export function LostDogCardView({
   userPos,
   active = false,
   strongShadow = false,
+  chips = true,
 }: {
   dog: NearbyLostDog;
   t: ReturnType<typeof useStrings>;
@@ -116,6 +110,15 @@ export function LostDogCardView({
   active?: boolean;
   // Heavier drop shadow (contact + ambient) to lift the card off a busy bg.
   strongShadow?: boolean;
+  // The urgency badge and distance chip. On in the deck and the "see
+  // all" list, where you are comparing pets and both are the point.
+  //
+  // Off once a pet is THE pet — during a confirmation or a running
+  // search there is only one card on screen, so "we're searching" is
+  // just the screen restating itself, and the distance belongs in the
+  // nav readout at the top rather than on the photo. What's left is
+  // the face, which is the only thing you're actually looking for.
+  chips?: boolean;
 }) {
   useEffect(() => {
     if (typeof document === 'undefined') return;
@@ -190,10 +193,12 @@ export function LostDogCardView({
         </View>
       )}
       <View style={styles.gradient} />
-      <View style={styles.badge}>
-        <Text style={[styles.badgeText, { color: badgeFg }]}>{badgeText}</Text>
-      </View>
-      {distLabel ? (
+      {chips ? (
+        <View style={styles.badge}>
+          <Text style={[styles.badgeText, { color: badgeFg }]}>{badgeText}</Text>
+        </View>
+      ) : null}
+      {chips && distLabel ? (
         <View style={styles.distChip}>
           <Text style={styles.distChipText}>{distLabel}</Text>
         </View>
