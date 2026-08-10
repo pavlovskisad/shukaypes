@@ -71,6 +71,38 @@ async function fetchText(url: string): Promise<string> {
   return res.text();
 }
 
+// IS THIS AD EVEN IN KYIV?
+//
+// The listing queries are all city_id=8, and that is not the guarantee it
+// looks like: OLX honours the filter loosely on the q- searches, so ads
+// from other oblasts come back. One of them was a Kharkiv dog — "район
+// центрального ринку" — and nothing downstream could catch it.
+//
+// Nothing downstream CAN catch it, which is the real point. The parser is
+// Kyiv-only by construction: its geo hints are Kyiv landmarks and the
+// gazetteer it matches against holds Kyiv streets. Hand it a Kharkiv
+// address and it does its job — it finds the closest Kyiv-shaped meaning
+// and returns a Kyiv coordinate. The upsert bbox then passes it, because
+// by that point the pet genuinely does have Kyiv coordinates. A pet
+// hundreds of kilometres away lands on the map with a plausible pin and
+// no way to tell it apart from a real one.
+//
+// So the question has to be asked here, while we still have the ad's own
+// page, which states its city in plain text.
+//
+// Deliberately conservative: reject ONLY when another oblast capital is
+// named and Kyiv is not. An ad that mentions neither is let through to
+// the parser as before — better to keep an ambiguous local pet than to
+// drop a real one over a missing word.
+const KYIV_WORDS = /Київ|Києв|Киев|Kyiv|Kiev/i;
+const OTHER_CITIES =
+  /Харків|Харьков|Kharkiv|Львів|Львов|Lviv|Одес|Odes|Дніпро|Днепр|Dnipro|Запоріж|Запорож|Zapor|Вінниц|Винниц|Vinnyts|Полтав|Poltav|Черкас|Cherkas|Чернігів|Чернигов|Chernihiv|Житомир|Zhytomyr|Миколаїв|Николаев|Mykolaiv|Херсон|Kherson|Тернопіль|Тернополь|Ternopil|Ужгород|Uzhhorod|Івано-Франківськ|Ивано-Франковск|Луцьк|Луцк|Lutsk|Рівне|Ровно|Rivne|Суми|Сумы|Sumy|Кропивницьк|Кировоград|Хмельницьк|Хмельницк/i;
+
+function looksNotKyiv(html: string): boolean {
+  if (KYIV_WORDS.test(html)) return false;
+  return OTHER_CITIES.test(html);
+}
+
 function parseCards(html: string, baseUrl: string): Card[] {
   const $ = loadHtml(html);
   const out: Card[] = [];
@@ -185,6 +217,20 @@ export class OlxSource implements Source {
 
       try {
         const adHtml = await fetchText(card.url);
+        if (looksNotKyiv(adHtml)) {
+          await db
+            .insert(schema.scrapeLog)
+            .values({
+              url: card.url,
+              source: SOURCE,
+              title: card.title,
+              ingestAction: 'skipped',
+              skipReason: 'not-kyiv',
+            })
+            .onConflictDoNothing({ target: schema.scrapeLog.url });
+          summary.skipped++;
+          continue;
+        }
         const { text, photoUrl } = extractAdBody(adHtml);
         if (text.length < 40) {
           await db
