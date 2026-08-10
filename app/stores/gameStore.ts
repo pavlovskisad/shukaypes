@@ -339,6 +339,11 @@ interface GameState {
     p: { dogId: string; spot: LatLng; radiusM: number } | null,
   ) => void;
   setAboutOpen: (open: boolean) => void;
+  // Credit paws won somewhere other than the pavement (finishing a
+  // search). The server has already banked them; this is the HUD
+  // catching up, one pickup pulse at a time so it reads as a run of
+  // paws rather than a number jumping.
+  awardPaws: (n: number) => void;
   setActiveHint: (id: string | null) => void;
   setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
   setHintsAllowed: (allowed: boolean) => void;
@@ -1028,6 +1033,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         : { searchPreview: null },
     ),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
+  awardPaws: (n) => {
+    const step = (left: number) => {
+      if (left <= 0) return;
+      set((s) => ({
+        tokensCollected: s.tokensCollected + 1,
+        points: s.points + 3,
+        collectPulse: s.collectPulse + 1,
+      }));
+      // 70ms apart: fast enough to read as one burst, slow enough that
+      // each paw registers as its own pickup.
+      setTimeout(() => step(left - 1), 70);
+    };
+    step(n);
+  },
   setActiveHint: (activeHint) => set({ activeHint }),
   setMenuCamera: (menuCamera) => set({ menuCamera }),
   setHintsAllowed: (hintsAllowed) => set({ hintsAllowed }),

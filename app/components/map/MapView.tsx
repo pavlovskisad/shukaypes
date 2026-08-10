@@ -44,7 +44,7 @@ import {
 import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
-import { LostDogCardStack } from '../ui/LostDogCardStack';
+import { LostDogCardStack, LostDogCardView } from '../ui/LostDogCardStack';
 import { DogPrompt } from './DogPrompt';
 import { createBuildingAvoider } from './buildingAvoider';
 import { GAME_RENDER, MULTIPLAYER, DOG_CAM, LOST_DOG_PINS } from '../../constants/experiments';
@@ -345,6 +345,20 @@ export default function MapViewWeb() {
   // Read inside effects that must not re-run on every render.
   const promptRef = useRef(prompt);
   promptRef.current = prompt;
+
+  // The words the dog is saying right now, if it is asking something.
+  // Derived rather than stored so the line always matches the state it
+  // came from — a second copy would be one more thing to keep in step.
+  const promptText =
+    prompt == null
+      ? null
+      : prompt.kind === 'confirm'
+        ? t.search.confirm(prompt.dog.name)
+        : prompt.kind === 'leave'
+          ? t.search.leaveAsk
+          : prompt.kind === 'arrived'
+            ? t.search.arrivedAsk(prompt.dog.name)
+            : prompt.text;
   const setSearchTarget = useGameStore((s) => s.setSearchTarget);
   const searchRoute = useGameStore((s) => s.searchRoute);
   const setSearchRoute = useGameStore((s) => s.setSearchRoute);
@@ -1169,11 +1183,11 @@ export default function MapViewWeb() {
     async (dog: NearbyLostDog, seen: boolean) => {
       setSearchTarget(null);
       setSearchRoute(null);
-      let awarded = 0;
+      let paws = 0;
       let sourceUrl: string | null = null;
       try {
         const res = await api.finishSearch(dog.id, seen, userPosRef.current);
-        awarded = res.awarded;
+        paws = res.paws;
         sourceUrl = res.sourceUrl;
       } catch {
         // Offline or the server said no. The search still ends — stranding
@@ -1181,9 +1195,17 @@ export default function MapViewWeb() {
         // — they just do not get told a number.
       }
       if (seen) useGameStore.getState().tickDailyTask('sightings');
+      // THE PAYOUT, ONE PAW AT A TIME.
+      //
+      // The counter could just jump by twenty, and it would be worth
+      // exactly as much and feel like nothing. Firing the same pickup
+      // pulse the map uses, staggered, spends those twenty paws across a
+      // second and a half — so the reward arrives as a run of pickups
+      // rather than a number changing.
+      if (paws > 0) useGameStore.getState().awardPaws(paws);
       setPrompt({
         kind: 'done',
-        text: seen ? t.search.thanksSeen(awarded) : t.search.thanksMissed(awarded),
+        text: seen ? t.search.thanksSeen(paws) : t.search.thanksMissed(paws),
         // Only offered when the pet came from a post that still exists.
         sourceUrl: seen ? sourceUrl : null,
       });
@@ -2716,7 +2738,11 @@ export default function MapViewWeb() {
         {companionPos ? (
           <Companion
             position={companionPos}
-            bubble={bubble}
+            // A question the dog is asking comes out of the DOG, in the
+            // same bubble as everything else it says, and stays up until
+            // it is answered. The buttons live down in the thumb zone;
+            // only the words belong up here.
+            bubble={promptText ?? bubble}
             hideBubble={offscreenIndicator != null}
             hidden={offscreenIndicator != null}
             onTap={() => {
@@ -2782,15 +2808,6 @@ export default function MapViewWeb() {
         >
           {prompt ? (
             <DogPrompt
-              text={
-                prompt.kind === 'confirm'
-                  ? t.search.confirm(prompt.dog.name)
-                  : prompt.kind === 'leave'
-                    ? t.search.leaveAsk
-                    : prompt.kind === 'arrived'
-                      ? t.search.arrivedAsk(prompt.dog.name)
-                      : prompt.text
-              }
               actions={
                 prompt.kind === 'confirm'
                   ? [
@@ -2852,7 +2869,23 @@ export default function MapViewWeb() {
               }
             />
           ) : searchTarget ? (
-            <Pressable
+            <>
+              {/* THE PET YOU ARE WALKING TO STAYS ON SCREEN.
+                  Hiding the whole deck also hid the one card that matters:
+                  the face you are out here looking for. A search with no
+                  picture of its subject is a blue line to a coordinate.
+                  The SIDE cards are what had to go — a deck to swipe
+                  through is an invitation to abandon this one — so the
+                  chosen pet is rendered alone, same card, no neighbours. */}
+              {(() => {
+                const dog = lostDogs.find((x) => x.id === searchTarget.dogId);
+                return dog ? (
+                  <View style={{ marginBottom: S.m }} pointerEvents="none">
+                    <LostDogCardView dog={dog} t={t} userPos={userPos} active strongShadow />
+                  </View>
+                ) : null;
+              })()}
+              <Pressable
               onPress={() => {
                 const d = lostDogs.find((x) => x.id === searchTarget.dogId);
                 if (d) setPrompt({ kind: 'leave', dog: d });
@@ -2872,8 +2905,9 @@ export default function MapViewWeb() {
                 boxShadow: '0 4px 14px rgba(0,0,0,0.22)' as unknown as undefined,
               }}
             >
-              <Text style={{ fontSize: 22, fontWeight: '700', color: '#1a1a1a' }}>✕</Text>
-            </Pressable>
+                <Text style={{ fontSize: 22, fontWeight: '700', color: '#1a1a1a' }}>✕</Text>
+              </Pressable>
+            </>
           ) : (
             <LostDogCardStack
               dogs={searchDogs}
