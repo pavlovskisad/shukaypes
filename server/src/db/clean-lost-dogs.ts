@@ -54,6 +54,16 @@ const UA =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
+function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
+  const toRad = (d: number) => (d * Math.PI) / 180;
+  const dLat = toRad(bLat - aLat);
+  const dLng = toRad(bLng - aLng);
+  const h =
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
+  return 2 * 6371000 * Math.asin(Math.sqrt(h));
+}
+
 type Fetched =
   | { ok: true; status: number; body: string }
   | { ok: false; status: number | null; error: string };
@@ -86,9 +96,23 @@ interface Row {
   photoUrl: string | null;
   urgency: string;
   source: string;
+  lat: number;
+  lng: number;
   // Filled in from scrape_log after the main query, not selected with it.
   sourceUrl?: string | null;
 }
+
+// Where the parser puts a pet whose post it could not place: Kyiv's
+// centre, exactly. /dogs/nearby and /sync/map both filter this pin out
+// rather than pile every ungeocoded pet on one spot, so these rows are
+// in the table, counted as active, and invisible to the app.
+//
+// Worth stating plainly because an earlier audit of mine got this
+// backwards: it checked for fallback-pin pets by reading /dogs/nearby,
+// which had already excluded them, and concluded there were none. You
+// cannot count what you are looking through a filter for.
+const FALLBACK_LAT = 50.4501;
+const FALLBACK_LNG = 30.5234;
 
 async function main() {
   const apply = process.argv.includes('--apply');
@@ -113,6 +137,8 @@ async function main() {
       photoUrl: schema.lostDogs.photoUrl,
       urgency: schema.lostDogs.urgency,
       source: schema.lostDogs.source,
+      lat: schema.lostDogs.lastSeenLat,
+      lng: schema.lostDogs.lastSeenLng,
     })
     .from(schema.lostDogs)
     .where(and(eq(schema.lostDogs.status, 'active'), ne(schema.lostDogs.source, 'in_app')));
@@ -155,6 +181,22 @@ async function main() {
   if (rows.length === 0) {
     console.log('  (nothing matched — check lost_dogs.source values before trusting this)');
   }
+
+  // How many of those the app can actually draw. /dogs/nearby drops the
+  // fallback pin outright and bounds the rest by the request radius, so
+  // a row can be active, correct, and still invisible — which is how a
+  // table of 261 shows 172 pets on screen.
+  const onFallback = rows.filter(
+    (r) => r.lat === FALLBACK_LAT && r.lng === FALLBACK_LNG,
+  );
+  const farOut = rows.filter(
+    (r) =>
+      !(r.lat === FALLBACK_LAT && r.lng === FALLBACK_LNG) &&
+      haversineM(r.lat, r.lng, FALLBACK_LAT, FALLBACK_LNG) > 60_000,
+  );
+  console.log(`  of those, invisible to the map:`);
+  console.log(`     ${onFallback.length}\tsitting on the ungeocoded fallback pin`);
+  console.log(`     ${farOut.length}\tmore than 60km from the city centre`);
   console.log('');
 
   const deadPhoto: Row[] = [];
