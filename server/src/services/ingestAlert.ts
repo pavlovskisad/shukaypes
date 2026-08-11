@@ -103,11 +103,54 @@ async function safe<T>(op: () => Promise<T>, log: Log, what: string): Promise<T 
   }
 }
 
-// A tick that went looking, found things, ingested none of them, and
-// recorded errors. Same shape the cron already logs at error level —
-// the condition that made a WAF block look like a healthy run.
+// Enough failed fetches in one tick to mean the source is refusing us,
+// rather than one ad having been deleted between listing and fetch.
+//
+// THIS THRESHOLD IS THE WHOLE RULE, and the obvious formulation is
+// wrong. The tempting one — "discovered things but parsed none, and
+// errored" — is what the cron logs, and the first live tick after this
+// shipped showed why it cannot drive an alert: OLX discovered 251 ads,
+// parsed 0, and was perfectly healthy about it, because all 251 were
+// already in scrape_log. Only ~4 genuinely new ads arrive per day
+// against 24 ticks, so *most* honest ticks parse nothing. Pair that
+// with one transient error and the alert fires on a normal quiet hour.
+//
+// Counting errors instead sidesteps that entirely, and the count
+// matters:
+//
+//   1 error    an ad 410'd between listing and fetch. Routine.
+//   7 errors   OBSERVED STEADY STATE on 11 Aug: 7 of OLX's 13 listing
+//              URLs refused, 6 served, 251 ads discovered — and OLX
+//              inserted 17 pets over the preceding week. Degraded
+//              coverage, not an outage. Alerting here would cry wolf
+//              from day one, and the first false alarm is what teaches
+//              somebody to ignore the channel.
+//   10+ errors most of the listing set refused. Coverage is collapsing.
+//
+// The default is therefore 10, not 3. This is calibrated against ONE
+// observed tick, which is thin — revisit once there is real history,
+// and note it is coupled to OLX having 13 listing URLs. Tunable via
+// INGEST_BLOCKED_ERRORS without a deploy.
+//
+// Genuine loss of a source is still caught regardless: if degraded
+// coverage ever does stop pets arriving, the pipeline-stall check fires
+// on its own, and that check asks the question that actually matters —
+// are pets arriving — rather than counting HTTP failures.
+//
+// Counting errors also keeps unconfigured sources quiet without
+// special-casing them, which a "discovered === 0" rule could not do:
+// Facebook emits exactly one error every tick ("FACEBOOK_COOKIES not
+// set — source disabled") and Telegram with no channels emits none.
+// Neither is broken, and neither should ever page anybody.
+const DEFAULT_ERRORS_MEANING_BLOCKED = 10;
+
+function errorsMeaningBlocked(): number {
+  const raw = Number(process.env.INGEST_BLOCKED_ERRORS);
+  return Number.isFinite(raw) && raw > 0 ? raw : DEFAULT_ERRORS_MEANING_BLOCKED;
+}
+
 function looksBlocked(s: SourceRunSummary): boolean {
-  return s.discovered > 0 && s.parsed === 0 && s.errors > 0;
+  return s.errors >= errorsMeaningBlocked();
 }
 
 function describeAge(ms: number): string {
@@ -155,7 +198,8 @@ async function perSourceBlocked(
         log,
         notify,
         `⚠️ шукайпес: ${s.source} looks blocked\n\n` +
-          `${count} ticks in a row found ${s.discovered} item(s) and ingested none.\n` +
+          `${count} ticks in a row with ${s.errors}+ fetch errors.\n` +
+          `Last tick: ${s.discovered} discovered, ${s.inserted} inserted.\n` +
           `First error: ${sample}\n\n` +
           `New pets from this source are not arriving.`,
         { kind: 'ingest_source_blocked', source: s.source, ticks: count },

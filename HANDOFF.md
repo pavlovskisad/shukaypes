@@ -60,9 +60,10 @@ section 3, worst first:
    one env var, no code, no purchase — and it is the only way to stop
    OLX being a single point of failure. Needs a curated channel list,
    which is a human judgement rather than a technical task.
-2. **Pick an unblocker and set `SCRAPE_PROXY_URL`** (3.1). OLX is the
-   only source that has ever inserted a real pet, so this still matters
-   — but it is a purchasing decision, and 3.3 is free.
+2. **Pick an unblocker and set `SCRAPE_PROXY_URL`** (3.1). Buys back the
+   half of OLX listing coverage that 403s. Worth doing — OLX is the only
+   source that has ever inserted a real pet — but it is a purchase, it
+   is not urgent, and pets are still arriving without it.
 3. **Do not widen the gazetteer gate** (3.2). Measured: it would place
    pets on wrong streets. Precision work first, measured before writing.
 4. 3.4 is a one-command cleanup, safe whenever someone wants it.
@@ -97,12 +98,35 @@ expiries and re-minting over long-lived tokens.
 
 ## 3. Live production problems, worst first
 
-### 3.1 OLX ingestion is blocked — new lost pets have stopped arriving
+### 3.1 OLX is partially blocked — coverage is degraded, not stopped
+
+**The old heading here said "new lost pets have stopped arriving". They
+have not.** Measured 11 Aug:
+
+```
+OLX pets inserted, last 7 days:  17
+Newest OLX pet:                  2026-08-10 10:35 UTC
+Live tick, 11 Aug 13:38 UTC:     7 of 13 listing URLs -> 403
+                                 6 served, 251 ads discovered
+```
+
+So roughly half the listing fetches are refused and the other half work.
+OLX has kept delivering a few pets a day throughout. This is lost
+coverage — the ads on the six refused listings are invisible to us —
+rather than an outage. §5 already flagged "OLX ingestion is dead" as too
+strong once; the heading kept saying it anyway.
+
+Buying a proxy therefore buys back missing coverage. It does not restart
+a dead pipeline, and nothing is on fire while it is unbought.
 
 CloudFront's WAF serves `403` to datacentre IPs. Confirmed from two
-independent hosts and in the production logs. A full browser header set
+independent hosts and in the production logs, and again on 11 Aug from a
+third: six paced requests from a cloud session, all `403`, so the block
+is per-address rather than rate-based. A full browser header set
 (`sec-fetch-*`, `sec-ch-ua`, `accept`, `upgrade-insecure-requests`)
-changes nothing: the block is on the address, not the request.
+changes nothing. Why Fly's address gets part-way through while another
+datacentre IP gets nothing is unexplained — one observation each, worth
+more history before theorising.
 
 The official route is a **dead end**, checked rather than assumed. OLX
 has a Partner API, but every advert endpoint is scoped to the
@@ -336,6 +360,11 @@ consecutive 403s rather than hammering the WAF.
   muted, and a muted monitor is the same silence it was built to remove.
   State is in redis so a deploy doesn't re-announce everything.
   **Needs `ALERT_CHAT_ID`** — unset ships it dormant and log-only.
+  The blocked threshold (`INGEST_BLOCKED_ERRORS`, default 10) is
+  calibrated against a single observed tick where OLX errored 7 times
+  and was still delivering pets — alerting on that steady state would
+  have cried wolf on day one. Thin calibration; revisit with history,
+  and note it assumes OLX's 13 listing URLs.
   Verify with `check:ingest-alert`, which exercises the transitions
   against an in-memory store and messages nobody.
 - `pnpm --filter @shukajpes/server expire:out-of-area [--apply]` — the
@@ -372,6 +401,14 @@ consecutive 403s rather than hammering the WAF.
   bug that would otherwise have been silent.
 - **Advising the environment-variables field as a place for secrets.**
   The docs say the opposite. Check the docs before advising, not after.
+- **Writing an alert rule from a log line instead of from data.** The
+  first version fired when a source "discovered things, parsed none, and
+  errored" — the condition the cron logs. The first live tick showed why
+  that cannot drive an alert: OLX discovers ~250 already-seen ads every
+  hour and parses none of them, because only ~4 genuinely new ads exist
+  per day against 24 ticks. Most honest ticks parse nothing. The rule
+  would have fired on a normal quiet hour. Alert conditions need the
+  distribution of the normal case, not the shape of the bad one.
 - **"The gazetteer resolves none of the 88 titles."** It resolves plenty.
   My tokenising regex lost its backslash passing through `fly ssh`, so
   `\p{L}` became a character class that split on every Cyrillic letter
