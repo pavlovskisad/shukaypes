@@ -17,7 +17,9 @@
     "seed:gazetteer": "tsx src/db/seed-gazetteer.ts",
     "backfill:landmarks": "tsx src/db/backfill-landmark-jitter.ts",
     "wipe:stats": "tsx src/db/wipe-stats.ts",
-    "clean:lost-dogs": "tsx src/db/clean-lost-dogs.ts"
+    "clean:lost-dogs": "tsx src/db/clean-lost-dogs.ts",
+    "expire:out-of-area": "tsx src/db/expire-out-of-area.ts",
+    "check:out-of-area": "tsx src/pipeline/outOfArea.check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

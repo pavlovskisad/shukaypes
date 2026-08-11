@@ -2,6 +2,8 @@
 // sideload today, Telegram/OLX/shelter scrapers later — parses raw text into
 // ParsedDog, then `upsertLostDog` is what actually touches the DB.
 
+import type { OtherCityHit } from './outOfArea.js';
+
 // "rehoming" is a signal from the parser that the post is offering a pet for
 // adoption, not reporting a lost one. Callers are expected to drop these
 // before upsert — they're not lost pets, they don't belong on the map.
@@ -35,6 +37,10 @@ export interface ParsedDog {
   // but get logged so we can eyeball them in `fly logs`.
   parseConfidence: number;
   parseNotes: string;
+  // Set when the post names a city that isn't Kyiv. The map is Kyiv-only
+  // and upsert refuses these — see outOfArea.ts for why the coord-based
+  // bbox check in upsert can't catch them on its own.
+  outOfArea: OtherCityHit | null;
 }
 
 export type IngestAction = 'inserted' | 'updated' | 'duplicate' | 'skipped';

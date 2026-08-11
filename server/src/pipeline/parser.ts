@@ -13,6 +13,7 @@
 import { anthropic } from '../services/anthropic.js';
 import { snapToLandIfInRiver } from '../utils/geo.js';
 import { lookupBestPlace } from '../services/gazetteer.js';
+import { detectOtherCity } from './outOfArea.js';
 import type { ParsedDog, Species, Urgency } from './types.js';
 
 const FALLBACK_LAT = 50.4501;
@@ -296,5 +297,12 @@ export async function parseDogPost(input: ParseDogPostInput): Promise<ParsedDog>
     photoFileId: input.photoFileId ?? null,
     parseConfidence: degradedConfidence,
     parseNotes: typeof raw.parseNotes === 'string' ? raw.parseNotes.slice(0, 400) : '',
+    // Read from the ORIGINAL post text, not from anything the model
+    // returned. The prompt has asked for out-of-city posts to be marked
+    // since day one and they still arrive unmarked; this is the
+    // deterministic backstop. Ingest is also the only moment the full
+    // ad body exists — nothing stores it, so a later pass would have
+    // only the title and an English translation to work from.
+    outOfArea: detectOtherCity(input.text),
   };
 }
