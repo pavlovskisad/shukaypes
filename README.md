@@ -4,6 +4,11 @@ AI-powered geo-quest app for dog owners and lovers. "шукайпес" means "se
 
 The companion dog NPC is the entire interface. Every mechanic doubles as a search-coordination layer for real lost pets. Built from a fully functional single-file HTML prototype (see `reference/shukajpes-demo.html`) into a production React Native app with a Node backend.
 
+> **Start at [`docs/project/`](docs/project/README.md)** — the maintained
+> documentation set: architecture, the lost-pet engine, territory, the
+> decision log, the history of every pivot, operations, and what is
+> currently open. The rest of this file is setup and deploy instructions.
+
 ## Repo layout
 
 ```
@@ -96,9 +101,26 @@ See `/root/.claude/plans/hello-dear-sir-please-wobbly-marble.md` or `docs/TRANSF
 
 ## Docs
 
-- `docs/PROJECT_README.md` — project vision
-- `docs/PRODUCT_SPEC.md` — V1 product spec
-- `docs/TECHNICAL.md` — complete technical documentation of the demo
-- `docs/TRANSFORMATION.md` — migration plan: demo → production app
-- `docs/CLAUDE_CODE_INSTRUCTIONS.md` — notes for Claude Code sessions
-- `docs/shukajpes-product-doc.docx` — canonical product architecture document
+**Current, maintained** — [`docs/project/`](docs/project/README.md):
+
+| Doc | What it answers |
+| --- | --- |
+| [`README.md`](docs/project/README.md) | Index, doc precedence, how to keep it true |
+| [`01-product.md`](docs/project/01-product.md) | What it is, the loops, what's actually built |
+| [`02-architecture.md`](docs/project/02-architecture.md) | Stack, topology, data model, endpoints, deploy |
+| [`03-lost-pet-engine.md`](docs/project/03-lost-pet-engine.md) | Sources, parsing, dedupe, geo gates, ops tooling |
+| [`04-territory.md`](docs/project/04-territory.md) | The territory mechanic and its invariants |
+| [`05-decisions.md`](docs/project/05-decisions.md) | Every load-bearing decision, with why |
+| [`06-history.md`](docs/project/06-history.md) | The arc of 412 PRs and every pivot in it |
+| [`07-operations.md`](docs/project/07-operations.md) | Deploys, secrets, admin tools, incident history |
+| [`08-open-issues.md`](docs/project/08-open-issues.md) | What is wrong right now, ranked |
+| [`09-glossary.md`](docs/project/09-glossary.md) | The project's vocabulary, and its fossils |
+
+**Historical** — accurate when written, superseded now. See the index for
+what is still true in each: `AUDIT_BRIEF.md`, `AUDIT_FINDINGS.md`,
+`PILOT_ROADMAP.md`, `docs/PROJECT_README.md`, `docs/PRODUCT_SPEC.md`,
+`docs/TECHNICAL.md`, `docs/TRANSFORMATION.md`, `docs/rfp/`,
+`docs/shukajpes-product-doc.docx`.
+
+**Point-in-time** — `HANDOFF.md`, the last session's production snapshot.
+`CLAUDE.md`, the working rules for sessions on this repo.

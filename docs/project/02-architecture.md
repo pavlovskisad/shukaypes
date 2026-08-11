@@ -1,0 +1,349 @@
+# 02 — Architecture
+
+Current as of `f421b7e`, 11 Aug 2026. Where this disagrees with the code,
+the code is right.
+
+## Repo layout
+
+pnpm monorepo, three workspaces (`pnpm-workspace.yaml`).
+
+```
+app/          Expo RN app (web-first). Expo Router. 23,191 lines TS/TSX.
+server/       Fastify API. 16,030 lines TS.
+shared/       TypeScript types only (145 lines). No build step.
+docs/         Documentation. docs/project/ is this set.
+reference/    The original single-file HTML prototype. Read-only history.
+```
+
+`shared` is types-only and the server **does not resolve it at runtime** —
+it maps the alias in tsconfig for typechecking and defines its own copies of
+the wire types where it needs them. This is deliberate (no build step for
+`shared`), and it means a wire-shape change has to be made in two places.
+
+Root also carries several large committed binaries (`8-Bit Dogs.rar`,
+`SHUKAYPES_SVG_ICONS.zip`, `kalam.zip`, a 929KB HTML file, the 380KB demo).
+They have no build role. See [`08-open-issues.md`](08-open-issues.md).
+
+## Runtime topology
+
+```
+Browser / Telegram Mini App  (app bundle, Vercel CDN)
+   │  HTTPS. Identity: x-device-id  OR  x-telegram-init-data
+   ▼
+Fastify API  (one Fly machine: shared-cpu-1x / 512MB, fra, min 1)
+   ├── Postgres            Supabase. Durable state. No PostGIS.
+   ├── Redis               presence GEO, spawn cooldowns, path anchor, lang cache
+   ├── Anthropic API       companion chat, lost-pet parsing, lore, quest narration
+   ├── Google Maps         Places (server-proxied + cached) / Routes (client-side)
+   └── Telegram Bot API    Mini App auth, webhook ingest, photo proxy
+Map tiles: OpenFreeMap "liberty", heavily overridden. Glyphs self-hosted.
+```
+
+Everything runs in one process on one machine. All crons are `setInterval`
+in-process. `min_machines_running = 1` exists specifically so the crons keep
+ticking.
+
+## The two hot paths
+
+### `GET /sync/map` — every 15s
+
+One round trip returns everything the map needs. Ordering matters and is
+commented in the source:
+
+1. **Territory first, alone.** `fetchMapTerritory` — one box query for
+   marks, your shapes, rivals' shapes, rivals' recent marks, and the
+   `home` flag. It has to land first because the spawn top-up branches on
+   `home` (paws are denser on ground you hold).
+2. **Writes next, in parallel.** `ensureTokensForUser`,
+   `ensureFoodForUser`, `noteHomeGround`. Idempotent top-ups; they must
+   complete before the reads or freshly-spawned rows would miss the
+   response.
+3. **Reads in parallel.** tokens, food, lost dogs, user state, presence
+   (if `mp=1`), pokes, raids.
+
+Response carries: `tokens`, `food`, `dogs`, `state`, `players`, `pokes`,
+`marks`, `shapes`, `rivalMarks`, `rivals`, `home`, `raids`.
+
+Area held is deliberately **not** in this payload — `/territory/leaderboard`
+owns that number, because two places computing it is how they drift.
+
+### `GET /presence` — every 3s
+
+Split out of `/sync/map` in PR #351. Positions only: one Redis GEO read, no
+Postgres, no territory, no partition.
+
+The reasoning, measured on prod: other dogs' positions were 3.7KB of a
+66.4KB payload (6%), while the territory in the other 94% only changes every
+few minutes — and the partition behind it cost 2.47s of a 3.57s sync.
+Polling the whole thing fast enough to make the dogs move smoothly would
+have meant ~80MB/hour of mobile data and five times the query load, to
+refresh polygons that had not moved.
+
+3s is the floor that matters, and it is set by the simulation rather than
+the transport: bots step on a 3.5s server tick and real GPS lands about once
+a second.
+
+### `POST /collect/path` — the movement-verified position
+
+Not a read path, but the third pillar. It owns the previous position anchor
+in Redis, rejects teleports, sweeps up paws and bones along a backgrounded
+walk, and — since PR #328 — is where the dog decides whether to mark
+territory. Hanging territory off this endpoint means the mechanic inherits
+its anti-cheat: you cannot claim ground you did not walk to any more than
+you can farm paws you did not walk to.
+
+## Frontend (`app/`)
+
+**Framework.** Expo (SDK ~52) + Expo Router + React Native Web, bundled by
+Metro into a **single** web bundle (`app.json` → `web.output: "single"`).
+This is why `three` cannot be code-split.
+
+**Screens.** `app/app/(tabs)/`:
+
+| Route | File | Lines | Role |
+| --- | --- | --- | --- |
+| `index` | `index.tsx` | 218 | The map. The core screen. |
+| `tasks` | `tasks.tsx` | 881 | Quests, daily tasks, and the territory standing. |
+| `chat` | `chat.tsx` | 714 | Talk to the dog. |
+| `spots` | `spots.tsx` | 311 | Partner / POI spots from Places. |
+| `profile` | `profile.tsx` | 569 | Stats, XP, and a live pixel-art dog scene. |
+
+Floating tab bar in `_layout.tsx`.
+
+**State.** Zustand, one large store: `stores/gameStore.ts` (1,172 lines) —
+map data, companion stats, quests, spots, territory, multiplayer, dog-cam,
+daylight. `stores/langStore.ts` for language (uk / en, `i18n/strings.ts`).
+
+**Map.** `components/map/MapView.tsx` (3,429 lines) is the nerve centre.
+MapLibre GL JS v5 with a heavily-overridden "crayon" style
+(`crayonStyle.ts`, 780 lines, based on OpenFreeMap liberty). Markers are DOM
+overlays via `MapLibreMarker.tsx` — companion, user dot, paws, bones, spots,
+other walkers, lost-dog pins and clusters.
+
+**Render stack**, in draw order:
+
+- `groundFogLayer.ts` — ground/sky fog with an off-screen warm sun and god
+  rays, plus a custom ground layer under the city.
+- `TerritoryLayer.tsx` — territory ground fills and marks, coloured per
+  owner (`territoryColor.ts`).
+- `threeBuildingsLayer.ts` (1,161 lines) — Three.js extruded buildings with
+  true per-distance and per-height fog, a see-through corridor along the
+  camera-to-dog sight line, and gradient ground shadows.
+- `fogLayer.ts` — the classic screen fog, kept as the fallback.
+
+All layers share fog parameters so ground and buildings dissolve together.
+The Three path requires **WebGL2**; on any throw during init the code tears
+down partial state and reverts to MapLibre buildings + screen fog
+(`MapView.tsx`, the `GAME_RENDER` init block).
+
+**Companion.** `Companion.tsx` (756 lines) + `DogSprite.tsx`, pixel-art
+sprite sheets in `app/public/dog/`. Lerps toward GPS; runs when hunting an
+item; sniffs on collect.
+
+**Build note.** `app/babel.config.js` enables
+`@babel/plugin-transform-class-static-block` so Metro can bundle `three`
+(ES2022 static blocks). Removing it breaks the web build.
+
+## Backend (`server/src/`)
+
+**Entry** `index.ts` — builds Fastify, registers routes, arms the watchdog
+*first*, warms the ground geometry worker, starts crons, eager-connects
+Redis, registers the Telegram webhook, listens.
+
+**Auth** `auth.ts` (Fastify `preHandler` plugin). Resolves `req.userId`
+from, in order of preference:
+
+1. `x-telegram-init-data` — validated against the bot token. Strong,
+   cross-device, keyed on `telegram_id`.
+2. `x-device-id` — any client-supplied string 8–128 chars. Weak,
+   browser-scoped, **unverified**.
+
+Bypasses (no identity required): `/health`, `/health/deep`, `/stats`,
+`/admin/*` (has its own bearer), `/telegram/webhook` (has its own secret
+header), `/photos/*` (served to bare `<img src>` tags that cannot carry
+headers).
+
+**Routes** (`routes/`):
+
+| File | Endpoints |
+| --- | --- |
+| `syncMap.ts` | `/sync/map`, `/presence`, `/territory/reset`, `/territory/raid-test`, `/territory/leaderboard` |
+| `path.ts` | `/collect/path` — movement-verified sweep + the territory mark hook |
+| `tokens.ts` | `/tokens/nearby`, `/collect/token` |
+| `food.ts` | `/food/nearby`, `/feed` |
+| `dogs.ts` | `/dogs/nearby` |
+| `sightings.ts` | `/sightings`, `/sightings/search-result` |
+| `quests.ts` | `/quests/start`, `/quests/active`, `/quests/advance`, `/quests/abandon`, `/quests/history` |
+| `chat.ts` | `/chat`, `/chat/ambient`, `/chat/history` |
+| `state.ts`, `profile.ts`, `dailyTasks.ts`, `lore.ts`, `places.ts`, `stats.ts` | state, profile, `/tasks/tick`, lore, spots, public stats |
+| `poke.ts` | `/poke` |
+| `photos.ts` | `/photos/:fileId` — Telegram photo proxy |
+| `telegram.ts` | `/telegram/webhook` + Mini App plumbing (554 lines) |
+| `admin.ts` | `/admin/lost-dogs/{ingest,scrape-now,scrape-log,report}` |
+
+**Services** (`services/`), the ones that carry weight:
+
+- `territory.ts` (1,021) — the whole mechanic. See [`04-territory.md`](04-territory.md).
+- `ground.ts` / `groundGeometry.ts` / `groundWorker.ts` — polygon union,
+  difference, simplification, and the worker thread they run in.
+- `spawn.ts` + `spawnCooldown.ts` — paw/bone spawning and per-area Redis
+  cooldown locks.
+- `presence.ts` + `bots.ts` — multiplayer.
+- `scrape.ts` + `pipeline/*` — lost-pet ingestion. See [`03-lost-pet-engine.md`](03-lost-pet-engine.md).
+- `ingestAlert.ts` — says something when pets stop arriving.
+- `watchdog.ts` — the dead-man's switch.
+- `anthropic.ts`, `memory*.ts`, `quest*.ts`, `gazetteer.ts`, `lostDogsReport.ts`,
+  `placesCache.ts`, `decay.ts`, `lostDogCleanup.ts`, `searchZoneExpansion.ts`.
+
+**Crons**, all `setInterval().unref()`, all in-process, all wrapped by
+`cronUtils.runCronTick`:
+
+| Cron | Cadence | Job |
+| --- | --- | --- |
+| decay | 8s | Hunger and happiness. Half rate on home ground. |
+| scrape | 1h (jittered 30–120s after boot) | Run every ingestion source in sequence. |
+| zone expansion | — | Grow a lost pet's search radius as time passes. |
+| lost-dog cleanup | — | Expire stale reports. |
+| multiplayer | 3.5s | Step + publish bot walkers, purge stale presence. |
+
+There is **no leader election**. A second machine would double every cron
+and run 2×30 bots. `services/scrape.ts` says so in a comment. This is the
+single change that blocks horizontal scaling.
+
+**DB** (`db/`): `schema.ts` (Drizzle), `index.ts`
+(`postgres(url, { prepare: false })`, default pool ~10), `redis.ts`
+(`ioredis`, `lazyConnect`, throttled error log), `migrate.ts` run at
+container start. 32 migrations, latest `0031_territory_reset_10.sql`.
+
+## Data model
+
+Postgres. **No PostGIS** — this is deliberate and is stated in two migration
+comments. Proximity is either hand-rolled haversine in SQL or, for
+territory, a bbox range scan on plain B-trees.
+
+| Table | Holds |
+| --- | --- |
+| `users` | Identity, points, totals, home coords, Telegram profile fields |
+| `companion_state` | 1:1 with users. Hunger, happiness, level, XP, memory notes, last-mark position/time, `on_home_ground` |
+| `tokens` | Paws — position, owner, spawn/collect timestamps |
+| `food_items` | Bones — same shape |
+| `lost_dogs` | The search layer. Species, breed, emoji, photo, last-seen point + time + description, urgency, search radius, source, status |
+| `sightings` | User reports against a lost dog |
+| `messages` | Full chat history with per-message token accounting |
+| `collect_events` | Anti-cheat audit trail |
+| `quests` + `StoredWaypoint[]` jsonb | Detective quest state |
+| `daily_tasks` | Per user per local calendar day |
+| `scrape_log` | One row per URL ever seen — the dedupe key and the ingest heartbeat |
+| `kyiv_lore` | Curated geo-indexed landmark stories (OSM + Wikidata, rewritten by Sonnet) |
+| `kyiv_gazetteer` | ~16k Kyiv place names from OSM, for parser geocoding. Trigram fuzzy match |
+| `places_cache` | Google Places results keyed by (cell, category) |
+| `territory_marks` | Individual marks — where the dog has been |
+| `territory_ground` | **The ownership record.** One row per piece: ring + holes + bbox + area |
+| `territory_raids` | "Somebody took your ground" — queued in Postgres so an overnight raid still lands |
+
+Indexes are plain B-trees: `tokens(owner_id)`, `tokens(collected_at)`,
+`food_items(owner_id)`, `lost_dogs(status)`, `messages(user_id, created_at)`,
+`quests(user_id, status)`, `scrape_log(source, first_seen_at)`,
+`territory_marks(user_id, created_at)`, `territory_marks(lat, lng)`,
+`territory_ground(user_id)`, `territory_ground(min_lat, max_lat, min_lng, max_lng)`,
+`kyiv_lore(lat, lng)`, `kyiv_gazetteer(search_key)` + category.
+
+There is **no geo index on `lost_dogs`**. `fetchNearbyLostDogs` filters
+`status='active'` and then computes haversine over every survivor, on every
+`/sync/map`, per user, every 15s.
+
+## Multiplayer
+
+Polling, not WebSockets — deliberate. It fits the existing sync cadence,
+needs no stateful connections on Fly, and latency is irrelevant for a
+walking game.
+
+- **Presence** (`services/presence.ts`): each `/presence` or `mp=1`
+  `/sync/map` writes the caller's **jittered** position into a Redis GEO
+  set (`mp:pos`), a `seen` ZSET with a 45s TTL, and an `mp:meta` hash
+  (name / photo / bot). Then `GEOSEARCH` within **8km**. Jitter is a stable
+  per-id offset of ≤25m derived from an FNV hash, so averaging many reads
+  does not de-jitter it. Every call guards on `redis.status === 'ready'`.
+- **Bots** (`services/bots.ts`, 463 lines): `MULTIPLAYER_BOTS` (30 in
+  `fly.toml`) simulated walkers on a state machine — roam, dwell at
+  hardcoded hotspots, go offline and back. They write to the same presence
+  set as real players and they mark territory on the same cadence rule, so
+  they render and compete identically.
+- **Poke** (`routes/poke.ts`): tap another walker → queued in Redis →
+  delivered on their next sync → toast + haptic + camera fly-to. Cannot
+  poke yourself or a bot.
+- **Kill switches**: server honours `MULTIPLAYER=off`; the client flag
+  `MULTIPLAYER` in `constants/experiments.ts` is compile-time and needs a
+  rebuild.
+
+## Configuration and flags
+
+**Client flags** — `app/constants/experiments.ts`, all compile-time
+constants:
+
+| Flag | Value | Meaning |
+| --- | --- | --- |
+| `GAME_RENDER` | `true` | Three.js buildings + volumetric fog |
+| `MULTIPLAYER` | `true` | Send `mp=1`, render other walkers |
+| `DOG_CAM` | `true` | Supersniff's low chase camera |
+| `LOST_DOG_PINS` | `false` | Lost-pet pins on the main map — off on purpose |
+
+**Balance** — `server/src/config/balance.ts` (435 lines) is the canonical
+source for anything that affects state transitions or reward maths;
+`app/constants/balance.ts` mirrors it for animation. A handful of territory
+values are env-overridable so the feel can be tuned on a live API without a
+redeploy per guess: `TERRITORY_COOLDOWN_MS`, `TERRITORY_MIN_DISTANCE_M`.
+A missing or unparseable var falls back to the tuned default, never to zero.
+
+**Server env / Fly secrets**: `DATABASE_URL`, `REDIS_URL`,
+`ANTHROPIC_API_KEY`, `GOOGLE_MAPS_API_KEY`, `TELEGRAM_BOT_TOKEN`,
+`TELEGRAM_PUBLIC_URL`, `ADMIN_TOKEN`, and the optional
+`TELEGRAM_CHANNELS`, `FACEBOOK_GROUP_IDS`, `SCRAPE_PROXY_URL`,
+`ALERT_CHAT_ID`, `INGEST_STALL_HOURS`, `MULTIPLAYER`, `REPORT_TOKEN`.
+`MULTIPLAYER_BOTS` lives in `fly.toml [env]`.
+
+**Client env**: `EXPO_PUBLIC_API_URL`, `EXPO_PUBLIC_GOOGLE_MAPS_API_KEY`.
+Any `EXPO_PUBLIC_*` var is inlined into the bundle by Metro — public by
+design.
+
+## Deploy and CI
+
+**Backend** — `.github/workflows/deploy.yml`, on push to `main`:
+
+```
+checks:  pnpm install --frozen-lockfile → pnpm typecheck → pnpm lint
+server:  needs: checks → flyctl deploy --remote-only
+```
+
+The gate is real (PR #274). `react-hooks/rules-of-hooks` is an **error** —
+that is the class of bug that white-screened prod once.
+
+`typecheck.yml` runs the same two checks on every PR and on `main`.
+
+**Frontend** — Vercel's own git integration, not this workflow. `main` →
+production, every branch → a preview URL. `vercel.json` at repo root sets
+the build command, SPA rewrites, and long-cache headers for
+`_expo` / `assets`. **The frontend deploy is not gated by CI.**
+
+**Fly** — `fly.toml`: app `shukajpes-api`, region `fra`, one
+`shared-cpu-1x / 512mb` VM, `min_machines_running = 1`, auto stop/start,
+health check `GET /health` every 30s.
+
+`/health` returns `{ ok: true }` unconditionally and is what Fly's rotation
+uses. `/health/deep` checks Postgres and Redis and returns 503 if either is
+unhealthy. The split is deliberate — Redis is non-critical, so a Redis
+outage should not make Fly cycle the machine.
+
+## Local development
+
+```sh
+pnpm install
+docker compose up -d                                # Postgres + Redis
+pnpm --filter @shukajpes/server db:migrate
+pnpm dev:server                                     # port 3000
+pnpm web                                            # Expo web
+```
+
+`server/.env` needs at minimum `DATABASE_URL` and `REDIS_URL`; the LLM and
+Maps keys are needed for chat, parsing and spots. The Anthropic key goes in
+`server/.env` only and is never exposed to the client bundle.
