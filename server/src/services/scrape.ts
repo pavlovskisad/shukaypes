@@ -27,12 +27,35 @@ function sources(): Source[] {
   return [new OlxSource(), new TelegramSource(), new FacebookSource()];
 }
 
-export async function runAllSources(log: Pick<FastifyBaseLogger, 'info' | 'warn'>): Promise<SourceRunSummary[]> {
+export async function runAllSources(log: Pick<FastifyBaseLogger, 'info' | 'warn' | 'error'>): Promise<SourceRunSummary[]> {
   const results: SourceRunSummary[] = [];
   for (const s of sources()) {
     try {
       const summary = await s.runOnce();
-      log.info({ kind: 'scrape_tick', ...summary }, `[${s.name}] tick complete`);
+      // "tick complete" at info level was how a source being 403'd off
+      // the internet came to look like a healthy run. OLX sits behind
+      // CloudFront's WAF, which blocks datacentre IPs; every listing and
+      // every ad fetch failed, and the tick still logged as complete
+      // with the errors folded into a field nobody greps for.
+      //
+      // A tick that discovered things but ingested none of them, or that
+      // recorded errors at all, is not a complete tick. Say so at a
+      // level that shows up.
+      const nothingLanded =
+        summary.discovered > 0 && summary.parsed === 0 && summary.errors > 0;
+      if (nothingLanded) {
+        log.error(
+          { kind: 'scrape_tick', ...summary },
+          `[${s.name}] tick INGESTED NOTHING — ${summary.errors} error(s), source may be blocked`,
+        );
+      } else if (summary.errors > 0) {
+        log.warn(
+          { kind: 'scrape_tick', ...summary },
+          `[${s.name}] tick complete with ${summary.errors} error(s)`,
+        );
+      } else {
+        log.info({ kind: 'scrape_tick', ...summary }, `[${s.name}] tick complete`);
+      }
       recordTick(summary);
       results.push(summary);
     } catch (err) {
@@ -56,7 +79,7 @@ export async function runAllSources(log: Pick<FastifyBaseLogger, 'info' | 'warn'
   return results;
 }
 
-export function startScrapeCron(log: Pick<FastifyBaseLogger, 'info' | 'warn'>): () => void {
+export function startScrapeCron(log: Pick<FastifyBaseLogger, 'info' | 'warn' | 'error'>): () => void {
   if (!process.env.ANTHROPIC_API_KEY) {
     log.warn('[scrape] ANTHROPIC_API_KEY missing — scrape cron disabled');
     return () => {};

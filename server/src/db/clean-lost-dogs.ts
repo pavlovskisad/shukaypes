@@ -37,7 +37,7 @@
 //                fly ssh console -a shukajpes-api -C "node dist/db/clean-lost-dogs.js --apply"
 
 import 'dotenv/config';
-import { and, eq, isNotNull, ne } from 'drizzle-orm';
+import { and, desc, eq, isNotNull, ne } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { looksNotKyiv } from '../pipeline/sources/olx.js';
@@ -197,6 +197,37 @@ async function main() {
   console.log(`  of those, invisible to the map:`);
   console.log(`     ${onFallback.length}\tsitting on the ungeocoded fallback pin`);
   console.log(`     ${farOut.length}\tmore than 60km from the city centre`);
+  console.log('');
+
+  // WHEN DID EACH SOURCE LAST BRING SOMETHING IN?
+  //
+  // A scraper that stops working does not announce it. OLX sits behind
+  // CloudFront's WAF, which serves 403 to datacentre IPs, so every ad
+  // fetch from the app host fails — and the scrape tick logs its errors
+  // at info level and returns a summary that looks like a completed run.
+  // The only externally visible symptom is that the newest pet quietly
+  // stops moving.
+  //
+  // A dead scraper is a much worse bug than any row this sweep cleans,
+  // so the number goes at the top of the report where it cannot be
+  // missed.
+  const newest = await db
+    .select({ source: schema.lostDogs.source, createdAt: schema.lostDogs.createdAt })
+    .from(schema.lostDogs)
+    .orderBy(desc(schema.lostDogs.createdAt));
+  const latestBySource = new Map<string, Date>();
+  for (const n of newest) {
+    if (!latestBySource.has(n.source)) latestBySource.set(n.source, n.createdAt);
+  }
+  console.log('  newest pet per source (ingest heartbeat):');
+  const nowMs = Date.now();
+  for (const [src, at] of [...latestBySource].sort(
+    (a, b) => b[1].getTime() - a[1].getTime(),
+  )) {
+    const days = (nowMs - at.getTime()) / 86_400_000;
+    const flag = days > 3 ? '  <-- STALE' : '';
+    console.log(`     ${days.toFixed(1)}d ago\t${src}${flag}`);
+  }
   console.log('');
 
   const deadPhoto: Row[] = [];
