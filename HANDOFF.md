@@ -5,28 +5,55 @@ Read this top to bottom before touching anything; several of the numbers
 below contradict what an earlier version of me confidently reported, and
 the corrections are recorded here on purpose.
 
+Updated later the same day: the two items that used to be section 1 are
+both done — see 1.1 for what happened to them.
+
 ---
 
 ## 1. Do these first
 
-**Rotate `REPORT_TOKEN`.** It is currently a placeholder string that was
-pasted verbatim into a shell by accident and is sitting in plaintext in a
-session transcript. It authenticates `GET /admin/lost-dogs/report`. It is
-read-only, so this is a nuisance rather than an incident, but it is a
-live credential that a stranger could reproduce from the transcript.
+### 1.1 Already done, do not redo
 
-```
-openssl rand -hex 32
-fly secrets set REPORT_TOKEN="<the value it printed>" -a shukajpes-api
-```
+**PR #407 is merged** (`cdf84bf`, 11 Aug 11:39 UTC, merged by the owner).
+`SCRAPE_PROXY_URL` is confirmed unset on Fly, so it is inert in
+production exactly as intended.
 
-Do not put a trailing `# comment` on a command you hand to someone using
-zsh — interactive zsh does not strip them, which is exactly how the
+**`REPORT_TOKEN` is unset, not rotated.** The compromised placeholder is
+gone from Fly (`fly secrets unset REPORT_TOKEN -a shukajpes-api`, machine
+`7841039a4d60e8` restarted healthy). Verified after: the secret no longer
+appears in `fly secrets list`, and `GET /admin/lost-dogs/report` returns
+`401` to both a junk bearer and no bearer, which is `checkReportAuth`
+failing closed on an undefined token as designed.
+
+It became a removal rather than a rotation because the owner asked the
+right question: given a session already holds `FLY_API_TOKEN`, is a
+report token worth anything? It is not. Anyone holding the Fly token can
+`fly secrets set REPORT_TOKEN=<anything>` and then use it, or skip the
+endpoint and run the same query in the container. The lesser key is only
+a boundary against a holder who lacks the greater one — a dashboard, a
+cron, a non-Fly agent. No such holder exists today, so there is nothing
+to hold a token.
+
+The code path is untouched: `checkReportAuth` still accepts
+`REPORT_TOKEN`, so re-opening the endpoint to a narrow reader is one
+`fly secrets set` away. If a session needs the report while holding the
+Fly token, mint one, use it, unset it in the same session — do not leave
+a long-lived value nobody can read back.
+
+Two things worth not relearning. A token used in a `curl` is a token in
+the transcript, so "generate it and tell the human" reproduces the exact
+exposure being fixed; there is no way to both use a value here and keep
+it private. And do not put a trailing `# comment` on a command handed to
+someone using zsh — interactive zsh does not strip them, which is how the
 placeholder got set in the first place.
 
-**Merge PR #407** if it is still open (`Give the scraper a way out from
-behind the WAF`). It is inert until `SCRAPE_PROXY_URL` is set, so merging
-it changes no behaviour on its own.
+### 1.2 What is actually next
+
+Nothing in section 1 is blocking any more. The live problems are in
+section 3, worst first: pick a proxy provider and set `SCRAPE_PROXY_URL`
+(3.1), then fix the gazetteer gate in `parser.ts` before backfilling the
+89 invisible pets through it (3.2). 3.4 is a one-command cleanup that is
+safe whenever someone wants it.
 
 ---
 
@@ -35,8 +62,8 @@ it changes no behaviour on its own.
 | What | State |
 | --- | --- |
 | `FLY_API_TOKEN` | Set in the cloud environment as of the end of the session. App-scoped deploy token for `shukajpes-api`. Only visible to sessions started *after* it was saved. |
-| `REPORT_TOKEN` | Set on Fly, but to a compromised placeholder. Rotate (above). |
-| `ADMIN_TOKEN` | Unchanged. Gates the write endpoints. Value is unknown to anyone — Fly secrets cannot be read back. |
+| `REPORT_TOKEN` | **Unset, deliberately** (see 1.1). The read route now answers only to `ADMIN_TOKEN`. Re-mint if a non-Fly holder ever needs the counts. |
+| `ADMIN_TOKEN` | Unchanged. Gates the write endpoints, and still opens the read ones. Value is unknown to anyone — Fly secrets cannot be read back. |
 | Database | Supabase (Postgres + PostGIS). No direct credentials held. Reachable from the app host, and from anywhere via the connection string. |
 
 `flyctl` is not preinstalled in cloud sessions. Install with
@@ -185,12 +212,19 @@ consecutive 403s rather than hammering the WAF.
   bug that would otherwise have been silent.
 - **Advising the environment-variables field as a place for secrets.**
   The docs say the opposite. Check the docs before advising, not after.
+- **Filing "rotate `REPORT_TOKEN`" as the top priority.** The exposure was
+  real but the fix was the wrong shape: I never asked what the token
+  still bought once the same session held `FLY_API_TOKEN`. It bought
+  nothing — a lesser key constrains only a holder who lacks the greater
+  one. Ask what a credential is a boundary *against* before spending
+  effort protecting it.
 
 ---
 
 ## 6. Standing rules
 
-- Work on branch `claude/project-sync-handoff-a2odxl`. Never push
+- Work on the branch the session was given — it changes per session, and
+  `claude/project-sync-handoff-a2odxl` is merged and finished. Never push
   elsewhere without asking.
 - Open a PR when a task is finished; the owner merges manually. A merged
   PR is finished — restart the branch from `origin/main` for follow-up
