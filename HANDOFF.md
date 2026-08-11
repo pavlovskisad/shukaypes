@@ -52,12 +52,16 @@ placeholder got set in the first place.
 Nothing in section 1 is blocking any more. The live problems are in
 section 3, worst first:
 
-1. **Pick a proxy provider and set `SCRAPE_PROXY_URL`** (3.1). Still the
-   one that matters most — OLX is the only source that has ever worked,
-   and it is blocked. Needs a purchasing decision, not code.
-2. **Do not widen the gazetteer gate** (3.2). Measured: it would place
+1. **Set `TELEGRAM_CHANNELS`** (3.3). Free, unblocked from the app host,
+   one env var, no code, no purchase — and it is the only way to stop
+   OLX being a single point of failure. Needs a curated channel list,
+   which is a human judgement rather than a technical task.
+2. **Pick an unblocker and set `SCRAPE_PROXY_URL`** (3.1). OLX is the
+   only source that has ever inserted a real pet, so this still matters
+   — but it is a purchasing decision, and 3.3 is free.
+3. **Do not widen the gazetteer gate** (3.2). Measured: it would place
    pets on wrong streets. Precision work first, measured before writing.
-3. 3.4 is a one-command cleanup, safe whenever someone wants it.
+4. 3.4 is a one-command cleanup, safe whenever someone wants it.
 
 The `expire:out-of-area` sweep has already been read and applied — see
 3.2. Do not re-run it expecting the same 17.
@@ -107,12 +111,37 @@ traffic routes through it; unset, behaviour is unchanged. No provider is
 hardcoded. Boot logs `[scrape] outbound: proxy <host>` so you can tell
 from the logs whether it is actually on.
 
-Still to do: pick a provider (pay-as-you-go tiers are ample — this is a
-few hundred requests an hour), set the secret, confirm the next tick
-stops erroring.
+**The volume estimate here was wrong by ~24×.** "A few hundred requests
+an hour" is really a few hundred a *day*. Measured from `scrape_log`
+over 14–21 days:
 
-Telegram and Facebook were floated as the unaffected fallback. **They are
-not** — see 3.3.
+```
+13 listing URLs × hourly           = 312 requests/day
+ad bodies actually fetched         ≈   4 requests/day
+pets inserted                      = 2–9/day
+
+14-day title filter: 926 title-filter + 386 rehoming rejected
+                     BEFORE any page fetch; only 55 ads fetched
+```
+
+So ~99% of proxied traffic is the hourly listing sweep, and the whole
+job is ~9,500 requests/month. Bandwidth is what a residential proxy
+bills for and nothing records page sizes, so plan on a low single-digit
+GB/month and measure once a proxy is on.
+
+Because the volume is this small and nobody wants to babysit a proxy
+pool, prefer a **managed unblocker in proxy mode** over raw residential
+IPs: the provider absorbs WAF changes instead of you. It must expose a
+`host:port` proxy endpoint — the seam feeds `SCRAPE_PROXY_URL` to an
+undici `ProxyAgent`, so an API-wrapper service (`GET api.x.com/?url=…`)
+would need code, not just an env var.
+
+Still to do: pick a provider, set the secret, confirm the boot log says
+`[scrape] outbound: proxy <host>` and that the next tick stops erroring.
+
+Telegram was previously written off here as an unaffected fallback that
+"is not" one. **That was wrong** — it is unaffected, it is free, and it
+is one env var from working. See 3.3. Do that before paying anyone.
 
 ### 3.2 Eighty-nine active pets are invisible on the map
 
@@ -200,19 +229,61 @@ The 81 still on the pin are the genuine geocoding-failure population.
 That is the rescue job, and it is the one that needs precision work
 before anything is written.
 
-### 3.3 Both Telegram sources are dead, and Facebook has never worked
+### 3.3 Telegram is unconfigured, not broken — and it is not blocked
 
-Ingest heartbeat at time of writing:
+**This section previously said "both Telegram sources are dead" and that
+"nobody has looked at why". Both were wrong.** Corrected 11 Aug by the
+owner and by measurement.
+
+The heartbeat entries that looked stale:
 
 ```
- 1.0d ago  olx
-45.7d ago  telegram:webhook:-1003509554251  <-- STALE
-48.1d ago  telegram:webhook:-4625589963     <-- STALE
+45.7d ago  telegram:webhook:-1003509554251
+48.1d ago  telegram:webhook:-4625589963
 ```
 
-Facebook does not appear at all, meaning it has never inserted a single
-pet. Nobody has looked at why. OLX is currently the only source that has
-ever done real work, which is why 3.1 matters as much as it does.
+are **the owner's own test chats**, ingested through the Mini App bot's
+webhook (`routes/telegram.ts` → `services/telegramIngest.ts`). That bot
+is part of a wider Telegram bot suite and was never pointed at a public
+pet source. Nothing died; those numbers are two manual tests going quiet
+after the tests ended, which is the expected outcome and not a fault.
+
+**The real Telegram source is a different code path and has never been
+switched on.** `pipeline/sources/telegram.ts` scrapes the anonymous web
+preview at `t.me/s/<channel>` — no Bot API, no auth, no MTProto. Its
+channel list comes from `TELEGRAM_CHANNELS`, and the file says plainly
+"Empty or unset = source is a no-op." That variable is not in Fly
+secrets and not in `fly.toml`, so the source has been a no-op since it
+was written.
+
+Measured 11 Aug, and this is the part that matters for 3.1:
+
+```
+GET https://t.me/s/telegram   from the Fly datacentre IP
+  -> 200, 134 KB, 227 messages parsed
+```
+
+**Telegram is not behind a WAF and does not need the proxy.** A second
+ingestion path is one env var away from working, at no cost.
+
+What it needs is curation, which the source file already calls out.
+Guessing channel names is a poor method — of 12 candidates probed with
+the project's own parser and keyword filter, most do not exist. Two
+real ones:
+
+```
+poshuk_tvaryn      20 msgs   1 lost, 4 rehoming
+                   e.g. "В районе Тираспольской площади найден кот"
+pets_share_Kyiv    10 msgs   0 lost, 1 rehoming (mostly adoption)
+```
+
+One page each, so treat those as a sample and not a rate. Set
+`TELEGRAM_CHANNELS=chan1,chan2` and the hourly cron picks them up; the
+existing rehoming filter already keeps adoption posts out.
+
+**Facebook is deliberately parked, not mysterious.** Testing never
+finished because it needs a burner account the owner has not created
+yet. Nothing to diagnose until then.
 
 ### 3.4 Six dead photos, ready to clean
 
