@@ -50,10 +50,18 @@ placeholder got set in the first place.
 ### 1.2 What is actually next
 
 Nothing in section 1 is blocking any more. The live problems are in
-section 3, worst first: pick a proxy provider and set `SCRAPE_PROXY_URL`
-(3.1), then fix the gazetteer gate in `parser.ts` before backfilling the
-89 invisible pets through it (3.2). 3.4 is a one-command cleanup that is
-safe whenever someone wants it.
+section 3, worst first:
+
+1. **Pick a proxy provider and set `SCRAPE_PROXY_URL`** (3.1). Still the
+   one that matters most — OLX is the only source that has ever worked,
+   and it is blocked. Needs a purchasing decision, not code.
+2. **Read the `expire:out-of-area` dry run and decide about `--apply`**
+   (3.2). It expires 17 out-of-city pets, 9 of which are drawn on the
+   map today. Reversible in one UPDATE. The dry run must be read first —
+   that is the whole design.
+3. **Do not widen the gazetteer gate** (3.2). Measured: it would place
+   pets on wrong streets. Precision work first, measured before writing.
+4. 3.4 is a one-command cleanup, safe whenever someone wants it.
 
 ---
 
@@ -122,27 +130,44 @@ Measured composition of the 89:
 (0 of them have no description text to re-geocode from)
 ```
 
-All of them are **real lost pets** with usable descriptions. Nothing to
-expire; this is entirely a rescue job. The descriptions plainly name
-places — "near Bercheny street", "near Ivushka café".
+**Two claims above were wrong, and were corrected by measurement on
+11 Aug.** Kept here because the reasoning that produced them is the
+trap, not the numbers.
 
-**Likely root cause, not yet fixed.** In `server/src/pipeline/parser.ts`
-the gazetteer rescue only runs when the LLM volunteers a non-empty
-`locationMentions` array:
+**"Nothing to expire; entirely a rescue job."** No. At least 17 active
+pets are in other cities — Dnipro, Cherkasy, Vinnytsia, Odesa,
+Zaporizhzhia, Zhytomyr, Kharkiv, Mykolaiv, Uzhhorod, Khmelnytskyi,
+Boryslav, Kryvyi Rih, and a village in Chernihiv oblast. Nine of them
+are **drawn on the map right now**, not sitting invisibly on the pin.
+`upsert.ts` documents the hole it has: coords outside the Greater Kyiv
+bbox are refused, but the ungeocoded fallback coord is let through on
+purpose — and a post about a cat in Uzhhorod is exactly the post that
+fails to geocode, so it lands on the fallback and stays active.
 
-```ts
-if (haikuFellBack && mentions.length > 0) { … lookupBestPlace(mentions) }
-```
+**"The `mentions.length > 0` gate is a live bug."** It is load-bearing.
+Measured: feeding raw post words to the gazetteer resolves 64 of 88
+titles, and the hits are mostly garbage — `котика` ("kitten") matches
+провулок Валі Котика at 1.00, `Ужгород` matches Ужгородський провулок
+at 0.88. There are 15,948 streets in the table and many are named after
+people, so collisions with ordinary words are the norm rather than the
+exception. Widening that gate would scatter dozens of real pets onto
+confident, wrong streets. **A wrong pin is worse than no pin** — it
+sends searchers to the wrong neighbourhood. Any rescue needs precision
+work first (place-type markers, a higher similarity floor, common-noun
+rejection), and its precision has to be measured before a single row is
+written.
 
-When it fell back to city centre *and* returned no mentions, the
-gazetteer was never consulted even though the description names a
-street. That is a live bug — new pets keep landing on the pin — so fix
-the gate first, then backfill the 89 through the same path.
+**The transliteration wrinkle is mostly not real.** 88 of the 89 have a
+`scrape_log.title` in the original Ukrainian; 259 of 261 active rows do.
+A backfill has better evidence than the English description. Note that
+the ad *body* is stored nowhere — only the title, the URL, and the
+parser's English summary — so ingest is the only moment the full text
+exists.
 
-One wrinkle to check before building: stored `lastSeenDescription` is an
-English translation, while the gazetteer is OSM-derived Ukrainian names.
-Re-geocoding from the stored text may need transliteration handling that
-the original parse (which had the Ukrainian ad body) did not.
+**Done on 11 Aug (PR #409):** the named-city gate. `pipeline/outOfArea.ts`
+reads the city out of the post text at parse time and `upsert` skips it,
+which closes the hole for new arrivals; `expire:out-of-area` is the
+catch-up pass for rows already in the table. Both described in §4.
 
 ### 3.3 Both Telegram sources are dead, and Facebook has never worked
 
@@ -185,6 +210,22 @@ consecutive 403s rather than hammering the WAF.
   that has to go out and ask the internet questions. Dry run by default.
 - `services/lostDogsReport.ts` — one query, one renderer, shared by both
   so the CLI and the endpoint cannot describe the database differently.
+- `pipeline/outOfArea.ts` — `detectOtherCity(text)`, the named-city gate
+  wired into the parser and enforced in `upsert`. Built around the trap
+  that Kyiv has streets named after other cities (Львівська площа,
+  Харківське шосе, метро Чернігівська): matching is token-exact and
+  adjectival endings are rejected, so a pet on Львівська площа is not
+  read as a pet in Lviv. Skips anything that names Kyiv itself.
+- `pnpm --filter @shukajpes/server check:out-of-area` — 31 fixture cases
+  for the above, 18 of which must NOT flag. Run it after touching the
+  city list; its failure mode is expiring a real Kyiv pet.
+- `pnpm --filter @shukajpes/server expire:out-of-area [--apply]` — the
+  catch-up sweep. Dry by default. Only a city named in the **ad title**
+  is ever written; a city named in the parser's English description is
+  reported and left alone, because a description narrates history as
+  readily as location ("evacuated from Kramatorsk" on a dog lost by the
+  Olimpiiska stadium, titled "КИЇВ!!!"). Needs no network, so unlike the
+  city half of `clean:lost-dogs` it actually runs from the app host.
 
 ---
 
@@ -212,6 +253,18 @@ consecutive 403s rather than hammering the WAF.
   bug that would otherwise have been silent.
 - **Advising the environment-variables field as a place for secrets.**
   The docs say the opposite. Check the docs before advising, not after.
+- **"The gazetteer resolves none of the 88 titles."** It resolves plenty.
+  My tokenising regex lost its backslash passing through `fly ssh`, so
+  `\p{L}` became a character class that split on every Cyrillic letter
+  and produced zero tokens. A check that read nothing, reported as a
+  check that found nothing — the exact failure this file already warns
+  about, committed again one section later. Print the intermediate
+  before trusting the aggregate.
+- **Reaching for the gate before asking whether the gazetteer worked.**
+  The plan was "fix the gate, then backfill through it", written without
+  ever asking what the gazetteer returns for these rows. It returns
+  confident nonsense, which makes the gate a guard rather than a bug.
+  One query would have said so.
 - **Filing "rotate `REPORT_TOKEN`" as the top priority.** The exposure was
   real but the fix was the wrong shape: I never asked what the token
   still bought once the same session held `FLY_API_TOKEN`. It bought

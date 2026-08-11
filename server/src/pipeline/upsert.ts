@@ -61,7 +61,23 @@ interface UpsertInput {
 }
 
 export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput): Promise<IngestResult> {
-  // Geo gate first — outside Greater Kyiv we don't want the pet on
+  // Named-city gate, before the coord gate. The bbox check below can
+  // only reject a pet whose coords resolved somewhere real, and a post
+  // about a cat in Uzhhorod almost never geocodes to anything — it
+  // lands on the fallback coord, which the bbox check deliberately lets
+  // through. That combination is how 9+ out-of-city pets ended up
+  // active on the Kyiv fallback pin. Reading the city out of the post
+  // text catches them at the only point where the full text exists.
+  if (parsed.outOfArea) {
+    return {
+      id: null,
+      action: 'skipped',
+      skipReason: `out-of-region (post names ${parsed.outOfArea.city} via "${parsed.outOfArea.token}")`,
+      parsed,
+    };
+  }
+
+  // Geo gate second — outside Greater Kyiv we don't want the pet on
   // the map at all. Fallback coords (geocode failure) are allowed
   // through; they're filtered from /dogs/nearby separately so they
   // never show but stay in the DB for audit.
