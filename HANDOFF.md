@@ -52,6 +52,10 @@ placeholder got set in the first place.
 Nothing in section 1 is blocking any more. The live problems are in
 section 3, worst first:
 
+0. **Set `ALERT_CHAT_ID`** to a Telegram chat. One value, no purchase,
+   and it is what makes the rest of this list stop needing a babysitter
+   — until it is set, a source dying is invisible until somebody reads
+   the heartbeat, which is how OLX sat blocked unnoticed. See §4.
 1. **Set `TELEGRAM_CHANNELS`** (3.3). Free, unblocked from the app host,
    one env var, no code, no purchase — and it is the only way to stop
    OLX being a single point of failure. Needs a curated channel list,
@@ -75,6 +79,7 @@ The `expire:out-of-area` sweep has already been read and applied — see
 | `FLY_API_TOKEN` | Set in the cloud environment as of the end of the session. App-scoped deploy token for `shukajpes-api`. Only visible to sessions started *after* it was saved. |
 | `REPORT_TOKEN` | **Unset, deliberately** (see 1.1). The read route now answers only to `ADMIN_TOKEN`. Re-mint if a non-Fly holder ever needs the counts. |
 | `ADMIN_TOKEN` | Unchanged. Gates the write endpoints, and still opens the read ones. Value is unknown to anyone — Fly secrets cannot be read back. |
+| `ALERT_CHAT_ID` | **Not set.** Telegram chat the ingest alerts go to. Until it is set, a stalled pipeline is logged and nothing is sent. Not a secret — a chat id. |
 | Database | Supabase (Postgres + PostGIS). No direct credentials held. Reachable from the app host, and from anywhere via the connection string. |
 
 `flyctl` is not preinstalled in cloud sessions. Install with
@@ -321,6 +326,18 @@ consecutive 403s rather than hammering the WAF.
 - `pnpm --filter @shukajpes/server check:out-of-area` — 31 fixture cases
   for the above, 18 of which must NOT flag. Run it after touching the
   city list; its failure mode is expiring a real Kyiv pet.
+- `services/ingestAlert.ts` — says something when pets stop arriving.
+  Two questions, both edge-triggered: *is a source blocked* (three
+  consecutive ticks that discovered items, ingested none and errored)
+  and *has everything stopped* (nothing inserted by any source for
+  `INGEST_STALL_HOURS`, default 36 — the measured baseline is 2–9/day
+  with no zero days in 21). Alerts once on the way in, once on the way
+  out, and never repeats in between; a monitor that nags hourly gets
+  muted, and a muted monitor is the same silence it was built to remove.
+  State is in redis so a deploy doesn't re-announce everything.
+  **Needs `ALERT_CHAT_ID`** — unset ships it dormant and log-only.
+  Verify with `check:ingest-alert`, which exercises the transitions
+  against an in-memory store and messages nobody.
 - `pnpm --filter @shukajpes/server expire:out-of-area [--apply]` — the
   catch-up sweep. Dry by default. Only a city named in the **ad title**
   is ever written; a city named in the parser's English description is
