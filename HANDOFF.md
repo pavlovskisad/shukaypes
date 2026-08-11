@@ -55,13 +55,12 @@ section 3, worst first:
 1. **Pick a proxy provider and set `SCRAPE_PROXY_URL`** (3.1). Still the
    one that matters most — OLX is the only source that has ever worked,
    and it is blocked. Needs a purchasing decision, not code.
-2. **Read the `expire:out-of-area` dry run and decide about `--apply`**
-   (3.2). It expires 17 out-of-city pets, 9 of which are drawn on the
-   map today. Reversible in one UPDATE. The dry run must be read first —
-   that is the whole design.
-3. **Do not widen the gazetteer gate** (3.2). Measured: it would place
+2. **Do not widen the gazetteer gate** (3.2). Measured: it would place
    pets on wrong streets. Precision work first, measured before writing.
-4. 3.4 is a one-command cleanup, safe whenever someone wants it.
+3. 3.4 is a one-command cleanup, safe whenever someone wants it.
+
+The `expire:out-of-area` sweep has already been read and applied — see
+3.2. Do not re-run it expecting the same 17.
 
 ---
 
@@ -130,6 +129,10 @@ Measured composition of the 89:
 (0 of them have no description text to re-geocode from)
 ```
 
+The counts above are the pre-sweep numbers, kept as written because the
+reasoning below refers to them. Current state: **244 active, 81 on the
+pin.**
+
 **Two claims above were wrong, and were corrected by measurement on
 11 Aug.** Kept here because the reasoning that produced them is the
 trap, not the numbers.
@@ -164,10 +167,38 @@ the ad *body* is stored nowhere — only the title, the URL, and the
 parser's English summary — so ingest is the only moment the full text
 exists.
 
-**Done on 11 Aug (PR #409):** the named-city gate. `pipeline/outOfArea.ts`
-reads the city out of the post text at parse time and `upsert` skips it,
-which closes the hole for new arrivals; `expire:out-of-area` is the
-catch-up pass for rows already in the table. Both described in §4.
+**Done on 11 Aug (PR #409), gate and sweep both.**
+`pipeline/outOfArea.ts` reads the city out of the post text at parse time
+and `upsert` skips it, closing the hole for new arrivals.
+`expire:out-of-area` was the catch-up pass for rows already in the table:
+dry run read, then applied with the owner's go-ahead.
+
+```
+before   261 active, 89 on the fallback pin
+apply    17 status → expired   (8 on the pin, 9 drawn on the map)
+after    244 active, 81 on the fallback pin
+```
+
+Reversible, and the exact ids were captured before the write:
+
+```sql
+UPDATE lost_dogs SET status = 'active' WHERE id IN (
+  'olx-jvM_QEx8nN','olx-Xa3ySjWw8H','olx-Yj8xS_Dgql','olx-gd4a1YexUH',
+  'olx-COZ9PTTAI7','olx-SH-tsAJjOF','olx-qmCz-xGyCf','olx-yNui4Alzrv',
+  'olx-Bv4hUsyBIW','olx-xTwS1MWT6h','olx-t4Q_h71h9w','olx-vLlLPgfjS8',
+  'olx-oHmvyqIMEM','olx-m6R90LwAcs','olx-fQiphYCSQj','olx-K18NaYRweI',
+  'olx-53ulPMqq2N');
+```
+
+Two rows were flagged only by the parser's English description and were
+deliberately **not** written — `Чак` (a Kyiv dog titled "КИЇВ!!! ЗНИК
+собака!!" whose description mentions being evacuated from Kramatorsk)
+and `Барбі` (description says Chernihiv district, coords are in Obolon).
+Both are still active. Decide them by hand or leave them.
+
+The 81 still on the pin are the genuine geocoding-failure population.
+That is the rescue job, and it is the one that needs precision work
+before anything is written.
 
 ### 3.3 Both Telegram sources are dead, and Facebook has never worked
 
