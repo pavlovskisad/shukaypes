@@ -99,6 +99,7 @@ interface Row {
   source: string;
   lat: number;
   lng: number;
+  description: string | null;
   // Filled in from scrape_log after the main query, not selected with it.
   sourceUrl?: string | null;
 }
@@ -140,6 +141,7 @@ async function main() {
       source: schema.lostDogs.source,
       lat: schema.lostDogs.lastSeenLat,
       lng: schema.lostDogs.lastSeenLng,
+      description: schema.lostDogs.lastSeenDescription,
     })
     .from(schema.lostDogs)
     .where(and(eq(schema.lostDogs.status, 'active'), ne(schema.lostDogs.source, 'in_app')));
@@ -199,6 +201,47 @@ async function main() {
   console.log(`     ${onFallback.length}\tsitting on the ungeocoded fallback pin`);
   console.log(`     ${farOut.length}\tmore than 60km from the city centre`);
   console.log('');
+
+  // WHAT ARE THE FALLBACK-PIN PETS, ACTUALLY?
+  //
+  // Two very different populations end up on this pin, and the fix for
+  // one is the opposite of the fix for the other:
+  //
+  //   a real lost pet whose post the geocoder couldn't place — worth
+  //   rescuing, because somebody is looking for it and the app is
+  //   currently hiding it;
+  //
+  //   a post that was never about a lost pet at all. The parser puts
+  //   rehoming ads ("шукає дім", "віддам в добрі руки") and resolution
+  //   notices on the fallback pin ON PURPOSE — but upsert only turns
+  //   urgency 'resolved' into status 'found', so a REHOMING post stays
+  //   status 'active' and sits in the table as an active lost pet
+  //   forever. Those should be expired, not geocoded.
+  //
+  // Splitting by urgency separates them without guessing, and the
+  // samples let a human sanity-check the split before anything acts on
+  // it. Report only — this diagnoses, it does not touch.
+  if (onFallback.length > 0) {
+    const byUrgency = new Map<string, Row[]>();
+    for (const r of onFallback) {
+      const list = byUrgency.get(r.urgency) ?? [];
+      list.push(r);
+      byUrgency.set(r.urgency, list);
+    }
+    console.log('  the fallback-pin pets, by urgency:');
+    for (const [u, list] of [...byUrgency].sort((a, b) => b[1].length - a[1].length)) {
+      console.log(`     ${list.length}\t${u}`);
+      for (const r of list.slice(0, 3)) {
+        const d = (r.description ?? '(no description)').replace(/\s+/g, ' ').slice(0, 88);
+        console.log(`        · ${r.name} — ${d}`);
+      }
+    }
+    // A post with no location words at all is one the geocoder never had
+    // a chance with; one that names a street is a rescue candidate.
+    const noDesc = onFallback.filter((r) => !r.description?.trim()).length;
+    console.log(`     (${noDesc} of them have no description text to re-geocode from)`);
+    console.log('');
+  }
 
   // WHEN DID EACH SOURCE LAST BRING SOMETHING IN?
   //
