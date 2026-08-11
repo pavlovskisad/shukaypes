@@ -16,6 +16,7 @@ import { db, schema } from '../../db/index.js';
 import { parseDogPost } from '../parser.js';
 import { upsertLostDog } from '../upsert.js';
 import { emptySummary, recordError, type Source, type SourceRunSummary } from '../source.js';
+import { scrapeFetch } from '../../lib/scrapeFetch.js';
 import {
   looksLikeLostPet,
   looksLikeRehoming,
@@ -63,12 +64,22 @@ interface Card {
 }
 
 async function fetchText(url: string): Promise<string> {
-  const res = await fetch(url, {
+  // Goes through SCRAPE_PROXY_URL when one is set, direct otherwise. The
+  // 403s that stopped ingestion are CloudFront refusing the datacentre
+  // address, so this is the one knob that can actually change the answer
+  // — no header tweak reaches it.
+  const res = await scrapeFetch(url, {
     headers: { 'user-agent': UA, 'accept-language': 'uk-UA,uk;q=0.9,en;q=0.6' },
-    redirect: 'follow',
+    retryOnBlock: true,
   });
-  if (!res.ok) throw new Error(`${url} -> ${res.status}`);
-  return res.text();
+  if (!res.ok) {
+    // Carry the attempt count into the error: "-> 403 after 3 attempts"
+    // says the proxy rotated and every exit was refused, which is a
+    // different problem from a single direct refusal.
+    const tries = res.attempts > 1 ? ` after ${res.attempts} attempts` : '';
+    throw new Error(`${url} -> ${res.status || 'network'}${tries}`);
+  }
+  return res.body;
 }
 
 // IS THIS AD EVEN IN KYIV?
