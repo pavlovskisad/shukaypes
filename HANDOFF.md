@@ -52,10 +52,6 @@ placeholder got set in the first place.
 Nothing in section 1 is blocking any more. The live problems are in
 section 3, worst first:
 
-0. **Set `ALERT_CHAT_ID`** to a Telegram chat. One value, no purchase,
-   and it is what makes the rest of this list stop needing a babysitter
-   — until it is set, a source dying is invisible until somebody reads
-   the heartbeat, which is how OLX sat blocked unnoticed. See §4.
 1. **Set `TELEGRAM_CHANNELS`** (3.3). Free, unblocked from the app host,
    one env var, no code, no purchase — and it is the only way to stop
    OLX being a single point of failure. Needs a curated channel list,
@@ -80,7 +76,7 @@ The `expire:out-of-area` sweep has already been read and applied — see
 | `FLY_API_TOKEN` | Set in the cloud environment as of the end of the session. App-scoped deploy token for `shukajpes-api`. Only visible to sessions started *after* it was saved. |
 | `REPORT_TOKEN` | **Unset, deliberately** (see 1.1). The read route now answers only to `ADMIN_TOKEN`. Re-mint if a non-Fly holder ever needs the counts. |
 | `ADMIN_TOKEN` | Unchanged. Gates the write endpoints, and still opens the read ones. Value is unknown to anyone — Fly secrets cannot be read back. |
-| `ALERT_CHAT_ID` | **Not set.** Telegram chat the ingest alerts go to. Until it is set, a stalled pipeline is logged and nothing is sent. Not a secret — a chat id. |
+| `ALERT_CHAT_ID` | **Set** 11 Aug to the owner's DM with the bot. Ingest alerts are live. Not a secret — a chat id. |
 | Database | Supabase (Postgres + PostGIS). No direct credentials held. Reachable from the app host, and from anywhere via the connection string. |
 
 `flyctl` is not preinstalled in cloud sessions. Install with
@@ -120,13 +116,27 @@ Buying a proxy therefore buys back missing coverage. It does not restart
 a dead pipeline, and nothing is on fire while it is unbought.
 
 CloudFront's WAF serves `403` to datacentre IPs. Confirmed from two
-independent hosts and in the production logs, and again on 11 Aug from a
-third: six paced requests from a cloud session, all `403`, so the block
-is per-address rather than rate-based. A full browser header set
+independent hosts and in the production logs. A full browser header set
 (`sec-fetch-*`, `sec-ch-ua`, `accept`, `upgrade-insecure-requests`)
-changes nothing. Why Fly's address gets part-way through while another
-datacentre IP gets nothing is unexplained — one observation each, worth
-more history before theorising.
+changes nothing.
+
+**Do not probe OLX by hand to learn more. It does not work and it is the
+one action that can make things worse.** Tried on 11 Aug and recorded so
+nobody repeats it: ~23 paced requests from the Fly host itself, covering
+10 of the 13 listing URLs, returned `403` on every single one — while
+the scheduled tick minutes either side of that probe was getting 6 of
+those same 13 through and discovering 251 ads. The scraper's request is
+not special: `scrapeFetch` sends the same user-agent and
+accept-language, no cookies, no extra headers.
+
+So a hand-run request and the cron's request get different answers from
+the same address, for reasons this session could not explain and stopped
+trying to. Two things follow. **A by-hand `403` proves nothing about
+whether ingestion works** — check `scrape_log` instead, which is free
+and cannot be misread. And the probing itself risks the coverage that
+still works: the tick before it and the tick after both showed exactly
+7 errors, so no harm was done that time, but that was luck rather than
+judgement.
 
 The official route is a **dead end**, checked rather than assumed. OLX
 has a Partner API, but every advert endpoint is scoped to the
@@ -401,6 +411,14 @@ consecutive 403s rather than hammering the WAF.
   bug that would otherwise have been silent.
 - **Advising the environment-variables field as a place for secrets.**
   The docs say the opposite. Check the docs before advising, not after.
+- **Probing OLX by hand to see whether a proxy could be avoided.** Three
+  measurement artefacts in one session, all the same shape: a check that
+  produced a number, and the number described my test rather than
+  production. This one was the worst, because unlike a bad regex it
+  spends something — every probe is a request at a WAF that has already
+  refused us, and a widened block would have cost real coverage on the
+  only source that inserts pets. It happened to cost nothing (7 errors
+  before, 7 after). `scrape_log` answers the same question for free.
 - **Writing an alert rule from a log line instead of from data.** The
   first version fired when a source "discovered things, parsed none, and
   errored" — the condition the cron logs. The first live tick showed why
