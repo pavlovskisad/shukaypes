@@ -13,6 +13,7 @@ import { TelegramSource } from '../pipeline/sources/telegram.js';
 import { FacebookSource } from '../pipeline/sources/facebook.js';
 import type { Source, SourceRunSummary } from '../pipeline/source.js';
 import { recordTick } from './scrape-history.js';
+import { evaluateIngestHealth } from './ingestAlert.js';
 import { scrapeProxyDescription } from '../lib/scrapeFetch.js';
 
 const INTERVAL_MS = 60 * 60 * 1000; // 1h
@@ -96,10 +97,20 @@ export function startScrapeCron(log: Pick<FastifyBaseLogger, 'info' | 'warn' | '
   let interval: NodeJS.Timeout | null = null;
   const initialDelay = INITIAL_DELAY_MIN_MS + Math.random() * (INITIAL_DELAY_MAX_MS - INITIAL_DELAY_MIN_MS);
 
+  // Health evaluation hangs off the CRON path only, not off
+  // runAllSources itself — the admin route calls that too, and a human
+  // triggering a run by hand is already watching. Letting a manual run
+  // feed the streak counters would let three impatient clicks report a
+  // source as blocked.
+  const tick = (label: string) =>
+    runAllSources(log)
+      .then((summaries) => evaluateIngestHealth(summaries, log))
+      .catch((err) => log.warn({ err: (err as Error).message }, `[scrape] ${label} errored`));
+
   const startTimeout = setTimeout(() => {
-    runAllSources(log).catch((err) => log.warn({ err: (err as Error).message }, '[scrape] initial run errored'));
+    void tick('initial run');
     interval = setInterval(() => {
-      runAllSources(log).catch((err) => log.warn({ err: (err as Error).message }, '[scrape] tick errored'));
+      void tick('tick');
     }, INTERVAL_MS);
     interval.unref?.();
   }, initialDelay);
