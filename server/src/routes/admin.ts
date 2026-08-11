@@ -14,6 +14,11 @@ import { db, schema } from '../db/index.js';
 import { parseDogPost } from '../pipeline/parser.js';
 import { upsertLostDog } from '../pipeline/upsert.js';
 import { runAllSources } from '../services/scrape.js';
+import {
+  buildLostDogsReport,
+  formatLostDogsReport,
+  loadAuditRows,
+} from '../services/lostDogsReport.js';
 
 const MAX_TEXT_CHARS = 4000;
 
@@ -139,6 +144,41 @@ const plugin: FastifyPluginAsync = async (app) => {
         .orderBy(desc(schema.scrapeLog.firstSeenAt))
         .limit(limit);
       return { count: rows.length, rows };
+    },
+  );
+
+  // THE LOST-PET AUDIT, WITHOUT AN SSH SESSION.
+  //
+  // Everything here was previously only reachable by SSHing into the
+  // production machine and running the sweep CLI — which meant it was
+  // only reachable from a laptop, which meant in practice it was
+  // reachable rarely. The numbers that matter (how many pets the map can
+  // actually draw, when each source last produced one, what the
+  // invisible ones are made of) are pure row-counting, so there is no
+  // reason for them to live behind a shell.
+  //
+  // Read-only by construction: it calls the counting half of the audit,
+  // which contains no writes. The network half — checking photos and ad
+  // pages — stays in the CLI, because it takes minutes and hundreds of
+  // outbound requests, which is not a thing to do inside a request.
+  //
+  // `?format=text` returns the same rendering the CLI prints, for when a
+  // human is reading it rather than a program.
+  app.get<{ Querystring: { format?: string } }>(
+    '/admin/lost-dogs/report',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      if (!checkAdminAuth(req.headers.authorization)) {
+        reply.code(401);
+        return { error: 'unauthorized' };
+      }
+      const rows = await loadAuditRows();
+      const report = await buildLostDogsReport(rows, Date.now());
+      if (req.query?.format === 'text') {
+        reply.type('text/plain; charset=utf-8');
+        return formatLostDogsReport(report);
+      }
+      return report;
     },
   );
 };
