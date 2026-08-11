@@ -13,6 +13,7 @@ import { TelegramSource } from '../pipeline/sources/telegram.js';
 import { FacebookSource } from '../pipeline/sources/facebook.js';
 import type { Source, SourceRunSummary } from '../pipeline/source.js';
 import { recordTick } from './scrape-history.js';
+import { scrapeProxyDescription } from '../lib/scrapeFetch.js';
 
 const INTERVAL_MS = 60 * 60 * 1000; // 1h
 const INITIAL_DELAY_MIN_MS = 30_000;
@@ -84,6 +85,13 @@ export function startScrapeCron(log: Pick<FastifyBaseLogger, 'info' | 'warn' | '
     log.warn('[scrape] ANTHROPIC_API_KEY missing — scrape cron disabled');
     return () => {};
   }
+
+  // Say at boot which way scrape traffic leaves the box. Whether the
+  // proxy is actually in use is the first question anyone will ask when
+  // the 403s do or don't stop, and "is the env var set on this machine"
+  // should not require an SSH session to answer. Host only — the URL
+  // carries credentials.
+  log.info(`[scrape] outbound: ${scrapeProxyDescription()}`);
 
   let interval: NodeJS.Timeout | null = null;
   const initialDelay = INITIAL_DELAY_MIN_MS + Math.random() * (INITIAL_DELAY_MAX_MS - INITIAL_DELAY_MIN_MS);

@@ -1,0 +1,53 @@
+{
+  "$schema": "https://json.schemastore.org/claude-code-settings.json",
+  "permissions": {
+    "allow": [
+      "Bash(fly logs *)",
+      "Bash(flyctl logs *)",
+      "Bash(fly status *)",
+      "Bash(flyctl status *)",
+      "Bash(fly version *)",
+      "Bash(flyctl version *)",
+      "Bash(fly apps list *)",
+      "Bash(flyctl apps list *)",
+      "Bash(fly secrets list *)",
+      "Bash(flyctl secrets list *)",
+      "Bash(fly machine list *)",
+      "Bash(flyctl machine list *)",
+      "Bash(fly machine status *)",
+      "Bash(flyctl machine status *)"
+    ],
+    "ask": [
+      "Bash(fly deploy *)",
+      "Bash(flyctl deploy *)",
+      "Bash(fly secrets set *)",
+      "Bash(flyctl secrets set *)",
+      "Bash(fly secrets unset *)",
+      "Bash(flyctl secrets unset *)",
+      "Bash(fly secrets import *)",
+      "Bash(flyctl secrets import *)",
+      "Bash(fly machine stop *)",
+      "Bash(flyctl machine stop *)",
+      "Bash(fly machine restart *)",
+      "Bash(flyctl machine restart *)",
+      "Bash(fly machine destroy *)",
+      "Bash(flyctl machine destroy *)",
+      "Bash(fly scale *)",
+      "Bash(flyctl scale *)",
+      "Bash(fly ssh *)",
+      "Bash(flyctl ssh *)",
+      "Bash(fly postgres *)",
+      "Bash(flyctl postgres *)",
+      "Bash(fly certs *)",
+      "Bash(flyctl certs *)"
+    ],
+    "deny": [
+      "Bash(fly apps destroy *)",
+      "Bash(flyctl apps destroy *)",
+      "Bash(fly volumes destroy *)",
+      "Bash(flyctl volumes destroy *)",
+      "Bash(fly volumes delete *)",
+      "Bash(flyctl volumes delete *)"
+    ]
+  }
+}
