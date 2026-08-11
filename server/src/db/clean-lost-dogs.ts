@@ -30,6 +30,16 @@
 // Dry run by default. Nothing is written without --apply, and the dry
 // run prints exactly what the apply would do.
 //
+// The COUNTING half of this audit — how many pets the map can draw,
+// when each source last produced one, what the invisible ones are made
+// of — needs no network at all and is served over HTTP instead:
+//
+//   GET /admin/lost-dogs/report[?format=text]   (Bearer ADMIN_TOKEN)
+//
+// Reach for that first. This script is for the half that has to go out
+// and ask the internet questions, which takes minutes and cannot run
+// inside a request.
+//
 // Usage:
 //   local:       pnpm --filter @shukajpes/server clean:lost-dogs
 //                pnpm --filter @shukajpes/server clean:lost-dogs --apply
@@ -37,9 +47,15 @@
 //                fly ssh console -a shukajpes-api -C "node dist/db/clean-lost-dogs.js --apply"
 
 import 'dotenv/config';
-import { and, desc, eq, isNotNull, ne } from 'drizzle-orm';
+import { and, eq, isNotNull } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
+import {
+  buildLostDogsReport,
+  formatLostDogsReport,
+  loadAuditRows,
+  type AuditRow,
+} from '../services/lostDogsReport.js';
 import { looksNotKyiv } from '../pipeline/sources/olx.js';
 
 // OLX rate-limits an impolite crawler, and being rate-limited here reads
@@ -54,16 +70,6 @@ const UA =
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 const BLOCK_GIVE_UP = 8;
-
-function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
-  const toRad = (d: number) => (d * Math.PI) / 180;
-  const dLat = toRad(bLat - aLat);
-  const dLng = toRad(bLng - aLng);
-  const h =
-    Math.sin(dLat / 2) ** 2 +
-    Math.cos(toRad(aLat)) * Math.cos(toRad(bLat)) * Math.sin(dLng / 2) ** 2;
-  return 2 * 6371000 * Math.asin(Math.sqrt(h));
-}
 
 type Fetched =
   | { ok: true; status: number; body: string }
@@ -91,31 +97,6 @@ async function get(url: string, wantBody: boolean): Promise<Fetched> {
   }
 }
 
-interface Row {
-  id: string;
-  name: string;
-  photoUrl: string | null;
-  urgency: string;
-  source: string;
-  lat: number;
-  lng: number;
-  description: string | null;
-  // Filled in from scrape_log after the main query, not selected with it.
-  sourceUrl?: string | null;
-}
-
-// Where the parser puts a pet whose post it could not place: Kyiv's
-// centre, exactly. /dogs/nearby and /sync/map both filter this pin out
-// rather than pile every ungeocoded pet on one spot, so these rows are
-// in the table, counted as active, and invisible to the app.
-//
-// Worth stating plainly because an earlier audit of mine got this
-// backwards: it checked for fallback-pin pets by reading /dogs/nearby,
-// which had already excluded them, and concluded there were none. You
-// cannot count what you are looking through a filter for.
-const FALLBACK_LAT = 50.4501;
-const FALLBACK_LNG = 30.5234;
-
 async function main() {
   const apply = process.argv.includes('--apply');
   console.log(apply ? '▶ APPLY — writes are real' : '▶ dry run — pass --apply to write');
@@ -132,19 +113,7 @@ async function main() {
   // scraped pets" as though that were a clean bill of health. Hence the
   // per-source breakdown below: a filter that quietly matches nothing
   // should be visible, not indistinguishable from a tidy database.
-  const rows: Row[] = await db
-    .select({
-      id: schema.lostDogs.id,
-      name: schema.lostDogs.name,
-      photoUrl: schema.lostDogs.photoUrl,
-      urgency: schema.lostDogs.urgency,
-      source: schema.lostDogs.source,
-      lat: schema.lostDogs.lastSeenLat,
-      lng: schema.lostDogs.lastSeenLng,
-      description: schema.lostDogs.lastSeenDescription,
-    })
-    .from(schema.lostDogs)
-    .where(and(eq(schema.lostDogs.status, 'active'), ne(schema.lostDogs.source, 'in_app')));
+  const rows: AuditRow[] = await loadAuditRows();
 
   // Permalinks in a second query, joined in memory.
   //
@@ -175,111 +144,18 @@ async function main() {
   }
   for (const r of rows) r.sourceUrl = urlByDog.get(r.id) ?? null;
 
-  const bySource = new Map<string, number>();
-  for (const r of rows) bySource.set(r.source, (bySource.get(r.source) ?? 0) + 1);
-  console.log(`  ${rows.length} active pets to check`);
-  for (const [src, n] of [...bySource].sort((a, b) => b[1] - a[1])) {
-    console.log(`     ${n}\t${src}`);
-  }
-  if (rows.length === 0) {
-    console.log('  (nothing matched — check lost_dogs.source values before trusting this)');
-  }
+  // The counting half of this audit now lives in services/lostDogsReport
+  // so an admin endpoint can serve the same numbers without an SSH
+  // session. One renderer, one query, two front doors — the CLI and the
+  // endpoint cannot drift into describing the same database differently.
+  console.log(formatLostDogsReport(await buildLostDogsReport(rows, Date.now())));
 
-  // How many of those the app can actually draw. /dogs/nearby drops the
-  // fallback pin outright and bounds the rest by the request radius, so
-  // a row can be active, correct, and still invisible — which is how a
-  // table of 261 shows 172 pets on screen.
-  const onFallback = rows.filter(
-    (r) => r.lat === FALLBACK_LAT && r.lng === FALLBACK_LNG,
-  );
-  const farOut = rows.filter(
-    (r) =>
-      !(r.lat === FALLBACK_LAT && r.lng === FALLBACK_LNG) &&
-      haversineM(r.lat, r.lng, FALLBACK_LAT, FALLBACK_LNG) > 60_000,
-  );
-  console.log(`  of those, invisible to the map:`);
-  console.log(`     ${onFallback.length}\tsitting on the ungeocoded fallback pin`);
-  console.log(`     ${farOut.length}\tmore than 60km from the city centre`);
-  console.log('');
-
-  // WHAT ARE THE FALLBACK-PIN PETS, ACTUALLY?
-  //
-  // Two very different populations end up on this pin, and the fix for
-  // one is the opposite of the fix for the other:
-  //
-  //   a real lost pet whose post the geocoder couldn't place — worth
-  //   rescuing, because somebody is looking for it and the app is
-  //   currently hiding it;
-  //
-  //   a post that was never about a lost pet at all. The parser puts
-  //   rehoming ads ("шукає дім", "віддам в добрі руки") and resolution
-  //   notices on the fallback pin ON PURPOSE — but upsert only turns
-  //   urgency 'resolved' into status 'found', so a REHOMING post stays
-  //   status 'active' and sits in the table as an active lost pet
-  //   forever. Those should be expired, not geocoded.
-  //
-  // Splitting by urgency separates them without guessing, and the
-  // samples let a human sanity-check the split before anything acts on
-  // it. Report only — this diagnoses, it does not touch.
-  if (onFallback.length > 0) {
-    const byUrgency = new Map<string, Row[]>();
-    for (const r of onFallback) {
-      const list = byUrgency.get(r.urgency) ?? [];
-      list.push(r);
-      byUrgency.set(r.urgency, list);
-    }
-    console.log('  the fallback-pin pets, by urgency:');
-    for (const [u, list] of [...byUrgency].sort((a, b) => b[1].length - a[1].length)) {
-      console.log(`     ${list.length}\t${u}`);
-      for (const r of list.slice(0, 3)) {
-        const d = (r.description ?? '(no description)').replace(/\s+/g, ' ').slice(0, 88);
-        console.log(`        · ${r.name} — ${d}`);
-      }
-    }
-    // A post with no location words at all is one the geocoder never had
-    // a chance with; one that names a street is a rescue candidate.
-    const noDesc = onFallback.filter((r) => !r.description?.trim()).length;
-    console.log(`     (${noDesc} of them have no description text to re-geocode from)`);
-    console.log('');
-  }
-
-  // WHEN DID EACH SOURCE LAST BRING SOMETHING IN?
-  //
-  // A scraper that stops working does not announce it. OLX sits behind
-  // CloudFront's WAF, which serves 403 to datacentre IPs, so every ad
-  // fetch from the app host fails — and the scrape tick logs its errors
-  // at info level and returns a summary that looks like a completed run.
-  // The only externally visible symptom is that the newest pet quietly
-  // stops moving.
-  //
-  // A dead scraper is a much worse bug than any row this sweep cleans,
-  // so the number goes at the top of the report where it cannot be
-  // missed.
-  const newest = await db
-    .select({ source: schema.lostDogs.source, createdAt: schema.lostDogs.createdAt })
-    .from(schema.lostDogs)
-    .orderBy(desc(schema.lostDogs.createdAt));
-  const latestBySource = new Map<string, Date>();
-  for (const n of newest) {
-    if (!latestBySource.has(n.source)) latestBySource.set(n.source, n.createdAt);
-  }
-  console.log('  newest pet per source (ingest heartbeat):');
-  const nowMs = Date.now();
-  for (const [src, at] of [...latestBySource].sort(
-    (a, b) => b[1].getTime() - a[1].getTime(),
-  )) {
-    const days = (nowMs - at.getTime()) / 86_400_000;
-    const flag = days > 3 ? '  <-- STALE' : '';
-    console.log(`     ${days.toFixed(1)}d ago\t${src}${flag}`);
-  }
-  console.log('');
-
-  const deadPhoto: Row[] = [];
-  const photoUnchecked: { row: Row; why: string }[] = [];
-  const wrongCity: { row: Row; hint: string }[] = [];
-  const sourceGone: Row[] = [];
-  const noPermalink: Row[] = [];
-  const adFetchFailed: { row: Row; why: string }[] = [];
+  const deadPhoto: AuditRow[] = [];
+  const photoUnchecked: { row: AuditRow; why: string }[] = [];
+  const wrongCity: { row: AuditRow; hint: string }[] = [];
+  const sourceGone: AuditRow[] = [];
+  const noPermalink: AuditRow[] = [];
+  const adFetchFailed: { row: AuditRow; why: string }[] = [];
   let adFetched = 0;
   // Give up on the city half after this many 403s in a row.
   let consecutiveBlocks = 0;
