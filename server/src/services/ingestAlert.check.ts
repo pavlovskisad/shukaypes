@@ -66,6 +66,35 @@ const healthy = (inserted = 2) => summary({ discovered: 20, parsed: 5, inserted 
 // must never be reported as a failure.
 const idle = () => summary({ source: 'telegram' });
 
+// The shapes below are copied from a real production tick on 11 Aug,
+// which is how the original rule's false positive was found. They are
+// here so it cannot come back.
+
+// A perfectly ordinary quiet hour: everything discovered was already in
+// scrape_log, so nothing parsed. With ~4 new ads a day against 24 ticks
+// this is the COMMON case, not the exceptional one.
+const quietHour = () => summary({ discovered: 251, skipped: 251, parsed: 0, errors: 0 });
+
+// The same quiet hour with one ad deleted between listing and fetch.
+const quietHourWithBlip = () =>
+  summary({ discovered: 251, skipped: 251, parsed: 0, errors: 1, errorMessages: ['ad -> 410'] });
+
+// Facebook every single tick, forever, until cookies are provided.
+const disabledSource = () =>
+  summary({ source: 'facebook', errors: 1, errorMessages: ['FACEBOOK_COOKIES not set — source disabled'] });
+
+// The exact 11 Aug OLX tick: 7 of 13 listings refused, 6 served, 251
+// ads seen, and 17 pets inserted over the preceding week. Degraded
+// coverage while still delivering. Must not alert.
+const degradedButWorking = () =>
+  summary({
+    discovered: 251,
+    skipped: 251,
+    parsed: 0,
+    errors: 7,
+    errorMessages: ['[listing …byuro-nahodok/kiev/] -> 403'],
+  });
+
 let failures = 0;
 function check(name: string, ok: boolean, detail = ''): void {
   if (!ok) {
@@ -112,6 +141,26 @@ async function main() {
     const deps = { store, notify: async (t: string) => (sent.push(t), true), nowMs: Date.now() };
     for (let i = 0; i < 10; i++) await evaluateIngestHealth([idle()], silentLog, deps);
     check('4 idle source never alerts', sent.length === 0, `sent ${sent.length}`);
+  }
+
+  // 4b. Regression cases from the real 11 Aug tick. A quiet hour is not
+  //     a blocked source, with or without a single stray error, and a
+  //     source that is merely switched off must never page anybody.
+  {
+    const store = memoryStore();
+    const sent: string[] = [];
+    const deps = { store, notify: async (t: string) => (sent.push(t), true), nowMs: Date.now() };
+    for (let i = 0; i < 10; i++) await evaluateIngestHealth([quietHour()], silentLog, deps);
+    check('4b quiet hour never alerts', sent.length === 0, `sent ${sent.length}`);
+    for (let i = 0; i < 10; i++) await evaluateIngestHealth([quietHourWithBlip()], silentLog, deps);
+    check('4c quiet hour + one 410 never alerts', sent.length === 0, `sent ${sent.length}`);
+    for (let i = 0; i < 10; i++) await evaluateIngestHealth([disabledSource()], silentLog, deps);
+    check('4d disabled source never alerts', sent.length === 0, `sent ${sent.length}`);
+    // Degraded-but-delivering is the state OLX has actually been in
+    // while inserting 17 pets a week. If this ever alerts, the channel
+    // gets muted and the real outage goes unread.
+    for (let i = 0; i < 10; i++) await evaluateIngestHealth([degradedButWorking()], silentLog, deps);
+    check('4e degraded-but-working never alerts', sent.length === 0, `sent ${sent.length}`);
   }
 
   // 5. Pipeline stall: silent until the threshold, then exactly once.
