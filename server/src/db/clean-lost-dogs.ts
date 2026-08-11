@@ -53,6 +53,7 @@ const UA =
   'Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0 Safari/537.36';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+const BLOCK_GIVE_UP = 8;
 
 function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const toRad = (d: number) => (d * Math.PI) / 180;
@@ -237,6 +238,10 @@ async function main() {
   const noPermalink: Row[] = [];
   const adFetchFailed: { row: Row; why: string }[] = [];
   let adFetched = 0;
+  // Give up on the city half after this many 403s in a row.
+  let consecutiveBlocks = 0;
+  let cityCheckBlocked = false;
+  let cityCheckSkipped = 0;
 
   for (const row of rows) {
     if (row.photoUrl) {
@@ -268,13 +273,38 @@ async function main() {
       continue;
     }
 
+    // Stop knocking once it's clear nobody is opening the door.
+    //
+    // OLX is behind CloudFront's WAF, which blocks datacentre IPs — so
+    // run from the app host, every one of these 250-odd requests is a
+    // guaranteed 403. Hammering a WAF that has already refused us is
+    // pointless, takes two minutes, and is exactly the behaviour that
+    // gets a block widened rather than lifted. The photo half above
+    // still completes: the CDN answers fine, it's only the ad pages
+    // that are blocked.
+    if (cityCheckBlocked) {
+      cityCheckSkipped++;
+      continue;
+    }
+
     const page = await get(row.sourceUrl, true);
     await sleep(REQUEST_GAP_MS);
     if (!page.ok) {
       if (page.status === 404 || page.status === 410) sourceGone.push(row);
-      else adFetchFailed.push({ row, why: page.error });
+      else {
+        adFetchFailed.push({ row, why: page.error });
+        if (page.status === 403) consecutiveBlocks++;
+        if (consecutiveBlocks >= BLOCK_GIVE_UP) {
+          cityCheckBlocked = true;
+          console.log(
+            `  … ${BLOCK_GIVE_UP} consecutive 403s — the ad host is blocking this machine.\n` +
+              `    Skipping the rest of the city check rather than keep knocking.`,
+          );
+        }
+      }
       continue;
     }
+    consecutiveBlocks = 0;
     adFetched++;
     if (looksNotKyiv(page.body)) {
       // Pull the city out of the page for the log — the operator should
@@ -308,11 +338,17 @@ async function main() {
   }
   // The headline number the operator actually needs: a city check that
   // read nothing is not a city check that found nothing.
+  if (cityCheckSkipped > 0) {
+    console.log(`not even attempted (gave up after repeated blocks): ${cityCheckSkipped}`);
+  }
   if (adFetched === 0) {
     console.log(
       `\n!! THE CITY CHECK READ ZERO ADS — "not in kyiv: 0" above means nothing.\n` +
-        `   OLX likely blocks this host. Run the sweep from a normal connection\n` +
-        `   instead: DATABASE_URL=<prod url> pnpm --filter @shukajpes/server clean:lost-dogs`,
+        `   The ad host blocks this machine (CloudFront WAF blocks datacentre IPs).\n` +
+        `   The PHOTO half above is unaffected and complete — the CDN answers fine —\n` +
+        `   so --apply from here is safe, it will just have no city work to do.\n` +
+        `   For the city half, run from a normal connection:\n` +
+        `   DATABASE_URL=<prod url> pnpm --filter @shukajpes/server clean:lost-dogs`,
     );
   } else if (adFetchFailed.length > adFetched) {
     console.log(
