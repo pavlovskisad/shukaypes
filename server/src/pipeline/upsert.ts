@@ -12,9 +12,7 @@ import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import type { IngestAction, IngestResult, ParsedDog } from './types.js';
 import { findLandmark, jitterAround } from './landmarks.js';
-
-const DEDUPE_RADIUS_M = 1500;
-const DEDUPE_WINDOW_MS = 7 * 24 * 60 * 60 * 1000;
+import { isSamePet, DEDUPE_RADIUS_M } from './samePet.js';
 
 // Newer reposts of the same dog often have coords that drift 30-150m
 // from the original — different parser run, slightly different landmark
@@ -99,30 +97,56 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
   // Pull active-ish rows in the geographic window; dedupe in JS to keep the
   // SQL shape simple and portable. Volume is low enough that this is fine.
   const distExpr = sql<number>`(6371000 * acos(cos(radians(${parsed.lastSeenLat})) * cos(radians(last_seen_lat)) * cos(radians(last_seen_lng) - radians(${parsed.lastSeenLng})) + sin(radians(${parsed.lastSeenLat})) * sin(radians(last_seen_lat))))`;
+  // ORDER BY distance, because without it the 20 rows are whichever 20
+  // Postgres felt like returning. That is not a theoretical complaint:
+  // 81 active pets share the exact ungeocoded fallback coordinate, so
+  // for any pet landing there the candidate set was a lottery among
+  // identically-placed rows, and the same input could dedupe differently
+  // on two runs.
+  //
+  // The limit stays at 20 deliberately. The measured problem is not that
+  // real duplicates are missed — only one genuine duplicate pair exists
+  // in the whole active table — it is that the old identity rule merged
+  // pets that were not the same animal. Widening the net would have made
+  // that worse, not better.
   const candidates = await db
     .select({
       id: schema.lostDogs.id,
       name: schema.lostDogs.name,
       species: schema.lostDogs.species,
+      breed: schema.lostDogs.breed,
       lastSeenAt: schema.lostDogs.lastSeenAt,
       source: schema.lostDogs.source,
       dist: distExpr,
     })
     .from(schema.lostDogs)
     .where(and(eq(schema.lostDogs.status, 'active'), sql`${distExpr} < ${DEDUPE_RADIUS_M}`))
+    .orderBy(distExpr, schema.lostDogs.id)
     .limit(20);
 
-  const candidateName = parsed.name.toLowerCase().trim();
-  const match = candidates.find((c) => {
-    // A dog named Murka and a cat named Murka on the same block are two pets,
-    // not a dedupe. Species must match before we consider anything a repost.
-    if (c.species !== parsed.species) return false;
-    const cn = c.name.toLowerCase().trim();
-    const nameHit = cn === candidateName || cn.includes(candidateName) || candidateName.includes(cn);
-    if (!nameHit) return false;
-    const dt = Math.abs(c.lastSeenAt.getTime() - lastSeenMs);
-    return dt < DEDUPE_WINDOW_MS;
-  });
+  // Identity lives in pipeline/samePet.ts, which is a pure function with
+  // its own fixture check. It used to be four lines inline here, and it
+  // was wrong in the expensive direction: measured on production, three
+  // of the four pairs it called the same pet were different animals.
+  // Merging those would have overwritten one family's lost pet with
+  // another's, and the losing record leaves no trace.
+  const match = candidates.find((c) =>
+    isSamePet(
+      {
+        name: c.name,
+        species: c.species as ParsedDog['species'],
+        breed: c.breed,
+        lastSeenAtMs: c.lastSeenAt.getTime(),
+      },
+      {
+        name: parsed.name,
+        species: parsed.species,
+        breed: parsed.breed,
+        lastSeenAtMs: lastSeenMs,
+      },
+      typeof c.dist === 'number' ? c.dist : Number.POSITIVE_INFINITY,
+    ),
+  );
 
   if (match) {
     // Only refresh if the incoming post is newer. Keeps older re-posts from

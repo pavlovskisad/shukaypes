@@ -18,3 +18,7 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      # Offline fixture checks — no database, no network, no secrets.
+      # They guard rules whose failure mode is silent: expiring a real
+      # Kyiv pet, or an ingest alert that never fires.
+      - run: pnpm check

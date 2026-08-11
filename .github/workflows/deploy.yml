@@ -26,6 +26,10 @@ jobs:
       - run: pnpm install --frozen-lockfile
       - run: pnpm typecheck
       - run: pnpm lint
+      # Same offline checks the PR runs. A rule that decides which pets
+      # get expired, or whether anyone hears that ingestion died, should
+      # not reach production on the strength of it having compiled.
+      - run: pnpm check
 
   server:
     name: server → fly.io
