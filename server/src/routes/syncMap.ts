@@ -28,6 +28,7 @@ import {
 } from '../services/territory.js';
 import type { LatLng } from '../utils/geo.js';
 import { limitExpensive, limitPolling, limitRead } from '../lib/rateLimit.js';
+import { DEV_KEY_HEADER, devAccessAllowed } from '../lib/devAuth.js';
 
 // Server kill-switch for multiplayer presence. Off only if explicitly set to
 // 'off'; otherwise presence runs when the client opts in via `mp=1` (so prod
@@ -92,7 +93,16 @@ const plugin: FastifyPluginAsync = async (app) => {
   // Wipe the caller's own territory. Only ever touches your own ground, so
   // it needs no special guard — and it makes the mechanic re-testable from
   // a clean slate without going near the database.
-  app.post('/territory/reset', limitExpensive, async (req) => {
+  //
+  // The client half is DEV_TOOLS-gated (app/constants/devTools.ts), but a
+  // flag in a browser is a suggestion — anyone can flip it in devtools. So
+  // this destructive route asks for the shared dev password itself, and
+  // the client sends it from whatever the operator typed at /dev.
+  // 404, not 403 — there is nothing here to discover.
+  app.post('/territory/reset', limitExpensive, async (req, reply) => {
+    if (!devAccessAllowed(req.headers[DEV_KEY_HEADER])) {
+      return reply.code(404).send({ error: 'not found' });
+    }
     await resetTerritory(req.userId);
     return { ok: true };
   });
@@ -100,7 +110,10 @@ const plugin: FastifyPluginAsync = async (app) => {
   // Send a bot onto your newest mark so the raid path can be exercised
   // without waiting for one to wander in on its own. Real contest, real
   // raid row — and it can only cost the caller their own ground.
-  app.post('/territory/raid-test', limitExpensive, async (req) => {
+  app.post('/territory/raid-test', limitExpensive, async (req, reply) => {
+    if (!devAccessAllowed(req.headers[DEV_KEY_HEADER])) {
+      return reply.code(404).send({ error: 'not found' });
+    }
     const ok = await simulateRaidOnSelf(req.userId);
     return { ok };
   });

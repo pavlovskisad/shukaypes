@@ -3,16 +3,22 @@
 // `components/map/crayonStyle.ts` and is shared with the production
 // map. This screen stays around as a stripped-down place to see the
 // base style without any pet/paw overlays on top — useful for tuning.
+//
+// DEV_TOOLS-gated since the beta. `vercel.json` rewrites every unmatched
+// path to index.html, so this route was publicly reachable at /preview in
+// the shipped build: a half-finished internal screen with its own map
+// instance, one URL guess away from anybody handed a beta link.
 
 import { useEffect, useMemo, useRef } from 'react';
 import { View, StyleSheet, Text, Pressable } from 'react-native';
-import { router } from 'expo-router';
+import { router, Redirect } from 'expo-router';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { R } from '../constants/radius';
 import { S } from '../constants/spacing';
 import { TYPE } from '../constants/type';
 import { popPressableEvent } from '../utils/popOnTap';
+import { DEV_TOOLS } from '../constants/devTools';
 
 import {
   LIGHT_PALETTE,
@@ -25,12 +31,18 @@ import {
 const KYIV_CENTER: [number, number] = [30.5234, 50.4501];
 
 export default function PhaseTwoPreview() {
+  // Hooks first, unconditionally — an early return above them would
+  // change hook order between builds, which is the exact mistake behind
+  // the white screens this beta work is trying to stop.
   const containerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
   const paperOverlayRef = useRef<HTMLDivElement | null>(null);
   const paperUrl = useMemo(() => generatePaperTextureUrl(LIGHT_PALETTE), []);
 
   useEffect(() => {
+    // No map is built when the screen is not going to be shown — a
+    // MapLibre instance costs a GL context and a style fetch.
+    if (!DEV_TOOLS) return;
     if (!containerRef.current || mapRef.current) return;
     let cancelled = false;
     let cleanupPaper: (() => void) | null = null;
@@ -66,6 +78,10 @@ export default function PhaseTwoPreview() {
       if (m) m.remove();
     };
   }, []);
+
+  // Send anyone who guesses the URL to the game, rather than showing a
+  // 404 that suggests there is something here to find.
+  if (!DEV_TOOLS) return <Redirect href="/" />;
 
   return (
     <View style={styles.root}>

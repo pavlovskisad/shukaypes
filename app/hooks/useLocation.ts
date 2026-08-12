@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
 import type { LatLng } from '@shukajpes/shared';
+import { DEV_TOOLS } from '../constants/devTools';
 
 const KYIV_FALLBACK: LatLng = { lat: 50.4501, lng: 30.5234 };
 
@@ -38,6 +39,11 @@ interface SimConfig {
 }
 
 function readSimConfig(): SimConfig | null {
+  // DEV_TOOLS-gated since the beta. A simulated walk drives real server
+  // writes — marks, claims, collected paws — from a desk, which is exactly
+  // what makes it useful for testing and exactly what should not be one
+  // query parameter away in a build handed to strangers.
+  if (!DEV_TOOLS) return null;
   if (typeof window === 'undefined') return null;
   try {
     const q = new URLSearchParams(window.location.search);

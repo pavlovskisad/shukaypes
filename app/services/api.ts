@@ -13,6 +13,7 @@ import { MULTIPLAYER } from '../constants/experiments';
 import { getDeviceId } from './deviceId';
 import { getTelegramInitData } from './telegram';
 import { getInviteCode, clearInviteCode } from './invite';
+import { getDevKey } from './devUnlock';
 import { markInviteRequired } from '../stores/accessStore';
 
 /**
@@ -140,6 +141,12 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   // has an account, and for everybody at all while the gate is off.
   const invite = getInviteCode();
   if (invite) authHeaders['x-invite-code'] = invite;
+  // Only the two destructive dev routes look at this, and only when
+  // somebody has unlocked at /dev. Sent on every request for the same
+  // reason as the invite code — knowing which call needs it is the
+  // caller's problem otherwise — and absent entirely for everybody else.
+  const devKey = getDevKey();
+  if (devKey) authHeaders['x-dev-key'] = devKey;
   const res = await fetch(`${env.apiUrl}${path}`, {
     ...init,
     headers: {
@@ -409,6 +416,15 @@ export const api = {
     req<{ ok: boolean }>('/territory/raid-test', {
       method: 'POST',
       body: JSON.stringify({}),
+    }),
+
+  // Check the shared dev password (see /dev). Throws on a wrong one, which
+  // is the whole point — storing an unchecked password would leave the
+  // operator staring at a simulator that silently does nothing.
+  unlockDev: (password: string) =>
+    req<{ ok: true }>('/dev/unlock', {
+      method: 'POST',
+      body: JSON.stringify({ password }),
     }),
 
   getChatHistory: () => req<{ messages: ChatMessage[] }>('/chat/history'),
