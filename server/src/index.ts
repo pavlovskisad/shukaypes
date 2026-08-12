@@ -22,6 +22,7 @@ import dailyTasksRoute from './routes/dailyTasks.js';
 import loreRoute from './routes/lore.js';
 import placesRoute from './routes/places.js';
 import photosRoute from './routes/photos.js';
+import clientErrorsRoute from './routes/clientErrors.js';
 import telegramRoute, { registerTelegramWebhook } from './routes/telegram.js';
 import { startDecayCron } from './services/decay.js';
 import { startWatchdog } from './services/watchdog.js';
@@ -155,6 +156,7 @@ export async function buildServer(observe?: RouteObserver) {
   await app.register(loreRoute);
   await app.register(placesRoute);
   await app.register(photosRoute);
+  await app.register(clientErrorsRoute);
   await app.register(telegramRoute);
 
   return app;

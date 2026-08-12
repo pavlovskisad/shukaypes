@@ -5,8 +5,10 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Splash } from '../components/ui/Splash';
 import { InviteGate } from '../components/ui/InviteGate';
+import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { useAccessStore } from '../stores/accessStore';
 import { notifyTelegramReady } from '../services/telegram';
+import { installGlobalCrashHandlers } from '../services/crashReport';
 // Side-effect import — patches RN's Text/TextInput defaults so every
 // instance picks up SYSTEM_FONT even when the component author didn't
 // add fontFamily to its style. Must be imported once at app root.
@@ -18,6 +20,14 @@ export default function RootLayout() {
   // height. No-op outside Telegram.
   useEffect(() => {
     notifyTelegramReady();
+  }, []);
+
+  // Catches what a React boundary structurally cannot: throws outside
+  // the render cycle, and promise rejections nobody handled. Installed
+  // in an effect rather than at module scope so it runs once the app is
+  // actually mounting, and it is idempotent either way.
+  useEffect(() => {
+    installGlobalCrashHandlers();
   }, []);
 
   // Replaces the whole tree rather than overlaying it: with no account
@@ -41,13 +51,19 @@ export default function RootLayout() {
     // react-native-gesture-handler to receive events on web — the
     // Tinder-style card stack on the tasks tab won't pan without it.
     // flex:1 so the rest of the layout fills the viewport as before.
+    // The boundary sits INSIDE the providers rather than around them:
+    // its fallback renders real components, so it needs the same
+    // context they do. Wrapping the outside would mean a crash in the
+    // tree leaves the fallback without a SafeAreaProvider.
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <StatusBar style="dark" />
-        <Stack screenOptions={{ headerShown: false }}>
-          <Stack.Screen name="(tabs)" />
-        </Stack>
-        <Splash />
+        <ErrorBoundary>
+          <Stack screenOptions={{ headerShown: false }}>
+            <Stack.Screen name="(tabs)" />
+          </Stack>
+          <Splash />
+        </ErrorBoundary>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );
