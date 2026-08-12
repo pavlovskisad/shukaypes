@@ -13,6 +13,7 @@ import { balance } from '../../constants/balance';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { DEV_TOOLS } from '../../constants/devTools';
 import { useGameStore } from '../../stores/gameStore';
 import { MapContext } from './MapContext';
 import {
@@ -627,8 +628,12 @@ export default function MapViewWeb() {
   // the mechanic can be re-tested from a clean slate without hunting rows
   // in the database. Ref-guarded so a re-render can't fire it twice, and
   // it only ever touches the caller's own ground.
+  //
+  // DEV_TOOLS-gated since the beta: it destroys real progress, and a
+  // tester who is handed the link has no way to know that before clicking.
   const terrResetRef = useRef(false);
   useEffect(() => {
+    if (!DEV_TOOLS) return;
     if (terrResetRef.current) return;
     if (typeof window === 'undefined') return;
     try {
@@ -654,6 +659,7 @@ export default function MapViewWeb() {
   // sync — this only causes the raid, it doesn't fake it.
   const terrRaidRef = useRef(false);
   useEffect(() => {
+    if (!DEV_TOOLS) return;
     if (terrRaidRef.current) return;
     if (typeof window === 'undefined') return;
     try {

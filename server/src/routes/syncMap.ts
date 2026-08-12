@@ -34,6 +34,13 @@ import { limitExpensive, limitPolling, limitRead } from '../lib/rateLimit.js';
 // clients that don't send the flag neither appear to nor see other players).
 const MULTIPLAYER_ON = process.env.MULTIPLAYER !== 'off';
 
+// Read per-request rather than captured at module load, so the pair can be
+// opened for a debugging session with `fly secrets set DEV_ROUTES=1` and
+// shut again without either state being baked into a build.
+function devRoutesEnabled(): boolean {
+  return process.env.DEV_ROUTES === '1';
+}
+
 interface SyncMapQuery {
   lat: string;
   lng: string;
@@ -92,7 +99,14 @@ const plugin: FastifyPluginAsync = async (app) => {
   // Wipe the caller's own territory. Only ever touches your own ground, so
   // it needs no special guard — and it makes the mechanic re-testable from
   // a clean slate without going near the database.
-  app.post('/territory/reset', limitExpensive, async (req) => {
+  //
+  // The client half is DEV_TOOLS-gated (app/constants/devTools.ts), so
+  // this gate matches it: a route whose only caller is a dev affordance
+  // should not stay answerable in a build handed to strangers. Both halves
+  // move together or the pair is half-shut. 404, not 403 — there is
+  // nothing here to discover.
+  app.post('/territory/reset', limitExpensive, async (req, reply) => {
+    if (!devRoutesEnabled()) return reply.code(404).send({ error: 'not found' });
     await resetTerritory(req.userId);
     return { ok: true };
   });
@@ -100,7 +114,8 @@ const plugin: FastifyPluginAsync = async (app) => {
   // Send a bot onto your newest mark so the raid path can be exercised
   // without waiting for one to wander in on its own. Real contest, real
   // raid row — and it can only cost the caller their own ground.
-  app.post('/territory/raid-test', limitExpensive, async (req) => {
+  app.post('/territory/raid-test', limitExpensive, async (req, reply) => {
+    if (!devRoutesEnabled()) return reply.code(404).send({ error: 'not found' });
     const ok = await simulateRaidOnSelf(req.userId);
     return { ok };
   });
