@@ -73,8 +73,27 @@ function coveredCells(
 ): Array<{ cellLat: number; cellLng: number }> {
   const latRangeDeg = radiusM / 111320;
   const lngRangeDeg = radiusM / (111320 * Math.cos((lat * Math.PI) / 180));
-  const cellsLat = Math.ceil(latRangeDeg / CELL_DEG);
-  const cellsLng = Math.ceil(lngRangeDeg / CELL_DEG);
+  // Hard ceiling on the fan-out, independent of whoever called us.
+  //
+  // Cell count is quadratic in the radius and each cell is a billable
+  // Google lookup per category, so this function is the place where a
+  // careless caller turns into an invoice. /places/* clamps the radius
+  // to 2000m, which lands well inside these numbers — this is the
+  // second lock, for the next caller who does not.
+  //
+  // Measured at Kyiv's latitude, cells per request per category:
+  //
+  //   1100m (the spots default) -> 3×5  =  15
+  //   1500m (the parks default) -> 5×7  =  35
+  //   2000m (the route's cap)   -> 5×7  =  35
+  //   5000m (the old cap)       -> 11×17 = 187
+  //
+  // 4 allows a 9×9 = 81 cell worst case: more than double what the
+  // clamped radius actually asks for, and a quarter of what an
+  // unclamped 5km request produced.
+  const MAX_CELLS_PER_AXIS = 4;
+  const cellsLat = Math.min(MAX_CELLS_PER_AXIS, Math.ceil(latRangeDeg / CELL_DEG));
+  const cellsLng = Math.min(MAX_CELLS_PER_AXIS, Math.ceil(lngRangeDeg / CELL_DEG));
   const { cellLat: cLat, cellLng: cLng } = snapToCell(lat, lng);
   const out: Array<{ cellLat: number; cellLng: number }> = [];
   for (let i = -cellsLat; i <= cellsLat; i++) {

@@ -30,7 +30,12 @@ const POSITION_UPDATE_THRESHOLD_M = 150;
 // parsed coords fall outside this box are skipped at upsert time;
 // fallback-coord pets (geocode failure → city center) stay in because
 // they're already filtered from /dogs/nearby on the way out.
-const KYIV_BBOX = {
+// Exported because it is the project's one definition of "inside the
+// map". /places/* uses it to refuse coordinates outside the city, which
+// is what stops somebody walking the globe to force cache misses on a
+// billable Google API. Two bounding boxes would drift, and then the
+// ingest gate and the spend gate would disagree about where Kyiv is.
+export const KYIV_BBOX = {
   north: 50.65,
   south: 50.20,
   west: 30.10,
