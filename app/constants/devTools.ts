@@ -7,7 +7,8 @@
 // server writes — marks, claims, collected paws — from a desk. Each one is
 // authenticated as the caller and touches only their own data, so none is
 // a way in. They are a way for a beta tester who found a link in a chat to
-// destroy their own progress and then, reasonably, report it as a bug.
+// destroy their own progress, or to mark ground they never walked onto a
+// map other people compete on, and then reasonably report it as a bug.
 //
 // GATED, NOT DELETED. Every one of these is genuinely useful: the walk
 // simulator is the only way to exercise movement mechanics without going
@@ -15,21 +16,41 @@
 // the hook — a simulated walk hits the real server code. Deleting them
 // would mean rewriting them the next time the territory rules change.
 //
-// On in a dev server (`__DEV__`), and on in any build that sets
-// EXPO_PUBLIC_DEV_TOOLS=1 — which is how to turn them back on for a Vercel
-// preview without touching the production project's environment.
+// THREE WAYS ON:
 //
-// Metro inlines both at build time, so this whole module compiles down to
-// a single boolean literal and the guarded branches are plainly dead in a
-// production bundle. Verified by grepping the export, not by reasoning
-// about it: `e.DEV_TOOLS=!1` with the variable unset, `!0` with it set.
+//   __DEV__                      a local dev server
+//   EXPO_PUBLIC_DEV_TOOLS=1      a build made for testing (e.g. a preview
+//                                deployment), set in that project's env
+//   a password typed at /dev     the production build, on a real phone
 //
-// LOCALLY, PASS `--clear`. Metro caches the transformed module, so a
-// rebuild after changing the variable happily re-emits the old literal —
-// the first check of this switch said it was broken when it was not.
-// Vercel builds in a clean container and is unaffected.
+// The third is the one that makes this usable in the field, and it is a
+// TYPED password rather than a fourth build flag on purpose: EXPO_PUBLIC_*
+// values are inlined into the bundle, so a secret shipped that way is
+// readable by anyone who opens the JavaScript. See services/devUnlock.ts
+// for what that gate does and does not protect.
+//
+// Read ONCE at module init, not per call. A flag that could change halfway
+// through a session would mean the simulator switching on under a running
+// map; unlocking reloads the app instead.
+//
+// Metro inlines the first two at build time. Before the /dev unlock
+// existed this module folded to a single boolean literal and every guarded
+// branch was plainly dead code in the production bundle; with a runtime
+// third source they are live code behind a false flag instead. That is the
+// honest cost of wanting the simulator on a real phone, and it is why the
+// two DESTRUCTIVE affordances are additionally checked server-side rather
+// than trusting this boolean on its own.
+//
+// LOCALLY, PASS `--clear` when changing the env variable. Metro caches the
+// transformed module and will happily re-emit the old literal — the first
+// check of this switch reported it broken when it was not. Vercel builds
+// in a clean container and is unaffected.
+
+import { isDevUnlocked } from '../services/devUnlock';
+
 declare const __DEV__: boolean;
 
 export const DEV_TOOLS: boolean =
   (typeof __DEV__ !== 'undefined' && __DEV__) ||
-  process.env.EXPO_PUBLIC_DEV_TOOLS === '1';
+  process.env.EXPO_PUBLIC_DEV_TOOLS === '1' ||
+  isDevUnlocked();
