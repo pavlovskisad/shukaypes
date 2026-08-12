@@ -12,6 +12,20 @@ import { env } from '../constants/env';
 import { MULTIPLAYER } from '../constants/experiments';
 import { getDeviceId } from './deviceId';
 import { getTelegramInitData } from './telegram';
+import { getInviteCode, clearInviteCode } from './invite';
+import { markInviteRequired } from '../stores/accessStore';
+
+/**
+ * The server refused to create an account because no valid invite code
+ * was presented. Its own class so the UI can show a door rather than an
+ * error — being uninvited is a state, not a fault.
+ */
+export class InviteRequiredError extends Error {
+  constructor() {
+    super('invite required');
+    this.name = 'InviteRequiredError';
+  }
+}
 
 // Projection returned by /dogs/nearby — narrower than the full LostDog type
 // (no description, source, status, reportedBy). Radius is named with the
@@ -120,6 +134,12 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   const authHeaders: Record<string, string> = tgInitData
     ? { 'x-telegram-init-data': tgInitData }
     : { 'x-device-id': getDeviceId() };
+  // Only consulted by the server when CREATING an account, so sending it
+  // on every request is harmless and saves having to know which call
+  // will be the one that signs us up. Absent for everybody who already
+  // has an account, and for everybody at all while the gate is off.
+  const invite = getInviteCode();
+  if (invite) authHeaders['x-invite-code'] = invite;
   const res = await fetch(`${env.apiUrl}${path}`, {
     ...init,
     headers: {
@@ -130,8 +150,23 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   });
   if (!res.ok) {
     const text = await res.text().catch(() => '');
+    // 403 from the auth hook means the door is shut, not that anything
+    // is broken. It needs to be distinguishable from a network fault,
+    // because every other failure in this app is swallowed into an
+    // unread field — and a user who simply has not been invited would
+    // otherwise see an app that silently does nothing at all.
+    if (res.status === 403 && text.includes('invite')) {
+      markInviteRequired();
+      throw new InviteRequiredError();
+    }
     throw new Error(`${res.status} ${path}: ${text}`);
   }
+  // We are through the door, so the code has done its job. Dropping it
+  // here keeps a used code from lingering in a shared browser and being
+  // presented by whoever opens the app next. Safe to do on any success:
+  // the server claims the code before it creates the account, so a
+  // retry could not have reused it anyway.
+  if (invite) clearInviteCode();
   return (await res.json()) as T;
 }
 

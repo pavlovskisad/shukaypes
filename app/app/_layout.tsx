@@ -4,6 +4,8 @@ import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Splash } from '../components/ui/Splash';
+import { InviteGate } from '../components/ui/InviteGate';
+import { useAccessStore } from '../stores/accessStore';
 import { notifyTelegramReady } from '../services/telegram';
 // Side-effect import — patches RN's Text/TextInput defaults so every
 // instance picks up SYSTEM_FONT even when the component author didn't
@@ -17,6 +19,22 @@ export default function RootLayout() {
   useEffect(() => {
     notifyTelegramReady();
   }, []);
+
+  // Replaces the whole tree rather than overlaying it: with no account
+  // there is no map, no dog and no data to sit behind a modal, and a
+  // half-rendered app under a message reads as broken rather than
+  // closed. False for everybody until INVITE_REQUIRED is switched on
+  // server-side, and false forever for anyone who already has an
+  // account.
+  const inviteRequired = useAccessStore((s) => s.inviteRequired);
+  if (inviteRequired) {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <InviteGate />
+      </SafeAreaProvider>
+    );
+  }
 
   return (
     // GestureHandlerRootView is required at the tree root for
