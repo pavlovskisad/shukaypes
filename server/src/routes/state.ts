@@ -2,9 +2,10 @@ import type { FastifyPluginAsync } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { xpProgress, MAX_LEVEL } from '../lib/xp.js';
+import { limitPolling } from '../lib/rateLimit.js';
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.get('/state', async (req) => {
+  app.get('/state', limitPolling, async (req) => {
     const userId = req.userId;
     const [user] = await db
       .select()

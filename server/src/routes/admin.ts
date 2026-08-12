@@ -22,6 +22,7 @@ import {
 // Token checks live in lib/adminAuth so /stats and the admin console ask
 // the same question the same way. See that file for the two-key model.
 import { checkAdminAuth, checkReportAuth } from '../lib/adminAuth.js';
+import { limitRead } from '../lib/rateLimit.js';
 
 const MAX_TEXT_CHARS = 4000;
 
@@ -110,6 +111,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   // what it decided, why. Read-only.
   app.get<{ Querystring: { source?: string; limit?: string } }>(
     '/admin/lost-dogs/scrape-log',
+    limitRead,
     async (req, reply) => {
       if (!checkAdminAuth(req.headers.authorization)) {
         reply.code(401);
