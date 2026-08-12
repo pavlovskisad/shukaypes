@@ -544,3 +544,55 @@ export const inviteRedemptions = pgTable(
     codeIdx: index('invite_redemptions_code_idx').on(t.code),
   }),
 );
+
+// EVERY completed search, found or not.
+//
+// `sightings` only ever gets a row when somebody answers "yes, I saw it".
+// The other answer — zone walked, nothing there — is the MAJORITY case and
+// the one that proves a walker actually searched, and until now it wrote
+// nothing but an ephemeral Fly log line. So "how many searches were
+// completed" could not be computed from this database at all, which makes
+// it the one number the product and the fundraise both lean on and neither
+// can show.
+//
+// Deliberately separate from `sightings` rather than a nullable-lat
+// `seen: false` row in it. `sightings` means "the pet was here", it is
+// read by the map and by the pin-moving logic, and widening it to mean
+// "somebody looked" would put rows that assert nothing into every query
+// that currently assumes otherwise.
+//
+// Nothing downstream reads this yet. It is written now so that when the
+// admin console asks for a search funnel there is history to draw, rather
+// than a chart that starts on the day somebody thought to record it.
+export const searchResults = pgTable(
+  'search_results',
+  {
+    id: text('id').primaryKey(),
+    // The pet stays referenced with a cascade: if a pet is deleted its
+    // searches are meaningless. Expiring one — the reversible form we
+    // prefer — leaves these rows alone.
+    dogId: text('dog_id')
+      .notNull()
+      .references(() => lostDogs.id, { onDelete: 'cascade' }),
+    // Null when the searcher's account is later deleted. The search still
+    // happened, and the counts should not silently drop when somebody
+    // leaves.
+    userId: text('user_id').references(() => users.id, { onDelete: 'set null' }),
+    seen: boolean('seen').notNull(),
+    // What the search paid out, so the reward economy can be read back
+    // without re-deriving it from rules that may have changed since.
+    paws: integer('paws').notNull(),
+    // Where the searcher was when they answered. Null on a "not found":
+    // the client sends no position with that answer today, and inventing
+    // one would be worse than admitting we do not have it.
+    lat: doublePrecision('lat'),
+    lng: doublePrecision('lng'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    // The funnel is read by time, and per-pet to answer "how hard was this
+    // one searched before it was found".
+    createdAtIdx: index('search_results_created_at_idx').on(t.createdAt),
+    dogIdx: index('search_results_dog_id_idx').on(t.dogId),
+  }),
+);

@@ -238,6 +238,34 @@ const plugin: FastifyPluginAsync = async (app) => {
           .where(eq(schema.users.id, req.userId));
       }
 
+      // THE SEARCH ITSELF, recorded whichever way it went.
+      //
+      // Everything above this line only leaves a trace when the answer was
+      // yes. "Walked the zone, nothing there" is the majority answer and
+      // the one that shows somebody actually searched, and it used to
+      // survive only as the log line below — which is to say, for as long
+      // as Fly keeps logs and no longer.
+      //
+      // WRAPPED, AND DELIBERATELY LAST. This is analytics; the search is
+      // the product. A failure here — a bad migration, a constraint nobody
+      // foresaw — must cost a row in a metrics table, never the walker's
+      // paws or their answer about a real animal that is still missing.
+      try {
+        await db.insert(schema.searchResults).values({
+          id: nanoid(),
+          dogId,
+          userId: req.userId || null,
+          seen,
+          paws,
+          // Present only on a find; the client sends no position with a
+          // "not found" and a guessed one would be worse than a null.
+          lat: seen && typeof lat === 'number' ? lat : null,
+          lng: seen && typeof lng === 'number' ? lng : null,
+        });
+      } catch (err) {
+        req.log.error({ err, kind: 'search_result_write_failed', dogId }, 'search not recorded');
+      }
+
       // Where the pet was posted, if it came from a scrape. In-app reports
       // have no permalink and get null — the client offers nothing rather
       // than a dead button.
