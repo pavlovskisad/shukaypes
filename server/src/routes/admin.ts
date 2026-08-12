@@ -19,59 +19,11 @@ import {
   formatLostDogsReport,
   loadAuditRows,
 } from '../services/lostDogsReport.js';
+// Token checks live in lib/adminAuth so /stats and the admin console ask
+// the same question the same way. See that file for the two-key model.
+import { checkAdminAuth, checkReportAuth } from '../lib/adminAuth.js';
 
 const MAX_TEXT_CHARS = 4000;
-
-function presentedToken(header: string | string[] | undefined): string | null {
-  const raw = Array.isArray(header) ? header[0] : header;
-  if (!raw) return null;
-  const match = raw.match(/^Bearer\s+(.+)$/i);
-  return match && match[1] ? match[1].trim() : raw.trim();
-}
-
-function tokenMatches(presented: string, token: string | undefined): boolean {
-  if (!token) return false;
-  // Constant-time compare to keep timing leaks off the table.
-  if (presented.length !== token.length) return false;
-  let diff = 0;
-  for (let i = 0; i < presented.length; i++) {
-    diff |= presented.charCodeAt(i) ^ token.charCodeAt(i);
-  }
-  return diff === 0;
-}
-
-// Writes. ADMIN_TOKEN only — this gates an endpoint that can put any pet
-// into the database.
-function checkAdminAuth(header: string | string[] | undefined): boolean {
-  const presented = presentedToken(header);
-  return presented != null && tokenMatches(presented, process.env.ADMIN_TOKEN);
-}
-
-// READS. A SECOND, LESSER KEY.
-//
-// The audit endpoint only counts rows, but until now the only key that
-// opened it was the same one that opens /admin/lost-dogs/ingest — a
-// write-anything endpoint. Handing someone the numbers meant handing
-// them the ability to invent pets, which is a bad trade for a report,
-// and a worse one when the party holding the key is an agent or a
-// dashboard rather than a person.
-//
-// REPORT_TOKEN opens the read-only routes and nothing else. ADMIN_TOKEN
-// still works here too, so the greater key is not made useless by the
-// existence of the lesser one, and nothing that worked before breaks.
-//
-// Fly secrets cannot be read back once set — "we do not allow read
-// access to the plain-text values of secrets" — so this is also the
-// practical answer to "what token do I hand over": generate a fresh one
-// for this, rather than trying to recover the admin one.
-function checkReportAuth(header: string | string[] | undefined): boolean {
-  const presented = presentedToken(header);
-  if (presented == null) return false;
-  return (
-    tokenMatches(presented, process.env.REPORT_TOKEN) ||
-    tokenMatches(presented, process.env.ADMIN_TOKEN)
-  );
-}
 
 const plugin: FastifyPluginAsync = async (app) => {
   app.post<{

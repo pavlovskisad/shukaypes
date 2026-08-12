@@ -225,6 +225,13 @@
       "when": 1777310100000,
       "tag": "0031_territory_reset_10",
       "breakpoints": true
+    },
+    {
+      "idx": 32,
+      "version": "7",
+      "when": 1786530681895,
+      "tag": "0032_invite_codes",
+      "breakpoints": true
     }
   ]
 }

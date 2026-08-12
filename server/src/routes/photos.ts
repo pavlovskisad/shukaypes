@@ -12,6 +12,7 @@
 // the client. The bot token never leaves the server.
 
 import type { FastifyPluginAsync } from 'fastify';
+import { limitMedia } from '../lib/rateLimit.js';
 
 const TG_API = 'https://api.telegram.org';
 const PATH_TTL_MS = 45 * 60 * 1000;
@@ -50,6 +51,7 @@ async function resolveFilePath(
 const plugin: FastifyPluginAsync = async (app) => {
   app.get<{ Params: { fileId: string } }>(
     '/photos/:fileId',
+    limitMedia,
     async (req, reply) => {
       const token = process.env.TELEGRAM_BOT_TOKEN;
       if (!token) {

@@ -10,6 +10,7 @@ import { loadMemoryBlock } from '../prompts/memory.js';
 import { buildContextBlock, type NearbySpot } from '../prompts/context.js';
 import { parseActionTag, type CompanionAction } from '../services/actionParser.js';
 import { scheduleMemoryUpdate } from '../services/memorySummary.js';
+import { chargeChatBudget } from '../services/chatBudget.js';
 
 const HISTORY_LIMIT = 10;
 const MAX_INPUT_CHARS = 2000;
@@ -162,6 +163,34 @@ const plugin: FastifyPluginAsync = async (app) => {
         return { error: 'text required' };
       }
 
+      // Charged BEFORE any work, and before the user message is
+      // persisted — a refused turn should cost nothing and leave no
+      // half-conversation behind. See services/chatBudget.ts for why it
+      // fails open when Redis is down.
+      const budget = await chargeChatBudget(req.userId, 'active', req.log);
+      if (!budget.allowed) {
+        // 200, not 429, and that is deliberate.
+        //
+        // The client throws on any non-2xx (`services/api.ts` req()) and
+        // the chat screen interpolates the thrown string into the dog's
+        // speech bubble — so a 429 here would literally show a beta
+        // tester `429 /chat: {"error":...}` in Ukrainian dialogue.
+        // Answering in the success shape lets the existing client render
+        // it as what it is: the dog having said enough for one day.
+        //
+        // `budgetExhausted` carries the machine-readable truth for the
+        // admin console and for anything that later wants to count it.
+        return {
+          id: nanoid(),
+          text:
+            lang === 'uk'
+              ? '*позіхає* — на сьогодні набалакались. завтра продовжимо.'
+              : '*yawns* — talked enough for today. tomorrow, then.',
+          action: null,
+          budgetExhausted: budget.reason,
+        };
+      }
+
       const userText = greet ? GREET_PROMPT[lang] : rawText;
       const pos: Pos = { lat: body.lat, lng: body.lng };
       const viewport: Pos | null =
@@ -273,6 +302,18 @@ const plugin: FastifyPluginAsync = async (app) => {
     async (req, reply) => {
       const body = req.body ?? {};
       const lang = normaliseLang(body.lang);
+      // Ambient is Haiku and six words long, so it gets its own, much
+      // looser ceiling — but not an absent one. It is client-triggered,
+      // which makes it a call anybody can drive.
+      const budget = await chargeChatBudget(req.userId, 'ambient', req.log);
+      if (!budget.allowed) {
+        // Empty string in the declared `{ text: string }` shape rather
+        // than a 204: the client's req() calls res.json() on any 2xx, so
+        // an empty body would throw a parse error instead of producing
+        // no bubble. Ambient is decoration — silence is its normal
+        // resting state between beats, so nothing needs to be said.
+        return { text: '' };
+      }
       const pos: Pos = { lat: body.lat, lng: body.lng };
       const system = await assembleSystem(req.userId, pos, lang);
 

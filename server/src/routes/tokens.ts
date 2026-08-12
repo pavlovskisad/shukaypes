@@ -5,6 +5,7 @@ import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
 import { ensureTokensForUser } from '../services/spawn.js';
 import { nanoid } from 'nanoid';
+import { limitInteractive, limitPolling } from '../lib/rateLimit.js';
 
 interface NearbyQuery {
   lat: string;
@@ -46,7 +47,7 @@ interface CollectBody {
 const TOKEN_VIEW_RADIUS_M = 2000;
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.get<{ Querystring: NearbyQuery }>('/tokens/nearby', async (req, reply) => {
+  app.get<{ Querystring: NearbyQuery }>('/tokens/nearby', limitPolling, async (req, reply) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -92,7 +93,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post<{ Body: CollectBody }>('/collect/token', async (req, reply) => {
+  app.post<{ Body: CollectBody }>('/collect/token', limitInteractive, async (req, reply) => {
     const { tokenId, lat, lng, force } = req.body ?? ({} as CollectBody);
     if (!tokenId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.code(400);

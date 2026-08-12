@@ -19,11 +19,14 @@
     "wipe:stats": "tsx src/db/wipe-stats.ts",
     "clean:lost-dogs": "tsx src/db/clean-lost-dogs.ts",
     "expire:out-of-area": "tsx src/db/expire-out-of-area.ts",
-    "check": "pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet",
+    "check": "pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites",
     "check:same-pet": "tsx src/pipeline/samePet.check.ts",
     "render:dedupe-sql": "tsx src/db/render-dedupe-sql.ts",
     "check:out-of-area": "tsx src/pipeline/outOfArea.check.ts",
-    "check:ingest-alert": "tsx src/services/ingestAlert.check.ts"
+    "check:ingest-alert": "tsx src/services/ingestAlert.check.ts",
+    "check:rate-limit": "tsx src/lib/rateLimit.check.ts",
+    "check:invites": "tsx src/services/invites.check.ts",
+    "invite": "tsx src/db/invite.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

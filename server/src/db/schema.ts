@@ -498,3 +498,49 @@ export const territoryRaids = pgTable(
     victimIdx: index('territory_raids_victim_idx').on(t.victimId, t.seenAt),
   }),
 );
+
+// Invite codes for the closed beta.
+//
+// The web path creates an account for any unseen x-device-id header, so
+// without this the "closed" round is a public URL. Telegram initData is
+// signed and gives real identity, but the bot is still discoverable, so
+// both paths redeem a code when INVITE_REQUIRED is on.
+//
+// Gates CREATION ONLY. Every existing account keeps resolving by its
+// device id untouched — there are several hundred of them, they have no
+// email and no password, and a code checked on every request rather
+// than only on the insert would lock all of them out permanently with
+// no recovery path.
+export const inviteCodes = pgTable('invite_codes', {
+  // The code itself, as typed. Short and human-shareable.
+  code: text('code').primaryKey(),
+  // Multi-use by design: one code per cohort or per channel is easier
+  // to hand out than one per person, and revoking is still one row.
+  maxUses: integer('max_uses').notNull().default(1),
+  usedCount: integer('used_count').notNull().default(0),
+  // Free text — who it went to, which channel it was posted in.
+  note: text('note'),
+  // Set to stop a code working without deleting the record of who used
+  // it. Revocation should not erase the audit trail.
+  revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
+
+// Which code let an account in. Kept separate from users so the join is
+// explicit and a revoked code can be traced to everyone it admitted.
+export const inviteRedemptions = pgTable(
+  'invite_redemptions',
+  {
+    id: text('id').primaryKey(),
+    code: text('code')
+      .notNull()
+      .references(() => inviteCodes.code, { onDelete: 'cascade' }),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    redeemedAt: timestamp('redeemed_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    codeIdx: index('invite_redemptions_code_idx').on(t.code),
+  }),
+);

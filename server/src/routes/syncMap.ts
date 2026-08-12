@@ -27,6 +27,7 @@ import {
   territoryStanding,
 } from '../services/territory.js';
 import type { LatLng } from '../utils/geo.js';
+import { limitExpensive, limitPolling, limitRead } from '../lib/rateLimit.js';
 
 // Server kill-switch for multiplayer presence. Off only if explicitly set to
 // 'off'; otherwise presence runs when the client opts in via `mp=1` (so prod
@@ -76,7 +77,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   // transport: bots step on a 3.5s server tick and real GPS lands about
   // once a second, so there is nothing to gain below ~3s and no protocol
   // that could find it.
-  app.get<{ Querystring: { lat: string; lng: string } }>('/presence', async (req) => {
+  app.get<{ Querystring: { lat: string; lng: string } }>('/presence', limitPolling, async (req) => {
     if (!MULTIPLAYER_ON) return { players: [] };
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
@@ -91,7 +92,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   // Wipe the caller's own territory. Only ever touches your own ground, so
   // it needs no special guard — and it makes the mechanic re-testable from
   // a clean slate without going near the database.
-  app.post('/territory/reset', async (req) => {
+  app.post('/territory/reset', limitExpensive, async (req) => {
     await resetTerritory(req.userId);
     return { ok: true };
   });
@@ -99,7 +100,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   // Send a bot onto your newest mark so the raid path can be exercised
   // without waiting for one to wander in on its own. Real contest, real
   // raid row — and it can only cost the caller their own ground.
-  app.post('/territory/raid-test', async (req) => {
+  app.post('/territory/raid-test', limitExpensive, async (req) => {
     const ok = await simulateRaidOnSelf(req.userId);
     return { ok };
   });
@@ -108,7 +109,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   // from the profile tab rather than the map, so it's its own trip —
   // putting it on the 15s sync would recompute a scoreboard nobody is
   // looking at.
-  app.get('/territory/leaderboard', async (req) => {
+  app.get('/territory/leaderboard', limitRead, async (req) => {
     // Sequential on purpose: the standing needs the board to find your
     // rank in it, and running both concurrently would have each miss the
     // cache and recompute every hull in the city twice.
@@ -120,7 +121,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     return { board, you };
   });
 
-  app.get<{ Querystring: SyncMapQuery }>('/sync/map', async (req, reply) => {
+  app.get<{ Querystring: SyncMapQuery }>('/sync/map', limitPolling, async (req, reply) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
     const radiusM = Number(req.query.radius ?? '5000');

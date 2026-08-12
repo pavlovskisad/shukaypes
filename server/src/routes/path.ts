@@ -7,6 +7,7 @@ import { balance } from '../config/balance.js';
 import { distanceMeters, pointToSegmentDistanceM, type LatLng } from '../utils/geo.js';
 import { markIfDue, type MarkResult } from '../services/territory.js';
 import { selfMeta } from '../services/presence.js';
+import { limitPolling } from '../lib/rateLimit.js';
 
 interface PathBody {
   lat: number;
@@ -115,7 +116,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   // anchor (last position) lives in Redis so a tampered client can't
   // claim a wide segment — the server controls one endpoint of the
   // line.
-  app.post<{ Body: PathBody }>('/collect/path', async (req, reply) => {
+  app.post<{ Body: PathBody }>('/collect/path', limitPolling, async (req, reply) => {
     const { lat, lng } = req.body ?? ({} as PathBody);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.code(400);
