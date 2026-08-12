@@ -11,6 +11,7 @@ import { buildContextBlock, type NearbySpot } from '../prompts/context.js';
 import { parseActionTag, type CompanionAction } from '../services/actionParser.js';
 import { scheduleMemoryUpdate } from '../services/memorySummary.js';
 import { chargeChatBudget } from '../services/chatBudget.js';
+import { limitRead } from '../lib/rateLimit.js';
 
 const HISTORY_LIMIT = 10;
 const MAX_INPUT_CHARS = 2000;
@@ -103,7 +104,7 @@ async function recentHistory(userId: string): Promise<Anthropic.MessageParam[]> 
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.get('/chat/history', async (req) => {
+  app.get('/chat/history', limitRead, async (req) => {
     const rows = await db
       .select({
         id: schema.messages.id,

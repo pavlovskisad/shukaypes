@@ -13,6 +13,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
+import { limitRead } from '../lib/rateLimit.js';
 
 const MAX_NOTE_CHARS = 200;
 const TRUST_MULTIPLIER = 2; // 2x search radius = "close enough" to move the pin
@@ -106,6 +107,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   // Lightweight read for a future UI ("others have seen this pet too").
   app.get<{ Querystring: { dogId?: string; limit?: string } }>(
     '/sightings',
+    limitRead,
     async (req, reply) => {
       const dogId = req.query?.dogId;
       if (!dogId) {

@@ -9,6 +9,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { and, notInArray, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
+import { limitRead } from '../lib/rateLimit.js';
 
 const DEFAULT_RADIUS_M = 350;
 const POOL_SIZE = 10;
@@ -21,7 +22,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       radius?: string;
       exclude?: string | string[];
     };
-  }>('/lore/discover', async (req, reply) => {
+  }>('/lore/discover', limitRead, async (req, reply) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {

@@ -17,6 +17,7 @@ import {
 import { ingestFromTelegramPost, type IngestOutcome } from '../services/telegramIngest.js';
 import { messages, parseLangArg, type Lang } from '../i18n/botMessages.js';
 import { getUserLang, setUserLang } from '../services/userLang.js';
+import { limitPolling } from '../lib/rateLimit.js';
 
 const TG_API = 'https://api.telegram.org';
 
@@ -329,7 +330,18 @@ const plugin: FastifyPluginAsync = async (app) => {
     info: (o, m) => app.log.info(o, m),
     warn: (o, m) => app.log.warn(o, m),
   };
-  app.post<{ Body: TgUpdate }>('/telegram/webhook', async (req, reply) => {
+  // Rate-limited despite being Telegram's to call.
+  //
+  // It is exempt from our auth (it carries TG's own secret header), the
+  // URL is derivable from a public hostname, and every accepted message
+  // can drive a Haiku parse plus an outbound sendMessage. If
+  // TELEGRAM_WEBHOOK_SECRET is ever unset the secret check is skipped
+  // entirely, at which point this is an open endpoint that spends money
+  // per request. Telegram's real traffic is far below this ceiling.
+  //
+  // Keyed on req.ip here rather than a user, since there is no user —
+  // which is fine now that trustProxy is on and req.ip is the caller.
+  app.post<{ Body: TgUpdate }>('/telegram/webhook', limitPolling, async (req, reply) => {
     // Verify Telegram's secret token if we set one. Without this
     // anyone who guesses the webhook URL could spam our bot via us.
     const secret = process.env.TELEGRAM_WEBHOOK_SECRET;

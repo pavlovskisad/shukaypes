@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { and, eq, not, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { buildPhotoUrl } from '../services/photoUrl.js';
+import { limitPolling, limitRead } from '../lib/rateLimit.js';
 
 interface NearbyQuery {
   lat: string;
@@ -18,7 +19,7 @@ const FALLBACK_LAT = 50.4501;
 const FALLBACK_LNG = 30.5234;
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.get<{ Querystring: NearbyQuery }>('/dogs/nearby', async (req, reply) => {
+  app.get<{ Querystring: NearbyQuery }>('/dogs/nearby', limitPolling, async (req, reply) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
     const radiusM = Number(req.query.radius ?? '5000');
@@ -86,7 +87,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   // This endpoint returns the same projection shape as /dogs/nearby's
   // array items so the client can drop it straight into the same
   // store list and reuse the existing modal/marker code.
-  app.get<{ Params: { id: string } }>('/dogs/:id', async (req, reply) => {
+  app.get<{ Params: { id: string } }>('/dogs/:id', limitRead, async (req, reply) => {
     const [row] = await db
       .select({
         id: schema.lostDogs.id,

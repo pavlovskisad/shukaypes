@@ -1,4 +1,5 @@
 import 'dotenv/config';
+import { pathToFileURL } from 'url';
 import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
 import cors from '@fastify/cors';
@@ -37,7 +38,15 @@ import { redis } from './db/redis.js';
 const PORT = Number(process.env.PORT ?? 3000);
 const HOST = process.env.HOST ?? '0.0.0.0';
 
-async function buildServer() {
+export interface RouteObserver {
+  (route: { url: string; method: string | string[]; hasRateLimit: boolean }): void;
+}
+
+// `observe` is exported for the route-coverage check, which asks Fastify
+// what it actually registered rather than grepping the source for it.
+// The hook goes on before any route is added, and onRoute is inherited
+// by the encapsulated plugin contexts below, so it sees all of them.
+export async function buildServer(observe?: RouteObserver) {
   const app = Fastify({
     logger: {
       transport:
@@ -51,6 +60,17 @@ async function buildServer() {
     // world at once rather than on anybody in particular.
     trustProxy: true,
   });
+
+  if (observe) {
+    app.addHook('onRoute', (routeOptions) => {
+      const cfg = routeOptions.config as { rateLimit?: unknown } | undefined;
+      observe({
+        url: routeOptions.url,
+        method: routeOptions.method,
+        hasRateLimit: cfg?.rateLimit != null,
+      });
+    });
+  }
 
   await app.register(cors, { origin: true });
   await app.register(rateLimit, {
@@ -240,4 +260,8 @@ async function main() {
   process.on('SIGTERM', shutdown);
 }
 
-main();
+// Only boot when run directly. Without this, importing buildServer from
+// a check or a script would start the whole server — crons, bots,
+// watchdog and all — as a side effect of the import.
+const isEntry = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
+if (isEntry) main();

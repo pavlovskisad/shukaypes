@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { xpProgress, MAX_LEVEL } from '../lib/xp.js';
+import { limitRead } from '../lib/rateLimit.js';
 
 // Profile endpoint — aggregate counts for the Profile tab. Separate
 // from /state (which is hot-pathed every 5s by useGameLoop) so the
@@ -11,7 +12,7 @@ import { xpProgress, MAX_LEVEL } from '../lib/xp.js';
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.get('/profile/me', async (req) => {
+  app.get('/profile/me', limitRead, async (req) => {
     const userId = req.userId;
 
     const [user] = await db
