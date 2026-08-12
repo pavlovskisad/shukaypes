@@ -4,6 +4,7 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import { sendPoke, selfMeta } from '../services/presence.js';
+import { limitExpensive } from '../lib/rateLimit.js';
 
 const MULTIPLAYER_ON = process.env.MULTIPLAYER !== 'off';
 
@@ -12,7 +13,7 @@ interface PokeBody {
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.post<{ Body: PokeBody }>('/poke', async (req, reply) => {
+  app.post<{ Body: PokeBody }>('/poke', limitExpensive, async (req, reply) => {
     if (!MULTIPLAYER_ON) return { ok: false };
     const targetId = req.body?.targetId;
     if (!targetId || typeof targetId !== 'string' || targetId.length > 128) {

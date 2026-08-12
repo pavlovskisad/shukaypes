@@ -15,6 +15,7 @@ import {
   narrateWaypointClues,
 } from '../services/questNarration.js';
 import { balance } from '../config/balance.js';
+import { limitExpensive, limitInteractive, limitRead } from '../lib/rateLimit.js';
 
 interface StartBody {
   dogId: string;
@@ -76,7 +77,7 @@ function rowToQuest(r: {
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.post<{ Body: StartBody }>('/quests/start', async (req, reply) => {
+  app.post<{ Body: StartBody }>('/quests/start', limitExpensive, async (req, reply) => {
     const { dogId, lat, lng } = req.body ?? ({} as StartBody);
     if (!dogId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.code(400);
@@ -162,7 +163,7 @@ const plugin: FastifyPluginAsync = async (app) => {
   // Recent completed/abandoned quests for the tasks-tab history list.
   // Caps at HISTORY_LIMIT so we don't ship a city-wide list when the
   // user opens the tab. Pet name + outcome + when it ended.
-  app.get('/quests/history', async (req) => {
+  app.get('/quests/history', limitRead, async (req) => {
     const HISTORY_LIMIT = 20;
     const rows = await db
       .select({
@@ -200,7 +201,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.get('/quests/active', async (req) => {
+  app.get('/quests/active', limitRead, async (req) => {
     const [row] = await db
       .select()
       .from(schema.quests)
@@ -214,7 +215,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     return { quest: row ? rowToQuest(row) : null };
   });
 
-  app.post<{ Body: AdvanceBody }>('/quests/advance', async (req, reply) => {
+  app.post<{ Body: AdvanceBody }>('/quests/advance', limitInteractive, async (req, reply) => {
     const { questId, lat, lng, force } = req.body ?? ({} as AdvanceBody);
     if (!questId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.code(400);
@@ -334,7 +335,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     return { quest: rowToQuest(updated!), completed: done, narration };
   });
 
-  app.post<{ Body: AbandonBody }>('/quests/abandon', async (req, reply) => {
+  app.post<{ Body: AbandonBody }>('/quests/abandon', limitInteractive, async (req, reply) => {
     const { questId } = req.body ?? ({} as AbandonBody);
     if (!questId) {
       reply.code(400);

@@ -14,6 +14,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { and, eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
+import { limitInteractive, limitRead } from '../lib/rateLimit.js';
 
 const VALID_KEYS = ['tokens', 'bones', 'lostPetChecks', 'spotVisits', 'sightings'] as const;
 type TaskKey = (typeof VALID_KEYS)[number];
@@ -50,7 +51,7 @@ function emptyRow(date: string): TaskRow {
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.get<{ Querystring: TodayQuery }>('/tasks/today', async (req, reply) => {
+  app.get<{ Querystring: TodayQuery }>('/tasks/today', limitRead, async (req, reply) => {
     const date = String(req.query.date ?? '');
     if (!DATE_RE.test(date)) {
       reply.code(400);
@@ -84,7 +85,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post<{ Body: TickBody }>('/tasks/tick', async (req, reply) => {
+  app.post<{ Body: TickBody }>('/tasks/tick', limitInteractive, async (req, reply) => {
     const { date, key } = req.body ?? ({} as TickBody);
     const amount = req.body?.amount ?? 1;
     if (!DATE_RE.test(date)) {

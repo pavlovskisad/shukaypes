@@ -5,6 +5,7 @@
 
 import type { FastifyPluginAsync } from 'fastify';
 import { nearbySpots } from '../services/placesCache.js';
+import { limitExpensive } from '../lib/rateLimit.js';
 
 // Same category list the client previously fanned out across.
 const SPOT_CATEGORIES = ['cafe', 'restaurant', 'bar', 'pet_store', 'veterinary_care'];
@@ -26,7 +27,7 @@ function parsePos(req: { query: NearbyQuery }): { lat: number; lng: number } | n
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.get<{ Querystring: NearbyQuery }>('/places/spots', async (req, reply) => {
+  app.get<{ Querystring: NearbyQuery }>('/places/spots', limitExpensive, async (req, reply) => {
     const pos = parsePos(req);
     if (!pos) {
       reply.code(400);
@@ -39,7 +40,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     return { spots };
   });
 
-  app.get<{ Querystring: NearbyQuery }>('/places/parks', async (req, reply) => {
+  app.get<{ Querystring: NearbyQuery }>('/places/parks', limitExpensive, async (req, reply) => {
     const pos = parsePos(req);
     if (!pos) {
       reply.code(400);

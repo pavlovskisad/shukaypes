@@ -2,9 +2,12 @@ import type { FastifyPluginAsync } from 'fastify';
 import { and, desc, eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { getTickHistory } from '../services/scrape-history.js';
+import { limitRead } from '../lib/rateLimit.js';
+import { checkReportAuth } from '../lib/adminAuth.js';
 
-// Public read-only pipeline status. Hit from anywhere — phone browser,
-// curl, dashboard. No auth, returns aggregate counts + the last N
+// Operator read-only pipeline status. Hit from a phone browser, curl or
+// the admin console with REPORT_TOKEN or ADMIN_TOKEN. Returns aggregate
+// counts + the last N
 // scrape_log rows so you can see what each source is producing without
 // an admin bearer or DB shell access.
 
@@ -14,7 +17,25 @@ const FALLBACK_LNG = 30.5234;
 const RECENT_SCRAPE_LIMIT = 30;
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.get('/stats', async () => {
+  // OPERATOR ENDPOINT, NOT A PUBLIC ONE.
+  //
+  // This was reachable by anyone, and it republished `scrape_log.title`.
+  // For a pet ingested through the Telegram bot that title is the first
+  // 200 characters of the message somebody sent — including a private
+  // DM to the bot — and the parser's contact-stripping applies to
+  // `lastSeenDescription`, NOT to the title. So phone numbers and names
+  // that a person typed to a dog were being served to the open internet,
+  // alongside the chat ids of the source channels.
+  //
+  // Nothing in the client calls this; it has always been a human
+  // debugging surface. So it takes the same key as the rest of the
+  // read-only operator surface rather than losing the fields that make
+  // it useful. The admin console will authenticate the same way.
+  app.get('/stats', limitRead, async (req, reply) => {
+    if (!checkReportAuth(req.headers.authorization)) {
+      reply.code(401);
+      return { error: 'unauthorized' };
+    }
     const [
       activeRow,
       byUrgency,

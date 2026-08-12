@@ -5,6 +5,7 @@ import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
 import { ensureFoodForUser } from '../services/spawn.js';
+import { limitInteractive, limitPolling } from '../lib/rateLimit.js';
 
 interface NearbyQuery {
   lat: string;
@@ -38,7 +39,7 @@ interface FeedBody {
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
-  app.get<{ Querystring: NearbyQuery }>('/food/nearby', async (req, reply) => {
+  app.get<{ Querystring: NearbyQuery }>('/food/nearby', limitPolling, async (req, reply) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
@@ -75,7 +76,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     };
   });
 
-  app.post<{ Body: FeedBody }>('/feed', async (req, reply) => {
+  app.post<{ Body: FeedBody }>('/feed', limitInteractive, async (req, reply) => {
     const { foodId, lat, lng, force } = req.body ?? ({} as FeedBody);
     if (!foodId || !Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.code(400);

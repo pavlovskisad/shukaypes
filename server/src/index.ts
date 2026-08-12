@@ -1,5 +1,6 @@
 import 'dotenv/config';
 import Fastify from 'fastify';
+import type { FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import rateLimit from '@fastify/rate-limit';
 import authPlugin from './auth.js';
@@ -44,6 +45,11 @@ async function buildServer() {
           ? { target: 'pino-pretty', options: { colorize: true } }
           : undefined,
     },
+    // Behind Fly's proxy, the socket peer is the proxy — not the user.
+    // Without this every request in the fleet shares one or two source
+    // addresses, so an IP-keyed rate limit is a limit on the whole
+    // world at once rather than on anybody in particular.
+    trustProxy: true,
   });
 
   await app.register(cors, { origin: true });
@@ -51,6 +57,20 @@ async function buildServer() {
     global: false,
     max: balance.collectRateLimitPerMin,
     timeWindow: '1 minute',
+    // MUST run at preHandler, not the plugin's default onRequest.
+    //
+    // req.userId is set by the auth plugin in a preHandler hook. The
+    // rate limiter's default hook is onRequest, which runs BEFORE that
+    // — so keyGenerator saw the decorator default (an empty string),
+    // fell through to req.ip every single time, and with the proxy in
+    // front that collapsed every user in the world into one bucket.
+    //
+    // The effect was not a loose limit, it was an inverted one: `max: 30`
+    // on /chat meant thirty requests per minute TOTAL across all users,
+    // so a handful of people talking to their dogs at once would 429
+    // each other, and one abuser could lock everybody out. Moving the
+    // hook is what makes every per-route number below mean what it says.
+    hook: 'preHandler',
     keyGenerator: (req) => req.userId || req.ip,
   });
 
@@ -73,6 +93,28 @@ async function buildServer() {
     const ok = Object.values(checks).every((v) => v === 'ok');
     reply.code(ok ? 200 : 503);
     return { ok, checks, ts: new Date().toISOString() };
+  });
+
+  // Never hand a database error to a client.
+  //
+  // Fastify's default handler serialises `err.message` into the response
+  // body, and for anything that reaches here from Drizzle that message
+  // is raw Postgres: constraint names, column names, sometimes the
+  // offending value. That is free schema reconnaissance for anyone
+  // poking at the API, and it is meaningless to the app besides.
+  //
+  // The full error still goes to the log, where it is useful.
+  app.setErrorHandler((err: FastifyError, req, reply) => {
+    const status = err.statusCode ?? 500;
+    // 4xx are deliberate — validation, rate limits, auth — and their
+    // messages are written for the caller. Only mask the 5xx.
+    if (status >= 500) {
+      req.log.error({ err, url: req.url }, 'unhandled route error');
+      reply.code(status);
+      return { error: 'internal error' };
+    }
+    reply.code(status);
+    return { error: err.message };
   });
 
   await app.register(authPlugin);
@@ -100,6 +142,31 @@ async function buildServer() {
 
 async function main() {
   const app = await buildServer();
+
+  // A rejected promise nobody awaited should not take the server down.
+  //
+  // Node's default for an unhandled rejection is to crash the process,
+  // and this file alone launches several deliberately unawaited jobs —
+  // the memory cleanup, the Telegram webhook registration — with more
+  // inside chat and the crons. The watchdog cannot help here: it catches
+  // a wedged event loop, not a clean exit.
+  //
+  // Logged loudly rather than swallowed. A restart loop is easier to
+  // diagnose than a silent outage, but a restart on a background job's
+  // failed fetch is not a trade worth making.
+  process.on('unhandledRejection', (reason) => {
+    app.log.error({ err: reason, kind: 'unhandled_rejection' }, 'unhandled promise rejection');
+  });
+
+  // An uncaught exception leaves the process in an unknown state, so
+  // this one does NOT keep running: it logs, then lets Fly restart into
+  // a clean boot. The log line is the point — the default is a stack
+  // trace on stderr with no context and no `kind` to grep for.
+  process.on('uncaughtException', (err) => {
+    app.log.error({ err, kind: 'uncaught_exception' }, 'uncaught exception — exiting for restart');
+    process.exit(1);
+  });
+
   // Eagerly connect Redis at boot (it's lazyConnect). This keeps the DB
   // actually in use — an idle free-tier Redis gets reaped by the provider —
   // and makes the `redis.status === 'ready'` guards throughout the code
