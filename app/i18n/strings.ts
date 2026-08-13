@@ -196,8 +196,13 @@ export interface AppStrings {
     startingSearch: string;
     showingSpot: string;
     walkingTo: (name: string) => string;
-    cantReachWalk: (err: string) => string;
+    cantReachWalk: () => string;
     inputPlaceholder: string;
+  };
+  // Shown by the connection banner when calls stop getting through.
+  connection: {
+    offline: string;
+    slow: string;
   };
   modals: {
     common: { close: string };
@@ -498,8 +503,17 @@ const uk: AppStrings = {
     startingSearch: 'починаємо пошук…',
     showingSpot: 'показую місце…',
     walkingTo: (name) => `йдемо до ${name}`,
-    cantReachWalk: (err) => `*нюх-нюх* — зараз не дістаємось до маршруту (${err})`,
+    // NO INTERPOLATED ERROR. This used to end with `(${err})`, which after
+    // the API layer started prefixing status codes meant the dog said
+    // things like "(500 /quests/start: {...})" out loud in its speech
+    // bubble. The detail belongs in the crash report, not in the mouth of
+    // a cartoon dog talking to somebody looking for a lost pet.
+    cantReachWalk: () => '*нюх-нюх* — зараз не дістаємось до маршруту, спробуймо ще раз',
     inputPlaceholder: 'скажи що хочеш…',
+  },
+  connection: {
+    offline: 'звʼязку немає — мапа зачекає',
+    slow: 'звʼязок повільний…',
   },
   modals: {
     common: { close: 'закрити' },
@@ -824,8 +838,12 @@ const en: AppStrings = {
     startingSearch: 'starting search…',
     showingSpot: 'showing spot…',
     walkingTo: (name) => `walking to ${name}`,
-    cantReachWalk: (err) => `*sniff sniff* — can't reach the walk right now (${err})`,
+    cantReachWalk: () => "*sniff sniff* — can't reach the walk right now, let's try again",
     inputPlaceholder: 'say anything…',
+  },
+  connection: {
+    offline: 'no connection — the map will wait',
+    slow: 'connection is slow…',
   },
   modals: {
     common: { close: 'close' },

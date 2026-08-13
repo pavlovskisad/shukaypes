@@ -15,6 +15,7 @@ import { getTelegramInitData } from './telegram';
 import { getInviteCode, clearInviteCode } from './invite';
 import { getDevKey } from './devUnlock';
 import { markInviteRequired } from '../stores/accessStore';
+import { useConnectionStore } from '../stores/connectionStore';
 
 /**
  * The server refused to create an account because no valid invite code
@@ -125,7 +126,36 @@ export interface NearbyLostDog {
   lastSeen: { position: LatLng; at: string };
 }
 
-async function req<T>(path: string, init?: RequestInit): Promise<T> {
+// A cellular hang is the most common failure in this app's target
+// environment, and until now nothing bounded it: a bare fetch with no
+// AbortController anywhere in the codebase. A request into a dead cell on
+// a metro platform simply stacked up behind the last one until the
+// browser gave up on its own — about two minutes on iOS Safari, during
+// which the map is frozen and the user has no idea whether to wait.
+//
+// Twelve seconds is chosen against the slow path, not the fast one:
+// /sync/map's own comments record it answering in over a second under
+// load, so the ceiling has to leave room for a bad day on 3G without
+// leaving somebody staring at a stalled screen.
+const DEFAULT_TIMEOUT_MS = 12_000;
+
+// Chat waits on a language model, not a database, and Opus routinely
+// takes longer than any other call here. Timing it out at twelve seconds
+// would kill perfectly good answers.
+const CHAT_TIMEOUT_MS = 45_000;
+
+/** Thrown when we gave up waiting, as opposed to being refused. */
+export class TimeoutError extends Error {
+  constructor(path: string) {
+    super(`timeout ${path}`);
+    this.name = 'TimeoutError';
+  }
+}
+
+const noteSuccess = () => useConnectionStore.getState().noteSuccess();
+const noteFailure = (timedOut: boolean) => useConnectionStore.getState().noteFailure(timedOut);
+
+async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
   // Prefer Telegram Mini App auth when running inside Telegram —
   // server validates the signature with our bot token and resolves
   // (or creates) the user keyed on telegram_id. Outside Telegram
@@ -147,14 +177,42 @@ async function req<T>(path: string, init?: RequestInit): Promise<T> {
   // caller's problem otherwise — and absent entirely for everybody else.
   const devKey = getDevKey();
   if (devKey) authHeaders['x-dev-key'] = devKey;
-  const res = await fetch(`${env.apiUrl}${path}`, {
-    ...init,
-    headers: {
-      'content-type': 'application/json',
-      ...authHeaders,
-      ...(init?.headers ?? {}),
-    },
-  });
+  // AbortController rather than Promise.race: racing leaves the request
+  // running, so a stalled call keeps its socket and its memory and still
+  // resolves into nothing later. Aborting actually cancels it.
+  const controller = new AbortController();
+  const timeoutMs = init?.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  let res: Response;
+  try {
+    res = await fetch(`${env.apiUrl}${path}`, {
+      ...init,
+      signal: controller.signal,
+      headers: {
+        'content-type': 'application/json',
+        ...authHeaders,
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (err) {
+    // An abort we caused reads as a DOMException named AbortError, which
+    // is indistinguishable from a real network fault to every caller
+    // upstream. Naming it lets the connection banner say "slow" rather
+    // than "broken", which is the more useful thing to tell somebody
+    // standing on a metro platform.
+    const timedOut = err instanceof Error && err.name === 'AbortError';
+    noteFailure(timedOut);
+    if (timedOut) throw new TimeoutError(path);
+    throw err;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  // REACHABILITY, NOT CORRECTNESS. A 500 still means the request crossed
+  // the network and the server replied, so it clears the banner: telling
+  // somebody they are offline when they are not would send them hunting
+  // for signal over a bug at our end.
+  noteSuccess();
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     // 403 from the auth hook means the door is shut, not that anything
@@ -454,6 +512,8 @@ export const api = {
       action: CompanionAction | null;
     }>('/chat', {
       method: 'POST',
+      // Waiting on a language model, not a query — see CHAT_TIMEOUT_MS.
+      timeoutMs: CHAT_TIMEOUT_MS,
       body: JSON.stringify({
         text,
         greet,
