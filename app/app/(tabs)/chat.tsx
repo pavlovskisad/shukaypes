@@ -282,12 +282,16 @@ export default function ChatScreen() {
         }
       }
     } catch (err) {
+      // The detail goes where a developer will read it, not into the
+      // dog's speech bubble — see the note on cantReachWalk in strings.
+      // eslint-disable-next-line no-console
+      console.warn('[chat] walk request failed', err);
       setMessages((m) => [
         ...m,
         {
           id: `err-${Date.now()}`,
           role: 'assistant',
-          content: t.chat.cantReachWalk((err as Error).message),
+          content: t.chat.cantReachWalk(),
           mode: 'active',
           createdAt: new Date().toISOString(),
         },

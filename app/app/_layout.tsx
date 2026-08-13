@@ -6,6 +6,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Splash } from '../components/ui/Splash';
 import { InviteGate } from '../components/ui/InviteGate';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
+import { ConnectionBanner } from '../components/ui/ConnectionBanner';
 import { useAccessStore } from '../stores/accessStore';
 import { notifyTelegramReady } from '../services/telegram';
 import { installGlobalCrashHandlers } from '../services/crashReport';
@@ -62,6 +63,11 @@ export default function RootLayout() {
           <Stack screenOptions={{ headerShown: false }}>
             <Stack.Screen name="(tabs)" />
           </Stack>
+          {/* Above every tab rather than inside the map, because losing
+              the network stops the chat and the tasks list too — and it
+              sits under the Splash so a cold start is not greeted by a
+              warning about a request that has not been made yet. */}
+          <ConnectionBanner />
           <Splash />
         </ErrorBoundary>
       </SafeAreaProvider>
