@@ -78,6 +78,15 @@ export function startLostDogCleanupCron(
   log: FastifyBaseLogger,
   intervalMs: number = balance.lostDogCleanup.intervalMs,
 ) {
+  // RUN ONCE ON BOOT, then on the interval — the shape every other cron
+  // in this directory already uses (see searchZoneExpansion).
+  //
+  // Without it this sweep depended on a machine living a full 24 hours
+  // uninterrupted. Pushing to main redeploys, and there were four deploys
+  // today alone, so in practice the interval was reset long before it
+  // ever fired: a cleanup that has been configured, logged and reasoned
+  // about, and has almost certainly never run in production.
+  void runCronTick('lostDogCleanup', () => runLostDogCleanupTick(log), log);
   const id = setInterval(() => {
     void runCronTick('lostDogCleanup', () => runLostDogCleanupTick(log), log);
   }, intervalMs);
