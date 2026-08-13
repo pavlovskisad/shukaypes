@@ -292,11 +292,16 @@ export const api = {
     return req<{ players: NearbyPlayer[] }>(`/presence?${params.toString()}`);
   },
 
-  syncMap: (pos: LatLng, opts?: { parks?: LatLng[]; radiusM?: number }) => {
+  // `dogsTag` is the fingerprint of the pets list we already hold. Sending
+  // it lets the server answer `dogs: null` — "unchanged, keep yours" —
+  // instead of repeating a payload measured at 29 KB, half of every sync,
+  // for a list that gains about seventeen entries a week.
+  syncMap: (pos: LatLng, opts?: { parks?: LatLng[]; radiusM?: number; dogsTag?: string | null }) => {
     const params = new URLSearchParams({
       lat: String(pos.lat),
       lng: String(pos.lng),
     });
+    if (opts?.dogsTag) params.set('dogsTag', opts.dogsTag);
     if (opts?.parks && opts.parks.length) {
       params.set('parks', opts.parks.map((p) => `${p.lat},${p.lng}`).join('|'));
     }
@@ -307,7 +312,11 @@ export const api = {
     return req<{
       tokens: Token[];
       food: FoodItem[];
-      dogs: NearbyLostDog[];
+      // NULL means "unchanged since the tag you sent" — keep what you have.
+      // Null rather than an absent key on purpose: an empty array is a real
+      // answer ("no pets near you") and the two must never be confusable.
+      dogs: NearbyLostDog[] | null;
+      dogsTag?: string;
       state: StateResponse;
       // Present only when mp=1; older servers omit these (default []).
       players?: NearbyPlayer[];
