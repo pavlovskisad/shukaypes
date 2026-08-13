@@ -844,6 +844,15 @@ export default function MapViewWeb() {
     let lastPos: { lat: number; lng: number } | null = null;
 
     const run = () => {
+      // A phone in a pocket with the screen off is not a walker looking at
+      // a map. This loop is the single most expensive thing the app does
+      // — measured at ~54 KB a call against a production-shaped database —
+      // and it used to keep running for as long as the tab existed.
+      //
+      // Note this guards the SYNC only. Position tracking and the local
+      // game loop are untouched, so a walk in a pocket still accumulates
+      // distance and still sweeps paws when the screen comes back on.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       const pos = useGameStore.getState().userPosition;
       if (!pos) return;
       lastAt = Date.now();
@@ -853,6 +862,12 @@ export default function MapViewWeb() {
     };
 
     run();
+    // Waking the tab syncs immediately rather than showing whatever the
+    // map looked like when it was backgrounded until the next tick.
+    const onVisible = () => {
+      if (typeof document !== 'undefined' && document.visibilityState !== 'hidden') run();
+    };
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible);
     // syncSpots is driven separately by the viewport-watcher effect
     // below so the dog finds places where the human is LOOKING, not
     // just where they're standing.
@@ -873,6 +888,9 @@ export default function MapViewWeb() {
     return () => {
       clearInterval(floor);
       clearInterval(watcher);
+      if (typeof document !== 'undefined') {
+        document.removeEventListener('visibilitychange', onVisible);
+      }
     };
   }, [hasPos, isFocused, collectPath, syncMap]);
 

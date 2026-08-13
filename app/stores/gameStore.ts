@@ -129,6 +129,11 @@ interface GameState {
   parks: Park[];
   lastParksFetchPos: LatLng | null;
   lostDogs: NearbyLostDog[];
+  // Fingerprint of the pets list the server last sent, echoed back on the
+  // next sync so an unchanged list is not re-sent. Null until the first
+  // one arrives, and left alone by every other write to lostDogs — it
+  // describes what the SERVER sent, not what the store now holds.
+  lostDogsTag: string | null;
   // Nearby online players (real + bots) from the multiplayer presence system.
   // Refreshed each /sync/map tick; rendered as other dogs on the map.
   nearbyPlayers: NearbyPlayer[];
@@ -428,6 +433,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   parks: [],
   lastParksFetchPos: null,
   lostDogs: [],
+  lostDogsTag: null,
   nearbyPlayers: [],
   incomingPoke: null,
   territoryMarks: [],
@@ -915,6 +921,9 @@ export const useGameStore = create<GameState>((set, get) => ({
       const parkPositions = parks.map((p) => p.position);
       const res = await api.syncMap(pos, {
         parks: parkPositions.length ? parkPositions : undefined,
+        // What we already hold. The server compares and sends the pets
+        // list back only if it has actually changed.
+        dogsTag: get().lostDogsTag,
       });
       if (seq !== syncMapSeq) return;
       const collected = get().recentlyCollectedIds;
@@ -929,7 +938,13 @@ export const useGameStore = create<GameState>((set, get) => ({
         // linked pin outside this sync's radius must survive the
         // wholesale replacement, otherwise the marker vanishes on
         // the next 15s tick.
-        const dogs = res.dogs;
+        // `dogs: null` is the server saying "identical to the tag you
+        // sent" — so the previous list IS this sync's answer, and every
+        // line below treats it exactly as if it had arrived on the wire.
+        // Falling back to prev.lostDogs rather than to [] matters: an
+        // empty list would clear every pin on the map on the first
+        // unchanged tick.
+        const dogs = res.dogs ?? prev.lostDogs;
         const keepSelected =
           prev.selectedDogId && !dogs.find((d) => d.id === prev.selectedDogId)
             ? prev.lostDogs.find((d) => d.id === prev.selectedDogId)
@@ -938,6 +953,10 @@ export const useGameStore = create<GameState>((set, get) => ({
           tokens: filteredTokens,
           foodItems: res.food,
           lostDogs: keepSelected ? [...dogs, keepSelected] : dogs,
+          // Only advance on a tag we were actually given. An older server
+          // sends none, which must leave the stored one untouched rather
+          // than wiping it to null and re-requesting the full list forever.
+          lostDogsTag: res.dogsTag ?? prev.lostDogsTag,
           // Only if no presence poll has been issued since this sync went
           // out. The fast loop is the usual source of this field; the sync
           // is here for the first paint and for when presence is failing.
