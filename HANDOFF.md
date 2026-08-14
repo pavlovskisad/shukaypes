@@ -36,6 +36,8 @@ owner's. Merged, deployed, and verified in production unless noted:
 | Data bill | halved. See 0.3. |
 | Connection banner | failures were written to `lastSyncError` at 19 sites and read by NONE. Plus the first fetch timeout in the app's history. |
 | Three silent no-ops | lost-pet cleanup never ran, two quest effects never re-ran, Vercel shipped without a typecheck. |
+| Admin console | `/admin/console`, read-only, plus `/admin/metrics` (`?format=text` for a terminal). One self-contained page served by the API — NOT the plan's Vite+React workspace, see the note in routes/adminConsole.ts. Needs `DASHBOARD_TOKEN`. |
+| Auth statuses | a 500-instead-of-401/403 regression from this same session, fixed and verified on production. See §5 — it was blocking owner item #2 without anyone knowing. |
 
 ### 0.2 THE OWNER'S OPEN ITEMS — nothing here is blocked on the agent
 
@@ -56,33 +58,38 @@ Ordered by what hurts first if forgotten.
    `pnpm --filter @shukajpes/server invite --new --uses=N --note=...`,
    then set the flag. Turning it on does not lock out the ~543 existing
    accounts — that invariant is the whole point of `check:invites`.
-3. **`DEV_TOOLS_PASSWORD` is unset**, so `/dev` refuses everyone and the
+3. **`DASHBOARD_TOKEN` is unset**, so `/admin/console` and
+   `/admin/metrics` refuse everyone. It is read-only and the only one of
+   the three keys safe to keep in a browser.
+   `fly secrets set DASHBOARD_TOKEN='…' -a shukajpes-api`, then open
+   `https://shukajpes-api.fly.dev/admin/console`.
+4. **`DEV_TOOLS_PASSWORD` is unset**, so `/dev` refuses everyone and the
    walk simulator is off everywhere, including for the agent.
    `fly secrets set DEV_TOOLS_PASSWORD='…' -a shukajpes-api`.
-4. **A way for an owner to reach you.** The takedown CLI is the operator
+5. **A way for an owner to reach you.** The takedown CLI is the operator
    half only. There is no contact route on the landing and no address in
    the app, so you can act in seconds once you know, and nothing
    guarantees you are told. Owner is thinking about a support ticket.
-5. **External uptime monitor on `/health/deep`.** It works and returns
+6. **External uptime monitor on `/health/deep`.** It works and returns
    503 correctly; nothing watches it. Fly's own check points at
    `/health`, which returns `ok` unconditionally and passes while the
    database is down. **Do not simply repoint Fly at `/health/deep`** —
    see 0.4.
-6. **Presence consent.** Every walker's position is broadcast to anyone
+7. **Presence consent.** Every walker's position is broadcast to anyone
    within 8km, jittered ~25m, with no opt-in, no opt-out, no disclosure.
    Product decision: presence off, or opt-out plus a plain note.
-7. **`TELEGRAM_CHANNELS` is still unset** — a free, unblocked second
+8. **`TELEGRAM_CHANNELS` is still unset** — a free, unblocked second
    ingest source doing nothing. Needs a curated channel list
    (`poshuk_tvaryn` verified working).
-8. **Parse accuracy over ~50 real posts.** The docs call this the single
+9. **Parse accuracy over ~50 real posts.** The docs call this the single
    biggest unknown in the product and no measured number exists. It is
    also the strongest slide in a deck. Needs a decision about reading
    production ad text.
-9. **The rival dials.** `rivalMarksPerOwner: 24` and
+10. **The rival dials.** `rivalMarksPerOwner: 24` and
    `rivalPiecesDrawn: 140` are 47% of what a sync now costs; halving
    them is another ~23%. Left alone because it changes how dense the map
    LOOKS, which is the art director's call.
-10. **`force: true` stays** — owner decided to keep tap-to-collect while
+11. **`force: true` stays** — owner decided to keep tap-to-collect while
     the animation is being tuned. Consequence to remember when reading
     beta numbers: collection counts will not prove anybody walked.
     `search_results` and distance still will.
@@ -506,6 +513,27 @@ consecutive 403s rather than hammering the WAF.
 ## 5. Things I got wrong, so you don't repeat them
 
 Added 13–14 Aug:
+
+- **I broke every auth response for a day and CI never noticed.** The
+  `setErrorHandler` added in the safety-nets change read `err.statusCode
+  ?? 500`. This app's auth hook refuses by setting the code on the REPLY
+  and then throwing a plain Error, which carries no statusCode — so every
+  401 and 403 became a 500 with the message masked. Verified live on
+  production before the fix: `GET /state` with no device id returned
+  `500 {"error":"internal error"}`.
+
+  The 403 is the part that mattered. `InviteRequiredError` reaches the
+  client as `res.status === 403 && text.includes('invite')`, so the door
+  screen could never have rendered and every uninvited tester would have
+  seen the silently-broken app that screen exists to prevent. It was
+  harmless only because INVITE_REQUIRED is still unset — i.e. the bug was
+  waiting precisely for owner item 0.2 #2 to be actioned.
+
+  Found by accident: a browser test of the admin console noticed a stray
+  500 on `/favicon.ico`. It was not looking for this, and neither its own
+  PR, nor CI, nor a production check had caught it. When adding a global
+  error handler, test the paths that set a status and THEN throw — this
+  codebase has two, and both are auth.
 
 - **Metro's cache will tell you a working thing is broken, twice.** The
   `EXPO_PUBLIC_DEV_TOOLS` opt-in reported as not working; it was a cached
