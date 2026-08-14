@@ -10,6 +10,9 @@
 //                 which can put any pet into the database. It should
 //                 never be pasted into a browser or a dashboard.
 //   REPORT_TOKEN  opens the read-only surfaces and nothing else.
+//   DASHBOARD_TOKEN
+//                 opens the metrics endpoints and nothing else. The one
+//                 that is safe to live in a browser.
 //
 // Handing somebody the numbers should not also hand them the ability to
 // invent pets — a bad trade for a report, and a worse one when the party
@@ -44,6 +47,27 @@ export function tokenMatches(presented: string, token: string | undefined): bool
 export function checkAdminAuth(header: string | string[] | undefined): boolean {
   const presented = presentedToken(header);
   return presented != null && tokenMatches(presented, process.env.ADMIN_TOKEN);
+}
+
+/**
+ * Metrics, for a browser. DASHBOARD_TOKEN is the key meant to be pasted
+ * into the admin console and stored there, and it opens NOTHING that
+ * writes — it is the only one of the three that is safe to keep in a
+ * localStorage on somebody's laptop.
+ *
+ * REPORT_TOKEN and ADMIN_TOKEN also open it, on the same reasoning as
+ * checkReportAuth below: a greater key is not made useless by a lesser
+ * one existing. But the console should be handed DASHBOARD_TOKEN only.
+ * Fails closed when all three are unset.
+ */
+export function checkDashboardAuth(header: string | string[] | undefined): boolean {
+  const presented = presentedToken(header);
+  if (presented == null) return false;
+  return (
+    tokenMatches(presented, process.env.DASHBOARD_TOKEN) ||
+    tokenMatches(presented, process.env.REPORT_TOKEN) ||
+    tokenMatches(presented, process.env.ADMIN_TOKEN)
+  );
 }
 
 /**
