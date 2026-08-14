@@ -8,6 +8,122 @@ the corrections are recorded here on purpose.
 Updated later the same day: the two items that used to be section 1 are
 both done — see 1.1 for what happened to them.
 
+**Updated 13–14 Aug** with a beta-readiness pass. Section 0 below is the
+current state and supersedes anything older it contradicts; sections 1–7
+are kept because their reasoning still holds.
+
+---
+
+## 0. State as of 14 Aug 2026
+
+### 0.1 Shipped since 11 Aug
+
+Phase 1 of the closed-beta plan is complete except two items that are the
+owner's. Merged, deployed, and verified in production unless noted:
+
+| | |
+| --- | --- |
+| Rate limiting | was GLOBAL, not per-user — `@fastify/rate-limit` installs at `onRequest`, `req.userId` is set at `preHandler`, so every key fell through to `req.ip` and, behind Fly's proxy, to one bucket for the world. Chat's 30/min was thirty for everybody at once. Fixed with `hook: 'preHandler'` + `trustProxy`. Proven per-user on production with two device ids. |
+| Route coverage | nine routes had no limit at all, including `/state`. `pnpm check:route-coverage` asks Fastify what it registered rather than grepping; 43 routes, 40 limited, 3 knowingly exempt. |
+| `/stats` | was unauthenticated and republished users' Telegram messages, DMs included, plus private chat ids. Now behind a token. |
+| Invite gate | built, **and deliberately switched OFF** — see 0.2. Existing accounts can never be gated; `check:invites` asserts it exhaustively. |
+| Chat spend | per-user daily budget + global cap + a kill switch that needs no deploy. |
+| Server safety nets | `setErrorHandler` masks 5xx (was returning raw Postgres constraint names), plus `unhandledRejection` / `uncaughtException`. |
+| Crash reporting | root `ErrorBoundary` + `window.onerror` + `unhandledrejection` → `POST /client-errors`. There was none of this; four white-screen incidents are on record. |
+| Dev affordances | `?terrReset=1`, `?terrRaid=1`, `?sim=1`, `/preview` are gated out of the shipped build. `/dev` + `DEV_TOOLS_PASSWORD` turns them back on per browser. |
+| `search_results` | every completed search now recorded, found or not. |
+| Takedown | `expire:pet --id=<id>` — dry run, `--apply`, `--photo`, `--restore`. |
+| Data bill | halved. See 0.3. |
+| Connection banner | failures were written to `lastSyncError` at 19 sites and read by NONE. Plus the first fetch timeout in the app's history. |
+| Three silent no-ops | lost-pet cleanup never ran, two quest effects never re-ran, Vercel shipped without a typecheck. |
+
+### 0.2 THE OWNER'S OPEN ITEMS — nothing here is blocked on the agent
+
+Ordered by what hurts first if forgotten.
+
+1. **Google Maps key — the only genuinely urgent one.** The repo is
+   PUBLIC and the committed key is the one serving production (confirmed
+   by hashing the committed value against the deployed bundle). Do the
+   cheap half today: a **billing quota and a budget alert**, which touch
+   no key and cap what a harvested one can cost. Precedent: ~$100 of
+   Places burned in days (`docs/project/07-operations.md:214`). Then
+   restrict to HTTP referrers + only the APIs in use. Rotation can wait
+   until before invites, and the ORDER matters or the map goes dark:
+   new key → restrict → set in Vercel → redeploy → confirm the map draws
+   → only then delete the old one.
+2. **`INVITE_REQUIRED` is UNSET, so the door is open.** The gate is built
+   and tested but off. Before invites: mint codes with
+   `pnpm --filter @shukajpes/server invite --new --uses=N --note=...`,
+   then set the flag. Turning it on does not lock out the ~543 existing
+   accounts — that invariant is the whole point of `check:invites`.
+3. **`DEV_TOOLS_PASSWORD` is unset**, so `/dev` refuses everyone and the
+   walk simulator is off everywhere, including for the agent.
+   `fly secrets set DEV_TOOLS_PASSWORD='…' -a shukajpes-api`.
+4. **A way for an owner to reach you.** The takedown CLI is the operator
+   half only. There is no contact route on the landing and no address in
+   the app, so you can act in seconds once you know, and nothing
+   guarantees you are told. Owner is thinking about a support ticket.
+5. **External uptime monitor on `/health/deep`.** It works and returns
+   503 correctly; nothing watches it. Fly's own check points at
+   `/health`, which returns `ok` unconditionally and passes while the
+   database is down. **Do not simply repoint Fly at `/health/deep`** —
+   see 0.4.
+6. **Presence consent.** Every walker's position is broadcast to anyone
+   within 8km, jittered ~25m, with no opt-in, no opt-out, no disclosure.
+   Product decision: presence off, or opt-out plus a plain note.
+7. **`TELEGRAM_CHANNELS` is still unset** — a free, unblocked second
+   ingest source doing nothing. Needs a curated channel list
+   (`poshuk_tvaryn` verified working).
+8. **Parse accuracy over ~50 real posts.** The docs call this the single
+   biggest unknown in the product and no measured number exists. It is
+   also the strongest slide in a deck. Needs a decision about reading
+   production ad text.
+9. **The rival dials.** `rivalMarksPerOwner: 24` and
+   `rivalPiecesDrawn: 140` are 47% of what a sync now costs; halving
+   them is another ~23%. Left alone because it changes how dense the map
+   LOOKS, which is the art director's call.
+10. **`force: true` stays** — owner decided to keep tap-to-collect while
+    the animation is being tuned. Consequence to remember when reading
+    beta numbers: collection counts will not prove anybody walked.
+    `search_results` and distance still will.
+
+### 0.3 The data bill, measured
+
+The roadmap blamed the `/state` poll and the rival dials. Both were wrong
+about the biggest item, and its 57MB/hour figure was ~4× too high.
+
+Measured against a local Postgres seeded to production's shape (244
+active pets, six rivals holding full territory):
+
+```
+dogs        29,300 B   49.3%   <- changes ~17 times a WEEK
+rivalMarks  12,960 B   21.8%
+rivals       9,570 B   16.1%
+tokens       5,848 B    9.8%
+TOTAL       54,234 B  = ~13 MB/hour at one sync per 15s
+```
+
+The pets list was half of every response and re-sent byte-for-byte every
+fifteen seconds. It is now conditional on a fingerprint the client echoes
+back; `/state` is no longer polled on the map (it returned the same
+fifteen fields `/sync/map` already nests under `state`, byte-identical);
+and neither loop runs while the tab is hidden.
+
+```
+before        54,234 B   ~13.0 MB/hour
+steady state  27,380 B    ~6.6 MB/hour   -49.5%
+backgrounded       0 B          0
+```
+
+### 0.4 Do not repoint Fly's health check at `/health/deep`
+
+The roadmap suggests it. It is worse. `/health/deep` fails on Redis too;
+Redis is free-tier and flaky and the app degrades gracefully without it,
+so a Redis blip would mark a SERVING machine unhealthy and take the app
+down. And on a real database outage, restarting the machine fixes
+nothing while costing you the logs and the endpoint you would diagnose
+from. The right fix is an external monitor telling a human.
+
 ---
 
 ## 1. Do these first
@@ -389,6 +505,33 @@ consecutive 403s rather than hammering the WAF.
 
 ## 5. Things I got wrong, so you don't repeat them
 
+Added 13–14 Aug:
+
+- **Metro's cache will tell you a working thing is broken, twice.** The
+  `EXPO_PUBLIC_DEV_TOOLS` opt-in reported as not working; it was a cached
+  module re-emitting the old literal. Later a browser test failed because
+  the bundle still had a previous build's `EXPO_PUBLIC_API_URL` inlined,
+  so the harness waited on a host the app never called. Pass `--clear`
+  when changing an env variable locally. Vercel builds clean and is
+  unaffected. Both times the wrong conclusion was one grep of the bundle
+  away from being caught.
+- **The GitHub API does not match short SHAs.** Four separate status
+  reports this session were wrong because a query returned an empty list
+  and empty was read as an answer: "CI complete" when it had not started,
+  "the workflow never triggered" when it had, "the deploy is still
+  running" when it had succeeded twenty minutes earlier. Use the full
+  40-character SHA, and make any status check say explicitly when it read
+  NOTHING rather than falling through to a conclusion. This is the same
+  failure the standing rules already warn about, in a new costume.
+- **A CI gate's first catch may be your own commit.** Testing the new
+  Vercel typecheck gate surfaced a variable referenced 270 lines above
+  its declaration in the very change that added the gate. `pnpm -r
+  typecheck` had passed before those edits. Re-run the check AFTER the
+  last edit, not before it.
+- **The roadmap's data-bill numbers were guesses.** 57MB/hour was ~4×
+  high, and both named culprits were minor next to the pets list nobody
+  had measured. See 0.3. Measure the payload before tuning the dial.
+
 - **"0 pets on the fallback pin, the filter works."** I checked by
   reading `/dogs/nearby` — the one endpoint that filters that pin out.
   The real number is 89. Never audit a filter through the filter.
@@ -458,7 +601,11 @@ consecutive 403s rather than hammering the WAF.
   work rather than stacking onto merged history.
 - Deploys are automatic: any push to `main` runs typecheck + lint and
   then `flyctl deploy`. The frontend deploys via Vercel's own git
-  integration.
+  integration, whose build command now runs `pnpm typecheck && pnpm lint`
+  FIRST and fails on either — a frontend that does not typecheck can no
+  longer reach users.
+- `pnpm check` is a seventh gate beyond typecheck and lint, and runs in
+  CI. All seven checks are pure: no database, no network, no secrets.
 - `pnpm -r typecheck` and `pnpm -r lint` before every PR. Lint currently
   carries 21 pre-existing `react-hooks/exhaustive-deps` warnings and 0
   errors; that is the baseline, not a regression.
@@ -471,6 +618,7 @@ consecutive 403s rather than hammering the WAF.
   the owner deferred this but the motive is real.
 - `groundIn` takes 240 pieces with no `ORDER BY` — harmless at current
   fragmentation, will bite eventually.
-- Sync payload is ~215KB with every nearby owner drawn (~52MB/hour on
-  cellular). `rivalPiecesDrawn` in `server/src/config/balance.ts` is the
-  dial.
+- ~~Sync payload is ~215KB (~52MB/hour)~~ — SUPERSEDED, see 0.3. Measured
+  at 54KB and now 27KB in steady state (~6.6MB/hour). `rivalPiecesDrawn`
+  and `rivalMarksPerOwner` remain the dials for another ~23%, untouched
+  because they change how dense the map looks.
