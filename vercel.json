@@ -1,6 +1,6 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "pnpm install --frozen-lockfile && pnpm --filter @shukajpes/app build:web",
+  "buildCommand": "pnpm install --frozen-lockfile && pnpm typecheck && pnpm lint && pnpm --filter @shukajpes/app build:web",
   "outputDirectory": "app/dist",
   "installCommand": "echo 'deferred to buildCommand for workspace resolution'",
   "framework": null,

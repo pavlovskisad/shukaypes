@@ -548,6 +548,10 @@ export default function MapViewWeb() {
   // Directions API. Renders as a thicker polyline when available;
   // straight-line fallback otherwise (see below).
   const [questRoute, setQuestRoute] = useState<LatLng[] | null>(null);
+  // Readiness, not the position itself — see the note on the deps below.
+  // Declared here rather than reusing the `hasPos` further down the file,
+  // which is defined 270 lines after these effects need it.
+  const questPosReady = !!userPos;
   useEffect(() => {
     setQuestRoute(null);
     if (!activeQuest || !userPos) return;
@@ -561,7 +565,13 @@ export default function MapViewWeb() {
     return () => {
       cancelled = true;
     };
-  }, [activeQuest?.id]);
+    // `hasPos`, not `userPos`. Depending on the position OBJECT would
+    // refetch a walking route on every GPS fix — a Directions call per
+    // second. Depending on the id alone was the bug: start a quest before
+    // GPS resolves, which is the ordinary cold-launch-on-cellular path,
+    // and this bails on `!userPos` and never runs again for that quest.
+    // No route line, for its whole duration.
+  }, [activeQuest?.id, questPosReady]);
 
   // When a quest starts, ease the camera to cover the user + every
   // waypoint so the human sees themselves relative to the trail at
@@ -587,7 +597,11 @@ export default function MapViewWeb() {
       maxZoom: 17,
       duration: 700,
     });
-  }, [activeQuest?.id]);
+    // Same fix, plus map readiness: mapRef.current is null until the
+    // instance is built, so a quest that starts during map init lost its
+    // camera framing entirely. `mapInstance` is the state mirror of that
+    // ref and re-runs this once the map exists.
+  }, [activeQuest?.id, questPosReady, mapInstance]);
 
   // Bot deep-link: the Mini App can be opened pointing at a specific
   // lost pet via either Telegram start_param ('lost-<id>') or a
