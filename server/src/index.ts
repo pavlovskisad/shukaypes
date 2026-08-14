@@ -57,6 +57,25 @@ export async function buildServer(observe?: RouteObserver) {
         process.env.NODE_ENV === 'development'
           ? { target: 'pino-pretty', options: { colorize: true } }
           : undefined,
+      serializers: {
+        // A secret in a query string ends up in the logs, and Fly keeps
+        // those. `/admin/console?k=<DASHBOARD_TOKEN>` is a deliberate
+        // convenience — one bookmarkable link instead of an open page —
+        // so the key it carries is redacted here rather than being
+        // written down on every request.
+        //
+        // Rewrites the logged url only; routing already happened and is
+        // untouched.
+        req(request) {
+          const raw = (request as { url?: string }).url ?? '';
+          return {
+            method: (request as { method?: string }).method,
+            url: raw.replace(/([?&]k=)[^&]*/i, '$1REDACTED'),
+            host: (request as { host?: string }).host,
+            remoteAddress: (request as { ip?: string }).ip,
+          };
+        },
+      },
     },
     // Behind Fly's proxy, the socket peer is the proxy — not the user.
     // Without this every request in the fleet shares one or two source

@@ -22,8 +22,20 @@
 //
 // THE PAGE ITSELF IS NOT A SECRET and needs no auth: it is markup with
 // no data in it. Every number arrives from /admin/metrics, which requires
-// DASHBOARD_TOKEN. The token is typed in here, kept in this browser's
-// localStorage, and sent as a bearer header — the same shape /dev uses.
+// DASHBOARD_TOKEN. The token is kept in this browser's localStorage and
+// sent as a bearer header — the same shape /dev uses.
+//
+// TWO WAYS TO HAND IT OVER. Typed into the box, or carried in the link
+// as `?k=<DASHBOARD_TOKEN>` so a bookmark opens straight onto the
+// numbers. The link form exists because the alternative people actually
+// reach for is removing the auth entirely, and these are DAU, retention
+// and spend figures on a path that is readable in a PUBLIC repo — a
+// URL nobody can guess is a very different thing from a URL anybody can
+// find.
+//
+// The key is STRIPPED FROM THE ADDRESS BAR the moment it is stored, via
+// replaceState. Otherwise it rides along in every screenshot, every
+// pasted link, and every Referer header the page ever sends.
 //
 // READ-ONLY, ON PURPOSE. There are no switches on this page yet. Ops
 // actions need ADMIN_TOKEN, which must never live in a browser, so they
@@ -103,6 +115,22 @@ const PAGE = `<!doctype html>
   var $ = function (id) { return document.getElementById(id); };
   var token = null;
   try { token = localStorage.getItem(KEY); } catch (e) { token = null; }
+
+  // A key in the link wins over whatever this browser had — that is the
+  // point of sending somebody a fresh link after a rotation.
+  try {
+    var fromLink = new URLSearchParams(window.location.search).get('k');
+    if (fromLink) {
+      token = fromLink;
+      try { localStorage.setItem(KEY, fromLink); } catch (e) {}
+      // Out of the address bar immediately: a key left there ends up in
+      // screenshots, in pasted links, and in the Referer of anything the
+      // page loads.
+      if (window.history && window.history.replaceState) {
+        window.history.replaceState({}, '', window.location.pathname);
+      }
+    }
+  } catch (e) {}
 
   function esc(s) {
     return String(s).replace(/[&<>"']/g, function (c) {
