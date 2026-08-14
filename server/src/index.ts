@@ -25,6 +25,7 @@ import photosRoute from './routes/photos.js';
 import clientErrorsRoute from './routes/clientErrors.js';
 import devRoute from './routes/dev.js';
 import adminMetricsRoute from './routes/adminMetrics.js';
+import adminConsoleRoute from './routes/adminConsole.js';
 import telegramRoute, { registerTelegramWebhook } from './routes/telegram.js';
 import { startDecayCron } from './services/decay.js';
 import { startWatchdog } from './services/watchdog.js';
@@ -128,7 +129,24 @@ export async function buildServer(observe?: RouteObserver) {
   //
   // The full error still goes to the log, where it is useful.
   app.setErrorHandler((err: FastifyError, req, reply) => {
-    const status = err.statusCode ?? 500;
+    // THE REPLY'S CODE COUNTS, NOT JUST THE ERROR'S.
+    //
+    // This app's auth hook signals refusal by setting the code on the
+    // reply and THEN throwing: `reply.code(401); throw new Error(...)`.
+    // A plain Error carries no statusCode, so reading only `err` turned
+    // every one of those into a 500 and masked the message — a missing
+    // device id came back as "internal error", and so did the invite
+    // gate's 403, which the client detects with
+    // `res.status === 403 && text.includes('invite')`. The door screen
+    // would never have appeared, and an uninvited beta tester would have
+    // seen exactly the silently-broken app that screen exists to
+    // prevent. Caught by a browser test noticing a stray 500 on
+    // /favicon.ico.
+    //
+    // 200 is the default on an untouched reply, so only a 4xx/5xx that
+    // somebody deliberately set is trusted here.
+    const fromReply = reply.statusCode >= 400 ? reply.statusCode : undefined;
+    const status = err.statusCode ?? fromReply ?? 500;
     // 4xx are deliberate — validation, rate limits, auth — and their
     // messages are written for the caller. Only mask the 5xx.
     if (status >= 500) {
@@ -161,6 +179,7 @@ export async function buildServer(observe?: RouteObserver) {
   await app.register(clientErrorsRoute);
   await app.register(devRoute);
   await app.register(adminMetricsRoute);
+  await app.register(adminConsoleRoute);
   await app.register(telegramRoute);
 
   return app;
