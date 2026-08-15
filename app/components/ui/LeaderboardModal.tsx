@@ -26,9 +26,12 @@ interface Props {
   // exactly as it does on the card.
   youRank: number | null;
   onClose: () => void;
+  // Tap a row → the parent jumps the map to that owner's ground. Rows
+  // without geometry aren't tappable.
+  onPick?: (row: TerritoryRanking) => void;
 }
 
-export function LeaderboardModal({ board, youRank, onClose }: Props) {
+export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
   const t = useStrings();
   const [renderBoard, setRenderBoard] = useState<TerritoryRanking[] | null>(board);
   const [closing, setClosing] = useState(false);
@@ -81,16 +84,26 @@ export function LeaderboardModal({ board, youRank, onClose }: Props) {
       >
         {renderBoard.map((row, i) => {
           const isYou = youRank === i + 1;
+          const pickable = onPick && row.mainPiece && row.mainPiece.length >= 3;
           return (
-            <BoardRow
+            <div
               key={row.userId}
-              rank={String(i + 1)}
-              name={isYou ? t.tasks.boardYou : row.name}
-              areaLabel={t.profile.areaValue(row.areaM2)}
-              piece={row.mainPiece}
-              color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
-              you={isYou}
-            />
+              onClick={
+                pickable
+                  ? (e) => playPopThen(e.currentTarget, () => onPick(row))
+                  : undefined
+              }
+              style={{ cursor: pickable ? 'pointer' : 'default' }}
+            >
+              <BoardRow
+                rank={String(i + 1)}
+                name={isYou ? t.tasks.boardYou : row.name}
+                areaLabel={t.profile.areaValue(row.areaM2)}
+                piece={row.mainPiece}
+                color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
+                you={isYou}
+              />
+            </div>
           );
         })}
       </div>
