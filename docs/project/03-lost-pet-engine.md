@@ -172,13 +172,33 @@ Between a parse and a row there are four filters, in order:
 
 ## Dedupe and upsert
 
-`pipeline/upsert.ts`. Every source funnels through it.
+`pipeline/upsert.ts`, with identity in `pipeline/samePet.ts` as a pure
+function since PR #416 — so the rule can be *checked* rather than reasoned
+about. Every source funnels through it.
 
-**Dedupe rule:** an active pet with a similar name within **1500m** whose
-`lastSeenAt` is within **7 days** of the candidate is the same pet.
-"Similar" is a case-insensitive substring match either way, so "Бусинка"
-matches "бусинка" matches "буся". Imperfect, and fine at a few dozen posts
-a day.
+**Dedupe rule:** an active pet of the same species with a similar name
+within **1500m** whose `lastSeenAt` is within **7 days** of the candidate
+is *probably* the same pet — and since PR #416 the predicate **refuses when
+evidence is thin**. Measured against the live table, three of the four
+pairs the old rule considered duplicates were **different animals**: two
+Лолаs 721m apart that were a chihuahua and a dachshund, two generic коти
+where one was missing and the other *found*, two котикs that shared nothing
+but the word. Two conditions carry the fix:
+
+- **Breed compatibility** — separates pets that genuinely share a name.
+  Unknown/mixed on either side stays a wildcard so ordinary reposts merge.
+- **Descriptor rejection** — `name` is frequently not a name: the parser
+  emits "a short descriptor if unnamed", which is why the table holds
+  "чорний кіт" and "собака без імені". Two cats being equally black is not
+  evidence they are one cat.
+
+The asymmetry decides the design: a duplicate pin is untidy, obvious, and
+fixable by anyone who notices. A wrong merge overwrites one family's lost
+pet with another's, and the losing record leaves no trace. The candidate
+query gained `ORDER BY` distance with an id tiebreak — with 81 pets sharing
+the exact fallback coordinate, an unordered `LIMIT 20` had made dedupe a
+lottery where the same input could resolve differently on two runs.
+`check:same-pet` covers all four production pairs and runs in CI.
 
 **Position drift:** reposts of the same pet often land 30–150m from the
 original — different parser run, different landmark match. Below **150m** we
@@ -213,11 +233,14 @@ failing silently.
 | `services/lostDogsReport.ts` | One query, one renderer, shared by the endpoint and the CLI, so the two cannot describe the database differently. |
 | `pnpm --filter @shukajpes/server clean:lost-dogs [--apply]` | The half that has to go out and ask the internet questions — dead photo detection and city checks. **Dry by default.** Gives up after 8 consecutive 403s. |
 | `pnpm --filter @shukajpes/server expire:out-of-area [--apply]` | The catch-up sweep for out-of-city rows already in the table. Dry by default. Needs no network, so it runs from the app host. |
+| `pnpm --filter @shukajpes/server expire:pet --id=<id>` | **The takedown tool** (PR #424) — for when an owner asks for their pet removed. Dry by default; `--apply` expires (reversible), `--photo` also nulls the photo (irreversible, opt-in, and the dry run says so in those words), `--restore` undoes. `--restore --photo` is refused rather than half-done. Prints the source permalink so a request can be checked against the post it came from. |
 | `pnpm --filter @shukajpes/server check:out-of-area` | 31 fixture cases for `detectOtherCity`. |
+| `pnpm --filter @shukajpes/server check:same-pet` | The four production dedupe pairs plus the guards. |
 | `pnpm --filter @shukajpes/server check:ingest-alert` | Exercises the alert state machine against an in-memory store, messaging nobody. |
 | `services/ingestAlert.ts` | Says something when pets stop arriving. See below. |
-| `GET /stats` | Public, unauthenticated. Active counts, per-source breakdown, last 30 `scrape_log` rows. Convenient; also an ops dashboard exposed to the world. |
+| `GET /stats` | **Bearer-gated since PR #417.** It had been unauthenticated and was republishing `scrape_log.title` — which for bot-ingested pets is the first 200 chars of the sender's message, contact-stripping *not* applied. Private Telegram DMs, served to the world. |
 | `GET /admin/lost-dogs/scrape-log` | The same data behind the admin bearer. |
+| `GET /admin/metrics[?format=text]` | The beta's numbers: users, DAU/WAU, retention, ingest heartbeat, the search funnel (from `search_results`), chat token spend by model. Bots excluded structurally. |
 | `POST /admin/lost-dogs/{ingest,scrape-now}` | Manual sideload and a forced tick. |
 
 ### The ingest alert
@@ -309,5 +332,13 @@ nothing. Print the intermediate before trusting the aggregate.
   `"dog_id" = "id"`. Prefer two plain queries and a Map, and render with
   `.toSQL()` before shipping — it needs no database and it caught a bug that
   would otherwise have been silent.
-- **No human review, kill switch or takedown path** for ingested reports.
-  You are republishing real people's posts and photos.
+- **The takedown path is half-built.** `expire:pet` (PR #424) means an
+  operator can act in seconds once a request arrives — but there is no way
+  for an owner to *make* one: no contact route on the landing, no address
+  in the app. You are republishing real people's posts and photos, and
+  nothing guarantees you are told when one of them minds.
+- **Every completed search is now recorded** (`search_results`, PR #421) —
+  before 14 Aug 2026, "zone walked, nothing there" existed only as an
+  ephemeral log line, so "how many searches were completed" could not be
+  computed from this database at all. History starts on that date; any
+  funnel chart should say so.

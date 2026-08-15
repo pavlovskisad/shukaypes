@@ -233,8 +233,9 @@ zone, because that is where a hand is on a walk.
 
 `claude-opus-4-8` carries the companion's voice on user-initiated turns;
 `claude-haiku-4-5` handles ambient turns (~60% of calls) and every lost-pet
-parse (~$0.001/call). Opus is the priciest call in the app and is reachable
-by anonymous device-id users at 30/min — see [`08-open-issues.md`](08-open-issues.md).
+parse (~$0.001/call). Opus is the priciest call in the app; since PR #417
+it sits behind per-user and global daily budgets and a kill switch (D-34),
+on top of a now-genuinely-per-user rate limit.
 
 ### D-23 · The parser geocodes from a landmark table instead of a geocoding API ✅⚠️
 *`pipeline/parser.ts`*
@@ -306,16 +307,20 @@ there was nothing for a token to hold. The code path is untouched:
 `checkReportAuth` still accepts `REPORT_TOKEN`, so re-opening the endpoint
 to a narrow reader is one `fly secrets set` away.
 
-### D-30 · The CI gate blocks the server deploy, not the frontend ✅⚠️
-*PR #274, 4 Jul 2026*
+### D-30 · The CI gate blocks both deploys ✅
+*PR #274, 4 Jul 2026 · frontend closed by PR #425, 13 Aug · fixture checks
+added by PR #416*
 
-`deploy.yml` runs typecheck + lint as a `checks` job and the Fly deploy
-`needs: checks`. `react-hooks/rules-of-hooks` is an **error** — that is the
-class of bug that white-screened prod. `exhaustive-deps` is a warning; there
-are 21 and that is the baseline.
+`deploy.yml` runs typecheck + lint + `pnpm check` as a `checks` job and the
+Fly deploy `needs: checks`. `react-hooks/rules-of-hooks` is an **error** —
+that is the class of bug that white-screened prod. `exhaustive-deps` is a
+warning; there are 21 and that is the baseline.
 
-**The frontend is still ungated.** Vercel deploys on the same push with no
-check, so a hook-order bug still reaches the web app first.
+The frontend gap closed on 13 Aug: `vercel.json`'s build command now runs
+typecheck + lint first and fails on either — deliberately a *failing build*
+rather than Vercel's `ignoreCommand`, because a skipped build leaves the
+previous deployment up with nothing visibly wrong. The gate's first catch
+was the commit that added it.
 
 ### D-31 · Boot-seeding of lost pets was removed ✅
 *`index.ts` · "pilot now runs on real scraped pets only"*
@@ -323,3 +328,127 @@ check, so a hook-order bug still reaches the web app first.
 The `seedLostDogs()` CLI in `db/seed-dogs.ts` still works for local dev, but
 production has no synthetic pets. Everything in `lost_dogs` came from a real
 post.
+
+---
+
+## The beta-readiness pass (12–14 Aug 2026)
+
+### D-32 · Dedupe refuses when evidence is thin ✅
+*PR #416 · `pipeline/samePet.ts`*
+
+Measurement inverted the task: the plan was to widen the candidate search;
+the data showed three of the four pairs the existing rule considered
+duplicates were **different animals**. The asymmetry decides the design — a
+duplicate pin is untidy, obvious, and fixable by anyone who notices; a
+wrong merge overwrites one family's lost pet with another's and the losing
+record leaves no trace. Breed compatibility plus descriptor rejection
+("чорний кіт" is not a name), identity as a pure checked function, and the
+candidate `LIMIT 20` kept but ordered — the measured problem was
+over-merging, not missed duplicates.
+
+### D-33 · `search_results` is its own table, not a nullable row in `sightings` ✅
+*PR #421*
+
+`sightings` means *the pet was here* — the map reads it and it drives the
+pin-moving logic. Widening it to also mean "somebody looked and found
+nothing" would put rows that assert nothing into every query that assumes
+otherwise. The analytics write is wrapped and runs last: a failure there
+must cost a row in a metrics table, never a walker's paws or their answer
+about an animal that is still missing.
+
+### D-34 · The chat budget fails open ✅
+*PR #417 · `services/chatBudget.ts`*
+
+Counters live in Redis. If Redis is unreachable the choice is between
+refusing every chat (the dog goes mute for everyone during an unrelated
+outage) and allowing them uncounted. Chat is the product's texture rather
+than its function, but a silently-mute companion reads as "the app is
+broken" to a beta tester, while the rate limits and the kill switch still
+stand in front of the spend. So: open, logged at error level, visible in
+the console. The ceilings themselves are sized from measurement — real
+usage was three Opus turns in seven days across three people, so 50/user
+and 1,000 global per day are two orders of magnitude of headroom, not a
+squeeze.
+
+### D-35 · Existing accounts are never invite-gated ✅
+*PR #417 · `lib/inviteGate.ts`*
+
+~543 accounts have no email, no password, no recovery — just a device id in
+localStorage. A code checked on every request instead of only at signup
+locks all of them out permanently. The decision is a pure predicate, and
+`check:invites` asserts exhaustively that `hasExistingAccount` dominates
+every input, including with the flag forced on. The gate ships dormant
+(`INVITE_REQUIRED` unset) until the owner flips it.
+
+### D-36 · A refusal returns 200 in the success shape ✅
+*PR #417 · `routes/chat.ts`*
+
+Read from the client rather than guessed: the client throws on non-2xx and
+interpolates the thrown string into the dog's speech bubble, so a 429 would
+have shown testers `429 /chat: {...}` in the middle of Ukrainian dialogue.
+The budget refusal comes back as a normal reply the dog can say.
+
+### D-37 · Crash reporting is self-hosted, not a third-party SDK ✅
+*PR #419 · `services/crashReport.ts`, `routes/clientErrors.ts`*
+
+Nothing added to a ~1MB bundle sent over Kyiv cellular, no data-processor
+agreement for EU/UA users, and crashes land in the same Fly logs as
+everything else. Capped at 5 reports per session, deduped by signature,
+`keepalive: true` so the report survives the tab closing on a blank screen
+— the most likely next action. The endpoint is auth-exempt and returns 204;
+every path swallows its own errors, because it runs at the moment the app
+is already broken.
+
+### D-38 · The admin console is one dependency-free page, not a workspace app ✅
+*PR #428 · `routes/adminConsole.ts`*
+
+The root Vercel build runs typecheck + lint across every workspace package,
+so a Vite + React console in the workspace would make the *walkers'* app
+pay for an internal tool's dependencies on every deploy. Same origin also
+means no CORS, no second deployment, no config drift. Read-only by
+construction — ops switches would need `ADMIN_TOKEN`, which must never live
+in a browser. `DASHBOARD_TOKEN` exists precisely as the one key safe to
+keep there, and the metrics numbers stay off the public internet because
+they are fundraise numbers (DAU, retention, spend) reachable at a path
+readable in a public repo.
+
+### D-39 · Dev affordances are gated, not deleted — and the gate is not a security boundary ✅
+*PR #420 · `constants/devTools.ts`, `routes/dev.ts`*
+
+`?sim=1`, `?terrReset=1`, `?terrRaid=1` and `/preview` are out of the
+shipped build; a typed password at `/dev` (checked server-side against
+`DEV_TOOLS_PASSWORD`) turns them back on per browser. The honest framing:
+the simulator grants nothing a determined person lacks — the client is
+trusted for its own position, so invented coordinates are a `curl` away
+regardless. What the gate stops is an *accident*: a beta tester wiping
+their own territory off a link found in a chat. That is also why the two
+destructive routes check the password server-side and 404 rather than
+trusting a client boolean.
+
+### D-40 · Do not repoint Fly's health check at `/health/deep` ✅
+*PR #425, arguing against the roadmap*
+
+`/health/deep` fails on Redis too; Redis is free-tier and flaky and the app
+degrades gracefully without it, so a Redis blip would mark a *serving*
+machine unhealthy and take the app down. On a real database outage,
+restarting the machine fixes nothing while costing the logs and the
+endpoint you would diagnose from. The right fix is an external monitor
+watching `/health/deep` and telling a human — which still does not exist.
+
+### D-41 · Migrations are hand-written until the Drizzle baseline is proven ✅
+*PRs #417, #421 · migrations `0032`, `0033`*
+
+`migrations/meta` has snapshots for 0000–0002 and nothing for 0003–0031, so
+`drizzle-kit generate` emits the entire schema including non-idempotent
+`ADD COLUMN`s — a file that would have failed mid-migration against the
+live database during a deploy. New migrations are additive, hand-written,
+and verified against a real local Postgres (including through the Drizzle
+schema, because a column named differently in `schema.ts` and the migration
+typechecks fine and fails at runtime).
+
+### D-42 · `force: true` stays, by the owner's decision ✅
+*Recorded 13 Aug*
+
+Tap-to-collect remains while the collection animation is tuned. The
+consequence to carry into any reading of beta numbers: collection counts
+will not prove anybody walked. `search_results` and distance still will.

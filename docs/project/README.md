@@ -1,7 +1,8 @@
 # шукайпес — project documentation
 
-The map and the source of truth. Nine documents, each with one job.
-Written 11 Aug 2026 against `main` at `f421b7e` (PR #412 merged).
+The map and the source of truth. Ten documents, each with one job.
+Written 11 Aug 2026 against `f421b7e`; updated 15 Aug 2026 against
+`8266bc6` (PR #430 merged) to fold in the 12–14 Aug beta-readiness pass.
 
 ## Read in this order
 
@@ -13,10 +14,11 @@ Written 11 Aug 2026 against `main` at `f421b7e` (PR #412 merged).
 | 03 | [`03-lost-pet-engine.md`](03-lost-pet-engine.md) | The data engine: sources, parsing, dedupe, geo gates, and what the table looks like today |
 | 04 | [`04-territory.md`](04-territory.md) | The territory mechanic: the model, the rules, the invariants, the knobs |
 | 05 | [`05-decisions.md`](05-decisions.md) | Every architectural decision that is still load-bearing, with why and when |
-| 06 | [`06-history.md`](06-history.md) | How we got here — the arc of 412 PRs and every pivot in it |
+| 06 | [`06-history.md`](06-history.md) | How we got here — the arc of 430 PRs and every pivot in it |
 | 07 | [`07-operations.md`](07-operations.md) | Running it: deploys, secrets, admin tools, incidents, the things that have gone down |
 | 08 | [`08-open-issues.md`](08-open-issues.md) | What is wrong right now, ranked, with what has already been fixed struck off |
 | 09 | [`09-glossary.md`](09-glossary.md) | The vocabulary this project uses for its own parts |
+| 10 | [`10-product-brief.md`](10-product-brief.md) | **Standalone** product outline + running costs — the substrate for business/strategy work; readable without the rest |
 
 ## Precedence
 
@@ -38,7 +40,7 @@ were real when they were made. But do not plan off them.
 | `AUDIT_BRIEF.md` (PR #267, 2 Jul) | Architecture map, accurate for its date. **Predates territory entirely.** Its §0-corrected claims about PostGIS are wrong — see `AUDIT_FINDINGS.md` §0. |
 | `AUDIT_FINDINGS.md` (2 Jul) | Ranked P0–P3 findings. Several are fixed; see [`08-open-issues.md`](08-open-issues.md) for which. Still the best single writeup of the auth and abuse surface. |
 | `PILOT_ROADMAP.md` (PR #275, 4 Jul) | Product state + road to pilot. Its "in-flight PRs" section stops at #274. Its §4 (what "pilot" means) is **still undecided and still the central question.** |
-| `HANDOFF.md` (11 Aug) | Live production state as of the last session. Current. Overlaps [`07-operations.md`](07-operations.md) and [`08-open-issues.md`](08-open-issues.md) — those two are the durable versions; HANDOFF is the snapshot. |
+| `HANDOFF.md` (11 Aug, §0 updated 13–14 Aug) | Live production state as of the last session; its §0.2 is the owner's current pre-beta checklist. Overlaps [`07-operations.md`](07-operations.md) and [`08-open-issues.md`](08-open-issues.md) — those two are the durable versions; HANDOFF is the snapshot. |
 | `README.md` (root) | Setup + deploy instructions. Its "Phases" list stops at Phase 6 and does not describe anything after Phase 5. |
 | `docs/TECHNICAL.md`, `docs/PRODUCT_SPEC.md`, `docs/TRANSFORMATION.md`, `docs/PROJECT_README.md` | Written against the original single-file HTML prototype and the migration plan out of it. Historical. `TECHNICAL.md:236` still contains a compromised Google Maps key — see [`08-open-issues.md`](08-open-issues.md). |
 | `docs/rfp/*` | Studio briefs and a binding tech spec, written for market price discovery (PR #197, #202). A snapshot of the product as pitched, not as built. |
@@ -67,13 +69,16 @@ Cheap rules, because expensive ones get skipped.
 
 ## Facts verified at the time of writing
 
-Run against `f421b7e` on 11 Aug 2026, with `pnpm install --frozen-lockfile`:
+Run against `8266bc6` on 15 Aug 2026, with `pnpm install --frozen-lockfile`:
 
 ```
 pnpm -r typecheck     shared / server / app — all clean
 pnpm lint             21 problems (0 errors, 21 warnings)
+pnpm check            7 fixture checks — all pass
 ```
 
 The 21 warnings are all `react-hooks/exhaustive-deps`. That is the
 baseline, not a regression — CLAUDE.md says the same number, and it
-matched exactly.
+matched exactly. `pnpm check` (out-of-area, ingest alert, pet identity,
+rate limiting, invite gate, dev auth, route coverage) has run in CI since
+PR #416.
