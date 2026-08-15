@@ -127,18 +127,25 @@ const plugin: FastifyPluginAsync = async (app) => {
   // Who holds the most of the city, plus where the caller stands. Read
   // from the profile tab rather than the map, so it's its own trip —
   // putting it on the 15s sync would recompute a scoreboard nobody is
-  // looking at.
-  app.get('/territory/leaderboard', limitRead, async (req) => {
-    // Sequential on purpose: the standing needs the board to find your
-    // rank in it, and running both concurrently would have each miss the
-    // cache and recompute every hull in the city twice.
-    const board = await territoryLeaderboard().catch(() => []);
-    const you = await territoryStanding(req.userId, board).catch(() => ({
-      areaM2: 0,
-      rank: null,
-    }));
-    return { board, you };
-  });
+  // looking at. `limit` widens the board for the fullscreen "see all"
+  // view; clamped, because every entry ships its silhouette ring and a
+  // thousand-row board would be a megabyte nobody scrolls to the end of.
+  app.get<{ Querystring: { limit?: string } }>(
+    '/territory/leaderboard',
+    limitRead,
+    async (req) => {
+      const limit = Math.min(Math.max(parseInt(req.query?.limit ?? '0', 10) || 0, 0), 100);
+      // Sequential on purpose: the standing needs the board to find your
+      // rank in it, and running both concurrently would have each miss the
+      // cache and recompute every hull in the city twice.
+      const board = await territoryLeaderboard(limit || undefined).catch(() => []);
+      const you = await territoryStanding(req.userId, board).catch(() => ({
+        areaM2: 0,
+        rank: null,
+      }));
+      return { board, you };
+    },
+  );
 
   app.get<{ Querystring: SyncMapQuery }>('/sync/map', limitPolling, async (req, reply) => {
     const lat = Number(req.query.lat);

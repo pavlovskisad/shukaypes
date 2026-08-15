@@ -130,6 +130,7 @@ export interface AppStrings {
     territoryBoard: string;
     boardYou: string;
     boardEmpty: string;
+    boardSeeAll: string;
   };
   spots: {
     nearbySpots: string;
@@ -428,6 +429,7 @@ const uk: AppStrings = {
     territoryBoard: 'хто тримає місто',
     boardYou: 'ти',
     boardEmpty: 'місто ще нічиє — познач перший',
+    boardSeeAll: 'показати всіх',
   },
   spots: {
     nearbySpots: 'місця поряд',
@@ -777,6 +779,7 @@ const en: AppStrings = {
     territoryBoard: 'who holds the city',
     boardYou: 'you',
     boardEmpty: 'nobody holds the city yet — go and mark',
+    boardSeeAll: 'see all',
   },
   spots: {
     nearbySpots: 'nearby spots',
