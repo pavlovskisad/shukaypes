@@ -638,6 +638,13 @@ const styles = StyleSheet.create({
     // above the floating dashboard instead of getting clipped
     // by it.
     scrollPaddingTop: 32,
+    // The tail anchor's counterpart: an end-aligned snap position
+    // (boardTailSnap) aligns the card's END to the snapport's bottom,
+    // and without this the snapport's bottom IS the screen's bottom —
+    // under the floating tab bar, which then sat on top of the last
+    // row and the "see all" link. Padded past the bar (bottom offset +
+    // 58px pill + clearance) so the tail rests fully readable above it.
+    scrollPaddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 108px)',
   } as unknown as object,
   // Tighter top padding so the next card's title peeks above
   // the tab bar. gap stays 60 so the between-card rhythm
