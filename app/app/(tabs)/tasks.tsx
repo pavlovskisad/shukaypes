@@ -177,6 +177,20 @@ export default function TasksScreen() {
     [setSelectedDog, router],
   );
 
+  // Tap a row on the standing → the map, framed on that owner's ground.
+  // The row already carries the largest piece's ring (the silhouette is
+  // drawn from it), so the jump needs no extra fetch; rows without
+  // geometry simply don't navigate.
+  const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
+  const onPickOwner = useCallback(
+    (ownerId: string, ring?: { lat: number; lng: number }[]) => {
+      if (!ring || ring.length < 3) return;
+      setFocusedTerritory({ ownerId, ring });
+      router.push('/');
+    },
+    [setFocusedTerritory, router],
+  );
+
   useFocusEffect(
     useCallback(() => {
       useGameStore.getState().setScreen('tasks');
@@ -390,14 +404,20 @@ export default function TasksScreen() {
                 a dash, which is honest: you are not on the board, and
                 here is what you hold anyway. */}
             <View style={styles.boardYouRow}>
-              <BoardRow
-                rank={String(board.you.rank ?? t.profile.unranked)}
-                name={t.tasks.boardYou}
-                areaLabel={t.profile.areaValue(board.you.areaM2)}
-                piece={yourPiece}
-                color={OWN_COLOR_CSS}
-                you
-              />
+              <Pressable
+                onPress={() => onPickOwner('you', yourPiece)}
+                disabled={!yourPiece || yourPiece.length < 3}
+                style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
+              >
+                <BoardRow
+                  rank={String(board.you.rank ?? t.profile.unranked)}
+                  name={t.tasks.boardYou}
+                  areaLabel={t.profile.areaValue(board.you.areaM2)}
+                  piece={yourPiece}
+                  color={OWN_COLOR_CSS}
+                  you
+                />
+              </Pressable>
             </View>
             {board.board.length === 0 ? (
               <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
@@ -412,15 +432,21 @@ export default function TasksScreen() {
                   // the silhouette is the same shape their claim has on
                   // the map, so colour and outline identify together.
                   return (
-                    <BoardRow
+                    <Pressable
                       key={row.userId}
-                      rank={String(i + 1)}
-                      name={isYou ? t.tasks.boardYou : row.name}
-                      areaLabel={t.profile.areaValue(row.areaM2)}
-                      piece={row.mainPiece}
-                      color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
-                      you={isYou}
-                    />
+                      onPress={() => onPickOwner(row.userId, row.mainPiece)}
+                      disabled={!row.mainPiece || row.mainPiece.length < 3}
+                      style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
+                    >
+                      <BoardRow
+                        rank={String(i + 1)}
+                        name={isYou ? t.tasks.boardYou : row.name}
+                        areaLabel={t.profile.areaValue(row.areaM2)}
+                        piece={row.mainPiece}
+                        color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
+                        you={isYou}
+                      />
+                    </Pressable>
                   );
                 })}
                 {/* The whole city, not just its ten loudest dogs — same
@@ -602,6 +628,10 @@ export default function TasksScreen() {
         board={boardAll}
         youRank={board?.you.rank ?? null}
         onClose={() => setBoardAll(null)}
+        onPick={(row) => {
+          setBoardAll(null);
+          onPickOwner(row.userId, row.mainPiece);
+        }}
       />
     </SafeAreaView>
   );
@@ -771,6 +801,7 @@ const styles = StyleSheet.create({
     paddingVertical: S.m,
   },
   boardSeeAllPressed: { opacity: 0.55 },
+  boardRowPressed: { opacity: 0.6 },
   // The standing card's end-anchor — see the scroller comment. A snap
   // area on the card's LAST element, end-aligned, so the page may rest
   // with the tail rows on screen under mandatory snapping.

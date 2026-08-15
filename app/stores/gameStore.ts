@@ -197,6 +197,14 @@ interface GameState {
   // render skeletons up-front instead of popping in and reordering.
   spotsLoaded: boolean;
   selectedSpotId: string | null;
+  // A territory the map should fly to and frame — set by tapping a row
+  // on the standing (the owner's largest piece rides along from the
+  // leaderboard payload), consumed ONCE by MapView's camera effect and
+  // cleared. One-shot on purpose: it is a command, not a selection, so
+  // it never needs to join the setScreen/toggleDogCam clear-lists —
+  // the lists whose interplay is exactly what keeps biting the spot
+  // modal.
+  focusedTerritory: { ownerId: string; ring: LatLng[] } | null;
   // Where the human is currently LOOKING on the map (viewport centre).
   // Set by MapView on map idle. Distinct from userPosition (GPS): used
   // by chat for lore/lost-pet proximity so the dog comments on the
@@ -339,6 +347,7 @@ interface GameState {
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
+  setFocusedTerritory: (v: { ownerId: string; ring: LatLng[] } | null) => void;
   toggleDogCam: () => void;
   setDogCamViaSearch: (dogCamViaSearch: boolean) => void;
   setSearchTarget: (t: { dogId: string; spot: LatLng } | null) => void;
@@ -415,6 +424,14 @@ let syncMapSeq = 0;
 // allowed to write its tokens, food, dogs or territory.
 let playersSeq = 0;
 
+// And one for spots. Two callers again — the spots tab on focus and the
+// map on viewport idle — and without a ticket the LAST response to land
+// won, not the newest issued. That is how a stale fetch centred on where
+// the user was standing could overwrite a fresh one centred on the spot
+// they had just flown the map to, drop the tapped spot from the array,
+// and silently kill its pin and open modal.
+let spotsSeq = 0;
+
 export const useGameStore = create<GameState>((set, get) => ({
   hunger: balance.hunger.start,
   happiness: balance.happiness.start,
@@ -452,6 +469,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   spotsLoading: false,
   spotsLoaded: false,
   selectedSpotId: null,
+  focusedTerritory: null,
   // Default OFF — the app opens on a clean 3D city view; users turn the
   // spots layer on via the HUD pin toggle (there's a one-shot hint for it).
   spotsVisible: false,
@@ -1032,10 +1050,28 @@ export const useGameStore = create<GameState>((set, get) => ({
       return;
     }
     set({ spotsLoading: true });
+    const seq = ++spotsSeq;
     try {
       const spots = await fetchNearbySpots(pos);
-      set({ spots, lastSpotsFetchPos: pos, spotsLoading: false, spotsLoaded: true });
+      // A response that was overtaken while in flight must not write —
+      // last-to-land used to win here, which is how a stale fetch
+      // centred on the old position could clobber a fresh one and drop
+      // the spot whose modal was open.
+      if (seq !== spotsSeq) return;
+      set((s) => {
+        // Keep the SELECTED spot alive across the refetch — the same
+        // rescue syncLostDogs does for selectedDogId and the walk
+        // destination gets in MapView. Without it, a refetch that no
+        // longer includes the tapped spot silently killed its pin and
+        // closed its modal mid-look; the user read that as the app
+        // dismissing it on its own.
+        const kept = s.selectedSpotId ? s.spots.find((x) => x.id === s.selectedSpotId) : null;
+        const next =
+          kept && !spots.some((x) => x.id === kept.id) ? [...spots, kept] : spots;
+        return { spots: next, lastSpotsFetchPos: pos, spotsLoading: false, spotsLoaded: true };
+      });
     } catch (err) {
+      if (seq !== spotsSeq) return;
       set({
         spotsLoading: false,
         spotsLoaded: true,
@@ -1050,6 +1086,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
+  setFocusedTerritory: (focusedTerritory) => set({ focusedTerritory }),
   // FLIPPING THE MODE CLEARS THE SCREEN.
   //
   // Supersniff and walking are two different views of the city, and

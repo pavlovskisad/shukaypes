@@ -1967,6 +1967,36 @@ export default function MapViewWeb() {
     });
   }, [selectedSpotId, spots]);
 
+  // Fly to a territory — tapping a row on the standing routes here with
+  // the owner's largest piece in the store, and the camera frames it.
+  // ONE-SHOT: consumed and cleared, deliberately unlike selectedSpotId.
+  // A selection has to be defended from every clear-list and sync in
+  // the app; a command is executed and gone, and tapping the same row
+  // again later simply issues a new one.
+  const focusedTerritory = useGameStore((s) => s.focusedTerritory);
+  const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !focusedTerritory) return;
+    const ring = focusedTerritory.ring;
+    if (ring.length >= 3) {
+      const first: [number, number] = [ring[0]!.lng, ring[0]!.lat];
+      const bounds = ring.reduce(
+        (b, p) => b.extend([p.lng, p.lat] as [number, number]),
+        new maplibregl.LngLatBounds(first, first),
+      );
+      map.fitBounds(bounds, {
+        // The quest-waypoints framing, slightly roomier: the shape is
+        // the subject, so it gets air on every side and never zooms
+        // past street level.
+        padding: { top: 120, bottom: 130, left: 44, right: 44 },
+        maxZoom: 16.5,
+        duration: 900,
+      });
+    }
+    setFocusedTerritory(null);
+  }, [focusedTerritory, setFocusedTerritory]);
+
   // Cinematic dog view — tapping a pet (on the map OR via the quests-tab
   // jump, which routes here with the dog already selected) pulls the
   // camera back and tilts it to frame the pet's WHOLE search zone above
