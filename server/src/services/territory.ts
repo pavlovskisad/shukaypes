@@ -101,6 +101,7 @@ import {
   groundOf,
   groundStanding,
   groundTotals,
+  largestPieceRings,
   ownerAt,
   pieceCovers,
   clearGround,
@@ -870,7 +871,23 @@ export interface LeaderboardEntry {
   name: string;
   areaM2: number;
   bot: boolean;
+  // The outer ring of the owner's largest piece, decimated for a
+  // thumbnail — the board draws it as a silhouette in the owner's colour.
+  // Absent only if the ground vanished between the sum and this read.
+  mainPiece?: { lat: number; lng: number }[];
 }
+
+// A thumbnail is ~50px across; more corners than this is invisible, and
+// the board is the one payload that ships geometry for owners the map
+// never loads, so it stays on a diet.
+const MINI_RING_POINTS = 48;
+const decimateRing = <P>(ring: P[]): P[] => {
+  if (ring.length <= MINI_RING_POINTS) return ring;
+  const step = ring.length / MINI_RING_POINTS;
+  const out: P[] = [];
+  for (let i = 0; i < MINI_RING_POINTS; i++) out.push(ring[Math.floor(i * step)]!);
+  return out;
+};
 
 // Who holds the most of the city.
 //
@@ -894,12 +911,23 @@ export async function territoryLeaderboard(): Promise<LeaderboardEntry[]> {
     .sort((a, b) => b.areaM2 - a.areaM2)
     .slice(0, T.leaderboardSize);
 
-  const names = await ownerNames(totals.map((e) => e.userId));
-  return totals.map((e) => ({
-    ...e,
-    name: names.get(e.userId) ?? 'сусід',
-    bot: isBot(e.userId),
-  }));
+  const ids = totals.map((e) => e.userId);
+  const [names, rings] = await Promise.all([ownerNames(ids), largestPieceRings(ids)]);
+  return totals.map((e) => {
+    const ring = rings.get(e.userId);
+    return {
+      ...e,
+      name: names.get(e.userId) ?? 'сусід',
+      bot: isBot(e.userId),
+      ...(ring && ring.length >= 3
+        ? {
+            mainPiece: trimPoints(
+              decimateRing(ring).map(([lng, lat]) => ({ lat: lat!, lng: lng! })),
+            ),
+          }
+        : {}),
+    };
+  });
 }
 
 // Where a given user stands, and how much they hold.

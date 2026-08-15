@@ -101,6 +101,10 @@ export interface TerritoryRanking {
   name: string;
   areaM2: number;
   bot: boolean;
+  // The outer ring of this owner's largest piece — the board draws it as
+  // a small silhouette in their colour. Optional: an older server (or an
+  // owner whose ground vanished mid-read) simply sends none.
+  mainPiece?: { lat: number; lng: number }[];
 }
 
 // Somebody marked over your ground while you weren't looking.
