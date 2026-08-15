@@ -51,21 +51,28 @@ now partly addressed, and neither was known before somebody counted.
 parse output vs source post, pin vs reality, dedupe across reposts — with
 the numbers written down.
 
-### P0-2 · No source is currently producing pets
-*See [`03-lost-pet-engine.md`](03-lost-pet-engine.md).*
+### P0-2 · Ingestion coverage is degraded and half-dark — but not stopped
+*Corrected 15 Aug against production logs. An earlier version of this item
+said "no source is currently producing pets"; that was too strong.*
 
-- **OLX** — blocked by CloudFront's WAF. The only source that has ever
-  inserted a real pet. A `SCRAPE_PROXY_URL` seam exists and is unset;
-  choosing a provider is a purchasing decision.
+- **OLX** — **partially blocked**: 7 of 13 listing URLs 403, the other 6
+  serve, and pets kept arriving (17 in the 7 days to 11 Aug; same shape
+  verified live 15 Aug). The ads on the refused listings are invisible —
+  lost coverage, not an outage. A `SCRAPE_PROXY_URL` seam exists and is
+  unset; buying a proxy **buys back the missing half of coverage** rather
+  than restarting a dead pipeline, so it is a real gap but not a fire.
+  **Do not probe OLX by hand to check on it** — a by-hand 403 proves
+  nothing (the cron gets different answers from the same address) and
+  probing risks the half that works. Read the tick summaries instead.
 - **Telegram channel scrape** — never configured. Free, unblocked from the
   Fly host, one env var. Needs a curated channel list, which is human
   judgement.
-- **Facebook** — parked; needs a burner account.
+- **Facebook** — parked; needs a burner account (`FACEBOOK_COOKIES`).
 - **Telegram bot ingest** — works, but has only ever been pointed at the
   owner's test chats.
 
 **Cheapest first:** set `TELEGRAM_CHANNELS`. It costs nothing and it is the
-only thing that stops OLX being a single point of failure.
+only thing that stops half-blocked OLX being a single point of failure.
 
 ### P0-3 · The ingest alert is dormant
 *`services/ingestAlert.ts`, PR #412, retuned against a real tick in #413.*

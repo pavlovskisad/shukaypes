@@ -14,12 +14,12 @@ most of the recent work has been about making silence audible.
 failing does not starve the others. The whole cron skips if
 `ANTHROPIC_API_KEY` is missing, because the parser would throw anyway.
 
-| Source | File | Status (11 Aug 2026) |
+| Source | File | Status (verified 15 Aug 2026) |
 | --- | --- | --- |
-| **OLX** | `pipeline/sources/olx.ts` | **Blocked.** CloudFront's WAF serves 403 to datacentre IPs. |
+| **OLX** | `pipeline/sources/olx.ts` | **Partially blocked — degraded, not stopped.** ~Half the listing URLs 403; the other half serve and pets keep arriving. See below. |
 | **Telegram (channel scrape)** | `pipeline/sources/telegram.ts` | **Unconfigured.** `TELEGRAM_CHANNELS` is unset, so the source is a no-op. Not blocked — verified reachable from the Fly IP. |
 | **Telegram (bot webhook)** | `routes/telegram.ts` → `services/telegramIngest.ts` | Working, but only ever pointed at the owner's own test chats. |
-| **Facebook** | `pipeline/sources/facebook.ts` | **Parked.** Needs a burner account nobody has created. |
+| **Facebook** | `pipeline/sources/facebook.ts` | **Parked.** Needs a burner account (`FACEBOOK_COOKIES` unset; logs one expected error per tick). |
 
 ### OLX
 
@@ -32,14 +32,43 @@ URL) stops the same ad being re-parsed.
 
 **It is the only source that has ever inserted a real pet.**
 
-**Why it is blocked, and what has been ruled out.** The 403 is on the
-address, not the request — a full browser header set (`sec-fetch-*`,
-`sec-ch-ua`, `accept`, `upgrade-insecure-requests`) changes nothing, and the
-block reproduces from two independent hosts and in production logs. The
+**The block is partial, and the earlier "ingestion has stopped" framing
+was wrong.** An earlier version of this section (and this doc set) said
+OLX was blocked outright. Measured 11 Aug and re-verified from production
+logs on 15 Aug, the same shape both times:
+
+```
+11 Aug tick:  7 of 13 listing URLs -> 403; 6 served, 251 ads discovered
+              OLX pets inserted, 7 days to 11 Aug: 17
+15 Aug 06:47: 7 of 13 listing URLs -> 403; 6 served, 247 ads discovered
+              (all 247 already seen — a normal quiet hour; only ~4
+              genuinely new ads exist per day against 24 ticks)
+```
+
+So roughly half the listing sweeps are refused and the other half work,
+and pets have kept arriving at a few a day throughout. This is **lost
+coverage** — the ads on the seven refused listings are invisible — not an
+outage. A proxy therefore *buys back the missing half of coverage*; it
+does not restart a dead pipeline, and nothing is on fire while it is
+unbought.
+
+**Do not probe OLX by hand.** Recorded in `HANDOFF.md` §3.1/§5 so nobody
+repeats it: ~23 paced by-hand requests from the Fly host itself got 403 on
+*every* URL — while the scheduled tick minutes either side was getting 6
+of the same 13 through. A hand-run request and the cron's request get
+different answers from the same address for reasons nobody could explain,
+so **a by-hand 403 proves nothing about whether ingestion works** — read
+`scrape_log` (or the tick summaries in the Fly logs), which is free and
+cannot be misread. And every probe is a request at a WAF that has already
+refused us; a widened block would cost real coverage on the only source
+that inserts pets.
+
+**What has been ruled out.** A full browser header set (`sec-fetch-*`,
+`sec-ch-ua`, `accept`, `upgrade-insecure-requests`) changes nothing. The
 official route is a checked dead end: OLX has a Partner API, but every
 advert endpoint is scoped to the authenticated partner's own listings
-(`GET /adverts` is "Get user adverts"). There is no public search. It cannot
-see other people's lost-pet ads.
+(`GET /adverts` is "Get user adverts"). There is no public search. It
+cannot see other people's lost-pet ads.
 
 **The seam that exists.** PR #407 added `SCRAPE_PROXY_URL`
 (`lib/scrapeFetch.ts`): set it to any HTTP(S) proxy URL and scrape traffic
@@ -247,11 +276,18 @@ failing silently.
 
 `services/ingestAlert.ts` asks two questions, both **edge-triggered**:
 
-- *Is a source blocked?* — three consecutive ticks that discovered items,
-  ingested none, and errored.
+- *Is a source blocked?* — **≥10 errors in a tick** (`INGEST_BLOCKED_ERRORS`),
+  three consecutive ticks. Retuned in PR #413 against a real tick: the
+  first rule ("discovered things, parsed none, errored") would have fired
+  on a perfectly normal quiet hour, because OLX discovers ~250 already-seen
+  ads hourly and parses none of them. The threshold is deliberately above
+  the current partial block's steady 7 errors — degraded coverage is a
+  known state, not a page; error-counting also keeps unconfigured sources
+  quiet (Facebook emits exactly one expected error per tick).
 - *Has everything stopped?* — nothing inserted by any source for
   `INGEST_STALL_HOURS` (default 36; the measured baseline is 2–9/day with no
-  zero days in 21).
+  zero days in 21). This is the check that asks the question that actually
+  matters — are pets arriving — rather than counting HTTP failures.
 
 It alerts once on the way in and once on the way out, and never repeats in
 between. A monitor that nags hourly gets muted, and a muted monitor is the

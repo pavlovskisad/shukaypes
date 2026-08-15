@@ -110,7 +110,7 @@ behind an always-on flag** · **⛔ not real yet**
 
 | Area | State | Notes |
 | --- | --- | --- |
-| Lost-pet ingestion | 🟡 | Hourly cron over OLX + Telegram + Facebook, plus real-time Telegram bot ingest. **OLX is currently blocked, Telegram is unconfigured, Facebook is parked.** See [`03-lost-pet-engine.md`](03-lost-pet-engine.md). |
+| Lost-pet ingestion | 🟡 | Hourly cron over OLX + Telegram + Facebook, plus real-time Telegram bot ingest. **OLX is half-blocked (coverage degraded, pets still arriving), Telegram is unconfigured, Facebook is parked.** See [`03-lost-pet-engine.md`](03-lost-pet-engine.md). |
 | Territory service | ✅ | `services/territory.ts`, 1,021 lines. Grow/cut at mark time; syncs are box queries. |
 | Auth | 🟡 | Telegram initData is strong. `x-device-id` is unverified and spoofable. An invite gate is built and dormant (`INVITE_REQUIRED` unset) — existing accounts can never be gated out. |
 | Spawn / mapData / decay / cleanup crons | ✅ | All in-process on one machine. The lost-pet cleanup now runs at boot too — a bare 24h interval meant it had probably **never fired in production** (every deploy reset the timer). |
@@ -150,6 +150,6 @@ beta-readiness pass aimed squarely at the neglected half — the dedupe rule
 measured and fixed (three of its four "duplicates" were different animals),
 every completed search recorded, a takedown path, crash reporting, real
 rate limits, spend ceilings, and the metrics that a beta will be judged by.
-The two engine gaps that remain are the two that were open before: **no
-ingestion source is currently producing pets, and parse accuracy on real
-posts has never been measured.**
+The two engine gaps that remain are the two that were open before:
+**ingestion coverage is degraded — OLX half-blocked, Telegram unconfigured
+— and parse accuracy on real posts has never been measured.**
