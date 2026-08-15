@@ -70,12 +70,15 @@ route, and decide the presence-privacy posture.
 **The two honest gaps**, unchanged for a month and named in every internal
 doc:
 
-- **No ingestion source is currently live.** OLX (the only source that
-  has ever produced real pets, 2–9/day measured) is blocked by a WAF; the
-  fix is a ~$10–50/mo managed proxy plus one env var, seam already built.
-  Telegram channel scraping is free, verified working, and needs only a
-  curated channel list. So this is days, not months — but today the pet
-  table is aging.
+- **Ingestion coverage is degraded.** OLX — the only source that has ever
+  produced real pets (2–9/day measured) — is *half*-blocked by a WAF:
+  about half its listing sweeps are refused, the other half serve, and
+  pets keep arriving at a few a day (verified live 15 Aug). The ads on
+  the blocked half are simply invisible. Buying back that coverage is a
+  ~$10–50/mo managed proxy plus one env var, seam already built; adding
+  Telegram channel scraping is free and needs only a curated channel
+  list. Days of work, not months — but until then the product sees only
+  part of the Kyiv lost-pet conversation.
 - **Parse accuracy on real posts has never been measured.** The core
   claim — a real post comes out with the right species, place and photo —
   has no number behind it. An afternoon of work; also the strongest slide
@@ -127,8 +130,9 @@ reports are self-hosted in the same VM and logs, by decision.
 **A scraping proxy for OLX: ~$10–50/mo.** The volume is measured and
 small — ~9,500 requests/month, low single-digit GB — so the recommendation
 on file is a managed unblocker in proxy mode (the provider absorbs WAF
-changes) rather than raw residential IPs. This is the only money currently
-standing between the product and its primary data source.
+changes) rather than raw residential IPs. This buys back the blocked half
+of the primary source's coverage — the pipeline is degraded, not dead, so
+it is the highest-value purchase pending rather than an emergency.
 
 ### 3.4 Closed beta (50–150 testers) — estimate
 

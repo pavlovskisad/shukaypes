@@ -291,7 +291,9 @@ camera, the fog, the leaderboard's six design passes and sixty-five
 territory PRs are all real work that made the app distinctive. But the
 engine that feeds the actual product — a lost pet reaching a walker who is
 near it — has still never had a validation pass on real posts, and the last
-time anyone looked closely, a third of the table was undrawable and the only
-working source had been blocked for days. Era 9 bent this curve — the
-beta-readiness pass was aimed at exactly the neglected half — but the two
-oldest engine gaps (no live source, unmeasured parse accuracy) survived it.
+time anyone looked closely, a third of the table was undrawable and the
+primary source had silently lost half its coverage to a WAF (first
+reported as fully dead — "too strong", twice, per the handoff's own
+corrections). Era 9 bent this curve — the beta-readiness pass was aimed at
+exactly the neglected half — but the two oldest engine gaps (degraded
+sources, unmeasured parse accuracy) survived it.
