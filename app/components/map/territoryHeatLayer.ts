@@ -68,19 +68,24 @@ export interface TerritoryHeatLayer extends CustomLayerInterface {
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext;
 
-// Offscreen buffers at 1/4 canvas resolution. Big enough that a near-crisp
-// low-zoom edge doesn't pixelate (the linear upsample smooths ~4px), small
-// enough that three fullscreen-ish passes cost a fraction of a frame.
+// Offscreen buffers at 1/4 of the canvas in CSS pixels — DOWNSCALE is
+// multiplied by devicePixelRatio at target-creation time. In physical
+// pixels the first cut of this undersampled on phones: a dpr-3 screen made
+// the blur radius three times larger in texels than the 9-tap kernel could
+// sample cleanly, and the soft edge came out banded and crunchy — the
+// exact opposite of soft. Constant CSS-pixel resolution keeps the kernel
+// in range on every screen (and makes the passes cheaper exactly where
+// the GPU is weakest).
 const DOWNSCALE = 4;
 
 // The soft edge, in metres of ground. Constant metres — not constant
 // pixels — is what keeps the look honest at both ends: standing at a
-// border you see a ~20m gradient underfoot; zoomed out to the whole city
+// border you see a ~25m gradient underfoot; zoomed out to the whole city
 // the clamp takes over and shapes stay readable instead of dissolving
 // into fog. The px clamps also protect the blur kernel's sampling range.
-const EDGE_SOFT_M = 22;
-const MIN_RADIUS_PX = 2; // CSS px
-const MAX_RADIUS_PX = 26; // CSS px
+const EDGE_SOFT_M = 26;
+const MIN_RADIUS_PX = 3; // CSS px
+const MAX_RADIUS_PX = 32; // CSS px
 
 // Peak fill opacity. 0.42 is a load-bearing number: the owner palette was
 // scored composited at 42% over the map paper (see territoryColor.ts) —
@@ -146,6 +151,10 @@ uniform sampler2D u_tex;
 uniform float u_alpha;
 uniform vec2 u_offset;
 uniform float u_dpr;
+// Offset for the seam probes below, in uv — the blur radius scaled into
+// the low-res texture, so the probe spans a constant FRACTION of the
+// crossfade at every zoom instead of a constant number of pixels.
+uniform vec2 u_probe;
 
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float vnoise(vec2 p) {
@@ -157,31 +166,65 @@ float vnoise(vec2 p) {
 float fbm(vec2 p) {
   return 0.58 * vnoise(p) + 0.30 * vnoise(p * 2.03 + 9.1) + 0.12 * vnoise(p * 4.11 + 23.7);
 }
+// Two octaves only, for the edge meander — the third octave that the body
+// grain uses put ~25px ripples on every border and the edges read as
+// torn paper rather than drifting scent.
+float fbm2(vec2 p) {
+  return 0.66 * vnoise(p) + 0.34 * vnoise(p * 2.03 + 9.1);
+}
+
+// The blur leaves rgb premultiplied by coverage; dividing it back out
+// recovers the blended owner colour — mid-border between two owners this
+// IS the crossfade.
+vec3 fieldColor(vec4 s) { return s.rgb / max(s.a, 0.004); }
 
 void main() {
   vec4 s = texture2D(u_tex, v_uv);
   float cov = s.a;
   if (cov < 0.01) discard;
   vec2 wp = (gl_FragCoord.xy + u_offset) / u_dpr;
-  // Edge meander, ~110px features. Gated by coverage so noise can never
+  // Edge meander, ~170px features. Gated by coverage so noise can never
   // conjure a floating speck of paint out on bare street.
-  float wob = (fbm(wp / 110.0) - 0.5) * 0.32 * min(1.0, cov * 4.0);
+  float wob = (fbm2(wp / 170.0) - 0.5) * 0.34 * min(1.0, cov * 4.0);
   float c = cov + wob;
-  float shaped = smoothstep(0.34, 0.66, c);
+  // TWO soft steps instead of one — a pale halo, then the dense body.
+  // This is most of what makes a claim read as a heat field with depth
+  // (the contour-band look) rather than a blurred sticker: the outer
+  // fringe sits at roughly half strength before the body comes in.
+  float halo = smoothstep(0.30, 0.42, c);
+  float body = smoothstep(0.52, 0.70, c);
+  float shaped = 0.55 * halo + 0.45 * body;
   if (shaped < 0.01) discard;
-  // The blur left rgb premultiplied by coverage; dividing it back out
-  // recovers the blended owner colour — mid-border between two owners
-  // this IS the crossfade.
-  vec3 col = s.rgb / max(cov, 0.004);
-  // A light rim where the field crosses the edge — the "hot" outline of a
-  // heat blob. Interior coverage is ~1 so this never tints the body, and
-  // owner-vs-owner borders (coverage ~1 throughout) never get it either.
-  float rim = smoothstep(0.34, 0.5, c) * (1.0 - smoothstep(0.5, 0.78, c));
-  col = mix(col, vec3(1.0), rim * 0.18);
-  // Faint large-scale unevenness inside the body, so a big claim reads as
-  // a field with density to it rather than a flat sticker.
-  float grain = fbm(wp / 300.0 + 17.0);
-  float a = shaped * u_alpha * (0.92 + 0.16 * grain);
+  vec3 col = fieldColor(s);
+  // Bright rims where each band is born — the hot outline of a heat blob.
+  // Both live in the coverage ramp, so they trace only OUTER edges
+  // against unclaimed ground; interior coverage is ~1 throughout.
+  float rim = smoothstep(0.30, 0.38, c) * (1.0 - smoothstep(0.40, 0.52, c)) * 0.30
+            + smoothstep(0.52, 0.60, c) * (1.0 - smoothstep(0.62, 0.74, c)) * 0.16;
+  // Where two OWNERS meet, coverage never dips, so the rims above can't
+  // fire — probe the field a blur-radius out on each axis and lighten
+  // where the colour is changing fast. That puts a soft bright seam down
+  // every shared border (strong between contrasting hues, faint between
+  // cousins), which is what keeps a fully-claimed city reading as many
+  // fields rather than one quilt. Masked to fully-painted ground so it
+  // can't double up on the outer rim.
+  vec4 sl = texture2D(u_tex, v_uv - vec2(u_probe.x, 0.0));
+  vec4 sr = texture2D(u_tex, v_uv + vec2(u_probe.x, 0.0));
+  vec4 sb = texture2D(u_tex, v_uv - vec2(0.0, u_probe.y));
+  vec4 st = texture2D(u_tex, v_uv + vec2(0.0, u_probe.y));
+  // Soft mask — a hard step() here drew visible stair-lines wherever the
+  // probe ring crossed a shape edge, the on/off of the lighten tracing
+  // axis-offset copies of every boundary.
+  float inner = smoothstep(0.4, 0.85, min(min(sl.a, sr.a), min(sb.a, st.a)));
+  float dc = length(fieldColor(sr) - fieldColor(sl)) + length(fieldColor(st) - fieldColor(sb));
+  float seam = smoothstep(0.10, 0.34, dc) * inner * 0.20;
+  col = mix(col, vec3(1.0), min(1.0, rim + seam));
+  // The hottest core leans a touch deeper, so a big claim glows from the
+  // inside out instead of being one flat tone edge to edge...
+  col *= 1.0 - 0.10 * smoothstep(0.80, 0.97, c);
+  // ...and the body carries large, soft density variation on top.
+  float grain = fbm(wp / 260.0 + 17.0);
+  float a = shaped * u_alpha * (0.88 + 0.24 * grain);
   gl_FragColor = vec4(col * a, a); // premultiplied
 }
 `;
@@ -319,6 +362,10 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
   let uCompAlpha: WebGLUniformLocation | null = null;
   let uCompOffset: WebGLUniformLocation | null = null;
   let uCompDpr: WebGLUniformLocation | null = null;
+  let uCompProbe: WebGLUniformLocation | null = null;
+  // Blur radius in low-res texels, written by prerender each frame and
+  // read back when render sets the seam-probe offsets.
+  let radiusTex = 0;
 
   let quadBuf: WebGLBuffer | null = null;
   let meshBuf: WebGLBuffer | null = null;
@@ -352,8 +399,9 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
   };
 
   const ensureTargets = (gl: GL): boolean => {
-    const w = Math.max(1, Math.round(gl.drawingBufferWidth / DOWNSCALE));
-    const h = Math.max(1, Math.round(gl.drawingBufferHeight / DOWNSCALE));
+    const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
+    const w = Math.max(1, Math.round(gl.drawingBufferWidth / (DOWNSCALE * dpr)));
+    const h = Math.max(1, Math.round(gl.drawingBufferHeight / (DOWNSCALE * dpr)));
     if (targets && targets[0].w === w && targets[0].h === h) return true;
     dropTargets(gl);
     const a = makeTarget(gl, w, h);
@@ -412,6 +460,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
       uCompAlpha = gl.getUniformLocation(compProg, 'u_alpha');
       uCompOffset = gl.getUniformLocation(compProg, 'u_offset');
       uCompDpr = gl.getUniformLocation(compProg, 'u_dpr');
+      uCompProbe = gl.getUniformLocation(compProg, 'u_probe');
       gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
       gl.bufferData(
         gl.ARRAY_BUFFER,
@@ -486,16 +535,18 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
         gl.disableVertexAttribArray(aPolyColor);
 
-        // 2. Blur. Radius: EDGE_SOFT_M of ground converted to pixels at
-        // the current zoom, clamped, then into quarter-res texels. When
-        // the texel radius outruns what 9 taps can sample cleanly, run the
-        // kernel twice at radius/√2 — gaussians compose.
+        // 2. Blur. Radius: EDGE_SOFT_M of ground converted to CSS pixels
+        // at the current zoom, clamped, then into texels — the buffer is
+        // sized in CSS pixels too, so dpr cancels out and the kernel sees
+        // the same texel radius on every screen. When that radius outruns
+        // what 9 taps can sample cleanly, run the kernel twice at
+        // radius/√2 — gaussians compose.
         const zoom = mapRef.getZoom();
         const lat = mapRef.getCenter().lat;
         const mpp = (78271.517 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
         const cssR = Math.min(MAX_RADIUS_PX, Math.max(MIN_RADIUS_PX, EDGE_SOFT_M / mpp));
-        const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
-        const rTex = (cssR * dpr) / DOWNSCALE;
+        const rTex = cssR / DOWNSCALE;
+        radiusTex = rTex;
         const iters = rTex > 5 ? 2 : 1;
         const r = rTex / Math.sqrt(iters);
         gl.useProgram(blurProg);
@@ -556,6 +607,10 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         }
         gl.uniform2f(uCompOffset, offX, offY);
         gl.uniform1f(uCompDpr, dpr);
+        // Seam probes reach one blur radius out — the crossfade between
+        // two owners spans ~2 radii, so this samples a constant fraction
+        // of it at every zoom and the seam strength stays steady.
+        gl.uniform2f(uCompProbe, (radiusTex * 0.9) / A.w, (radiusTex * 0.9) / A.h);
         gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
         gl.enableVertexAttribArray(aCompPos);
         gl.vertexAttribPointer(aCompPos, 2, gl.FLOAT, false, 0, 0);
