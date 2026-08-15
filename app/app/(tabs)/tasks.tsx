@@ -129,7 +129,7 @@ function BoardRow({
       >
         {rank}
       </Text>
-      <TerritoryMini points={piece} color={color} size={46} />
+      <TerritoryMini points={piece} color={color} size={92} />
       <View style={styles.boardText}>
         <Text style={[styles.boardName, you && styles.boardYouText]} numberOfLines={1}>
           {name}
