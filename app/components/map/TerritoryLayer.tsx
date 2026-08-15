@@ -38,13 +38,29 @@
 // Every stroked version of this has read as a diagram of the mechanic
 // rather than paint on the ground, and the map already has plenty of
 // lines in it. The fill colour alone carries the edge.
+//
+// HOW the ground is painted changed once more: the fill is now a soft
+// blurred field (territoryHeatLayer.ts) rather than a hard vector fill.
+// That is a deliberate return towards the heat look this header opens by
+// rejecting — but what was wrong with Model 1 was the DATA (a grid that
+// couldn't make a shape), not the softness. The geometry under the blur
+// is still the exact server partition: dots still explain marks, holes
+// are still holes, borders still sit where the server put them. Only the
+// finish changed, from boardgame diagram to paint that bleeds a little
+// into the street. The flat fill below survives as the fallback for
+// devices where the custom GL layer can't set up.
 
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { useMaplibreMap } from './MapContext';
 import { THREE_BUILDINGS_LAYER_ID } from './threeBuildingsLayer';
 import type { RivalTerritory, TerritoryMark, TerritoryShape } from '../../services/api';
-import { OWN_COLOR_CSS, ownerColorCss } from './territoryColor';
+import { OWN_COLOR_CSS, OWN_COLOR_RGB, ownerColorCss, ownerColorRgb } from './territoryColor';
+import {
+  createTerritoryHeatLayer,
+  TERRITORY_HEAT_LAYER_ID,
+  type TerritoryHeatLayer,
+} from './territoryHeatLayer';
 
 const AREA_SOURCE = 'territory-area-src';
 const AREA_FILL = 'territory-area-fill';
@@ -225,14 +241,25 @@ export function TerritoryLayer({
   rivalMarks: { lat: number; lng: number; ownerId: string; at: string }[];
 }) {
   const map = useMaplibreMap();
-  // One group per owner, each with its own colour. Yours goes LAST so
-  // that if two ever did overlap, yours is the one on top — the server
-  // partitions the ground so they shouldn't, but if the geometry ever
-  // disagrees, the answer the user cares about is "which bit is mine".
+  // The soft GL layer object outlives any single effect run; the failed
+  // flag flips exactly once, if its GL setup can't come up, and swaps the
+  // whole area rendering over to the classic flat fill.
+  const heatRef = useRef<TerritoryHeatLayer | null>(null);
+  const [heatFailed, setHeatFailed] = useState(false);
+  // One group per owner, each with its own colour — CSS string for the
+  // flat-fill fallback, linear triple for the GL layer, same hue either
+  // way. Yours goes LAST so that if two ever did overlap, yours is the
+  // one on top — the server partitions the ground so they shouldn't, but
+  // if the geometry ever disagrees, the answer the user cares about is
+  // "which bit is mine".
   const areaGroups = useMemo(
     () => [
-      ...rivals.map((r) => ({ shapes: r.shapes, color: ownerColorCss(r.ownerId) })),
-      { shapes, color: OWN_COLOR_CSS },
+      ...rivals.map((r) => ({
+        shapes: r.shapes,
+        color: ownerColorCss(r.ownerId),
+        rgb: ownerColorRgb(r.ownerId),
+      })),
+      { shapes, color: OWN_COLOR_CSS, rgb: OWN_COLOR_RGB },
     ],
     [rivals, shapes],
   );
@@ -276,7 +303,6 @@ export function TerritoryLayer({
 
   useEffect(() => {
     if (!map) return;
-    const areas = areaGeoJSON(areaGroups);
     const links = linkGeoJSON(shapes);
     const dots = dotsGeoJSON(marks, Date.now(), rivalMarks);
 
@@ -300,12 +326,41 @@ export function TerritoryLayer({
         return false;
       };
 
-      // Yours and everyone else's live in ONE source, coloured per
-      // feature. The ground is partitioned server-side so no two zones
-      // overlap, which means there's no stacking order to get right — and
-      // one layer is what lets an arbitrary number of neighbours be drawn
-      // without adding a layer each time somebody new walks past.
-      if (!setOr(AREA_SOURCE, areas)) {
+      // Yours and everyone else's ground still all lives in ONE layer,
+      // coloured per owner. The ground is partitioned server-side so no
+      // two zones overlap, which means there's no stacking order to get
+      // right — and one layer is what lets an arbitrary number of
+      // neighbours be drawn without adding a layer each time somebody new
+      // walks past.
+      //
+      // The layer is normally the soft GL field; the flat vector fill
+      // below is the same data down the fallback path, for a device where
+      // the custom layer's GL setup fails.
+      if (!heatFailed) {
+        if (!map.getLayer(TERRITORY_HEAT_LAYER_ID)) {
+          const layer = createTerritoryHeatLayer(() => setHeatFailed(true));
+          heatRef.current = layer;
+          try {
+            map.addLayer(layer, under);
+          } catch (e) {
+            // eslint-disable-next-line no-console
+            console.error('[territory] soft layer addLayer failed', e);
+            heatRef.current = null;
+            setHeatFailed(true);
+          }
+        }
+        heatRef.current?.setGroups(
+          areaGroups.map((g) => ({ shapes: g.shapes, color: g.rgb })),
+        );
+      } else if (!setOr(AREA_SOURCE, areaGeoJSON(areaGroups))) {
+        if (map.getLayer(TERRITORY_HEAT_LAYER_ID)) {
+          try {
+            map.removeLayer(TERRITORY_HEAT_LAYER_ID);
+          } catch {
+            /* already gone */
+          }
+          heatRef.current = null;
+        }
         map.addLayer(
           {
             id: AREA_FILL,
@@ -386,7 +441,7 @@ export function TerritoryLayer({
     if (map.isStyleLoaded()) apply();
     else map.once('style.load', apply);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [map, shapeSig, markSig, rivalSig, tick]);
+  }, [map, shapeSig, markSig, rivalSig, tick, heatFailed]);
 
   // Tear everything down on unmount (tab switch / mode change) so nothing
   // lingers over another screen's map.
@@ -394,7 +449,7 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
+        for (const id of [TERRITORY_HEAT_LAYER_ID, AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
         for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {
