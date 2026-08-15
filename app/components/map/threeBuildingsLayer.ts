@@ -415,6 +415,14 @@ export function createThreeBuildingsLayer(
     u_fogColor: { value: new THREE.Color(DAY.fog) },
     u_fogNear: { value: DAY.fogNear },
     u_fogDensity: { value: DAY.fogDensity },
+    // Zoom gate on the distance fog. The fog is horizon haze for PITCHED
+    // street-level views — its wall sits 560m from the EYE, and a
+    // zoomed-out top-down camera is kilometres up, so past a certain
+    // zoom-out every roof in the city crossed the wall at once and the
+    // whole town bleached to fog-white over the territory field (the
+    // "white buildings" effect). 1 at neighbourhood zoom, fading to 0 by
+    // overview zoom, set per frame from the live camera.
+    u_fogZoom: { value: 1 },
     // Focus (map centre / dog) in local metres — only .xz (east/south) used.
     u_focusLocal: { value: new THREE.Vector3() },
     u_clearRadius: { value: CLEAR_RADIUS },
@@ -440,6 +448,7 @@ export function createThreeBuildingsLayer(
     shader.uniforms.u_fogColor = fogUniforms.u_fogColor;
     shader.uniforms.u_fogNear = fogUniforms.u_fogNear;
     shader.uniforms.u_fogDensity = fogUniforms.u_fogDensity;
+    shader.uniforms.u_fogZoom = fogUniforms.u_fogZoom;
     shader.uniforms.u_focusLocal = fogUniforms.u_focusLocal;
     shader.uniforms.u_clearRadius = fogUniforms.u_clearRadius;
     shader.uniforms.u_clearBand = fogUniforms.u_clearBand;
@@ -458,7 +467,7 @@ export function createThreeBuildingsLayer(
         '#include <begin_vertex>\n  vLocalPos = position;\n  vTerr = aTerr;',
       );
     shader.fragmentShader =
-      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nuniform vec3 u_dogLocal;\nuniform float u_dogActive;\nvarying vec3 vLocalPos;\nvarying vec4 vTerr;\n' +
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform float u_fogZoom;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nuniform vec3 u_dogLocal;\nuniform float u_dogActive;\nvarying vec3 vLocalPos;\nvarying vec4 vTerr;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         [
@@ -476,7 +485,9 @@ export function createThreeBuildingsLayer(
           // component that makes buildings RISE OUT of the mist (substance).
           `  float _pool = 1.0 - smoothstep(0.0, ${MIST_TOP.toFixed(1)}, vLocalPos.y);`,
           '  _pool *= smoothstep(u_fogNear * 0.55, u_fogNear * 1.05, _dist);',
-          `  float _f = clamp(max(_distFog, _pool * ${POOL_STRENGTH.toFixed(2)}), 0.0, 1.0);`,
+          // u_fogZoom stands the whole haze down at overview zooms — see
+          // the uniform's comment.
+          `  float _f = clamp(max(_distFog, _pool * ${POOL_STRENGTH.toFixed(2)}), 0.0, 1.0) * u_fogZoom;`,
           // Clear bubble around the focus — keeps the dog's neighbourhood crisp
           // regardless of zoom (horizontal distance, so tall near buildings
           // stay fully clear).
@@ -1090,6 +1101,11 @@ export function createThreeBuildingsLayer(
           const bubble = clearBubbleForCamera(mapRef.getZoom(), mapRef.getPitch());
           fogUniforms.u_clearRadius.value = bubble.radius;
           fogUniforms.u_clearBand.value = bubble.band;
+          // Fog is fully on at neighbourhood zoom (≥14.8), fully off by
+          // overview (≤13.2). The clear bubble grows on zoom-out too, but
+          // it is capped, and past the cap the fog whited out every roof.
+          const z = mapRef.getZoom();
+          fogUniforms.u_fogZoom.value = Math.min(1, Math.max(0, (z - 13.2) / 1.6));
         }
 
         // Zone beacon — two sources, same brand-blue glow. Supersniff

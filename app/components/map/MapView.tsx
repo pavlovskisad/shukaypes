@@ -1980,17 +1980,19 @@ export default function MapViewWeb() {
     if (!map || !focusedTerritory) return;
     const ring = focusedTerritory.ring;
     if (ring.length >= 3) {
-      const first: [number, number] = [ring[0]!.lng, ring[0]!.lat];
-      const bounds = ring.reduce(
-        (b, p) => b.extend([p.lng, p.lat] as [number, number]),
-        new maplibregl.LngLatBounds(first, first),
-      );
-      map.fitBounds(bounds, {
-        // The quest-waypoints framing, slightly roomier: the shape is
-        // the subject, so it gets air on every side and never zooms
-        // past street level.
-        padding: { top: 120, bottom: 130, left: 44, right: 44 },
-        maxZoom: 16.5,
+      // Down INTO the territory, not a survey of it. fitBounds framed
+      // the whole blob from ~z14 and the arrival read as a map of the
+      // claim rather than a visit to it — street level at the claim's
+      // centre is the neighbourhood the owner's dog actually works.
+      let clat = 0;
+      let clng = 0;
+      for (const p of ring) {
+        clat += p.lat;
+        clng += p.lng;
+      }
+      map.easeTo({
+        center: [clng / ring.length, clat / ring.length],
+        zoom: 16,
         duration: 900,
       });
     }
