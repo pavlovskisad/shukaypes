@@ -12,10 +12,15 @@
 // (it injects keyframes into document.head). No native path exists yet;
 // the native map itself is a stub.
 //
-// The soft edge echoes the map. Territory on the map is a blurred field
-// with a halo, and a hard-edged vector chip next to it would read as a
-// different object — so the silhouette is drawn twice: a blurred pass
-// underneath for the halo, a lightly-softened body on top.
+// The finish copies the map, and the OPACITY is the load-bearing part:
+// nobody ever sees an owner's hue raw on the map — the field composites
+// at 42% over pale paper, and the whole palette was contrast-tuned in
+// that composited form (see territoryColor.ts). The first cut of this
+// chip filled at 0.9 and every silhouette came out lurid, a different
+// palette from the city it was summarising. So the body sits at the
+// map's own fill alpha and the paper does the pastelising, with a faint
+// blurred halo underneath — the field's fringe, not a glow effect —
+// and only a whisper of blur on the body so the edge stays clean.
 
 import { useId, useMemo } from 'react';
 
@@ -23,6 +28,11 @@ import { useId, useMemo } from 'react';
 // 48-corner polygons stay cheap. The rendered size is set per-use.
 const BOX = 64;
 const PAD = 7; // room inside the box for the halo to breathe
+
+// The map's numbers: fill-opacity 0.42 on the ground field, halo at a
+// fraction of it. Change these only alongside the map's.
+const BODY_ALPHA = 0.45;
+const HALO_ALPHA = 0.16;
 
 export function TerritoryMini({
   points,
@@ -68,7 +78,14 @@ export function TerritoryMini({
   if (!pts) {
     return (
       <svg viewBox={`0 0 ${BOX} ${BOX}`} width={size} height={size} aria-hidden>
-        <circle cx={BOX / 2} cy={BOX / 2} r={BOX / 4} fill={color} opacity={0.85} />
+        <circle
+          cx={BOX / 2}
+          cy={BOX / 2}
+          r={BOX / 3.2}
+          fill={color}
+          opacity={HALO_ALPHA}
+        />
+        <circle cx={BOX / 2} cy={BOX / 2} r={BOX / 4} fill={color} opacity={BODY_ALPHA} />
       </svg>
     );
   }
@@ -77,14 +94,14 @@ export function TerritoryMini({
     <svg viewBox={`0 0 ${BOX} ${BOX}`} width={size} height={size} aria-hidden>
       <defs>
         <filter id={`tm-halo-${uid}`} x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation="3" />
+          <feGaussianBlur stdDeviation="2.2" />
         </filter>
         <filter id={`tm-body-${uid}`} x="-30%" y="-30%" width="160%" height="160%">
-          <feGaussianBlur stdDeviation="0.7" />
+          <feGaussianBlur stdDeviation="0.4" />
         </filter>
       </defs>
-      <polygon points={pts} fill={color} opacity={0.35} filter={`url(#tm-halo-${uid})`} />
-      <polygon points={pts} fill={color} opacity={0.9} filter={`url(#tm-body-${uid})`} />
+      <polygon points={pts} fill={color} opacity={HALO_ALPHA} filter={`url(#tm-halo-${uid})`} />
+      <polygon points={pts} fill={color} opacity={BODY_ALPHA} filter={`url(#tm-body-${uid})`} />
     </svg>
   );
 }
