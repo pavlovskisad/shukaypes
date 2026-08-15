@@ -2881,8 +2881,13 @@ export default function MapViewWeb() {
           }}
           pointerEvents="box-none"
         >
-          {focusDog ? (
-            <View style={{ width: 288, height: 252, marginBottom: 30 }} pointerEvents="none">
+          {focusDog && !(prompt?.kind === 'confirm' && !searchTarget) ? (
+            // Raised while a prompt is up so the answer buttons at the
+            // bottom HUD have clear ground under the card.
+            <View
+              style={{ width: 288, height: 252, marginBottom: prompt ? 122 : 30 }}
+              pointerEvents="none"
+            >
               {/* No `active` glow here. That pulsing blue ring exists to
                   pick THIS pet out of a deck of others — and there is no
                   deck any more, just the one card. Marking the only
@@ -2897,6 +2902,11 @@ export default function MapViewWeb() {
               />
             </View>
           ) : (
+            // The deck STAYS MOUNTED through the confirm prompt — tapping
+            // a card focuses it in place (it grows and lifts, its
+            // neighbours slide off) instead of the old swap to a lone
+            // static card, which read as a blink. Cancel rewinds the same
+            // motion and the deck is simply back.
             <LostDogCardStack
               dogs={searchDogs}
               onTap={(dog) => setPrompt({ kind: 'confirm', dog })}
@@ -2905,26 +2915,30 @@ export default function MapViewWeb() {
               cardWidth={288}
               cardHeight={252}
               strongShadow
+              focused={prompt?.kind === 'confirm' && !searchTarget}
             />
           )}
         </View>
       ) : null}
 
-      {/* THE ANSWERS SIT UNDER THE DOG, not at the foot of the screen.
-          The dog is asking; its words come out of its mouth and the
-          replies belong directly beneath them. The dog rides at true
-          screen centre in supersniff, so this is a fixed offset below
-          that rather than anything that has to track the sprite. */}
+      {/* THE ANSWERS SIT AT THE BOTTOM HUD — the exact ground the tab
+          bar stands on in normal mode, which supersniff vacates. The
+          dog's words still come out of the dog; what lives down here is
+          the buttons, full-size, where the thumb already is. They used
+          to float mid-screen under the sprite, and at button size they
+          covered the card the question was about. */}
       {DOG_CAM && dogCam && onMapScreen && prompt ? (
         <View
-          style={{
-            position: 'absolute',
-            left: 0,
-            right: 0,
-            top: '56%',
-            alignItems: 'center',
-            zIndex: Z.HUD_CHIPS + 1,
-          }}
+          style={
+            {
+              position: 'absolute',
+              left: 0,
+              right: 0,
+              bottom: 'calc(env(safe-area-inset-bottom, 0px) + 26px)',
+              alignItems: 'center',
+              zIndex: Z.HUD_CHIPS + 1,
+            } as unknown as object
+          }
           pointerEvents="box-none"
         >
           <DogPrompt

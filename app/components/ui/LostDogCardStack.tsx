@@ -35,6 +35,9 @@ interface Props {
   // Heavier drop shadow so cards separate cleanly from a busy background (the
   // 3D map in supersniff). Off by default — the Quests tab keeps its lighter one.
   strongShadow?: boolean;
+  // Confirmation focus — see CardStack.focused. The centre card grows into
+  // the confirmation card in place; neighbours slide off; gestures freeze.
+  focused?: boolean;
 }
 
 export function LostDogCardStack({
@@ -49,6 +52,7 @@ export function LostDogCardStack({
   activeId,
   initialId,
   strongShadow,
+  focused,
 }: Props) {
   const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
@@ -81,6 +85,7 @@ export function LostDogCardStack({
       {...(peekScale != null ? { peekScale } : {})}
       {...(showCounter != null ? { showCounter } : {})}
       {...(initialId != null ? { initialId } : {})}
+      {...(focused != null ? { focused } : {})}
     />
   );
 }
