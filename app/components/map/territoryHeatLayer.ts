@@ -189,18 +189,20 @@ void main() {
   float c = cov + wob;
   // TWO soft steps instead of one — a pale halo, then the dense body.
   // This is most of what makes a claim read as a heat field with depth
-  // (the contour-band look) rather than a blurred sticker: the outer
-  // fringe sits at roughly half strength before the body comes in.
-  float halo = smoothstep(0.30, 0.42, c);
-  float body = smoothstep(0.52, 0.70, c);
-  float shaped = 0.55 * halo + 0.45 * body;
+  // (the contour-band look) rather than a blurred sticker. The halo sits
+  // at well under half strength: the first cut had it at 0.55 and the
+  // two levels blurred into one on a phone — the gap between fringe and
+  // body IS the contrast that sells the field.
+  float halo = smoothstep(0.28, 0.40, c);
+  float body = smoothstep(0.55, 0.74, c);
+  float shaped = 0.38 * halo + 0.62 * body;
   if (shaped < 0.01) discard;
   vec3 col = fieldColor(s);
   // Bright rims where each band is born — the hot outline of a heat blob.
   // Both live in the coverage ramp, so they trace only OUTER edges
   // against unclaimed ground; interior coverage is ~1 throughout.
-  float rim = smoothstep(0.30, 0.38, c) * (1.0 - smoothstep(0.40, 0.52, c)) * 0.30
-            + smoothstep(0.52, 0.60, c) * (1.0 - smoothstep(0.62, 0.74, c)) * 0.16;
+  float rim = smoothstep(0.28, 0.36, c) * (1.0 - smoothstep(0.38, 0.50, c)) * 0.34
+            + smoothstep(0.55, 0.63, c) * (1.0 - smoothstep(0.65, 0.78, c)) * 0.22;
   // Where two OWNERS meet, coverage never dips, so the rims above can't
   // fire — probe the field a blur-radius out on each axis and lighten
   // where the colour is changing fast. That puts a soft bright seam down
@@ -221,7 +223,7 @@ void main() {
   col = mix(col, vec3(1.0), min(1.0, rim + seam));
   // The hottest core leans a touch deeper, so a big claim glows from the
   // inside out instead of being one flat tone edge to edge...
-  col *= 1.0 - 0.10 * smoothstep(0.80, 0.97, c);
+  col *= 1.0 - 0.15 * smoothstep(0.80, 0.97, c);
   // ...and the body carries large, soft density variation on top.
   float grain = fbm(wp / 260.0 + 17.0);
   float a = shaped * u_alpha * (0.88 + 0.24 * grain);
