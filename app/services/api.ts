@@ -475,9 +475,11 @@ export const api = {
   // rather than a field on /sync/map — the board is read from the profile
   // tab, and recomputing a scoreboard on every 15s map poll would be work
   // nobody is looking at. `rank` is null when you're outside the top ten.
-  territoryLeaderboard: () =>
+  // `limit` widens the board past the default ten (clamped server-side)
+  // for the fullscreen "see all" view.
+  territoryLeaderboard: (limit?: number) =>
     req<{ board: TerritoryRanking[]; you: { areaM2: number; rank: number | null } }>(
-      '/territory/leaderboard',
+      limit != null ? `/territory/leaderboard?limit=${limit}` : '/territory/leaderboard',
     ),
 
   // Dev affordance (see ?terrRaid=1): send a bot onto your newest mark so

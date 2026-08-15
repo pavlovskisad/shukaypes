@@ -904,12 +904,14 @@ const decimateRing = <P>(ring: P[]): P[] => {
 // None of that is needed now. Area is stored when the ground changes
 // hands, which is the only moment it can change, so the board is a sum
 // and reads live.
-export async function territoryLeaderboard(): Promise<LeaderboardEntry[]> {
+export async function territoryLeaderboard(
+  limit: number = T.leaderboardSize,
+): Promise<LeaderboardEntry[]> {
   const totals = (await groundTotals())
     .map((t) => ({ userId: t.userId, areaM2: Math.round(t.areaM2) }))
     .filter((e) => e.areaM2 > 0)
     .sort((a, b) => b.areaM2 - a.areaM2)
-    .slice(0, T.leaderboardSize);
+    .slice(0, limit);
 
   const ids = totals.map((e) => e.userId);
   const [names, rings] = await Promise.all([ownerNames(ids), largestPieceRings(ids)]);

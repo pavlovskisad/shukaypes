@@ -60,6 +60,18 @@ const TOP_SCALE = 0.88;
 const PEEK_SCALE = 0.74;
 const OFF_SCALE = 0.62;
 
+// Confirmation focus — the deck's answer to "make this one the card".
+// The centre card grows past TOP_SCALE and lifts clear of the bottom
+// HUD while its neighbours slide off sideways and fade; reversing the
+// phase walks every card straight back. All of it happens WITHOUT
+// unmounting the deck, which is the whole point: the old flow swapped
+// the deck for a lone static card and the confirmation appeared as a
+// blink instead of as the card you tapped stepping forward.
+const FOCUS_GROW = 0.24; // centre scale: TOP_SCALE -> ~1.12
+const FOCUS_LIFT = 124; // px up, clearing the prompt buttons below
+const FOCUS_SPREAD = 1.8; // how much faster neighbours leave than they came
+const FOCUS_MS = 420;
+
 interface Props<T> {
   items: T[];
   renderCard: (item: T) => ReactNode;
@@ -85,6 +97,11 @@ interface Props<T> {
   // Used by the search carousel when supersniff is entered already
   // committed to a dog (modal's "start search").
   initialId?: string;
+  // Confirmation focus (see the FOCUS_* constants): true grows and
+  // lifts the centre card while the neighbours slide off and fade, and
+  // freezes the deck's gestures; false animates everything back. The
+  // deck stays mounted throughout — that continuity IS the feature.
+  focused?: boolean;
 }
 
 // Per-item slot. `virtualIdx` is the item's stable position on the
@@ -103,6 +120,7 @@ function ItemSlotImpl<T>({
   virtualIdx,
   currentPos,
   popPhase,
+  focusPhase,
   step,
   slotSize,
   renderCard,
@@ -111,14 +129,15 @@ function ItemSlotImpl<T>({
   virtualIdx: number;
   currentPos: SharedValue<number>;
   popPhase: SharedValue<number>;
+  focusPhase: SharedValue<number>;
   step: number;
   slotSize: { width: number; height: number };
   renderCard: (item: T) => ReactNode;
 }) {
   const animStyle = useAnimatedStyle(() => {
-    const visualTx = (virtualIdx - currentPos.value) * step;
+    const restTx = (virtualIdx - currentPos.value) * step;
     const baseScale = interpolate(
-      visualTx,
+      restTx,
       [-2 * step, -step, 0, step, 2 * step],
       [OFF_SCALE, PEEK_SCALE, TOP_SCALE, PEEK_SCALE, OFF_SCALE],
       Extrapolation.CLAMP,
@@ -126,7 +145,7 @@ function ItemSlotImpl<T>({
     // zIndex follows distance-to-centre so the slot closest to 0
     // paints on top of the peeks during a swipe.
     const z = interpolate(
-      Math.abs(visualTx),
+      Math.abs(restTx),
       [0, step, 2 * step],
       [3, 2, 1],
       Extrapolation.CLAMP,
@@ -139,16 +158,23 @@ function ItemSlotImpl<T>({
     // on the tab scroll cards so the two motions feel like the
     // same family.
     const centrality = interpolate(
-      Math.abs(visualTx),
+      Math.abs(restTx),
       [0, step * 0.5],
       [1, 0],
       Extrapolation.CLAMP,
     );
     const pop = centrality * popPhase.value;
-    const ty = -10 * pop;
-    const scale = baseScale * (1 + 0.04 * pop);
+    // Confirmation focus. Centrality decides each slot's role: the
+    // centre grows and lifts, the peeks ride their own translate away
+    // and thin out. One phase, every slot on it — which is what makes
+    // cancel a perfect rewind.
+    const f = focusPhase.value;
+    const visualTx = restTx * (1 + FOCUS_SPREAD * f);
+    const ty = -10 * pop - FOCUS_LIFT * centrality * f;
+    const scale = baseScale * (1 + 0.04 * pop) + FOCUS_GROW * centrality * f;
     return {
       transform: [{ translateX: visualTx }, { translateY: ty }, { scale }],
+      opacity: 1 - (1 - centrality) * f,
       zIndex: z,
     };
   });
@@ -176,6 +202,7 @@ export function CardStack<T>({
   onCounterTap,
   onSwipe,
   initialId,
+  focused = false,
 }: Props<T>) {
   // Mount-time anchor: index of initialId in the CURRENT items, or 0.
   // useState initializer (not an effect) so the first paint already has
@@ -201,6 +228,14 @@ export function CardStack<T>({
   // to 0. ItemSlot multiplies by per-item centrality so only
   // the new centre actually moves.
   const popPhase = useSharedValue(0);
+  // Confirmation focus, eased both ways — see the FOCUS_* constants.
+  const focusPhase = useSharedValue(0);
+  useEffect(() => {
+    focusPhase.value = withTiming(focused ? 1 : 0, {
+      duration: FOCUS_MS,
+      easing: Easing.out(Easing.cubic),
+    });
+  }, [focused, focusPhase]);
   // Snapshot of currentPos at touch-down. All subsequent
   // onUpdate deltas are applied to THIS, not to virtualBaseSV
   // directly — so if the user grabs the carousel mid-settle
@@ -361,11 +396,17 @@ export function CardStack<T>({
   // any low-travel release. Peek taps also route to onTap(topItem);
   // simpler than per-slot hit-testing and matches carousel
   // expectations ("the centre card is what you interact with").
-  const tap = Gesture.Tap().onEnd(() => {
-    runOnJS(handleTap)();
-  });
+  // Both freeze while focused: the confirmation's answers are buttons,
+  // and a deck that still swiped under them could change WHICH dog is
+  // centred out from under the question being asked.
+  const tap = Gesture.Tap()
+    .enabled(!focused)
+    .onEnd(() => {
+      runOnJS(handleTap)();
+    });
 
   const pan = Gesture.Pan()
+    .enabled(!focused)
     // Horizontal / vertical gesture mediation so a carousel
     // can coexist with the tab's vertical scroll-snap container.
     //   activeOffsetX — claim the touch on >5 px horizontal
@@ -493,6 +534,7 @@ export function CardStack<T>({
               virtualIdx={virtualIdx}
               currentPos={currentPos}
               popPhase={popPhase}
+              focusPhase={focusPhase}
               step={STEP}
               slotSize={slotSize}
               renderCard={renderCard}

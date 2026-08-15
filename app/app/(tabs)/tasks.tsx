@@ -20,7 +20,8 @@ import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
 import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColor';
-import { TerritoryMini } from '../../components/ui/TerritoryMini';
+import { BoardRow } from '../../components/ui/BoardRow';
+import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
 import { useHint } from '../../hooks/useHint';
 
 interface QuestHistoryRow {
@@ -93,53 +94,6 @@ const TASKS: TaskRow[] = [
 
 // One bar on the standing: the owner's colour, a length, and the shine.
 //
-// One row of the standing — used for YOU and for everyone else, because
-// the two have to be the same thing. They used to be written out
-// separately and drifted immediately; keeping a single component is what
-// stops yours becoming a different kind of object from the list it
-// belongs to.
-//
-// The row is a portrait now, not a bar chart: the owner's largest piece,
-// drawn as a silhouette in their colour, with the name beside it and the
-// area counter under the name. The coloured length-bar it replaces
-// ranked rows against the leader, but every shape here is one a player
-// has actually walked past on the map — "the red blob by the fountain" —
-// and recognising WHO is worth more than re-reading HOW MUCH, which the
-// counter still says in numbers.
-function BoardRow({
-  rank,
-  name,
-  areaLabel,
-  piece,
-  color,
-  you,
-}: {
-  rank: string;
-  name: string;
-  areaLabel: string;
-  piece: { lat: number; lng: number }[] | undefined;
-  color: string;
-  you: boolean;
-}) {
-  return (
-    <View style={styles.boardRow}>
-      <Text
-        style={[styles.boardRank, styles.boardRankStrong, you && styles.boardYouText]}
-        numberOfLines={1}
-      >
-        {rank}
-      </Text>
-      <TerritoryMini points={piece} color={color} size={92} />
-      <View style={styles.boardText}>
-        <Text style={[styles.boardName, you && styles.boardYouText]} numberOfLines={1}>
-          {name}
-        </Text>
-        <Text style={[styles.boardArea, you && styles.boardYouText]}>{areaLabel}</Text>
-      </View>
-    </View>
-  );
-}
-
 export default function TasksScreen() {
   const t = useStrings();
   const router = useRouter();
@@ -160,6 +114,20 @@ export default function TasksScreen() {
   } | null>(null);
   // Open the "see all" fullscreen list when truthy.
   const [seeAllDogsOpen, setSeeAllDogsOpen] = useState(false);
+  // The full standing — nullable data doubles as the modal's open flag,
+  // same as every sheet here. Opens instantly with the ten rows already
+  // on screen, then swaps in the long board when the fetch lands; a
+  // failed fetch leaves the ten showing, which is the honest fallback.
+  const [boardAll, setBoardAll] = useState<TerritoryRanking[] | null>(null);
+  const openFullBoard = useCallback(() => {
+    setBoardAll((cur) => cur ?? board?.board ?? null);
+    api
+      .territoryLeaderboard(100)
+      .then((res) => setBoardAll((cur) => (cur ? res.board : cur)))
+      .catch(() => {
+        /* the short board stays up */
+      });
+  }, [board]);
 
   // Sort by straight-line distance to the dog's last-seen position
   // so the closest pet is the first card in the carousel (and the
@@ -455,6 +423,15 @@ export default function TasksScreen() {
                     />
                   );
                 })}
+                {/* The whole city, not just its ten loudest dogs — same
+                    underlined-link affordance as the carousel counter. */}
+                <Pressable onPress={openFullBoard} hitSlop={8}>
+                  {({ pressed }) => (
+                    <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
+                      {t.tasks.boardSeeAll}
+                    </Text>
+                  )}
+                </Pressable>
               </>
             )}
           </View>
@@ -611,6 +588,12 @@ export default function TasksScreen() {
           onPickDog(d);
         }}
       />
+
+      <LeaderboardModal
+        board={boardAll}
+        youRank={board?.you.rank ?? null}
+        onClose={() => setBoardAll(null)}
+      />
     </SafeAreaView>
   );
 }
@@ -619,14 +602,19 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#ffffff' },
   // Vertical snap-scroll on the tab — each card is a snap target,
   // so a flick from the lost-pets card lands cleanly on the daily-
-  // tasks card (and back). `mandatory` is fine because every card
-  // currently fits in a phone viewport; if a card ever overflows,
-  // switch to `proximity` so the user can free-scroll within it.
+  // tasks card (and back). `proximity`, NOT `mandatory`: the standing
+  // card grew taller than a phone viewport when its rows became
+  // portraits, and mandatory snapping made the tenth row reachable
+  // only while a finger held the scroll — release, and the page
+  // leapt on to the lost-pets card. Proximity keeps the clean
+  // card-to-card landings when a card edge is near, and lets the
+  // user rest anywhere inside a card that overflows. (This move was
+  // predicted by the previous version of this very comment.)
   // RN-Web passes scroll-snap-* straight through to CSS even
   // though RN typings don't know about them.
   scroller: {
     flex: 1,
-    scrollSnapType: 'y mandatory',
+    scrollSnapType: 'y proximity',
     // Match contentContainer paddingTop. Bumped 60 → 32 so the
     // snapped card sits higher in the viewport, leaving more
     // room at the bottom for the next snap-card's title to peek
@@ -734,16 +722,10 @@ const styles = StyleSheet.create({
   labelDone: { color: '#aaa', textDecorationLine: 'line-through' },
   count: { fontSize: TYPE.small, color: '#777', fontWeight: '700' },
   countDone: { color: '#666' },
-  // The standing. Each row is a portrait: rank, the owner's largest
-  // piece as a coloured silhouette, then name with the area counter
-  // stacked under it. Taller than the old bar rows on purpose — fewer
-  // fit on screen, and each one is worth looking at.
-  boardRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: S.m,
-    paddingVertical: S.s,
-  },
+  // The standing's row styles live with BoardRow (components/ui) now,
+  // shared with the fullscreen "see all" board. What stays here is the
+  // card-only chrome.
+  //
   // YOU: the same row as everyone else, set apart by a gap rather than
   // by being built differently. The tinted rounded card it used to sit
   // in made your own standing read as a header ABOUT the board instead
@@ -754,41 +736,17 @@ const styles = StyleSheet.create({
     // one meaningful break on the card.
     marginBottom: S.l,
   },
-  boardRank: {
-    // 22 fitted a single digit and nothing else, so a two-character rank
-    // wrapped onto a second line and pushed the row's height out — which
-    // is exactly what "#30" did in the you-row. Wide enough for three
-    // digits, since a real city will have more than ninety-nine dogs in
-    // it, and the column is invisible whitespace until it is needed.
-    width: 30,
+  // Same affordance as the carousel's "N / M" counter link — the app's
+  // one established way of saying "there is a fullscreen version".
+  boardSeeAll: {
     fontSize: TYPE.small,
     fontWeight: '700',
-    color: '#999',
-  },
-  // Name over counter, and the column owns the leftover width so a long
-  // name truncates instead of pushing the silhouette around.
-  boardText: {
-    flex: 1,
-    minWidth: 0,
-  },
-  boardName: {
-    fontSize: TYPE.body,
-    fontWeight: '600',
-    color: colors.black,
-  },
-  boardArea: {
-    fontSize: TYPE.small,
-    color: '#777',
-    fontWeight: '700',
-  },
-  boardYouText: {
     color: 'rgba(0,60,255,0.85)',
-    fontWeight: '700',
+    textDecorationLine: 'underline',
+    textAlign: 'center',
+    paddingVertical: S.m,
   },
-  // The digit gets weight, not colour — the bar beside it is already
-  // carrying the owner's hue and two colours competing in one row reads
-  // as decoration.
-  boardRankStrong: { color: colors.black, fontWeight: '700' },
+  boardSeeAllPressed: { opacity: 0.55 },
   boardEmpty: {
     fontSize: TYPE.small,
     color: '#777',
