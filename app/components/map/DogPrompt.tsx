@@ -44,10 +44,17 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
   return (
     <div
       style={{
+        // A COLUMN, on purpose — not a row that happens to wrap. The
+        // first answer stands on the corner logo's line and the rest
+        // stack under it, which is the arrangement that survived on a
+        // real phone: two full-width-ish pills never fit beside the
+        // logo in one row, and the accidental wrap of the row layout
+        // turned out to be the right design. Same shape at every
+        // screen width now, for every prompt kind.
         display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'flex-end',
         gap: S.s,
-        flexWrap: 'wrap',
-        justifyContent: 'flex-end',
         pointerEvents: 'auto',
       }}
     >
