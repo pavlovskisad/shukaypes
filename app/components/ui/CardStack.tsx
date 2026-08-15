@@ -61,14 +61,21 @@ const PEEK_SCALE = 0.74;
 const OFF_SCALE = 0.62;
 
 // Confirmation focus — the deck's answer to "make this one the card".
-// The centre card grows past TOP_SCALE and lifts clear of the bottom
-// HUD while its neighbours slide off sideways and fade; reversing the
-// phase walks every card straight back. All of it happens WITHOUT
-// unmounting the deck, which is the whole point: the old flow swapped
-// the deck for a lone static card and the confirmation appeared as a
-// blink instead of as the card you tapped stepping forward.
-const FOCUS_GROW = 0.24; // centre scale: TOP_SCALE -> ~1.12
-const FOCUS_LIFT = 124; // px up, clearing the prompt buttons below
+// The centre card grows past TOP_SCALE while its neighbours slide off
+// sideways and fade; reversing the phase walks every card straight
+// back. All of it happens WITHOUT unmounting the deck, which is the
+// whole point: the old flow swapped the deck for a lone static card
+// and the confirmation appeared as a blink instead of as the card you
+// tapped stepping forward.
+//
+// GROW lands the centre on scale 1.0 exactly — the size the lone
+// active-quest card renders at — so when a confirmed search swaps the
+// deck for that card, nothing on screen changes size. The first cut
+// grew to 1.12 and the confirmation photo loomed bigger than the quest
+// it became. LIFT is a nudge, not a move: the answers live in the top
+// HUD, so the card has nothing at the bottom to clear.
+const FOCUS_GROW = 0.12; // centre scale: TOP_SCALE 0.88 -> 1.0
+const FOCUS_LIFT = 8;
 const FOCUS_SPREAD = 1.8; // how much faster neighbours leave than they came
 const FOCUS_MS = 420;
 
