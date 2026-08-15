@@ -286,18 +286,20 @@ export function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number
 // Ownership is decided per BUILDING, off its footprint centre, against the
 // same partitioned shapes the ground fill draws — so a block is never one
 // colour underfoot and another above it.
-// How strongly a claim tints the building it holds. A flat strength was
-// tried first (0.45 everywhere) and it turned every claimed block into a
-// solid slab of colour — from above, whole neighbourhoods read as painted
-// rectangles that broke the soft field the ground now draws. So the paint
-// POOLS instead, the way the ground mist does: strong at the base — the
-// building stands IN the scent — fading up the walls to a whisper by
-// roughly two storeys. Low houses still carry their owner's colour on the
-// roof; towers rise out of it clean, the way they rise out of the mist.
-const TERRITORY_PAINT_BASE = 0.6; // at ground level
-const TERRITORY_PAINT_TOP = 0.16; // above the pool
-const TERRITORY_POOL_FROM_M = 3; // fully painted below this height
-const TERRITORY_POOL_TO_M = 26; // whisper above this
+// How strongly a claim tints the building it holds. UNIFORM, and this is
+// the second time that's been decided, so the reasons are worth keeping:
+//
+// - At 0.45 every claimed block was a solid slab of colour that buried
+//   the architecture and broke the soft field the ground draws.
+// - A base-to-roof gradient (0.6 at the pavement fading to 0.16 above
+//   ~26m, mimicking the mist pool) failed the other way: the game camera
+//   is pitched, so what it mostly shows is ROOFS — which went pale, and
+//   ownership stopped reading on buildings at all. Pale roofs over
+//   tinted walls looked like a fog bug, not a style.
+//
+// So: one strength, roofs included, but light — the building carries its
+// owner's colour while the soft ground field stays the loudest voice.
+const TERRITORY_PAINT = 0.32;
 
 // One building's slice of the merged vertex buffer, plus where it stands.
 interface BuildingSpan {
@@ -465,11 +467,7 @@ export function createThreeBuildingsLayer(
           // BEFORE the fog and the see-through orb so a painted block still
           // fades into the distance and still dissolves around the dog —
           // territory is a coat of paint on the city, not a layer over it.
-          // The claim pools at the base like the ground mist — see the
-          // TERRITORY_PAINT_* constants for why it isn't a flat strength.
-          `  float _tPool = 1.0 - smoothstep(${TERRITORY_POOL_FROM_M.toFixed(1)}, ${TERRITORY_POOL_TO_M.toFixed(1)}, vLocalPos.y);`,
-          `  float _tp = vTerr.a * (${TERRITORY_PAINT_TOP.toFixed(2)} + ${(TERRITORY_PAINT_BASE - TERRITORY_PAINT_TOP).toFixed(2)} * _tPool);`,
-          '  gl_FragColor.rgb = mix(gl_FragColor.rgb, vTerr.rgb, _tp);',
+          `  gl_FragColor.rgb = mix(gl_FragColor.rgb, vTerr.rgb, vTerr.a * ${TERRITORY_PAINT.toFixed(2)});`,
           '  float _dist = length(vLocalPos - u_camLocal);',
           // Exponential distance fog — the "wall" that swallows the far.
           '  float _distFog = 1.0 - exp(-u_fogDensity * max(0.0, _dist - u_fogNear));',
