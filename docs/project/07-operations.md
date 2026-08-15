@@ -38,6 +38,10 @@ Deploying is a mutating action. Ask first.
 | `ALERT_CHAT_ID` | **Not set.** The Telegram chat ingest alerts go to. Until it is set, a stalled pipeline is logged and nothing is sent. Not a secret — a chat id. |
 | `TELEGRAM_CHANNELS` | **Not set.** The channel-scrape source is a no-op until it is. |
 | `SCRAPE_PROXY_URL` | **Not set.** The proxy seam is inert; scrape traffic goes out direct. |
+| `DASHBOARD_TOKEN` | **Not set.** Read-only key for `/admin/console` + `/admin/metrics` — the only one of the three keys safe to keep in a browser. Until it is set the console 401s for everyone. |
+| `DEV_TOOLS_PASSWORD` | **Not set.** Unlocks `/dev` (walk simulator + destructive territory test routes) per browser. Until it is set the dev affordances are off everywhere. |
+| `INVITE_REQUIRED` | **Not set — the door is open.** With it set, new device ids must redeem an invite code; existing accounts are never gated. Mint codes with `pnpm --filter @shukajpes/server invite --new --uses=N --note=...` before flipping it. |
+| `CHAT_DISABLED` | Not set (chat on). The no-deploy kill switch for all model calls. |
 | Database | Supabase (Postgres). No direct credentials held in the repo. Reachable from the app host and from anywhere with the connection string. |
 
 `flyctl` is **not preinstalled** in cloud sessions:
@@ -110,9 +114,18 @@ Other read surfaces:
 | Endpoint | Auth | Returns |
 | --- | --- | --- |
 | `/health` | none | `{ ok: true }` unconditionally. Fly's rotation check. |
-| `/health/deep` | none | Checks Postgres and Redis; 503 if either is unhealthy. **Point an uptime monitor here.** |
-| `/stats` | none | Active counts, per-source breakdown, last 30 scrape-log rows. |
+| `/health/deep` | none | Checks Postgres and Redis; 503 if either is unhealthy. **Point an *external* uptime monitor here — do not repoint Fly's own check at it** (see the note below). |
+| `/admin/metrics[?format=text]` | `DASHBOARD_TOKEN` or admin | Users, DAU/WAU, retention, ingest heartbeat, search funnel, chat token spend by model. Bots excluded structurally. |
+| `/admin/console` | `DASHBOARD_TOKEN` | The same numbers as a page. Open with `…/admin/console?k=<token>` — the key is stripped from the URL bar on load and redacted in the request log. Read-only by construction. |
+| `/stats` | bearer | Active counts, per-source breakdown, last 30 scrape-log rows. **No longer public** — it was leaking bot-ingested users' DM text. |
 | `/admin/lost-dogs/scrape-log` | admin | The same, with auth and filters. |
+
+**Why Fly's own health check stays on `/health`:** `/health/deep` fails on
+Redis too, Redis is free-tier and flaky, and the app degrades gracefully
+without it — so a Redis blip would mark a *serving* machine unhealthy and
+take the app down. On a real database outage, restarting the machine fixes
+nothing while costing the logs you would diagnose from. The deep endpoint
+is for an external monitor that tells a human.
 
 ## Server-side CLIs
 
@@ -124,8 +137,9 @@ or locally against a `DATABASE_URL`.
 | `db:migrate` | Runs at container start automatically. |
 | `clean:lost-dogs [--apply]` | Dead-photo and city sweep. **Dry by default.** The city half needs a connection OLX will talk to and so cannot run from the app host; it gives up after 8 consecutive 403s. |
 | `expire:out-of-area [--apply]` | Catch-up sweep for out-of-city rows. **Dry by default.** Needs no network. |
-| `check:out-of-area` | 31 fixture cases for `detectOtherCity`. Run after touching the city list — its failure mode is expiring a real Kyiv pet. |
-| `check:ingest-alert` | Exercises the alert state machine in memory. Messages nobody. |
+| `expire:pet --id=<id> [--apply] [--photo] [--restore]` | **The takedown tool.** Dry by default; expire is reversible, `--photo` is not (opt-in, and the dry run says so); `--restore --photo` is refused rather than half-done. An unknown id fails loudly — a takedown that quietly matched nothing is the worst outcome, because somebody would report it as done. |
+| `invite --new --uses=N --note=...` | Mint beta invite codes, ahead of flipping `INVITE_REQUIRED`. |
+| `check` (`pnpm check`) | All seven fixture checks — out-of-area, ingest alert, pet identity, per-user rate limiting, invite gate, dev auth, route coverage. **Runs in CI on PRs and before deploy.** |
 | `seed:lore`, `seed:gazetteer` | One-off corpus builds from OSM. |
 | `db:seed-dogs` | Local dev only. Production runs on real scraped pets. |
 | `wipe:stats` | Clears stats. |
@@ -151,9 +165,11 @@ Anything that writes to `lost_dogs`, `sightings` or `users`:
 | --- | --- |
 | Fly health check on `/health` | Running, every 30s. Only catches a dead process, not a wedged one. |
 | Watchdog | Armed. Kills a process whose event loop has been blocked 30s. |
+| Client crash reporting | **Exists since PR #419.** Root boundary + global handlers → `POST /client-errors` → Fly logs (`kind: 'client_error'`). Capped and deduped client-side. |
+| Server error visibility | `setErrorHandler` masks 5xx bodies; `unhandledRejection` / `uncaughtException` handlers installed (several jobs are deliberately unawaited and Node's default is to crash). |
+| Admin console / metrics | Built, **dark** — `DASHBOARD_TOKEN` unset, so it 401s for everyone. |
 | Ingest alert | Built, **dormant** — `ALERT_CHAT_ID` unset. |
-| External uptime monitor on `/health/deep` | **Does not exist.** Recommended by the audit; still not done. |
-| Client error tracking | **Does not exist.** Crashes surface when a human notices. |
+| External uptime monitor on `/health/deep` | **Does not exist.** Recommended by the audit; still not done. Needs an account, so it is the owner's. |
 | Redis uptime alert | **Does not exist.** Redis silently degrades everywhere. |
 | Scrape tick history | In-memory only (`routes/stats.ts`). Gone on every restart. |
 
@@ -235,6 +251,35 @@ so at a level that shows up. Plus a give-up threshold at 8 consecutive 403s.
 **PR #412** added the alert that would have caught it in 36 hours instead of
 days — and that alert is still dormant for want of `ALERT_CHAT_ID`.
 
+### Rate limiting was global, silently, since it was added
+
+The plugin installed at `onRequest`; auth sets `req.userId` at
+`preHandler`, which runs later — so the per-user keyGenerator never saw a
+userId, fell through to `req.ip`, and behind Fly's proxy with `trustProxy`
+unset, that was the proxy's address: **one bucket for the entire service**.
+Chat's "30/min per user" was thirty per minute for everybody combined. It
+read completely correct in review.
+
+**Fix (PRs #417, #418):** `hook: 'preHandler'` + `trustProxy`, proven
+per-user against production with two device ids, then named tiers on the
+nine routes that had none at all. `check:route-coverage` asks Fastify what
+it registered and fails CI if a route ships unlimited.
+
+### Every auth failure returned 500, briefly
+
+The `setErrorHandler` added for safety read only `err.statusCode ?? 500`,
+and the auth hook refuses by setting the code on the reply *then* throwing
+a plain `Error` — so the handler overrode the 401/403 already sitting on
+the reply. Latent but serious: the client detects the invite-gate door with
+`status === 403`, so flipping `INVITE_REQUIRED` on would have shown
+uninvited testers a silently-broken app instead of the door screen.
+
+**Fix (PR #428):** the handler respects a status already set on the reply.
+Found by a browser test noticing a stray 500 on `/favicon.ico` while
+checking something else. A regression shipped and fixed within the same
+session, recorded because the *shape* — a safety net masking the signal it
+sits in front of — is worth remembering.
+
 ## Standing rules
 
 - Work on the branch the session was given. It changes per session. Never
@@ -242,9 +287,10 @@ days — and that alert is still dormant for want of `ALERT_CHAT_ID`.
 - Open a PR when a task is done; the owner merges manually.
 - **A merged PR is finished.** Restart the branch from `origin/main` for
   follow-up work rather than stacking onto merged history.
-- `pnpm -r typecheck` and `pnpm -r lint` before every PR. The baseline is
-  **0 errors, 21 `react-hooks/exhaustive-deps` warnings** — verified on
-  11 Aug at `f421b7e`. That is not a regression.
+- `pnpm -r typecheck`, `pnpm -r lint` and `pnpm check` before every PR. The
+  lint baseline is **0 errors, 21 `react-hooks/exhaustive-deps` warnings**;
+  `pnpm check` is seven fixture checks and all must pass. Verified on
+  15 Aug at `8266bc6`.
 - When a check cannot run — blocked, throttled, unauthenticated — **say so
   loudly.** A check that read nothing must never be reported as a check that
   found nothing.

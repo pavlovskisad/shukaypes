@@ -3,36 +3,31 @@
 What is wrong right now, ranked. Where an item came from `AUDIT_FINDINGS.md`
 its original ID is kept so the two can be read together.
 
-Verified against the code at `f421b7e` on 11 Aug 2026 — several audit
-findings have been fixed since July and are listed as closed at the bottom
-rather than left to rot at the top.
+Re-verified against the code at `8266bc6` on 15 Aug 2026. The 12–14 Aug
+beta-readiness pass (PRs #416–#430) closed a lot of this list — the closed
+items are struck off at the bottom rather than left to rot at the top, and
+the owner's live checklist is `HANDOFF.md` §0.2.
 
 ---
 
 ## The blocking question
 
-### Q-1 · "Pilot" is still undefined
-*`PILOT_ROADMAP.md` §4, written 4 Jul, still open five weeks later.*
+### Q-1 · The pilot is defined; the door is still open ⚠️
+*Was "pilot is undefined" — resolved in shape during the 12–14 Aug pass.*
 
-Everything downstream forks on this and none of it is a technical decision:
+The answer: a **closed beta of roughly 50–150 testers**, invite-gated, on
+real data, with a phased readiness plan. Phase 1 ("safe to hand to a
+stranger") is complete server-side. What still stands between here and
+invites is entirely the owner's checklist — the Maps key (P0-4), flipping
+`INVITE_REQUIRED` after minting codes, `DASHBOARD_TOKEN` and
+`DEV_TOOLS_PASSWORD`, a contact route (P0-5), and the presence-consent
+decision (P1-1).
 
-- **Audience and size** — founders and friends? A closed group of 20–100
-  Kyiv dog owners? An open Kyiv soft launch?
-- **Surface** — Telegram Mini App first, or web/PWA first?
-- **Data mode** — real ingested reports (real owners, real stakes, real
-  trust/safety obligations) or seeded data for a mechanics-only test?
-- **Bots** — keep 30 for density, or off for an authentic small-group test?
-  (`MULTIPLAYER_BOTS=0` is a one-line switch.)
-- **What is being validated** — that the walking game retains people, or
-  that the search network helps find a pet? Different instrumentation,
-  different minimum bars.
-- **Success criteria** — retention %, reports ingested and accurate,
-  sightings submitted, one real reunion, qualitative delight?
-
-The roadmap's own default recommendation, absent other input: a small closed
-Telegram-first pilot in one or two Kyiv districts, on real data, bots off or
-clearly labelled, instrumented for both retention and the report→sighting
-loop.
+Still genuinely undecided from the old list: **bots on or off** for the
+beta (30 currently on; `MULTIPLAYER_BOTS=0` is one line), and the **success
+criteria** the beta will be judged by — though `/admin/metrics` now
+computes DAU/WAU/retention/funnel, so the instrumentation no longer forces
+the question.
 
 ---
 
@@ -73,41 +68,47 @@ the numbers written down.
 only thing that stops OLX being a single point of failure.
 
 ### P0-3 · The ingest alert is dormant
-*`services/ingestAlert.ts`, PR #412.*
+*`services/ingestAlert.ts`, PR #412, retuned against a real tick in #413.*
 
 Built, tested, shipped — and silent, because `ALERT_CHAT_ID` is unset. One
 value, no purchase. Until it is set, a source dying is invisible until
 somebody reads the heartbeat by hand, which is exactly how OLX sat blocked
 unnoticed.
 
-This is the highest value-per-effort item on the whole list.
+Still the highest value-per-effort item on the list — now joined by three
+sibling one-value items: `DASHBOARD_TOKEN` (the console 401s for everyone),
+`DEV_TOOLS_PASSWORD` (the walk simulator is off everywhere), and
+`INVITE_REQUIRED` (the door is open until it is set).
 
-### P0-4 · Compromised Google Maps key still committed
+### P0-4 · Compromised Google Maps key still committed — in a public repo
 *`AUDIT_FINDINGS` §1.1 · `docs/TECHNICAL.md:236`,
 `reference/shukajpes-demo.html:147`*
 
-Still present at HEAD in two tracked files, and in history. Known
-compromised. Rotation was deferred in July and has not happened.
+Still present at HEAD in two tracked files, and in history. Two facts
+sharpened since the audit: **the repo is public**, and the committed key
+**is the one serving production** (confirmed by hashing the committed value
+against the deployed bundle). This is the only genuinely urgent owner item.
 
-**The fix, in order:** rotate the key in Google Cloud → restrict the new one
-(HTTP referrers = the Vercel origins only; enable only the Routes API, since
-Places moved server-side) → set a billing quota and budget alert → purge the
-value from history (`git filter-repo --replace-text` or BFG) and force-push
-→ delete or placeholder the demo HTML, which is a 380KB artifact with no
-build role.
+**Do the cheap half first:** a billing quota and a budget alert — touches
+no key, caps what a harvested one can cost, precedent is ~$100 of Places
+burned in days. Then restrict to HTTP referrers + only the APIs in use.
+Rotation can wait until just before invites, and **the order matters or the
+map goes dark**: new key → restrict → set in Vercel → redeploy → confirm
+the map draws → only then delete the old one. History purge
+(`git filter-repo` / BFG) last, alongside removing the demo HTML.
 
-The rotation is the urgent part and is a ten-minute Google Cloud task, not
-code. The history purge can follow.
+### P0-5 · Trust-and-safety is half-built: the operator can act, the owner cannot ask
+*`PILOT_ROADMAP` §5.3 · takedown CLI landed in PR #424*
 
-### P0-5 · No trust-and-safety path for republished reports
-*`PILOT_ROADMAP` §5.3*
-
-You are republishing real people's posts and photos. There is no human
-review of ingested reports, no kill switch, no takedown path, and no
+`expire:pet` closes the operator half — a takedown request can be honoured
+in seconds, reversibly, checked against the source post. **The other half
+is still missing:** there is no contact route on the landing, no address in
+the app, nothing that guarantees an owner who minds can reach a human.
+There is also still no proactive review of ingested reports and no
 moderation of user-submitted sightings.
 
-Minimum floor before a real-data pilot: a way for a human to review or kill
-an ingested report, and a way for an owner to ask for theirs to be removed.
+Minimum floor before invites: a visible contact path (a landing-page
+change, not code). The owner is considering a support-ticket form.
 
 ---
 
@@ -126,37 +127,19 @@ no in-app disclosure.**
 writing presence. Or presence off entirely for the pilot. Plus a basic
 privacy note.
 
-### P1-2 · Mutating routes are unthrottled
-*`AUDIT_FINDINGS` §2.2 · `index.ts:50` registers rate-limit with
-`global: false`*
+*(P1-2 — unthrottled mutating routes — is closed; see the bottom. It turned
+out to be worse than filed: the limits that did exist were silently global.)*
 
-**Verified still open.** Only `chat`, `admin` and `sightings` opt in via
-`config.rateLimit`. `/collect/token`, `/feed`, `/collect/path`,
-`/quests/advance`, `/tasks/tick`, `/poke` and `/sync/map` register nothing —
-so `balance.collectRateLimitPerMin` (120) is the plugin default applied to
-nothing.
+### P1-3 · `force: true` still bypasses every distance check — now a standing decision
+*`AUDIT_FINDINGS` §2.3 · `tokens.ts`, `food.ts`, `quests.ts`*
 
-`/sync/map` triggers the whole spawn pipeline, so it is also the DB-cost
-lever. `/poke` unthrottled means poke-spamming another walker's screen.
-
-**Fix:** add `config: { rateLimit: { max, timeWindow } }` per route —
-`/sync/map` ~30/min, `/poke` ~10/min — keeping the `userId || ip`
-keyGenerator. Or flip the plugin to `global: true` with a sane default.
-
-### P1-3 · `force: true` still bypasses every distance check
-*`AUDIT_FINDINGS` §2.3 · `tokens.ts:131`, `food.ts:114`, `quests.ts:245`*
-
-**Verified still open.** A client-supplied boolean gates the distance check
-on collect, feed and quest advance. The UI sends `force: true` on taps.
-`quests.ts` still carries the comment "Testing flag … Gate this later if it
-ever ships to non-dev builds" — it shipped.
-
-Scope is self-farming: items are per-user owned, so this corrupts the
-economy and any future leaderboard rather than harming other users. Combined
-with P1-2 it can be done at machine speed.
-
-The owner has said tap-to-collect is test-only and goes away at launch. That
-resolves it if it actually happens.
+A client-supplied boolean gates the distance check on collect, feed and
+quest advance; the UI sends `force: true` on taps. **The owner decided on
+13 Aug to keep it** while the collection animation is tuned (D-42), so this
+is no longer a pending fix but a recorded trade with one consequence:
+**beta collection counts will not prove anybody walked.** `search_results`
+and distance still will. Rate limiting being per-user now means it at least
+cannot be done at machine speed against a shared bucket.
 
 ### P1-4 · No spatial index on `lost_dogs`
 *`AUDIT_FINDINGS` §3.1*
@@ -198,19 +181,17 @@ properly signed and fine.
 and require the Telegram-signed identity for anything with real value. If
 device-id must stay first-class, issue an HMAC token on first contact.
 
-### P1-7 · No client error tracking
-*`PILOT_ROADMAP` §5.7*
+*(P1-7 — client error tracking — and P1-8 — the ungated frontend deploy —
+are both closed; see the bottom.)*
 
-Crashes surface when a human notices. Four white-screen incidents in the
-history say this is not hypothetical. Cheap, high value, and it should land
-before real users touch the Three.js render.
+### P1-9 · Parse accuracy over ~50 real posts, measured
+*Promoted from P0-1's "what it needs" — it is now the single named next
+step, and the strongest slide a fundraising deck could carry.*
 
-### P1-8 · The frontend deploy is ungated
-*`AUDIT_FINDINGS` §4.2, partially fixed*
-
-The Fly deploy now gates on typecheck + lint (PR #274). Vercel's git
-integration deploys on the same push with no check, so a hook-order bug
-still reaches the web app first.
+No measured number exists for the core claim: that a real post comes out of
+the parser with the right species, the right place and a usable photo. The
+blocker is partly a decision about reading production ad text (the ad body
+is stored nowhere — only ingest sees it), partly an afternoon of work.
 
 ---
 
@@ -221,15 +202,13 @@ still reaches the web app first.
 | P2-1 | **81 active pets sit on the fallback pin and cannot be drawn.** The genuine geocoding-failure population. Rescuing them needs precision work on the gazetteer *measured before anything is written* — see the trap in [`03-lost-pet-engine.md`](03-lost-pet-engine.md) | `pipeline/parser.ts` |
 | P2-2 | **No uptime monitor on `/health/deep`.** It exists and returns 503 correctly; nothing watches it | ops |
 | P2-3 | **Redis has no uptime alert** and silently degrades everywhere. Also unconfirmed whether the current tier is persistent or another idle-reapable free database | `AUDIT_FINDINGS` §4.1 |
-| P2-4 | **`spawnCooldown` fails open when Redis is down** → every 15s sync re-spawns, no cooldown, no claim lock. Global caps bound the on-screen count but not the write churn | `AUDIT_FINDINGS` §3.4 |
-| P2-5 | **Public `/stats` leaks pipeline internals** — source breakdowns, post titles, skip reasons, dog ids, unauthenticated. `/admin/lost-dogs/scrape-log` returns nearly the same data *with* auth | `AUDIT_FINDINGS` §2.5 |
-| P2-6 | **Open Telegram photo proxy**, unauthenticated and unthrottled. Any `file_id` the bot can resolve is fetchable, not just ingested ones. Bounded (ids are opaque and bot-scoped) but it is an open egress path under your bot token | `AUDIT_FINDINGS` §2.6 |
+| P2-4 | **`spawnCooldown` fails open when Redis is down** → every 15s sync re-spawns, no cooldown, no claim lock. Global caps bound the on-screen count but not the write churn. (The chat budget now fails open the same way, as a stated decision — D-34) | `AUDIT_FINDINGS` §3.4 |
+| P2-6 | **Telegram photo proxy is rate-limited but still an open egress path.** Any `file_id` the bot can resolve is fetchable, not just ingested ones. Bounded (ids are opaque and bot-scoped) | `AUDIT_FINDINGS` §2.6 |
 | P2-7 | **Untrusted scraped text reaches the companion's LLM context.** Rendered in RN `Text` so no XSS, but indirect prompt injection is possible. Worst case is the companion saying something off-script | `AUDIT_FINDINGS` §6.1 |
-| P2-8 | **Opus chat is reachable by anonymous device-id users at 30/min.** The most direct cost-abuse lever in the app. No global spend cap on the Anthropic key | `AUDIT_FINDINGS` §6.2 |
 | P2-9 | **Single machine, in-process crons, no leader election.** A second replica would double every cron and run 2×30 bots. A Redis leader lock is the one change that unblocks it | `AUDIT_FINDINGS` §3.3 |
-| P2-10 | **`MapView.tsx` is 3,429 lines** — up from 2,665 at the audit. The highest-risk file in the repo, mixing map init, marker layout, territory render, multiplayer culling, supersniff and camera control | `AUDIT_FINDINGS` §5.3 |
+| P2-10 | **`MapView.tsx` is ~3,400 lines** — the highest-risk file in the repo, mixing map init, marker layout, territory render, multiplayer culling, supersniff and camera control | `AUDIT_FINDINGS` §5.3 |
 | P2-11 | **Territory decay is undesigned.** Ground only ever ratchets upward. Deferred by the owner; the motive is real — with no decay a city eventually saturates | [`04-territory.md`](04-territory.md) |
-| P2-12 | **Sync payload is ~215KB with every nearby owner drawn** (~52MB/hour on cellular). `rivalPiecesDrawn` is the dial | `config/balance.ts` |
+| P2-12 | **The rival dials are now 47% of what a sync costs.** `rivalMarksPerOwner: 24` + `rivalPiecesDrawn: 140`; halving them is another ~23% off the data bill. Left alone deliberately — it changes how dense the map *looks*, which is the art director's call. (The old "~52MB/hour" figure here was ~4× too high; measured reality was ~13MB/h, now ~6.6) | PR #422 |
 | P2-13 | **Render flags are compile-time constants.** `GAME_RENDER` / `MULTIPLAYER` cannot be turned off without a rebuild and redeploy. The server has a `MULTIPLAYER=off` kill switch; the client cannot match it | `AUDIT_FINDINGS` §5.1 |
 | P2-14 | **Perf and battery of the Three.js render on low-end Android is unmeasured.** WebGL2 fallback is handled well; the cost of the continuous fog repaint in the field is not known | `PILOT_ROADMAP` §5.6 |
 | P2-15 | **CORS reflects any origin** (`origin: true`). Low risk — auth is header-based, so a malicious site has neither the device id nor the initData — but pinning is free | `AUDIT_FINDINGS` §2.7 |
@@ -252,10 +231,32 @@ still reaches the web app first.
 
 Kept so nobody re-files them.
 
+### Closed by the beta-readiness pass (12–14 Aug, PRs #416–#430)
+
+| Was | Now |
+| --- | --- |
+| P1-2 — mutating routes unthrottled | ✅ Closed by #417/#418, and it was worse than filed: the limits that existed were **global**, one bucket for the whole service behind Fly's proxy. Now per-user (`hook: 'preHandler'` + `trustProxy`), 45 routes tiered, `check:route-coverage` in CI. |
+| P1-7 — no client error tracking | ✅ Closed by #419. Root `ErrorBoundary` + global handlers → `POST /client-errors`, self-hosted, capped, deduped. |
+| P1-8 — frontend deploy ungated | ✅ Closed by #425. Vercel's build command runs typecheck + lint and fails on either; its first catch was the commit that added it. |
+| P2-5 — public `/stats` leaks pipeline internals | ✅ Closed by #417, and it was worse than filed: it was republishing bot-ingested users' **private Telegram DM text** (`scrape_log.title`, contact-stripping not applied). Now bearer-gated. |
+| P2-8 — Opus reachable with no spend cap | ✅ Closed by #417. Per-user daily (50), global daily (1,000), ambient cap (300), `CHAT_DISABLED` kill switch. Fails open on Redis, loudly (D-34). |
+| P2-13 (partial) — no way to kill features without a deploy | 🟡 Chat now has a no-deploy kill switch; `GAME_RENDER` / `MULTIPLAYER` are still compile-time. |
+| Places request cost unbounded | ✅ Closed by #417. Radius clamped to 2000m, Kyiv-bbox-validated coordinates, capped fan-out — one crafted request could previously trigger 935 Google calls (~$30). |
+| Device-id door open to anyone | 🟡 Invite gate built (#417), exhaustively checked, **dormant** — `INVITE_REQUIRED` unset is the owner's call. Also fixed the first-launch 500 (auth race on a UNIQUE column). |
+| Dedupe over-merging real pets | ✅ Closed by #416 — three of four "duplicate" pairs were different animals; the rule now refuses on thin evidence (D-32). |
+| Search funnel uncomputable | ✅ Closed by #421 — `search_results` records every completed search from 14 Aug. |
+| No takedown tool | ✅ Operator half closed by #424 (`expire:pet`). The owner-facing contact route is still open — P0-5. |
+| Lost-pet cleanup cron never fired | ✅ Closed by #425 — runs at boot now, like its siblings. |
+| Fixture checks existed, nothing ran them | ✅ Closed by #416 — `pnpm check` in CI on PRs and before deploy. |
+| Dev affordances in the public build | ✅ Closed by #420 — `/dev` + server-checked password; destructive routes verify server-side. |
+| Auth returning 500 for every failure | ✅ Regression from this same pass, closed by #428. 401/403 pass through; the invite-gate door screen depends on it. |
+
+### Closed earlier
+
 | Was | Now |
 | --- | --- |
 | `AUDIT_FINDINGS` §5.2 — ESLint referenced but not installed or configured | ✅ Fixed by PR #274. Root `eslint.config.mjs`, `eslint-plugin-react-hooks`, `rules-of-hooks` as an **error**. Verified: 0 errors, 21 warnings. |
-| `AUDIT_FINDINGS` §4.2 — `deploy.yml` does not gate on typecheck | ✅ Fixed for the server by PR #274 (`server` job `needs: checks`). Still open for the frontend — see P1-8. |
+| `AUDIT_FINDINGS` §4.2 — `deploy.yml` does not gate on typecheck | ✅ Fixed for the server by PR #274 (`server` job `needs: checks`), for the frontend by PR #425. |
 | `AUDIT_BRIEF` §10.4 — Redis idle-reap | ✅ Fixed by PR #265 (eager boot connect + status guards + log throttle). Uptime alerting still missing — P2-3. |
 | `AUDIT_BRIEF` — "PostGIS is in use" | ✅ Corrected. There is no PostGIS and that is now a stated decision, not an oversight — see D-06. |
 | `AUDIT_FINDINGS` §1.2 — Google Places called from the client | ✅ Fixed. `services/placesCache.ts` proxies and caches server-side. Only Routes is still called from the browser. |

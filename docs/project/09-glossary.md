@@ -17,6 +17,10 @@ written to the same Redis presence set and marking territory on the same
 cadence rule as real players, so they render and compete identically. Cannot
 be poked.
 
+**Chat budget** — the spend ceilings on model calls (`chatBudget.ts`):
+per-user daily, global daily, ambient cap, and the `CHAT_DISABLED` kill
+switch. Counters in Redis; fails open on a Redis outage by design.
+
 **Claim** — what a single territory mark takes: the hull of that mark and
 its neighbours within `claimNeighbourM` (250m), unioned into the owner's
 ground and subtracted from every rival piece it covers. A claim is **local**
@@ -27,6 +31,12 @@ ever walked.
 Claude agent with memory. The two are the same character; "companion state"
 in the schema means the game-mechanical half (hunger, happiness, level, XP,
 last mark).
+
+**Console** — `/admin/console`, the read-only ops/metrics page: one
+self-contained HTML file served by the API, no build step, no dependencies.
+Opened with `?k=<DASHBOARD_TOKEN>`; the key is stripped from the URL bar
+and redacted in logs. Distinct from `/admin/metrics`, the JSON/text
+endpoint behind it — one computation, two renderers.
 
 **Crayon style** — the hand-written MapLibre style override
 (`crayonStyle.ts`) applied over OpenFreeMap's "liberty" vector tiles. B&W
@@ -52,6 +62,13 @@ a dog has been. Ground does not decay; marks do.
 **Grow** — the half of a territory mark that adds ground: the claim hull is
 unioned into what the owner already holds. Paired with **cut**.
 
+**Dev tools** — the gated test affordances (`?sim=1` walk simulator,
+`?terrReset=1`, `?terrRaid=1`, `/preview`). On via `__DEV__`, a test build,
+or a password typed at `/dev` and checked server-side against
+`DEV_TOOLS_PASSWORD`. Not a security boundary — the client is trusted for
+its own position regardless — a guard against a beta tester wrecking their
+own progress by accident.
+
 **Heartbeat (ingest)** — per-source "when did this last insert something"
 derived from `scrape_log`, surfaced by `/admin/lost-dogs/report`. The thing
 you read to find out whether a source has quietly died.
@@ -65,6 +82,11 @@ cannot compute a hull per user.
 **Invisible pet** — an active `lost_dogs` row the map cannot draw, almost
 always because it is on the **fallback pin**. Not a status; a consequence of
 `/dogs/nearby`'s filters.
+
+**Invite gate** — the door in front of account creation
+(`lib/inviteGate.ts`): with `INVITE_REQUIRED` set, a new device id must
+redeem a code; an existing account is *never* gated, exhaustively checked.
+Dormant until the flag is set.
 
 **Mark** — one point where the dog claimed ground. Decided server-side on
 `/collect/path`, at most once per `cooldownMs` (20s) and never within
@@ -99,6 +121,11 @@ separate. Rejected at both filter stages; 386 rejected over 14 days.
 **Search zone** — the circle around a lost pet's last-seen point,
 `search_zone_radius_m`, default 500m, capped at 1.25km, expanded over time
 by the zone-expansion cron. Walking it is the search.
+
+**Search result** — one row per *completed* search, found or not
+(`search_results`, since 14 Aug 2026). Deliberately not a **sighting**: a
+sighting asserts the pet was here and can move the pin; a search result may
+assert only that somebody looked.
 
 **Sighting** — a user report that they saw a specific lost pet. Written to
 `sightings`; if the reported point is within 2× the pet's search radius it

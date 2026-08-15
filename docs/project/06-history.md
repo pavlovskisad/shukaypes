@@ -1,6 +1,6 @@
 # 06 — How we got here
 
-412 merged PRs between 20 April and 11 August 2026, on a repo built from a
+430 merged PRs between 20 April and 14 August 2026, on a repo built from a
 single-file HTML prototype (`reference/shukajpes-demo.html`, still in-tree,
 read-only). Almost all of them are one-idea PRs merged within minutes of
 opening — the working rhythm is small change, preview URL, look at it, merge
@@ -217,6 +217,35 @@ silently:
 | #411 | "Both Telegram sources are dead" was **wrong** — one is the owner's test chats, the other has simply never been configured |
 | #412 | Something finally says so when pets stop arriving |
 
+## Era 9 — The beta-readiness pass
+**#413–#430 · 11–14 Aug · 4 days**
+
+The pilot question finally acquires a shape — a **closed beta of 50–150
+strangers** — and a phased plan behind it. This era is Phase 1 of that
+plan ("safe to hand to a stranger") plus the first pieces of its metrics
+and trust phases. It also produced this documentation set (#414).
+
+The recurring silence pattern doesn't just continue — it escalates to
+things that had *passed review*:
+
+| PR | What it found |
+| --- | --- |
+| #416 | Dedupe was **over-merging, not under-merging**: three of the four pairs the rule called duplicates were different animals. The planned fix (widen the search) was inverted by measuring first. And the fixture checks that would have guarded the rule existed — **nothing ran them**. `pnpm check` enters CI. |
+| #417 | Rate limiting was **inverted, not loose** — the keyGenerator ran before auth set `userId`, so every key fell to the proxy's IP: one bucket for the whole service. "Reads completely correct in review." Same PR: `/stats` was serving private Telegram DMs unauthenticated; one crafted Places request could cost ~$30; LLM spend had no ceiling; and the open device-id door got an invite gate, shipped dormant. |
+| #419 | No error boundary, no `onerror`, no `unhandledrejection` — all four white-screen incidents on record were found by a human noticing. Crash reporting, self-hosted. |
+| #420 | `?sim=1`, `?terrReset=1`, `?terrRaid=1` and `/preview` shipped in the public build. Gated behind `/dev` + a server-checked password. |
+| #421 | "Zone walked, nothing there" — the majority search outcome — had never been written anywhere but a log line, so "how many searches were completed" was uncomputable. `search_results` starts recording 14 Aug. |
+| #422 | The data-cost blame was measured and moved: the roadmap accused the rival dials and the `/state` poll; the real cost was the **pets list at 49.3% of every sync**, re-sent byte-for-byte every 15s. Fingerprinted, `/state` de-duplicated, hidden-tab pause: −49.5%. |
+| #424 | A takedown tool for when an owner asks — the obligation that comes with republishing people's posts. The contact route for them to ask through still doesn't exist. |
+| #425 | Three things that quietly never ran: the lost-pet cleanup cron (no boot run — a deploy-per-day cadence meant it likely **never fired in production**), two quest effects (dead on the cold-start path for a quest's whole duration), and the Vercel build shipping without a typecheck. |
+| #427, #428 | `/admin/metrics` + the console — DAU, retention, funnel, spend, bots excluded structurally "because these numbers are going into a fundraise". Plus a regression from the same session: `setErrorHandler` had been turning every 401/403 into a 500, which would have silently broken the invite-gate door screen the moment it was turned on. |
+
+Era 9's own lesson, stated in #416's body: *the checks existed and nothing
+ran them.* The era's answer was to wire every fixture check into CI and to
+grow the habit of measuring before building — the dedupe fix, the data-cost
+fix and the chat-budget sizing all started with a measurement that
+contradicted the plan.
+
 ---
 
 ## The pivots, in one list
@@ -233,6 +262,7 @@ silently:
 | 8 | **Global claims → local claims** | #364, 3 Aug | Every mark re-claiming everywhere the dog ever walked → a claim covering the ground around the mark that made it. |
 | 9 | **Points → paws** | #394, 10 Aug | An abstract score → the currency people already pick up off the pavement. |
 | 10 | **Seeded pets → real pets only** | `index.ts` | Boot-seeding removed; production runs on scraped posts. |
+| 11 | **Undefined pilot → closed beta** | #416–#430, Aug | "What is the pilot" answered in shape: 50–150 invite-gated strangers on real data, with a phased readiness plan driving the work. |
 
 ## What the history is trying to tell you
 
@@ -242,9 +272,12 @@ incidental.
 **Silence is the recurring failure mode.** A source 403'd off the internet
 logging as a complete tick. A sniff mode nobody could enter, kept for weeks.
 Eighty-nine pets that were active, correct and invisible. A filter audited
-through the filter it was testing. The pattern is always the same: the
-system had no way to say that nothing had happened, so nothing looked like
-fine.
+through the filter it was testing. A rate limiter whose per-user keys all
+fell to one shared bucket while reading completely correct in review. A
+cleanup cron that likely never fired because every deploy reset its timer.
+Fixture checks that existed while nothing ran them. The pattern is always
+the same: the system had no way to say that nothing had happened, so
+nothing looked like fine.
 
 **Reasoning was repeatedly beaten by counting.** "0 pets on the fallback
 pin." "The 89 are probably rehoming ads." "OLX ingestion is dead." "~25% of
@@ -259,4 +292,6 @@ territory PRs are all real work that made the app distinctive. But the
 engine that feeds the actual product — a lost pet reaching a walker who is
 near it — has still never had a validation pass on real posts, and the last
 time anyone looked closely, a third of the table was undrawable and the only
-working source had been blocked for days.
+working source had been blocked for days. Era 9 bent this curve — the
+beta-readiness pass was aimed at exactly the neglected half — but the two
+oldest engine gaps (no live source, unmeasured parse accuracy) survived it.

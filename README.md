@@ -111,10 +111,11 @@ See `/root/.claude/plans/hello-dear-sir-please-wobbly-marble.md` or `docs/TRANSF
 | [`03-lost-pet-engine.md`](docs/project/03-lost-pet-engine.md) | Sources, parsing, dedupe, geo gates, ops tooling |
 | [`04-territory.md`](docs/project/04-territory.md) | The territory mechanic and its invariants |
 | [`05-decisions.md`](docs/project/05-decisions.md) | Every load-bearing decision, with why |
-| [`06-history.md`](docs/project/06-history.md) | The arc of 412 PRs and every pivot in it |
+| [`06-history.md`](docs/project/06-history.md) | The arc of 430 PRs and every pivot in it |
 | [`07-operations.md`](docs/project/07-operations.md) | Deploys, secrets, admin tools, incident history |
 | [`08-open-issues.md`](docs/project/08-open-issues.md) | What is wrong right now, ranked |
 | [`09-glossary.md`](docs/project/09-glossary.md) | The project's vocabulary, and its fossils |
+| [`10-product-brief.md`](docs/project/10-product-brief.md) | Standalone product outline + running costs, for business work |
 
 **Historical** — accurate when written, superseded now. See the index for
 what is still true in each: `AUDIT_BRIEF.md`, `AUDIT_FINDINGS.md`,

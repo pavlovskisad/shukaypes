@@ -76,11 +76,14 @@ Kyiv dog owners and dog people who already walk daily. The Telegram Mini App
 path exists because that is where the Kyiv audience is and because it gives
 a real signed identity for free.
 
-The pilot audience has **not been decided**. `PILOT_ROADMAP.md` §4 lays out
-the axes — founders-only vs a closed group of 20–100 vs an open soft launch;
-Telegram-first vs web-first; real data vs synthetic; bots on or off; and
-what "successful" would mean. That decision is still open and still blocks
-sequencing. See [`08-open-issues.md`](08-open-issues.md).
+The pilot question has been decided in shape if not in every detail: the
+next step is a **closed beta of roughly 50–150 testers**, invite-gated, on
+real data. A phased closed-beta plan drove the 12–14 Aug work, and its
+Phase 1 — "safe to hand to a stranger" — is complete on the server side.
+What remains before invites go out is the owner's checklist in
+`HANDOFF.md` §0.2 (Maps key, flipping `INVITE_REQUIRED`, tokens for the
+console and dev tools, a contact route, presence consent). See
+[`08-open-issues.md`](08-open-issues.md).
 
 ## What is actually built
 
@@ -92,7 +95,9 @@ behind an always-on flag** · **⛔ not real yet**
 | Area | State | Notes |
 | --- | --- | --- |
 | Map + GPS companion follow | ✅ | The core screen. `MapView.tsx`, 3,429 lines — the highest-risk file in the repo. |
-| Paw / bone collect, hunger + happiness | ✅ | Decay and refill work. Collect distance is still bypassable by a client `force` flag. |
+| Paw / bone collect, hunger + happiness | ✅ | Decay and refill work. Collect distance is still bypassable by a client `force` flag — **the owner decided to keep tap-to-collect** while the animation is tuned, so beta collection counts will not prove anybody walked; `search_results` and distance still will. |
+| Connection banner | ✅ | The app now tells the walker when it cannot reach the server. Failures were written to `lastSyncError` at 19 sites and read by none. |
+| Error boundary | ✅ | A root boundary with a reload button — a render throw no longer unmounts into a blank white page. The only class component in the codebase, dependent on almost nothing by design. |
 | **Territory marking, ground, standing, raids** | ✅ | The dominant mechanic since late July. Rebuilt three times; the current model is stable. |
 | Companion chat (Claude agent) | ✅ | Opus active / Haiku ambient, 4-layer prompt, memory summarisation. |
 | **Supersniff → search → sighting** | 🟡 | **The core.** End-to-end and coherent since PRs #393–#397. Never validated against a batch of real posts. |
@@ -107,13 +112,18 @@ behind an always-on flag** · **⛔ not real yet**
 | --- | --- | --- |
 | Lost-pet ingestion | 🟡 | Hourly cron over OLX + Telegram + Facebook, plus real-time Telegram bot ingest. **OLX is currently blocked, Telegram is unconfigured, Facebook is parked.** See [`03-lost-pet-engine.md`](03-lost-pet-engine.md). |
 | Territory service | ✅ | `services/territory.ts`, 1,021 lines. Grow/cut at mark time; syncs are box queries. |
-| Auth | 🟡 | Telegram initData is strong. `x-device-id` is unverified and spoofable. |
-| Spawn / mapData / decay / cleanup crons | ✅ | All in-process on one machine. |
+| Auth | 🟡 | Telegram initData is strong. `x-device-id` is unverified and spoofable. An invite gate is built and dormant (`INVITE_REQUIRED` unset) — existing accounts can never be gated out. |
+| Spawn / mapData / decay / cleanup crons | ✅ | All in-process on one machine. The lost-pet cleanup now runs at boot too — a bare 24h interval meant it had probably **never fired in production** (every deploy reset the timer). |
 | Postgres (no PostGIS — hand-rolled haversine + bbox) | 🟡 | Deliberate, documented, and a scaling ceiling later. |
-| Redis (presence, cooldowns, path anchor, lang) | ✅ | Eager-connects at boot; silent-degrades if down. No uptime alert. |
-| Rate limiting | 🟡 | Applied to chat, admin and sightings only. Collect / feed / quests / poke / sync are unthrottled. |
+| Redis (presence, cooldowns, path anchor, lang, chat budget) | ✅ | Eager-connects at boot; silent-degrades if down. No uptime alert. |
+| Rate limiting | ✅ | **Per-user and real since PR #417/#418.** It had been silently *global* — one bucket for the whole service behind Fly's proxy. Now 45 routes covered (named tiers), enforced by a CI fixture check. |
+| LLM spend controls | ✅ | Per-user daily budget, global daily backstop, `CHAT_DISABLED` kill switch. Fails open on a Redis outage, loudly. |
+| Client crash reporting | ✅ | Root `ErrorBoundary` + global handlers → `POST /client-errors`, self-hosted. There was none; four white-screen incidents were all found by humans noticing. |
+| Search analytics | ✅ | `search_results` records **every** completed search, found or not (history starts 14 Aug 2026). |
+| Admin console + metrics | ✅ | `/admin/console` (read-only, self-contained page) + `/admin/metrics` (`?format=text`). DAU/WAU/retention/funnel/spend, bots separated structurally. Needs `DASHBOARD_TOKEN` — **unset**, so it 401s for everyone today. |
+| Takedown path | 🟡 | `expire:pet` CLI — the operator half. **No way for an owner to reach us yet** (no contact route anywhere). |
 | Ingest alerting | 🟡 | Built (`services/ingestAlert.ts`) but **dormant — `ALERT_CHAT_ID` is unset.** |
-| CI gate | ✅ | `deploy.yml` gates the Fly deploy on typecheck + lint. Vercel is still ungated. |
+| CI gate | ✅ | Fly deploy gated on typecheck + lint + `pnpm check` (7 fixture checks). **Vercel is gated too now** — its build command runs typecheck + lint first and fails on either. |
 | Watchdog | ✅ | Dead-man's switch on the event loop, added after an 11-hour silent outage. |
 
 ## The imbalance, stated plainly
@@ -134,3 +144,12 @@ That is not an argument against the territory work, which is genuinely good
 and is the retention mechanic the search layer needs. It is an argument that
 the engine feeding the search layer has never had a validation pass, and
 that a pilot on real data cannot start until it does.
+
+**Update, 12–14 Aug:** the correction began. PRs #416–#430 were a
+beta-readiness pass aimed squarely at the neglected half — the dedupe rule
+measured and fixed (three of its four "duplicates" were different animals),
+every completed search recorded, a takedown path, crash reporting, real
+rate limits, spend ceilings, and the metrics that a beta will be judged by.
+The two engine gaps that remain are the two that were open before: **no
+ingestion source is currently producing pets, and parse accuracy on real
+posts has never been measured.**
