@@ -2882,12 +2882,7 @@ export default function MapViewWeb() {
           pointerEvents="box-none"
         >
           {focusDog && !(prompt?.kind === 'confirm' && !searchTarget) ? (
-            // Raised while a prompt is up so the answer buttons at the
-            // bottom HUD have clear ground under the card.
-            <View
-              style={{ width: 288, height: 252, marginBottom: prompt ? 122 : 30 }}
-              pointerEvents="none"
-            >
+            <View style={{ width: 288, height: 252, marginBottom: 30 }} pointerEvents="none">
               {/* No `active` glow here. That pulsing blue ring exists to
                   pick THIS pet out of a deck of others — and there is no
                   deck any more, just the one card. Marking the only
@@ -2921,21 +2916,26 @@ export default function MapViewWeb() {
         </View>
       ) : null}
 
-      {/* THE ANSWERS SIT AT THE BOTTOM HUD — the exact ground the tab
-          bar stands on in normal mode, which supersniff vacates. The
-          dog's words still come out of the dog; what lives down here is
-          the buttons, full-size, where the thumb already is. They used
-          to float mid-screen under the sprite, and at button size they
-          covered the card the question was about. */}
+      {/* THE ANSWERS SIT IN THE TOP HUD, on the corner logo's line —
+          the exact slot the nav HUD's distance-and-exit row occupies
+          during a running search, and the nav HUD hides while a prompt
+          is up, so the two never collide. The dog's words still come
+          out of the dog; the buttons stand where every glanceable
+          control in supersniff already lives. They floated mid-screen
+          once (covered the card) and at the bottom once (covered the
+          card's ground and fought the deck) — the logo line is the one
+          strip of this mode that is always clear. */}
       {DOG_CAM && dogCam && onMapScreen && prompt ? (
         <View
           style={
             {
               position: 'absolute',
-              left: 0,
-              right: 0,
-              bottom: 'calc(env(safe-area-inset-bottom, 0px) + 26px)',
-              alignItems: 'center',
+              // Clear of the corner logo; answers hug the right edge,
+              // balancing it.
+              left: 84,
+              right: S.m,
+              top: 'calc(env(safe-area-inset-top, 0px) + 25px)',
+              alignItems: 'flex-end',
               zIndex: Z.HUD_CHIPS + 1,
             } as unknown as object
           }

@@ -424,14 +424,23 @@ export default function TasksScreen() {
                   );
                 })}
                 {/* The whole city, not just its ten loudest dogs — same
-                    underlined-link affordance as the carousel counter. */}
-                <Pressable onPress={openFullBoard} hitSlop={8}>
-                  {({ pressed }) => (
-                    <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
-                      {t.tasks.boardSeeAll}
-                    </Text>
-                  )}
-                </Pressable>
+                    underlined-link affordance as the carousel counter.
+                    The wrapper is also the card's END-ANCHOR: an
+                    end-aligned snap area, so mandatory snapping has a
+                    legal resting position showing the tail rows and this
+                    link (see the scroller comment). Only when the list
+                    is long enough to overflow — on a short board an end
+                    anchor above the card's start would just add a
+                    second snap point next to the first. */}
+                <View style={board.board.length >= 5 ? styles.boardTailSnap : undefined}>
+                  <Pressable onPress={openFullBoard} hitSlop={8}>
+                    {({ pressed }) => (
+                      <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
+                        {t.tasks.boardSeeAll}
+                      </Text>
+                    )}
+                  </Pressable>
+                </View>
               </>
             )}
           </View>
@@ -602,19 +611,27 @@ const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#ffffff' },
   // Vertical snap-scroll on the tab — each card is a snap target,
   // so a flick from the lost-pets card lands cleanly on the daily-
-  // tasks card (and back). `proximity`, NOT `mandatory`: the standing
-  // card grew taller than a phone viewport when its rows became
-  // portraits, and mandatory snapping made the tenth row reachable
-  // only while a finger held the scroll — release, and the page
-  // leapt on to the lost-pets card. Proximity keeps the clean
-  // card-to-card landings when a card edge is near, and lets the
-  // user rest anywhere inside a card that overflows. (This move was
-  // predicted by the previous version of this very comment.)
+  // tasks card (and back).
+  //
+  // `mandatory`, and that took a round trip to settle. The standing
+  // card outgrew a phone viewport and its tail rows became reachable
+  // only while a finger held the scroll — so this flipped to
+  // `proximity`, which fixed the tail and broke the feel: every card
+  // edge turned into a sticky patch and a flick stuttered down the
+  // page in small jumps instead of gliding to the next section. The
+  // actual problem was never the snap STRENGTH — mandatory already
+  // lets the scroll rest anywhere while an oversized card covers the
+  // viewport (the CSS covering rule) — it was that the standing
+  // card's TAIL has no snap position of its own, so the moment its
+  // bottom edge rose into view the scroller had nowhere legal to
+  // stay. The fix is boardTailSnap below: an end-aligned snap point
+  // on the card's last element. Sections snap crisply again, and the
+  // tail is a place the page is allowed to stop.
   // RN-Web passes scroll-snap-* straight through to CSS even
   // though RN typings don't know about them.
   scroller: {
     flex: 1,
-    scrollSnapType: 'y proximity',
+    scrollSnapType: 'y mandatory',
     // Match contentContainer paddingTop. Bumped 60 → 32 so the
     // snapped card sits higher in the viewport, leaving more
     // room at the bottom for the next snap-card's title to peek
@@ -747,6 +764,12 @@ const styles = StyleSheet.create({
     paddingVertical: S.m,
   },
   boardSeeAllPressed: { opacity: 0.55 },
+  // The standing card's end-anchor — see the scroller comment. A snap
+  // area on the card's LAST element, end-aligned, so the page may rest
+  // with the tail rows on screen under mandatory snapping.
+  boardTailSnap: {
+    scrollSnapAlign: 'end',
+  } as unknown as object,
   boardEmpty: {
     fontSize: TYPE.small,
     color: '#777',
