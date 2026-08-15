@@ -113,6 +113,28 @@ export async function groundOf(userId: string): Promise<GroundPiece[]> {
   return rows.map(rowToPiece);
 }
 
+// Each owner's LARGEST piece — the shape the leaderboard draws next to
+// their name. Outer ring only: at thumbnail size a hole is noise, and the
+// holes column is the payload's heaviest part. One indexed read for the
+// board's handful of ids, biggest-first so the first row seen per owner
+// is the answer; no geometry work.
+export async function largestPieceRings(userIds: string[]): Promise<Map<string, Pt[]>> {
+  if (userIds.length === 0) return new Map();
+  const rows = await db
+    .select({
+      userId: schema.territoryGround.userId,
+      ring: schema.territoryGround.ring,
+    })
+    .from(schema.territoryGround)
+    .where(inArray(schema.territoryGround.userId, userIds))
+    .orderBy(desc(schema.territoryGround.areaM2));
+  const out = new Map<string, Pt[]>();
+  for (const r of rows) {
+    if (!out.has(r.userId)) out.set(r.userId, r.ring);
+  }
+  return out;
+}
+
 // Is this spot inside the piece — outer ring yes, pocket no?
 export function pieceCovers(piece: GroundPiece, pos: LatLng): boolean {
   if (!pointInPolygon(pos, asLatLng(piece.ring))) return false;

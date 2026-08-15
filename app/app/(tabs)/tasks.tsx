@@ -20,6 +20,7 @@ import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
 import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColor';
+import { TerritoryMini } from '../../components/ui/TerritoryMini';
 import { useHint } from '../../hooks/useHint';
 
 interface QuestHistoryRow {
@@ -92,37 +93,48 @@ const TASKS: TaskRow[] = [
 
 // One bar on the standing: the owner's colour, a length, and the shine.
 //
-// A component rather than JSX repeated twice, because the row for YOU and
-// the rows for everyone else have to be the same thing. They used to be
-// written out separately and drifted immediately — yours ended up with no
-// bar at all, sitting in a tinted card that made your own standing look
-// like a different kind of object from the list it belongs to.
-function BoardBar({ color, pct, delayS }: { color: string; pct: number; delayS: number }) {
+// One row of the standing — used for YOU and for everyone else, because
+// the two have to be the same thing. They used to be written out
+// separately and drifted immediately; keeping a single component is what
+// stops yours becoming a different kind of object from the list it
+// belongs to.
+//
+// The row is a portrait now, not a bar chart: the owner's largest piece,
+// drawn as a silhouette in their colour, with the name beside it and the
+// area counter under the name. The coloured length-bar it replaces
+// ranked rows against the leader, but every shape here is one a player
+// has actually walked past on the map — "the red blob by the fountain" —
+// and recognising WHO is worth more than re-reading HOW MUCH, which the
+// counter still says in numbers.
+function BoardRow({
+  rank,
+  name,
+  areaLabel,
+  piece,
+  color,
+  you,
+}: {
+  rank: string;
+  name: string;
+  areaLabel: string;
+  piece: { lat: number; lng: number }[] | undefined;
+  color: string;
+  you: boolean;
+}) {
   return (
-    <View style={styles.barTrack}>
-      <View
-        style={[
-          styles.barFill,
-          { width: `${pct}%` as unknown as number },
-          { backgroundColor: color, overflow: 'hidden' } as unknown as object,
-        ]}
+    <View style={styles.boardRow}>
+      <Text
+        style={[styles.boardRank, styles.boardRankStrong, you && styles.boardYouText]}
+        numberOfLines={1}
       >
-        {/* The travelling glint. Staggered down the list so the bars
-            catch the light one after another rather than in unison,
-            which would read as the whole card blinking. */}
-        <View
-          style={
-            {
-              position: 'absolute',
-              top: 0,
-              bottom: 0,
-              width: '34%',
-              backgroundImage:
-                'linear-gradient(90deg, rgba(255,255,255,0) 0%, rgba(255,255,255,0.9) 50%, rgba(255,255,255,0) 100%)',
-              animation: `board-sweep 4.2s ${delayS}s ease-in-out infinite`,
-            } as unknown as object
-          }
-        />
+        {rank}
+      </Text>
+      <TerritoryMini points={piece} color={color} size={46} />
+      <View style={styles.boardText}>
+        <Text style={[styles.boardName, you && styles.boardYouText]} numberOfLines={1}>
+          {name}
+        </Text>
+        <Text style={[styles.boardArea, you && styles.boardYouText]}>{areaLabel}</Text>
       </View>
     </View>
   );
@@ -255,32 +267,13 @@ export default function TasksScreen() {
     }, []),
   );
 
-  // The shine that travels along every bar in the standing. One
-  // stylesheet for the whole tab, injected once — same pattern the card
-  // deck's shimmer uses.
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    if (document.getElementById('board-sweep-style')) return;
-    const el = document.createElement('style');
-    el.id = 'board-sweep-style';
-    el.textContent = `
-      @keyframes board-sweep {
-        0%   { transform: translateX(-60%) skewX(-18deg); opacity: 0; }
-        12%  { opacity: 0.85; }
-        55%  { opacity: 0.85; }
-        70%  { transform: translateX(340%) skewX(-18deg); opacity: 0; }
-        100% { transform: translateX(340%) skewX(-18deg); opacity: 0; }
-      }
-    `;
-    document.head.appendChild(el);
-  }, []);
-
-  // The longest bar on the standing sets the scale for every other one —
-  // including yours, which is the whole reason it is hoisted out of the
-  // map below. A bar drawn against a different maximum would be a
-  // different chart sharing a card with this one.
-  const boardTop = board?.board[0]?.areaM2 || 1;
-  const youPct = board ? Math.max(2, Math.round((board.you.areaM2 / boardTop) * 100)) : 0;
+  // Your own silhouette, when the board already carries it: if you sit in
+  // the ranked list, your entry there has your largest piece. Outside the
+  // list the server sends no geometry for you, and the row falls back to
+  // a plain dot in your blue — honest, and cheaper than a second query
+  // for a shape the map screen can show you anyway.
+  const yourPiece =
+    board?.you.rank != null ? board.board[board.you.rank - 1]?.mainPiece : undefined;
 
   const doneCount = TASKS.filter((row) => dailyTasks[row.key] >= row.target).length;
 
@@ -428,22 +421,15 @@ export default function TasksScreen() {
                 of by being a different kind of object. Unranked reads as
                 a dash, which is honest: you are not on the board, and
                 here is what you hold anyway. */}
-            <View style={[styles.boardRow, styles.boardYouRow]}>
-              <View style={styles.row}>
-                <Text
-                  style={[styles.boardRank, styles.boardRankStrong, styles.boardYouText]}
-                  numberOfLines={1}
-                >
-                  {board.you.rank ?? t.profile.unranked}
-                </Text>
-                <Text style={[styles.boardName, styles.boardYouText]} numberOfLines={1}>
-                  {t.tasks.boardYou}
-                </Text>
-                <Text style={[styles.boardArea, styles.boardYouText]}>
-                  {t.profile.areaValue(board.you.areaM2)}
-                </Text>
-              </View>
-              <BoardBar color={OWN_COLOR_CSS} pct={youPct} delayS={0} />
+            <View style={styles.boardYouRow}>
+              <BoardRow
+                rank={String(board.you.rank ?? t.profile.unranked)}
+                name={t.tasks.boardYou}
+                areaLabel={t.profile.areaValue(board.you.areaM2)}
+                piece={yourPiece}
+                color={OWN_COLOR_CSS}
+                you
+              />
             </View>
             {board.board.length === 0 ? (
               <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
@@ -454,51 +440,19 @@ export default function TasksScreen() {
                   // board carries no id for you, and it doesn't need to.
                   const isYou = board.you.rank === i + 1;
                   // Yours in the brand blue the map paints your ground
-                  // with; everyone else in the hue theirs is painted.
-                  const barColor = isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId);
+                  // with; everyone else in the hue theirs is painted —
+                  // the silhouette is the same shape their claim has on
+                  // the map, so colour and outline identify together.
                   return (
-                    <View
+                    <BoardRow
                       key={row.userId}
-                      // No rule between rows. Every row already carries a
-                      // full-width coloured bar, so a hairline above it was
-                      // a second horizontal line doing the same job worse —
-                      // the bars separate the rows on their own.
-                      style={styles.boardRow}
-                    >
-                      <View style={styles.row}>
-                        <Text
-                          style={[
-                            styles.boardRank,
-                            styles.boardRankStrong,
-                            isYou && styles.boardYouText,
-                          ]}
-                        >
-                          {i + 1}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.boardName,
-                            isYou && styles.boardYouText,
-                          ]}
-                          numberOfLines={1}
-                        >
-                          {isYou ? t.tasks.boardYou : row.name}
-                        </Text>
-                        <Text
-                          style={[
-                            styles.boardArea,
-                            isYou && styles.boardYouText,
-                          ]}
-                        >
-                          {t.profile.areaValue(row.areaM2)}
-                        </Text>
-                      </View>
-                      <BoardBar
-                        color={barColor}
-                        pct={Math.max(2, Math.round((row.areaM2 / boardTop) * 100))}
-                        delayS={(i + 1) * 0.45}
-                      />
-                    </View>
+                      rank={String(i + 1)}
+                      name={isYou ? t.tasks.boardYou : row.name}
+                      areaLabel={t.profile.areaValue(row.areaM2)}
+                      piece={row.mainPiece}
+                      color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
+                      you={isYou}
+                    />
                   );
                 })}
               </>
@@ -780,19 +734,20 @@ const styles = StyleSheet.create({
   labelDone: { color: '#aaa', textDecorationLine: 'line-through' },
   count: { fontSize: TYPE.small, color: '#777', fontWeight: '700' },
   countDone: { color: '#666' },
-  // The standing. Rows are the same shape as a daily task — number,
-  // label, value, bar — so the two cards read as one language.
+  // The standing. Each row is a portrait: rank, the owner's largest
+  // piece as a coloured silhouette, then name with the area counter
+  // stacked under it. Taller than the old bar rows on purpose — fewer
+  // fit on screen, and each one is worth looking at.
   boardRow: {
-    paddingVertical: S.m,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.m,
+    paddingVertical: S.s,
   },
-  // Your own line, set apart from the ranking under it: tinted, inset,
-  // and rounded so it reads as a summary of you rather than as position
-  // zero on the board.
-  // YOU: the same row as everyone else, set apart by a gap and a rule
-  // rather than by being built differently. The tinted rounded card it
-  // used to sit in made your own standing read as a header ABOUT the
-  // board instead of a line IN it — and, having no bar, gave you no way
-  // to see how far behind the leader you actually were.
+  // YOU: the same row as everyone else, set apart by a gap rather than
+  // by being built differently. The tinted rounded card it used to sit
+  // in made your own standing read as a header ABOUT the board instead
+  // of a line IN it.
   boardYouRow: {
     // Set apart by air alone. A rule here read as one more of the
     // hairlines that used to run between every row, rather than as the
@@ -810,9 +765,15 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     color: '#999',
   },
-  boardName: {
+  // Name over counter, and the column owns the leftover width so a long
+  // name truncates instead of pushing the silhouette around.
+  boardText: {
     flex: 1,
+    minWidth: 0,
+  },
+  boardName: {
     fontSize: TYPE.body,
+    fontWeight: '600',
     color: colors.black,
   },
   boardArea: {
@@ -833,6 +794,9 @@ const styles = StyleSheet.create({
     color: '#777',
     paddingVertical: S.m,
   },
+  // The daily tasks' progress bars. The standing used to share these —
+  // its rows carried a bar each — but it draws silhouettes now, so the
+  // track lives on for the tasks card alone.
   barTrack: {
     height: 6,
     backgroundColor: '#f0f0f0',
