@@ -21,8 +21,6 @@ import {
   applyCrayonOverride,
   setStreetLabelsVisible,
   fetchCrayonStyleSpec,
-  generatePaperTextureUrl,
-  installPaperOverlaySync,
 } from './crayonStyle';
 import type { Spot } from '../../services/places';
 import { useLocation, isSimulatedWalk } from '../../hooks/useLocation';
@@ -313,7 +311,6 @@ export default function MapViewWeb() {
   // Stored in state too so React-tree children (markers) can be wired
   // to the map via MapContext when it's ready.
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
-  const paperOverlayRef = useRef<HTMLDivElement | null>(null);
   // Map fires its own click on the canvas independently of DOM event
   // propagation from markers — `stopPropagation` inside a marker
   // child doesn't reach it. At low zoom the companion overlaps the
@@ -1562,11 +1559,6 @@ export default function MapViewWeb() {
     [30.28, 50.30],
     [30.85, 50.62],
   ];
-  // Paper-tooth overlay URL.
-  const paperUrl = useMemo(() => generatePaperTextureUrl(LIGHT_PALETTE), []);
-  const paperOpacity = LIGHT_PALETTE.paperOpacity;
-  const paperBlend = 'multiply';
-
   // Map-only distance cull. Full lists live in the store (Quests tab,
   // auto-collect loops, sync diff math); only the rendered DOM is
   // bounded by MAP_RENDER_RADIUS_M. This is the perf sliding-door —
@@ -2303,17 +2295,6 @@ export default function MapViewWeb() {
           useGameStore.getState().setMenuOpen(false);
           setWalkRoute(null, null);
         });
-        const cleanupPaper = installPaperOverlaySync(
-          map,
-          paperOverlayRef,
-          userPos.lng,
-          userPos.lat,
-        );
-        // Stash the paper cleanup on the map instance so the unmount
-        // effect can call it without sharing a closure variable across
-        // hooks.
-        (map as unknown as { __paperCleanup?: () => void }).__paperCleanup =
-          cleanupPaper;
         setMapInstance(map);
       } catch (err) {
         // eslint-disable-next-line no-console
@@ -2330,7 +2311,6 @@ export default function MapViewWeb() {
     return () => {
       const m = mapRef.current;
       if (m) {
-        (m as unknown as { __paperCleanup?: () => void }).__paperCleanup?.();
         m.remove();
       }
       mapRef.current = null;
@@ -2501,20 +2481,11 @@ export default function MapViewWeb() {
         ref={mapContainerRef}
         style={{ width: '100%', height: '100%' }}
       />
-      <div
-        ref={paperOverlayRef}
-        aria-hidden
-        style={{
-          position: 'absolute',
-          inset: 0,
-          pointerEvents: 'none',
-          backgroundImage: `url(${paperUrl})`,
-          backgroundRepeat: 'repeat',
-          backgroundSize: '512px 512px',
-          mixBlendMode: paperBlend,
-          opacity: paperOpacity,
-        }}
-      />
+      {/* The paper-tooth speckle overlay lived here — a multiply-blended
+          grain tiled over the whole map, position-synced to the
+          geography. Retired: under the territory field's own multiply
+          stain the two grains compounded, and the map read as dusty
+          rather than textured. Plain paper it is. */}
       {/* Long-press "press the map" cue — lives on open map BELOW the
           dog (not radiating from it), so it reads as "hold the map
           here", not "tap the dog". Shown only while the long-press
