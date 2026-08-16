@@ -139,6 +139,32 @@ export async function writePresence(
   await writePresenceBatch([{ id, pos: shownPos, name, photo, bot }], now);
 }
 
+// Live positions for specific ids — the freshest place each of these
+// walkers actually is, if they are online right now. One pipeline:
+// GEOPOS for the coordinates plus a ZSCORE per id for staleness (the
+// same last-seen set the purge cron reads). Entries older than the
+// presence TTL are dropped rather than served as "live"; the caller
+// falls back to something honest, like the owner's last mark.
+export async function presencePositions(ids: string[]): Promise<Map<string, LatLng>> {
+  if (ids.length === 0 || redis.status !== 'ready') return new Map();
+  const now = Date.now();
+  const pipe = redis.pipeline();
+  pipe.geopos(POS_KEY, ...ids);
+  for (const id of ids) pipe.zscore(SEEN_KEY, id);
+  const res = await pipe.exec();
+  const out = new Map<string, LatLng>();
+  if (!res) return out;
+  const coords = (res[0]?.[1] ?? []) as ([string, string] | null)[];
+  for (let i = 0; i < ids.length; i++) {
+    const c = coords[i];
+    if (!c) continue;
+    const seen = Number(res[i + 1]?.[1] ?? 0);
+    if (!seen || now - seen > PRESENCE_TTL_MS) continue;
+    out.set(ids[i]!, { lat: Number(c[1]), lng: Number(c[0]) });
+  }
+  return out;
+}
+
 // Write self-presence and return nearby online players (excluding self).
 export async function syncPresence(userId: string, pos: LatLng): Promise<NearbyPlayer[]> {
   if (redis.status !== 'ready') return [];

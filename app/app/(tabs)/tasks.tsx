@@ -187,9 +187,10 @@ export default function TasksScreen() {
       ownerId: string,
       ring?: { lat: number; lng: number }[],
       mark?: { lat: number; lng: number },
+      pos?: { lat: number; lng: number },
     ) => {
       if (!ring || ring.length < 3) return;
-      setFocusedTerritory({ ownerId, ring, ...(mark ? { mark } : {}) });
+      setFocusedTerritory({ ownerId, ring, ...(mark ? { mark } : {}), ...(pos ? { pos } : {}) });
       router.push('/');
     },
     [setFocusedTerritory, router],
@@ -438,7 +439,7 @@ export default function TasksScreen() {
                   return (
                     <Pressable
                       key={row.userId}
-                      onPress={() => onPickOwner(row.userId, row.mainPiece, row.lastMark)}
+                      onPress={() => onPickOwner(row.userId, row.mainPiece, row.lastMark, row.pos)}
                       disabled={!row.mainPiece || row.mainPiece.length < 3}
                       style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
                     >
@@ -634,7 +635,7 @@ export default function TasksScreen() {
         onClose={() => setBoardAll(null)}
         onPick={(row) => {
           setBoardAll(null);
-          onPickOwner(row.userId, row.mainPiece, row.lastMark);
+          onPickOwner(row.userId, row.mainPiece, row.lastMark, row.pos);
         }}
       />
     </SafeAreaView>

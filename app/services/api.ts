@@ -108,6 +108,9 @@ export interface TerritoryRanking {
   // The owner's freshest mark — where their dog last worked. The board
   // jump lands here so a far dog is findable.
   lastMark?: { lat: number; lng: number };
+  // Where the dog IS right now, from live presence — set only while the
+  // owner is online and walking. Fresher than lastMark.
+  pos?: { lat: number; lng: number };
 }
 
 // Somebody marked over your ground while you weren't looking.
