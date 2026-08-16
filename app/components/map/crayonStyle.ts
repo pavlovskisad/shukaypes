@@ -370,8 +370,12 @@ export function applyCrayonOverride(
 
     if (sl === 'water') {
       if (type === 'fill') {
-        clear(map, id, 'fill-color');
-        map.setPaintProperty(id, 'fill-pattern', 'crayon-water');
+        // Flat colour, not the crayon noise pattern. The grain earned its
+        // keep when the fills were the richest thing on the map; under
+        // the territory field's multiply stain the speckles and blobs
+        // showed through every claim and read as dirt on the colour.
+        clear(map, id, 'fill-pattern');
+        map.setPaintProperty(id, 'fill-color', palette.blue);
         map.setPaintProperty(id, 'fill-opacity', 1);
         const src = (l as { source?: string }).source;
         const filt = (l as { filter?: unknown }).filter;
@@ -414,8 +418,9 @@ export function applyCrayonOverride(
           lower,
         );
       if (isGreen) {
-        clear(map, id, 'fill-color');
-        map.setPaintProperty(id, 'fill-pattern', 'crayon-park');
+        // Flat colour — same reasoning as the water fill above.
+        clear(map, id, 'fill-pattern');
+        map.setPaintProperty(id, 'fill-color', palette.green);
         map.setPaintProperty(id, 'fill-opacity', 1);
         const src = (l as { source?: string }).source;
         const filt = (l as { filter?: unknown }).filter;
