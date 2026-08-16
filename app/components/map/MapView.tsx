@@ -69,7 +69,6 @@ import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import { SniffPress } from './SniffPress';
 import { TerritoryLayer } from './TerritoryLayer';
-import { OWN_COLOR_CSS, ownerColorCss } from './territoryColor';
 import type { LatLng } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
@@ -2008,32 +2007,12 @@ export default function MapViewWeb() {
         }
         target = { lat: clat / ring.length, lng: clng / ring.length };
       }
+      // No marker at the landing spot. A scent ping lived here briefly,
+      // from the days when the jump aimed at a minutes-stale mark and
+      // needed something to point at — now the camera lands on the dog's
+      // live position (or its freshest trail), and a dropped dot next to
+      // the actual sprite just read as a second, wrong dog.
       map.easeTo({ center: [target.lng, target.lat], zoom: 16, duration: 900 });
-      // A scent ping at the landing spot, in the owner's colour — the
-      // sprite may be absent out here, so the ping is what there is to
-      // find: "the dog marked HERE, moments-to-minutes ago". Gone again
-      // in a few seconds; it's a wave, not a permanent marker.
-      const color =
-        focusedTerritory.ownerId === 'you'
-          ? OWN_COLOR_CSS
-          : ownerColorCss(focusedTerritory.ownerId);
-      const el = document.createElement('div');
-      el.style.cssText = 'position:relative;width:18px;height:18px;pointer-events:none;';
-      el.innerHTML =
-        `<div style="position:absolute;inset:0;border-radius:50%;background:${color};` +
-        'box-shadow:0 0 0 3px rgba(255,255,255,0.8);"></div>' +
-        `<div style="position:absolute;inset:-12px;border-radius:50%;border:3px solid ${color};` +
-        'animation:hint-map-pulse 1.6s ease-out infinite;"></div>';
-      const ping = new maplibregl.Marker({ element: el })
-        .setLngLat([target.lng, target.lat])
-        .addTo(map);
-      setTimeout(() => {
-        try {
-          ping.remove();
-        } catch {
-          /* map already gone */
-        }
-      }, 7000);
     }
     setFocusedTerritory(null);
   }, [focusedTerritory, setFocusedTerritory]);
