@@ -108,6 +108,7 @@ import {
   type GroundPiece,
 } from './ground.js';
 import { isOnWater } from '../data/kyivWater.js';
+import { presencePositions } from './presence.js';
 
 const T = balance.territory;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -879,6 +880,11 @@ export interface LeaderboardEntry {
   // jump lands here so the dog is findable even far outside the
   // viewer's presence radius.
   lastMark?: { lat: number; lng: number };
+  // Where the dog IS, when it's online right now — live presence, the
+  // same store the map's nearby-players read from. Fresher than
+  // lastMark by up to a few minutes of walking; absent when the owner
+  // is offline or resting.
+  pos?: { lat: number; lng: number };
 }
 
 // A thumbnail is ~50px across; more corners than this is invisible, and
@@ -918,14 +924,16 @@ export async function territoryLeaderboard(
     .slice(0, limit);
 
   const ids = totals.map((e) => e.userId);
-  const [names, rings, marks] = await Promise.all([
+  const [names, rings, marks, livePos] = await Promise.all([
     ownerNames(ids),
     largestPieceRings(ids),
     latestMarks(ids),
+    presencePositions(ids).catch(() => new Map<string, { lat: number; lng: number }>()),
   ]);
   return totals.map((e) => {
     const ring = rings.get(e.userId);
     const mark = marks.get(e.userId);
+    const live = livePos.get(e.userId);
     return {
       ...e,
       name: names.get(e.userId) ?? 'сусід',
@@ -938,6 +946,7 @@ export async function territoryLeaderboard(
           }
         : {}),
       ...(mark ? { lastMark: { lat: trim(mark.lat), lng: trim(mark.lng) } } : {}),
+      ...(live ? { pos: { lat: trim(live.lat), lng: trim(live.lng) } } : {}),
     };
   });
 }

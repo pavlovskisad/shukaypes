@@ -1988,11 +1988,17 @@ export default function MapViewWeb() {
     const ring = focusedTerritory.ring;
     if (ring.length >= 3) {
       // Down INTO the territory, not a survey of it — and onto the DOG,
-      // not the geometric middle. The board ships each owner's freshest
-      // mark; landing there answers "where is this dog" even for owners
-      // far outside the presence radius, whose sprite the map will never
-      // have. The centroid is the fallback for a mark that didn't come.
-      let target = focusedTerritory.mark ?? null;
+      // freshest source first. The nearby-players list refreshes every
+      // 15s and holds the live sprite position when the owner is inside
+      // presence range — landing anywhere else visibly disagrees with
+      // the sprite on screen. Next, the live presence position the board
+      // fetched (right for far owners who are online); then the owner's
+      // last mark (minutes stale — the dog kept walking); and only then
+      // the ground's geometric middle.
+      const live = useGameStore
+        .getState()
+        .nearbyPlayers.find((p) => p.id === focusedTerritory.ownerId)?.position;
+      let target = live ?? focusedTerritory.pos ?? focusedTerritory.mark ?? null;
       if (!target) {
         let clat = 0;
         let clng = 0;
