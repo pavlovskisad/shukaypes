@@ -87,9 +87,11 @@ const EDGE_SOFT_M = 26;
 const MIN_RADIUS_PX = 3; // CSS px
 const MAX_RADIUS_PX = 32; // CSS px
 
-// Peak fill opacity. 0.42 is a load-bearing number: the owner palette was
-// scored composited at 42% over the map paper (see territoryColor.ts) —
-// change this and every colour-distance argument there is stale.
+// Peak stain strength. 0.42 is a load-bearing number: the owner palette
+// was scored composited at 42% over the map paper (see territoryColor.ts).
+// The compositing became a multiply-tint rather than an alpha film, but
+// over the pale paper the two land within a hair of each other, so the
+// palette's contrast tuning still holds — change this and it doesn't.
 const FILL_ALPHA = 0.42;
 
 const POLY_VERT = `
@@ -221,13 +223,34 @@ void main() {
   float dc = length(fieldColor(sr) - fieldColor(sl)) + length(fieldColor(st) - fieldColor(sb));
   float seam = smoothstep(0.10, 0.34, dc) * inner * 0.20;
   col = mix(col, vec3(1.0), min(1.0, rim + seam));
-  // The hottest core leans a touch deeper, so a big claim glows from the
-  // inside out instead of being one flat tone edge to edge...
-  col *= 1.0 - 0.15 * smoothstep(0.80, 0.97, c);
+  // PUFF — pseudo-relief from the coverage gradient the probes already
+  // measured for free: the slope facing the light lifts, the far side
+  // settles, and a flat sticker of colour becomes a cushion of scent.
+  // Interiors have no gradient, so the body stays calm; all the relief
+  // lives where the field actually rises and falls.
+  float gx = sr.a - sl.a;
+  float gy = st.a - sb.a;
+  // Light from the top-left: a slope whose coverage falls upward (gy<0,
+  // the blob's top edge) faces the light and lifts; the south edge
+  // settles into its own soft shadow.
+  col *= clamp(1.0 + (0.4 * gx - 0.65 * gy), 0.8, 1.22);
+  // Hot core: RICHER, not darker — saturation climbs toward the middle
+  // of a claim, so deeply-held ground reads as deeply dyed. The earlier
+  // darkening pass read as dirt on the palette.
+  float coreT = smoothstep(0.80, 0.97, c);
+  float luma = dot(col, vec3(0.299, 0.587, 0.114));
+  col = mix(col, mix(vec3(luma), col, 1.45), coreT * 0.6);
   // ...and the body carries large, soft density variation on top.
   float grain = fbm(wp / 260.0 + 17.0);
   float a = shaped * u_alpha * (0.88 + 0.24 * grain);
-  gl_FragColor = vec4(col * a, a); // premultiplied
+  // STAIN, not film. The output is a multiply tint (1 where the field
+  // is empty), composited with DST_COLOR blending: the field dyes the
+  // map instead of floating over it, so streets, blocks and parks keep
+  // their linework INSIDE a claim instead of being fogged by it. Over
+  // the pale paper this lands within a hair of the old 42% alpha film —
+  // the palette's contrast tuning carries over — but everywhere the map
+  // has detail, the detail now shows through the colour.
+  gl_FragColor = vec4(mix(vec3(1.0), col, a), 1.0);
 }
 `;
 
@@ -618,7 +641,10 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         gl.vertexAttribPointer(aCompPos, 2, gl.FLOAT, false, 0, 0);
         gl.disable(gl.DEPTH_TEST);
         gl.enable(gl.BLEND);
-        gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+        // Multiply blending — the shader outputs a tint (1.0 where the
+        // field is empty) and the map underneath is dyed by it. See the
+        // STAIN note at the end of COMP_FRAG.
+        gl.blendFunc(gl.DST_COLOR, gl.ZERO);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
       } catch (e) {
         // eslint-disable-next-line no-console

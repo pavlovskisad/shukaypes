@@ -69,6 +69,7 @@ import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import { SniffPress } from './SniffPress';
 import { TerritoryLayer } from './TerritoryLayer';
+import { OWN_COLOR_CSS, ownerColorCss } from './territoryColor';
 import type { LatLng } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
@@ -269,15 +270,21 @@ function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
   return undefined;
 }
 
-// Experiment (GAME_RENDER): hide MapLibre's own flat fill-extrusion
-// buildings so the Three.js extruded city owns the building volumes. Called
-// after every crayon override (which re-shows / re-opacities them).
+// Experiment (GAME_RENDER): hide EVERY MapLibre building layer so the
+// Three.js extruded city owns the buildings outright. Called after every
+// crayon override (which re-shows / re-opacities them).
+//
+// Every layer, not just the fill-extrusions — and that distinction took
+// a live bug to learn. The flat `fill` footprints stayed visible, which
+// was harmless at street zoom where the 3D city stands on top of them —
+// but the vector tiles carry no `building` layer below ~z13, so on
+// zoom-out the 3D city simply has nothing to build and the flat paper
+// fills surfaced from under it: a city of white cutouts punched through
+// the territory field. (The first fix aimed at the buildings' distance
+// fog — wrong layer; the 3D city wasn't even there.)
 function hideMapLibreBuildings(map: maplibregl.Map): void {
   for (const l of map.getStyle().layers ?? []) {
-    if (
-      (l as { 'source-layer'?: string })['source-layer'] === 'building' &&
-      l.type === 'fill-extrusion'
-    ) {
+    if ((l as { 'source-layer'?: string })['source-layer'] === 'building') {
       try {
         map.setLayoutProperty(l.id, 'visibility', 'none');
       } catch {
@@ -1980,21 +1987,47 @@ export default function MapViewWeb() {
     if (!map || !focusedTerritory) return;
     const ring = focusedTerritory.ring;
     if (ring.length >= 3) {
-      // Down INTO the territory, not a survey of it. fitBounds framed
-      // the whole blob from ~z14 and the arrival read as a map of the
-      // claim rather than a visit to it — street level at the claim's
-      // centre is the neighbourhood the owner's dog actually works.
-      let clat = 0;
-      let clng = 0;
-      for (const p of ring) {
-        clat += p.lat;
-        clng += p.lng;
+      // Down INTO the territory, not a survey of it — and onto the DOG,
+      // not the geometric middle. The board ships each owner's freshest
+      // mark; landing there answers "where is this dog" even for owners
+      // far outside the presence radius, whose sprite the map will never
+      // have. The centroid is the fallback for a mark that didn't come.
+      let target = focusedTerritory.mark ?? null;
+      if (!target) {
+        let clat = 0;
+        let clng = 0;
+        for (const p of ring) {
+          clat += p.lat;
+          clng += p.lng;
+        }
+        target = { lat: clat / ring.length, lng: clng / ring.length };
       }
-      map.easeTo({
-        center: [clng / ring.length, clat / ring.length],
-        zoom: 16,
-        duration: 900,
-      });
+      map.easeTo({ center: [target.lng, target.lat], zoom: 16, duration: 900 });
+      // A scent ping at the landing spot, in the owner's colour — the
+      // sprite may be absent out here, so the ping is what there is to
+      // find: "the dog marked HERE, moments-to-minutes ago". Gone again
+      // in a few seconds; it's a wave, not a permanent marker.
+      const color =
+        focusedTerritory.ownerId === 'you'
+          ? OWN_COLOR_CSS
+          : ownerColorCss(focusedTerritory.ownerId);
+      const el = document.createElement('div');
+      el.style.cssText = 'position:relative;width:18px;height:18px;pointer-events:none;';
+      el.innerHTML =
+        `<div style="position:absolute;inset:0;border-radius:50%;background:${color};` +
+        'box-shadow:0 0 0 3px rgba(255,255,255,0.8);"></div>' +
+        `<div style="position:absolute;inset:-12px;border-radius:50%;border:3px solid ${color};` +
+        'animation:hint-map-pulse 1.6s ease-out infinite;"></div>';
+      const ping = new maplibregl.Marker({ element: el })
+        .setLngLat([target.lng, target.lat])
+        .addTo(map);
+      setTimeout(() => {
+        try {
+          ping.remove();
+        } catch {
+          /* map already gone */
+        }
+      }, 7000);
     }
     setFocusedTerritory(null);
   }, [focusedTerritory, setFocusedTerritory]);

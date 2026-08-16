@@ -204,7 +204,7 @@ interface GameState {
   // it never needs to join the setScreen/toggleDogCam clear-lists —
   // the lists whose interplay is exactly what keeps biting the spot
   // modal.
-  focusedTerritory: { ownerId: string; ring: LatLng[] } | null;
+  focusedTerritory: { ownerId: string; ring: LatLng[]; mark?: LatLng } | null;
   // Where the human is currently LOOKING on the map (viewport centre).
   // Set by MapView on map idle. Distinct from userPosition (GPS): used
   // by chat for lore/lost-pet proximity so the dog comments on the
@@ -347,7 +347,7 @@ interface GameState {
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
-  setFocusedTerritory: (v: { ownerId: string; ring: LatLng[] } | null) => void;
+  setFocusedTerritory: (v: { ownerId: string; ring: LatLng[]; mark?: LatLng } | null) => void;
   toggleDogCam: () => void;
   setDogCamViaSearch: (dogCamViaSearch: boolean) => void;
   setSearchTarget: (t: { dogId: string; spot: LatLng } | null) => void;
