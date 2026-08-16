@@ -105,6 +105,9 @@ export interface TerritoryRanking {
   // a small silhouette in their colour. Optional: an older server (or an
   // owner whose ground vanished mid-read) simply sends none.
   mainPiece?: { lat: number; lng: number }[];
+  // The owner's freshest mark — where their dog last worked. The board
+  // jump lands here so a far dog is findable.
+  lastMark?: { lat: number; lng: number };
 }
 
 // Somebody marked over your ground while you weren't looking.

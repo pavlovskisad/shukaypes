@@ -875,6 +875,10 @@ export interface LeaderboardEntry {
   // thumbnail — the board draws it as a silhouette in the owner's colour.
   // Absent only if the ground vanished between the sum and this read.
   mainPiece?: { lat: number; lng: number }[];
+  // The owner's freshest mark — where their dog last worked. The board
+  // jump lands here so the dog is findable even far outside the
+  // viewer's presence radius.
+  lastMark?: { lat: number; lng: number };
 }
 
 // A thumbnail is ~50px across; more corners than this is invisible, and
@@ -914,9 +918,14 @@ export async function territoryLeaderboard(
     .slice(0, limit);
 
   const ids = totals.map((e) => e.userId);
-  const [names, rings] = await Promise.all([ownerNames(ids), largestPieceRings(ids)]);
+  const [names, rings, marks] = await Promise.all([
+    ownerNames(ids),
+    largestPieceRings(ids),
+    latestMarks(ids),
+  ]);
   return totals.map((e) => {
     const ring = rings.get(e.userId);
+    const mark = marks.get(e.userId);
     return {
       ...e,
       name: names.get(e.userId) ?? 'сусід',
@@ -928,6 +937,7 @@ export async function territoryLeaderboard(
             ),
           }
         : {}),
+      ...(mark ? { lastMark: { lat: trim(mark.lat), lng: trim(mark.lng) } } : {}),
     };
   });
 }
@@ -962,6 +972,25 @@ async function ownerNames(ids: string[]): Promise<Map<string, string>> {
     .from(schema.users)
     .where(inArray(schema.users.id, ids));
   return new Map(rows.map((r) => [r.id, r.first || r.username || 'сусід']));
+}
+
+// Each owner's freshest mark — where their dog last was. The board ships
+// it so tapping a row can land the camera on the dog's actual trail
+// rather than the geometric middle of their ground; a far owner's dog is
+// otherwise unfindable (presence only covers the area around the
+// viewer). One DISTINCT ON over the (user_id, created_at) index.
+async function latestMarks(ids: string[]): Promise<Map<string, { lat: number; lng: number }>> {
+  if (ids.length === 0) return new Map();
+  const rows = await db
+    .selectDistinctOn([schema.territoryMarks.userId], {
+      userId: schema.territoryMarks.userId,
+      lat: schema.territoryMarks.lat,
+      lng: schema.territoryMarks.lng,
+    })
+    .from(schema.territoryMarks)
+    .where(inArray(schema.territoryMarks.userId, ids))
+    .orderBy(schema.territoryMarks.userId, desc(schema.territoryMarks.createdAt));
+  return new Map(rows.map((r) => [r.userId, { lat: r.lat, lng: r.lng }]));
 }
 
 // Raids waiting for this user, delivered once. Marked seen as they go out

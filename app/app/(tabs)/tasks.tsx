@@ -177,15 +177,19 @@ export default function TasksScreen() {
     [setSelectedDog, router],
   );
 
-  // Tap a row on the standing → the map, framed on that owner's ground.
+  // Tap a row on the standing → the map, landed on that owner's ground.
   // The row already carries the largest piece's ring (the silhouette is
-  // drawn from it), so the jump needs no extra fetch; rows without
-  // geometry simply don't navigate.
+  // drawn from it) and the owner's freshest mark, so the jump needs no
+  // extra fetch; rows without geometry simply don't navigate.
   const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
   const onPickOwner = useCallback(
-    (ownerId: string, ring?: { lat: number; lng: number }[]) => {
+    (
+      ownerId: string,
+      ring?: { lat: number; lng: number }[],
+      mark?: { lat: number; lng: number },
+    ) => {
       if (!ring || ring.length < 3) return;
-      setFocusedTerritory({ ownerId, ring });
+      setFocusedTerritory({ ownerId, ring, ...(mark ? { mark } : {}) });
       router.push('/');
     },
     [setFocusedTerritory, router],
@@ -434,7 +438,7 @@ export default function TasksScreen() {
                   return (
                     <Pressable
                       key={row.userId}
-                      onPress={() => onPickOwner(row.userId, row.mainPiece)}
+                      onPress={() => onPickOwner(row.userId, row.mainPiece, row.lastMark)}
                       disabled={!row.mainPiece || row.mainPiece.length < 3}
                       style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
                     >
@@ -630,7 +634,7 @@ export default function TasksScreen() {
         onClose={() => setBoardAll(null)}
         onPick={(row) => {
           setBoardAll(null);
-          onPickOwner(row.userId, row.mainPiece);
+          onPickOwner(row.userId, row.mainPiece, row.lastMark);
         }}
       />
     </SafeAreaView>
