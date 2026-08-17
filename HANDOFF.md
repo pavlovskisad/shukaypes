@@ -39,6 +39,60 @@ owner's. Merged, deployed, and verified in production unless noted:
 | Admin console | `/admin/console`, read-only, plus `/admin/metrics` (`?format=text` for a terminal). One self-contained page served by the API — NOT the plan's Vite+React workspace, see the note in routes/adminConsole.ts. Needs `DASHBOARD_TOKEN`. |
 | Auth statuses | a 500-instead-of-401/403 regression from this same session, fixed and verified on production. See §5 — it was blocking owner item #2 without anyone knowing. |
 
+### 0.1b 17 Aug — OLX was never blocked, and the docs said it was
+
+The biggest correction in this file. `scrapeFetch.ts` opened by asserting
+"CloudFront blocks the address, not the request". Measured, from Fly, no
+proxy, the SAME url eight times in a row:
+
+    403 200 403 200 403 200 403 200
+
+Fifty per cent, alternating, deterministic. Not a block — a coin flip.
+The retry that fixes it already existed and was switched OFF unless a
+proxy was configured, on the reasoning that retrying a fixed address is
+"pure waste: the answer is the same every time". It is not.
+
+**A residential proxy is NOT the fix**, and this cost a subscription to
+establish: four Ukrainian residential exits, two in Kyiv, with a full
+browser header set, returned 403/919 every single time. `SCRAPE_PROXY_URL`
+stays as a seam and is unset.
+
+**The retry must fire with NO delay.** The first attempt at this shipped
+with a 500ms pause for politeness and changed nothing — the tick after
+deploy logged the same seven failures. Measured:
+
+    no delay      424242     <- every second request succeeds
+    500ms apart   444444     <- all refused
+    3s apart      444444     <- all refused
+
+Back-to-back requests reuse the warm connection and the second is let
+through; any pause opens a fresh one and is refused. **Do not add a
+backoff to that retry loop.** It looks like an obvious improvement and it
+silently disables the whole thing.
+
+Result, measured on the tick after the fix landed:
+
+    before   discovered 251, errors 7
+    after    discovered 508, errors 0
+
+Coverage of LISTINGS doubled. Whether that yields more PETS is not yet
+known — every ad discovered in that first tick was already known, because
+one lost-pet ad matches several of the thirteen queries. Watch `inserted`
+over the coming days before claiming otherwise.
+
+Also shipped 17 Aug: `scrape_log.raw_body` stores the ad text the parser
+read (migration 0034), and `GET /dogs/:id/post` serves it one pet at a
+time behind auth. Contact details are stored and shown DELIBERATELY —
+owner's decision — and the safeguard is that they never enter a bulk
+payload: verified 0 occurrences in /sync/map, /dogs/nearby and /stats.
+Expired pets 404, so `expire:pet` doubles as contact removal.
+
+**Still to do:** the client half. The walker still bounces out to OLX
+(`MapView.tsx` ~3005, `strings.ts` contactOpen). `DogPrompt` takes only
+actions, so showing an ad inline needs a scrollable modal following the
+LostDogModal pattern — not a one-line change. The route it would call is
+live and tested.
+
 ### 0.2 THE OWNER'S OPEN ITEMS — nothing here is blocked on the agent
 
 Ordered by what hurts first if forgotten.
