@@ -25,6 +25,7 @@ import { eq } from 'drizzle-orm';
 import type { FastifyBaseLogger } from 'fastify';
 import { db, schema } from '../db/index.js';
 import { parseDogPost } from '../pipeline/parser.js';
+import { capBody } from '../pipeline/adBody.js';
 import { upsertLostDog } from '../pipeline/upsert.js';
 import type { IngestResult, ParsedDog } from '../pipeline/types.js';
 
@@ -146,6 +147,7 @@ export async function ingestFromTelegramPost(
         url,
         source,
         title,
+        rawBody: capBody(text),
         parseConfidence: parsed.parseConfidence,
         ingestAction: 'skipped',
         skipReason: `low-confidence:${parsed.parseConfidence.toFixed(2)}`,
@@ -162,6 +164,9 @@ export async function ingestFromTelegramPost(
       url,
       source,
       title,
+      // `title` is only text.slice(0, 200) on this path — the message
+      // itself is what the parser read, and what the app will show.
+      rawBody: capBody(text),
       dogId: result.id,
       parseConfidence: parsed.parseConfidence,
       ingestAction: result.action,
