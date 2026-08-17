@@ -315,11 +315,14 @@ export const balance = {
     // GROUND — the stored territory, and the two bounds that keep a read
     // and a write from ever being unbounded.
     //
-    // How many pieces one view can return. Fourteen neighbours with a few
-    // pieces each, plus room for a city that has been fought over; past
-    // this the far ones are dropped, and they are the ones off the edge of
-    // the screen anyway.
-    groundPiecesInView: 240,
+    // How many pieces one view can return from the DATABASE, before the
+    // nearest-corner sort and the drawn cap. Must stay comfortably above
+    // rivalPiecesDrawn: this query has no ordering, so if the box ever
+    // holds more pieces than this, the overflow dropped here is an
+    // ARBITRARY subset — the sort never sees it — and ground would vanish
+    // in patches rather than by distance. Sized for the city-wide view
+    // radius with margin.
+    groundPiecesInView: 320,
     // How many pieces one mark can touch. The claim is a hull over marks
     // within claimNeighbourM, so this is "how many separate territories can
     // possibly overlap one walk" — generous, and still a bound.
@@ -352,10 +355,14 @@ export const balance = {
     // out decays away on markTtlDays like any other.
     markOnlyOutsideOwnGround: true,
     // How far out other people's ground is drawn. Effectively the whole
-    // map view: seeing the city carved up between neighbours is the point
-    // of a territory game, and a 900m keyhole (the first cut) meant you
-    // only ever saw your own paint plus a sliver.
-    rivalViewRadiusM: 5000,
+    // CITY now: seeing it carved up between neighbours is the point of a
+    // territory game, and both earlier values taught the same lesson at
+    // different scales — the 900m keyhole (first cut) showed your own
+    // paint plus a sliver, and 5km still cut a friend's district off the
+    // map because they played from across town. 12km covers metropolitan
+    // Kyiv from anywhere in it. The piece cap below, not this radius, is
+    // what bounds the payload.
+    rivalViewRadiusM: 12_000,
     // Ceiling on how many neighbours are drawn at once, nearest first.
     // Past a certain count the map stops saying anything — it's just a
     // quilt — and the payload grows for ranges you can't make out anyway.
@@ -365,11 +372,13 @@ export const balance = {
     // — including ground under your feet — the moment they fell outside
     // the nearest fourteen. See fetchMapTerritory for the measurements.
     //
-    // 140 against roughly 78 drawn today, so there is room for the
-    // fragmentation to keep going before this bites. The sync is ~130KB at
-    // 78 pieces and vertices dominate it, so treat this as the payload
-    // dial: it is very nearly linear.
-    rivalPiecesDrawn: 140,
+    // 180 with the city-wide view radius above: the whole city's pieces
+    // fit under it today (~100-150 exist), so nobody's district vanishes,
+    // and when the count grows past it the nearest-corner sort drops the
+    // FAR ones, which is where missing ground reads as distance. The sync
+    // was ~130KB at 78 pieces and vertices dominate, so treat this as the
+    // payload dial: it is very nearly linear (~1.7KB per piece).
+    rivalPiecesDrawn: 180,
     // HARD BOUNDS on the partition. Every one of these exists because the
     // unbounded version took the API down: buffered claims overlap far more
     // often than raw hulls did, so a patch could be handed a bite polygon
