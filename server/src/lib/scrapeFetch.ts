@@ -86,7 +86,26 @@ export interface ScrapeFetchOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 20_000;
-const RETRY_DELAY_MS = 500;
+// ZERO, AND THE ZERO IS THE WHOLE MECHANISM.
+//
+// Retrying immediately is what works, and a "polite" pause is what kills
+// it. Measured on the Fly machine against the same URL:
+//
+//     no delay      424242     <- every second request succeeds
+//     500ms apart   444444     <- all refused
+//     3s apart      444444     <- all refused
+//
+// The reading: back-to-back requests reuse the warm connection and the
+// second one is let through; any pause lets the socket go and the next
+// request opens a fresh one, which is refused again. So the retry has to
+// ride the SAME connection, which means no sleep between attempts.
+//
+// The first version of this shipped with a 500ms delay added for
+// politeness. It negated the fix entirely — the tick after deploy still
+// logged "403 after 3 attempts" on 7 of 13 listings, exactly as before.
+// A local mock could not have caught it: the mock had no connection
+// behaviour to reuse.
+const RETRY_DELAY_MS = 0;
 const BLOCKED_STATUSES = new Set([403, 429]);
 
 export interface ScrapeResponse {
@@ -141,10 +160,12 @@ export async function scrapeFetch(
       // new exit address; without one it simply gets the other side of
       // the alternation. Both are worth taking.
       //
-      // A short pause rather than an instant retry: the measurement says
-      // an immediate one works, but there is no hurry inside an hourly
-      // cron and a refused request is not something to hammer.
-      if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      // Immediately, on purpose — see RETRY_DELAY_MS. Three attempts on a
+      // refused listing is thirteen extra requests per hourly tick in the
+      // worst case, which is a rounding error against what it recovers.
+      if (attempt < maxAttempts && RETRY_DELAY_MS > 0) {
+        await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
+      }
     } catch (err) {
       last = {
         ok: false,
