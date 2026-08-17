@@ -1,11 +1,28 @@
-// FETCHING FROM SOMEWHERE THAT DOES NOT WANT TO HEAR FROM A DATACENTRE.
+// FETCHING FROM SOMEWHERE THAT ONLY SOMETIMES WANTS TO HEAR FROM US.
 //
-// OLX sits behind CloudFront's WAF, and CloudFront blocks the address,
-// not the request. Confirmed the hard way: identical requests from a
-// home connection return the page and from Fly return a 919-byte
-// "Request blocked" stub, and a full browser header set — sec-fetch-*,
-// sec-ch-ua, accept, upgrade-insecure-requests — changes nothing. There
-// is no user-agent clever enough to fix a rejected IP.
+// CORRECTED 17 Aug. This file used to open by asserting that "CloudFront
+// blocks the address, not the request", and that conclusion is wrong in
+// the way that mattered most: it is not a block at all, it is a COIN
+// FLIP, and believing it was a block is what disabled the retry below.
+//
+// What was actually measured, from the Fly machine, no proxy, the same
+// URL eight times in a row:
+//
+//     403 200 403 200 403 200 403 200
+//
+// Fifty per cent, alternating, deterministic. An 8-second gap between
+// requests did not change it, so it is not time-based throttling. The
+// same URL from a different datacentre returned 200 five times out of
+// five, so it is not a universal ban on datacentres either.
+//
+// Also measured, and worth keeping because it cost a proxy subscription
+// to learn: routing through four Ukrainian RESIDENTIAL addresses — two
+// in Kyiv — with a full browser header set returned 403/919 every single
+// time. A residential exit is not the fix. The retry is.
+//
+// The original observation behind the old comment (home connection works,
+// Fly does not) was real but confounded: it compared a home browser with
+// a datacentre Node client and attributed the difference to the address.
 //
 // The official route was checked first and is a dead end: OLX does have
 // a Partner API, but every advert endpoint on it is scoped to the
@@ -13,12 +30,11 @@
 // adverts"). It is for managing your own inventory. It cannot see other
 // people's lost-pet ads, which is the entire thing we need.
 //
-// So the remaining honest option is to make the request from an address
-// that is not a datacentre. This module is the seam for that: set
-// SCRAPE_PROXY_URL and outbound scrape traffic goes through it; leave it
-// unset and behaviour is exactly what it is today. No provider is
-// hardcoded — any HTTP(S) proxy URL works, so switching vendors is an
-// env var, not a deploy of new code.
+// SCRAPE_PROXY_URL remains as a seam, and is still the right tool if the
+// edge ever hardens into a real block: set it and outbound scrape traffic
+// goes through it, leave it unset and nothing changes. No provider is
+// hardcoded, so switching vendors is an env var rather than a deploy.
+// On the evidence above it is not needed today, and it is NOT set.
 //
 // Note the seam is deliberately narrow: it wraps SCRAPING only. The rest
 // of the server's outbound traffic (Anthropic, Google, Telegram) keeps
@@ -70,6 +86,7 @@ export interface ScrapeFetchOptions {
 }
 
 const DEFAULT_TIMEOUT_MS = 20_000;
+const RETRY_DELAY_MS = 500;
 const BLOCKED_STATUSES = new Set([403, 429]);
 
 export interface ScrapeResponse {
@@ -86,7 +103,22 @@ export async function scrapeFetch(
   opts: ScrapeFetchOptions = {},
 ): Promise<ScrapeResponse> {
   const proxy = scrapeProxyUrl();
-  const maxAttempts = proxy && opts.retryOnBlock !== false ? 3 : 1;
+  // RETRY WITH OR WITHOUT A PROXY.
+  //
+  // This used to be `proxy && …`, on the reasoning that retrying a fixed
+  // address is pure waste because "the answer is the same every time".
+  // Measured on 17 Aug, from the Fly machine, no proxy: the same URL
+  // fetched eight times in a row returned
+  //
+  //     403 200 403 200 403 200 403 200
+  //
+  // Fifty per cent, alternating, deterministic — and an 8s gap between
+  // requests did not change it, so it is not time-based throttling
+  // either. Whatever the edge is doing, a second attempt rescues almost
+  // all of it. Leaving the retry proxy-only meant HALF of every scrape
+  // tick was thrown away, which is what "OLX is half-blocked" has been
+  // describing all along.
+  const maxAttempts = opts.retryOnBlock !== false ? 3 : 1;
 
   let last: ScrapeResponse = { ok: false, status: 0, body: '', attempts: 0 };
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -105,8 +137,14 @@ export async function scrapeFetch(
       const body = await res.text();
       last = { ok: res.ok, status: res.status, body, attempts: attempt };
       if (res.ok || !BLOCKED_STATUSES.has(res.status)) return last;
-      // Blocked and we have a retry left: the next attempt gets a new
-      // exit address from the pool.
+      // Blocked with a retry left. With a proxy the next attempt gets a
+      // new exit address; without one it simply gets the other side of
+      // the alternation. Both are worth taking.
+      //
+      // A short pause rather than an instant retry: the measurement says
+      // an immediate one works, but there is no hurry inside an hourly
+      // cron and a refused request is not something to hammer.
+      if (attempt < maxAttempts) await new Promise((r) => setTimeout(r, RETRY_DELAY_MS));
     } catch (err) {
       last = {
         ok: false,
