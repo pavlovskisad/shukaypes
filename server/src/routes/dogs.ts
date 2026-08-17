@@ -87,6 +87,56 @@ const plugin: FastifyPluginAsync = async (app) => {
   // This endpoint returns the same projection shape as /dogs/nearby's
   // array items so the client can drop it straight into the same
   // store list and reuse the existing modal/marker code.
+  // THE AD ITSELF, one pet at a time.
+  //
+  // Until now the app bounced the walker out to OLX after a sighting,
+  // because the owner's phone number is in the ad and the ad was thrown
+  // away at ingest. It is stored now (scrape_log.raw_body), so the post
+  // can be read without leaving.
+  //
+  // ITS OWN ROUTE, DELIBERATELY. This never joins /sync/map or
+  // /dogs/nearby, for two reasons that both matter:
+  //
+  //   - /sync/map goes to every walker every 15 seconds and was just cut
+  //     from 54KB to 27KB. An 8KB ad per pet would undo that at a stroke.
+  //   - a LIST endpoint carrying contact details is a scrapable contact
+  //     list. One walker reading one ad is a different thing, and this
+  //     shape is what keeps it that way.
+  //
+  // Expired pets return nothing: expiring is the takedown path
+  // (db/expire-pet.ts), so it has to take the contact details with it.
+  app.get<{ Params: { id: string } }>('/dogs/:id/post', limitRead, async (req, reply) => {
+    const [dog] = await db
+      .select({ status: schema.lostDogs.status })
+      .from(schema.lostDogs)
+      .where(eq(schema.lostDogs.id, req.params.id))
+      .limit(1);
+    if (!dog || dog.status !== 'active') {
+      reply.code(404);
+      return { error: 'not found' };
+    }
+
+    const [log] = await db
+      .select({
+        body: schema.scrapeLog.rawBody,
+        url: schema.scrapeLog.url,
+        at: schema.scrapeLog.firstSeenAt,
+      })
+      .from(schema.scrapeLog)
+      .where(eq(schema.scrapeLog.dogId, req.params.id))
+      .limit(1);
+
+    // `body: null` is the ordinary answer for every pet ingested before
+    // the column existed, and stays ordinary for weeks. The client keeps
+    // the old link-out for exactly this case, so null must read as "we
+    // do not have it" rather than as an error.
+    return {
+      body: log?.body ?? null,
+      sourceUrl: log?.url ?? null,
+      fetchedAt: log?.at ? log.at.toISOString() : null,
+    };
+  });
+
   app.get<{ Params: { id: string } }>('/dogs/:id', limitRead, async (req, reply) => {
     const [row] = await db
       .select({
