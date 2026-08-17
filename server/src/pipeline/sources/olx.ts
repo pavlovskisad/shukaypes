@@ -14,6 +14,7 @@ import { load as loadHtml } from 'cheerio';
 import { eq, inArray } from 'drizzle-orm';
 import { db, schema } from '../../db/index.js';
 import { parseDogPost } from '../parser.js';
+import { capBody } from '../adBody.js';
 import { upsertLostDog } from '../upsert.js';
 import { emptySummary, recordError, type Source, type SourceRunSummary } from '../source.js';
 import { scrapeFetch } from '../../lib/scrapeFetch.js';
@@ -287,6 +288,9 @@ export class OlxSource implements Source {
               url: card.url,
               source: SOURCE,
               title: card.title,
+              // Kept here in particular: a low-confidence parse is exactly
+              // the row somebody will want to read to find out why.
+              rawBody: capBody(text),
               parseConfidence: parsed.parseConfidence,
               ingestAction: 'skipped',
               skipReason: 'low-confidence',
@@ -308,6 +312,9 @@ export class OlxSource implements Source {
             url: card.url,
             source: SOURCE,
             title: card.title,
+            // The text the parser actually read, so the post can be shown
+            // in-app and the parse can be scored against its own input.
+            rawBody: capBody(text),
             dogId: result.id,
             parseConfidence: parsed.parseConfidence,
             ingestAction: result.action,

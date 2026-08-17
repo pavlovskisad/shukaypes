@@ -241,7 +241,20 @@ export const scrapeLog = pgTable(
     source: text('source').notNull(), // olx | telegram:<channel> | ...
     title: text('title'),
     dogId: text('dog_id').references(() => lostDogs.id, { onDelete: 'set null' }),
-    parseConfidence: doublePrecision('parse_confidence'),
+    // The post as the PARSER read it, verbatim, contact details included.
+  //
+  // Two jobs. The app can show the ad without bouncing the walker out to
+  // OLX (the bounce existed only because the owner's phone number lives
+  // in the ad and we never kept it). And parse accuracy can finally be
+  // scored, because scoring needs the input the parser actually saw —
+  // `title` is an OLX listing headline or a 200-char Telegram snippet
+  // and was never enough.
+  //
+  // NEVER goes into a bulk response: one pet at a time, behind auth. A
+  // list endpoint carrying contact details is a scrapable contact list,
+  // which is a different thing from one walker reading one ad.
+  rawBody: text('raw_body'),
+  parseConfidence: doublePrecision('parse_confidence'),
     ingestAction: text('ingest_action'), // inserted | updated | duplicate | skipped
     skipReason: text('skip_reason'),
     firstSeenAt: timestamp('first_seen_at', { withTimezone: true }).notNull().defaultNow(),
