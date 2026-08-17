@@ -150,7 +150,10 @@ const plugin: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: SyncMapQuery }>('/sync/map', limitPolling, async (req, reply) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
-    const radiusM = Number(req.query.radius ?? '5000');
+    // Default matches the territory view clamp — the client sends no
+    // radius, so this IS the view. A default below the clamp quietly
+    // narrows the world for everyone.
+    const radiusM = Number(req.query.radius ?? '12000');
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radiusM)) {
       reply.code(400);
       return { error: 'invalid query' };
@@ -186,7 +189,11 @@ const plugin: FastifyPluginAsync = async (app) => {
       await Promise.all([
       fetchNearbyTokens(req.userId, pos),
       fetchNearbyFood(req.userId),
-      fetchNearbyLostDogs(pos, radiusM),
+      // Pets stay at their own radius. The route default widened to give
+      // TERRITORY the whole city, and pets riding the same number would
+      // have silently filled the carousels with animals across town —
+      // a lost pet 12km away is not one this walker can go look for.
+      fetchNearbyLostDogs(pos, Math.min(radiusM, 5000)),
       fetchUserState(req.userId),
       // Presence never blocks the map response — on any Redis hiccup we just
       // return no players / pokes.
