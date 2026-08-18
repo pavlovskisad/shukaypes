@@ -189,8 +189,45 @@ async function main() {
   console.log(
     `\nWILL EXPIRE: ${flagged.length}  (${onPin} on the fallback pin, ${drawn.length} drawn on the map)`,
   );
-  const byAge = [...flagged].sort((a, b) => a.lastSeenAt.getTime() - b.lastSeenAt.getTime());
-  for (const p of byAge.slice(0, 60)) {
+  // THE HISTOGRAM COMES FIRST, AND IT IS COMPLETE. Every flagged pet is
+  // in exactly one bucket, so no truncation can hide part of the answer.
+  //
+  // The first version of this listing printed the 60 OLDEST and capped
+  // the rest, which is backwards for review: an 89-day-old pet whose ad
+  // has been deleted is the obvious case, and a pet from last week is
+  // the one a human needs to look at. Sorting the interesting rows off
+  // the bottom of the screen made the dry run unreadable in exactly the
+  // place it mattered — on the first real run against production, 83 of
+  // 143 were hidden and every one of them was newer than the ones shown.
+  const BUCKETS: Array<{ label: string; maxDays: number }> = [
+    { label: 'under 7d', maxDays: 7 },
+    { label: '7–30d', maxDays: 30 },
+    { label: '30–60d', maxDays: 60 },
+    { label: '60–90d', maxDays: 90 },
+    { label: 'over 90d', maxDays: Infinity },
+  ];
+  console.log('\n  by age, ALL of them:');
+  for (const b of BUCKETS) {
+    const idx = BUCKETS.indexOf(b);
+    const min = idx === 0 ? -Infinity : BUCKETS[idx - 1]!.maxDays;
+    const inBucket = flagged.filter((p) => {
+      const d = days(p.lastSeenAt);
+      return d >= min && d < b.maxDays;
+    });
+    if (inBucket.length === 0) continue;
+    const drawnHere = inBucket.filter((p) => !onFallbackPin(p.lat, p.lng)).length;
+    console.log(
+      `    ${b.label.padEnd(10)} ${String(inBucket.length).padStart(4)}   ` +
+        `(${drawnHere} drawn, ${inBucket.length - drawnHere} on the pin)`,
+    );
+  }
+
+  // NEWEST FIRST — the ones worth arguing about.
+  const listArg = process.argv.find((a) => a.startsWith('--list='));
+  const listN = listArg ? Number(listArg.split('=')[1]) : 40;
+  const byAge = [...flagged].sort((a, b) => b.lastSeenAt.getTime() - a.lastSeenAt.getTime());
+  console.log(`\n  newest ${Math.min(listN, byAge.length)} of them:`);
+  for (const p of byAge.slice(0, listN)) {
     const where = onFallbackPin(p.lat, p.lng) ? 'pin' : 'MAP';
     const s = sightingsByDog.get(p.id) ?? 0;
     console.log(
@@ -198,10 +235,12 @@ async function main() {
         (s ? `  ${s} sighting(s)` : ''),
     );
   }
-  if (byAge.length > 60) {
-    // Never let a listing bound read as completeness.
+  if (byAge.length > listN) {
+    // Never let a listing bound read as completeness — and say which end
+    // was cut, so nobody assumes it was the uninteresting one.
     console.log(
-      `  … and ${byAge.length - 60} more (listing capped at 60; ALL ${byAge.length} would be expired)`,
+      `  … and ${byAge.length - listN} OLDER than these, not listed (--list=N to see more).\n` +
+        `      ALL ${byAge.length} would be expired; the histogram above is the complete picture.`,
     );
   }
 
