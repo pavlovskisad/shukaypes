@@ -12,101 +12,63 @@
 // (it injects keyframes into document.head). No native path exists yet;
 // the native map itself is a stub.
 //
-// THE FINISH IS THE MAP'S, STEP FOR STEP.
+// A HEAT BLOB WITH HARD EDGES — CONTOURS, NOT BLUR.
 //
-// Not "in the same spirit" — the same pipeline, ported primitive for
-// primitive from territoryHeatLayer's composite shader, with the band
-// thresholds READ OUT of that shader below so the two cannot drift:
+// This is the third construction, and the first two are why it looks
+// like this. Both built the chip the way the MAP builds its field: blur
+// the shape into a coverage field, then threshold that field into
+// bands. On the map that is right — a claim is hundreds of pixels wide,
+// so the blurred ramp lands entirely in the border and the interior is
+// a solid, evenly-held body. Shrink the same construction to 92px and
+// both halves fail: the ramp is a quarter of the whole chip (fog), and
+// tightening it until the edge is crisp leaves the interior a single
+// flat step — a sticker in the owner's colour, with none of the heat.
 //
-//   shader                        →  filter primitive
-//   ─────────────────────────────────────────────────────────────
-//   gaussian blur of coverage     →  feGaussianBlur on SourceAlpha
-//   fbm edge meander              →  feTurbulence + feDisplacementMap
-//   halo/body smoothstep bands    →  feFuncA table (sampled from the
-//                                    identical smoothstep maths)
-//   owner colour                  →  feFlood + feComposite in
-//   bright rim at each band       →  second feFuncA table, white flood
+// So the bands are drawn as CONTOURS instead. Each is the silhouette
+// eroded a little further inward (feMorphology, a true offset — not a
+// blur, which would round the shape away), filled at the same modest
+// alpha, and stacked: where four bands overlap the colour has built up
+// four times, so density rises toward the middle exactly as a heat
+// field does, while every band boundary stays a hard step. Crisp, and
+// hot in the core.
 //
-// The shader's PUFF — relief lit from the coverage gradient — is the one
-// stage left out, and it was tried: feDiffuseLighting reproduces it
-// exactly (its normals are that same gradient). On the map it reads as a
-// cushion because a claim is hundreds of pixels wide. At 92px it only
-// ever lands on the pale halo band, darkening it to a grey ring that
-// reads as a blurry drop shadow around the chip — the single thing that
-// made these look out of focus. Relief needs room; the chip hasn't got
-// any.
-//
-// One deliberate difference, and it is a background difference rather
-// than a rendering one: on the map the field MULTIPLIES the paper, here
-// it composites over the card. Over white those are the same operation,
-// so the hue is identical and the chip reads a shade lighter than the
-// same claim does over map paper. The core saturation lift and the
-// large-scale density grain are dropped — both work at scales (a whole
-// claim, ~260px of city) that a 92px chip has no room to show.
+// What carries over from the map unchanged: the owner's hue, the fill
+// alpha it was contrast-tuned at, and the meander that keeps a border
+// from looking machined. What is deliberately gone is the puff relief —
+// feDiffuseLighting reproduces it exactly, but at this size it only
+// ever lands on the outermost band and darkens it to a grey ring that
+// reads as a blurry drop shadow. Relief needs room the chip hasn't got.
 
-import { useId, useMemo } from 'react';
+import React, { useId, useMemo } from 'react';
 
-// Big enough that the blur and the bands survive rasterisation, small
-// enough that 48-corner polygons stay cheap. Rendered size is per-use.
+// Big enough that erosion steps and the meander survive rasterisation,
+// small enough that 48-corner polygons stay cheap. Size is per-use.
 const BOX = 64;
-// Room inside the box for the halo band and the meander to breathe —
-// the field spreads visibly past the polygon it grew from.
-const PAD = 7;
+// Room for the meander to bend into. The field no longer spreads past
+// the polygon — the outermost contour IS the polygon — so this is much
+// tighter than the blurred versions needed, and the silhouette is
+// correspondingly bigger in its box.
+const PAD = 6;
 
-// ── The shader's own numbers ────────────────────────────────────────
-// Kept as literal copies of territoryHeatLayer's composite stage. If
-// those move, move these: the whole point of this file is that a chip
-// and the ground it stands for are the same picture.
-const FILL_ALPHA = 0.42;
-const HALO_LO = 0.28;
-const HALO_HI = 0.4;
-const BODY_LO = 0.55;
-const BODY_HI = 0.74;
-const HALO_WEIGHT = 0.38;
-const BODY_WEIGHT = 0.62;
+// ── Contours ────────────────────────────────────────────────────────
+// Erosion depth per band, in viewBox units, outermost first. The first
+// is zero: band one is the claim's true outline, so the shape a player
+// recognises from the map is drawn exactly, and every hotter band sits
+// inside it. Depths are uneven on purpose — tight near the edge where
+// the eye reads contour spacing as steepness, wider toward the middle
+// so the core reads as a plateau rather than a bullseye.
+const CONTOURS = [0, 2.4, 5.2, 8.6];
+// Alpha PER BAND, not cumulative. Four of these stack to ~0.55 in the
+// core; the map's field peaks at 0.42 over pale paper, and the chip
+// sits on a white card, so a slightly higher peak lands at the same
+// density. The outermost band alone is the palest — the claim's cool
+// fringe.
+const BAND_ALPHA = 0.18;
+// Just enough blur to put back the antialiasing erosion throws away.
+// Any more and the steps start to smear into each other, which is the
+// fog this construction exists to replace.
+const EDGE_SOFTEN = 0.3;
 
-const smoothstep = (e0: number, e1: number, x: number): number => {
-  const t = Math.min(1, Math.max(0, (x - e0) / (e1 - e0)));
-  return t * t * (3 - 2 * t);
-};
-
-// TWO soft steps, not one — a pale halo, then the dense body. The gap
-// between fringe and body is the contrast that sells the field.
-const shapedAt = (c: number): number =>
-  HALO_WEIGHT * smoothstep(HALO_LO, HALO_HI, c) +
-  BODY_WEIGHT * smoothstep(BODY_LO, BODY_HI, c);
-
-// Bright rims where each band is born — the hot outline of a heat blob.
-const rimAt = (c: number): number =>
-  smoothstep(0.28, 0.36, c) * (1 - smoothstep(0.38, 0.5, c)) * 0.34 +
-  smoothstep(0.55, 0.63, c) * (1 - smoothstep(0.65, 0.78, c)) * 0.22;
-
-// feFuncA maps input alpha through a piecewise-linear table, so sampling
-// the shader's curves finely enough IS the shader's curve.
-const SAMPLES = 33;
-const tableOf = (f: (c: number) => number): string =>
-  Array.from({ length: SAMPLES }, (_, i) => f(i / (SAMPLES - 1)).toFixed(4)).join(' ');
-
-const SHAPED_TABLE = tableOf((c) => shapedAt(c) * FILL_ALPHA);
-// Gated by the body's own alpha so the rim can never paint where there
-// is no field — the shader's `min(1.0, cov * 4.0)` guard in spirit.
-const RIM_TABLE = tableOf((c) => rimAt(c) * shapedAt(c) * FILL_ALPHA);
-
-// The coverage ramp, in viewBox units — the one number here that is
-// deliberately TIGHTER than the map's proportion rather than equal to
-// it, and the reason is size. On the map a claim is hundreds of pixels
-// wide and a wide ramp reads as a soft edge; at 92px the same
-// proportion spends a quarter of the whole chip on fringe, and the
-// shape stops being a shape. So the pipeline stays the map's and the
-// ramp comes in: a crisp body, the bands drawn close to the edge.
-// Below about 0.8 the bands have no room left and the chip flattens
-// into a sticker.
-const BLUR = 0.9;
-// Edge meander. Low frequency and small amplitude: on the map the
-// wobble has ~170px features, and a whole territory drawn at 64 units
-// only ever shows the first bend of one.
-const WOBBLE = 0.9;
-const WOBBLE_FREQ = 0.03;
 
 export function TerritoryMini({
   points,
@@ -147,17 +109,6 @@ export function TerritoryMini({
       )
       .join(' ');
   }, [points]);
-  // Every chip meanders differently — one shared seed would give a row
-  // of blobs bent the same way, which reads as a pattern rather than as
-  // ground. Derived from the id so a chip is stable across renders.
-  const seed = useMemo(() => {
-    let h = 2166136261;
-    for (let i = 0; i < uid.length; i++) {
-      h ^= uid.charCodeAt(i);
-      h = Math.imul(h, 16777619);
-    }
-    return (h >>> 0) % 100;
-  }, [uid]);
 
   return (
     <svg
@@ -165,67 +116,74 @@ export function TerritoryMini({
       width={size}
       height={size}
       aria-hidden
-      // sRGB, not the filter default of linearRGB: the map composites in
-      // sRGB, and in linear the same alphas come out visibly paler.
       style={{ overflow: 'visible' }}
     >
       <defs>
         <filter
           id={fid}
-          x="-25%"
-          y="-25%"
-          width="150%"
-          height="150%"
+          x="-15%"
+          y="-15%"
+          width="130%"
+          height="130%"
+          // sRGB, not the filter default of linearRGB: the map composites
+          // in sRGB, and in linear the same alphas come out visibly paler.
           colorInterpolationFilters="sRGB"
         >
-          {/* The coverage field: what the shader blurs offscreen. */}
-          <feGaussianBlur in="SourceAlpha" stdDeviation={BLUR} result="cov" />
-          {/* …bent a little, so the border meanders instead of being
-              uniformly rounded. */}
-          <feTurbulence
-            type="fractalNoise"
-            baseFrequency={WOBBLE_FREQ}
-            numOctaves={2}
-            seed={seed}
-            result="noise"
-          />
-          <feDisplacementMap
-            in="cov"
-            in2="noise"
-            scale={WOBBLE}
-            xChannelSelector="R"
-            yChannelSelector="G"
-            result="field"
-          />
-
-          {/* Coverage → the halo/body bands, at the map's own alpha. */}
-          <feComponentTransfer in="field" result="shapedA">
-            <feFuncA type="table" tableValues={SHAPED_TABLE} />
-          </feComponentTransfer>
+          {/* No blur and no meander before the contours, and both were
+              tried. Softening the silhouette first, or bending it with
+              turbulence, feeds every erosion below a fuzzy edge — the
+              bands come back melted into one another, which is the
+              gradient this construction exists to replace. A real
+              claim's outline already meanders (it is the hull of a walk);
+              it does not need noise to look organic. */}
           <feFlood floodColor={color} result="hue" />
-          <feComposite in="hue" in2="shapedA" operator="in" result="body" />
 
-          {/* The bright rim each band is born with. */}
-          <feComponentTransfer in="field" result="rimA">
-            <feFuncA type="table" tableValues={RIM_TABLE} />
-          </feComponentTransfer>
-          <feFlood floodColor="#ffffff" result="white" />
-          <feComposite in="white" in2="rimA" operator="in" result="rim" />
+          {CONTOURS.map((depth, i) => (
+            <React.Fragment key={i}>
+              {/* Erode inward — a true offset of the outline, so a
+                  claim's fingers and inlets survive as contour detail
+                  instead of being rounded away. Depth 0 passes the
+                  silhouette through untouched. */}
+              {depth > 0 ? (
+                <feMorphology
+                  in="SourceAlpha"
+                  operator="erode"
+                  radius={depth}
+                  result={`e${i}`}
+                />
+              ) : null}
+              <feComponentTransfer in={depth > 0 ? `e${i}` : 'SourceAlpha'} result={`m${i}`}>
+                <feFuncA type="linear" slope={BAND_ALPHA} intercept={0} />
+              </feComponentTransfer>
+              <feComposite in="hue" in2={`m${i}`} operator="in" result={`band${i}`} />
+            </React.Fragment>
+          ))}
 
-          <feMerge>
-            <feMergeNode in="body" />
-            <feMergeNode in="rim" />
+          {/* Stacked, so the colour builds up where the bands overlap —
+              which is what makes the core hot without any band being
+              painted darker than the rest. */}
+          <feMerge result="bands">
+            {CONTOURS.map((_, i) => (
+              <feMergeNode key={i} in={`band${i}`} />
+            ))}
           </feMerge>
+          {/* ONE softening pass over the finished stack rather than one
+              per band: erosion returns a hard aliased edge (it takes the
+              minimum over its kernel, which throws the antialiasing
+              away), and this puts just enough back. Doing it once is
+              four primitives cheaper on a sheet that can hold a hundred
+              of these. */}
+          <feGaussianBlur in="bands" stdDeviation={EDGE_SOFTEN} />
         </filter>
       </defs>
-      {/* The source is a bare silhouette — every bit of the look above is
-          the filter, exactly as every bit of the map's is the shader.
-          No shape (older server, or ground lost mid-read) falls back to a
-          disc, which the same filter turns into the same kind of field. */}
+      {/* The source is a bare silhouette — every band above is the
+          filter's doing. No shape (older server, or ground lost
+          mid-read) falls back to a disc, which the same contours turn
+          into the same kind of blob. */}
       {pts ? (
         <polygon points={pts} fill="#000" filter={`url(#${fid})`} />
       ) : (
-        <circle cx={BOX / 2} cy={BOX / 2} r={BOX / 4.4} fill="#000" filter={`url(#${fid})`} />
+        <circle cx={BOX / 2} cy={BOX / 2} r={BOX / 4} fill="#000" filter={`url(#${fid})`} />
       )}
     </svg>
   );
