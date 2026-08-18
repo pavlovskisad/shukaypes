@@ -52,7 +52,6 @@ import type {
   Map as MlMap,
 } from 'maplibre-gl';
 import earcut from 'earcut';
-import { urlTune } from './territoryField';
 import type { TerritoryShape } from '../../services/api';
 
 export const TERRITORY_HEAT_LAYER_ID = 'territory-heat';
@@ -163,68 +162,31 @@ const MIN_RADIUS_PX = 10; // CSS px
 // what it was before any of that — two soft steps, a fringe and a body.
 
 
-// EXPERIMENT — the board chip's construction, on the map. Off unless
-// the URL says ?contours=1, so this costs nothing until somebody asks
-// for it, and comparing the two is a page reload rather than a build.
+// WHY THERE IS NO CONTOUR MODE HERE, THOUGH IT WAS TRIED.
 //
-// The chip draws its heat as CONTOURS: nested bands, each a hard step,
-// stacked so the colour builds toward a hot core (see TerritoryMini).
-// It gets its bands by eroding the silhouette, which a fragment shader
-// has no cheap way to do — but it does not need one. Thresholding a
-// blurred coverage field ABOVE 0.5 is an erosion: for a gaussian of
-// width σ, threshold t pulls the edge in by about σ·Φ⁻¹(t). So the
-// same wide blur this layer already computes, cut at four rising
-// levels instead of ramped through two smooth ones, gives the chip's
-// nested contours for the price of a few extra steps in the composite.
+// The board chip draws its heat as nested hard-edged bands, and the same
+// thing is cheap to get here: thresholding a blurred coverage field above
+// 0.5 IS an erosion (for a gaussian of width σ, threshold t pulls the
+// edge in by about σ·Φ⁻¹(t)), so the blur this layer already computes,
+// cut at four rising levels instead of ramped through two, gives the
+// chip's contours for a few extra steps in the composite. It shipped
+// behind ?contours=1 for a while.
 //
-// The blur goes WIDER in this mode, not narrower, which sounds
-// backwards for a look whose whole point is crispness: the bands are
-// hard steps, so the blur is no longer visible AS blur — it is the
-// distance field the thresholds carve up, and a wider one spreads the
-// contours further inside the claim instead of crowding them at the
-// rim.
+// It does not work, and the reason is structural rather than a tuning
+// miss. On a claim that stands alone it is lovely. On a district where
+// claims TILE — most of a lived-in city — it collapses into a wash with
+// no borders at all: the contours are cut from COVERAGE, and coverage
+// says how much ground is painted, not who holds it. Where two owners
+// meet, both sides are painted, coverage never dips, and every threshold
+// fires on both sides at once. A contour can only form where a claim
+// borders NOTHING. Checked at two blur widths to be sure it was not just
+// colours smearing; the wash was there at both.
 //
-// WHAT IT LOOKS LIKE, HAVING TRIED IT. On a claim that stands alone it
-// is lovely, and it is the chip's picture at map scale: nested bands,
-// hot core, crisp steps. On a district where claims TILE — which is
-// most of a lived-in city — it collapses into a wash with no borders
-// at all, and that is structural rather than a tuning problem. These
-// contours are cut from COVERAGE, and coverage is what the field has,
-// not who holds it: where two owners meet, both sides are painted, so
-// coverage never dips and every threshold fires on both sides at once.
-// A contour can only appear where a claim borders NOTHING. Checked at
-// two blur widths to be sure it was not just colours smearing; the
-// wash is there at both.
-//
-// Making it work everywhere needs a per-owner distance field — each
-// owner's coverage eroded separately — which means a pass per owner,
-// or an owner id encoded per pixel and the erosion done against that.
-// Either is a real change to a layer whose whole design is ONE pass
-// with a data-driven colour, so it is not a thing to slip in behind a
-// flag. Hence: off by default, and not a candidate for default until
-// that is solved.
-const CONTOURS_ON =
-  typeof window !== 'undefined' &&
-  /[?&]contours=1/.test(window.location.search);
-// Rising thresholds on the coverage field. The first is 0.5 — the
-// claim's true outline, so the shape stays exactly where the server put
-// it — and each one after erodes further in.
-const CONTOUR_STEPS = [0.5, 0.72, 0.88, 0.965];
-// Per band, not cumulative: four of these stack to ~0.55 in the core,
-// matching the chip.
-const CONTOUR_ALPHA = 0.18;
-// Half-width of the antialiasing on each step, in coverage units. Small
-// enough to read as a hard edge, wide enough not to crawl with pixels.
-const CONTOUR_AA = 0.018;
-// The distance field the steps carve up — see above for why it widens.
-// No pixel ceiling: the buffer resolution adapts to whatever this costs
-// at the current zoom, same as the default mode's radius.
-const CONTOUR_SOFT_M = 90;
-// The steps as one GLSL expression, built here so the thresholds above
-// are the only place they are written down.
-const CONTOUR_SUM = CONTOUR_STEPS.map(
-  (t) => 'smoothstep(' + t.toFixed(3) + ' - CAA, ' + t.toFixed(3) + ' + CAA, c)',
-).join(' + ');
+// Making it work needs a per-owner distance field — each owner's
+// coverage eroded separately, so a pass per owner or an owner id encoded
+// per pixel — which is a different layer from this one, whose whole
+// design is ONE pass with a data-driven colour. Left here as a finding
+// rather than as a flag: the code is gone, the answer isn't.
 
 // The noise lattice repeats every this many cells, so the world position
 // of the viewport can be wrapped into one tile before it reaches the
@@ -273,7 +235,7 @@ const NOISE_FADE_HI = 14.8;
 // 0.34 is as low as it goes: below about 0.32 the cousins in the palette
 // start collapsing into each other, and telling whose ground you are on
 // is the map's first job.
-const FILL_ALPHA = urlTune('field', 0.34);
+const FILL_ALPHA = 0.34;
 
 const POLY_VERT = `
 attribute vec2 a_pos;
@@ -331,14 +293,10 @@ void main() {
 // glass. See the render() comment for how, and for the version of this
 // that only claimed to.
 const COMP_FRAG = `
-#define CAA ${CONTOUR_AA.toFixed(4)}
-#define CBAND ${CONTOUR_ALPHA.toFixed(4)}
-
 precision highp float;
 varying vec2 v_uv;
 uniform sampler2D u_tex;
 uniform float u_alpha;
-uniform float u_contour; // 1 = the board chip's contour bands
 uniform float u_dpr;
 // Screen → world, for the noise below. u_half is the viewport centre in
 // CSS px; u_toWorld turns a pixel's offset from it into world pixels
@@ -416,12 +374,6 @@ void main() {
   float halo = smoothstep(0.28, 0.40, c);
   float body = smoothstep(0.55, 0.74, c);
   float shaped = 0.38 * halo + 0.62 * body;
-  if (u_contour > 0.5) {
-    // Four hard steps instead of two soft ramps — the chip's contours.
-    // Each smoothstep spans a couple of hundredths of coverage, which
-    // is antialiasing, not a gradient.
-    shaped = (${CONTOUR_SUM}) * CBAND / u_alpha;
-  }
   if (shaped < 0.01) discard;
   vec3 col = fieldColor(s);
   // Bright rims where each band is born — the hot outline of a heat blob.
@@ -635,7 +587,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
   let uCompNoiseFade: WebGLUniformLocation | null = null;
   let uCompDpr: WebGLUniformLocation | null = null;
   let uCompProbe: WebGLUniformLocation | null = null;
-  let uCompContour: WebGLUniformLocation | null = null;
   // Blur radius in low-res texels, written by prerender each frame and
   // read back when render sets the seam-probe offsets.
   let radiusTex = 0;
@@ -746,7 +697,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
       uCompNoiseFade = gl.getUniformLocation(compProg, 'u_noiseFade');
       uCompDpr = gl.getUniformLocation(compProg, 'u_dpr');
       uCompProbe = gl.getUniformLocation(compProg, 'u_probe');
-      uCompContour = gl.getUniformLocation(compProg, 'u_contour');
       gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
       gl.bufferData(
         gl.ARRAY_BUFFER,
@@ -792,8 +742,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         const zoom = mapRef.getZoom();
         const lat = mapRef.getCenter().lat;
         const mpp = (78271.517 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
-        const softM = CONTOURS_ON ? CONTOUR_SOFT_M : EDGE_SOFT_M;
-        const cssR = Math.max(MIN_RADIUS_PX, softM / mpp);
+        const cssR = Math.max(MIN_RADIUS_PX, EDGE_SOFT_M / mpp);
         const downscale = downscaleFor(cssR);
         if (!ensureTargets(gl, downscale) || !targets) return;
         const [A, B, P] = targets;
@@ -900,7 +849,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         gl.bindTexture(gl.TEXTURE_2D, A.tex);
         gl.uniform1i(uCompTex, 0);
         gl.uniform1f(uCompAlpha, FILL_ALPHA);
-        gl.uniform1f(uCompContour, CONTOURS_ON ? 1 : 0);
         const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
         // ── Anchor the meander and grain to the ground ──────────────────
         // The first version of this projected the map CENTRE and offset
