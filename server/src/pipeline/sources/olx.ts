@@ -53,6 +53,40 @@ const LISTING_URLS = [
   'https://www.olx.ua/uk/list/q-загубилася/?search%5Bcity_id%5D=8',
 ];
 
+// SORT BY NEWEST, OR THE POLLER READS THE SAME PAGE FOREVER.
+//
+// This is the fix for a pipeline that had quietly stopped producing
+// anything. Measured on production, 18 Aug — a full tick, no errors:
+//
+//     [olx] discovered 506, skipped 506, parsed 0, inserted 0
+//
+// Every discovered URL was already in scrape_log, so every one stopped at
+// the seenUrls gate. Nothing reached the ad fetch, nothing was parsed,
+// no pet and no ad body had been written for days. It looked healthy in
+// every log line: no errors, coverage up from 251 to 508 after the retry
+// fix. Discovery had doubled and yield stayed at zero.
+//
+// The cause is at the top of this file, in its own non-goals: each
+// listing URL serves the FIRST PAGE ONLY. OLX orders that page by
+// relevance and promotion by default, not by date, so page one is a
+// nearly-fixed set. A new ad joins the middle of the relevance order and
+// this scraper never sees it. Polling hourly changes nothing when the
+// page does not change.
+//
+// `search[order]=created_at:desc` puts the newest first, which is what an
+// hourly poller needs: anything posted since the last tick is at the top.
+// An unknown query parameter is ignored by OLX, so if this key is ever
+// wrong the behaviour is exactly what it is today — the tick log says
+// which, because `skipped` drops below `discovered` the moment genuinely
+// new URLs arrive.
+const NEWEST_FIRST = { 'search[order]': 'created_at:desc' };
+
+function sortedByNewest(listUrl: string): string {
+  const u = new URL(listUrl);
+  for (const [k, v] of Object.entries(NEWEST_FIRST)) u.searchParams.set(k, v);
+  return u.toString();
+}
+
 // Title-level filter + rehoming guard live in pipeline/keywords so
 // every source (Telegram next) runs the same rules. Rehoming wins over
 // lost even when urgency words are present — e.g. "ТЕРМІНОВО шукає дім"
@@ -179,7 +213,8 @@ export class OlxSource implements Source {
 
     // 1. Fetch every listing page, collect card candidates.
     const allCards: Card[] = [];
-    for (const listUrl of LISTING_URLS) {
+    for (const rawListUrl of LISTING_URLS) {
+      const listUrl = sortedByNewest(rawListUrl);
       try {
         const html = await fetchText(listUrl);
         const cards = parseCards(html, listUrl);
@@ -207,6 +242,8 @@ export class OlxSource implements Source {
     const seenUrls = new Set(alreadySeen.map((r) => r.url));
 
     // 3. For each new card: title-filter, then fetch body, parse, upsert.
+    summary.fresh = deduped.filter((c) => !seenUrls.has(c.url)).length;
+
     for (const card of deduped) {
       if (seenUrls.has(card.url)) {
         summary.skipped++;
