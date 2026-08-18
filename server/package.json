@@ -21,7 +21,7 @@
     "expire:out-of-area": "tsx src/db/expire-out-of-area.ts",
     "expire:pet": "tsx src/db/expire-pet.ts",
     "expire:no-post": "tsx src/db/expire-no-post.ts",
-    "check": "pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:redact && pnpm check:ad-body && pnpm check:ad-extract && pnpm check:route-coverage",
+    "check": "pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:redact && pnpm check:ad-body && pnpm check:ad-extract && pnpm check:found-report && pnpm check:route-coverage",
     "check:same-pet": "tsx src/pipeline/samePet.check.ts",
     "render:dedupe-sql": "tsx src/db/render-dedupe-sql.ts",
     "check:out-of-area": "tsx src/pipeline/outOfArea.check.ts",
@@ -35,7 +35,9 @@
     "check:route-coverage": "tsx src/lib/routeCoverage.check.ts",
     "check:ad-extract": "tsx src/pipeline/sources/extractAdBody.check.ts",
     "probe:ad-phone": "tsx src/db/probe-ad-phone.ts",
-    "audit:ingest": "tsx src/db/audit-ingest.ts"
+    "audit:ingest": "tsx src/db/audit-ingest.ts",
+    "check:found-report": "tsx src/pipeline/foundReport.check.ts",
+    "flag:found-reports": "tsx src/db/flag-found-reports.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

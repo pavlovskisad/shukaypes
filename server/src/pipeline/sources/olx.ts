@@ -20,6 +20,7 @@ import { upsertLostDog } from '../upsert.js';
 import { emptySummary, recordError, type Source, type SourceRunSummary } from '../source.js';
 import { scrapeFetch } from '../../lib/scrapeFetch.js';
 import {
+  looksLikeFoundReport,
   looksLikeLostPet,
   looksLikeRehoming,
 } from '../keywords.js';
@@ -318,7 +319,15 @@ export class OlxSource implements Source {
           continue;
         }
 
-        const result = await upsertLostDog({ parsed, source: SOURCE });
+        // Decided from the listing title, not the parsed body: «песик
+        // (знайдений)» says it plainly there, and the parser has no field
+        // for it. Stored rather than filtered out — a found stray needs
+        // its owner found, which is a real job deserving its own screen.
+        const result = await upsertLostDog({
+          parsed,
+          source: SOURCE,
+          isFoundReport: looksLikeFoundReport(card.title),
+        });
         if (result.action === 'inserted') summary.inserted++;
         else if (result.action === 'updated') summary.updated++;
         else if (result.action === 'duplicate') summary.duplicate++;

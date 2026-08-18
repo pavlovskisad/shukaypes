@@ -136,6 +136,13 @@ export async function fetchNearbyLostDogs(
     .where(
       and(
         eq(schema.lostDogs.status, 'active'),
+        // FOUND STRAYS ARE NOT SEARCHES. Somebody has the animal safe and
+        // wants its owner; sending a walker to comb the streets for it is
+        // a wasted walk and reads as the app not knowing what it is
+        // talking about. They stay in the table — a found stray genuinely
+        // needs its owner found, and that deserves its own screen — but
+        // they do not belong in «загублені».
+        eq(schema.lostDogs.isFoundReport, false),
         not(
           and(
             eq(schema.lostDogs.lastSeenLat, FALLBACK_LAT),

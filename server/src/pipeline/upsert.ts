@@ -61,9 +61,19 @@ interface UpsertInput {
   parsed: ParsedDog;
   source: string;          // 'admin-sideload' | 'telegram:<channel>' | 'olx' | ...
   reportedBy?: string | null; // user id if the sideload came from an authenticated user
+  // Somebody HAS this animal and wants its owner, rather than having lost
+  // it. Decided from the LISTING TITLE by the caller, because that is
+  // where the distinction is stated plainly — «песик (знайдений)» — and
+  // the title is not part of ParsedDog.
+  isFoundReport?: boolean;
 }
 
-export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput): Promise<IngestResult> {
+export async function upsertLostDog({
+  parsed,
+  source,
+  reportedBy,
+  isFoundReport,
+}: UpsertInput): Promise<IngestResult> {
   // Named-city gate, before the coord gate. The bbox check below can
   // only reject a pet whose coords resolved somewhere real, and a post
   // about a cat in Uzhhorod almost never geocodes to anything — it
@@ -222,6 +232,7 @@ export async function upsertLostDog({ parsed, source, reportedBy }: UpsertInput)
     rewardPoints: parsed.rewardPoints,
     source,
     status: parsed.urgency === 'resolved' ? 'found' : 'active',
+    isFoundReport: isFoundReport ?? false,
     reportedBy: reportedBy ?? null,
   });
   return { id, action: 'inserted', parsed };

@@ -133,6 +133,11 @@ export const lostDogs = pgTable(
     rewardPoints: integer('reward_points').notNull().default(100),
     source: text('source').notNull().default('in_app'), // scrape | in_app
     status: text('status').notNull().default('active'), // active | found | expired
+    // Somebody HAS this animal and is looking for its owner, rather than
+    // having lost it. Kept in the table rather than filtered at ingest so
+    // these can get their own screen later; for now the map query simply
+    // does not return them. See migration 0035.
+    isFoundReport: boolean('is_found_report').notNull().default(false),
     reportedBy: text('reported_by').references(() => users.id, { onDelete: 'set null' }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },

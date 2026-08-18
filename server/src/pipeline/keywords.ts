@@ -34,3 +34,30 @@ export function looksLikeLostPet(title: string): boolean {
 export function looksLikeRehoming(title: string): boolean {
   return REHOMING_KEYWORDS.test(title);
 }
+
+// FOUND REPORTS ARE NOT SEARCHES, and the app has been treating them as
+// one. «песик (знайдений)» — somebody has the animal safe indoors and is
+// looking for its OWNER — was appearing under «загублені» with a
+// «терміново» badge, asking a walker to go comb the streets for a dog
+// already sitting on a stranger's sofa.
+//
+// They are ingested on purpose: LOST_KEYWORDS includes знайд|знайш and
+// four listing queries search for exactly them, because a found stray
+// genuinely needs its owner found. That is a real job. It is just not
+// the same job, and it deserves its own screen rather than a misleading
+// place on this one.
+//
+// The distinction is "found words present, lost words absent". A post
+// that says both — «Пропала собака… знайшлася» — is left as lost, since
+// the ambiguity is better resolved by a human than by a regex.
+//
+// знайт is deliberately NOT a found stem: «Допоможіть знайти собаку» is
+// somebody ASKING for help finding, which is the most lost a post can be.
+const FOUND_STEMS = /(знайд|знайш|найден|нашли|прибил|пристал|found)/i;
+const LOST_STEMS = /(пропа|загуб|зник|потер|сбеж|втеч|розшук|lost|missing)/i;
+
+/** Somebody HAS this animal and wants its owner — not a search to join. */
+export function looksLikeFoundReport(title: string): boolean {
+  return FOUND_STEMS.test(title) && !LOST_STEMS.test(title);
+}
+
