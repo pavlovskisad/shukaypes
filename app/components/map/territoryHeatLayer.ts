@@ -52,7 +52,7 @@ import type {
   Map as MlMap,
 } from 'maplibre-gl';
 import earcut from 'earcut';
-import { publishTerritoryField, SEAM_FADE, urlTune } from './territoryField';
+import { urlTune } from './territoryField';
 import type { TerritoryShape } from '../../services/api';
 
 export const TERRITORY_HEAT_LAYER_ID = 'territory-heat';
@@ -143,23 +143,25 @@ const MIN_RADIUS_PX = 10; // CSS px
 // that job now, and the radius is free to be the number of metres it
 // says it is.
 
-// ── How deep inside your own ground am I? ────────────────────────────
-// The shape's edge is a 26m ramp, so coverage is a flat 1.0 two streets
-// in: cutting more bands out of it can only ever decorate the border,
-// never concentrate a claim's strength toward its middle. That needs a
-// second, much wider field — the same coverage blurred until it stops
-// being an edge and becomes a distance — which is what these extra
-// iterations build. Gaussians compose, so re-running the kernel widens
-// it by √n rather than needing a kernel nobody can sample cleanly.
-const DEPTH_ITERS = 6;
-// The wide field alone says "deep inside CLAIMED ground", not "deep
-// inside YOURS" — where two owners meet, both sides are painted and it
-// never dips, the same wall the contour experiment hit. The way past it
-// without a pass per owner: the wide blur MIXES the neighbour's colour
-// in, and the sharp field does not. How far the two colours have drifted
-// apart is therefore a per-owner depth, free, from textures already
-// bound. SEAM_FADE (in territoryField.ts, because the buildings read the
-// field the same way) scales that drift into a 0..1 fade.
+// A NOTE ON WHAT IS NOT HERE ANY MORE.
+//
+// This field briefly carried a second, much wider blur — a "how deep
+// inside your own ground am I" distance — so a third band could put a
+// claim's strongest colour in its middle. It came from trying to land
+// the board chip's nested contours on the map, and it went the way the
+// contour experiment above went: on real ground, which is a hull of
+// walks rather than a disc, the wide field found a local maximum
+// wherever a few walks crossed, so a district lit up as a scatter of
+// hot islands with pale water between them. It was also six extra blur
+// passes, a third render target, and a texture the buildings layer had
+// to reach across for.
+//
+// What replaced it is simpler and belongs where the question is asked:
+// the buildings carry ONE beacon per zone, a radial falloff from the
+// middle of an owner's ground, exactly as the supersniff preview lights
+// a place (see zonesFor in threeBuildingsLayer). The ground goes back to
+// what it was before any of that — two soft steps, a fringe and a body.
+
 
 // EXPERIMENT — the board chip's construction, on the map. Off unless
 // the URL says ?contours=1, so this costs nothing until somebody asks
@@ -335,8 +337,6 @@ const COMP_FRAG = `
 precision highp float;
 varying vec2 v_uv;
 uniform sampler2D u_tex;
-// The same field blurred much wider — a distance rather than an edge.
-uniform sampler2D u_depth;
 uniform float u_alpha;
 uniform float u_contour; // 1 = the board chip's contour bands
 uniform float u_dpr;
@@ -405,36 +405,17 @@ void main() {
   float wob = (fbm2(wpx / 170.0 + u_nOrigin.xy) - 0.5) * 0.34
             * min(1.0, cov * 4.0) * u_noiseFade;
   float c = cov + wob;
-  // THREE soft steps — a pale fringe, a body, and a dense core. This is
-  // most of what makes a claim read as a heat field with depth (the
-  // contour-band look) rather than a blurred sticker, and the third step
-  // is what pulls the strength inward: the top third of the weight now
-  // waits until coverage is past 0.80, so a claim's hottest ground is a
-  // smaller patch nearer its middle and the approach to it is a longer
-  // climb. Two steps put more than half the weight on at 0.55, which
-  // made the strong part broad and the whole field heavier than it
-  // needed to be.
-  //
-  // Coverage saturates across the interior of one big polygon, so on a
-  // solid claim these steps land in its border. The concentration shows
-  // where real ground is: a claim is a hull of walks, dozens of pieces
-  // with gaps, and the blur turns that into a genuine density field —
-  // dense where somebody walks daily, thin at the edges of their range.
-  float halo = smoothstep(0.26, 0.40, c);
-  float body = smoothstep(0.55, 0.72, c);
-  // The third step reads the WIDE field, not this one, and that is what
-  // makes it a core rather than one more ring around the edge: it asks
-  // how far inside the claim this pixel is, over hundreds of metres,
-  // where the sharp field has been saturated since the second street.
-  vec4 dp = texture2D(u_depth, uv);
-  // ...and how much of the neighbour has bled into the wide colour,
-  // which is what tells one owner's middle from a shared border. Deep in
-  // your own ground the two colours agree and this is 1; approaching
-  // somebody else's it falls away before the seam arrives.
-  float mine = 1.0 - clamp(length(fieldColor(dp) - fieldColor(s)) * ${SEAM_FADE.toFixed(2)}, 0.0, 1.0);
-  float deep = dp.a * mine;
-  float core = smoothstep(0.30, 0.80, deep);
-  float shaped = 0.32 * halo + 0.38 * body + 0.30 * core;
+  // TWO soft steps instead of one — a pale halo, then the dense body.
+  // This is most of what makes a claim read as a heat field with depth
+  // rather than a blurred sticker. The halo sits at well under half
+  // strength: the first cut had it at 0.55 and the two levels blurred
+  // into one on a phone — the gap between fringe and body IS the
+  // contrast that sells the field. (A third step keyed to a wide depth
+  // field lived here for a while; see the note by the constants for why
+  // it went.)
+  float halo = smoothstep(0.28, 0.40, c);
+  float body = smoothstep(0.55, 0.74, c);
+  float shaped = 0.38 * halo + 0.62 * body;
   if (u_contour > 0.5) {
     // Four hard steps instead of two soft ramps — the chip's contours.
     // Each smoothstep spans a couple of hundredths of coverage, which
@@ -444,13 +425,10 @@ void main() {
   if (shaped < 0.01) discard;
   vec3 col = fieldColor(s);
   // Bright rims where each band is born — the hot outline of a heat blob.
-  // They live in the coverage ramp, so they trace only OUTER edges
-  // against unclaimed ground; interior coverage is ~1 throughout. The
-  // third is deliberately the faintest: it draws the new core's outline
-  // without lighting up the middle of every claim.
-  float rim = smoothstep(0.26, 0.36, c) * (1.0 - smoothstep(0.38, 0.50, c)) * 0.34
-            + smoothstep(0.55, 0.63, c) * (1.0 - smoothstep(0.65, 0.76, c)) * 0.22
-            + smoothstep(0.28, 0.38, deep) * (1.0 - smoothstep(0.42, 0.60, deep)) * 0.14;
+  // Both live in the coverage ramp, so they trace only OUTER edges
+  // against unclaimed ground; interior coverage is ~1 throughout.
+  float rim = smoothstep(0.28, 0.36, c) * (1.0 - smoothstep(0.38, 0.50, c)) * 0.34
+            + smoothstep(0.55, 0.63, c) * (1.0 - smoothstep(0.65, 0.78, c)) * 0.22;
   // Where two OWNERS meet, coverage never dips, so the rims above can't
   // fire — probe the field a blur-radius out on each axis and lighten
   // where the colour is changing fast. That puts a soft bright seam down
@@ -655,7 +633,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
   let uCompToWorld: WebGLUniformLocation | null = null;
   let uCompNOrigin: WebGLUniformLocation | null = null;
   let uCompNoiseFade: WebGLUniformLocation | null = null;
-  let uCompDepth: WebGLUniformLocation | null = null;
   let uCompDpr: WebGLUniformLocation | null = null;
   let uCompProbe: WebGLUniformLocation | null = null;
   let uCompContour: WebGLUniformLocation | null = null;
@@ -665,8 +642,8 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
 
   let quadBuf: WebGLBuffer | null = null;
   let meshBuf: WebGLBuffer | null = null;
-  // [sharp field, scratch, wide depth field, supersampled polygons]
-  let targets: [Target, Target, Target, Target] | null = null;
+  // [sharp field, scratch, supersampled polygons]
+  let targets: [Target, Target, Target] | null = null;
 
   let mesh: Mesh = { data: new Float32Array(0), count: 0, ax: 0, ay: 0 };
   let dirty = false;
@@ -677,7 +654,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
   const fail = (where: string, e?: unknown) => {
     if (failed) return;
     failed = true;
-    publishTerritoryField(null);
     // eslint-disable-next-line no-console
     console.error(`[territory-heat] ${where} — falling back to flat fill`, e ?? '');
     try {
@@ -689,7 +665,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
 
   const dropTargets = (gl: GL) => {
     if (!targets) return;
-    publishTerritoryField(null);
     for (const t of targets) {
       gl.deleteTexture(t.tex);
       gl.deleteFramebuffer(t.fbo);
@@ -708,13 +683,11 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
     dropTargets(gl);
     const a = makeTarget(gl, w, h);
     const b = makeTarget(gl, w, h);
-    // C holds the wide "how deep inside" field; A the sharp one, B the
-    // scratch both blurs bounce through.
-    const c = makeTarget(gl, w, h);
+    // A is the field, B the scratch the blur bounces through.
     // P: where the polygons land, at SUPERSAMPLE× — see the constant.
     const pp = makeTarget(gl, w * SUPERSAMPLE, h * SUPERSAMPLE);
-    if (!a || !b || !c || !pp) {
-      for (const t of [a, b, c, pp]) {
+    if (!a || !b || !pp) {
+      for (const t of [a, b, pp]) {
         if (t) {
           gl.deleteTexture(t.tex);
           gl.deleteFramebuffer(t.fbo);
@@ -723,7 +696,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
       fail('offscreen framebuffer unavailable');
       return false;
     }
-    targets = [a, b, c, pp];
+    targets = [a, b, pp];
     return true;
   };
 
@@ -771,7 +744,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
       uCompToWorld = gl.getUniformLocation(compProg, 'u_toWorld');
       uCompNOrigin = gl.getUniformLocation(compProg, 'u_nOrigin');
       uCompNoiseFade = gl.getUniformLocation(compProg, 'u_noiseFade');
-      uCompDepth = gl.getUniformLocation(compProg, 'u_depth');
       uCompDpr = gl.getUniformLocation(compProg, 'u_dpr');
       uCompProbe = gl.getUniformLocation(compProg, 'u_probe');
       uCompContour = gl.getUniformLocation(compProg, 'u_contour');
@@ -786,7 +758,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
     onRemove(_map: MlMap, gl: GL) {
       mapRef = null;
       hasContent = false;
-      publishTerritoryField(null);
       try {
         dropTargets(gl);
         if (polyProg) gl.deleteProgram(polyProg);
@@ -825,7 +796,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         const cssR = Math.max(MIN_RADIUS_PX, softM / mpp);
         const downscale = downscaleFor(cssR);
         if (!ensureTargets(gl, downscale) || !targets) return;
-        const [A, B, C, P] = targets;
+        const [A, B, P] = targets;
 
         const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
         const prevVp = gl.getParameter(gl.VIEWPORT) as Int32Array;
@@ -903,20 +874,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
           gl.drawArrays(gl.TRIANGLES, 0, 6);
         }
 
-        // 2b. Keep going, into C — the same kernel run again and again
-        // until the edge ramp has spread into a distance field. A is left
-        // alone; the composite needs both.
-        for (let i = 0; i < DEPTH_ITERS; i++) {
-          gl.bindFramebuffer(gl.FRAMEBUFFER, B.fbo);
-          gl.bindTexture(gl.TEXTURE_2D, i === 0 ? A.tex : C.tex);
-          gl.uniform2f(uBlurDir, r / 4 / A.w, 0);
-          gl.drawArrays(gl.TRIANGLES, 0, 6);
-          gl.bindFramebuffer(gl.FRAMEBUFFER, C.fbo);
-          gl.bindTexture(gl.TEXTURE_2D, B.tex);
-          gl.uniform2f(uBlurDir, 0, r / 4 / A.h);
-          gl.drawArrays(gl.TRIANGLES, 0, 6);
-        }
-
         gl.bindFramebuffer(gl.FRAMEBUFFER, prevFb);
         gl.viewport(prevVp[0]!, prevVp[1]!, prevVp[2]!, prevVp[3]!);
         if (scissorOn) gl.enable(gl.SCISSOR_TEST);
@@ -925,11 +882,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         if (stencilOn) gl.enable(gl.STENCIL_TEST);
         if (cullOn) gl.enable(gl.CULL_FACE);
         hasContent = true;
-        // Hand this frame's field to whoever else draws on this ground —
-        // the buildings read it so their paint fades the way the ground
-        // under them does. See territoryField.ts for why the ordering is
-        // safe.
-        publishTerritoryField({ sharp: A.tex, depth: C.tex, pad: PAD_F });
       } catch (e) {
         // Skip the frame, keep the map alive. Structural failures already
         // came through fail(); anything here is transient.
@@ -943,15 +895,10 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
       if (failed || !compProg || !quadBuf || !hasContent || !targets || !mapRef) return;
       try {
         const A = targets[0];
-        const C = targets[2];
         gl.useProgram(compProg);
         gl.activeTexture(gl.TEXTURE0);
         gl.bindTexture(gl.TEXTURE_2D, A.tex);
         gl.uniform1i(uCompTex, 0);
-        gl.activeTexture(gl.TEXTURE1);
-        gl.bindTexture(gl.TEXTURE_2D, C.tex);
-        gl.uniform1i(uCompDepth, 1);
-        gl.activeTexture(gl.TEXTURE0);
         gl.uniform1f(uCompAlpha, FILL_ALPHA);
         gl.uniform1f(uCompContour, CONTOURS_ON ? 1 : 0);
         const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
