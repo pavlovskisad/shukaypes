@@ -150,6 +150,130 @@ even a re-fetch, just the same verdict recomputed. The first version of
 Default is now rows attached to an active pet; `--orphans` and `--all`
 widen it deliberately.
 
+**`reopen:ads` was then deleted outright — it could not have worked.** It
+relied on the scraper rediscovering a cleared ad on a listing page, and
+the `created_at:desc` fix below means page one now shows only the ~40
+newest ads per query. A six-week-old ad is never on it again. See 0.1e.
+
+### 0.1d 18 Aug — the scraper had SATURATED, and that is why nothing arrived
+
+The answer to 0.1c, and the most important finding of the day. A clean
+tick, no errors:
+
+    [olx] discovered 506, skipped 506, parsed 0, inserted 0, errors 0
+
+Every discovered URL was already in `scrape_log`, so every one stopped at
+the `seenUrls` gate. Nothing reached the ad fetch. The body write path
+was fine all along — it was never reached.
+
+**Nothing broke. It ran out of page.** OLX inserted ~17 pets/week in
+early August with this same code. Each listing URL serves page one only
+(`olx.ts` non-goals, line 6), and OLX orders that page by RELEVANCE, not
+date — so page one is a nearly fixed set. Early on, with a small ledger,
+most of it was new. After a few weeks and 12,381 rows the scraper had
+seen everything relevance ordering would ever show it, and a genuinely
+new ad does not rank onto page one immediately. Discovery hit 100%
+already-seen and stayed there, while every log line read `tick complete`.
+
+Fix: `search[order]=created_at:desc` on every listing URL. Measured after
+deploy — `fresh` went 0 → 88 (backlog), then settles to single digits per
+tick, which is what ~a few new ads a day looks like against 24 ticks.
+
+`SourceRunSummary.fresh` was added for this: URLs never seen before,
+whatever became of them. `skipped` lumps already-seen together with
+title-filtered, so `discovered - skipped` does NOT answer it and nothing
+else did. `fresh === 0` is a log LEVEL, never an alert — ingestAlert.ts
+already documents why a per-tick "parsed nothing" rule cries wolf.
+
+**Still open at time of writing: 94 fresh ads have produced 0 pets.** All
+were rejected by the title filter. That is either the filter being too
+strict or those queries genuinely surfacing non-lost-pet traffic;
+`scrape_log.skip_reason` distinguishes `title-filter` from `rehoming` and
+would settle it. Do not assume the pipeline is healthy just because
+`fresh` is above zero — fresh ads are not pets.
+
+### 0.1e 18 Aug — the base was refreshed: 221 active pets → 78
+
+`backfill:ad-bodies` fetches each pet's ad by the URL already stored in
+`scrape_log.url` — no rediscovery, ~226 requests instead of ~12,000. Three
+outcomes, and keeping them apart is the safety property: 200 stores the
+body; 404/410 marks `skip_reason='ad-gone'`; **anything else is left
+alone**. A 403 that survived its retries says nothing about whether an ad
+exists, and treating one as gone would expire a pet somebody is still
+looking for.
+
+`expire:no-post` then expires only the `ad-gone` rows. Result:
+
+    221 active  →  78 active
+      67 with full ad text
+      11 no verdict (8 serve a 200 page we cannot parse, 3 refused)
+     143 expired — ad deleted from OLX, which for a lost pet usually
+         means found. Reversible with one UPDATE.
+
+29 sightings existed; all survived (expiring does not cascade). The owner
+confirms those were their own UI testing, not real use.
+
+**A deleted ad is the best found-signal this data has** — far better than
+an age threshold, which expires a pet still being searched for and keeps
+one that went home in April.
+
+Its dry run lists NEWEST first behind a complete age histogram. The first
+version listed the 60 oldest and capped the rest, which hid all 83 rows
+newer than the ones shown — unreadable in exactly the place a human needs
+to look.
+
+### 0.1f 18 Aug — every stored ad body was mostly CSS
+
+Caught by the owner opening one in the app. cheerio's `.text()`
+concatenates every descendant text node and a `<style>` tag's contents
+ARE a text node; OLX injects CSS-in-JS `<style>` elements inside the
+description container. Bodies opened with several hundred characters of
+`.css-4upmi{text-transform:uppercase…}` before the description.
+
+Invisible for as long as the body was only ever WRITTEN. The first time
+anything read it back was PostModal, in front of a user.
+
+`extractAdBody` now strips `style, script, noscript` first, and moved to
+`pipeline/sources/adHtml.ts` — pure HTML in, text out. It had been in
+`olx.ts`, which imports the db module, so a check for it could not run
+without `DATABASE_URL`. That is most of why a pure function had no test.
+`check:ad-extract` asserts both halves: no stylesheet survives AND the
+description does.
+
+Repaired in production via `--repair`: 66 bodies re-fetched. Clean bodies
+are 86–189 chars where the polluted ones were 1300–1430. That gap was the
+stylesheet.
+
+**`parseDogPost` has been reading this same polluted text all along**, so
+every classification to date spent part of its input on CSS. Whether that
+changed any verdict is UNMEASURED — do not claim an improvement without
+scoring it.
+
+### 0.1g Left open on 18 Aug, smallest first
+
+- **`--sample=N` draws from an unshuffled list.** It reported "4 of 5 ads
+  are live" when the true rate was nearer 1 in 3, because the query order
+  put the freshest first. Shuffle before drawing, or the sample is a
+  biased estimate presented as a measurement.
+- **One pet has `last_seen_at` 94 days in the FUTURE.** Printed as
+  `-94d ago` by `expire:no-post`. It would dodge the staleness sweep for
+  six months. A parser date bug, not yet traced.
+- **Found-pet ads are ingested and displayed as lost pets.** `песик
+  (знайдений)` — "dog (found)" — appears under «загублені» with
+  «терміново», and the app asks a walker to go search the streets for an
+  animal already sitting in somebody's flat. This is BY DESIGN:
+  `LOST_KEYWORDS` includes `знайд|знайш|найден|нашли|found`, four of the
+  thirteen listing queries are «знайшли-собаку»/«нашли-кошку», and the
+  parser prompt says explicitly never to call a found stray rehoming. The
+  intent is sound — a found stray needs its OWNER found — but the UI has
+  one presentation for two different asks. **Owner's decision:** drop
+  them, or give them their own badge and a different call to action
+  («знаєш чий це?» rather than «шукати»).
+- **`/stats` and `/admin/lost-dogs/report` are unreadable** without
+  `REPORT_TOKEN` or `DASHBOARD_TOKEN`, neither of which is set. Three
+  separate questions this session could have been answered in seconds and
+  instead needed a deploy or a log tail. Any random string will do.
+
 ### 0.2 THE OWNER'S OPEN ITEMS — nothing here is blocked on the agent
 
 Ordered by what hurts first if forgotten.
