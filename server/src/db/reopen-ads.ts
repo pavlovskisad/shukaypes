@@ -6,13 +6,36 @@
 // never gains a body, however many ticks run, because its ad is never
 // fetched again. Deleting the ledger row un-freezes exactly that ad.
 //
-// DEFAULT IS THE NARROW ONE, and the narrow one is almost always right.
-// Only rows with NO stored body are cleared. Rows that already carry
-// their ad text need no re-fetch at all — clearing them would throw away
-// text we hold in exchange for a request that might come back 404 if the
-// owner has since taken the listing down. `--all` exists for a genuine
-// full refresh (pins, photos and parse re-derived from scratch) and
-// should be a deliberate choice, not a default.
+// THE DEFAULT IS ROWS ATTACHED TO AN ACTIVE PET, and production is what
+// taught me that. The first version of this script cleared every
+// body-less row, which read as "the narrow scope" until the numbers came
+// back:
+//
+//     WILL CLEAR: 12067 row(s)
+//       … pointing at an active pet:        226
+//       … pointing at no pet (skipped ad): 11780
+//
+// Those 11,780 are ads the pipeline already looked at and rejected —
+// rehoming posts, wrong city, titles that are not a lost pet. Re-opening
+// one does not produce a pet; it produces the same rejection again. And
+// most of them are decided from the LISTING TITLE, before `fetchText` is
+// ever called (olx.ts:214), so re-opening them is not even a re-fetch —
+// it is the same verdict recomputed, thousands of times, for nothing.
+//
+// 226 is the number that matters: pets on the map today whose ad text we
+// do not hold. That is the refresh.
+//
+// Rows that already carry their text are never cleared under any scope —
+// clearing one trades text we hold for a request that may come back 404
+// if the owner has since taken the listing down.
+//
+//   (default)      body-less rows attached to an ACTIVE pet
+//   --orphans      also rows attached to no pet (the rejected ads)
+//   --all          also rows that already have a body (full re-derive:
+//                  pins, photos and parse from scratch)
+//
+// The two wider scopes exist for a deliberate full refresh and should be
+// typed on purpose, never inherited from a default.
 //
 // WHAT HAPPENS NEXT, and why nothing goes missing in between: the next
 // ingest ticks re-fetch those ads and write bodies. A pet whose ad is
@@ -36,8 +59,9 @@
 //   production:  fly ssh console -a shukajpes-api -C "node dist/db/reopen-ads.js"
 //                fly ssh console -a shukajpes-api -C "node dist/db/reopen-ads.js --apply"
 //
-//   --all         also clear rows that already have a body (full refresh)
-//   --limit N     clear at most N rows, so the re-fetch can be spread
+//   --orphans     widen to rows attached to no pet (ads already rejected)
+//   --all         widen further to rows that already have a body
+//   --limit=N     clear at most N rows, so the re-fetch can be spread
 //                 across several runs rather than landing in one tick
 
 import 'dotenv/config';
@@ -56,6 +80,9 @@ interface Row {
 async function main() {
   const apply = process.argv.includes('--apply');
   const all = process.argv.includes('--all');
+  // --all implies --orphans: a full re-derive that skipped the rejected
+  // ads would not be a full re-derive.
+  const orphans = all || process.argv.includes('--orphans');
   const limitArg = process.argv.find((a) => a.startsWith('--limit='));
   const limit = limitArg ? parseInt(limitArg.split('=')[1] ?? '', 10) : null;
   if (limitArg && (!Number.isFinite(limit) || (limit as number) < 1)) {
@@ -64,7 +91,15 @@ async function main() {
   }
 
   console.log(apply ? '▶ APPLY — writes are real' : '▶ dry run — pass --apply to write');
-  console.log(all ? '  scope: ALL ledger rows (full refresh)' : '  scope: rows with NO stored body');
+  console.log(
+    `  scope: ${
+      all
+        ? 'ALL rows, bodies included (full re-derive)'
+        : orphans
+          ? 'body-less rows, attached to a pet or not'
+          : 'body-less rows attached to an ACTIVE pet'
+    }`,
+  );
 
   // Everything, so the report can describe the whole ledger rather than
   // only the slice being cleared. Volumes here are thousands of rows at
@@ -117,29 +152,52 @@ async function main() {
   candidates = candidates.filter((r) => r.petStatus !== 'expired');
   const skippedExpired = beforeExpiredFilter - candidates.length;
 
+  // Rows with no pet behind them are ads the pipeline already rejected.
+  // Excluded by default — see the header: re-opening one recomputes the
+  // same rejection, and for the title-filtered majority does not even
+  // reach the network.
+  const beforeOrphanFilter = candidates.length;
+  if (!orphans) candidates = candidates.filter((r) => r.dogId !== null);
+  const skippedOrphans = beforeOrphanFilter - candidates.length;
+
+  const eligible = candidates.length;
   if (limit) candidates = candidates.slice(0, limit);
 
   const attachedToActive = candidates.filter((r) => r.petStatus === 'active').length;
   const attachedToNothing = candidates.filter((r) => r.dogId === null).length;
 
   console.log(`\nWILL CLEAR: ${candidates.length} row(s)`);
-  console.log(`  … pointing at an active pet:      ${attachedToActive}`);
-  console.log(`  … pointing at no pet (skipped ad): ${attachedToNothing}`);
+  console.log(`  … pointing at an active pet:       ${attachedToActive}`);
+  console.log(`  … pointing at no pet (rejected ad): ${attachedToNothing}`);
   if (skippedExpired > 0) {
     console.log(`  (${skippedExpired} row(s) left alone — their pet is already expired)`);
   }
-  if (limit && beforeExpiredFilter - skippedExpired > candidates.length) {
+  if (skippedOrphans > 0) {
+    console.log(
+      `  (${skippedOrphans} row(s) left alone — no pet behind them; --orphans to include)`,
+    );
+  }
+  if (limit && eligible > candidates.length) {
     // Never let a bound look like completeness.
     console.log(
-      `\n!! CAPPED BY --limit=${limit}. ${beforeExpiredFilter - skippedExpired - candidates.length} ` +
-        `eligible row(s) were NOT cleared.\n   Re-run to continue; this is not the whole set.`,
+      `\n!! CAPPED BY --limit=${limit}. ${eligible - candidates.length} eligible row(s) were NOT` +
+        `\n   cleared. Re-run to continue; this is not the whole set.`,
     );
   }
 
+  // Only rows that reach fetchText cost a request, and a row with a pet
+  // behind it did reach it once. The rejected ads mostly did not — their
+  // verdict came from the listing title — so counting them as fetches
+  // would overstate the burst.
+  const willFetch = candidates.filter((r) => r.dogId !== null).length;
   console.log(
-    `\n  → the next ingest ticks will fetch about ${candidates.length} ad page(s).\n` +
+    `\n  → the next ingest ticks will fetch about ${willFetch} ad page(s).\n` +
       `    OLX answers roughly every other request and the scraper retries\n` +
-      `    immediately, so budget ~2 requests per ad.`,
+      `    immediately, so budget ~2 requests per ad.` +
+      (candidates.length > willFetch
+        ? `\n    The other ${candidates.length - willFetch} are re-judged from the listing title,\n` +
+          `    which costs no extra request.`
+        : ''),
   );
 
   if (!apply) {

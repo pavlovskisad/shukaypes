@@ -118,6 +118,38 @@ verified through the map itself — `tiles.openfreemap.org` is unreachable
 from the sandbox and MapView aborts init when the style fetch fails, so
 the card was driven directly instead of by tapping a pin.
 
+### 0.1c 18 Aug — production holds ZERO ad bodies, and nobody had looked
+
+The first read-only dry run of `reopen:ads` against production:
+
+    ledger rows:            12393
+      … with a stored body: 0
+         olx                12381  (0 with body)
+         telegram:webhook   12      (0 with body)
+
+`raw_body` shipped on 17 Aug and the scrape cron is alive —
+`ANTHROPIC_API_KEY` is set (checked via `fly secrets list`, which is the
+gate at `services/scrape.ts:85`), and the cron runs on boot with a
+30–120s jitter, so it is NOT the reset-`setInterval` bug that bit
+`lostDogCleanup`. **Unresolved at the time of writing** whether zero
+means "no new lost-pet-titled ad has passed the title filter in the
+window" or "the write is not landing". Watch a tick before believing
+either.
+
+This matters because everything about the refresh assumes re-fetched ads
+come back with bodies. `expire:no-post` refuses to write when no scraped
+pet has one, which is exactly this state — the guard covers it.
+
+**And the shape of the ledger is not what the plan assumed.** Of 12,067
+clearable rows, only **226 point at an active pet**; 11,780 point at no
+pet at all. Those are ads the pipeline already rejected — rehoming,
+wrong city, title-filtered — and most are decided from the LISTING TITLE
+before `fetchText` is called (`olx.ts:214`), so re-opening one is not
+even a re-fetch, just the same verdict recomputed. The first version of
+`reopen:ads` defaulted to clearing all of them: a 50× burst for nothing.
+Default is now rows attached to an active pet; `--orphans` and `--all`
+widen it deliberately.
+
 ### 0.2 THE OWNER'S OPEN ITEMS — nothing here is blocked on the agent
 
 Ordered by what hurts first if forgotten.
