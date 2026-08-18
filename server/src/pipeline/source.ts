@@ -7,6 +7,16 @@ export interface SourceRunSummary {
   source: string;        // 'olx' | 'telegram:channel' | etc
   discovered: number;    // distinct ad urls seen this run (including already-known ones)
   skipped: number;       // already-seen, or title-filtered, or off-topic
+  // URLs this tick had never seen before, whatever happened to them
+  // afterwards. THE ONE NUMBER THAT SEPARATES A QUIET HOUR FROM A DEAD
+  // PIPELINE, and its absence is why OLX produced nothing for days while
+  // every log line read "tick complete": `skipped` lumps already-seen in
+  // with title-filtered, so `discovered - skipped` does not answer it and
+  // nothing else did either. fresh === 0 across many ticks means the
+  // listing page is not moving; a genuinely quiet hour still turns one up
+  // every few ticks. Optional so older fixtures and synthetic summaries
+  // stay valid.
+  fresh?: number;
   parsed: number;        // Haiku parse calls made
   inserted: number;
   updated: number;

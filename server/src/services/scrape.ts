@@ -45,10 +45,28 @@ export async function runAllSources(log: Pick<FastifyBaseLogger, 'info' | 'warn'
       // level that shows up.
       const nothingLanded =
         summary.discovered > 0 && summary.parsed === 0 && summary.errors > 0;
+      // A SECOND WAY TO INGEST NOTHING, and the one that actually
+      // happened. On 18 Aug OLX logged `discovered 506, skipped 506,
+      // parsed 0, inserted 0, errors 0` — every URL already known, so
+      // every one stopped at the seenUrls gate. Zero errors, so the rule
+      // above did not fire and this printed at info as "tick complete"
+      // while the pipeline had been producing nothing for days.
+      //
+      // `fresh === 0` alone is NOT an alert — see ingestAlert.ts: only a
+      // few new ads arrive per day against 24 ticks, so most honest ticks
+      // legitimately find nothing new. It is a log LEVEL, so that reading
+      // an hour of logs shows which kind of quiet this is.
+      const nothingFresh = summary.discovered > 0 && summary.fresh === 0;
       if (nothingLanded) {
         log.error(
           { kind: 'scrape_tick', ...summary },
           `[${s.name}] tick INGESTED NOTHING — ${summary.errors} error(s), source may be blocked`,
+        );
+      } else if (nothingFresh && summary.errors === 0) {
+        log.warn(
+          { kind: 'scrape_tick', ...summary },
+          `[${s.name}] tick complete — ${summary.discovered} discovered, NONE new. ` +
+            `Many such ticks in a row means the listing page is not moving.`,
         );
       } else if (summary.errors > 0) {
         log.warn(
