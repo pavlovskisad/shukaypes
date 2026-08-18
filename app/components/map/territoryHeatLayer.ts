@@ -438,10 +438,24 @@ void main() {
   // lives where the field actually rises and falls.
   float gx = sr.a - sl.a;
   float gy = st.a - sb.a;
-  // Light from the top-left: a slope whose coverage falls upward (gy<0,
-  // the blob's top edge) faces the light and lifts; the south edge
-  // settles into its own soft shadow.
-  col *= clamp(1.0 + (0.4 * gx - 0.65 * gy), 0.8, 1.22);
+  // Light from the top-left, and it LIFTS ONLY — the clamp floor is 1.0,
+  // not the 0.8 it started at.
+  //
+  // The shadow half had to go. A claim's strength should fall off toward
+  // its edge and nothing else: the alpha ramp already does that, so the
+  // field gets paler the further out you look, which is the whole idea.
+  // Multiplying the south-facing slope down by up to 20% fought that —
+  // it drew a band DARKER than the claim's own body just inside every
+  // bottom edge, and a dark outline is the one thing a field of scent
+  // should never have. Measured across an edge at street zoom, the
+  // luminance ran 164 → 158 → paper: a dark line, plainly visible, right
+  // where the eye expects the claim to be fading out. With the floor at
+  // 1.0 the same walk is 164 → 166 → paper, monotonic.
+  //
+  // The lit side is untouched, so the cushion is still there; it is now
+  // made of highlight alone, the way light on a pale surface actually
+  // reads.
+  col *= clamp(1.0 + (0.4 * gx - 0.65 * gy), 1.0, 1.22);
   // Hot core: RICHER, not darker — saturation climbs toward the middle
   // of a claim, so deeply-held ground reads as deeply dyed. The earlier
   // darkening pass read as dirt on the palette.
