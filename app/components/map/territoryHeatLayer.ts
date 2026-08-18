@@ -69,15 +69,43 @@ export interface TerritoryHeatLayer extends CustomLayerInterface {
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext;
 
-// Offscreen buffers at 1/4 of the canvas in CSS pixels — DOWNSCALE is
-// multiplied by devicePixelRatio at target-creation time. In physical
-// pixels the first cut of this undersampled on phones: a dpr-3 screen made
-// the blur radius three times larger in texels than the 9-tap kernel could
-// sample cleanly, and the soft edge came out banded and crunchy — the
-// exact opposite of soft. Constant CSS-pixel resolution keeps the kernel
-// in range on every screen (and makes the passes cheaper exactly where
-// the GPU is weakest).
-const DOWNSCALE = 4;
+// How coarse the offscreen buffers are, in CSS pixels per texel, CHOSEN
+// PER FRAME — and choosing it is what keeps a claim looking like the same
+// claim at every zoom.
+//
+// It used to be a flat 1/4, with the blur radius clamped to 32 CSS px so
+// the 9-tap kernel could still sample it cleanly. That clamp quietly
+// broke the promise the radius is written in metres to make: 26m of
+// softness costs 17 CSS px at z15, but 68 at z17 and 137 at z18, so past
+// z16 the clamp took over and the field sharpened to 12m, then 6m. A
+// district that merged into one soft claim when you were looking at it
+// from above came apart into its separate walked pieces as you zoomed in
+// — islands with pale water between them, appearing and deepening as you
+// pinched. Exactly the complaint.
+//
+// The kernel's limit is real, but it is a limit in TEXELS, and texels are
+// ours to choose. So the radius is left alone in metres and the buffer
+// gets coarser as you zoom in, keeping the blur at about
+// TARGET_BLUR_TEXELS wherever you are. Zoomed in, a coarse buffer costs
+// nothing: the field is 26m soft either way, and the screen is showing
+// less ground, so a texel still lands every few metres.
+//
+// Powers of two, so the reallocation happens about once per two zoom
+// levels rather than on every frame of a pinch. dpr is folded in at
+// target-creation time: on a dpr-3 screen the first cut of this
+// undersampled badly — the kernel saw three times the texels it could
+// reach and the soft edge came out banded and crunchy.
+const DOWNSCALE_MIN = 4;
+const DOWNSCALE_MAX = 32;
+// Where the 9 taps sample cleanly: they reach ±0.81r, so at this radius
+// the gaps between taps stay under a texel and a half.
+const TARGET_BLUR_TEXELS = 6;
+
+function downscaleFor(cssRadius: number): number {
+  const want = cssRadius / TARGET_BLUR_TEXELS;
+  const pow2 = Math.pow(2, Math.round(Math.log2(Math.max(1, want))));
+  return Math.min(DOWNSCALE_MAX, Math.max(DOWNSCALE_MIN, pow2));
+}
 
 // The polygons are rasterised at TWICE the working resolution and boxed
 // down into it. Without that, coverage in the working buffer is binary
@@ -110,7 +138,10 @@ const EDGE_SOFT_M = 26;
 // worst zoomed out, where this clamp is what sets the width. It only
 // binds below about z14.6; nearer the ground the metres win.
 const MIN_RADIUS_PX = 10; // CSS px
-const MAX_RADIUS_PX = 32; // CSS px
+// No maximum any more — see downscaleFor. The old 32px ceiling is what
+// made the field change character with zoom; the buffer resolution takes
+// that job now, and the radius is free to be the number of metres it
+// says it is.
 
 // ── How deep inside your own ground am I? ────────────────────────────
 // The shape's edge is a 26m ramp, so coverage is a flat 1.0 two streets
@@ -184,8 +215,9 @@ const CONTOUR_ALPHA = 0.18;
 // enough to read as a hard edge, wide enough not to crawl with pixels.
 const CONTOUR_AA = 0.018;
 // The distance field the steps carve up — see above for why it widens.
+// No pixel ceiling: the buffer resolution adapts to whatever this costs
+// at the current zoom, same as the default mode's radius.
 const CONTOUR_SOFT_M = 90;
-const CONTOUR_MAX_RADIUS_PX = 60;
 // The steps as one GLSL expression, built here so the thresholds above
 // are the only place they are written down.
 const CONTOUR_SUM = CONTOUR_STEPS.map(
@@ -665,13 +697,13 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
     targets = null;
   };
 
-  const ensureTargets = (gl: GL): boolean => {
+  const ensureTargets = (gl: GL, downscale: number): boolean => {
     const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
     // Padded, and rounded to an even size so the 2× polygon buffer boxes
     // down onto exact 2×2 blocks.
     const even = (v: number) => Math.max(2, Math.round(v / 2) * 2);
-    const w = even((gl.drawingBufferWidth * PAD_F) / (DOWNSCALE * dpr));
-    const h = even((gl.drawingBufferHeight * PAD_F) / (DOWNSCALE * dpr));
+    const w = even((gl.drawingBufferWidth * PAD_F) / (downscale * dpr));
+    const h = even((gl.drawingBufferHeight * PAD_F) / (downscale * dpr));
     if (targets && targets[0].w === w && targets[0].h === h) return true;
     dropTargets(gl);
     const a = makeTarget(gl, w, h);
@@ -782,7 +814,17 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
           dirty = false;
         }
         if (mesh.count === 0) return;
-        if (!ensureTargets(gl) || !targets) return;
+        // The soft edge, in metres of ground, turned into CSS pixels at
+        // this zoom — and then into the buffer resolution that keeps that
+        // many pixels inside the kernel's reach. Radius first, buffers
+        // second: which is the point of the whole arrangement.
+        const zoom = mapRef.getZoom();
+        const lat = mapRef.getCenter().lat;
+        const mpp = (78271.517 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
+        const softM = CONTOURS_ON ? CONTOUR_SOFT_M : EDGE_SOFT_M;
+        const cssR = Math.max(MIN_RADIUS_PX, softM / mpp);
+        const downscale = downscaleFor(cssR);
+        if (!ensureTargets(gl, downscale) || !targets) return;
         const [A, B, C, P] = targets;
 
         const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
@@ -840,19 +882,13 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         gl.uniform2f(uBlurDir, 0, 0);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-        // 2. Blur. Radius: EDGE_SOFT_M of ground converted to CSS pixels
-        // at the current zoom, clamped, then into texels — the buffer is
-        // sized in CSS pixels too, so dpr cancels out and the kernel sees
-        // the same texel radius on every screen. When that radius outruns
-        // what 9 taps can sample cleanly, run the kernel twice at
-        // radius/√2 — gaussians compose.
-        const zoom = mapRef.getZoom();
-        const lat = mapRef.getCenter().lat;
-        const mpp = (78271.517 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
-        const softM = CONTOURS_ON ? CONTOUR_SOFT_M : EDGE_SOFT_M;
-        const maxR = CONTOURS_ON ? CONTOUR_MAX_RADIUS_PX : MAX_RADIUS_PX;
-        const cssR = Math.min(maxR, Math.max(MIN_RADIUS_PX, softM / mpp));
-        const rTex = cssR / DOWNSCALE;
+        // 2. Blur. The radius is metres of ground; the buffer was sized
+        // above so that those metres land near TARGET_BLUR_TEXELS however
+        // far in you are. dpr cancels out (the buffer is sized in CSS
+        // pixels too), so the kernel sees the same texel radius on every
+        // screen. When the radius still outruns what 9 taps sample
+        // cleanly, run the kernel twice at radius/√2 — gaussians compose.
+        const rTex = cssR / downscale;
         radiusTex = rTex;
         const iters = rTex > 5 ? 2 : 1;
         const r = rTex / Math.sqrt(iters);
