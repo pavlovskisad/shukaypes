@@ -78,13 +78,37 @@ type GL = WebGLRenderingContext | WebGL2RenderingContext;
 // the GPU is weakest).
 const DOWNSCALE = 4;
 
+// The polygons are rasterised at TWICE the working resolution and boxed
+// down into it. Without that, coverage in the working buffer is binary
+// per texel — a shape's edge can only sit on a texel boundary — so a
+// half-pixel pan flips whole texels and the blurred field jumps with
+// them. That is the crawl: measured, a half-pixel pan at city zoom moved
+// individual pixels by up to 63/255. Averaging 2×2 samples makes the
+// stored coverage a fraction instead of a flag, and the edge slides
+// between texels the way the map does.
+const SUPERSAMPLE = 2;
+
+// The offscreen buffers cover more ground than the screen does. The wide
+// depth blur reaches hundreds of pixels, and at the edge of a buffer
+// there is nothing to reach INTO — the sampler repeats the last texel,
+// so the field near the screen edge was invented from whatever sat on
+// the border, and it changed as you panned. The whole field breathed.
+// This is the margin per side, as a fraction of the viewport.
+const PAD = 0.3;
+const PAD_F = 1 + 2 * PAD;
+
 // The soft edge, in metres of ground. Constant metres — not constant
 // pixels — is what keeps the look honest at both ends: standing at a
 // border you see a ~25m gradient underfoot; zoomed out to the whole city
 // the clamp takes over and shapes stay readable instead of dissolving
 // into fog. The px clamps also protect the blur kernel's sampling range.
 const EDGE_SOFT_M = 26;
-const MIN_RADIUS_PX = 3; // CSS px
+// The floor is not cosmetic. Below about 2 buffer texels the field
+// carries detail finer than the grid it is sampled on, and that aliases
+// into a shimmer whenever the map moves — which is why the shaking was
+// worst zoomed out, where this clamp is what sets the width. It only
+// binds below about z14.6; nearer the ground the metres win.
+const MIN_RADIUS_PX = 10; // CSS px
 const MAX_RADIUS_PX = 32; // CSS px
 
 // ── How deep inside your own ground am I? ────────────────────────────
@@ -318,7 +342,10 @@ float fbm2(vec2 p) {
 vec3 fieldColor(vec4 s) { return s.rgb / max(s.a, 0.004); }
 
 void main() {
-  vec4 s = texture2D(u_tex, v_uv);
+  // The buffers hold a margin of ground beyond the screen, so the screen
+  // maps to their middle rather than their whole extent.
+  vec2 uv = 0.5 + (v_uv - 0.5) / ${PAD_F.toFixed(4)};
+  vec4 s = texture2D(u_tex, uv);
   float cov = s.a;
   if (cov < 0.01) discard;
   // This pixel's offset from the viewport centre in CSS px (y south, so
@@ -355,7 +382,7 @@ void main() {
   // makes it a core rather than one more ring around the edge: it asks
   // how far inside the claim this pixel is, over hundreds of metres,
   // where the sharp field has been saturated since the second street.
-  vec4 dp = texture2D(u_depth, v_uv);
+  vec4 dp = texture2D(u_depth, uv);
   // ...and how much of the neighbour has bled into the wide colour,
   // which is what tells one owner's middle from a shared border. Deep in
   // your own ground the two colours agree and this is 1; approaching
@@ -387,17 +414,23 @@ void main() {
   // cousins), which is what keeps a fully-claimed city reading as many
   // fields rather than one quilt. Masked to fully-painted ground so it
   // can't double up on the outer rim.
-  vec4 sl = texture2D(u_tex, v_uv - vec2(u_probe.x, 0.0));
-  vec4 sr = texture2D(u_tex, v_uv + vec2(u_probe.x, 0.0));
-  vec4 sb = texture2D(u_tex, v_uv - vec2(0.0, u_probe.y));
-  vec4 st = texture2D(u_tex, v_uv + vec2(0.0, u_probe.y));
+  vec4 sl = texture2D(u_tex, uv - vec2(u_probe.x, 0.0));
+  vec4 sr = texture2D(u_tex, uv + vec2(u_probe.x, 0.0));
+  vec4 sb = texture2D(u_tex, uv - vec2(0.0, u_probe.y));
+  vec4 st = texture2D(u_tex, uv + vec2(0.0, u_probe.y));
   // Soft mask — a hard step() here drew visible stair-lines wherever the
   // probe ring crossed a shape edge, the on/off of the lighten tracing
   // axis-offset copies of every boundary.
   float inner = smoothstep(0.4, 0.85, min(min(sl.a, sr.a), min(sb.a, st.a)));
   float dc = length(fieldColor(sr) - fieldColor(sl)) + length(fieldColor(st) - fieldColor(sb));
   float seam = smoothstep(0.10, 0.34, dc) * inner * 0.20;
-  col = mix(col, vec3(1.0), min(1.0, rim + seam));
+  // Both highlights are thin bright lines, exactly the detail that
+  // flickers once a claim is a few pixels across, so they come down with
+  // the noise at overview zoom. The outer rim goes out entirely; the
+  // seam between two owners only halves, because at city zoom it is the
+  // only thing still saying where one person's ground ends. At street
+  // zoom u_noiseFade is 1 and nothing here changes.
+  col = mix(col, vec3(1.0), min(1.0, rim * u_noiseFade + seam * mix(0.5, 1.0, u_noiseFade)));
   // PUFF — pseudo-relief from the coverage gradient the probes already
   // measured for free: the slope facing the light lifts, the far side
   // settles, and a flat sticker of colour becomes a cushion of scent.
@@ -574,8 +607,8 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
 
   let quadBuf: WebGLBuffer | null = null;
   let meshBuf: WebGLBuffer | null = null;
-  // [sharp field, scratch, wide depth field]
-  let targets: [Target, Target, Target] | null = null;
+  // [sharp field, scratch, wide depth field, supersampled polygons]
+  let targets: [Target, Target, Target, Target] | null = null;
 
   let mesh: Mesh = { data: new Float32Array(0), count: 0, ax: 0, ay: 0 };
   let dirty = false;
@@ -606,8 +639,11 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
 
   const ensureTargets = (gl: GL): boolean => {
     const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
-    const w = Math.max(1, Math.round(gl.drawingBufferWidth / (DOWNSCALE * dpr)));
-    const h = Math.max(1, Math.round(gl.drawingBufferHeight / (DOWNSCALE * dpr)));
+    // Padded, and rounded to an even size so the 2× polygon buffer boxes
+    // down onto exact 2×2 blocks.
+    const even = (v: number) => Math.max(2, Math.round(v / 2) * 2);
+    const w = even((gl.drawingBufferWidth * PAD_F) / (DOWNSCALE * dpr));
+    const h = even((gl.drawingBufferHeight * PAD_F) / (DOWNSCALE * dpr));
     if (targets && targets[0].w === w && targets[0].h === h) return true;
     dropTargets(gl);
     const a = makeTarget(gl, w, h);
@@ -615,8 +651,10 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
     // C holds the wide "how deep inside" field; A the sharp one, B the
     // scratch both blurs bounce through.
     const c = makeTarget(gl, w, h);
-    if (!a || !b || !c) {
-      for (const t of [a, b, c]) {
+    // P: where the polygons land, at SUPERSAMPLE× — see the constant.
+    const pp = makeTarget(gl, w * SUPERSAMPLE, h * SUPERSAMPLE);
+    if (!a || !b || !c || !pp) {
+      for (const t of [a, b, c, pp]) {
         if (t) {
           gl.deleteTexture(t.tex);
           gl.deleteFramebuffer(t.fbo);
@@ -625,7 +663,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
       fail('offscreen framebuffer unavailable');
       return false;
     }
-    targets = [a, b, c];
+    targets = [a, b, c, pp];
     return true;
   };
 
@@ -716,7 +754,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         }
         if (mesh.count === 0) return;
         if (!ensureTargets(gl) || !targets) return;
-        const [A, B, C] = targets;
+        const [A, B, C, P] = targets;
 
         const prevFb = gl.getParameter(gl.FRAMEBUFFER_BINDING) as WebGLFramebuffer | null;
         const prevVp = gl.getParameter(gl.VIEWPORT) as Int32Array;
@@ -733,16 +771,20 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
 
         // 1. Polygons, crisp, owner-coloured. No blending: draw order is
         // priority, later groups overwrite earlier ones where they touch.
-        gl.bindFramebuffer(gl.FRAMEBUFFER, A.fbo);
-        gl.viewport(0, 0, A.w, A.h);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, P.fbo);
+        gl.viewport(0, 0, P.w, P.h);
         gl.clearColor(0, 0, 0, 0);
         gl.clear(gl.COLOR_BUFFER_BIT);
         gl.useProgram(polyProg);
-        gl.uniformMatrix4fv(
-          uPolyMatrix,
-          false,
-          anchoredMatrix(args.defaultProjectionData.mainMatrix, mesh.ax, mesh.ay),
-        );
+        // Shrink clip space by the padding factor, so the buffer holds a
+        // margin of ground beyond the screen on every side — what the
+        // wide blur needs to reach into.
+        const pm = anchoredMatrix(args.defaultProjectionData.mainMatrix, mesh.ax, mesh.ay);
+        for (let i = 0; i < 16; i += 4) {
+          pm[i] = pm[i]! / PAD_F;
+          pm[i + 1] = pm[i + 1]! / PAD_F;
+        }
+        gl.uniformMatrix4fv(uPolyMatrix, false, pm);
         gl.bindBuffer(gl.ARRAY_BUFFER, meshBuf);
         gl.enableVertexAttribArray(aPolyPos);
         gl.vertexAttribPointer(aPolyPos, 2, gl.FLOAT, false, 20, 0);
@@ -750,6 +792,24 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         gl.vertexAttribPointer(aPolyColor, 3, gl.FLOAT, false, 20, 8);
         gl.drawArrays(gl.TRIANGLES, 0, mesh.count);
         gl.disableVertexAttribArray(aPolyColor);
+
+        // 1b. Box the supersampled polygons down into the working buffer.
+        // The blur program with a zero direction is a plain copy — all
+        // nine taps land on one point — and because A's texel centres
+        // fall exactly between P's, the LINEAR sampler returns the mean
+        // of each 2×2 block. That mean is the whole point: coverage
+        // stops being a flag and becomes a fraction.
+        gl.useProgram(blurProg);
+        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
+        gl.enableVertexAttribArray(aBlurPos);
+        gl.vertexAttribPointer(aBlurPos, 2, gl.FLOAT, false, 0, 0);
+        gl.uniform1i(uBlurTex, 0);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindFramebuffer(gl.FRAMEBUFFER, A.fbo);
+        gl.viewport(0, 0, A.w, A.h);
+        gl.bindTexture(gl.TEXTURE_2D, P.tex);
+        gl.uniform2f(uBlurDir, 0, 0);
+        gl.drawArrays(gl.TRIANGLES, 0, 6);
 
         // 2. Blur. Radius: EDGE_SOFT_M of ground converted to CSS pixels
         // at the current zoom, clamped, then into texels — the buffer is
@@ -767,12 +827,6 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         radiusTex = rTex;
         const iters = rTex > 5 ? 2 : 1;
         const r = rTex / Math.sqrt(iters);
-        gl.useProgram(blurProg);
-        gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
-        gl.enableVertexAttribArray(aBlurPos);
-        gl.vertexAttribPointer(aBlurPos, 2, gl.FLOAT, false, 0, 0);
-        gl.uniform1i(uBlurTex, 0);
-        gl.activeTexture(gl.TEXTURE0);
         for (let i = 0; i < iters; i++) {
           gl.bindFramebuffer(gl.FRAMEBUFFER, B.fbo);
           gl.bindTexture(gl.TEXTURE_2D, A.tex);
