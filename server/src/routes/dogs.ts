@@ -3,6 +3,7 @@ import { and, eq, not, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { buildPhotoUrl } from '../services/photoUrl.js';
 import { limitPolling, limitRead } from '../lib/rateLimit.js';
+import { looksLikeItHadContacts, redactContacts } from '../pipeline/redactContacts.js';
 
 interface NearbyQuery {
   lat: string;
@@ -126,12 +127,45 @@ const plugin: FastifyPluginAsync = async (app) => {
       .where(eq(schema.scrapeLog.dogId, req.params.id))
       .limit(1);
 
+    // WHO GETS THE PHONE NUMBER IS DECIDED HERE, NOT IN THE CLIENT.
+    //
+    // The walker sees the ad twice, for different reasons. During a
+    // search they need to identify the animal — collar, temperament,
+    // what it answers to — and that is what the body is full of. Once
+    // they report having seen it, they need to reach the owner.
+    //
+    // The app already worked this way (`sourceUrl: seen ? … : null` in
+    // MapView), and keeping it server-side is what makes it real: a
+    // client flag would be a suggestion, and this endpoint is reachable
+    // with curl by anybody holding a device id.
+    //
+    // The proof is a sighting row by THIS user for THIS pet. Nothing
+    // else counts — not having walked there, not having the quest open.
+    const [seen] = await db
+      .select({ id: schema.sightings.id })
+      .from(schema.sightings)
+      .where(
+        and(
+          eq(schema.sightings.dogId, req.params.id),
+          eq(schema.sightings.reporterId, req.userId),
+        ),
+      )
+      .limit(1);
+
+    const raw = log?.body ?? null;
+    const hideContacts = !seen;
+
     // `body: null` is the ordinary answer for every pet ingested before
     // the column existed, and stays ordinary for weeks. The client keeps
     // the old link-out for exactly this case, so null must read as "we
     // do not have it" rather than as an error.
     return {
-      body: log?.body ?? null,
+      body: raw && hideContacts ? redactContacts(raw) : raw,
+      // So the UI can say WHY the ad has holes in it, rather than
+      // leaving somebody to think the owner wrote it that way.
+      contactsHidden: raw ? hideContacts && looksLikeItHadContacts(raw) : false,
+      // The link out survives for the no-body case and as the way to
+      // reach an owner whose ad we never stored.
       sourceUrl: log?.url ?? null,
       fetchedAt: log?.at ? log.at.toISOString() : null,
     };
