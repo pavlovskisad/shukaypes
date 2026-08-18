@@ -109,6 +109,14 @@ const MAP_RENDER_RADIUS_M = 2000;
 // clutter the world — the full lost-pet view is the sniff/locate flow.
 const NORMAL_LOSTDOG_RADIUS_M = 500;
 
+// How far supersniff will offer to send somebody. The server now returns
+// pets city-wide (it used to cut the list at 5km itself), so this is the
+// walking horizon for the "pick one and go" carousel — a pet across Kyiv
+// is a real pet, but not one this walker is about to reach on foot. The
+// quests tab deliberately has no such limit: browsing the whole city is
+// the point there.
+const SUPERSNIFF_RADIUS_M = 5000;
+
 // Above this pitch the camera is in "game view" — street names tilt into
 // the perspective and clutter the distance, so they're hidden until the
 // user flattens the camera back out. Matches the marker horizon-cull gate.
@@ -1596,14 +1604,25 @@ export default function MapViewWeb() {
   const searchDogs = useMemo(() => {
     const up = userPosRef.current;
     const arr = [...lostDogs];
-    if (up) {
-      arr.sort(
-        (a, b) =>
-          distanceMeters(up, a.lastSeen.position) -
-          distanceMeters(up, b.lastSeen.position),
-      );
-    }
-    return arr.slice(0, 15);
+    if (!up) return arr;
+    arr.sort(
+      (a, b) =>
+        distanceMeters(up, a.lastSeen.position) -
+        distanceMeters(up, b.lastSeen.position),
+    );
+    // BOUNDED BY DISTANCE, NOT BY COUNT.
+    //
+    // This was `arr.slice(0, 15)`, which made sense when the server sent
+    // a 5km slice of a 244-pet base and the carousel would otherwise
+    // have been an unswipeable stack. It is the wrong bound now that
+    // pets arrive city-wide: a fixed 15 silently drops the 16th-nearest
+    // pet without telling anybody, and it disagrees with the quests tab,
+    // which lists every pet in the city. Two surfaces showing different
+    // numbers with no explanation is worse than either bound.
+    //
+    // Supersniff is the "go and look for one" flow, so the honest limit
+    // is how far somebody will walk, not how many cards they will swipe.
+    return arr.filter((d) => distanceMeters(up, d.lastSeen.position) <= SUPERSNIFF_RADIUS_M);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [lostDogs, userLatBucket, userLngBucket]);
   const visibleLostDogs = useMemo(() => {

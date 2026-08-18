@@ -189,11 +189,33 @@ const plugin: FastifyPluginAsync = async (app) => {
       await Promise.all([
       fetchNearbyTokens(req.userId, pos),
       fetchNearbyFood(req.userId),
-      // Pets stay at their own radius. The route default widened to give
-      // TERRITORY the whole city, and pets riding the same number would
-      // have silently filled the carousels with animals across town —
-      // a lost pet 12km away is not one this walker can go look for.
-      fetchNearbyLostDogs(pos, Math.min(radiusM, 5000)),
+      // PETS ARE CITY-WIDE, and this reverses an earlier decision on
+      // purpose. The cap here used to be 5km, reasoning that "a lost pet
+      // 12km away is not one this walker can go look for". True of the
+      // MAP, and false of the quests tab, which is a browse view — the
+      // client comment at MapView.tsx:101 has claimed "Quests tab keeps
+      // the city-wide view" all along while this line quietly prevented
+      // it. Somebody scrolling the list wants to know what is missing in
+      // their city, not only what is within a walk of where they stand.
+      //
+      // What made this affordable is the refresh: the base went from 244
+      // active pets to 78. Cost of the whole city, measured two ways that
+      // do not agree — 120 bytes/pet from the production data-bill work
+      // (244 pets = 29.3KB), 279 bytes/pet from a local fixture — so 78
+      // pets is somewhere between 9KB and 21KB, against roughly 4KB for
+      // the old 5km slice. The spread is unexplained and the honest
+      // number is the larger one.
+      //
+      // It is affordable regardless because of `dogsTag`: an unchanged
+      // list is answered with `dogs: null`, and the pet list changes a
+      // handful of times a week, not every 15 seconds. The steady-state
+      // sync is unaffected by this line; only the syncs right after an
+      // ingest tick carry the bigger payload.
+      //
+      // Distance limiting moved to where it belongs — the client. Map
+      // pins cull at NORMAL_LOSTDOG_RADIUS_M, supersniff at 5km. Both are
+      // view concerns, and neither needs the server to withhold data.
+      fetchNearbyLostDogs(pos, radiusM),
       fetchUserState(req.userId),
       // Presence never blocks the map response — on any Redis hiccup we just
       // return no players / pokes.
