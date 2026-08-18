@@ -39,10 +39,12 @@ const ALLOWED = new Map<string, string>([
   // THE ONLY READER OF THE TEXT. Gated on a sightings row for this user,
   // and it redacts contacts when there is not one.
   ['routes/dogs.ts', 'serves it from GET /dogs/:id/post, gated'],
-  // The refresh CLIs. Both ask only `raw_body is not null` — whether we
-  // hold an ad, never what it says — so no contact detail is read, let
-  // alone returned to anybody. Operator-run, not reachable over HTTP.
-  ['db/reopen-ads.ts', 'tests null-ness to pick ads worth re-fetching'],
+  // The refresh CLIs, operator-run and not reachable over HTTP.
+  // expire:no-post only ever asks `raw_body is not null` — whether we
+  // hold an ad, never what it says. backfill:ad-bodies is a WRITER: it
+  // fetches an ad we already have the URL for and stores the text, the
+  // same job olx.ts does at ingest. Neither returns a body to anybody.
+  ['db/backfill-ad-bodies.ts', 'fetches a known ad URL and writes the text'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
 ]);
 

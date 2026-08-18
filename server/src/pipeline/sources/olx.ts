@@ -184,7 +184,11 @@ function canonical(url: string): string {
   }
 }
 
-function extractAdBody(html: string): { text: string; photoUrl: string | null } {
+// Exported for db/backfill-ad-bodies.ts, which fetches known ad URLs
+// directly rather than rediscovering them through a listing page. It has
+// to read the page the same way this does, or the stored corpus would
+// depend on which code path happened to fetch it.
+export function extractAdBody(html: string): { text: string; photoUrl: string | null } {
   const $ = loadHtml(html);
   // OLX ad body is the only multi-line description on the page. data-cy
   // markers here have been stable too, with a couple of fallbacks for
