@@ -45,7 +45,7 @@ import { useId, useMemo } from 'react';
 const BOX = 64;
 // Room inside the box for the halo band and the meander to breathe —
 // the field spreads visibly past the polygon it grew from.
-const PAD = 9;
+const PAD = 8;
 
 // ── The shader's own numbers ────────────────────────────────────────
 // Kept as literal copies of territoryHeatLayer's composite stage. If
@@ -86,18 +86,20 @@ const SHAPED_TABLE = tableOf((c) => shapedAt(c) * FILL_ALPHA);
 // is no field — the shader's `min(1.0, cov * 4.0)` guard in spirit.
 const RIM_TABLE = tableOf((c) => rimAt(c) * shapedAt(c) * FILL_ALPHA);
 
-// The coverage ramp, in viewBox units. Sized by PROPORTION, which is
-// the only way the two can agree: on the map the ramp is EDGE_SOFT_M of
-// ground, about a tenth of a typical claim's width at neighbourhood
-// zoom. A gaussian's visible ramp is ~4σ, and a chip's shape spans
-// BOX-2·PAD, so σ ≈ 0.1·46/4. Softer than this and the chip dissolves
-// into fog next to the map's crisper claims; harder and the bands lose
-// the room they need to read as bands.
-const BLUR = 2.2;
+// The coverage ramp, in viewBox units — the one number here that is
+// deliberately TIGHTER than the map's proportion rather than equal to
+// it, and the reason is size. On the map a claim is hundreds of pixels
+// wide and a wide ramp reads as a soft edge; at 92px the same
+// proportion spends a quarter of the whole chip on fringe, and the
+// shape stops being a shape. So the pipeline stays the map's and the
+// ramp comes in: a crisp body, the bands drawn close to the edge.
+// Below about 0.8 the bands have no room left and the chip flattens
+// into a sticker.
+const BLUR = 1.2;
 // Edge meander. Low frequency and small amplitude: on the map the
 // wobble has ~170px features, and a whole territory drawn at 64 units
 // only ever shows the first bend of one.
-const WOBBLE = 1.8;
+const WOBBLE = 1.2;
 const WOBBLE_FREQ = 0.03;
 // Puff relief. feDiffuseLighting builds its normals from the alpha
 // gradient — the same field the shader probes left/right/up/down — so a
