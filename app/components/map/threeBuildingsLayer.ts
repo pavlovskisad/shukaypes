@@ -38,7 +38,6 @@ import { useGameStore } from '../../stores/gameStore';
 import { OWN_COLOR_RGB, ownerColorRgb, pointInRing } from './territoryColor';
 import { DOG_CAM } from '../../constants/experiments';
 import { jitterInRadius } from '../../utils/cluster';
-import { urlTune } from './territoryField';
 
 export const THREE_BUILDINGS_LAYER_ID = 'three-buildings';
 
@@ -314,7 +313,7 @@ export function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number
 // drops to a quiet backdrop (see FILL_ALPHA in territoryHeatLayer). The
 // city keeps its architecture because the paint still fades with the
 // claim, which the 0.45 version had no way to do.
-const TERRITORY_PAINT = urlTune('paint', 0.5);
+const TERRITORY_PAINT = 0.5;
 
 // The falloff is no longer a constant here at all: it rides in on the
 // vertex attribute, one beacon per zone, computed where the owner of each
