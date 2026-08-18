@@ -270,6 +270,14 @@ export interface StateResponse {
   };
 }
 
+// How far out pets are FETCHED — deliberately not how far they are
+// SHOWN. The whole city comes down (matching /sync/map's own default) and
+// each surface narrows it for itself: map pins at 500m, the supersniff
+// carousel at 5km, the quests tab not at all. Every call that populates
+// `lostDogs` must use this, or two of them disagree and the list changes
+// size depending on which one happened to run last.
+export const PET_RADIUS_M = 12000;
+
 export const api = {
   getState: () => req<StateResponse>('/state'),
 
@@ -334,7 +342,14 @@ export const api = {
     return req<{ food: FoodItem[] }>(`/food/nearby?${params.toString()}`);
   },
 
-  getLostDogsNearby: (pos: LatLng, radiusM = 5000) =>
+  // ONE RADIUS FOR PETS, because two of them drifted and broke the
+  // carousel. /sync/map returns the whole city now; this call kept its
+  // own 5km default, and reportSighting uses it to refresh the pins
+  // after a trusted report. So tapping "я його бачив" replaced a 47-pet
+  // city list with a 15-pet local one, the carousel resized under the
+  // walker's thumb and jumped to a different animal. Same data, two
+  // defaults, and the mismatch only showed up on one code path.
+  getLostDogsNearby: (pos: LatLng, radiusM = PET_RADIUS_M) =>
     req<{ dogs: NearbyLostDog[] }>(
       `/dogs/nearby?lat=${pos.lat}&lng=${pos.lng}&radius=${radiusM}`,
     ),

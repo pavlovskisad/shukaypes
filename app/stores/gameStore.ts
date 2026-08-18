@@ -3,6 +3,7 @@ import { balance } from '../constants/balance';
 import type { FoodItem, LatLng, NearbyPlayer, Quest, Token } from '@shukajpes/shared';
 import {
   api,
+  PET_RADIUS_M,
   type NearbyLostDog,
   type RivalTerritory,
   type TerritoryMark,
@@ -939,6 +940,10 @@ export const useGameStore = create<GameState>((set, get) => ({
       const parkPositions = parks.map((p) => p.position);
       const res = await api.syncMap(pos, {
         parks: parkPositions.length ? parkPositions : undefined,
+        // Explicit, and it must equal the radius syncLostDogs uses.
+        // Leaving both to their own server-side defaults is exactly how
+        // they drifted apart — see PET_RADIUS_M in services/api.ts.
+        radiusM: PET_RADIUS_M,
         // What we already hold. The server compares and sends the pets
         // list back only if it has actually changed.
         dogsTag: get().lostDogsTag,

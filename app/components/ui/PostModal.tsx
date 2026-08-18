@@ -25,7 +25,7 @@ import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
-import { MODAL_PILL_DARK } from '../../constants/buttons';
+import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { api } from '../../services/api';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -229,15 +229,20 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
           {/* The original stays reachable. For a pet with no stored ad
               it is the only way through, and for one whose contacts are
               masked it is where the owner's own posting lives. */}
+          {/* Straight from constants/buttons — the first version used
+              MODAL_PILL_DARK for both and faked the secondary with
+              opacity: 0.75, which is off the rails every other modal
+              runs on. Dark for the action, light for dismiss, same
+              recipe LostDogModal and SpotModal use. */}
           {post?.sourceUrl ? (
             <button
               onClick={() => window.open(post.sourceUrl!, '_blank', 'noopener')}
-              style={{ ...MODAL_PILL_DARK, flex: 1 }}
+              style={MODAL_PILL_DARK}
             >
-              {t.search.contactOpen}
+              {t.modals.post.openOriginal}
             </button>
           ) : null}
-          <button onClick={onClose} style={{ ...MODAL_PILL_DARK, flex: 1, opacity: 0.75 }}>
+          <button onClick={onClose} style={MODAL_PILL_LIGHT}>
             {t.modals.common.close}
           </button>
         </div>
