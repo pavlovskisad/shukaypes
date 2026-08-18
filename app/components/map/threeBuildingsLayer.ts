@@ -38,7 +38,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { OWN_COLOR_RGB, ownerColorRgb, pointInRing } from './territoryColor';
 import { DOG_CAM } from '../../constants/experiments';
 import { jitterInRadius } from '../../utils/cluster';
-import { getTerritoryField, SEAM_FADE } from './territoryField';
+import { getTerritoryField, SEAM_FADE, urlTune } from './territoryField';
 
 export const THREE_BUILDINGS_LAYER_ID = 'three-buildings';
 
@@ -287,8 +287,9 @@ export function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number
 // Ownership is decided per BUILDING, off its footprint centre, against the
 // same partitioned shapes the ground fill draws — so a block is never one
 // colour underfoot and another above it.
-// How strongly a claim tints the building it holds. UNIFORM, and this is
-// the second time that's been decided, so the reasons are worth keeping:
+// How strongly a claim tints the building it holds. Third time this has
+// been decided, and the earlier reasons still stand — they were about
+// something else:
 //
 // - At 0.45 every claimed block was a solid slab of colour that buried
 //   the architecture and broke the soft field the ground draws.
@@ -298,9 +299,22 @@ export function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number
 //   ownership stopped reading on buildings at all. Pale roofs over
 //   tinted walls looked like a fog bug, not a style.
 //
-// So: one strength, roofs included, but light — the building carries its
-// owner's colour while the soft ground field stays the loudest voice.
-const TERRITORY_PAINT = 0.32;
+// WHY 0.50 IS NOT A REPEAT OF THE 0.45 MISTAKE. Supersniff's beacon
+// washes buildings at exactly this strength and reads beautifully — a
+// district lit up, blocks standing out as solid volumes. The thing that
+// makes it work is not the number: it is that the beacon paints ONLY the
+// buildings, over ground that stays plain, so there is a figure and a
+// background. The 0.45 slab failed because the ground underneath was
+// dyed just as hard, leaving nothing for the buildings to stand out
+// AGAINST — every surface on screen was colour, so none of it read as
+// deliberate.
+//
+// So the two move together, and the old ranking is deliberately
+// inverted: the buildings become the loud voice and the ground field
+// drops to a quiet backdrop (see FILL_ALPHA in territoryHeatLayer). The
+// city keeps its architecture because the paint still fades with the
+// claim, which the 0.45 version had no way to do.
+const TERRITORY_PAINT = urlTune('paint', 0.5);
 
 // ...and how much of that paint survives out at the edge of a claim.
 //
@@ -317,8 +331,10 @@ const TERRITORY_PAINT = 0.32;
 // claim thins it drops to this fraction, so a district reads as a heart
 // with a fading rim instead of a slab. Not to zero — a building on the
 // border still belongs to somebody, and the answer to "whose is this"
-// must not vanish.
-const TERRITORY_PAINT_RIM = 0.35;
+// must not vanish. It rises with the coat above: a third of a light coat
+// was nearly nothing, while a third of a strong one is a real colour, so
+// the fraction is tuned against the strength it modifies.
+const TERRITORY_PAINT_RIM = 0.45;
 // Where the falloff sits on the depth field. Matches the ground's own
 // core band (see the composite's `core`), so the buildings brighten over
 // the same ground the field does.

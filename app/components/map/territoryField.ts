@@ -46,3 +46,19 @@ export function getTerritoryField(): TerritoryFieldRef | null {
 // in either layer: the ground and the buildings must read the field the
 // same way, or a block's paint disagrees with the paint under it.
 export const SEAM_FADE = 2.6;
+
+// A number the URL can override, for the two constants that decide how
+// loud territory is: the ground field's peak (?field=) and the coat on
+// the buildings standing in it (?paint=). They live in different layers
+// but they are ONE decision — the balance between figure and background
+// — and the only place to judge that is a real city on a real phone,
+// which no harness here can render. So they are dials rather than a
+// round trip per guess. Read once at module load; the values are baked
+// into shaders when those are built, so tuning is a reload.
+export function urlTune(name: string, fallback: number): number {
+  if (typeof window === 'undefined') return fallback;
+  const raw = new URLSearchParams(window.location.search).get(name);
+  if (raw === null) return fallback;
+  const v = Number(raw);
+  return Number.isFinite(v) && v >= 0 && v <= 1 ? v : fallback;
+}
