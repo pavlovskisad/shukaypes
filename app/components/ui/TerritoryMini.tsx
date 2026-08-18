@@ -32,20 +32,27 @@
 // field does, while every band boundary stays a hard step. Crisp, and
 // hot in the core.
 //
-// What carries over from the map unchanged: the owner's hue, the fill
-// alpha it was contrast-tuned at, and the meander that keeps a border
-// from looking machined. What is deliberately gone is the puff relief —
-// feDiffuseLighting reproduces it exactly, but at this size it only
-// ever lands on the outermost band and darkens it to a grey ring that
-// reads as a blurry drop shadow. Relief needs room the chip hasn't got.
+// What carries over from the map unchanged: the owner's hue and the
+// fill alpha its palette was contrast-tuned at. Two of the map's stages
+// are deliberately absent, both for the same reason — they need room a
+// 92px chip hasn't got:
+//
+//   PUFF RELIEF. feDiffuseLighting reproduces it exactly, but at this
+//   size it only ever lands on the outermost band, darkening it to a
+//   grey ring that reads as a blurry drop shadow around the chip.
+//
+//   THE EDGE MEANDER. Turbulence bends the map's borders so they don't
+//   look machined; here it fed the erosions a fuzzy edge and the bands
+//   came back melted together. A claim's outline is the hull of a walk
+//   — it already meanders without help.
 
 import React, { useId, useMemo } from 'react';
 
-// Big enough that erosion steps and the meander survive rasterisation,
-// small enough that 48-corner polygons stay cheap. Size is per-use.
+// Big enough that the erosion steps survive rasterisation, small enough
+// that 48-corner polygons stay cheap. Rendered size is per-use.
 const BOX = 64;
-// Room for the meander to bend into. The field no longer spreads past
-// the polygon — the outermost contour IS the polygon — so this is much
+// Breathing room inside the box. The field no longer spreads past the
+// polygon — the outermost contour IS the polygon — so this is much
 // tighter than the blurred versions needed, and the silhouette is
 // correspondingly bigger in its box.
 const PAD = 6;
@@ -68,7 +75,6 @@ const BAND_ALPHA = 0.18;
 // Any more and the steps start to smear into each other, which is the
 // fog this construction exists to replace.
 const EDGE_SOFTEN = 0.3;
-
 
 export function TerritoryMini({
   points,
