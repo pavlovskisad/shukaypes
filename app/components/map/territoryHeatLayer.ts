@@ -52,7 +52,7 @@ import type {
   Map as MlMap,
 } from 'maplibre-gl';
 import earcut from 'earcut';
-import { publishTerritoryField, SEAM_FADE } from './territoryField';
+import { publishTerritoryField, SEAM_FADE, urlTune } from './territoryField';
 import type { TerritoryShape } from '../../services/api';
 
 export const TERRITORY_HEAT_LAYER_ID = 'territory-heat';
@@ -223,12 +223,23 @@ const NOISE_FADE_HI = 14.8;
 // its scored strength, edge to edge, with the map underneath it. 0.38
 // keeps the palette's separation (the hues are still distinguishable at
 // this depth; it is the same tuning a shade lighter) while letting the
-// city back through. Below ~0.32 the cousins in the palette start to
-// collapse into each other, so this is not a free dial — which is why
-// most of the calming is done by the core band above instead: a claim's
-// deepest ground still lands within a hair of the scored 0.42, and it is
-// the approaches that lighten.
-const FILL_ALPHA = 0.40;
+// city back through.
+//
+// It steps back again here, and this time for a reason about the whole
+// picture rather than about the ground alone. The buildings standing on
+// this field used to be tinted about as hard as the field itself, which
+// left the screen with no figure and no background — every surface
+// coloured, so none of it read as deliberate. Supersniff has always done
+// the opposite (buildings hit hard, ground left plain) and that is why a
+// lit district there looks like somewhere rather than a stain. So the
+// buildings take over as the loud voice (TERRITORY_PAINT in
+// threeBuildingsLayer) and the ground becomes the quiet one that says
+// how far the claim reaches.
+//
+// 0.34 is as low as it goes: below about 0.32 the cousins in the palette
+// start collapsing into each other, and telling whose ground you are on
+// is the map's first job.
+const FILL_ALPHA = urlTune('field', 0.34);
 
 const POLY_VERT = `
 attribute vec2 a_pos;
