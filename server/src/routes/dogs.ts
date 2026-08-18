@@ -1,5 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { and, eq, not, sql } from 'drizzle-orm';
+import { and, desc, eq, not, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { buildPhotoUrl } from '../services/photoUrl.js';
 import { limitPolling, limitRead } from '../lib/rateLimit.js';
@@ -125,6 +125,19 @@ const plugin: FastifyPluginAsync = async (app) => {
       })
       .from(schema.scrapeLog)
       .where(eq(schema.scrapeLog.dogId, req.params.id))
+      // ORDER MATTERS, AND ITS ABSENCE WAS A BUG.
+      //
+      // One pet can own several scrape_log rows: a repost lands at a new
+      // URL and the row is written with the same dogId whatever the
+      // upsert did with it (olx.ts writes `dogId: result.id` for
+      // inserted, updated AND duplicate alike). With a bare limit(1) the
+      // database was free to hand back whichever it liked — including a
+      // pre-17-Aug row whose raw_body is null, which reads to the walker
+      // as "we never stored this ad" for a pet whose ad we are holding.
+      //
+      // Rows WITH a body first, then newest — so the answer is the most
+      // recent text we actually have.
+      .orderBy(sql`(${schema.scrapeLog.rawBody} is null)`, desc(schema.scrapeLog.firstSeenAt))
       .limit(1);
 
     // WHO GETS THE PHONE NUMBER IS DECIDED HERE, NOT IN THE CLIENT.

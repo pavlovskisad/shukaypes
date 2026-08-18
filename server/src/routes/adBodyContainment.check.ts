@@ -36,9 +36,14 @@ const ALLOWED = new Map<string, string>([
   ['pipeline/adBody.ts', 'caps the text on the way in'],
   ['pipeline/sources/olx.ts', 'writes it at ingest'],
   ['services/telegramIngest.ts', 'writes it at ingest'],
-  // THE ONLY READER. Gated on a sightings row for this user, and it
-  // redacts contacts when there is not one.
+  // THE ONLY READER OF THE TEXT. Gated on a sightings row for this user,
+  // and it redacts contacts when there is not one.
   ['routes/dogs.ts', 'serves it from GET /dogs/:id/post, gated'],
+  // The refresh CLIs. Both ask only `raw_body is not null` — whether we
+  // hold an ad, never what it says — so no contact detail is read, let
+  // alone returned to anybody. Operator-run, not reachable over HTTP.
+  ['db/reopen-ads.ts', 'tests null-ness to pick ads worth re-fetching'],
+  ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
 ]);
 
 // Nothing here may ever read it. These are the payloads that go out in
@@ -104,4 +109,4 @@ for (const [needle, why] of [
   }
 }
 
-console.log(`✓ ad body: one gated reader, ${ALLOWED.size - 1} writers, no bulk payload`);
+console.log(`✓ ad body: one gated reader of the text, ${ALLOWED.size - 1} other files, no bulk payload`);
