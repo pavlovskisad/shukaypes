@@ -87,6 +87,68 @@ const EDGE_SOFT_M = 26;
 const MIN_RADIUS_PX = 3; // CSS px
 const MAX_RADIUS_PX = 32; // CSS px
 
+// EXPERIMENT — the board chip's construction, on the map. Off unless
+// the URL says ?contours=1, so this costs nothing until somebody asks
+// for it, and comparing the two is a page reload rather than a build.
+//
+// The chip draws its heat as CONTOURS: nested bands, each a hard step,
+// stacked so the colour builds toward a hot core (see TerritoryMini).
+// It gets its bands by eroding the silhouette, which a fragment shader
+// has no cheap way to do — but it does not need one. Thresholding a
+// blurred coverage field ABOVE 0.5 is an erosion: for a gaussian of
+// width σ, threshold t pulls the edge in by about σ·Φ⁻¹(t). So the
+// same wide blur this layer already computes, cut at four rising
+// levels instead of ramped through two smooth ones, gives the chip's
+// nested contours for the price of a few extra steps in the composite.
+//
+// The blur goes WIDER in this mode, not narrower, which sounds
+// backwards for a look whose whole point is crispness: the bands are
+// hard steps, so the blur is no longer visible AS blur — it is the
+// distance field the thresholds carve up, and a wider one spreads the
+// contours further inside the claim instead of crowding them at the
+// rim.
+//
+// WHAT IT LOOKS LIKE, HAVING TRIED IT. On a claim that stands alone it
+// is lovely, and it is the chip's picture at map scale: nested bands,
+// hot core, crisp steps. On a district where claims TILE — which is
+// most of a lived-in city — it collapses into a wash with no borders
+// at all, and that is structural rather than a tuning problem. These
+// contours are cut from COVERAGE, and coverage is what the field has,
+// not who holds it: where two owners meet, both sides are painted, so
+// coverage never dips and every threshold fires on both sides at once.
+// A contour can only appear where a claim borders NOTHING. Checked at
+// two blur widths to be sure it was not just colours smearing; the
+// wash is there at both.
+//
+// Making it work everywhere needs a per-owner distance field — each
+// owner's coverage eroded separately — which means a pass per owner,
+// or an owner id encoded per pixel and the erosion done against that.
+// Either is a real change to a layer whose whole design is ONE pass
+// with a data-driven colour, so it is not a thing to slip in behind a
+// flag. Hence: off by default, and not a candidate for default until
+// that is solved.
+const CONTOURS_ON =
+  typeof window !== 'undefined' &&
+  /[?&]contours=1/.test(window.location.search);
+// Rising thresholds on the coverage field. The first is 0.5 — the
+// claim's true outline, so the shape stays exactly where the server put
+// it — and each one after erodes further in.
+const CONTOUR_STEPS = [0.5, 0.72, 0.88, 0.965];
+// Per band, not cumulative: four of these stack to ~0.55 in the core,
+// matching the chip.
+const CONTOUR_ALPHA = 0.18;
+// Half-width of the antialiasing on each step, in coverage units. Small
+// enough to read as a hard edge, wide enough not to crawl with pixels.
+const CONTOUR_AA = 0.018;
+// The distance field the steps carve up — see above for why it widens.
+const CONTOUR_SOFT_M = 90;
+const CONTOUR_MAX_RADIUS_PX = 60;
+// The steps as one GLSL expression, built here so the thresholds above
+// are the only place they are written down.
+const CONTOUR_SUM = CONTOUR_STEPS.map(
+  (t) => 'smoothstep(' + t.toFixed(3) + ' - CAA, ' + t.toFixed(3) + ' + CAA, c)',
+).join(' + ');
+
 // Peak stain strength. 0.42 is a load-bearing number: the owner palette
 // was scored composited at 42% over the map paper (see territoryColor.ts).
 // The compositing became a multiply-tint rather than an alpha film, but
@@ -147,10 +209,14 @@ void main() {
 // Noise coords are world-anchored via u_offset (same trick as the fog) so
 // the pattern pans with the streets instead of sticking to the glass.
 const COMP_FRAG = `
+#define CAA ${CONTOUR_AA.toFixed(4)}
+#define CBAND ${CONTOUR_ALPHA.toFixed(4)}
+
 precision highp float;
 varying vec2 v_uv;
 uniform sampler2D u_tex;
 uniform float u_alpha;
+uniform float u_contour; // 1 = the board chip's contour bands
 uniform vec2 u_offset;
 uniform float u_dpr;
 // Offset for the seam probes below, in uv — the blur radius scaled into
@@ -198,6 +264,12 @@ void main() {
   float halo = smoothstep(0.28, 0.40, c);
   float body = smoothstep(0.55, 0.74, c);
   float shaped = 0.38 * halo + 0.62 * body;
+  if (u_contour > 0.5) {
+    // Four hard steps instead of two soft ramps — the chip's contours.
+    // Each smoothstep spans a couple of hundredths of coverage, which
+    // is antialiasing, not a gradient.
+    shaped = (${CONTOUR_SUM}) * CBAND / u_alpha;
+  }
   if (shaped < 0.01) discard;
   vec3 col = fieldColor(s);
   // Bright rims where each band is born — the hot outline of a heat blob.
@@ -388,6 +460,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
   let uCompOffset: WebGLUniformLocation | null = null;
   let uCompDpr: WebGLUniformLocation | null = null;
   let uCompProbe: WebGLUniformLocation | null = null;
+  let uCompContour: WebGLUniformLocation | null = null;
   // Blur radius in low-res texels, written by prerender each frame and
   // read back when render sets the seam-probe offsets.
   let radiusTex = 0;
@@ -486,6 +559,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
       uCompOffset = gl.getUniformLocation(compProg, 'u_offset');
       uCompDpr = gl.getUniformLocation(compProg, 'u_dpr');
       uCompProbe = gl.getUniformLocation(compProg, 'u_probe');
+      uCompContour = gl.getUniformLocation(compProg, 'u_contour');
       gl.bindBuffer(gl.ARRAY_BUFFER, quadBuf);
       gl.bufferData(
         gl.ARRAY_BUFFER,
@@ -569,7 +643,9 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         const zoom = mapRef.getZoom();
         const lat = mapRef.getCenter().lat;
         const mpp = (78271.517 * Math.cos((lat * Math.PI) / 180)) / Math.pow(2, zoom);
-        const cssR = Math.min(MAX_RADIUS_PX, Math.max(MIN_RADIUS_PX, EDGE_SOFT_M / mpp));
+        const softM = CONTOURS_ON ? CONTOUR_SOFT_M : EDGE_SOFT_M;
+        const maxR = CONTOURS_ON ? CONTOUR_MAX_RADIUS_PX : MAX_RADIUS_PX;
+        const cssR = Math.min(maxR, Math.max(MIN_RADIUS_PX, softM / mpp));
         const rTex = cssR / DOWNSCALE;
         radiusTex = rTex;
         const iters = rTex > 5 ? 2 : 1;
@@ -617,6 +693,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         gl.bindTexture(gl.TEXTURE_2D, A.tex);
         gl.uniform1i(uCompTex, 0);
         gl.uniform1f(uCompAlpha, FILL_ALPHA);
+        gl.uniform1f(uCompContour, CONTOURS_ON ? 1 : 0);
         const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
         // Anchor the edge/grain noise to the world: project the map centre
         // to screen px and offset gl_FragCoord by it, exactly as the fog
