@@ -164,9 +164,19 @@ const plugin: FastifyPluginAsync = async (app) => {
       // So the UI can say WHY the ad has holes in it, rather than
       // leaving somebody to think the owner wrote it that way.
       contactsHidden: raw ? hideContacts && looksLikeItHadContacts(raw) : false,
-      // The link out survives for the no-body case and as the way to
-      // reach an owner whose ad we never stored.
-      sourceUrl: log?.url ?? null,
+      // THE LINK IS GATED TOO, AND IT HAS TO BE.
+      //
+      // Masking the phone in the body while handing over the URL of the
+      // page that prints it makes the mask decoration: one tap and the
+      // gate is gone. Withholding it costs the walker nothing they need
+      // mid-search — the description is what answers "is this the dog?",
+      // and it is right there unmasked.
+      //
+      // This also restores exactly what the app did before this route
+      // existed: `sourceUrl: seen ? sourceUrl : null` in MapView. There
+      // was never a path to the original post without a sighting, and
+      // there still is not.
+      sourceUrl: seen ? (log?.url ?? null) : null,
       fetchedAt: log?.at ? log.at.toISOString() : null,
     };
   });

@@ -87,11 +87,36 @@ owner's decision — and the safeguard is that they never enter a bulk
 payload: verified 0 occurrences in /sync/map, /dogs/nearby and /stats.
 Expired pets 404, so `expire:pet` doubles as contact removal.
 
-**Still to do:** the client half. The walker still bounces out to OLX
-(`MapView.tsx` ~3005, `strings.ts` contactOpen). `DogPrompt` takes only
-actions, so showing an ad inline needs a scrollable modal following the
-LostDogModal pattern — not a one-line change. The route it would call is
-live and tested.
+**18 Aug — the client half landed, and the bounce is gone.**
+`components/ui/PostModal.tsx` reads the post in a top sheet, reachable
+from two places: «читати оголошення» on the pet card (mid-search — this
+is the one that answers "is this the dog?") and the end-of-search prompt,
+which used to `window.open` OLX.
+
+**The link is gated with the contacts, and that was a change of mind
+during the work.** The first pass masked the phone in the body while
+still handing over the OLX url — one tap and the mask was decoration.
+`sourceUrl` is now `seen ? url : null`, which is exactly what MapView did
+before this route existed. Consequence: a pet with NO stored body and no
+sighting shows only an explanation and a close button. That is deliberate
+and the copy says so (`t.modals.post.originalAfterSighting`); the
+alternative was a gate anybody could walk around.
+
+`check:ad-body` is the eighth fixture check. It scans the source and
+fails if any file outside a five-name allowlist mentions `raw_body`, and
+if `routes/dogs.ts` stops mentioning `redactContacts` or
+`schema.sightings`. Source-level on purpose: a response check only sees
+the pets a seeded database happens to hold, and passes happily if the
+leak sits behind a branch the fixture never takes. Both mutations were
+run and both failed the check.
+
+Verified in Chromium against the built production bundle and a local
+Postgres, all four states: body + no sighting (masked, description
+intact), body + sighting (phone visible), no body (fallback copy), and a
+404 (the "try again" state, which must not read as "no ad"). **Not**
+verified through the map itself — `tiles.openfreemap.org` is unreachable
+from the sandbox and MapView aborts init when the style fetch fails, so
+the card was driven directly instead of by tapping a pin.
 
 ### 0.2 THE OWNER'S OPEN ITEMS — nothing here is blocked on the agent
 

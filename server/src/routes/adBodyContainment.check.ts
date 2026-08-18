@@ -1,0 +1,107 @@
+// The ad body must stay on ONE route, and this is the check that says so.
+// Run with: pnpm --filter @shukajpes/server check:ad-body
+//
+// WHY THIS IS WORTH A CHECK RATHER THAN A CODE REVIEW.
+//
+// `scrape_log.raw_body` holds the owner's post verbatim — phone number,
+// Viber, Telegram handle, all of it. That is fine, and it is the point:
+// somebody who has just reported seeing the animal should be able to ring
+// the owner without leaving the app.
+//
+// It stops being fine the moment it rides along in a payload that goes to
+// everybody. `/sync/map` is sent to every walker every fifteen seconds. A
+// body joined into THAT query turns "one walker reads one ad" into a
+// contact list anyone with a device id can download in a loop, and it does
+// it silently — the map keeps working, nothing errors, the payload is just
+// bigger. There is no failing test to notice, which is exactly why this
+// file exists.
+//
+// So: the read path is an allowlist of one route, and any new file that
+// touches the column has to come here and say why. Adding a name below is
+// a deliberate act; joining a column is not.
+//
+// This checks the SOURCE, not a live response, on purpose. A response
+// check can only see the pets a seeded database happens to contain, and
+// passes happily if the leak is behind a branch nothing in the fixture
+// takes.
+
+import { readdirSync, readFileSync, statSync } from 'node:fs';
+import { join } from 'node:path';
+
+const SRC = new URL('../', import.meta.url).pathname;
+
+// Files allowed to name the column, and what each is allowed to do.
+const ALLOWED = new Map<string, string>([
+  ['db/schema.ts', 'declares the column'],
+  ['pipeline/adBody.ts', 'caps the text on the way in'],
+  ['pipeline/sources/olx.ts', 'writes it at ingest'],
+  ['services/telegramIngest.ts', 'writes it at ingest'],
+  // THE ONLY READER. Gated on a sightings row for this user, and it
+  // redacts contacts when there is not one.
+  ['routes/dogs.ts', 'serves it from GET /dogs/:id/post, gated'],
+]);
+
+// Nothing here may ever read it. These are the payloads that go out in
+// bulk or without a user attached; listing them by name makes the failure
+// message say which door was left open rather than just "a file changed".
+const FORBIDDEN_HINTS = new Map<string, string>([
+  ['services/mapData.ts', '/sync/map and /dogs/nearby — every walker, every 15s'],
+  ['routes/syncMap.ts', '/sync/map — every walker, every 15s'],
+  ['services/metrics.ts', '/admin/metrics — an unauthenticated console'],
+  ['routes/admin.ts', '/admin/* — an unauthenticated console'],
+  ['routes/stats.ts', '/stats — unauthenticated'],
+]);
+
+function walk(dir: string, out: string[] = []): string[] {
+  for (const entry of readdirSync(dir)) {
+    const full = join(dir, entry);
+    if (statSync(full).isDirectory()) walk(full, out);
+    else if (entry.endsWith('.ts')) out.push(full);
+  }
+  return out;
+}
+
+let failures = 0;
+const offenders: string[] = [];
+
+for (const full of walk(SRC)) {
+  const rel = full.slice(SRC.length);
+  // A check that asserts things about the column has to be able to spell
+  // its name.
+  if (rel.endsWith('.check.ts')) continue;
+
+  const text = readFileSync(full, 'utf8');
+  if (!/\brawBody\b|\braw_body\b/.test(text)) continue;
+  if (ALLOWED.has(rel)) continue;
+
+  failures++;
+  const hint = FORBIDDEN_HINTS.get(rel);
+  offenders.push(hint ? `${rel} — this feeds ${hint}` : rel);
+}
+
+if (failures > 0) {
+  console.error('✗ the ad body escaped GET /dogs/:id/post:\n');
+  for (const o of offenders) console.error(`    ${o}`);
+  console.error(
+    '\n  The body carries the owner\'s phone number. If this file genuinely\n' +
+      '  needs it, add it to ALLOWED in this check WITH the reason — and be\n' +
+      '  sure it is not a payload that goes out in bulk or unauthenticated.\n',
+  );
+  process.exit(1);
+}
+
+// The reader also has to still BE the gated one. A rename or a refactor
+// that drops the sightings lookup would leave the allowlist happy and the
+// contacts ungated, so check the gate is still standing.
+const dogsRoute = readFileSync(join(SRC, 'routes/dogs.ts'), 'utf8');
+for (const [needle, why] of [
+  ['redactContacts', 'masks the contacts when there is no sighting'],
+  ['schema.sightings', 'the sightings lookup that decides which of the two you get'],
+] as const) {
+  if (!dogsRoute.includes(needle)) {
+    console.error(`✗ routes/dogs.ts no longer mentions ${needle} — ${why}`);
+    process.exit(1);
+  }
+}
+
+console.log(`✓ ad body: one gated reader, ${ALLOWED.size - 1} writers, no bulk payload`);
