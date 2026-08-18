@@ -235,7 +235,10 @@ async function main() {
     if (write) {
       await db
         .update(schema.scrapeLog)
-        .set({ rawBody: capBody(text) })
+        // A 200 is also proof the ad is still up, and that is the signal
+        // the staleness sweep needs — it used to expire pets on age while
+        // their listing was demonstrably live.
+        .set({ rawBody: capBody(text), adAliveAt: new Date() })
         .where(eq(schema.scrapeLog.url, t.url));
     }
   }

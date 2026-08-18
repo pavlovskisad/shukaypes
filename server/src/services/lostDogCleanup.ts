@@ -50,7 +50,25 @@ export async function runLostDogCleanupTick(log: FastifyBaseLogger): Promise<voi
     RETURNING id
   `);
 
-  // Stale-active sweep. Pure age + no-recent-sighting check.
+  // Stale-active sweep. Age, no recent sighting — AND no evidence the
+  // owner's ad is still up.
+  //
+  // THAT LAST CLAUSE IS NEW, AND IT IS THE POINT. Measured on production:
+  // «Льоля» was ingested 21 April, expired by this rule on age alone, and
+  // her ad was still serving four months later. The owner was renewing a
+  // live listing while we took her off the map and told nobody.
+  //
+  // Age is a proxy for "the search is over". A listing the owner is still
+  // maintaining is EVIDENCE that it is not. So when something has
+  // recently confirmed the ad still answers — backfill:ad-bodies and
+  // revive:live-ads both stamp scrape_log.ad_alive_at on a 200 — this
+  // sweep stands down and lets expire:no-post, which asks the real
+  // question, be the thing that expires it.
+  //
+  // Null ad_alive_at means nobody has checked, and those behave exactly
+  // as they did before: age decides. So this can only ever KEEP a pet
+  // that would have been expired, never expire one that would have been
+  // kept.
   const staleRes = await db.execute(sql`
     UPDATE lost_dogs
     SET status = 'expired'
@@ -60,6 +78,11 @@ export async function runLostDogCleanupTick(log: FastifyBaseLogger): Promise<voi
         SELECT 1 FROM sightings s
         WHERE s.dog_id = lost_dogs.id
           AND s.created_at > NOW() - (${c.sightingsGraceMs}::bigint * INTERVAL '1 millisecond')
+      )
+      AND NOT EXISTS (
+        SELECT 1 FROM scrape_log sl
+        WHERE sl.dog_id = lost_dogs.id
+          AND sl.ad_alive_at > NOW() - (${c.adAliveGraceMs}::bigint * INTERVAL '1 millisecond')
       )
     RETURNING id
   `);

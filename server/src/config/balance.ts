@@ -170,6 +170,11 @@ export const balance = {
     lowConfidenceGraceMs: 24 * 60 * 60 * 1000,
     staleAfterMs: 90 * 24 * 60 * 60 * 1000,
     sightingsGraceMs: 30 * 24 * 60 * 60 * 1000,
+    // How long a confirmed-alive ad holds the staleness sweep off. Long
+    // enough that a monthly re-check keeps a live search on the map,
+    // short enough that a pet nobody has re-checked in a season falls
+    // back to the age rule rather than living forever on one old 200.
+    adAliveGraceMs: 45 * 24 * 60 * 60 * 1000,
   },
   // Territory marking — the dog claims ground the way a real one does.
   // The companion decides; the human's only lever is walking it somewhere

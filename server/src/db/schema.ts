@@ -259,6 +259,10 @@ export const scrapeLog = pgTable(
   // list endpoint carrying contact details is a scrapable contact list,
   // which is a different thing from one walker reading one ad.
   rawBody: text('raw_body'),
+  // Last time a fetch of this URL came back 200. The staleness sweep
+  // defers to it: a pet whose ad is demonstrably still up is a search
+  // still running, whatever its age says. See migration 0036.
+  adAliveAt: timestamp('ad_alive_at', { withTimezone: true }),
   parseConfidence: doublePrecision('parse_confidence'),
     ingestAction: text('ingest_action'), // inserted | updated | duplicate | skipped
     skipReason: text('skip_reason'),
