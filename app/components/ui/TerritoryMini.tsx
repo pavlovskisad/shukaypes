@@ -25,10 +25,16 @@
 //   halo/body smoothstep bands    →  feFuncA table (sampled from the
 //                                    identical smoothstep maths)
 //   owner colour                  →  feFlood + feComposite in
-//   puff relief from the gradient →  feDiffuseLighting (its normals ARE
-//                                    the coverage gradient the shader
-//                                    probes for by hand)
 //   bright rim at each band       →  second feFuncA table, white flood
+//
+// The shader's PUFF — relief lit from the coverage gradient — is the one
+// stage left out, and it was tried: feDiffuseLighting reproduces it
+// exactly (its normals are that same gradient). On the map it reads as a
+// cushion because a claim is hundreds of pixels wide. At 92px it only
+// ever lands on the pale halo band, darkening it to a grey ring that
+// reads as a blurry drop shadow around the chip — the single thing that
+// made these look out of focus. Relief needs room; the chip hasn't got
+// any.
 //
 // One deliberate difference, and it is a background difference rather
 // than a rendering one: on the map the field MULTIPLIES the paper, here
@@ -45,7 +51,7 @@ import { useId, useMemo } from 'react';
 const BOX = 64;
 // Room inside the box for the halo band and the meander to breathe —
 // the field spreads visibly past the polygon it grew from.
-const PAD = 8;
+const PAD = 7;
 
 // ── The shader's own numbers ────────────────────────────────────────
 // Kept as literal copies of territoryHeatLayer's composite stage. If
@@ -95,22 +101,12 @@ const RIM_TABLE = tableOf((c) => rimAt(c) * shapedAt(c) * FILL_ALPHA);
 // ramp comes in: a crisp body, the bands drawn close to the edge.
 // Below about 0.8 the bands have no room left and the chip flattens
 // into a sticker.
-const BLUR = 1.2;
+const BLUR = 0.9;
 // Edge meander. Low frequency and small amplitude: on the map the
 // wobble has ~170px features, and a whole territory drawn at 64 units
 // only ever shows the first bend of one.
-const WOBBLE = 1.2;
+const WOBBLE = 0.9;
 const WOBBLE_FREQ = 0.03;
-// Puff relief. feDiffuseLighting builds its normals from the alpha
-// gradient — the same field the shader probes left/right/up/down — so a
-// distant light at the shader's top-left gives the same cushion.
-const SURFACE = 3.2;
-const LIGHT_AZIMUTH = 225;
-const LIGHT_ELEVATION = 62;
-// A flat-lit surface comes back at sin(elevation); rescale so flat
-// ground reads as unshaded (×1) and only the slopes lift or settle.
-const FLAT = Math.sin((LIGHT_ELEVATION * Math.PI) / 180);
-const LIT_SLOPE = 1 / FLAT;
 
 export function TerritoryMini({
   points,
@@ -209,36 +205,6 @@ export function TerritoryMini({
           <feFlood floodColor={color} result="hue" />
           <feComposite in="hue" in2="shapedA" operator="in" result="body" />
 
-          {/* Puff: the field lit from the top-left, so a claim reads as a
-              cushion of scent rather than a flat sticker. */}
-          <feDiffuseLighting
-            in="field"
-            surfaceScale={SURFACE}
-            diffuseConstant={1}
-            lightingColor="#ffffff"
-            result="litRaw"
-          >
-            <feDistantLight azimuth={LIGHT_AZIMUTH} elevation={LIGHT_ELEVATION} />
-          </feDiffuseLighting>
-          <feComponentTransfer in="litRaw" result="lit">
-            <feFuncR type="linear" slope={LIT_SLOPE} intercept={0} />
-            <feFuncG type="linear" slope={LIT_SLOPE} intercept={0} />
-            <feFuncB type="linear" slope={LIT_SLOPE} intercept={0} />
-          </feComponentTransfer>
-          {/* arithmetic k1=1 is a per-channel multiply: the shading rides
-              on the colour without touching its alpha (the light is
-              opaque, so alpha × 1). */}
-          <feComposite
-            in="body"
-            in2="lit"
-            operator="arithmetic"
-            k1={1}
-            k2={0}
-            k3={0}
-            k4={0}
-            result="bodyLit"
-          />
-
           {/* The bright rim each band is born with. */}
           <feComponentTransfer in="field" result="rimA">
             <feFuncA type="table" tableValues={RIM_TABLE} />
@@ -247,7 +213,7 @@ export function TerritoryMini({
           <feComposite in="white" in2="rimA" operator="in" result="rim" />
 
           <feMerge>
-            <feMergeNode in="bodyLit" />
+            <feMergeNode in="body" />
             <feMergeNode in="rim" />
           </feMerge>
         </filter>
