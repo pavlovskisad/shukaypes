@@ -20,7 +20,7 @@
     "clean:lost-dogs": "tsx src/db/clean-lost-dogs.ts",
     "expire:out-of-area": "tsx src/db/expire-out-of-area.ts",
     "expire:pet": "tsx src/db/expire-pet.ts",
-    "check": "pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:route-coverage",
+    "check": "pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:redact && pnpm check:route-coverage",
     "check:same-pet": "tsx src/pipeline/samePet.check.ts",
     "render:dedupe-sql": "tsx src/db/render-dedupe-sql.ts",
     "check:out-of-area": "tsx src/pipeline/outOfArea.check.ts",
@@ -28,6 +28,7 @@
     "check:rate-limit": "tsx src/lib/rateLimit.check.ts",
     "check:invites": "tsx src/services/invites.check.ts",
     "check:dev-auth": "tsx src/lib/devAuth.check.ts",
+    "check:redact": "tsx src/pipeline/redactContacts.check.ts",
     "invite": "tsx src/db/invite.ts",
     "check:route-coverage": "tsx src/lib/routeCoverage.check.ts"
   },
