@@ -11,6 +11,7 @@
 // discovered: 0 and know immediately — no silent corruption.
 
 import { load as loadHtml } from 'cheerio';
+import { extractAdBody } from './adHtml.js';
 import { eq, inArray } from 'drizzle-orm';
 import { db, schema } from '../../db/index.js';
 import { parseDogPost } from '../parser.js';
@@ -184,30 +185,6 @@ function canonical(url: string): string {
   }
 }
 
-// Exported for db/backfill-ad-bodies.ts, which fetches known ad URLs
-// directly rather than rediscovering them through a listing page. It has
-// to read the page the same way this does, or the stored corpus would
-// depend on which code path happened to fetch it.
-export function extractAdBody(html: string): { text: string; photoUrl: string | null } {
-  const $ = loadHtml(html);
-  // OLX ad body is the only multi-line description on the page. data-cy
-  // markers here have been stable too, with a couple of fallbacks for
-  // layout experiments.
-  const body =
-    $('[data-cy="ad_description"]').text() ||
-    $('[data-testid="ad-description"]').text() ||
-    $('div[data-testid="main"]').text() ||
-    '';
-  const title = $('[data-cy="ad_title"] h4').first().text() || $('h4').first().text();
-  const combined = `${title}\n\n${body}`.replace(/\s+\n/g, '\n').trim();
-
-  const photo =
-    $('[data-cy="ad-photo"] img').first().attr('src') ||
-    $('meta[property="og:image"]').attr('content') ||
-    null;
-
-  return { text: combined, photoUrl: photo };
-}
 
 export class OlxSource implements Source {
   name = SOURCE;

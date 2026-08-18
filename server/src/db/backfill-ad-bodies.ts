@@ -49,6 +49,8 @@
 //   production:  fly ssh console -a shukajpes-api -C "node dist/db/backfill-ad-bodies.js"
 //                fly ssh console -a shukajpes-api -C "node dist/db/backfill-ad-bodies.js --apply"
 //
+//   --repair     target bodies stored WITH CSS in them (pre-<style>-strip)
+//                and overwrite, instead of targeting missing ones
 //   --sample=N   dry run, but really fetch N ads and report (no writes)
 //   --limit=N    cap how many are fetched in an --apply run
 //   --delay=MS   between ads (default 1500)
@@ -58,7 +60,7 @@ import { and, eq, isNull, sql } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { scrapeFetch } from '../lib/scrapeFetch.js';
-import { extractAdBody } from '../pipeline/sources/olx.js';
+import { extractAdBody } from '../pipeline/sources/adHtml.js';
 import { capBody } from '../pipeline/adBody.js';
 
 const UA =
@@ -99,6 +101,16 @@ async function main() {
   // have not already been marked gone by a previous run. Only http(s)
   // rows: a Telegram-sourced row's "url" is a message link, not an ad
   // page, and fetching it would prove nothing.
+  // --repair swaps the target from "has no body" to "has a body full of
+  // stylesheet", so a corpus stored before the <style> strip can be
+  // corrected without clearing anything first. Matching the RULE SHAPE
+  // (.css-xxxx{) rather than a bare class prefix, so an ad that merely
+  // mentions css in prose is not re-fetched.
+  const repair = process.argv.includes('--repair');
+  const bodyPredicate = repair
+    ? sql`${schema.scrapeLog.rawBody} ~ '\\.css-[a-z0-9]+[[:space:]]*\\{'`
+    : isNull(schema.scrapeLog.rawBody);
+
   const rows = await db
     .select({
       url: schema.scrapeLog.url,
@@ -110,7 +122,7 @@ async function main() {
     .where(
       and(
         eq(schema.lostDogs.status, 'active'),
-        isNull(schema.scrapeLog.rawBody),
+        bodyPredicate,
         sql`${schema.scrapeLog.url} like 'http%'`,
         sql`(${schema.scrapeLog.skipReason} is null or ${schema.scrapeLog.skipReason} <> ${AD_GONE})`,
       ),
@@ -124,7 +136,9 @@ async function main() {
   }
   let targets = [...byDog.values()];
 
-  console.log(`\nactive pets with a fetchable ad URL and no stored body: ${targets.length}`);
+  console.log(
+    `\nactive pets ${repair ? 'whose stored body is polluted with CSS' : 'with a fetchable ad URL and no stored body'}: ${targets.length}`,
+  );
 
   if (targets.length === 0) {
     // A check that read nothing must never be reported as a check that
