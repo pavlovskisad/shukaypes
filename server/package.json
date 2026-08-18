@@ -34,7 +34,8 @@
     "invite": "tsx src/db/invite.ts",
     "check:route-coverage": "tsx src/lib/routeCoverage.check.ts",
     "check:ad-extract": "tsx src/pipeline/sources/extractAdBody.check.ts",
-    "probe:ad-phone": "tsx src/db/probe-ad-phone.ts"
+    "probe:ad-phone": "tsx src/db/probe-ad-phone.ts",
+    "audit:ingest": "tsx src/db/audit-ingest.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

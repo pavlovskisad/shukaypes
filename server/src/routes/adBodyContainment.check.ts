@@ -50,6 +50,12 @@ const ALLOWED = new Map<string, string>([
   // it never selects the column. And it masks every digit it prints, so
   // even what it does report cannot carry a contact.
   ['db/probe-ad-phone.ts', 'tests null-ness to choose one ad to probe'],
+  // THE ONE GENUINE READER besides the route. It scans stored bodies for
+  // rehoming phrasing — that is the question it answers — but everything
+  // it prints goes through redactContacts first, so its output carries a
+  // matched keyword and a redacted title and nothing else. Operator-run,
+  // never reachable over HTTP.
+  ['db/audit-ingest.ts', 'scans bodies for rehoming phrasing, prints redacted'],
 ]);
 
 // Nothing here may ever read it. These are the payloads that go out in
