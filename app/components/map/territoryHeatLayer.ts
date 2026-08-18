@@ -149,6 +149,13 @@ const CONTOUR_SUM = CONTOUR_STEPS.map(
   (t) => 'smoothstep(' + t.toFixed(3) + ' - CAA, ' + t.toFixed(3) + ' + CAA, c)',
 ).join(' + ');
 
+// The noise lattice repeats every this many cells, so the world position
+// of the viewport can be wrapped into one tile before it reaches the
+// shader (see the composite's NPERIOD note). 64 cells is ~11k px for the
+// meander and ~17k px for the grain — a dozen screens of walking before a
+// repeat, and the repeat is seamless when it comes.
+const NOISE_PERIOD = 64;
+
 // Peak stain strength. 0.42 is a load-bearing number: the owner palette
 // was scored composited at 42% over the map paper (see territoryColor.ts).
 // The compositing became a multiply-tint rather than an alpha film, but
@@ -206,8 +213,11 @@ void main() {
 // outer edge. The smoothstep is centred on 0.5 so the drawn border sits on
 // the true polygon edge; the noise wobbles WHERE within the ramp the
 // threshold falls, which bends the border without moving its average.
-// Noise coords are world-anchored via u_offset (same trick as the fog) so
-// the pattern pans with the streets instead of sticking to the glass.
+// Noise coords are world-anchored — each pixel's offset from the viewport
+// centre is pushed back through the map's own screen transform, so the
+// pattern pans and rotates with the streets instead of sticking to the
+// glass. See the render() comment for how, and for the version of this
+// that only claimed to.
 const COMP_FRAG = `
 #define CAA ${CONTOUR_AA.toFixed(4)}
 #define CBAND ${CONTOUR_ALPHA.toFixed(4)}
@@ -217,28 +227,44 @@ varying vec2 v_uv;
 uniform sampler2D u_tex;
 uniform float u_alpha;
 uniform float u_contour; // 1 = the board chip's contour bands
-uniform vec2 u_offset;
 uniform float u_dpr;
+// Screen → world, for the noise below. u_half is the viewport centre in
+// CSS px; u_toWorld turns a pixel's offset from it into world pixels
+// (north up, at the current zoom); u_nOrigin is where the viewport centre
+// sits in each noise lattice, already wrapped into one tile by the caller.
+uniform vec2 u_half;
+uniform mat2 u_toWorld;
+uniform vec4 u_nOrigin; // xy: meander lattice, zw: grain lattice
 // Offset for the seam probes below, in uv — the blur radius scaled into
 // the low-res texture, so the probe spans a constant FRACTION of the
 // crossfade at every zoom instead of a constant number of pixels.
 uniform vec2 u_probe;
 
+// TILEABLE value noise. The lattice repeats every NPERIOD cells, which is
+// what lets the caller keep the world coordinate small: a claim's position
+// in the world is tens of millions of pixels at street zoom, far past what
+// a float32 sin() can hash, so the caller wraps it into one tile before
+// upload. Wrapping is only invisible because the noise repeats exactly at
+// the tile edge — hence the mod here, and hence the octave scales below
+// being whole numbers (a 2.03 octave would not close on itself).
+#define NPERIOD ${NOISE_PERIOD.toFixed(1)}
 float hash(vec2 p) { return fract(sin(dot(p, vec2(127.1, 311.7))) * 43758.5453123); }
 float vnoise(vec2 p) {
   vec2 i = floor(p), f = fract(p);
   vec2 u = f * f * (3.0 - 2.0 * f);
-  return mix(mix(hash(i), hash(i + vec2(1.0, 0.0)), u.x),
-             mix(hash(i + vec2(0.0, 1.0)), hash(i + vec2(1.0, 1.0)), u.x), u.y);
+  vec2 i0 = mod(i, NPERIOD);
+  vec2 i1 = mod(i + 1.0, NPERIOD);
+  return mix(mix(hash(i0), hash(vec2(i1.x, i0.y)), u.x),
+             mix(hash(vec2(i0.x, i1.y)), hash(i1), u.x), u.y);
 }
 float fbm(vec2 p) {
-  return 0.58 * vnoise(p) + 0.30 * vnoise(p * 2.03 + 9.1) + 0.12 * vnoise(p * 4.11 + 23.7);
+  return 0.58 * vnoise(p) + 0.30 * vnoise(p * 2.0 + 9.1) + 0.12 * vnoise(p * 4.0 + 23.7);
 }
 // Two octaves only, for the edge meander — the third octave that the body
 // grain uses put ~25px ripples on every border and the edges read as
 // torn paper rather than drifting scent.
 float fbm2(vec2 p) {
-  return 0.66 * vnoise(p) + 0.34 * vnoise(p * 2.03 + 9.1);
+  return 0.66 * vnoise(p) + 0.34 * vnoise(p * 2.0 + 9.1);
 }
 
 // The blur leaves rgb premultiplied by coverage; dividing it back out
@@ -250,10 +276,16 @@ void main() {
   vec4 s = texture2D(u_tex, v_uv);
   float cov = s.a;
   if (cov < 0.01) discard;
-  vec2 wp = (gl_FragCoord.xy + u_offset) / u_dpr;
+  // This pixel's offset from the viewport centre in CSS px (y south, so
+  // it matches the world's axes), turned into world pixels and then into
+  // each noise lattice. Doing it here rather than from gl_FragCoord alone
+  // is the whole point: the pattern belongs to the ground, so panning
+  // slides it under the glass instead of dragging it along.
+  vec2 d = vec2(gl_FragCoord.x / u_dpr - u_half.x, u_half.y - gl_FragCoord.y / u_dpr);
+  vec2 wpx = u_toWorld * d;
   // Edge meander, ~170px features. Gated by coverage so noise can never
   // conjure a floating speck of paint out on bare street.
-  float wob = (fbm2(wp / 170.0) - 0.5) * 0.34 * min(1.0, cov * 4.0);
+  float wob = (fbm2(wpx / 170.0 + u_nOrigin.xy) - 0.5) * 0.34 * min(1.0, cov * 4.0);
   float c = cov + wob;
   // TWO soft steps instead of one — a pale halo, then the dense body.
   // This is most of what makes a claim read as a heat field with depth
@@ -313,7 +345,7 @@ void main() {
   float luma = dot(col, vec3(0.299, 0.587, 0.114));
   col = mix(col, mix(vec3(luma), col, 1.45), coreT * 0.6);
   // ...and the body carries large, soft density variation on top.
-  float grain = fbm(wp / 260.0 + 17.0);
+  float grain = fbm(wpx / 260.0 + u_nOrigin.zw);
   float a = shaped * u_alpha * (0.88 + 0.24 * grain);
   // STAIN, not film. The output is a multiply tint (1 where the field
   // is empty), composited with DST_COLOR blending: the field dyes the
@@ -457,7 +489,9 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
   let aCompPos = -1;
   let uCompTex: WebGLUniformLocation | null = null;
   let uCompAlpha: WebGLUniformLocation | null = null;
-  let uCompOffset: WebGLUniformLocation | null = null;
+  let uCompHalf: WebGLUniformLocation | null = null;
+  let uCompToWorld: WebGLUniformLocation | null = null;
+  let uCompNOrigin: WebGLUniformLocation | null = null;
   let uCompDpr: WebGLUniformLocation | null = null;
   let uCompProbe: WebGLUniformLocation | null = null;
   let uCompContour: WebGLUniformLocation | null = null;
@@ -556,7 +590,9 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
       aCompPos = gl.getAttribLocation(compProg, 'a_pos');
       uCompTex = gl.getUniformLocation(compProg, 'u_tex');
       uCompAlpha = gl.getUniformLocation(compProg, 'u_alpha');
-      uCompOffset = gl.getUniformLocation(compProg, 'u_offset');
+      uCompHalf = gl.getUniformLocation(compProg, 'u_half');
+      uCompToWorld = gl.getUniformLocation(compProg, 'u_toWorld');
+      uCompNOrigin = gl.getUniformLocation(compProg, 'u_nOrigin');
       uCompDpr = gl.getUniformLocation(compProg, 'u_dpr');
       uCompProbe = gl.getUniformLocation(compProg, 'u_probe');
       uCompContour = gl.getUniformLocation(compProg, 'u_contour');
@@ -695,19 +731,69 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         gl.uniform1f(uCompAlpha, FILL_ALPHA);
         gl.uniform1f(uCompContour, CONTOURS_ON ? 1 : 0);
         const dpr = (typeof window !== 'undefined' && window.devicePixelRatio) || 1;
-        // Anchor the edge/grain noise to the world: project the map centre
-        // to screen px and offset gl_FragCoord by it, exactly as the fog
-        // does — pan and the pattern travels with the streets.
-        let offX = 0;
-        let offY = 0;
+        // ── Anchor the meander and grain to the ground ──────────────────
+        // The first version of this projected the map CENTRE and offset
+        // gl_FragCoord by it, which anchors nothing: the centre projects to
+        // the middle of the canvas by definition, so the offset was the
+        // same every frame and the noise was welded to the glass. Panning
+        // dragged a cloud of grain along with the phone. (Measured, not
+        // guessed: two frames 440m apart came out byte-identical.)
+        //
+        // What actually anchors it is the inverse of the map's own screen
+        // transform, measured rather than rebuilt from zoom and bearing —
+        // project the centre and two neighbours a hair to the east and
+        // south, and the differences ARE the matrix, whatever conventions
+        // MapLibre uses internally. Under pitch this is the linearisation
+        // at the centre, so the far distance parallaxes a little; the
+        // pattern is a texture, not a landmark, and that is invisible.
+        let half = [0, 0];
+        // Column-major mat2: screen px → world px. Identity means "no
+        // anchor this frame", which is the old screen-locked behaviour.
+        const toWorld = [1, 0, 0, 1];
+        const nOrigin = [0, 0, 0, 0];
         try {
-          const p = mapRef.project(mapRef.getCenter());
-          offX = -p.x * dpr;
-          offY = p.y * dpr;
+          half = [gl.drawingBufferWidth / dpr / 2, gl.drawingBufferHeight / dpr / 2];
+          const c = mapRef.getCenter();
+          // World pixels at this zoom — MapLibre's own units: mercator
+          // scaled by tile size × 2^zoom.
+          const ws = 512 * Math.pow(2, mapRef.getZoom());
+          const EPS = 1e-4; // degrees; ~10m, small enough to stay linear
+          const mc = MercatorCoordinate.fromLngLat([c.lng, c.lat], 0);
+          const me = MercatorCoordinate.fromLngLat([c.lng + EPS, c.lat], 0);
+          const ms = MercatorCoordinate.fromLngLat([c.lng, c.lat - EPS], 0);
+          const p0 = mapRef.project(c);
+          const pe = mapRef.project([c.lng + EPS, c.lat]);
+          const ps = mapRef.project([c.lng, c.lat - EPS]);
+          const ex = (me.x - mc.x) * ws; // world px per EPS east
+          const sy = (ms.y - mc.y) * ws; // world px per EPS south
+          // Forward matrix: world px → screen px, one column per world axis.
+          const a = (pe.x - p0.x) / ex;
+          const b = (pe.y - p0.y) / ex;
+          const cc = (ps.x - p0.x) / sy;
+          const d = (ps.y - p0.y) / sy;
+          const det = a * d - b * cc;
+          if (Number.isFinite(det) && Math.abs(det) > 1e-9) {
+            toWorld[0] = d / det;
+            toWorld[1] = -b / det;
+            toWorld[2] = -cc / det;
+            toWorld[3] = a / det;
+            // Where the viewport centre sits in each lattice. Divide first,
+            // wrap second, both in float64 — this is the step that keeps a
+            // twenty-million-pixel world coordinate inside one noise tile.
+            // The +17 keeps the grain from sampling the same corner of the
+            // lattice the meander does.
+            const wrap = (v: number) => ((v % NOISE_PERIOD) + NOISE_PERIOD) % NOISE_PERIOD;
+            nOrigin[0] = wrap((mc.x * ws) / 170);
+            nOrigin[1] = wrap((mc.y * ws) / 170);
+            nOrigin[2] = wrap((mc.x * ws) / 260 + 17);
+            nOrigin[3] = wrap((mc.y * ws) / 260 + 17);
+          }
         } catch {
           /* mid-teardown; screen-anchored for a frame is fine */
         }
-        gl.uniform2f(uCompOffset, offX, offY);
+        gl.uniform2f(uCompHalf, half[0]!, half[1]!);
+        gl.uniformMatrix2fv(uCompToWorld, false, toWorld);
+        gl.uniform4f(uCompNOrigin, nOrigin[0]!, nOrigin[1]!, nOrigin[2]!, nOrigin[3]!);
         gl.uniform1f(uCompDpr, dpr);
         // Seam probes reach one blur radius out — the crossfade between
         // two owners spans ~2 radii, so this samples a constant fraction
