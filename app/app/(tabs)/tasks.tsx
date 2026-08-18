@@ -74,6 +74,28 @@ interface TaskRow {
   target: number;
 }
 
+// How many neighbours the STANDING CARD shows. Not a display
+// preference — it is what keeps the card a screenful, and a card that
+// fits its screen is why this tab snaps cleanly in both directions.
+//
+// The card used to list all ten at portrait size, which ran to about
+// twice a phone viewport. That needed an end-aligned snap anchor at its
+// tail to be reachable at all, and that anchor then caught every scroll
+// coming back UP from the lost-pets card — you landed on the board's
+// last row instead of its title. So the number is derived, not chosen:
+//
+//   card height ≈ 230 + 104·N     (32 padding + 34 title + 124 your
+//                                  row + 104 per row + 40 for the link;
+//                                  104 measured off a real render)
+//   snapport    ≈ 618             (a notch-era iPhone's Safari content
+//                                  area, less scrollPaddingTop)
+//
+// N=4 overflows by ~30px, which is exactly the condition that broke the
+// scroll before; N=3 fits with room to spare on the small end too. Your
+// own row sits above them, so it reads as you against the podium — and
+// the rest of the city is one tap away in the fullscreen board.
+const BOARD_CARD_ROWS = 3;
+
 const TASKS: TaskRow[] = [
   { key: 'tokens', iconName: 'paws', labelKey: 'collectTokens', target: DAILY_TARGETS.tokens },
   { key: 'bones', iconName: 'bone', labelKey: 'feedBones', target: DAILY_TARGETS.bones },
@@ -428,7 +450,7 @@ export default function TasksScreen() {
               <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
             ) : (
               <>
-                {board.board.map((row, i) => {
+                {board.board.slice(0, BOARD_CARD_ROWS).map((row, i) => {
                   // The viewer is whoever sits at their own rank — the
                   // board carries no id for you, and it doesn't need to.
                   const isYou = board.you.rank === i + 1;
@@ -454,24 +476,18 @@ export default function TasksScreen() {
                     </Pressable>
                   );
                 })}
-                {/* The whole city, not just its ten loudest dogs — same
-                    underlined-link affordance as the carousel counter.
-                    The wrapper is also the card's END-ANCHOR: an
-                    end-aligned snap area, so mandatory snapping has a
-                    legal resting position showing the tail rows and this
-                    link (see the scroller comment). Only when the list
-                    is long enough to overflow — on a short board an end
-                    anchor above the card's start would just add a
-                    second snap point next to the first. */}
-                <View style={board.board.length >= 5 ? styles.boardTailSnap : undefined}>
-                  <Pressable onPress={openFullBoard} hitSlop={8}>
-                    {({ pressed }) => (
-                      <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
-                        {t.tasks.boardSeeAll}
-                      </Text>
-                    )}
-                  </Pressable>
-                </View>
+                {/* The rest of the city — same underlined-link
+                    affordance as the carousel counter. It carries real
+                    weight now that the card shows a handful: the board
+                    is the district's shape, the sheet is its full
+                    census. */}
+                <Pressable onPress={openFullBoard} hitSlop={8}>
+                  {({ pressed }) => (
+                    <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
+                      {t.tasks.boardSeeAll}
+                    </Text>
+                  )}
+                </Pressable>
               </>
             )}
           </View>
@@ -648,20 +664,20 @@ const styles = StyleSheet.create({
   // so a flick from the lost-pets card lands cleanly on the daily-
   // tasks card (and back).
   //
-  // `mandatory`, and that took a round trip to settle. The standing
-  // card outgrew a phone viewport and its tail rows became reachable
-  // only while a finger held the scroll — so this flipped to
-  // `proximity`, which fixed the tail and broke the feel: every card
-  // edge turned into a sticky patch and a flick stuttered down the
-  // page in small jumps instead of gliding to the next section. The
-  // actual problem was never the snap STRENGTH — mandatory already
-  // lets the scroll rest anywhere while an oversized card covers the
-  // viewport (the CSS covering rule) — it was that the standing
-  // card's TAIL has no snap position of its own, so the moment its
-  // bottom edge rose into view the scroller had nowhere legal to
-  // stay. The fix is boardTailSnap below: an end-aligned snap point
-  // on the card's last element. Sections snap crisply again, and the
-  // tail is a place the page is allowed to stop.
+  // `mandatory`, with ONE snap position per card — its start — and
+  // that took a round trip to arrive at. When the standing card ran to
+  // twice a viewport, its tail was unreachable (mandatory yanked you
+  // to the next card the moment the card stopped covering the
+  // screen); `proximity` fixed the tail and broke the feel, every card
+  // edge turning sticky so a flick stuttered instead of gliding; an
+  // end-aligned anchor at the card's tail fixed both, and then caught
+  // every scroll coming back UP from lost pets, landing you on the
+  // board's last row instead of its title.
+  //
+  // The fix was upstream of all three: cards that FIT (see
+  // BOARD_CARD_ROWS). With nothing overflowing there is no tail to
+  // reach, no second anchor to catch an upward flick, and every
+  // landing — up or down — is a card's own top.
   // RN-Web passes scroll-snap-* straight through to CSS even
   // though RN typings don't know about them.
   scroller: {
@@ -673,26 +689,21 @@ const styles = StyleSheet.create({
     // above the floating dashboard instead of getting clipped
     // by it.
     scrollPaddingTop: 32,
-    // The tail anchor's counterpart: an end-aligned snap position
-    // (boardTailSnap) aligns the card's END to the snapport's bottom,
-    // and without this the snapport's bottom IS the screen's bottom —
-    // under the floating tab bar, which then sat on top of the last
-    // row and the "see all" link. Padded past the bar (bottom offset +
-    // 58px pill + clearance) so the tail rests fully readable above it.
-    scrollPaddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 108px)',
   } as unknown as object,
-  // Tighter top padding so the next card's title peeks above
-  // the tab bar. gap stays 60 so the between-card rhythm
-  // doesn't collapse. paddingBottom is calc(100vh - 200px) so
-  // even short cards (like "минулі пошуки" with 2 history rows)
-  // have enough room beneath them to snap-scroll all the way to
-  // the top — without this, a small last card was held mid-
-  // screen because the page couldn't scroll any further.
+  // Tighter top padding so the next card's title peeks above the tab
+  // bar. The gap is the SEPARATION between sections and it is
+  // deliberately large: at 60 the standing, the pets and the quests
+  // ran into each other as one long page, and this tab is meant to
+  // read as a few clean screens you flick between. paddingBottom is
+  // calc(100vh - 200px) so even short cards (like "минулі пошуки"
+  // with 2 history rows) have enough room beneath them to snap-scroll
+  // all the way to the top — without this, a small last card was held
+  // mid-screen because the page couldn't scroll any further.
   content: {
     paddingHorizontal: S.l,
     paddingTop: S.xxxl,
     paddingBottom: 'calc(100vh - 200px)' as unknown as number,
-    gap: 60,
+    gap: 112,
   },
   // Snap block — no white card frame anymore. Title + content
   // sit straight on the page bg. Just carries the scroll-snap
@@ -807,12 +818,6 @@ const styles = StyleSheet.create({
   },
   boardSeeAllPressed: { opacity: 0.55 },
   boardRowPressed: { opacity: 0.6 },
-  // The standing card's end-anchor — see the scroller comment. A snap
-  // area on the card's LAST element, end-aligned, so the page may rest
-  // with the tail rows on screen under mandatory snapping.
-  boardTailSnap: {
-    scrollSnapAlign: 'end',
-  } as unknown as object,
   boardEmpty: {
     fontSize: TYPE.small,
     color: '#777',
