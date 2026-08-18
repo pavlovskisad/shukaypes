@@ -38,6 +38,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { OWN_COLOR_RGB, ownerColorRgb, pointInRing } from './territoryColor';
 import { DOG_CAM } from '../../constants/experiments';
 import { jitterInRadius } from '../../utils/cluster';
+import { getTerritoryField, SEAM_FADE } from './territoryField';
 
 export const THREE_BUILDINGS_LAYER_ID = 'three-buildings';
 
@@ -301,6 +302,29 @@ export function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number
 // owner's colour while the soft ground field stays the loudest voice.
 const TERRITORY_PAINT = 0.32;
 
+// ...and how much of that paint survives out at the edge of a claim.
+//
+// The flat coat was the complaint: every block in a district dyed to the
+// same depth, right up to the last one on the border, which is not how
+// the ground under them reads any more. The supersniff beacon has always
+// done the other thing — a smooth falloff across the buildings of one
+// zone — and that gradient is the reason it looks like light on a place
+// rather than paint on a mesh.
+//
+// So the territory coat gets the same treatment, from the honest source:
+// the ground layer's own depth field, sampled under each building's
+// footprint. Deep in somebody's ground the paint is full; out where the
+// claim thins it drops to this fraction, so a district reads as a heart
+// with a fading rim instead of a slab. Not to zero — a building on the
+// border still belongs to somebody, and the answer to "whose is this"
+// must not vanish.
+const TERRITORY_PAINT_RIM = 0.35;
+// Where the falloff sits on the depth field. Matches the ground's own
+// core band (see the composite's `core`), so the buildings brighten over
+// the same ground the field does.
+const TERRITORY_DEPTH_LO = 0.3;
+const TERRITORY_DEPTH_HI = 0.8;
+
 // One building's slice of the merged vertex buffer, plus where it stands.
 interface BuildingSpan {
   start: number; // first vertex index
@@ -442,6 +466,13 @@ export function createThreeBuildingsLayer(
     // Dog position (local metres, .xz used) + 1 when there's a dog to orb around.
     u_dogLocal: { value: new THREE.Vector3() },
     u_dogActive: { value: 0 },
+    // The ground layer's field — see territoryField.ts. Null until it has
+    // rendered a frame, and null again if it ever falls back to the flat
+    // fill, which u_terrFieldOn gates.
+    u_terrSharp: { value: null as THREE.Texture | null },
+    u_terrDepth: { value: null as THREE.Texture | null },
+    u_terrFieldOn: { value: 0 },
+    u_terrPad: { value: 1 },
   };
   material.onBeforeCompile = (shader) => {
     shader.uniforms.u_camLocal = fogUniforms.u_camLocal;
@@ -460,14 +491,28 @@ export function createThreeBuildingsLayer(
     shader.uniforms.u_previewStrength = fogUniforms.u_previewStrength;
     shader.uniforms.u_dogLocal = fogUniforms.u_dogLocal;
     shader.uniforms.u_dogActive = fogUniforms.u_dogActive;
+    shader.uniforms.u_terrSharp = fogUniforms.u_terrSharp;
+    shader.uniforms.u_terrDepth = fogUniforms.u_terrDepth;
+    shader.uniforms.u_terrFieldOn = fogUniforms.u_terrFieldOn;
+    shader.uniforms.u_terrPad = fogUniforms.u_terrPad;
     shader.vertexShader =
-      'varying vec3 vLocalPos;\nattribute vec4 aTerr;\nvarying vec4 vTerr;\n' +
+      'varying vec3 vLocalPos;\nattribute vec4 aTerr;\nvarying vec4 vTerr;\nvarying vec3 vGround;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\n  vLocalPos = position;\n  vTerr = aTerr;',
+        '#include <begin_vertex>\n  vLocalPos = position;\n  vTerr = aTerr;\n' +
+          // Where this vertex's GROUND point lands on the glass — the same
+          // vertex with its height dropped. A roof is drawn well above its
+          // own footprint on a pitched map, so sampling a screen-space
+          // field at the fragment's own position would paint a roof with
+          // whatever ground happens to lie behind the building. This asks
+          // about the ground the building actually stands on. Kept
+          // projective (xy, w) and divided in the fragment, so the
+          // interpolation across a face is perspective-correct.
+          '  vec4 _gp = projectionMatrix * modelViewMatrix * vec4(position.x, 0.0, position.z, 1.0);\n' +
+          '  vGround = vec3(_gp.xy, _gp.w);',
       );
     shader.fragmentShader =
-      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform float u_fogZoom;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nuniform vec3 u_dogLocal;\nuniform float u_dogActive;\nvarying vec3 vLocalPos;\nvarying vec4 vTerr;\n' +
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform float u_fogZoom;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nuniform vec3 u_dogLocal;\nuniform float u_dogActive;\nuniform sampler2D u_terrSharp;\nuniform sampler2D u_terrDepth;\nuniform float u_terrFieldOn;\nuniform float u_terrPad;\nvarying vec3 vLocalPos;\nvarying vec4 vTerr;\nvarying vec3 vGround;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         [
@@ -476,7 +521,28 @@ export function createThreeBuildingsLayer(
           // BEFORE the fog and the see-through orb so a painted block still
           // fades into the distance and still dissolves around the dog —
           // territory is a coat of paint on the city, not a layer over it.
-          `  gl_FragColor.rgb = mix(gl_FragColor.rgb, vTerr.rgb, vTerr.a * ${TERRITORY_PAINT.toFixed(2)});`,
+          `  float _paint = vTerr.a * ${TERRITORY_PAINT.toFixed(2)};`,
+          // Fade the coat out toward the edge of the claim, reading the
+          // ground layer's own field so the two agree exactly. Everything
+          // here is the ground's arithmetic, not a second opinion about
+          // where a claim is strong.
+          '  if (u_terrFieldOn > 0.5 && vGround.z > 0.0) {',
+          '    vec2 _suv = (vGround.xy / vGround.z) * 0.5 + 0.5;',
+          // The field's buffers hold a margin beyond the screen.
+          '    vec2 _fuv = 0.5 + (_suv - 0.5) / u_terrPad;',
+          '    vec4 _fs = texture2D(u_terrSharp, _fuv);',
+          '    vec4 _fd = texture2D(u_terrDepth, _fuv);',
+          // Deep inside CLAIMED ground, and deep inside THIS owner's:
+          // the wide blur mixes a neighbour's colour in where the sharp
+          // one does not, so the drift between them is the per-owner part.
+          // Same two terms the ground's core band is cut from.
+          '    vec3 _cs = _fs.rgb / max(_fs.a, 0.004);',
+          '    vec3 _cd = _fd.rgb / max(_fd.a, 0.004);',
+          `    float _mine = 1.0 - clamp(length(_cd - _cs) * ${SEAM_FADE.toFixed(2)}, 0.0, 1.0);`,
+          `    float _deep = smoothstep(${TERRITORY_DEPTH_LO.toFixed(2)}, ${TERRITORY_DEPTH_HI.toFixed(2)}, _fd.a * _mine);`,
+          `    _paint *= mix(${TERRITORY_PAINT_RIM.toFixed(2)}, 1.0, _deep);`,
+          '  }',
+          '  gl_FragColor.rgb = mix(gl_FragColor.rgb, vTerr.rgb, _paint);',
           '  float _dist = length(vLocalPos - u_camLocal);',
           // Exponential distance fog — the "wall" that swallows the far.
           '  float _distFog = 1.0 - exp(-u_fogDensity * max(0.0, _dist - u_fogNear));',
@@ -622,6 +688,10 @@ export function createThreeBuildingsLayer(
   let dogCamRepaintPending = false;
   // Eased 0→1 strength of the preview beacon glow (fades in/out per frame).
   let previewStrength = 0;
+  // Wrappers around the ground layer's textures — rebuilt when it
+  // reallocates them (a resize), dropped when the layer goes away.
+  let terrSharpTex: THREE.ExternalTexture | null = null;
+  let terrDepthTex: THREE.ExternalTexture | null = null;
   let mapRef: MlMap | null = null;
 
   // Mercator origin of the current mesh + the metre scale at that origin.
@@ -982,6 +1052,15 @@ export function createThreeBuildingsLayer(
         mesh.geometry.dispose();
         mesh = null;
       }
+      // The wrappers are ours; the textures inside them are the ground
+      // layer's and are not ours to delete.
+      terrSharpTex?.dispose();
+      terrDepthTex?.dispose();
+      terrSharpTex = null;
+      terrDepthTex = null;
+      fogUniforms.u_terrSharp.value = null;
+      fogUniforms.u_terrDepth.value = null;
+      fogUniforms.u_terrFieldOn.value = 0;
       if (shadowMesh) {
         scene.remove(shadowMesh);
         shadowMesh.geometry.dispose();
@@ -1106,6 +1185,32 @@ export function createThreeBuildingsLayer(
           // it is capped, and past the cap the fog whited out every roof.
           const z = mapRef.getZoom();
           fogUniforms.u_fogZoom.value = Math.min(1, Math.max(0, (z - 13.2) / 1.6));
+        }
+
+        // The ground layer's field, for the territory coat above. The
+        // textures belong to that layer and are reallocated whenever the
+        // canvas resizes, so the wrappers are rebuilt when the identity
+        // changes rather than kept forever. ExternalTexture is three's
+        // supported way to hand it a texture it did not create — no
+        // reaching into renderer internals.
+        {
+          const field = getTerritoryField();
+          if (!field) {
+            fogUniforms.u_terrFieldOn.value = 0;
+          } else {
+            if (terrSharpTex?.sourceTexture !== field.sharp) {
+              terrSharpTex?.dispose();
+              terrSharpTex = new THREE.ExternalTexture(field.sharp);
+            }
+            if (terrDepthTex?.sourceTexture !== field.depth) {
+              terrDepthTex?.dispose();
+              terrDepthTex = new THREE.ExternalTexture(field.depth);
+            }
+            fogUniforms.u_terrSharp.value = terrSharpTex;
+            fogUniforms.u_terrDepth.value = terrDepthTex;
+            fogUniforms.u_terrPad.value = field.pad;
+            fogUniforms.u_terrFieldOn.value = 1;
+          }
         }
 
         // Zone beacon — two sources, same brand-blue glow. Supersniff

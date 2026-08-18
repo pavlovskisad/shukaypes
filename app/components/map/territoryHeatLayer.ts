@@ -52,6 +52,7 @@ import type {
   Map as MlMap,
 } from 'maplibre-gl';
 import earcut from 'earcut';
+import { publishTerritoryField, SEAM_FADE } from './territoryField';
 import type { TerritoryShape } from '../../services/api';
 
 export const TERRITORY_HEAT_LAYER_ID = 'territory-heat';
@@ -126,8 +127,8 @@ const DEPTH_ITERS = 6;
 // without a pass per owner: the wide blur MIXES the neighbour's colour
 // in, and the sharp field does not. How far the two colours have drifted
 // apart is therefore a per-owner depth, free, from textures already
-// bound. This scales that drift into a 0..1 fade.
-const SEAM_FADE = 2.6;
+// bound. SEAM_FADE (in territoryField.ts, because the buildings read the
+// field the same way) scales that drift into a 0..1 fade.
 
 // EXPERIMENT — the board chip's construction, on the map. Off unless
 // the URL says ?contours=1, so this costs nothing until somebody asks
@@ -633,6 +634,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
   const fail = (where: string, e?: unknown) => {
     if (failed) return;
     failed = true;
+    publishTerritoryField(null);
     // eslint-disable-next-line no-console
     console.error(`[territory-heat] ${where} — falling back to flat fill`, e ?? '');
     try {
@@ -644,6 +646,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
 
   const dropTargets = (gl: GL) => {
     if (!targets) return;
+    publishTerritoryField(null);
     for (const t of targets) {
       gl.deleteTexture(t.tex);
       gl.deleteFramebuffer(t.fbo);
@@ -740,6 +743,7 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
     onRemove(_map: MlMap, gl: GL) {
       mapRef = null;
       hasContent = false;
+      publishTerritoryField(null);
       try {
         dropTargets(gl);
         if (polyProg) gl.deleteProgram(polyProg);
@@ -874,6 +878,11 @@ export function createTerritoryHeatLayer(onFail?: () => void): TerritoryHeatLaye
         if (stencilOn) gl.enable(gl.STENCIL_TEST);
         if (cullOn) gl.enable(gl.CULL_FACE);
         hasContent = true;
+        // Hand this frame's field to whoever else draws on this ground —
+        // the buildings read it so their paint fades the way the ground
+        // under them does. See territoryField.ts for why the ordering is
+        // safe.
+        publishTerritoryField({ sharp: A.tex, depth: C.tex, pad: PAD_F });
       } catch (e) {
         // Skip the frame, keep the map alive. Structural failures already
         // came through fail(); anything here is transient.
