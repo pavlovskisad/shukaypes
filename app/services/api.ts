@@ -346,6 +346,25 @@ export const api = {
   getLostDogById: (id: string) =>
     req<{ dog: NearbyLostDog }>(`/dogs/${encodeURIComponent(id)}`),
 
+  // The owner's post for one pet, fetched only when somebody opens it.
+  //
+  // DELIBERATELY NOT ON /sync/map. That payload goes out every 15s to
+  // every walker and we just spent a PR halving it; a few KB of ad text
+  // per pet would undo that. And a bulk endpoint carrying phone numbers
+  // is what turns "one walker reads one ad" into a scrapable contact
+  // list. One pet, on demand, authenticated.
+  //
+  // `contactsHidden` is the server telling us it masked something — the
+  // walker gets the description now and the phone once they report a
+  // sighting. The client never decides that; it only explains it.
+  getDogPost: (id: string) =>
+    req<{
+      body: string | null;
+      contactsHidden: boolean;
+      sourceUrl: string | null;
+      fetchedAt: string | null;
+    }>(`/dogs/${encodeURIComponent(id)}/post`),
+
   // Bulk variant of the four /tokens/nearby + /food/nearby +
   // /dogs/nearby + /state calls. One round-trip instead of four; the
   // client store can also collapse the resulting state into a single

@@ -24,6 +24,12 @@ interface LostDogModalProps {
   onClose: () => void;
   onReportSighting?: (dog: NearbyLostDog) => void;
   onStartSearch?: (dog: NearbyLostDog) => void;
+  // Read the owner's post without leaving. Deliberately NOT a pill: the
+  // two decisions on this card are "I've seen them" and "start search",
+  // and a third button of equal weight would blunt both. This is the
+  // detail you reach for mid-search when you are looking at an animal
+  // and asking "is this the one" — quieter than a choice, always there.
+  onOpenPost?: (dog: NearbyLostDog) => void;
   // When this dog already has an active search, swap the "start search"
   // button for a muted "searching…" affordance.
   searchActive?: boolean;
@@ -115,6 +121,7 @@ export function LostDogModal({
   onClose,
   onReportSighting,
   onStartSearch,
+  onOpenPost,
   searchActive,
   onPrev,
   onNext,
@@ -286,6 +293,25 @@ export function LostDogModal({
             >
               {t.modals.lostDog.questCta(renderDog.rewardPoints)}
             </div>
+            {onOpenPost ? (
+              <button
+                onClick={() => onOpenPost(renderDog)}
+                style={{
+                  marginTop: 8,
+                  padding: 0,
+                  border: 'none',
+                  background: 'none',
+                  color: BADGE_ON_DARK,
+                  fontFamily: SYSTEM_FONT,
+                  fontSize: TYPE.caption,
+                  fontWeight: 700,
+                  textDecoration: 'underline',
+                  cursor: 'pointer',
+                }}
+              >
+                {t.modals.lostDog.readPost}
+              </button>
+            ) : null}
           </div>
 
           {/* Action pills — brand-blue primary (start search), white

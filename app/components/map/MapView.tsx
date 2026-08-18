@@ -56,6 +56,7 @@ import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { LostDogModal } from '../ui/LostDogModal';
 import { SpotModal } from '../ui/SpotModal';
+import { PostModal } from '../ui/PostModal';
 import { getDeepLinkDogId } from '../../services/telegram';
 import { useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
@@ -349,8 +350,15 @@ export default function MapViewWeb() {
     | { kind: 'confirm'; dog: NearbyLostDog }
     | { kind: 'leave'; dog: NearbyLostDog }
     | { kind: 'arrived'; dog: NearbyLostDog }
-    | { kind: 'done'; text: string; sourceUrl: string | null }
+    // `postDog` is set only when the walker said they saw the animal —
+    // that report is what unlocks the owner's contact, and the server
+    // checks it again before sending anything.
+    | { kind: 'done'; text: string; postDog: { id: string; name: string } | null }
   >(null);
+  // The pet whose post is open, if any. Its own state rather than a
+  // prompt variant, because it is reached from two unrelated places —
+  // the pet card mid-search and the end-of-search prompt.
+  const [postDog, setPostDog] = useState<{ id: string; name: string } | null>(null);
   // Read inside effects that must not re-run on every render.
   const promptRef = useRef(prompt);
   promptRef.current = prompt;
@@ -1263,11 +1271,13 @@ export default function MapViewWeb() {
       setSearchTarget(null);
       setSearchRoute(null);
       let paws = 0;
-      let sourceUrl: string | null = null;
       try {
         const res = await api.finishSearch(dog.id, seen, userPosRef.current);
         paws = res.paws;
-        sourceUrl = res.sourceUrl;
+        // `res.sourceUrl` is deliberately ignored now. It was the OLX
+        // link this prompt used to open; /dogs/:id/post carries its own
+        // copy, gated by the same sighting check, so reading it from two
+        // places is how the two would drift.
       } catch {
         // Offline or the server said no. The search still ends — stranding
         // someone in a quest because a request failed is the worse outcome
@@ -1285,8 +1295,10 @@ export default function MapViewWeb() {
       setPrompt({
         kind: 'done',
         text: seen ? t.search.thanksSeen(paws) : t.search.thanksMissed(paws),
-        // Only offered when the pet came from a post that still exists.
-        sourceUrl: seen ? sourceUrl : null,
+        // Reading the post used to mean opening OLX in a new tab. Now it
+        // opens in place — and having just reported a sighting is exactly
+        // what earns the unmasked contact.
+        postDog: seen ? { id: dog.id, name: dog.name } : null,
       });
     },
     [setSearchTarget, setSearchRoute, t],
@@ -3003,20 +3015,24 @@ export default function MapViewWeb() {
                       },
                     ]
                   : [
-                      ...(prompt.sourceUrl
+                      // Was `window.open(sourceUrl)`. The post opens in a
+                      // sheet now; the original URL survives inside it as
+                      // the fallback for pets ingested before we stored
+                      // bodies, which is most of them for a while yet.
+                      ...(prompt.postDog
                         ? [
                             {
                               label: t.search.contactOpen,
                               primary: true,
                               onPress: () => {
-                                window.open(prompt.sourceUrl!, '_blank', 'noopener');
+                                setPostDog(prompt.postDog);
                                 setPrompt(null);
                               },
                             },
                           ]
                         : []),
                       {
-                        label: prompt.sourceUrl ? t.search.contactLater : t.search.close,
+                        label: prompt.postDog ? t.search.contactLater : t.search.close,
                         onPress: () => setPrompt(null),
                       },
                     ]
@@ -3429,6 +3445,14 @@ export default function MapViewWeb() {
         }
         onPrev={lostDogs.length > 1 ? () => cycleSelectedDog(-1) : undefined}
         onNext={lostDogs.length > 1 ? () => cycleSelectedDog(1) : undefined}
+        onOpenPost={(d) => {
+          // The card closes on the way in. Two sheets stacked over a
+          // dimmed map is a maze, and the reader is where the decision
+          // gets made — the card is what you came from, not what you
+          // come back to.
+          setSelectedDog(null);
+          setPostDog({ id: d.id, name: d.name });
+        }}
         onReportSighting={async (d) => {
           setSelectedDog(null);
           const res = await useGameStore.getState().reportSighting(d.id);
@@ -3454,6 +3478,12 @@ export default function MapViewWeb() {
           }
           assignSearch(d);
         }}
+      />
+
+      <PostModal
+        dogId={postDog?.id ?? null}
+        dogName={postDog?.name}
+        onClose={() => setPostDog(null)}
       />
 
       <SpotModal

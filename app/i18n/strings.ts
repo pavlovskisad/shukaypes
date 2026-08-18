@@ -217,6 +217,27 @@ export interface AppStrings {
       searchingCta: string;
       previousPet: string;
       nextPet: string;
+      // Opens the owner's post inside the app.
+      readPost: string;
+    };
+    // The owner's post, read in-app instead of bouncing out to OLX.
+    post: {
+      title: string;
+      titleNamed: (name: string) => string;
+      loading: string;
+      // The request failed — "try again", which is NOT the same thing as
+      // an ad we never stored.
+      failed: string;
+      // We have no body for this pet: everything ingested before 17 Aug,
+      // which is most of the base for weeks yet. Must read as "it lives
+      // over there", never as a broken panel.
+      notStored: string;
+      // …and the original is behind the same sighting gate the contacts
+      // are, so when there is no body AND no link this says what to do
+      // instead of leaving an empty sheet.
+      originalAfterSighting: string;
+      // Why the text has holes in it.
+      contactsAfterSighting: string;
     };
     spot: {
       walkHere: string;
@@ -530,6 +551,22 @@ const uk: AppStrings = {
       searchingCta: 'шукаємо…',
       previousPet: 'попередній',
       nextPet: 'наступний',
+      readPost: 'читати оголошення',
+    },
+    post: {
+      title: 'оголошення',
+      // Name first, separated — «оголошення про {name}» would need the
+      // accusative («про Мухтара», «про Лялю») and pet names decline every
+      // which way. A separator sidesteps the case entirely.
+      titleNamed: (name) => `${name} · оголошення`,
+      loading: 'відкриваю…',
+      failed: 'не вдалося завантажити. спробуй ще раз.',
+      notStored:
+        'повного тексту цього оголошення в нас немає — воно з’явилось раніше, ніж ми почали їх зберігати.',
+      originalAfterSighting:
+        'позначиш, що бачив цю тваринку — відкрию оригінал з контактами власника.',
+      contactsAfterSighting:
+        'контакти власника зʼявляться тут, щойно ти позначиш, що бачив цю тваринку.',
     },
     spot: {
       walkHere: 'ходімо сюди',
@@ -860,6 +897,19 @@ const en: AppStrings = {
       searchingCta: 'searching…',
       previousPet: 'previous pet',
       nextPet: 'next pet',
+      readPost: 'read the post',
+    },
+    post: {
+      title: 'the post',
+      titleNamed: (name) => `${name} · the post`,
+      loading: 'opening…',
+      failed: "couldn't load that. try again.",
+      notStored:
+        "we don't have the full text of this one — it was posted before we started keeping them.",
+      originalAfterSighting:
+        "mark that you've seen this pet and i'll open the original, contact and all.",
+      contactsAfterSighting:
+        "the owner's contact appears here once you mark that you've seen this pet.",
     },
     spot: {
       walkHere: 'walk here',
