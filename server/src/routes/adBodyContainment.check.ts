@@ -46,6 +46,10 @@ const ALLOWED = new Map<string, string>([
   // same job olx.ts does at ingest. Neither returns a body to anybody.
   ['db/backfill-ad-bodies.ts', 'fetches a known ad URL and writes the text'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
+  // Only asks `raw_body is not null` to PICK a candidate ad to probe —
+  // it never selects the column. And it masks every digit it prints, so
+  // even what it does report cannot carry a contact.
+  ['db/probe-ad-phone.ts', 'tests null-ness to choose one ad to probe'],
 ]);
 
 // Nothing here may ever read it. These are the payloads that go out in

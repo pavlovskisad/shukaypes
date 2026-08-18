@@ -358,10 +358,14 @@ export default function MapViewWeb() {
     | { kind: 'confirm'; dog: NearbyLostDog }
     | { kind: 'leave'; dog: NearbyLostDog }
     | { kind: 'arrived'; dog: NearbyLostDog }
-    // `postDog` is set only when the walker said they saw the animal —
-    // that report is what unlocks the owner's contact, and the server
-    // checks it again before sending anything.
-    | { kind: 'done'; text: string; postDog: { id: string; name: string } | null }
+    // Carries its pet like every other prompt kind, and that is the
+    // point: this one used to carry only a name+id, so the big card had
+    // nothing to render and the deck slid back while the walker was
+    // still being asked about the animal they had just found.
+    // `canSeePost` is true only when they said they saw it — that report
+    // is what unlocks the owner's contact, and the server checks it
+    // again before sending anything.
+    | { kind: 'done'; text: string; dog: NearbyLostDog; canSeePost: boolean }
   >(null);
   // The pet whose post is open, if any. Its own state rather than a
   // prompt variant, because it is reached from two unrelated places —
@@ -487,12 +491,23 @@ export default function MapViewWeb() {
   const lostDogs = useGameStore((s) => s.lostDogs);
   // Whose card belongs on screen: the pet being confirmed, or the pet
   // being walked to. Null means neither, and the deck comes back.
+  // THE PET STAYS ON SCREEN FOR THE WHOLE ENCOUNTER, and that used to
+  // read `prompt.kind !== 'done'`. finishSearch clears searchTarget
+  // before raising the done prompt, so at that instant both branches
+  // failed, focusDog went null and the deck slid back — while the
+  // "show the ad?" question about that same animal was still up. You
+  // answered a question about a dog whose photo had just left.
+  //
+  // Now: any prompt keeps its own pet, an open post keeps the pet whose
+  // post it is, and only then does it fall through to the search target.
   const focusDog =
-    prompt && prompt.kind !== 'done'
+    prompt
       ? prompt.dog
-      : searchTarget
-        ? (lostDogs.find((d) => d.id === searchTarget.dogId) ?? null)
-        : null;
+      : postDog
+        ? (lostDogs.find((d) => d.id === postDog.id) ?? null)
+        : searchTarget
+          ? (lostDogs.find((d) => d.id === searchTarget.dogId) ?? null)
+          : null;
   // How far is left to walk. Route-remaining rather than crow-flies:
   // walking the long way round a block barely moves a straight line,
   // so the readout would sit still while you were plainly making
@@ -1303,10 +1318,11 @@ export default function MapViewWeb() {
       setPrompt({
         kind: 'done',
         text: seen ? t.search.thanksSeen(paws) : t.search.thanksMissed(paws),
+        dog,
         // Reading the post used to mean opening OLX in a new tab. Now it
         // opens in place — and having just reported a sighting is exactly
         // what earns the unmasked contact.
-        postDog: seen ? { id: dog.id, name: dog.name } : null,
+        canSeePost: seen,
       });
     },
     [setSearchTarget, setSearchRoute, t],
@@ -3038,20 +3054,23 @@ export default function MapViewWeb() {
                       // sheet now; the original URL survives inside it as
                       // the fallback for pets ingested before we stored
                       // bodies, which is most of them for a while yet.
-                      ...(prompt.postDog
+                      ...(prompt.canSeePost
                         ? [
                             {
                               label: t.search.contactOpen,
                               primary: true,
                               onPress: () => {
-                                setPostDog(prompt.postDog);
+                                // Prompt closes, post opens — and focusDog
+                                // now follows postDog, so the pet's photo
+                                // does not blink out between the two.
+                                setPostDog({ id: prompt.dog.id, name: prompt.dog.name });
                                 setPrompt(null);
                               },
                             },
                           ]
                         : []),
                       {
-                        label: prompt.postDog ? t.search.contactLater : t.search.close,
+                        label: prompt.canSeePost ? t.search.contactLater : t.search.close,
                         onPress: () => setPrompt(null),
                       },
                     ]
