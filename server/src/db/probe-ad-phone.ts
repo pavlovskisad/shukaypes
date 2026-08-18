@@ -69,6 +69,15 @@ function nearestKey(html: string, index: number): string {
 
 interface Finding {
   url: string;
+  // Where a reveal call would have to come from, if one exists. The
+  // markup names no phone API, so this looks for the pieces such a call
+  // would need: an offer id to key on, an API origin, and whether the
+  // page hands the browser any credential at all.
+  offerId: string | null;
+  apiOrigins: string[];
+  graphql: boolean;
+  credentialish: string[];
+  scriptCount: number;
   maskedShapes: string[];
   // The question that matters: does a full number in the page reconcile
   // with the mask by prefix and suffix?
@@ -117,8 +126,43 @@ async function probe(url: string): Promise<Finding | null> {
     if (reconciles) break;
   }
 
+  // --- endpoint discovery, structure only ---
+  // An id to key on. OLX puts one in the slug (…-IDxxxxx.html) and
+  // usually again in the embedded JSON.
+  const slugId = url.match(/-ID([A-Za-z0-9]+)\.html/)?.[1] ?? null;
+
+  // API origins the page references at all. Reported as origin+path
+  // prefix only — never with a query string, which is where ids and
+  // tokens live.
+  const apiOrigins = [
+    ...new Set(
+      (html.match(/https?:\/\/[a-z0-9.-]+\/(?:api|graphql)[a-z0-9/_-]{0,40}/gi) ?? []).map((u) =>
+        u.replace(/\/\d+/g, '/{id}'),
+      ),
+    ),
+  ].slice(0, 8);
+
+  // Does the page hand the browser a credential? If a reveal call needs
+  // one that the page never provides, the door is shut regardless of
+  // whether it exists. Presence and length only — never the value.
+  const credentialish: string[] = [];
+  for (const [label, re] of [
+    ['bearer', /Bearer\s+[A-Za-z0-9._-]{20,}/],
+    ['access_token', /"access_token"\s*:\s*"[^"]{20,}"/],
+    ['csrf', /"(?:csrf|xsrf)[A-Za-z_]*"\s*:\s*"[^"]{8,}"/i],
+    ['client_id', /"client_id"\s*:\s*"[^"]{6,}"/],
+  ] as const) {
+    const m = html.match(re);
+    if (m) credentialish.push(`${label} (${m[0].length} chars)`);
+  }
+
   return {
     url,
+    offerId: slugId ? `ID${'•'.repeat(slugId.length)}` : null,
+    apiOrigins,
+    graphql: /graphql/i.test(html),
+    credentialish,
+    scriptCount: (html.match(/<script[^>]+src=/g) ?? []).length,
     maskedShapes: [...new Set(masked.map((m) => shape(m[0]!)))].slice(0, 3),
     reconciles,
     where,
@@ -171,6 +215,11 @@ async function main() {
     console.log(`     full numbers  : ${f.unmaskedCount}`);
     console.log(`     RECONCILES    : ${f.reconciles ? `YES  at ${f.where}` : 'no'}`);
     console.log(`     candidates at : ${f.candidateKeys.join('  ') || '—'}`);
+    console.log(`     offer id      : ${f.offerId ?? 'none in slug'}`);
+    console.log(`     api origins   : ${f.apiOrigins.length ? f.apiOrigins.join('  ') : 'NONE referenced in the markup'}`);
+    console.log(`     graphql       : ${f.graphql ? 'mentioned' : 'no'}`);
+    console.log(`     credentials   : ${f.credentialish.length ? f.credentialish.join('  ') : 'none handed to the browser'}`);
+    console.log(`     script bundles: ${f.scriptCount}`);
   }
 
   if (findings.length === 0) {
@@ -192,6 +241,20 @@ async function main() {
     console.log('  MIXED, so do not generalise from either half. Probe more ads before');
     console.log('  building anything on this.');
   }
+  // The second question, now that the first is answered: IS THERE A DOOR?
+  const anyApi = findings.some((f) => f.apiOrigins.length > 0);
+  const anyCred = findings.some((f) => f.credentialish.length > 0);
+  console.log('\n─── could a reveal call even be made from here? ───');
+  console.log(`  api origins named in the markup : ${anyApi ? 'yes' : 'NO'}`);
+  console.log(`  credential handed to the browser: ${anyCred ? 'yes' : 'NO'}`);
+  if (!anyApi && !anyCred) {
+    console.log('  Neither. Any reveal endpoint is built inside OLX\'s JS bundles and');
+    console.log('  authorised by something the server-rendered page never contains, so');
+    console.log('  reproducing it means running their client — a headless browser per');
+    console.log('  ad, not an HTTP call. That is a different order of cost and a much');
+    console.log('  louder signal to the host that already refuses half our requests.');
+  }
+
   console.log(
     `\n  Still a decision for a person: whether using it is appropriate at all.`,
   );
