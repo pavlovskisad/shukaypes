@@ -52,6 +52,11 @@ const ALLOWED = new Map<string, string>([
   // prints a body, and the one thing it does print (the listing title)
   // goes through redactContacts.
   ['db/revive-live-ads.ts', 'stores the text of an ad it fetched to prove the search is live'],
+  // Rewrites stored bodies to take OLX's section labels off them. It
+  // reads the column and writes it back, but the only thing it PRINTS is
+  // the text it removed — a section label by construction — and that
+  // still goes through redactContacts. Operator-run, no HTTP surface.
+  ['db/clean-ad-bodies.ts', 'strips OLX section labels out of stored bodies'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
   // Only asks `raw_body is not null` to PICK a candidate ad to probe —
   // it never selects the column. And it masks every digit it prints, so

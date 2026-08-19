@@ -38,7 +38,8 @@
     "audit:ingest": "tsx src/db/audit-ingest.ts",
     "check:found-report": "tsx src/pipeline/foundReport.check.ts",
     "flag:found-reports": "tsx src/db/flag-found-reports.ts",
-    "revive:live-ads": "tsx src/db/revive-live-ads.ts"
+    "revive:live-ads": "tsx src/db/revive-live-ads.ts",
+    "clean:ad-bodies": "tsx src/db/clean-ad-bodies.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
