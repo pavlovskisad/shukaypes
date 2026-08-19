@@ -93,8 +93,19 @@ export const TEXT_ITEM = {
   // words. Sentences need more room to breathe at this height, and the
   // pill is a touch target rather than a block of prose.
   padX: 18,
-  // Gap between stacked answers, and between the dog and the first one.
-  gap: 12,
+  // THE NUMBER THAT MAKES A RING OF SENTENCES POSSIBLE.
+  //
+  // A ring's width is 2*radius + the widest item, and the radius has a
+  // floor because the left and right items must clear the dog. Unwrapped,
+  // «хто тримає цей район?» is ~210px of pill, which needs a radius of
+  // ~139 to clear the sprite and at most ~75 to fit on a 360px screen —
+  // no number satisfies both. Capping the pill at 130 and letting it
+  // wrap to two lines opens a real window: radius >= ~95 to clear the
+  // dog, <= ~115 to fit the screen. 105 sits in the middle of it.
+  //
+  // The clearance figure is the VISIBLE sprite (~40px), not the 140px
+  // tap container it floats in — measured, not assumed.
+  maxWidth: 130,
 } as const;
 
 // Trig-positioned radial around a center point with radius R.
@@ -112,23 +123,14 @@ interface RadialMenuProps {
   // 'icon' is the ring the app has always had. 'text' is the L1 intent
   // menu — word pills, no icons.
   variant?: 'icon' | 'text';
-  // WHY THE TOP LEVEL IS NOT A RING.
+  // Where item 0 sits, in radians, with the rest walking clockwise from
+  // it. Default -90 degrees puts it at twelve o'clock.
   //
-  // A ring puts items on opposite sides of the dog, so the width it
-  // needs is 2*radius + the widest item — and the radius itself has a
-  // floor, because an item must clear the 128px sprite in the middle.
-  // Measured at 15px in this font, «хто тримає цей район?» is ~174px of
-  // ink, ~210px of pill. Clearing the dog needs radius >= ~135; fitting
-  // two of those on a 360px screen needs radius <= ~75. There is no
-  // number that satisfies both, and no amount of wrapping closes a gap
-  // that wide.
-  //
-  // So sentence-length answers stack. It also fixes something a ring
-  // could not: on a ring, items are placed by their CENTRES, so pills of
-  // different widths sit at different distances from the dog's edge —
-  // measured, 49px for one and 64px for another. In a column every
-  // answer is the same distance from the one above it, by construction.
-  layout?: 'ring' | 'stack';
+  // The walking level passes +90 instead, which turns its three icons
+  // upside down: one directly UNDER the dog and two out to the sides.
+  // Nothing above the dog means the bubble can tuck in at its nose
+  // instead of being pushed up over a top button.
+  startAngle?: number;
 }
 
 export function RadialMenu({
@@ -139,11 +141,10 @@ export function RadialMenu({
   inverted = false,
   showLabels = false,
   variant = 'icon',
-  layout = 'ring',
+  startAngle = -Math.PI / 2,
 }: RadialMenuProps) {
   const N = actions.length;
   const isText = variant === 'text';
-  const isStack = layout === 'stack';
   // How wide one rim item actually is. The icon variant's wrapper has
   // always been 100 (see the -50 offset below); the text variant's is
   // its pill.
@@ -184,7 +185,7 @@ export function RadialMenu({
         width: isText ? 'max-content' : BUTTON.size,
         // Sentence answers must be allowed to wrap rather than run off
         // the screen; 300 keeps the longest to two lines at 360 wide.
-        maxWidth: isText ? 300 : undefined,
+        maxWidth: isText ? TEXT_ITEM.maxWidth : undefined,
         padding: isText ? `0 ${TEXT_ITEM.padX}px` : undefined,
         minHeight: isText ? TEXT_ITEM.height : BUTTON.size,
         height: isText ? undefined : BUTTON.size,
@@ -222,8 +223,9 @@ export function RadialMenu({
     </button>
   );
 
-  // The same entrance the ring uses, so a stacked answer arrives exactly
-  // the way a ring item does — see the keyframe note in public/index.html.
+  // Shared so text pills and icon discs arrive identically — see the
+  // keyframe note in public/index.html for why it is an animation and
+  // not only a transition.
   const entrance = (i: number) => ({
     opacity: open ? 1 : 0,
     transform: open ? 'scale(1)' : 'scale(0.4)',
@@ -231,33 +233,6 @@ export function RadialMenu({
     animation: open ? `radial-item-in 220ms ease ${i * 40}ms both` : undefined,
     pointerEvents: (open ? 'auto' : 'none') as 'auto' | 'none',
   });
-
-  if (isStack) {
-    return (
-      <div
-        style={{
-          position: 'absolute',
-          left: '50%',
-          // Hangs below the dog rather than around it: the sprite keeps
-          // its own space, the bubble keeps the space above, and the
-          // answers land where a thumb already is (D-21).
-          top: `calc(50% + ${TEXT_ITEM.gap + 62}px)`,
-          transform: 'translateX(-50%)',
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: TEXT_ITEM.gap,
-          pointerEvents: 'none',
-        }}
-      >
-        {actions.map((a, i) => (
-          <div key={a.id} style={entrance(i)}>
-            {renderButton(a)}
-          </div>
-        ))}
-      </div>
-    );
-  }
 
   return (
     <div
@@ -272,7 +247,7 @@ export function RadialMenu({
       }}
     >
       {actions.map((a, i) => {
-        const ang = -Math.PI / 2 + i * ((2 * Math.PI) / N);
+        const ang = startAngle + i * ((2 * Math.PI) / N);
         const bx = CENTER + Math.cos(ang) * radius;
         const by = CENTER + Math.sin(ang) * radius;
         return (

@@ -328,13 +328,7 @@ export default function MapViewWeb() {
   // "background click" that closes it ~1 frame later. Record every
   // companion tap and suppress the map click for a short window.
   const companionTappedAtRef = useRef<number>(0);
-  // How far up the dog goes while the four answers are stacked beneath
-// it. Sized from the stack: four 60px pills and three 12px gaps is
-// 276px, plus the gap to the dog — at 110 the last answer clears the
-// dashboard on a 780px-tall phone with room to spare.
-const MODE_STACK_LIFT_PX = 110;
-
-const SUPPRESS_MAP_CLICK_MS = 300;
+  const SUPPRESS_MAP_CLICK_MS = 300;
   // Which cluster is currently "spiderified" — tapping a cluster pops its
   // pets out around the center. Tapping elsewhere (the map background or
   // another cluster) collapses it. Lives locally because nothing else in
@@ -2189,14 +2183,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // values only so the explainer bubble can still be told apart.)
     if (menuCamera) {
       menuWasOpenRef.current = true;
-      // 'modes' hangs four stacked answers UNDER the dog, so the dog has
-      // to move up or the last of them lands behind the dashboard. The
-      // ring framings have items on all sides and want the dog centred.
-      map.easeTo({
-        center: c,
-        offset: [0, menuCamera === 'modes' ? -MODE_STACK_LIFT_PX : 0],
-        duration: 320,
-      });
+      map.easeTo({ center: c, offset: [0, 0], duration: 320 });
     } else if (menuWasOpenRef.current) {
       menuWasOpenRef.current = false;
       map.easeTo({ center: c, offset: [0, 0], duration: 320 });
