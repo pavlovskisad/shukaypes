@@ -1,11 +1,15 @@
 import type { LatLng } from '@shukajpes/shared';
 import { api } from './api';
 import { fetchWalkingRoute } from './directions';
+import type { Park } from './places';
 import {
+  mergeCandidates,
+  parkCandidates,
   planWalkOptions,
   loadRecentStopIds,
   recordRecentStops,
   recordRecentDestination,
+  WALK_FAR_M,
   type WalkCandidate,
   type WalkDistance,
   type WalkPlan,
@@ -68,16 +72,23 @@ const CORRIDOR_M = 240;
 const MAX_STOPS_CLOSE = 3;
 const MAX_STOPS_FAR = 4;
 
+// How far out to ask our own tables for destinations. The far walk is
+// the longest the planner proposes, and a one-way version of it puts the
+// destination a full WALK_FAR_M away — so anything past that plus a
+// margin can never be picked.
+const DESTINATION_RADIUS_M = WALK_FAR_M + 500;
+
 export interface ExplorationWalk {
-  // The drawn polyline, already routed through the stops.
+  // The drawn polyline, routed through the stops.
   route: LatLng[];
   primary: WalkCandidate;
   shape: WalkShape;
-  // Only set when the destination is a spot with its own marker, so the
-  // map can keep that pin visible regardless of the spots toggle.
-  spotId: string | null;
   // In visiting order. Empty is a normal, valid walk.
   stops: WalkStop[];
+  // True when the line is straight segments between the points rather
+  // than street geometry — Google routing was unavailable. The walk is
+  // real either way; only the drawing of it is approximate.
+  approximate: boolean;
 }
 
 interface Costed {
@@ -142,15 +153,40 @@ function bestCandidate(costed: Costed[]): Costed | null {
   );
 }
 
+// The tour's pool: parks and squares, museums and landmarks, out of our
+// own tables, plus whatever parks Places happens to know about. A
+// failure fetching ours is not fatal — Places parks alone can still
+// carry a walk; if there are none either, the caller gets no plans and
+// says so.
+async function poolFor(
+  origin: LatLng,
+  parks: Park[],
+): Promise<WalkCandidate[]> {
+  const base = parkCandidates(parks);
+  try {
+    const { destinations } = await api.walkDestinations(
+      origin,
+      DESTINATION_RADIUS_M,
+    );
+    return mergeCandidates(base, destinations);
+  } catch {
+    return base;
+  }
+}
+
 export async function startExplorationWalk(args: {
   origin: LatLng;
-  candidates: WalkCandidate[];
+  // Google Places parks, which the store already holds for bone
+  // seeding. Places SPOTS are deliberately not a parameter: going to a
+  // named café or the vet is what visit:spot / walk_to_spot are for, and
+  // a walk is a small local tour.
+  parks: Park[];
   shape: WalkShape;
   distance: WalkDistance;
 }): Promise<ExplorationWalk | null> {
-  const { origin, candidates, shape, distance } = args;
+  const { origin, parks, shape, distance } = args;
   const plans = planWalkOptions({
-    candidates,
+    candidates: await poolFor(origin, parks),
     origin,
     shape,
     distance,
@@ -161,36 +197,55 @@ export async function startExplorationWalk(args: {
   const chosen = bestCandidate(await costCandidates(plans, distance));
   if (!chosen) return null;
   const { plan, stops } = chosen;
-  const spotId = plan.primary.isSpot ? plan.primary.id : null;
 
-  const settle = (route: LatLng[], withStops: WalkStop[]): ExplorationWalk => {
+  const settle = (
+    line: { path: LatLng[]; approximate: boolean },
+    withStops: WalkStop[],
+  ): ExplorationWalk => {
     // Only record what the walker actually got. A destination we
     // couldn't route to must not be penalised on the next tap, and
     // landmarks on a route that never rendered are still unseen.
     recordRecentDestination(plan.primary.id);
     if (withStops.length) recordRecentStops(withStops.map((s) => s.id));
-    return { route, primary: plan.primary, shape, spotId, stops: withStops };
+    return {
+      route: line.path,
+      primary: plan.primary,
+      shape,
+      stops: withStops,
+      approximate: line.approximate,
+    };
   };
 
-  // First choice: the walk through the landmarks.
+  // First choice: the walk through the landmarks, on real streets.
   const viaStops = await fetchWalkingRoute(origin, chosen.waypoints);
-  if (viaStops) return settle(viaStops, stops);
+  if (viaStops) return settle({ path: viaStops, approximate: false }, stops);
 
   // A stop the directions API can't walk to (inside a closed courtyard,
   // on an island, behind a fence) fails the WHOLE call, taking the walk
-  // with it. Drop the enrichment and keep the walk.
+  // with it. Retry without the stops to find out whether the stops were
+  // the problem or routing is unavailable altogether.
   const plain = await fetchWalkingRoute(origin, plan.waypoints);
-  if (plain) return settle(plain, []);
+  if (plain) return settle({ path: plain, approximate: false }, []);
 
   // Same fallback the roundtrip path has always had: the perpendicular
   // via-point may itself be unroutable (river, gated park), so retry
-  // out-and-back before giving up.
+  // out-and-back.
   if (plan.hasReturnDetour && plan.waypoints.length === 3) {
     const outAndBack = await fetchWalkingRoute(origin, [
       plan.waypoints[0]!,
       plan.waypoints[2]!,
     ]);
-    if (outAndBack) return settle(outAndBack, []);
+    if (outAndBack) return settle({ path: outAndBack, approximate: false }, []);
   }
-  return null;
+
+  // Nothing routed at all, which in practice means Google is not
+  // answering us — no key, no quota, no billing. Everything that makes
+  // this walk a walk still exists, so draw it as straight segments and
+  // KEEP THE STOPS: the point of the exploration is the places and their
+  // stories, and those are ours, not Google's.
+  //
+  // Built here rather than through fetchWalkingRouteOrLine, which would
+  // spend a fourth request re-asking a service that has already declined
+  // three times.
+  return settle({ path: [origin, ...chosen.waypoints], approximate: true }, stops);
 }

@@ -707,6 +707,27 @@ export const api = {
     }>(`/lore/discover?${params.toString()}`);
   },
 
+  // Places to walk to, out of our own tables (gazetteer parks and
+  // squares, lore museums and churches and attractions) rather than
+  // Google Places. Merged with the Places pool when there is one and
+  // carrying the whole walk when there isn't — see utils/walk.ts.
+  walkDestinations: (center: LatLng, radiusM: number) =>
+    req<{
+      destinations: Array<{
+        id: string;
+        name: string;
+        category: string;
+        position: LatLng;
+        distM: number;
+      }>;
+    }>(
+      `/walk/destinations?${new URLSearchParams({
+        lat: String(center.lat),
+        lng: String(center.lng),
+        radius: String(Math.round(radiusM)),
+      }).toString()}`,
+    ),
+
   // The landmarks each candidate walk passes. Several candidates go in
   // one call because the client picks the walk with the most to see and
   // can only know which that is after asking — see

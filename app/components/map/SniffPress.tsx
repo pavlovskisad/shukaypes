@@ -4,7 +4,7 @@ import type { LatLng } from '@shukajpes/shared';
 import { useMaplibreMap } from './MapContext';
 import { MapLibreMarker } from './MapLibreMarker';
 import { api } from '../../services/api';
-import { fetchWalkingRoute } from '../../services/directions';
+import { fetchWalkingRouteOrLine } from '../../services/directions';
 import { clampExtract, fetchWikipediaExtract } from '../../services/wikipedia';
 import { useGameStore } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -460,9 +460,16 @@ export function SniffPress() {
     if (discovered.id === '__none__') return;
     setRouting(true);
     try {
-      const route = await fetchWalkingRoute(userPos, [discovered.position]);
-      if (route) {
-        setWalkRoute(route, { shape: 'oneway', spotId: null });
+      // Falls back to a straight line when Google can't route, so
+      // "ходімо сюди" always puts something on the map — the place we
+      // are pointing at is ours, only the way there was Google's.
+      const line = await fetchWalkingRouteOrLine(userPos, [discovered.position]);
+      if (line) {
+        setWalkRoute(line.path, {
+          shape: 'oneway',
+          spotId: null,
+          approximate: line.approximate,
+        });
       }
     } finally {
       setRouting(false);

@@ -76,10 +76,29 @@ export interface StopPlanOptions {
   // stacked on the destination pin at the end.
   headroomStartM?: number;
   headroomEndM?: number;
+  // How close a landmark may come to a CORNER of the walk — the
+  // destination, or a roundtrip's via-point — before it stops counting
+  // as somewhere you pass on the way.
+  vertexClearanceM?: number;
 }
 
 const DEFAULT_HEADROOM_START_M = 120;
 const DEFAULT_HEADROOM_END_M = 120;
+
+// A landmark this close to a corner of the walk IS that corner.
+//
+// The end headroom only catches the last stretch of the path, which on a
+// ONE-WAY walk is the destination — but a roundtrip's destination sits
+// in the MIDDLE of its path (origin → dest → via → origin), so the
+// headroom sails straight past it. Result, seen on a real Troieshchyna
+// walk: the destination came back as its own first stop, and the walker
+// was told to go and see the place they were already going to.
+//
+// 100 m rather than something tighter because these two points are
+// picked independently — the planner's destination comes from
+// kyiv_gazetteer or Places, the stop from kyiv_lore — so the same church
+// is two rows with two coordinates tens of metres apart.
+const DEFAULT_VERTEX_CLEARANCE_M = 100;
 
 // A landmark with a Wikipedia handle can be expanded in-app for the
 // walker who wants more than the dog's one sentence. Worth this much
@@ -235,6 +254,7 @@ export function planStops(opts: StopPlanOptions): LoreStop[] {
     maxDetourM,
     headroomStartM = DEFAULT_HEADROOM_START_M,
     headroomEndM = DEFAULT_HEADROOM_END_M,
+    vertexClearanceM = DEFAULT_VERTEX_CLEARANCE_M,
   } = opts;
   if (path.length < 2 || pool.length === 0 || maxStops <= 0) return [];
 
@@ -247,10 +267,14 @@ export function planStops(opts: StopPlanOptions): LoreStop[] {
 
   const scored: Scored[] = [];
   for (const point of pool) {
-    const proj = projectOntoPath({ lat: point.lat, lng: point.lng }, path, f);
+    const here = { lat: point.lat, lng: point.lng };
+    const proj = projectOntoPath(here, path, f);
     if (!proj) continue;
     if (proj.offM > corridorM) continue;
     if (proj.alongM < from || proj.alongM > to) continue;
+    // Sitting on a corner of the walk — that's the destination (or the
+    // turn), not somewhere passed on the way to it.
+    if (path.some((v) => distanceMeters(v, here) < vertexClearanceM)) continue;
     scored.push({
       point,
       proj,
