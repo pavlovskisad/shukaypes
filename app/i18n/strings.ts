@@ -710,7 +710,7 @@ const uk: AppStrings = {
     hudMeters: 'вгорі: сонце — мій настрій, кістка — голод, лапки — скільки назбирали 🐾',
   },
   modes: {
-    ask: 'привіт! що сьогодні робимо? 🐾',
+    ask: 'нюх-нюх! що хочеш робити? 🐾',
     lost: 'загубив',
     search: 'шукати',
     explore: 'гуляти',
@@ -1079,7 +1079,7 @@ const en: AppStrings = {
     hudMeters: "up top: sun's my mood, bone's hunger, paws are what we've found 🐾",
   },
   modes: {
-    ask: 'hey! what are we doing today? 🐾',
+    ask: 'sniff-sniff! what do you want to do? 🐾',
     lost: 'lost one',
     search: 'search',
     explore: 'walk',
