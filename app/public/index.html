@@ -220,6 +220,28 @@
           opacity: 0;
         }
       }
+
+      /* One ring item arriving. Matches the open/close transition in
+         RadialMenu exactly — same 220ms, same ease, same 0.4 start — so
+         an item that arrives by MOUNTING is indistinguishable from one
+         that arrives by the menu opening.
+
+         That distinction used to be visible. The transition only fires
+         when `open` flips on an element already in the DOM, so the two
+         cases it could not cover were the two that matter most: the
+         cold-start ring, which mounts already open, and every change of
+         level, where the old items unmount and the new ones appear at
+         their final size. Both simply blinked into place. */
+      @keyframes radial-item-in {
+        from {
+          opacity: 0;
+          transform: scale(0.4);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
     </style>
   </head>
 

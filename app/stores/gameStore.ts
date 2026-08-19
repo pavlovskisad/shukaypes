@@ -1211,9 +1211,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       // Default entry channel is the logo; the modal's "start search"
       // path flips this true right after toggling.
       dogCamViaSearch: false,
-      // The radial menu is disabled in supersniff (tap = reaction only),
-      // so drop it on any mode flip — otherwise a menu left open while
-      // tapping the logo would float over the search UI. The exception
+      // A menu belongs to the mode it was opened in, so a flip drops it —
+      // otherwise a ring left open while tapping the logo would float
+      // over whatever the new mode puts on screen. (Supersniff can open
+      // the ring itself now, by tapping the dog; what it does not do is
+      // inherit one.) The exception
       // is 'gate', where the ring IS the mode: it opens with it and the
       // Companion refuses to close it until a choice is made.
       //

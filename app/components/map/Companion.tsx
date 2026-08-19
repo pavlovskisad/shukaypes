@@ -330,21 +330,22 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
       // question. The dog does not react, does not woof, does not close
       // the ring — the only way out is one of the four answers.
       if (useGameStore.getState().appMode === 'gate') return;
-      // Supersniff: the dog is working the trail — no radial menu, and no
-      // onTapCompanion either (its recenter would fight the follow cam).
-      // A tap gets the profile-scene treatment instead: a quick sniff
-      // beat + a random woof. Live store read so the closure can't go
-      // stale across the mode toggle.
-      if (useGameStore.getState().dogCam) {
-        const woofs = t.bubbles.woofs;
-        flash(
-          woofs[Math.floor(Math.random() * woofs.length)] ?? t.bubbles.simpleWoof,
-          2500,
-        );
+      // Supersniff used to swallow the tap entirely: a sniff beat and a
+      // woof, and nothing else. That was right while the dog's menu was
+      // a pile of walking verbs with no business on a search — but the
+      // top of the menu is the way out of a mode now, and supersniff was
+      // the one mode you could not leave that way. The corner logo is
+      // not a worse answer, it is a different one, and "tap the dog" has
+      // to mean the same thing everywhere or it means nothing.
+      //
+      // So the beat stays — the dog still reacts to being touched — and
+      // the ring opens on top of it. No woof, because the question takes
+      // the bubble and two lines cannot share it.
+      const sniffing = useGameStore.getState().dogCam;
+      if (sniffing) {
         setSniffing(true);
         if (sniffTimerRef.current) clearTimeout(sniffTimerRef.current);
         sniffTimerRef.current = setTimeout(() => setSniffing(false), 1500);
-        return;
       }
       // THE DOG OPENS THE FOUR CHOICES — AS A MENU LEVEL, NOT AS A MODE.
       //
@@ -357,7 +358,11 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
       // actually chosen. Someone in explore who wants a walk taps the
       // dog, taps «гуляти», and drills on — no flicker in between.
       if (!menuOpen) {
-        onTapCompanion?.();
+        // Recentring is the one thing supersniff still does not want: it
+        // would fight the chase camera that is following the dog down
+        // the trail. The ring does not need it — in that mode the dog is
+        // already framed.
+        if (!sniffing) onTapCompanion?.();
         setAtModes(true);
         setMenuPath([]);
         setMenuOpen(true);
@@ -373,7 +378,9 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
       // Already at the top — nothing above it, so this is a dismiss.
       setMenuOpen(false);
     },
-    [menuOpen, atModes, setMenuOpen, onTapCompanion, onTap, t, flash]
+    // `t` and `flash` left with the supersniff woof — the bubble carries
+    // the question now, so this handler no longer says anything.
+    [menuOpen, atModes, setMenuOpen, onTapCompanion, onTap]
   );
 
   const fireLeafAction = useCallback(

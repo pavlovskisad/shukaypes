@@ -171,6 +171,23 @@ export function RadialMenu({
               opacity: open ? 1 : 0,
               transform: open ? 'scale(1)' : 'scale(0.4)',
               transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
+              // The transition above only fires on an element that is
+              // ALREADY mounted when `open` flips — so it misses the two
+              // cases where items appear by mounting: the cold-start
+              // ring, which renders open on its first frame, and every
+              // change of level, where React swaps the whole set for new
+              // keys. Those blinked in. This runs on mount and lands on
+              // exactly the same values the transition would, so the
+              // two paths are one animation with two triggers.
+              //
+              // Only while open: an item that mounts into a CLOSED menu
+              // (the actions swapping underneath a dismissed ring) must
+              // stay invisible, not animate itself out of nowhere. And
+              // `both` matters — without it the item paints at full size
+              // during its stagger delay and flashes before it starts.
+              animation: open
+                ? `radial-item-in 220ms ease ${i * 40}ms both`
+                : undefined,
               pointerEvents: open ? 'auto' : 'none',
               display: 'flex',
               flexDirection: 'column',
