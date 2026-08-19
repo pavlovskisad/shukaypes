@@ -346,6 +346,7 @@ export default function MapViewWeb() {
   // Supersniff (the logo toggle — see index.tsx).
   // Drives the low chase-camera follow effect + DOGCAM_* constants below.
   const dogCam = useGameStore((s) => s.dogCam);
+  const appMode = useGameStore((s) => s.appMode);
   // Sniff-and-lead search mode assignment (which lost dog + spot). Set by the
   // search controller below while dogCam is on.
   const searchTarget = useGameStore((s) => s.searchTarget);
@@ -399,6 +400,9 @@ export default function MapViewWeb() {
   // for "just marked here" / "not in the mood to mark".
   const territoryMarks = useGameStore((s) => s.territoryMarks);
   const territoryShapes = useGameStore((s) => s.territoryShapes);
+  // Whether the claims are drawn at all. Visibility only — see the note
+  // at the TerritoryLayer mount below.
+  const territoryVisible = useGameStore((s) => s.territoryVisible);
   const lastMark = useGameStore((s) => s.lastMark);
   const markMood = useGameStore((s) => s.markMood);
   // …and the PvP half: whoever else holds ground within sight, plus the
@@ -1475,6 +1479,12 @@ export default function MapViewWeb() {
   // pauses, resuming once you're idle on the map again.
   const hintsAllowed =
     onMapScreen &&
+    // The gate is the least calm moment there is: the dog has asked a
+    // question and is waiting. A hint firing here would be spent
+    // invisibly — the bubble is holding the question, and the surfaces
+    // hints point at (the logo, the HUD pin) are bubbled out — and each
+    // one only ever fires once per device.
+    appMode !== 'gate' &&
     !mapMoving &&
     !selectedDogId &&
     !selectedSpotId &&
@@ -2333,6 +2343,12 @@ export default function MapViewWeb() {
         map.on('movestart', () => setMapMoving(true));
         map.on('moveend', () => setMapMoving(false));
         map.on('click', () => {
+          // While the dog is asking, a tap on the map is not a dismiss.
+          // The ring closes by being answered and by nothing else — this
+          // is the "tap-to-discard blocked" half of the gate, and it has
+          // to sit here rather than under an overlay, because the ring
+          // and the dog are themselves children of the map.
+          if (useGameStore.getState().appMode === 'gate') return;
           if (
             Date.now() - companionTappedAtRef.current <
             SUPPRESS_MAP_CLICK_MS
@@ -2877,7 +2893,11 @@ export default function MapViewWeb() {
             the ordinary map and noise on top of a search — same paint,
             different job. See threeBuildingsLayer.territoryPaintHidden,
             which mutes the blocks for the same reason. */}
-        {!(DOG_CAM && dogCam) && !selectedDogId && onMapScreen ? (
+        {/* …and now it is also a lens the user asks for. Ground is claimed
+            on every walk in every mode — marking hangs off /collect/path
+            and is nowhere near this flag — but you only SEE the claims
+            inside 'грати'. The map the app opens on is the clean one. */}
+        {territoryVisible && !(DOG_CAM && dogCam) && !selectedDogId && onMapScreen ? (
           <TerritoryLayer
             shapes={territoryShapes}
             marks={territoryMarks}
@@ -3381,16 +3401,12 @@ export default function MapViewWeb() {
         </div>
       ) : null}
 
-      {/* Bubble keyframes for the HUD pills (StatusBar / QuestPill),
-          which bubble out on entering supersniff and back in on
-          leaving. Defined here rather than beside them because this is
-          the one component always mounted on the map screen. */}
+      {/* Keyframes for things only the map draws. The shell's shared
+          pop-in / pop-out used to live here too; they moved to the
+          global stylesheet in public/index.html when the dashboard
+          started using them, because the dashboard outlives this
+          component (see the note there). */}
       <style>{`
-        @keyframes pop-in {
-          0%   { transform: scale(0);    opacity: 0; }
-          70%  { transform: scale(1.10); opacity: 1; }
-          100% { transform: scale(1);    opacity: 1; }
-        }
         @keyframes poke-wave {
           0%   { transform: translateY(0) scale(0.6) rotate(-15deg); opacity: 0; }
           25%  { transform: translateY(-6px) scale(1.15) rotate(12deg); opacity: 1; }
@@ -3404,11 +3420,6 @@ export default function MapViewWeb() {
         @keyframes poke-dog-bounce {
           0%,100% { transform: translateY(0); }
           50%     { transform: translateY(-7px); }
-        }
-        @keyframes pop-out {
-          0%   { transform: scale(1);    opacity: 1; }
-          25%  { transform: scale(1.10); opacity: 1; }
-          100% { transform: scale(0);    opacity: 0; }
         }
         @keyframes hint-map-pulse {
           0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0.5; }

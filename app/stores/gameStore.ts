@@ -19,6 +19,17 @@ import {
 import { distanceMeters } from '../utils/geo';
 import type { WalkStop } from '../utils/walk';
 
+// The app's top level: what the human answered when the dog asked.
+//
+//   gate    — the question is on screen. Ring up, chrome out, map inert.
+//   search  — supersniff. The quiet half of the app, made loud.
+//   explore — the walking game as it has always been.
+//   play    — explore plus the territory lens.
+//
+// 'search' and `dogCam` mean the same thing and are kept in sync by
+// setAppMode; see the note on `appMode` in the state below.
+export type AppMode = 'gate' | 'explore' | 'search' | 'play';
+
 // Re-fetch the cached Places lists (parks for bone seeding +
 // per-park paw rings, spots for the visit menu) when the user has
 // walked further than this from the last fetch anchor. ~half the
@@ -228,10 +239,26 @@ interface GameState {
   // whether spots are loaded into the array — the user can declutter
   // the map without losing the cached Places fetch.
   spotsVisible: boolean;
+  // What the human said they came here to do. The dog asks on entry and
+  // the answer is the app's top level; everything else is a layer under
+  // it. 'gate' is the question itself — the ring is up, the chrome is
+  // out, and the map is inert until a choice is made.
+  //
+  // `dogCam` is NOT replaced by this. It has readers all over MapView and
+  // is the shipped name for supersniff; it stays a real field, written in
+  // lockstep with `appMode === 'search'`, so none of those readers had to
+  // learn a new word.
+  appMode: AppMode;
   // Supersniff — toggled by tapping the logo. The camera drops behind the
   // dog, the city goes see-through around it, and the nearby lost pets
   // come up as a carousel to pick a search from.
   dogCam: boolean;
+  // Map-overlay visibility for territory. Ground is claimed continuously
+  // as the dog walks, in every mode — this only decides whether you can
+  // SEE it. 'грати' turns the lens on; leaving turns it off. Nothing
+  // about capture is gated on this (see D-13: marking hangs off
+  // /collect/path and must stay there).
+  territoryVisible: boolean;
   // Bumped on every supersniff flip. Components that keep transient
   // state of their own — the long-press discovery, the dog's question
   // prompt, expanded map clusters — watch this and drop it, so a mode
@@ -262,6 +289,10 @@ interface GameState {
   // "?" button. MapScreen still hosts the modal so the dashboard tab
   // bar isn't covered.
   aboutOpen: boolean;
+  // "I lost my pet" sheet — opened from the top of the L1 ring. Lives in
+  // the store for the same reason aboutOpen does: the ring is a child of
+  // MapView, and the sheet is hosted by the map screen.
+  lostFlowOpen: boolean;
   // Currently-visible one-shot hint id (or null). Published by the
   // component that owns the hint's primary surface (the companion's
   // speech bubble) so OTHER components can render a matching visual
@@ -373,7 +404,11 @@ interface GameState {
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
   setFocusedTerritory: (v: { ownerId: string; ring: LatLng[]; mark?: LatLng; pos?: LatLng } | null) => void;
+  // The one mode switch. Every entry into a mode goes through here so the
+  // clear-slate rules below are applied exactly once, in one place.
+  setAppMode: (mode: AppMode) => void;
   toggleDogCam: () => void;
+  setTerritoryVisible: (visible: boolean) => void;
   setDogCamViaSearch: (dogCamViaSearch: boolean) => void;
   setSearchTarget: (t: { dogId: string; spot: LatLng } | null) => void;
   setSearchRoute: (r: LatLng[] | null) => void;
@@ -383,6 +418,7 @@ interface GameState {
     p: { dogId: string; spot: LatLng; radiusM: number } | null,
   ) => void;
   setAboutOpen: (open: boolean) => void;
+  setLostFlowOpen: (open: boolean) => void;
   // Credit paws won somewhere other than the pavement (finishing a
   // search). The server has already banked them; this is the HUD
   // catching up, one pickup pulse at a time so it reads as a run of
@@ -472,7 +508,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   userPosition: null,
   homePosition: null,
   activeQuest: null,
-  menuOpen: false,
+  // True at boot, because `appMode` starts at 'gate' and the gate IS the
+  // open ring. setAppMode keeps the two in step from then on, but it
+  // never runs on a cold start — nobody has changed mode yet — so the
+  // initial pair has to be consistent here or the app opens on a
+  // question with no answers under it.
+  menuOpen: true,
   currentScreen: 'map',
   tokens: [],
   recentlyCollectedIds: new Set<string>(),
@@ -504,13 +545,18 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Default OFF — the app opens on a clean 3D city view; users turn the
   // spots layer on via the HUD pin toggle (there's a one-shot hint for it).
   spotsVisible: false,
+  // The dog asks before anything else happens. Cold start is the
+  // question, not the map.
+  appMode: 'gate',
   dogCam: false,
+  territoryVisible: false,
   overlayEpoch: 0,
   dogCamViaSearch: false,
   searchTarget: null,
   searchRoute: null,
   searchPreview: null,
   aboutOpen: false,
+  lostFlowOpen: false,
   activeHint: null,
   menuCamera: null,
   hintsAllowed: false,
@@ -1143,16 +1189,41 @@ export const useGameStore = create<GameState>((set, get) => ({
   // it because someone tapped the logo would destroy real progress. It
   // is hidden while in supersniff instead, and is still there when you
   // come back.
-  toggleDogCam: () =>
+  //
+  // This started life as toggleDogCam, a two-state flip. It is now the
+  // reducer for FOUR modes, and the rule is unchanged and applies to
+  // every pair: whatever mode you were in owns everything transient on
+  // the screen, so leaving it takes all of that with you.
+  setAppMode: (mode) =>
     set((s) => ({
-      dogCam: !s.dogCam,
+      appMode: mode,
+      // Same fact, two names. `dogCam` is the shipped word for supersniff
+      // and half of MapView reads it; keeping it in lockstep here means
+      // nothing downstream had to change.
+      dogCam: mode === 'search',
+      // The territory lens belongs to 'грати' and follows it in both
+      // directions. Ground keeps being claimed either way.
+      territoryVisible: mode === 'play',
+      // Play is about the ground you hold — pins for cafes and vets are
+      // somebody else's map. The user can turn them back on from the HUD
+      // without leaving the mode.
+      spotsVisible: mode === 'play' ? false : s.spotsVisible,
       // Default entry channel is the logo; the modal's "start search"
       // path flips this true right after toggling.
       dogCamViaSearch: false,
       // The radial menu is disabled in supersniff (tap = reaction only),
       // so drop it on any mode flip — otherwise a menu left open while
-      // tapping the logo would float over the search UI.
-      menuOpen: false,
+      // tapping the logo would float over the search UI. The exception
+      // is 'gate', where the ring IS the mode: it opens with it and the
+      // Companion refuses to close it until a choice is made.
+      //
+      // 'explore' opens its own ring too — answering «гуляти» is asking
+      // for the walking verbs, so handing back a bare map and making the
+      // user tap the dog again would be one tap of nothing. Tapping the
+      // map from there clears it to the clean view. Search and play have
+      // no menu of their own: one is the supersniff carousel and the
+      // other is the territory lens, and both want the whole screen.
+      menuOpen: mode === 'gate' || mode === 'explore',
       searchTarget: null,
       searchRoute: null,
       searchPreview: null,
@@ -1160,6 +1231,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       selectedSpotId: null,
       selectedDogId: null,
       aboutOpen: false,
+      lostFlowOpen: false,
       // A suggested walking line is client-side only — nothing banked,
       // nothing to lose by dropping it.
       walkRoute: null,
@@ -1175,6 +1247,14 @@ export const useGameStore = create<GameState>((set, get) => ({
       // === and never have to reset it.
       overlayEpoch: s.overlayEpoch + 1,
     })),
+  // Kept as-is for its two callers — the corner logo and the lost-dog
+  // modal's "start search". Both still mean "flip supersniff", and both
+  // now get the four-mode reducer for free. Leaving supersniff returns to
+  // explore rather than to the gate: the user is mid-walk and already
+  // answered the question once.
+  toggleDogCam: () =>
+    get().setAppMode(get().dogCam ? 'explore' : 'search'),
+  setTerritoryVisible: (territoryVisible) => set({ territoryVisible }),
   setDogCamViaSearch: (dogCamViaSearch) => set({ dogCamViaSearch }),
   setSearchTarget: (searchTarget) => set({ searchTarget }),
   setSearchRoute: (searchRoute) => set({ searchRoute }),
@@ -1187,6 +1267,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         : { searchPreview: null },
     ),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
+  setLostFlowOpen: (lostFlowOpen) => set({ lostFlowOpen }),
   awardPaws: (n) => {
     const step = (left: number) => {
       if (left <= 0) return;

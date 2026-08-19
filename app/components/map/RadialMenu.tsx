@@ -10,13 +10,35 @@ export interface RadialAction {
   // Either iconName (renders as a pixel <Icon>) or icon (emoji
   // fallback for runtime-generated entries like visit:spot:<id>
   // that pull the spot's category emoji from gameStore).
+  // Both are absent on text-variant items, which render their label.
   iconName?: IconName;
-  icon: string;
+  icon?: string;
   label: string;
 }
 
-export const PRIMARY_ACTIONS: RadialAction[] = [
-  { id: 'search', iconName: 'search', icon: '🔍', label: 'search' },
+// L1 — the four intents. The angle formula below puts index 0 at twelve
+// o'clock and walks clockwise, so this array IS the ring, and the order
+// is load-bearing: 'гуляти' sits at the bottom because that is the
+// everyday answer and the bottom is where a thumb already is on a walk
+// (D-21). 'загубив' takes the top — the rarest and most deliberate of
+// the four, and nobody reaching for it is doing so casually.
+export type ModeActionId =
+  | 'mode:lost'
+  | 'mode:search'
+  | 'mode:explore'
+  | 'mode:play';
+
+export const MODE_ACTION_IDS: ModeActionId[] = [
+  'mode:lost',
+  'mode:search',
+  'mode:explore',
+  'mode:play',
+];
+
+// L2 for 'гуляти' — the walking game's own verbs. `search` used to head
+// this list; it is an L1 intent now, and leaving a copy here would mean
+// two different depths of menu that both change mode.
+export const EXPLORE_ACTIONS: RadialAction[] = [
   { id: 'walk', iconName: 'walk', icon: '🚶', label: 'walk' },
   { id: 'visit', iconName: 'pin', icon: '📍', label: 'visit' },
   { id: 'meet', iconName: 'meet', icon: '👥', label: 'meet' },
@@ -49,8 +71,21 @@ export const VISIT_CATEGORY_ACTIONS: RadialAction[] = [
   { id: 'visit:veterinary_care', iconName: 'vet', icon: '⛑️', label: 'vet' },
 ];
 
-// Trig-positioned radial around a center point (105, 105) with radius R (demo lines 187-210).
-// The container div is 210x210 centered on the companion.
+// The four top-level intents are words, not pictures. There is no icon
+// for "I lost my dog" that a stranger reads correctly on the first try,
+// and this ring is the first thing anyone sees.
+//
+// A text item is a wide pill with the word inside it, rather than the
+// icon variant's round button with a caption underneath. That changes
+// the footprint, which is why CONTAINER is computed from the item width
+// below instead of a fixed +80.
+export const TEXT_ITEM = {
+  width: 112,
+  height: 44,
+} as const;
+
+// Trig-positioned radial around a center point with radius R.
+// The container is sized to fit the rim items and centered on the companion.
 interface RadialMenuProps {
   open: boolean;
   actions: RadialAction[];
@@ -61,6 +96,9 @@ interface RadialMenuProps {
   // deepest drill-down (named spots) where the icon alone can't tell
   // a cafe from another cafe.
   showLabels?: boolean;
+  // 'icon' is the ring the app has always had. 'text' is the L1 intent
+  // ring — word pills, no icons.
+  variant?: 'icon' | 'text';
 }
 
 export function RadialMenu({
@@ -70,12 +108,21 @@ export function RadialMenu({
   radius = balance.menuRadius,
   inverted = false,
   showLabels = false,
+  variant = 'icon',
 }: RadialMenuProps) {
   const N = actions.length;
+  const isText = variant === 'text';
+  // How wide one rim item actually is. The icon variant's wrapper has
+  // always been 100 (see the -50 offset below); the text variant's is
+  // its pill.
+  const ITEM_W = isText ? TEXT_ITEM.width : 100;
   // Menu container is centered on the parent via 50/50 + translate(-50,-50)
   // so the ring is truly centered on the companion, regardless of companion
-  // size. Size is 2*radius + button + buffer so rim buttons fit.
-  const CONTAINER = radius * 2 + 80;
+  // size. It has to span the ring PLUS a whole item on each side, or the
+  // left and right rim items hang outside it — which the old
+  // `radius * 2 + 80` did by ~10px even for the six-icon ring, because 80
+  // is less than the 100 an item occupies.
+  const CONTAINER = radius * 2 + ITEM_W + 24;
   const CENTER = CONTAINER / 2;
   // Plain black-and-white pills — no frosted glass / translucency.
   // Sniff mode (dark map) uses the dark variant so the buttons stay
@@ -109,9 +156,9 @@ export function RadialMenu({
             key={a.id}
             style={{
               position: 'absolute',
-              left: bx - 50,
-              top: by - 28,
-              width: 100,
+              left: bx - ITEM_W / 2,
+              top: by - (isText ? TEXT_ITEM.height / 2 : 28),
+              width: ITEM_W,
               opacity: open ? 1 : 0,
               transform: open ? 'scale(1)' : 'scale(0.4)',
               transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
@@ -129,28 +176,42 @@ export function RadialMenu({
                 playPopThen(e.currentTarget, () => onSelect(a.id));
               }}
               style={{
-                width: BUTTON.size,
-                height: BUTTON.size,
-                borderRadius: BUTTON.radius,
+                width: isText ? TEXT_ITEM.width : BUTTON.size,
+                height: isText ? TEXT_ITEM.height : BUTTON.size,
+                // Text pills are capsules; icon buttons are circles.
+                borderRadius: isText ? TEXT_ITEM.height / 2 : BUTTON.radius,
                 border: 'none',
                 background: bg,
                 color: fg,
-                fontSize: TYPE.hero,
+                // One word has to survive at this size in Ukrainian, so
+                // the pill takes body type rather than the icon variant's
+                // hero glyph size.
+                fontSize: isText ? TYPE.body : TYPE.hero,
+                fontWeight: isText ? 700 : undefined,
                 cursor: 'pointer',
                 boxShadow: '0 6px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'center',
                 userSelect: 'none',
+                whiteSpace: 'nowrap',
               }}
               aria-label={a.label}
             >
               {/* Icon sized via the shared BUTTON token — 0.79 ratio
                   reads calm against the dark glass disc without
                   feeling sparse like the 0.68 we tried last pass. */}
-              {a.iconName ? <Icon name={a.iconName} size={BUTTON.icon} inverted={inverted} /> : a.icon}
+              {isText ? (
+                a.label
+              ) : a.iconName ? (
+                <Icon name={a.iconName} size={BUTTON.icon} inverted={inverted} />
+              ) : (
+                a.icon
+              )}
             </button>
-            {showLabels ? (
+            {/* The text variant already IS its label — a caption under it
+                would say the word twice. */}
+            {showLabels && !isText ? (
               <span
                 style={{
                   marginTop: S.xs,
@@ -161,7 +222,7 @@ export function RadialMenu({
                   whiteSpace: 'nowrap',
                   overflow: 'hidden',
                   textOverflow: 'ellipsis',
-                  maxWidth: 100,
+                  maxWidth: ITEM_W,
                   textAlign: 'center',
                   pointerEvents: 'none',
                   userSelect: 'none',

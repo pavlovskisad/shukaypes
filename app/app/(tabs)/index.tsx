@@ -6,6 +6,7 @@ import MapView from '../../components/map';
 import { StatusBar, PillPulseRing } from '../../components/ui/StatusBar';
 import { QuestPill } from '../../components/ui/QuestPill';
 import { AboutModal } from '../../components/ui/AboutModal';
+import { LostFlowModal } from '../../components/ui/LostFlowModal';
 import { Z } from '../../constants/z';
 import { S } from '../../constants/spacing';
 import { popPressableEvent } from '../../utils/popOnTap';
@@ -16,9 +17,10 @@ import { useGameStore } from '../../stores/gameStore';
 // rather than dominating the map.
 const HUD_ICON_SIZE = 59;
 
-// Bubble easing for the HUD pills as supersniff toggles. Slight
-// overshoot on the way in reads as "popping into place"; the keyframes
-// themselves live in MapView, which is always mounted here.
+// Bubble easing for the HUD pills as the mode changes. Slight overshoot
+// on the way in reads as "popping into place"; the pop-in / pop-out
+// keyframes are global CSS in public/index.html, because the dashboard
+// shares them and outlives this screen.
 const POP_IN = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 
 export default function MapScreen() {
@@ -27,8 +29,17 @@ export default function MapScreen() {
   // Supersniff — the corner-logo button toggles it.
   const dogCam = useGameStore((s) => s.dogCam);
   const toggleDogCam = useGameStore((s) => s.toggleDogCam);
-  // Immersive = the HUD bubbles out.
-  const immersive = dogCam;
+  const appMode = useGameStore((s) => s.appMode);
+  const lostFlowOpen = useGameStore((s) => s.lostFlowOpen);
+  const setLostFlowOpen = useGameStore((s) => s.setLostFlowOpen);
+  // The dog is asking what we're doing. Nothing else on screen is real
+  // until it's answered.
+  const gateOpen = appMode === 'gate';
+  // Immersive = the HUD bubbles out. Supersniff wants the screen for the
+  // carousel; the gate wants it for the question. Same treatment, and
+  // deliberately the same flag, so both get the one animation path
+  // rather than two that drift.
+  const immersive = dogCam || gateOpen;
   // When a logo-targeting hint is showing, pulse the logo so the spoken
   // line has a target: 'map:supersniff' calls the user to TRY the mode,
   // 'map:supersniff-exit' shows modal-arrived searchers the way BACK to
@@ -59,6 +70,22 @@ export default function MapScreen() {
     return () => clearTimeout(t);
   }, [immersive]);
 
+  // The logo needs its OWN window, not `sniffJustChanged`. It stays put
+  // through a supersniff toggle — it IS the supersniff toggle — and only
+  // bubbles for the gate, so keying it on `immersive` would animate it
+  // out and back every time somebody tapped it.
+  const [gateJustChanged, setGateJustChanged] = useState(false);
+  const gateInitRef = useRef(true);
+  useLayoutEffect(() => {
+    if (gateInitRef.current) {
+      gateInitRef.current = false;
+      return;
+    }
+    setGateJustChanged(true);
+    const t = setTimeout(() => setGateJustChanged(false), 700);
+    return () => clearTimeout(t);
+  }, [gateOpen]);
+
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('map');
   }, []));
@@ -69,6 +96,7 @@ export default function MapScreen() {
   // explains the game, which is the dog standing in a coloured city. Let
   // them look at it first and read about it when they choose to.
   const handleAboutClose = useCallback(() => setAboutOpen(false), [setAboutOpen]);
+  const handleLostFlowClose = useCallback(() => setLostFlowOpen(false), [setLostFlowOpen]);
 
   return (
     <View style={styles.root}>
@@ -91,6 +119,24 @@ export default function MapScreen() {
             portal comment on the off-screen companion chip). Its two
             real children keep their own hit areas. */}
         <View style={styles.hudRow} pointerEvents="box-none">
+          {/* The logo is a mode switch, so it leaves with the rest of the
+              chrome while the gate is up — otherwise the one control that
+              survives the question is one that answers it behind the
+              ring's back. It pops out and back on the same clock as the
+              status pill, one leg of the same stagger. */}
+          <div
+            style={{
+              transformOrigin: 'left center',
+              opacity: gateOpen ? 0 : 1,
+              transform: gateOpen ? 'scale(0)' : 'scale(1)',
+              animation: gateJustChanged
+                ? gateOpen
+                  ? `pop-out 320ms ease-in forwards`
+                  : `pop-in 360ms ${POP_IN} 200ms both`
+                : 'none',
+              pointerEvents: gateOpen ? 'none' : 'auto',
+            }}
+          >
           <Pressable
             onPress={toggleDogCam}
             onPressIn={popPressableEvent}
@@ -131,6 +177,7 @@ export default function MapScreen() {
               `}</style>
             ) : null}
           </Pressable>
+          </div>
           {/* StatusBar bubbles out in sniff mode. Anchor the scale
               transform to the right edge so it collapses toward the
               edge of the screen rather than the centre. */}
@@ -175,6 +222,10 @@ export default function MapScreen() {
         </View>
       </SafeAreaView>
       <AboutModal open={aboutOpen} onClose={handleAboutClose} />
+      {/* Hosted here rather than inside MapView for the same reason the
+          about sheet is: it has to sit above the dashboard, not under
+          it. */}
+      <LostFlowModal open={lostFlowOpen} onClose={handleLostFlowClose} />
     </View>
   );
 }

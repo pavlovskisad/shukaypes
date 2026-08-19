@@ -347,9 +347,14 @@ interface PaintPoly {
 // current supersniff actually sets — MapView's ground-fill gate has always
 // checked the same one, and the two have to agree or the pavement goes
 // neutral under painted blocks.
+// The third reason to mute it is now the plainest one: the user has not
+// asked to see territory at all. `territoryVisible` is off everywhere
+// except 'грати', and this gate has to move with MapView's ground-fill
+// gate for exactly the reason above — painted blocks over neutral
+// pavement look broken, not intentional.
 function territoryPaintHidden(): boolean {
   const s = useGameStore.getState();
-  return (DOG_CAM && s.dogCam) || s.selectedDogId != null;
+  return !s.territoryVisible || (DOG_CAM && s.dogCam) || s.selectedDogId != null;
 }
 
 function territoryPaintPolys(): PaintPoly[] {

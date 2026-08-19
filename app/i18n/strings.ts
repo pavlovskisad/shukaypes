@@ -294,6 +294,30 @@ export interface AppStrings {
     spotsToggle: string;
     hudMeters: string;
   };
+  // The dog's front door. It asks once on entry and the answer picks
+  // the mode. One word per option — they ride inside a 112px pill on
+  // the ring, so anything longer gets clipped rather than wrapped.
+  modes: {
+    // The question in the dog's bubble while the ring is up.
+    ask: string;
+    lost: string;
+    search: string;
+    explore: string;
+    play: string;
+    // Shown when the user picks "meet" in explore and there is nobody
+    // around. Was hardcoded English in Companion.tsx.
+    noWalkers: string;
+    // The "I lost a pet" sheet. Points at the Telegram group, which is
+    // the one path that actually puts a pet on the map today.
+    lostSheet: {
+      title: string;
+      body: string;
+      cta: string;
+      // Shown instead of the CTA when no group link is configured.
+      noLink: string;
+      close: string;
+    };
+  };
 }
 
 // "зупинка" in the case Ukrainian wants after a number. Slavic plurals
@@ -685,6 +709,21 @@ const uk: AppStrings = {
     spotsToggle: 'шпилька вгорі — показати чи сховати місця 📍',
     hudMeters: 'вгорі: сонце — мій настрій, кістка — голод, лапки — скільки назбирали 🐾',
   },
+  modes: {
+    ask: 'привіт! що сьогодні робимо? 🐾',
+    lost: 'загубив',
+    search: 'шукати',
+    explore: 'гуляти',
+    play: 'грати',
+    noWalkers: 'поки нікого поруч 👥',
+    lostSheet: {
+      title: 'загубився пес?',
+      body: 'напиши в нашу групу в телеграмі — фото, район, коли востаннє бачили. я одразу візьму той допис і поставлю пса на карту, і його побачить кожен, хто цієї хвилини гуляє містом. так швидше, ніж будь-яка форма.',
+      cta: 'відкрити групу',
+      noLink: 'посилання на групу ще не налаштоване',
+      close: 'потім',
+    },
+  },
 };
 
 const en: AppStrings = {
@@ -1038,6 +1077,21 @@ const en: AppStrings = {
     radialMenu: 'this is all of us: find a pet, take a walk, drop by a place, say hi, or chat 🐾',
     spotsToggle: 'the pin up top — show or hide places 📍',
     hudMeters: "up top: sun's my mood, bone's hunger, paws are what we've found 🐾",
+  },
+  modes: {
+    ask: 'hey! what are we doing today? 🐾',
+    lost: 'lost one',
+    search: 'search',
+    explore: 'walk',
+    play: 'play',
+    noWalkers: 'nobody around just yet 👥',
+    lostSheet: {
+      title: 'lost your pet?',
+      body: "post in our telegram group — a photo, the district, when you last saw them. i'll pick that post up and put your pet on the map straight away, in front of everyone out walking this minute. faster than any form.",
+      cta: 'open the group',
+      noLink: 'the group link isn\'t set up yet',
+      close: 'later',
+    },
   },
 };
 
