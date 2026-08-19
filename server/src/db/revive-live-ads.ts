@@ -15,7 +15,8 @@
 //   200        → the search is live. Revive, and stamp ad_alive_at so the
 //                daily sweep stands down instead of expiring it again
 //                tomorrow. Without that stamp this whole pass lasts one
-//                day.
+//                day. The body gets stored from the same response — see
+//                below.
 //   404 / 410  → the listing is gone. Stays expired, and gets marked
 //                'ad-gone' so we never re-fetch it.
 //   anything   → left exactly as it is. A 403 that survived its retries
@@ -32,6 +33,19 @@
 // Rows already marked 'ad-gone' are skipped without a request — we asked
 // today and OLX said no.
 //
+// AND WE KEEP THE PAGE WE JUST FETCHED. backfill:ad-bodies only ever
+// looked at ACTIVE pets, so every row this pass revives has raw_body
+// null — reviving without storing would put a hundred-odd pets back on
+// the map all telling their walker "we don't have the full text of this
+// one", which is the state PR #472 existed to remove. The 200 that
+// proves the ad is alive is the same 200 that carries the text; throwing
+// it away only to re-fetch it an hour later doubles what we ask of OLX
+// for no gain.
+//
+// A page we cannot read is still proof of life: the pet is revived
+// either way, and the unreadable ones are counted separately rather than
+// folded into the success line.
+//
 // Dry run by default; the dry run makes NO requests unless --sample.
 //
 // Usage:
@@ -46,6 +60,8 @@ import { db, schema, pg } from './index.js';
 import { scrapeFetch } from '../lib/scrapeFetch.js';
 import { detectOtherCity } from '../pipeline/outOfArea.js';
 import { redactContacts } from '../pipeline/redactContacts.js';
+import { extractAdBody } from '../pipeline/sources/adHtml.js';
+import { capBody } from '../pipeline/adBody.js';
 import { AD_GONE } from './backfill-ad-bodies.js';
 
 const UA =
@@ -161,6 +177,8 @@ async function main() {
   let alive = 0;
   let gone = 0;
   let inconclusive = 0;
+  let bodies = 0;
+  let unreadable = 0;
 
   for (const [i, t] of targets.entries()) {
     if (i > 0 && delayMs > 0) await new Promise((r) => setTimeout(r, delayMs));
@@ -196,15 +214,29 @@ async function main() {
     }
 
     alive++;
+    const { text } = extractAdBody(res.body);
+    const readable = text.length >= 40;
+    if (readable) bodies++;
+    else unreadable++;
+
     console.log(
-      `  ✓  ${t.name.padEnd(22)} ad still live — ${redactContacts(t.title ?? '').slice(0, 44)}`,
+      `  ✓  ${t.name.padEnd(22)} ad still live, ${
+        readable ? `${String(text.length).padStart(5)} chars` : ' unreadable  '
+      } — ${redactContacts(t.title ?? '').slice(0, 44)}`,
     );
+
     if (apply) {
       // The stamp matters as much as the revive: without it the daily
-      // sweep expires this pet again tomorrow on the same age rule.
+      // sweep expires this pet again tomorrow on the same age rule. The
+      // body rides along on the same response — an unreadable page still
+      // revives, it just comes back without its text.
       await db
         .update(schema.scrapeLog)
-        .set({ adAliveAt: new Date() })
+        .set(
+          readable
+            ? { adAliveAt: new Date(), rawBody: capBody(text) }
+            : { adAliveAt: new Date() },
+        )
         .where(eq(schema.scrapeLog.url, t.url));
       await db
         .update(schema.lostDogs)
@@ -214,6 +246,8 @@ async function main() {
   }
 
   console.log(`\n  ad still live (revive): ${alive}`);
+  console.log(`     … with its text:     ${bodies}`);
+  console.log(`     … page unreadable:   ${unreadable}${unreadable ? ' — revived, but no ad text' : ''}`);
   console.log(`  ad gone (stays expired): ${gone}`);
   console.log(`  inconclusive (untouched): ${inconclusive}`);
 
@@ -231,7 +265,13 @@ async function main() {
   }
 
   console.log(`\n  ${alive} pet(s) back on the map, with ad_alive_at stamped so the`);
-  console.log('  daily sweep does not undo it.');
+  console.log(`  daily sweep does not undo it, and ${bodies} of them carrying their ad text.`);
+  if (unreadable > 0) {
+    console.log(
+      `  ${unreadable} came back without text — backfill:ad-bodies picks those up now\n` +
+        '  that they are active again.',
+    );
+  }
   console.log("  reversible: UPDATE lost_dogs SET status = 'expired' WHERE id IN (…)");
   console.log('\n✓ done.');
   await pg.end();

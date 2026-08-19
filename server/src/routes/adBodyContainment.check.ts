@@ -45,6 +45,13 @@ const ALLOWED = new Map<string, string>([
   // fetches an ad we already have the URL for and stores the text, the
   // same job olx.ts does at ingest. Neither returns a body to anybody.
   ['db/backfill-ad-bodies.ts', 'fetches a known ad URL and writes the text'],
+  // Same job as backfill-ad-bodies, on the other half of the base: it
+  // fetches an expired pet's ad to find out whether the search is still
+  // running, and stores the text from the response it already holds
+  // rather than making a second request for it. A WRITER — it never
+  // prints a body, and the one thing it does print (the listing title)
+  // goes through redactContacts.
+  ['db/revive-live-ads.ts', 'stores the text of an ad it fetched to prove the search is live'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
   // Only asks `raw_body is not null` to PICK a candidate ad to probe —
   // it never selects the column. And it masks every digit it prints, so
