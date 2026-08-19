@@ -3,7 +3,11 @@ import { and, desc, eq, not, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { buildPhotoUrl } from '../services/photoUrl.js';
 import { limitPolling, limitRead } from '../lib/rateLimit.js';
-import { looksLikeItHadContacts, redactContacts } from '../pipeline/redactContacts.js';
+import {
+  looksLikeItHadContacts,
+  looksLikeSourceMaskedContact,
+  redactContacts,
+} from '../pipeline/redactContacts.js';
 
 interface NearbyQuery {
   lat: string;
@@ -177,6 +181,15 @@ const plugin: FastifyPluginAsync = async (app) => {
       // So the UI can say WHY the ad has holes in it, rather than
       // leaving somebody to think the owner wrote it that way.
       contactsHidden: raw ? hideContacts && looksLikeItHadContacts(raw) : false,
+      // A SECOND, DIFFERENT REASON THE NUMBER IS NOT READABLE, and the
+      // walker cannot tell them apart without being told.
+      //
+      // They reported the sighting, they earned the contact, and the
+      // body still shows «05*******62» — because OLX masked it on the
+      // page and we stored what the page said. Nothing is being withheld
+      // here; the digits were never ours to hold. Only reported once the
+      // gate is open, so it never contradicts the message above it.
+      contactsMasked: raw ? !hideContacts && looksLikeSourceMaskedContact(raw) : false,
       // THE LINK IS GATED TOO, AND IT HAS TO BE.
       //
       // Masking the phone in the body while handing over the URL of the

@@ -240,6 +240,7 @@ export interface AppStrings {
       // "open the post" because this modal IS the post now; the thing
       // on the other side of this button is the source it came from.
       openOriginal: string;
+      contactsMaskedBySource: string;
       // Why the text has holes in it.
       contactsAfterSighting: string;
     };
@@ -572,6 +573,8 @@ const uk: AppStrings = {
       openOriginal: 'оригінал',
       contactsAfterSighting:
         'контакти власника зʼявляться тут, щойно ти позначиш, що бачив цю тваринку.',
+      contactsMaskedBySource:
+        'номер сховала сама olx — вона показує його лише після натискання. відкрий оригінал і тисни «показати телефон».',
     },
     spot: {
       walkHere: 'ходімо сюди',
@@ -916,6 +919,8 @@ const en: AppStrings = {
       openOriginal: 'original',
       contactsAfterSighting:
         "the owner's contact appears here once you mark that you've seen this pet.",
+      contactsMaskedBySource:
+        'olx hid the number itself — it only shows in full after a tap. open the original and tap "show phone".',
     },
     spot: {
       walkHere: 'walk here',

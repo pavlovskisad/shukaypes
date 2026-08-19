@@ -49,6 +49,10 @@ interface PostModalProps {
 interface PostState {
   body: string | null;
   contactsHidden: boolean;
+  // The walker did everything right and the number is STILL stars —
+  // because OLX masked it on its own page. Different sentence, different
+  // remedy: one tap on the original, rather than "go report a sighting".
+  contactsMasked: boolean;
   sourceUrl: string | null;
 }
 
@@ -200,6 +204,30 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
           {/* Says WHY the ad has holes in it. Without this the masking
               reads as the owner having written it that way, or as a
               bug. */}
+          {/* NOT the same message as the one below, and the difference
+              matters to somebody standing in the street holding a phone.
+              «contactsHidden» means we are withholding it and walking on
+              will fix that. This means the digits were never ours: OLX
+              prints «05*******62» and reveals the rest on a tap, so the
+              only way through is the original. Saying "report a sighting"
+              to a walker who already has would be a lie they can check. */}
+          {post?.contactsMasked ? (
+            <div
+              style={{
+                marginTop: S.m,
+                padding: S.s,
+                borderRadius: R.chip,
+                background: '#F3F0E7',
+                fontFamily: SYSTEM_FONT,
+                fontSize: TYPE.small,
+                lineHeight: 1.45,
+                color: '#5A5750',
+              }}
+            >
+              {t.modals.post.contactsMaskedBySource}
+            </div>
+          ) : null}
+
           {post?.contactsHidden ? (
             <div
               style={{

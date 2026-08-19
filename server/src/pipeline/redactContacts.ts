@@ -60,3 +60,24 @@ export function redactContacts(text: string): string {
 export function looksLikeItHadContacts(original: string): boolean {
   return redactContacts(original) !== original;
 }
+
+// THE ASTERISKS ARE NOT OURS, and telling the two apart is the whole
+// point of this function.
+//
+// OLX prints the owner's number partly masked — «т.05*******62» — and
+// reveals the rest only when a human taps. We store the page verbatim,
+// so that mask is in the body we hand a walker who HAS reported their
+// sighting and has earned the contact. They see stars, and every reading
+// of that is wrong: that we are still withholding it, that the owner
+// typed it that way, or that the app is broken.
+//
+// Our own redaction never looks like this — it substitutes
+// «[контакт приховано]», a phrase, precisely so the two can never be
+// confused in a screenshot or a bug report. Three or more mask
+// characters between digits is OLX's shape and nothing else's.
+const SOURCE_MASKED = /\d[\s\-().]*[*•·]{3,}[\s\-().]*\d/;
+
+/** Did the SOURCE mask the number, rather than us? */
+export function looksLikeSourceMaskedContact(text: string): boolean {
+  return SOURCE_MASKED.test(text);
+}

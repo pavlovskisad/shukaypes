@@ -14,7 +14,7 @@
 //
 // So the must-not-redact half of this file is the important half.
 
-import { redactContacts } from './redactContacts.js';
+import { looksLikeSourceMaskedContact, redactContacts } from './redactContacts.js';
 
 let failures = 0;
 function check(name: string, ok: boolean, detail = ''): void {
@@ -84,6 +84,32 @@ check('whole ad: the name survives', red.includes('Мухтар'));
 
 check('empty stays empty', redactContacts('') === '');
 check('no contacts means byte-identical', kept('просто текст без контактів'));
+
+// ---- WHOSE MASK IS IT ----
+//
+// A walker who has reported their sighting has earned the number and can
+// still be looking at asterisks, because OLX masks it on its own page and
+// we store the page verbatim. The app has to say which of the two is
+// happening — "go report a sighting" told to somebody who already did is
+// a lie they can check — so the two masks must never be confusable.
+
+check('olx mask is recognised', looksLikeSourceMaskedContact('т.05*******62'));
+check('olx mask, bullets', looksLikeSourceMaskedContact('тел 067•••••45'));
+check('olx mask, spaced', looksLikeSourceMaskedContact('09 ****** 65'));
+
+// OUR mask is a phrase, never asterisks — that is what keeps them apart.
+check(
+  'our own redaction is never mistaken for the source mask',
+  !looksLikeSourceMaskedContact(redactContacts('Телефон 067-123-45-67')),
+);
+check(
+  'a plain unmasked number is not a source mask',
+  !looksLikeSourceMaskedContact('Телефон 0671234567'),
+);
+// Ordinary prose that happens to carry a star must not trip it, or every
+// ad with a rating or a footnote grows a misleading notice.
+check('a single star is not a mask', !looksLikeSourceMaskedContact('оцінка 5*, зник 14.08'));
+check('emphasis stars are not a mask', !looksLikeSourceMaskedContact('**дуже терміново** 2 дні'));
 
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);
