@@ -376,6 +376,9 @@ export const api = {
     req<{
       body: string | null;
       contactsHidden: boolean;
+      // True when the SOURCE masked the number, not us — the walker has
+      // the contact unlocked and OLX is still showing «05*******62».
+      contactsMasked: boolean;
       sourceUrl: string | null;
       fetchedAt: string | null;
     }>(`/dogs/${encodeURIComponent(id)}/post`),
