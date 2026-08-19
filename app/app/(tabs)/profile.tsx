@@ -355,16 +355,21 @@ export default function ProfileScreen() {
         <View style={styles.langPills}>
           <LangPill code="uk" label="UA" active={lang === 'uk'} onPress={() => setLang('uk')} />
           <LangPill code="en" label="EN" active={lang === 'en'} onPress={() => setLang('en')} />
-          {/* The about sheet lives here now. It used to hang off the
-              companion's ring as a «?», and when that ring was cut down
-              to the three things you can do on a walk, «what is this
-              app» had nowhere left to be reached from — the sheet was
-              still built, still translated, and unreachable. This is
-              where a reader looks for it anyway.
+        </View>
+        {/* The about sheet lives here now. It used to hang off the
+            companion's ring as a «?», and when that ring was cut down to
+            the three things you can do on a walk, «what is this app» had
+            nowhere left to be reached from — the sheet was still built,
+            still translated, and unreachable. This is where a reader
+            looks for it anyway.
 
-              Borrows the language pill's styling so the row reads as one
-              set, but it is a button, not a switch — LangPill is a
-              two-state toggle down to its accessibility role. */}
+            On its own line under the toggles, not beside them: three
+            pills in a row made the corner busy, and the two that belong
+            together are the two languages. It borrows their styling so
+            the pair still reads as one set, but it is a button rather
+            than a switch — LangPill is a two-state toggle down to its
+            accessibility role. */}
+        <View style={styles.aboutRow}>
           <Pressable
             onPress={() => setAboutOpen(true)}
             onPressIn={popPressableEvent}
@@ -467,6 +472,11 @@ const styles = StyleSheet.create({
   langPills: {
     flexDirection: 'row',
     gap: S.s,
+  },
+  // Its own line, aligned with the toggles above it.
+  aboutRow: {
+    flexDirection: 'row',
+    marginTop: S.s,
   },
   // Lang pill — solid white, same shape + chat-style CHROME_SHADOW
   // as the HUD MeterPill / CounterPill in solid mode. The dark
