@@ -106,9 +106,33 @@ async function main() {
   // So count what SURVIVES, per label. A number here is the difference
   // between "we handled it" and "we handled one of them".
   console.log('\nstill present after the strip (anywhere in the text):');
+  const survivors = new Map<string, string[]>();
   for (const label of ['Повідомлення', 'Опис', 'Сообщение', 'Описание']) {
-    const n = rows.filter((r) => stripSectionLabelLines(r.body!).includes(label)).length;
-    console.log(`  ${label.padEnd(14)} ${String(n).padStart(4)} / ${rows.length}`);
+    const hits = rows.map((r) => stripSectionLabelLines(r.body!)).filter((t) => t.includes(label));
+    survivors.set(label, hits);
+    console.log(`  ${label.padEnd(14)} ${String(hits.length).padStart(4)} / ${rows.length}`);
+  }
+
+  // WHERE a survivor sits decides what to do about it, and the two cases
+  // want OPPOSITE treatment: a label at the start of a line is furniture
+  // the rule declined to take (some boundary it does not yet know), while
+  // a label inside a sentence is the owner's own word and must be left
+  // alone forever. A count cannot tell them apart. This prints the
+  // neighbourhood so a human can.
+  //
+  // ⏎ marks a newline, so "line start" is visible rather than inferred.
+  // Redacted, like everything else this file prints.
+  for (const [label, hits] of survivors) {
+    if (hits.length === 0) continue;
+    console.log(`\n  where «${label}» still sits (${Math.min(hits.length, 10)} of ${hits.length}):`);
+    for (const text of hits.slice(0, 10)) {
+      const at = text.indexOf(label);
+      const window = text.slice(Math.max(0, at - 14), at + label.length + 26);
+      const atLineStart = at === 0 || text[at - 1] === '\n';
+      console.log(
+        `    ${atLineStart ? 'LINE START' : 'mid-text  '}  …${redactContacts(window).replace(/\n/g, '⏎')}…`,
+      );
+    }
   }
 
   if (dirty.length === 0) {
