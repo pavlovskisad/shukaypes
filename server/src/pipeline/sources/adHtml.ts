@@ -47,8 +47,41 @@ const SECTION_LABELS = ['Повідомлення', 'Опис', 'Сообщен�
 function labelBoundary(label: string): RegExp {
   return new RegExp(`^${label}(?=[\\s:]|$)[\\s:]*`, 'iu');
 }
-function labelWelded(label: string): RegExp {
-  return new RegExp(`^${label}(?=\\p{Lu})`, 'u');
+
+// THE CAPITAL-LETTER TEST WAS TOO NARROW, and the survivor positions said
+// so: of the 30 «Опис» left after it shipped, every single one sat at the
+// start of a line, and they were welded to
+//
+//     Опис09******65⏎…            a phone number
+//     Опис4 июня по ул…           a date
+//     Описзагубився котик…        a lowercase sentence
+//     Описшукаю свою хаскі…       a lowercase sentence
+//
+// Digits and lowercase both. But "strip whenever it is fused" would eat
+// «Описи зовнішності» — опис is a real Ukrainian noun and it declines.
+//
+// What separates them is the LENGTH of what follows. An inflection is a
+// short tail — описи, опису, описом, описах, описів, описами — at most
+// four letters before the word ends. A fused heading is followed by a
+// whole word, a date, or a phone number.
+//
+// So: keep the label when the next token is a short lowercase tail, and
+// strip otherwise. The bias is deliberate and one-directional — a short
+// lowercase word after the label («Опискіт») leaves furniture on screen,
+// which is ugly; the opposite error deletes the first word of somebody's
+// post about their missing animal, which is not recoverable. Ugly is the
+// side to fail on.
+const MAX_INFLECTION_TAIL = 4;
+
+function stripWeldedLabel(text: string, label: string): string {
+  if (!text.startsWith(label)) return text;
+  const rest = text.slice(label.length);
+  if (rest === '') return text; // a bare label — labelBoundary handles it
+  const token = rest.split(/[\s.,:;!?()«»"'\-—]/)[0] ?? '';
+  // LETTERS ONLY, which is not a detail: «Опис4 июня» has a one-character
+  // token that a bare length test would call an inflection and keep.
+  const isInflection = new RegExp(`^\\p{Ll}{1,${MAX_INFLECTION_TAIL}}$`, 'u').test(token);
+  return isInflection ? text : rest;
 }
 
 export function stripSectionLabels(body: string): string {
@@ -56,7 +89,7 @@ export function stripSectionLabels(body: string): string {
   for (let pass = 0; pass < SECTION_LABELS.length; pass++) {
     const before = out;
     for (const label of SECTION_LABELS) {
-      out = out.replace(labelBoundary(label), '').replace(labelWelded(label), '');
+      out = stripWeldedLabel(out.replace(labelBoundary(label), ''), label);
     }
     if (out === before) break;
   }
