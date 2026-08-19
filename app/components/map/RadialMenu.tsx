@@ -1,3 +1,4 @@
+import type { ReactNode } from 'react';
 import { balance } from '../../constants/balance';
 import { BUTTON } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
@@ -93,20 +94,21 @@ export const TEXT_ITEM = {
   // words. Sentences need more room to breathe at this height, and the
   // pill is a touch target rather than a block of prose.
   padX: 18,
-  // THE NUMBER THAT MAKES A RING OF SENTENCES POSSIBLE.
-  //
-  // A ring's width is 2*radius + the widest item, and the radius has a
-  // floor because the left and right items must clear the dog. Unwrapped,
-  // «хто тримає цей район?» is ~210px of pill, which needs a radius of
-  // ~139 to clear the sprite and at most ~75 to fit on a 360px screen —
-  // no number satisfies both. Capping the pill at 130 and letting it
-  // wrap to two lines opens a real window: radius >= ~95 to clear the
-  // dog, <= ~115 to fit the screen. 105 sits in the middle of it.
-  //
-  // The clearance figure is the VISIBLE sprite (~40px), not the 140px
-  // tap container it floats in — measured, not assumed.
+  // Caps the pill and lets a long answer wrap to two lines. Two of these
+  // side by side plus the gap is 272px, which leaves ~44px of margin on
+  // each side of a 360px screen.
   maxWidth: 130,
+  // Between pills, both across a row and down a column.
+  gap: 12,
 } as const;
+
+// Below the dog, both menus start here — far enough down to clear the
+// VISIBLE sprite (~50px tall, not the 140px tap container it floats in)
+// without leaving a gap you could park a bus in.
+const BELOW_DOG_PX = 46;
+
+// Between the three walking icons in their row.
+const ICON_ROW_GAP = 16;
 
 // Trig-positioned radial around a center point with radius R.
 // The container is sized to fit the rim items and centered on the companion.
@@ -123,14 +125,20 @@ interface RadialMenuProps {
   // 'icon' is the ring the app has always had. 'text' is the L1 intent
   // menu — word pills, no icons.
   variant?: 'icon' | 'text';
-  // Where item 0 sits, in radians, with the rest walking clockwise from
-  // it. Default -90 degrees puts it at twelve o'clock.
+  // Where the items go.
   //
-  // The walking level passes +90 instead, which turns its three icons
-  // upside down: one directly UNDER the dog and two out to the sides.
-  // Nothing above the dog means the bubble can tuck in at its nose
-  // instead of being pushed up over a top button.
-  startAngle?: number;
+  //   'ring' — the original, orbiting the dog. Still what the drill-down
+  //            levels use, where every item is a 68px disc and there are
+  //            only two or three of them.
+  //   'row'  — one line of icons directly under the dog.
+  //   'grid' — two columns of pills under the dog, filled COLUMN-FIRST:
+  //            the first half of `actions` goes down the left column and
+  //            the rest down the right.
+  //
+  // Both of the under-the-dog layouts leave the space above it empty,
+  // which is what lets the dog's line sit at its nose instead of being
+  // pushed up and over a button at twelve o'clock.
+  layout?: 'ring' | 'row' | 'grid';
 }
 
 export function RadialMenu({
@@ -141,7 +149,7 @@ export function RadialMenu({
   inverted = false,
   showLabels = false,
   variant = 'icon',
-  startAngle = -Math.PI / 2,
+  layout = 'ring',
 }: RadialMenuProps) {
   const N = actions.length;
   const isText = variant === 'text';
@@ -234,6 +242,64 @@ export function RadialMenu({
     pointerEvents: (open ? 'auto' : 'none') as 'auto' | 'none',
   });
 
+  // Shared shell for both under-the-dog layouts: centred on the dog
+  // horizontally, hanging below it, and inert except for its buttons.
+  const below = (children: ReactNode, gap: number) => (
+    <div
+      style={{
+        position: 'absolute',
+        left: '50%',
+        top: `calc(50% + ${BELOW_DOG_PX}px)`,
+        transform: 'translateX(-50%)',
+        display: 'flex',
+        gap,
+        pointerEvents: 'none',
+      }}
+    >
+      {children}
+    </div>
+  );
+
+  if (layout === 'row') {
+    return below(
+      actions.map((a, i) => (
+        <div key={a.id} style={entrance(i)}>
+          {renderButton(a)}
+        </div>
+      )),
+      ICON_ROW_GAP,
+    );
+  }
+
+  if (layout === 'grid') {
+    // Column-first, so `actions` reads down the left column and then
+    // down the right — which is how the four intents are ordered.
+    const half = Math.ceil(N / 2);
+    const columns = [actions.slice(0, half), actions.slice(half)];
+    return below(
+      columns.map((col, c) => (
+        <div
+          key={c}
+          style={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            gap: TEXT_ITEM.gap,
+          }}
+        >
+          {col.map((a, r) => (
+            // Stagger by position in the whole set, not within the
+            // column, so the four arrive as one sweep.
+            <div key={a.id} style={entrance(c * half + r)}>
+              {renderButton(a)}
+            </div>
+          ))}
+        </div>
+      )),
+      TEXT_ITEM.gap,
+    );
+  }
+
   return (
     <div
       style={{
@@ -247,7 +313,7 @@ export function RadialMenu({
       }}
     >
       {actions.map((a, i) => {
-        const ang = startAngle + i * ((2 * Math.PI) / N);
+        const ang = -Math.PI / 2 + i * ((2 * Math.PI) / N);
         const bx = CENTER + Math.cos(ang) * radius;
         const by = CENTER + Math.sin(ang) * radius;
         return (

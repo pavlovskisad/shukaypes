@@ -32,13 +32,6 @@ import { DogSprite, type DogAnim } from './DogSprite';
 
 const VISIT_LEAVES_PER_CATEGORY = 3;
 
-// Ring radius for the four intents. The icon ring's 78 is sized for 68px
-// discs; a wrapped sentence pill is up to 130 wide and needs the ring to
-// open out, but not so far that the left and right pills leave the
-// screen. See TEXT_ITEM.maxWidth for the two inequalities this sits
-// between.
-const MODE_MENU_RADIUS = 105;
-
 // Builds the visit-leaf actions for the current category. Pulled out
 // so it can be memoised + cached separately from the rest of the menu
 // (the `spots` reference flips on every /sync/map tick — without
@@ -876,11 +869,11 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
             instead of the sprite div. */}
         <DogSprite anim={anim} facingLeft={facingLeft} />
 
-        {/* Explainer rides higher (above the top ring button) so it
-            clears the radial menu; every other line tucks just above
-            the nose. The intents' ring is wider still — its top pill
-            reaches ~108px above the dog's centre — so the question has
-            to sit higher again or it lands on top of «загубив». */}
+        {/* No offset any more, in any state. Both menus the dog speaks
+            over hang BELOW it now, so there is nothing at twelve
+            o'clock to clear and the line sits at its nose like
+            everything else it says. The 150px and 81px lifts this
+            carried existed only to climb over a button that is gone. */}
         <SpeechBubble
           text={activeBubble}
           // Two rings, two clearances. The intents put a pill at twelve
@@ -888,20 +881,6 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           // the question has to start above that. The walking ring is
           // upside down and has nothing up there at all, so its line
           // tucks in at the nose like every other thing the dog says.
-          // Two rings, two clearances, both measured off the topmost
-          // button rather than guessed. The intents put a pill at twelve
-          // o'clock reaching ~140px above the dog's centre. The walking
-          // ring is upside down, so its highest buttons are the two at
-          // the sides: sin(210 degrees) * 78 puts them 39px up, plus 34
-          // of icon, is 73 — the bubble clears that by 8 and no more,
-          // which is the point of turning the ring over.
-          bottom={
-            showModes
-              ? 'calc(50% + 150px)'
-              : menuExplainer
-                ? 'calc(50% + 81px)'
-                : undefined
-          }
         />
         <RadialMenu
           open={menuOpen}
@@ -915,15 +894,11 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           // each ring item would clutter the cardinal slots.
           showLabels={menuPath.length === 2 && menuPath[0] === 'visit'}
           variant={showModes ? 'text' : 'icon'}
-          // Sentences need a wider ring than 68px discs do; see the
-          // maxWidth note on TEXT_ITEM for how 105 was arrived at.
-          radius={showModes ? MODE_MENU_RADIUS : undefined}
-          // The walking level hangs upside down — one icon under the
-          // dog, two out to the sides — so nothing sits above the dog
-          // and the question can tuck in at its nose.
-          startAngle={
-            !showModes && menuPath.length === 0 ? Math.PI / 2 : undefined
-          }
+          // The two levels the user actually converses with hang under
+          // the dog: four intents in two columns, three walking verbs in
+          // one row. Everything deeper stays a ring, where the items are
+          // 68px discs and there are only two or three of them.
+          layout={showModes ? 'grid' : menuPath.length === 0 ? 'row' : 'ring'}
         />
       </div>
     </MapLibreMarker>
