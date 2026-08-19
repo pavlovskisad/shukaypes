@@ -165,10 +165,11 @@ export function RadialMenu({
   // is less than the 100 an item occupies.
   const CONTAINER = radius * 2 + ITEM_W + 24;
   const CENTER = CONTAINER / 2;
-  // Plain black-and-white pills — no frosted glass / translucency.
-  // Sniff mode (dark map) uses the dark variant so the buttons stay
-  // legible against the white-on-dark theme; normal map uses the
-  // light variant. Caller passes `inverted={!sniffMode}`.
+  // Plain black-and-white buttons — no frosted glass / translucency.
+  // The companion asks for the light variant everywhere now: white
+  // fill, black text and glyphs, matching the HUD pills and the
+  // dashboard. `inverted` flips the pair, and it also drives the Icon's
+  // invert filter, so fill and glyph can never disagree.
   const bg = inverted ? '#1a1a1a' : '#ffffff';
   const fg = inverted ? '#ffffff' : '#1a1a1a';
   const labelColor = inverted ? '#f5f5f5' : '#1a1a1a';

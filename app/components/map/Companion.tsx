@@ -886,9 +886,13 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           open={menuOpen}
           actions={currentActions}
           onSelect={handleSelect}
-          // The map is light, so the menu is dark — a light-frosted menu
-          // disappeared into it.
-          inverted
+          // White buttons, black text and icons — the same way round as
+          // the HUD pills and the dashboard, so the dog's menu now reads
+          // as part of the app's chrome rather than as a dark object
+          // dropped on top of it. `inverted` also drives the Icon's
+          // invert filter, so leaving it off is what turns the glyphs
+          // black; the two cannot be set apart.
+          inverted={false}
           // Show readable names at the named-spot leaves only — every
           // other level has self-explanatory icons and a label below
           // each ring item would clutter the cardinal slots.
