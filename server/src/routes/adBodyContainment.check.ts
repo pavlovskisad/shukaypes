@@ -57,6 +57,11 @@ const ALLOWED = new Map<string, string>([
   // the text it removed — a section label by construction — and that
   // still goes through redactContacts. Operator-run, no HTTP surface.
   ['db/clean-ad-bodies.ts', 'strips OLX section labels out of stored bodies'],
+  // Counts how many bodies carry a readable contact, a source-masked
+  // one, or none. It reads the column and prints NO part of it — not a
+  // fragment, not a redacted window, only three integers. A census does
+  // not need to show a phone number to say how many there are.
+  ['db/census-contacts.ts', 'counts contact-shapes across bodies, prints integers only'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
   // Only asks `raw_body is not null` to PICK a candidate ad to probe —
   // it never selects the column. And it masks every digit it prints, so
