@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from '../../components/map';
 import { StatusBar, PillPulseRing } from '../../components/ui/StatusBar';
 import { QuestPill } from '../../components/ui/QuestPill';
-import { AboutModal } from '../../components/ui/AboutModal';
 import { LostFlowModal } from '../../components/ui/LostFlowModal';
 import { Z } from '../../constants/z';
 import { S } from '../../constants/spacing';
@@ -24,8 +23,6 @@ const HUD_ICON_SIZE = 59;
 const POP_IN = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 
 export default function MapScreen() {
-  const aboutOpen = useGameStore((s) => s.aboutOpen);
-  const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   // Supersniff — the corner-logo button toggles it.
   const dogCam = useGameStore((s) => s.dogCam);
   const toggleDogCam = useGameStore((s) => s.toggleDogCam);
@@ -90,12 +87,6 @@ export default function MapScreen() {
     useGameStore.getState().setScreen('map');
   }, []));
 
-  // The about sheet is on demand only — the "?" in the companion's
-  // radial menu. It used to open itself on a first-ever visit, which put
-  // a wall of text between a new player and the thing that actually
-  // explains the game, which is the dog standing in a coloured city. Let
-  // them look at it first and read about it when they choose to.
-  const handleAboutClose = useCallback(() => setAboutOpen(false), [setAboutOpen]);
   const handleLostFlowClose = useCallback(() => setLostFlowOpen(false), [setLostFlowOpen]);
 
   return (
@@ -221,7 +212,6 @@ export default function MapScreen() {
           </div>
         </View>
       </SafeAreaView>
-      <AboutModal open={aboutOpen} onClose={handleAboutClose} />
       {/* Hosted here rather than inside MapView for the same reason the
           about sheet is: it has to sit above the dashboard, not under
           it. */}

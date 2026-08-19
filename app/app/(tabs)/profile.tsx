@@ -109,6 +109,7 @@ export default function ProfileScreen() {
   const lang = useLangStore((s) => s.lang);
   const setLang = useLangStore((s) => s.setLang);
   const companionName = useGameStore((s) => s.companionName);
+  const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const [data, setData] = useState<ProfileData | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Territory standing. Its own fetch rather than a field on /profile/me
@@ -354,6 +355,25 @@ export default function ProfileScreen() {
         <View style={styles.langPills}>
           <LangPill code="uk" label="UA" active={lang === 'uk'} onPress={() => setLang('uk')} />
           <LangPill code="en" label="EN" active={lang === 'en'} onPress={() => setLang('en')} />
+          {/* The about sheet lives here now. It used to hang off the
+              companion's ring as a «?», and when that ring was cut down
+              to the three things you can do on a walk, «what is this
+              app» had nowhere left to be reached from — the sheet was
+              still built, still translated, and unreachable. This is
+              where a reader looks for it anyway.
+
+              Borrows the language pill's styling so the row reads as one
+              set, but it is a button, not a switch — LangPill is a
+              two-state toggle down to its accessibility role. */}
+          <Pressable
+            onPress={() => setAboutOpen(true)}
+            onPressIn={popPressableEvent}
+            accessibilityRole="button"
+            accessibilityLabel={t.modals.about.header}
+            style={({ pressed }) => [styles.langPill, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.langPillText}>?</Text>
+          </Pressable>
         </View>
       </View>
 

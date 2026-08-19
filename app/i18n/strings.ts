@@ -304,6 +304,9 @@ export interface AppStrings {
     search: string;
     explore: string;
     play: string;
+    // The dog's line over the walking level — three icons that do not
+    // explain themselves, named in one breath.
+    exploreAsk: string;
     // Shown when the user picks "meet" in explore and there is nobody
     // around. Was hardcoded English in Companion.tsx.
     noWalkers: string;
@@ -710,11 +713,14 @@ const uk: AppStrings = {
     hudMeters: 'вгорі: сонце — мій настрій, кістка — голод, лапки — скільки назбирали 🐾',
   },
   modes: {
-    ask: 'нюх-нюх! що хочеш робити? 🐾',
-    lost: 'загубив',
-    search: 'шукати',
-    explore: 'гуляти',
-    play: 'грати',
+    ask: 'нюх-нюх! шо ти?',
+    lost: 'загубив друга :(',
+    search: 'я шукайпес!',
+    explore: 'хочу погуляти',
+    play: 'хто тримає цей район?',
+    // Shown while the walking verbs are on the ring — three icons that
+    // do not explain themselves, so the dog names them.
+    exploreAsk: 'просто пройтись, заскочити по каву чи в зоомагазин, чи з кимось познайомитись?',
     noWalkers: 'поки нікого поруч 👥',
     lostSheet: {
       title: 'загубився пес?',
@@ -1079,11 +1085,12 @@ const en: AppStrings = {
     hudMeters: "up top: sun's my mood, bone's hunger, paws are what we've found 🐾",
   },
   modes: {
-    ask: 'sniff-sniff! what do you want to do? 🐾',
-    lost: 'lost one',
-    search: 'search',
-    explore: 'walk',
-    play: 'play',
+    ask: 'sniff-sniff! so what is it?',
+    lost: 'lost my friend :(',
+    search: "i'm a pet-finder!",
+    explore: 'i want a walk',
+    play: 'who holds this district?',
+    exploreAsk: 'just a stroll, a coffee or a pet shop, or shall we go and meet somebody?',
     noWalkers: 'nobody around just yet 👥',
     lostSheet: {
       title: 'lost your pet?',

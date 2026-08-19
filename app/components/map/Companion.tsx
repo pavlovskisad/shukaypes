@@ -32,14 +32,6 @@ import { DogSprite, type DogAnim } from './DogSprite';
 
 const VISIT_LEAVES_PER_CATEGORY = 3;
 
-// Ring radius for the four intents, wherever they are shown — the cold
-// start's gate and the level you reach by tapping the dog are the same
-// ring. The icon ring's 78 was sized for 68px discs; a 112px word pill
-// at that radius would have «шукати» and «грати» overlapping across the
-// dog. At 86 the container comes out at 308px, which still leaves
-// margins on a 360px-wide phone.
-const MODE_MENU_RADIUS = 86;
-
 // Builds the visit-leaf actions for the current category. Pulled out
 // so it can be memoised + cached separately from the rest of the menu
 // (the `spots` reference flips on every /sync/map tick — without
@@ -768,13 +760,17 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
             : activeHintId === 'map:supersniff-exit'
               ? t.hints.supersniffExit
               : null;
-  // While the menu is open we normally suppress the bubble — except
-  // for the one-shot radial-menu explainer, which is meant to sit
-  // alongside the open menu at root and name the options.
+  // The walking level names itself, every time rather than once.
+  //
+  // It used to be a one-shot hint, which was the right shape when the
+  // ring held five or six loosely-related verbs and the line was a
+  // tutorial. Three icons that answer one question is not a tutorial —
+  // it is a question, the same as the one a level above, and a question
+  // that only gets asked on your first ever visit is not much of a
+  // question. `menuHint` is kept for its `seen` flag, which still
+  // decides the camera framing.
   const menuExplainer =
-    menuOpen && menuPath.length === 0 && menuHint.visible
-      ? t.hints.radialMenu
-      : null;
+    menuOpen && menuPath.length === 0 && !showModes ? t.modes.exploreAsk : null;
   // Supersniff intro bubble — shown over ambient/real barks for its window.
   const supersniffIntro =
     dogCam && supersniffIntroHint.visible ? t.hints.supersniffIntro : null;
@@ -823,7 +819,7 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   useEffect(() => {
     setMenuCamera(
       showModes
-        ? 'explainer'
+        ? 'modes'
         : menuOpen
           ? menuHint.seen
             ? 'center'
@@ -880,13 +876,12 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
             to sit higher again or it lands on top of «загубив». */}
         <SpeechBubble
           text={activeBubble}
-          bottom={
-            showModes
-              ? 'calc(50% + 165px)'
-              : menuExplainer
-                ? 'calc(50% + 130px)'
-                : undefined
-          }
+          // The stacked answers hang BELOW the dog, so the question
+          // tucks in just above its head like every other line it says.
+          // The 165px lift was there to clear a ring pill at twelve
+          // o'clock, and with no pill up there it only stranded the
+          // question halfway up the screen.
+          bottom={menuExplainer ? 'calc(50% + 130px)' : undefined}
         />
         <RadialMenu
           open={menuOpen}
@@ -899,11 +894,11 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           // other level has self-explanatory icons and a label below
           // each ring item would clutter the cardinal slots.
           showLabels={menuPath.length === 2 && menuPath[0] === 'visit'}
-          // The top level is words. See the note on TEXT_ITEM in RadialMenu.
+          // The top level is words, and words this long cannot orbit a
+          // dog on a phone — see the `layout` note in RadialMenu for the
+          // measurement that rules it out.
           variant={showModes ? 'text' : 'icon'}
-          // Word pills are wider than icon buttons, so the ring has to
-          // open out or opposite pills meet in the middle.
-          radius={showModes ? MODE_MENU_RADIUS : undefined}
+          layout={showModes ? 'stack' : 'ring'}
         />
       </div>
     </MapLibreMarker>

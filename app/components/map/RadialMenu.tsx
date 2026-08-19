@@ -35,18 +35,18 @@ export const MODE_ACTION_IDS: ModeActionId[] = [
   'mode:play',
 ];
 
-// L2 for 'гуляти' — the walking game's own verbs. `search` used to head
-// this list; it is an L1 intent now, and leaving a copy here would mean
-// two different depths of menu that both change mode.
+// L2 for «хочу погуляти» — three ways to spend a walk, and nothing else.
+//
+// `search` left first: it is an L1 intent now, and a second copy down
+// here would have meant two depths of menu that both change mode. Then
+// `chat` and `about`, which were not walks at all — `chat` has its own
+// place on the dashboard, and `about` moved to the profile tab, which
+// is where a "what is this" sheet belongs anyway. What is left answers
+// one question, which is why the dog can now name all three in a line.
 export const EXPLORE_ACTIONS: RadialAction[] = [
   { id: 'walk', iconName: 'walk', icon: '🚶', label: 'walk' },
   { id: 'visit', iconName: 'pin', icon: '📍', label: 'visit' },
   { id: 'meet', iconName: 'meet', icon: '👥', label: 'meet' },
-  { id: 'chat', iconName: 'chat', icon: '💬', label: 'chat' },
-  // About / help — opened from the radial menu now that the logo
-  // tap is wired to sniff-mode toggle. Keeps the onboarding sheet
-  // one tap away.
-  { id: 'about', iconName: 'question', icon: '❓', label: 'about' },
 ];
 
 // Walk drills two levels deep: shape (roundtrip / one-way) → distance
@@ -86,11 +86,15 @@ export const VISIT_CATEGORY_ACTIONS: RadialAction[] = [
 // label plus its padding.
 export const TEXT_ITEM = {
   width: 112,
-  height: 44,
-  // Matches SpeechBubble's horizontal padding exactly. The question and
-  // its answers are the same object on screen and have to be cut from
-  // the same cloth; see the comment on the button.
-  padX: 10,
+  // Chunky enough to read as a sibling of the 68px icon discs rather
+  // than a thin chip stuck to them.
+  height: 60,
+  // Was matched to SpeechBubble's 10 while the labels were single
+  // words. Sentences need more room to breathe at this height, and the
+  // pill is a touch target rather than a block of prose.
+  padX: 18,
+  // Gap between stacked answers, and between the dog and the first one.
+  gap: 12,
 } as const;
 
 // Trig-positioned radial around a center point with radius R.
@@ -106,8 +110,25 @@ interface RadialMenuProps {
   // a cafe from another cafe.
   showLabels?: boolean;
   // 'icon' is the ring the app has always had. 'text' is the L1 intent
-  // ring — word pills, no icons.
+  // menu — word pills, no icons.
   variant?: 'icon' | 'text';
+  // WHY THE TOP LEVEL IS NOT A RING.
+  //
+  // A ring puts items on opposite sides of the dog, so the width it
+  // needs is 2*radius + the widest item — and the radius itself has a
+  // floor, because an item must clear the 128px sprite in the middle.
+  // Measured at 15px in this font, «хто тримає цей район?» is ~174px of
+  // ink, ~210px of pill. Clearing the dog needs radius >= ~135; fitting
+  // two of those on a 360px screen needs radius <= ~75. There is no
+  // number that satisfies both, and no amount of wrapping closes a gap
+  // that wide.
+  //
+  // So sentence-length answers stack. It also fixes something a ring
+  // could not: on a ring, items are placed by their CENTRES, so pills of
+  // different widths sit at different distances from the dog's edge —
+  // measured, 49px for one and 64px for another. In a column every
+  // answer is the same distance from the one above it, by construction.
+  layout?: 'ring' | 'stack';
 }
 
 export function RadialMenu({
@@ -118,9 +139,11 @@ export function RadialMenu({
   inverted = false,
   showLabels = false,
   variant = 'icon',
+  layout = 'ring',
 }: RadialMenuProps) {
   const N = actions.length;
   const isText = variant === 'text';
+  const isStack = layout === 'stack';
   // How wide one rim item actually is. The icon variant's wrapper has
   // always been 100 (see the -50 offset below); the text variant's is
   // its pill.
@@ -143,6 +166,98 @@ export function RadialMenu({
   const labelShadow = inverted
     ? '0 1px 4px rgba(0,0,0,0.95)'
     : '0 1px 4px rgba(255,255,255,0.95)';
+
+  // One answer. Shared by both layouts so a pill in a column and a pill
+  // on a ring can never drift apart in shape, only in position.
+  const renderButton = (a: RadialAction) => (
+    <button
+      type="button"
+      onClick={(e) => {
+        e.stopPropagation();
+        playPopThen(e.currentTarget, () => onSelect(a.id));
+      }}
+      style={{
+        // A TEXT PILL HUGS ITS LABEL, so its width says how long the
+        // answer is. It used to be a fixed 112 with the label centred,
+        // which gave it no padding at all — only leftover space, 27–36px
+        // of it, and a different amount on every pill.
+        width: isText ? 'max-content' : BUTTON.size,
+        // Sentence answers must be allowed to wrap rather than run off
+        // the screen; 300 keeps the longest to two lines at 360 wide.
+        maxWidth: isText ? 300 : undefined,
+        padding: isText ? `0 ${TEXT_ITEM.padX}px` : undefined,
+        minHeight: isText ? TEXT_ITEM.height : BUTTON.size,
+        height: isText ? undefined : BUTTON.size,
+        // Text pills are capsules; icon buttons are circles. Same
+        // family, and at 60 tall against the disc's 68 they read as
+        // siblings rather than as a chip clipped onto a button.
+        borderRadius: isText ? TEXT_ITEM.height / 2 : BUTTON.radius,
+        border: 'none',
+        background: bg,
+        color: fg,
+        fontSize: isText ? TYPE.body : TYPE.hero,
+        fontWeight: isText ? 700 : undefined,
+        lineHeight: isText ? 1.25 : undefined,
+        cursor: 'pointer',
+        boxShadow: '0 6px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        textAlign: 'center',
+        userSelect: 'none',
+        // Nowrap was safe while every label was one word. It is not now.
+        whiteSpace: isText ? 'normal' : 'nowrap',
+      }}
+      aria-label={a.label}
+    >
+      {/* Icon sized via the shared BUTTON token — 0.79 ratio reads calm
+          against the dark disc without feeling sparse. */}
+      {isText ? (
+        a.label
+      ) : a.iconName ? (
+        <Icon name={a.iconName} size={BUTTON.icon} inverted={inverted} />
+      ) : (
+        a.icon
+      )}
+    </button>
+  );
+
+  // The same entrance the ring uses, so a stacked answer arrives exactly
+  // the way a ring item does — see the keyframe note in public/index.html.
+  const entrance = (i: number) => ({
+    opacity: open ? 1 : 0,
+    transform: open ? 'scale(1)' : 'scale(0.4)',
+    transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
+    animation: open ? `radial-item-in 220ms ease ${i * 40}ms both` : undefined,
+    pointerEvents: (open ? 'auto' : 'none') as 'auto' | 'none',
+  });
+
+  if (isStack) {
+    return (
+      <div
+        style={{
+          position: 'absolute',
+          left: '50%',
+          // Hangs below the dog rather than around it: the sprite keeps
+          // its own space, the bubble keeps the space above, and the
+          // answers land where a thumb already is (D-21).
+          top: `calc(50% + ${TEXT_ITEM.gap + 62}px)`,
+          transform: 'translateX(-50%)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          gap: TEXT_ITEM.gap,
+          pointerEvents: 'none',
+        }}
+      >
+        {actions.map((a, i) => (
+          <div key={a.id} style={entrance(i)}>
+            {renderButton(a)}
+          </div>
+        ))}
+      </div>
+    );
+  }
 
   return (
     <div
@@ -168,83 +283,14 @@ export function RadialMenu({
               left: bx - ITEM_W / 2,
               top: by - (isText ? TEXT_ITEM.height / 2 : 28),
               width: ITEM_W,
-              opacity: open ? 1 : 0,
-              transform: open ? 'scale(1)' : 'scale(0.4)',
-              transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
-              // The transition above only fires on an element that is
-              // ALREADY mounted when `open` flips — so it misses the two
-              // cases where items appear by mounting: the cold-start
-              // ring, which renders open on its first frame, and every
-              // change of level, where React swaps the whole set for new
-              // keys. Those blinked in. This runs on mount and lands on
-              // exactly the same values the transition would, so the
-              // two paths are one animation with two triggers.
-              //
-              // Only while open: an item that mounts into a CLOSED menu
-              // (the actions swapping underneath a dismissed ring) must
-              // stay invisible, not animate itself out of nowhere. And
-              // `both` matters — without it the item paints at full size
-              // during its stagger delay and flashes before it starts.
-              animation: open
-                ? `radial-item-in 220ms ease ${i * 40}ms both`
-                : undefined,
-              pointerEvents: open ? 'auto' : 'none',
+              ...entrance(i),
               display: 'flex',
               flexDirection: 'column',
               alignItems: 'center',
               justifyContent: 'flex-start',
             }}
           >
-            <button
-              type="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                playPopThen(e.currentTarget, () => onSelect(a.id));
-              }}
-              style={{
-                // A TEXT PILL HUGS ITS WORD, like the bubble above it.
-                //
-                // It used to be a fixed 112 wide with the label centred,
-                // which gave it no padding at all — only leftover space.
-                // Measured, that read as 27–36px of side padding against
-                // the bubble's 10, and it differed per pill: «грати» sat
-                // in 36px of air and «загубив» in 27, so four buttons
-                // meant to be one family were each spaced differently.
-                // max-content plus a real padding fixes both at once.
-                width: isText ? 'max-content' : BUTTON.size,
-                padding: isText ? `0 ${TEXT_ITEM.padX}px` : undefined,
-                height: isText ? TEXT_ITEM.height : BUTTON.size,
-                // Text pills are capsules; icon buttons are circles.
-                borderRadius: isText ? TEXT_ITEM.height / 2 : BUTTON.radius,
-                border: 'none',
-                background: bg,
-                color: fg,
-                // One word has to survive at this size in Ukrainian, so
-                // the pill takes body type rather than the icon variant's
-                // hero glyph size.
-                fontSize: isText ? TYPE.body : TYPE.hero,
-                fontWeight: isText ? 700 : undefined,
-                cursor: 'pointer',
-                boxShadow: '0 6px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                userSelect: 'none',
-                whiteSpace: 'nowrap',
-              }}
-              aria-label={a.label}
-            >
-              {/* Icon sized via the shared BUTTON token — 0.79 ratio
-                  reads calm against the dark glass disc without
-                  feeling sparse like the 0.68 we tried last pass. */}
-              {isText ? (
-                a.label
-              ) : a.iconName ? (
-                <Icon name={a.iconName} size={BUTTON.icon} inverted={inverted} />
-              ) : (
-                a.icon
-              )}
-            </button>
+            {renderButton(a)}
             {/* The text variant already IS its label — a caption under it
                 would say the word twice. */}
             {showLabels && !isText ? (

@@ -304,7 +304,7 @@ interface GameState {
   // snaps the dog lower (room for the first-time explainer bubble above
   // the ring); 'center' just centres the dog (2nd+ taps, menu only);
   // null = menu closed.
-  menuCamera: 'explainer' | 'center' | null;
+  menuCamera: 'explainer' | 'center' | 'modes' | null;
   // Whether the map is in a calm enough state to surface a chained
   // map hint right now: map tab active, camera idle (not animating a
   // sniff jump / snap / pan), not in sniff mode, no modal open, and the
@@ -425,7 +425,7 @@ interface GameState {
   // paws rather than a number jumping.
   awardPaws: (n: number) => void;
   setActiveHint: (id: string | null) => void;
-  setMenuCamera: (mode: 'explainer' | 'center' | null) => void;
+  setMenuCamera: (mode: 'explainer' | 'center' | 'modes' | null) => void;
   setHintsAllowed: (allowed: boolean) => void;
   setSniffActive: (active: boolean) => void;
   setSpotsCategoryFilter: (filter: 'all' | SpotCategory) => void;
