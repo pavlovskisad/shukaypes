@@ -85,6 +85,31 @@ const REAL_SHAPE = `<html><body>
     'a longer word starting with a label is left alone',
     stripSectionLabels('Описания немає, телефонуйте') === 'Описания немає, телефонуйте',
   );
+  // THE SHAPE THE CORPUS ACTUALLY HAS. cheerio joins adjacent text nodes
+  // with nothing between them, so the label arrives fused to the first
+  // word of the post. 201 of 202 stored bodies looked like this.
+  check(
+    'a label welded to the next word comes off',
+    stripSectionLabels('ОписЗагубився кіт на Оболоні') === 'Загубився кіт на Оболоні',
+    JSON.stringify(stripSectionLabels('ОписЗагубився кіт на Оболоні')),
+  );
+  check(
+    'both labels welded in sequence come off',
+    stripSectionLabels('ПовідомленняОписЗник пес') === 'Зник пес',
+    JSON.stringify(stripSectionLabels('ПовідомленняОписЗник пес')),
+  );
+  // …and the guard that makes the above safe. Lowercase continuation is
+  // a real word, not a heading, and the uppercase test must stay
+  // case-sensitive for this to hold.
+  check(
+    'a lowercase continuation is a word, not a label',
+    stripSectionLabels('Описи зовнішності: рудий') === 'Описи зовнішності: рудий',
+    JSON.stringify(stripSectionLabels('Описи зовнішності: рудий')),
+  );
+  check(
+    'another lowercase continuation survives',
+    stripSectionLabels('Описом не передати') === 'Описом не передати',
+  );
   check(
     'a body that is only labels comes back empty rather than mangled',
     stripSectionLabels('Повідомлення Опис') === '',
