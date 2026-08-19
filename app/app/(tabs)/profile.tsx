@@ -353,23 +353,30 @@ export default function ProfileScreen() {
           />
         </View>
         <View style={styles.langPills}>
-          <LangPill code="uk" label="UA" active={lang === 'uk'} onPress={() => setLang('uk')} />
-          <LangPill code="en" label="EN" active={lang === 'en'} onPress={() => setLang('en')} />
-        </View>
-        {/* The about sheet lives here now. It used to hang off the
-            companion's ring as a «?», and when that ring was cut down to
-            the three things you can do on a walk, «what is this app» had
-            nowhere left to be reached from — the sheet was still built,
-            still translated, and unreachable. This is where a reader
-            looks for it anyway.
+          {/* ONE pill, not two. Two separate buttons for a two-state
+              choice spent a whole extra pill saying what the first one
+              already said — and with «?» beside them the corner was
+              three pills of chrome over the dog's sky. Tapping swaps the
+              language, and the pill reads as the one you are NOT in, the
+              way a language switch is labelled everywhere else. */}
+          <Pressable
+            onPress={() => setLang(lang === 'uk' ? 'en' : 'uk')}
+            onPressIn={popPressableEvent}
+            accessibilityRole="button"
+            accessibilityLabel={lang === 'uk' ? 'Switch to English' : 'Перемкнути на українську'}
+            style={({ pressed }) => [styles.langPill, pressed && { opacity: 0.7 }]}
+          >
+            <Text style={styles.langPillText}>{lang === 'uk' ? 'EN' : 'UA'}</Text>
+          </Pressable>
+          {/* The about sheet lives here. It used to hang off the
+              companion's ring as a «?», and when that ring was cut down
+              to the three things you can do on a walk, «what is this
+              app» had nowhere left to be reached from — the sheet was
+              still built, still translated, and unreachable.
 
-            On its own line under the toggles, not beside them: three
-            pills in a row made the corner busy, and the two that belong
-            together are the two languages. It borrows their styling so
-            the pair still reads as one set, but it is a button rather
-            than a switch — LangPill is a two-state toggle down to its
-            accessibility role. */}
-        <View style={styles.aboutRow}>
+              Back on the top row now that the language toggle is one
+              pill and there is room. It borrows that pill's styling, but
+              it is a button rather than a switch. */}
           <Pressable
             onPress={() => setAboutOpen(true)}
             onPressIn={popPressableEvent}
@@ -399,41 +406,6 @@ export default function ProfileScreen() {
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
     </SafeAreaView>
-  );
-}
-
-// Tiny UA / EN pill — same frosted-glass family as the HUD
-// MeterPill so the language toggle reads as one of "the
-// pills" rather than a stray button. Active state inverts to
-// dark fill, matching the spots-tab category-chip family.
-function LangPill({
-  code,
-  label,
-  active,
-  onPress,
-}: {
-  code: 'uk' | 'en';
-  label: string;
-  active: boolean;
-  onPress: () => void;
-}) {
-  return (
-    <Pressable
-      onPress={onPress}
-      onPressIn={popPressableEvent}
-      accessibilityRole="switch"
-      accessibilityState={{ checked: active }}
-      accessibilityLabel={code === 'uk' ? 'Ukrainian' : 'English'}
-      style={({ pressed }) => [
-        styles.langPill,
-        active && styles.langPillActive,
-        pressed && { opacity: 0.7 },
-      ]}
-    >
-      <Text style={[styles.langPillText, active && styles.langPillTextActive]}>
-        {label}
-      </Text>
-    </Pressable>
   );
 }
 
@@ -473,11 +445,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: S.s,
   },
-  // Its own line, aligned with the toggles above it.
-  aboutRow: {
-    flexDirection: 'row',
-    marginTop: S.s,
-  },
   // Lang pill — solid white, same shape + chat-style CHROME_SHADOW
   // as the HUD MeterPill / CounterPill in solid mode. The dark
   // night sky behind would tint a translucent pill, so plain white
@@ -495,9 +462,6 @@ const styles = StyleSheet.create({
     elevation: 6,
     alignItems: 'center',
     justifyContent: 'center',
-  },
-  langPillActive: {
-    backgroundColor: colors.black,
   },
   langPillText: {
     fontFamily: SYSTEM_FONT,
