@@ -54,10 +54,27 @@ export function looksLikeRehoming(title: string): boolean {
 // знайт is deliberately NOT a found stem: «Допоможіть знайти собаку» is
 // somebody ASKING for help finding, which is the most lost a post can be.
 const FOUND_STEMS = /(знайд|знайш|найден|нашли|прибил|пристал|found)/i;
-const LOST_STEMS = /(пропа|загуб|зник|потер|сбеж|втеч|розшук|lost|missing)/i;
+
+// «Шукаю кота, хто знайде тому нагорода» — "I'm looking for my cat,
+// reward to whoever finds him" — was being filed as a found stray. It
+// carries знайд, and none of the lost stems below reach «Шукаю», so the
+// rule read a reward offer as somebody handing an animal back. Caught on
+// a real row in production, not invented here.
+//
+// Seeking is a lost-side signal, so шука/ищу join the list. But WHAT is
+// being sought decides everything, and the same verb serves both sides:
+// an owner seeks the ANIMAL, a finder seeks the OWNER.
+const LOST_STEMS = /(пропа|загуб|зник|потер|сбеж|втеч|розшук|шука|ищу|lost|missing)/i;
+
+// …so this is checked first and wins. «шукаємо господарів», «ищем
+// хозяев», «Шукаємо власника собаки» are people WITH an animal, and the
+// window keeps «шукаю дім» (rehoming, a different filter) from landing
+// here by accident.
+const SEEKING_OWNER = /(шука|ищ|ищу|ище)\w*[^.!?\n]{0,20}(власни|вдасни|хазя|господар|хозя|owner)/i;
 
 /** Somebody HAS this animal and wants its owner — not a search to join. */
 export function looksLikeFoundReport(title: string): boolean {
+  if (SEEKING_OWNER.test(title)) return true;
   return FOUND_STEMS.test(title) && !LOST_STEMS.test(title);
 }
 

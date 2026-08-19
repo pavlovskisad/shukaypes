@@ -93,6 +93,24 @@ async function main() {
   console.log(`  … carrying labels:      ${dirty.length}`);
   console.log(`  … already clean:        ${rows.length - dirty.length}`);
 
+  // WHAT THE STRIP DOES NOT REACH.
+  //
+  // The line rule only fires on a line that IS a label. A label welded
+  // to the front of the description («Опис Пропав кіт…») or sitting
+  // mid-sentence is left alone on purpose — that is the guard that stops
+  // this pass eating somebody's words. But "left alone on purpose" and
+  // "not there" look identical in a diff of what was removed, and the
+  // first run showed only «Повідомлення» coming off, from every row,
+  // while «Опис» was reported as present by the person reading the app.
+  //
+  // So count what SURVIVES, per label. A number here is the difference
+  // between "we handled it" and "we handled one of them".
+  console.log('\nstill present after the strip (anywhere in the text):');
+  for (const label of ['Повідомлення', 'Опис', 'Сообщение', 'Описание']) {
+    const n = rows.filter((r) => stripSectionLabelLines(r.body!).includes(label)).length;
+    console.log(`  ${label.padEnd(14)} ${String(n).padStart(4)} / ${rows.length}`);
+  }
+
   if (dirty.length === 0) {
     console.log('\n✓ nothing to clean.');
     await pg.end();
