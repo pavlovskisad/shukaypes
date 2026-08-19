@@ -328,7 +328,12 @@ export default function MapViewWeb() {
   // "background click" that closes it ~1 frame later. Record every
   // companion tap and suppress the map click for a short window.
   const companionTappedAtRef = useRef<number>(0);
-  const SUPPRESS_MAP_CLICK_MS = 300;
+  // How long the lost-pet deck takes to slide out of the menu's way, and
+// back. Matches the modal family's 280ms so the whole app moves on one
+// clock.
+const DECK_ANIM_MS = 280;
+
+const SUPPRESS_MAP_CLICK_MS = 300;
   // Which cluster is currently "spiderified" — tapping a cluster pops its
   // pets out around the center. Tapping elsewhere (the map background or
   // another cluster) collapses it. Lives locally because nothing else in
@@ -534,6 +539,34 @@ export default function MapViewWeb() {
   // map.
   const currentScreen = useGameStore((s) => s.currentScreen);
   const onMapScreen = currentScreen === 'map';
+
+  // THE DECK LEAVES AND ARRIVES, it does not blink.
+  //
+  // Same three states the dashboard uses, for the same reason: an
+  // element that unmounts cannot animate on its way out, so it has to
+  // outlive the condition that hid it. Visible → still mounted and
+  // sliding away → gone. `deckVisible` is the truth; `deckMounted` is
+  // what the DOM holds.
+  const deckVisible = DOG_CAM && dogCam && onMapScreen && !menuOpen;
+  const [deckMounted, setDeckMounted] = useState(deckVisible);
+  const [deckAnimating, setDeckAnimating] = useState(false);
+  const deckInitRef = useRef(true);
+  useLayoutEffect(() => {
+    if (deckInitRef.current) {
+      deckInitRef.current = false;
+      setDeckMounted(deckVisible);
+      return;
+    }
+    setDeckAnimating(true);
+    // Mount FIRST when arriving, so the element exists for its own
+    // entrance; unmount LAST when leaving, once the exit has played.
+    if (deckVisible) setDeckMounted(true);
+    const timer = setTimeout(() => {
+      setDeckAnimating(false);
+      if (!deckVisible) setDeckMounted(false);
+    }, DECK_ANIM_MS);
+    return () => clearTimeout(timer);
+  }, [deckVisible]);
   // Hint cue + radial-menu camera mode, consumed by camera/overlay
   // effects below: the long-press hint draws a "press the map" pulse,
   // and the menu camera mode frames the dog (lower for the first-time
@@ -2977,7 +3010,7 @@ export default function MapViewWeb() {
           under a menu is worse than something that is plainly gone. It
           comes back the moment the menu closes, on the same state it
           left. */}
-      {DOG_CAM && dogCam && onMapScreen && !menuOpen ? (
+      {deckMounted ? (
         <View
           style={{
             position: 'absolute',
@@ -2986,8 +3019,20 @@ export default function MapViewWeb() {
             bottom: -14,
             alignItems: 'center',
             zIndex: Z.HUD_CHIPS,
+            // Slides down and fades as it leaves, back up as it returns.
+            // RN's ViewStyle has no `animation`; RN-Web hands it to CSS
+            // anyway, the same escape hatch the dashboard uses.
+            ...({
+              animation: deckAnimating
+                ? `deck-${deckVisible ? 'in' : 'out'} ${DECK_ANIM_MS}ms ease both`
+                : undefined,
+            } as object),
           }}
-          pointerEvents="box-none"
+          // Deaf the moment it starts leaving. The deck is swipeable, and
+          // a card sliding away under a thumb should not still answer to
+          // it — nor should it swallow a tap meant for the menu that
+          // replaced it.
+          pointerEvents={deckVisible ? 'box-none' : 'none'}
         >
           {focusDog && !(prompt?.kind === 'confirm' && !searchTarget) ? (
             <View style={{ width: 288, height: 252, marginBottom: 30 }} pointerEvents="none">
@@ -3419,6 +3464,14 @@ export default function MapViewWeb() {
           started using them, because the dashboard outlives this
           component (see the note there). */}
       <style>{`
+        @keyframes deck-in {
+          from { transform: translateY(48px); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+        @keyframes deck-out {
+          from { transform: translateY(0);    opacity: 1; }
+          to   { transform: translateY(48px); opacity: 0; }
+        }
         @keyframes poke-wave {
           0%   { transform: translateY(0) scale(0.6) rotate(-15deg); opacity: 0; }
           25%  { transform: translateY(-6px) scale(1.15) rotate(12deg); opacity: 1; }
