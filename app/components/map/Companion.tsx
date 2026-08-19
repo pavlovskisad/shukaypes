@@ -407,9 +407,10 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
               );
             const shapeLabel = shape === 'roundtrip' ? 'roundtrip' : 'one-way';
             const distLabel = distance === 'far' ? 'long' : 'short';
+            const n = walk.stops.length;
             flash(
-              walk.stops.length
-                ? `${distLabel} ${shapeLabel} to ${walk.primary.name} — ${walk.stops.length} stops on the way 🐾`
+              n
+                ? `${distLabel} ${shapeLabel} to ${walk.primary.name} — ${n} ${n === 1 ? 'stop' : 'stops'} on the way 🐾`
                 : `${distLabel} ${shapeLabel} to ${walk.primary.name} 🚶`,
             );
           },
