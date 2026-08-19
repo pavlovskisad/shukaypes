@@ -67,6 +67,7 @@ import { PoiCluster } from './PoiCluster';
 import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import { SniffPress } from './SniffPress';
+import { WalkStops, WalkStopsIntro } from './WalkStops';
 import { TerritoryLayer } from './TerritoryLayer';
 import type { LatLng } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
@@ -2852,6 +2853,13 @@ export default function MapViewWeb() {
           <CrayonRoute path={walkRoute} color="#2f6bff" weight={9} opacity={0.8} />
         ) : null}
 
+        {/* The landmarks that walk was routed through — numbered discs
+            on the line, each expanding into the dog's sentence about
+            the place and, under that, its Wikipedia summary. Empty for
+            a walk through a district kyiv_lore has nothing near. */}
+        <WalkStops />
+
+
         {/* Long-press anywhere on the bare map → dog sniffs the area
             and surfaces one nearby kyiv_lore entry with a story and
             a "let's go here" CTA. Past finds excluded so each press
@@ -3178,6 +3186,22 @@ export default function MapViewWeb() {
             pointerEvents: 'none',
           }}
         >
+          {/* What this walk has to show, listed once when it starts.
+              Above the cancel pill because it's the walk being
+              introduced and the pill is how you back out of it. */}
+          <WalkStopsIntro
+            onFocusStop={(position) =>
+              // Same downward offset the sniff discovery uses: the
+              // story bubble stacks ABOVE its disc, so centring the
+              // disc would push the text under the HUD.
+              mapRef.current?.easeTo({
+                center: [position.lng, position.lat],
+                padding: { top: 0, bottom: 0, left: 0, right: 0 },
+                offset: [0, 70],
+                duration: 600,
+              })
+            }
+          />
           {walkRoute ? (
             <div
               role="button"

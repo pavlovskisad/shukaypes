@@ -197,8 +197,23 @@ export interface AppStrings {
     startingSearch: string;
     showingSpot: string;
     walkingTo: (name: string) => string;
+    // Same, for a walk that also passes landmarks worth stopping at.
+    walkingToVia: (name: string, stops: number) => string;
     cantReachWalk: () => string;
     inputPlaceholder: string;
+  };
+  // The landmarks a planned walk goes through — the list shown when the
+  // walk starts, and the story bubbles on the route itself.
+  walkStops: {
+    // Heading over the list of stops, e.g. "3 stops on the way".
+    heading: (count: number) => string;
+    // Where the walk ends, under the stops.
+    destination: (name: string) => string;
+    // How far this landmark sits off the direct line. Shown only for the
+    // ones far enough off it to be a noticeable detour — a walk should
+    // not promise a stop is "on the way" when it is a block away.
+    offRoute: (metres: number) => string;
+    dismiss: string;
   };
   // Shown by the connection banner when calls stop getting through.
   connection: {
@@ -279,6 +294,20 @@ export interface AppStrings {
     spotsToggle: string;
     hudMeters: string;
   };
+}
+
+// "зупинка" in the case Ukrainian wants after a number. Slavic plurals
+// are three-way and the walk-stop counts here are 1–5, so the general
+// rule is written out rather than special-cased: 1, 21, 31 take the
+// singular; 2–4 the paucal; everything else (including the 11–14 band,
+// which is why the mod-100 test comes first) the genitive plural.
+function ukStops(n: number): string {
+  const mod100 = n % 100;
+  const mod10 = n % 10;
+  if (mod100 >= 11 && mod100 <= 14) return 'зупинок';
+  if (mod10 === 1) return 'зупинка';
+  if (mod10 >= 2 && mod10 <= 4) return 'зупинки';
+  return 'зупинок';
 }
 
 const uk: AppStrings = {
@@ -531,6 +560,8 @@ const uk: AppStrings = {
     startingSearch: 'починаємо пошук…',
     showingSpot: 'показую місце…',
     walkingTo: (name) => `йдемо до ${name}`,
+    walkingToVia: (name, stops) =>
+      `йдемо до ${name} — ${stops} ${ukStops(stops)} по дорозі`,
     // NO INTERPOLATED ERROR. This used to end with `(${err})`, which after
     // the API layer started prefixing status codes meant the dog said
     // things like "(500 /quests/start: {...})" out loud in its speech
@@ -538,6 +569,12 @@ const uk: AppStrings = {
     // a cartoon dog talking to somebody looking for a lost pet.
     cantReachWalk: () => '*нюх-нюх* — зараз не дістаємось до маршруту, спробуймо ще раз',
     inputPlaceholder: 'скажи що хочеш…',
+  },
+  walkStops: {
+    heading: (count) => `${count} ${ukStops(count)} по дорозі`,
+    destination: (name) => `а в кінці — ${name}`,
+    offRoute: (metres) => `${metres} м убік`,
+    dismiss: 'ходімо',
   },
   connection: {
     offline: 'звʼязку немає — мапа зачекає',
@@ -886,8 +923,16 @@ const en: AppStrings = {
     startingSearch: 'starting search…',
     showingSpot: 'showing spot…',
     walkingTo: (name) => `walking to ${name}`,
+    walkingToVia: (name, stops) =>
+      `walking to ${name} — ${stops} ${stops === 1 ? 'stop' : 'stops'} on the way`,
     cantReachWalk: () => "*sniff sniff* — can't reach the walk right now, let's try again",
     inputPlaceholder: 'say anything…',
+  },
+  walkStops: {
+    heading: (count) => `${count} ${count === 1 ? 'stop' : 'stops'} on the way`,
+    destination: (name) => `and at the end — ${name}`,
+    offRoute: (metres) => `${metres} m aside`,
+    dismiss: "let's go",
   },
   connection: {
     offline: 'no connection — the map will wait',

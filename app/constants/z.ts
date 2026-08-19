@@ -31,6 +31,12 @@ export const Z = {
   // cluster's stacking context, but bumped here so they paint
   // above other map markers while expanded.
   MARKER_CLUSTER_CHILD: 18,
+  // Numbered stops on a planned walk. Above the ordinary POI field so
+  // the points the route was built around stay findable in it, below
+  // the dog. An OPEN stop's story bubble goes to HUD_SNIFF_BUBBLE
+  // instead — it's the same voice, and it has to clear the other
+  // stops' discs.
+  MARKER_WALK_STOP: 20,
 
   // ───────────────────────────────────────────────────────────────
   // TIER 2 — map-area HUD (DOM children of MapView, above markers)

@@ -8,6 +8,7 @@ import type {
   Token,
   UrgencyLevel,
 } from '@shukajpes/shared';
+import type { WalkStop } from '../utils/walk';
 import { env } from '../constants/env';
 import { MULTIPLAYER } from '../constants/experiments';
 import { getDeviceId } from './deviceId';
@@ -705,4 +706,26 @@ export const api = {
       } | null;
     }>(`/lore/discover?${params.toString()}`);
   },
+
+  // The landmarks each candidate walk passes. Several candidates go in
+  // one call because the client picks the walk with the most to see and
+  // can only know which that is after asking — see
+  // services/exploreWalk.ts. Server derives spacing and the detour
+  // budget from the length of each path.
+  loreWalkStops: (
+    routes: Array<{ id: string; path: LatLng[] }>,
+    opts: { maxStops: number; corridorM: number; exclude?: string[] },
+  ) =>
+    req<{
+      results: Array<{ id: string; stops: WalkStop[]; waypoints: LatLng[] }>;
+      poolSize: number;
+    }>('/lore/route', {
+      method: 'POST',
+      body: JSON.stringify({
+        routes,
+        maxStops: opts.maxStops,
+        corridorM: opts.corridorM,
+        exclude: opts.exclude ?? [],
+      }),
+    }),
 };
