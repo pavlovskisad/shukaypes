@@ -79,9 +79,18 @@ export const VISIT_CATEGORY_ACTIONS: RadialAction[] = [
 // icon variant's round button with a caption underneath. That changes
 // the footprint, which is why CONTAINER is computed from the item width
 // below instead of a fixed +80.
+// `width` is the LAYOUT CELL, not the pill. The pill itself hugs its
+// word — see the padding note on the button below — and is centred in
+// this cell, which is what positions it on the ring and what the
+// container is sized from. Keep it comfortably wider than the longest
+// label plus its padding.
 export const TEXT_ITEM = {
   width: 112,
   height: 44,
+  // Matches SpeechBubble's horizontal padding exactly. The question and
+  // its answers are the same object on screen and have to be cut from
+  // the same cloth; see the comment on the button.
+  padX: 10,
 } as const;
 
 // Trig-positioned radial around a center point with radius R.
@@ -176,7 +185,17 @@ export function RadialMenu({
                 playPopThen(e.currentTarget, () => onSelect(a.id));
               }}
               style={{
-                width: isText ? TEXT_ITEM.width : BUTTON.size,
+                // A TEXT PILL HUGS ITS WORD, like the bubble above it.
+                //
+                // It used to be a fixed 112 wide with the label centred,
+                // which gave it no padding at all — only leftover space.
+                // Measured, that read as 27–36px of side padding against
+                // the bubble's 10, and it differed per pill: «грати» sat
+                // in 36px of air and «загубив» in 27, so four buttons
+                // meant to be one family were each spaced differently.
+                // max-content plus a real padding fixes both at once.
+                width: isText ? 'max-content' : BUTTON.size,
+                padding: isText ? `0 ${TEXT_ITEM.padX}px` : undefined,
                 height: isText ? TEXT_ITEM.height : BUTTON.size,
                 // Text pills are capsules; icon buttons are circles.
                 borderRadius: isText ? TEXT_ITEM.height / 2 : BUTTON.radius,
