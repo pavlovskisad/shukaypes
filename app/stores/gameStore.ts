@@ -62,6 +62,12 @@ export interface WalkRouteMeta {
   // flow sets it; the "walk me to this one place" paths don't need it,
   // since the thing they route to is already on screen and named.
   destinationName?: string;
+  // The line is straight segments between the walk's points, because
+  // street routing was unavailable (no Google key, no quota, no
+  // billing). The destination, the landmarks and their stories are all
+  // ours and all real — only the drawn geometry is a guess, so the map
+  // draws it dashed instead of claiming a route.
+  approximate?: boolean;
 }
 
 const DAILY_TARGETS = {

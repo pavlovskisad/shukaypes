@@ -374,13 +374,12 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
         const ctxParks = useGameStore.getState().parks;
         const candidates = buildCandidates(ctxSpots, ctxParks);
         if (candidates.length === 0) {
-          // Lazy-fetch — leaves were probably hit immediately after
-          // tapping "walk" before Places had loaded. Kick it again
-          // and ask the user to retry in a moment.
-          const { syncSpots: doSync } = useGameStore.getState();
-          void doSync(ctxPos);
-          flash("sniffing out spots… try again in a sec");
-          return;
+          // Places hasn't loaded yet, or has no key at all. Kick a
+          // refresh in case it's the former — but DON'T bail: our own
+          // tables carry parks, squares, museums and churches, and
+          // startExplorationWalk pulls them. A walk no longer needs
+          // Google to have a destination.
+          void useGameStore.getState().syncSpots(ctxPos);
         }
         // Clear any open spot-detail modal — the user shifted intent.
         setSelectedSpot(null);
@@ -402,7 +401,12 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
               .getState()
               .setWalkRoute(
                 walk.route,
-                { shape, spotId: walk.spotId, destinationName: walk.primary.name },
+                {
+                  shape,
+                  spotId: walk.spotId,
+                  destinationName: walk.primary.name,
+                  approximate: walk.approximate,
+                },
                 walk.stops,
               );
             const shapeLabel = shape === 'roundtrip' ? 'roundtrip' : 'one-way';

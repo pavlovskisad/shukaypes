@@ -211,6 +211,54 @@ function ok(cond: boolean, label: string, detail = ''): void {
 }
 
 // ---------------------------------------------------------------------
+// The destination is not a stop on the way to itself.
+//
+// A real Troieshchyna walk found this: the walk ended at a church, and
+// the same church came back as its first stop, so the dog offered to
+// show the walker the place they were already walking to. The end
+// headroom does not catch it, because a ROUNDTRIP's destination sits in
+// the middle of the path, not at the end of it.
+// ---------------------------------------------------------------------
+{
+  const dest = at(800, 0);
+  const via = at(400, 400);
+  const path = [ORIGIN, dest, via, ORIGIN];
+  // The same church, as the gazetteer has it and as kyiv_lore has it —
+  // two sources, one place, coordinates tens of metres apart.
+  const asLandmark = poi(830, 25, { name: 'the destination itself' });
+  const onTheWay = poi(400, -30, { name: 'genuinely on the way' });
+  const stops = planStops({
+    path,
+    pool: [asLandmark, onTheWay],
+    corridorM: 200,
+    maxStops: 3,
+    minSpacingM: 150,
+    maxDetourM: 500,
+  });
+  ok(
+    !stops.some((s) => s.name === 'the destination itself'),
+    'a landmark sitting on the destination is not offered as a stop',
+    stops.map((s) => s.name).join(', ') || '(none)',
+  );
+  ok(
+    stops.some((s) => s.name === 'genuinely on the way'),
+    'and the one actually on the way survives',
+  );
+
+  // Same rule at the turn: a roundtrip's via-point is a corner too.
+  const onTheTurn = poi(400, 380, { name: 'on the turn' });
+  const turnStops = planStops({
+    path,
+    pool: [onTheTurn],
+    corridorM: 200,
+    maxStops: 3,
+    minSpacingM: 150,
+    maxDetourM: 500,
+  });
+  ok(turnStops.length === 0, 'a landmark sitting on the turn is not a stop either');
+}
+
+// ---------------------------------------------------------------------
 // Preference: given two equally convenient landmarks, take the one the
 // walker can read more about.
 // ---------------------------------------------------------------------

@@ -69,8 +69,17 @@ const RETURN_NUDGE_MAX_M = 800;
 // is strongly preferred (negative) so it'll outrank an equidistant
 // cafe; vet/pet-shop are penalties so they only win when nothing
 // nicer is in range.
+//
+// The bottom four come from OUR tables rather than Google Places (see
+// services/api.ts walkDestinations). They sit between park and cafe on
+// purpose: somewhere with a name and a history is a better end to a
+// walk than a chain café, and not as good as a park, which is the one
+// destination a dog is unambiguously right about.
 const WALK_CATEGORY_BIAS: Record<string, number> = {
   park: -2,
+  square: -1,
+  museum: -1,
+  landmark: -0.5,
   cafe: 0,
   restaurant: 0,
   bar: 0.5,
@@ -301,6 +310,52 @@ export function recordRecentStops(ids: string[]): void {
     // rather than a rotation, which is a worse feature but not a
     // broken one.
   }
+}
+
+// A destination out of our own tables. Same shape /walk/destinations
+// returns; kept here because it becomes a WalkCandidate immediately.
+export interface DbDestination {
+  id: string;
+  name: string;
+  category: string;
+  position: LatLng;
+  distM: number;
+}
+
+// Fold our own destinations in with whatever Places gave us. Places is
+// no longer required for a walk to happen — with its key off, `spots`
+// and `parks` are simply empty and the whole pool comes from here.
+//
+// Deduped by POSITION rather than by id, because the two sources have
+// unrelated id spaces and both know about the same big parks: Google's
+// place_id and our osm:way:… for Holosiivskyi are different strings for
+// one place, and without this the planner would rank it twice and the
+// recent-destination memory would only ever suppress one of them.
+const DUPLICATE_RADIUS_M = 120;
+
+export function mergeCandidates(
+  fromPlaces: WalkCandidate[],
+  fromDb: DbDestination[],
+): WalkCandidate[] {
+  const out = [...fromPlaces];
+  for (const d of fromDb) {
+    const already = out.some(
+      (c) => distanceMeters(c.position, d.position) < DUPLICATE_RADIUS_M,
+    );
+    if (already) continue;
+    out.push({
+      id: d.id,
+      name: d.name,
+      position: d.position,
+      category: d.category,
+      // No ratings in our tables. score() reads `rating ?? 3`, so
+      // leaving it undefined scores these as "unremarkable", which is
+      // the honest default — a park with no rating should not beat a
+      // 4.8 café on a signal we do not have.
+      isSpot: false,
+    });
+  }
+  return out;
 }
 
 export function buildCandidates(spots: Spot[], parks: Park[]): WalkCandidate[] {

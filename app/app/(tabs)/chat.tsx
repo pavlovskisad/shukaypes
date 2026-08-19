@@ -91,11 +91,12 @@ export default function ChatScreen() {
             const { userPosition: pos, spots: ctxSpots, parks: ctxParks } =
               useGameStore.getState();
             if (!pos) return `🚶 ${t.chat.needLocation}`;
-            const candidates = buildCandidates(ctxSpots, ctxParks);
-            if (candidates.length === 0) return `🚶 ${t.chat.noNearbySpots}`;
+            // An empty Places pool is no longer a dead end — our own
+            // tables carry destinations, and startExplorationWalk folds
+            // them in. Only a walk with nowhere at all to go fails.
             const walk = await startExplorationWalk({
               origin: pos,
-              candidates,
+              candidates: buildCandidates(ctxSpots, ctxParks),
               shape: action.args.shape,
               distance: action.args.distance,
             });
@@ -106,6 +107,7 @@ export default function ChatScreen() {
                 shape: action.args.shape,
                 spotId: walk.spotId,
                 destinationName: walk.primary.name,
+                approximate: walk.approximate,
               },
               walk.stops,
             );

@@ -28,6 +28,12 @@ interface CrayonRouteProps {
   // also includes the user position, so the dog can see themselves
   // relative to the quest waypoints.
   autoFit?: boolean;
+  // Draw the line broken rather than solid. Used for a walk whose
+  // geometry is straight segments between its points because street
+  // routing was unavailable — a solid line there would be a claim about
+  // which streets to take that we cannot make. Dashes say "this way,
+  // roughly" without pretending otherwise.
+  dashed?: boolean;
 }
 
 // Subdivide segments at this many meters so there are enough vertices
@@ -106,11 +112,18 @@ export function CrayonRoute({
   weight = 9,
   opacity = 0.8,
   autoFit = true,
+  dashed = false,
 }: CrayonRouteProps) {
   const map = useMaplibreMap();
   const uid = useId().replace(/[:]/g, '');
   const sourceId = useMemo(() => `route-${uid}`, [uid]);
   const layerId = `${sourceId}-line`;
+  // Dash lengths are in LINE WIDTHS, not pixels, so this reads the same
+  // at any weight the callers pass.
+  const dashPattern = useMemo(
+    () => (dashed ? [0.6, 0.9] : undefined),
+    [dashed],
+  );
   // Only autofit ONCE per route instance — re-centering on every prop
   // change would fight the user if they panned to read the route in
   // detail and a tick later we re-flew them home.
@@ -141,6 +154,9 @@ export function CrayonRoute({
           map.setPaintProperty(layerId, 'line-color', color);
           map.setPaintProperty(layerId, 'line-width', weight);
           map.setPaintProperty(layerId, 'line-opacity', opacity);
+          // undefined clears the dash back to solid, so a walk replanned
+          // once routing recovers doesn't stay broken.
+          map.setPaintProperty(layerId, 'line-dasharray', dashPattern);
         }
         return;
       }
@@ -156,6 +172,7 @@ export function CrayonRoute({
           // Soft pencil edge — keeps the crayon feel without the
           // expensive SVG filter the old implementation used.
           'line-blur': 0.6,
+          ...(dashPattern ? { 'line-dasharray': dashPattern } : {}),
         },
         layout: {
           'line-cap': 'round',
@@ -200,7 +217,7 @@ export function CrayonRoute({
       if (map.getLayer(layerId)) map.removeLayer(layerId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
     };
-  }, [map, path, color, weight, opacity, sourceId, layerId, autoFit]);
+  }, [map, path, color, weight, opacity, sourceId, layerId, autoFit, dashPattern]);
 
   return null;
 }
