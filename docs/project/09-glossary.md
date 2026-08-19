@@ -152,6 +152,15 @@ straight off `territory_ground.area_m2`. Lives in the quests tab, served by
 **Supersniff** — the app's second mode: the dog-cam camera, the lost-pet
 carousel, and the guided search. Entered from the logo. See **dog-cam**.
 
+**Walk stop** — a `kyiv_lore` landmark a planned walk is routed *through*,
+rather than past. `/lore/route` picks two to four of them along the candidate
+routes the client offers and the client spends its walk on whichever route
+passes the most; they render as numbered discs on the line
+(`WalkStops.tsx`), tap to expand the dog's sentence, tap again for the
+Wikipedia summary. Zero stops is a valid walk — most of the left bank has
+nothing in `kyiv_lore` near it. Same corpus as the **sniff press**, reached
+from the other direction.
+
 **Wipe** — a deliberate truncate of the territory tables, done via its own
 migration, because every claim in the database was made under a rule that no
 longer exists. Five so far. Irreversible.

@@ -188,12 +188,18 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { error: 'no usable route' };
     }
 
-    const maxStops = Number.isFinite(Number(req.body?.maxStops))
-      ? clamp(Math.round(Number(req.body.maxStops)), 1, MAX_STOPS_CEILING)
-      : DEFAULT_MAX_STOPS;
-    const corridorM = Number.isFinite(Number(req.body?.corridorM))
-      ? clamp(Number(req.body.corridorM), MIN_CORRIDOR_M, MAX_CORRIDOR_M)
-      : DEFAULT_CORRIDOR_M;
+    // typeof, not Number(): Number(null) is 0, which would quietly turn a
+    // null into "one stop" instead of falling through to the default.
+    const rawStops = req.body?.maxStops;
+    const maxStops =
+      typeof rawStops === 'number' && Number.isFinite(rawStops)
+        ? clamp(Math.round(rawStops), 1, MAX_STOPS_CEILING)
+        : DEFAULT_MAX_STOPS;
+    const rawCorridor = req.body?.corridorM;
+    const corridorM =
+      typeof rawCorridor === 'number' && Number.isFinite(rawCorridor)
+        ? clamp(rawCorridor, MIN_CORRIDOR_M, MAX_CORRIDOR_M)
+        : DEFAULT_CORRIDOR_M;
     const rawEx = req.body?.exclude;
     const exclude = Array.isArray(rawEx)
       ? rawEx.filter((x): x is string => typeof x === 'string').slice(0, 60)

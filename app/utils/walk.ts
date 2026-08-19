@@ -92,6 +92,14 @@ const RECENT_LIMIT = 3;
 const RECENT_PENALTY_PER_RANK = 2.0;
 const TOP_K = 6;
 const QUALITY_BAND = 1.5;
+// How far below the leader a candidate may score and still be offered to
+// the landmark step as an ALTERNATIVE destination. Wider than
+// QUALITY_BAND, because a walk worth trading up to three stops for
+// doesn't have to be the single nicest endpoint in range — but finite,
+// because it does have to be a walk somebody would want. Sized to sit
+// under the park→vet gap in WALK_CATEGORY_BIAS (4.5), so "three
+// landmarks on the way to the vet" never outranks a park.
+const ALTERNATIVE_BAND = 3.0;
 const RECENT_STORAGE_KEY = 'shukajpes.walks.recent.v1';
 
 function loadRecentIds(): string[] {
@@ -356,12 +364,13 @@ function orderQualityBand(
   // comparable. Take everyone within QUALITY_BAND of the leader,
   // capped at TOP_K so a flat city block doesn't put every nearby
   // spot on the ballot. Then order uniformly at random — democratic,
-  // no ranked-bias toward whichever scored a hair higher. Candidates
-  // outside the band follow in score order as fallbacks.
+  // no ranked-bias toward whichever scored a hair higher.
   const best = scored[0]!.s;
   const band = scored.filter((x) => x.s - best <= QUALITY_BAND).slice(0, TOP_K);
   const banded = new Set(band.map((x) => x.c.id));
-  const rest = scored.filter((x) => !banded.has(x.c.id)).map((x) => x.c);
+  const rest = scored
+    .filter((x) => !banded.has(x.c.id) && x.s - best <= ALTERNATIVE_BAND)
+    .map((x) => x.c);
   return [...shuffle(band.map((x) => x.c)), ...rest];
 }
 
@@ -404,8 +413,15 @@ function rankCandidates(
   // for long-distance walks in low-density areas). Uniform random
   // order within the top-N — recent penalty still rotates between
   // them across taps — then the rest as fallbacks.
+  const best = scored[0]!.s;
   const topN = shuffle(scored.slice(0, MIN_POOL_SIZE).map((x) => x.c));
-  return [...topN, ...scored.slice(MIN_POOL_SIZE).map((x) => x.c)];
+  return [
+    ...topN,
+    ...scored
+      .slice(MIN_POOL_SIZE)
+      .filter((x) => x.s - best <= ALTERNATIVE_BAND)
+      .map((x) => x.c),
+  ];
 }
 
 // Compute a synthetic via-point offset perpendicular to the
