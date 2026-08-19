@@ -44,6 +44,13 @@ const MAX_ROUTES = 6;
 // A candidate walk is origin + destination (+ via + home). Anything
 // longer is not a shape this planner produces.
 const MAX_PATH_POINTS = 8;
+// KEEP THIS UNDER 8. Every stop becomes an INTERMEDIATE waypoint on the
+// client's Google Routes call, and the Essentials SKU is "basic features
+// with a maximum of 10 intermediate waypoints"; past ten, the same
+// request bills at a higher tier. A roundtrip already spends two on the
+// destination and the return via-point, so five stops is seven — under
+// the line with room, and this project has already been surprised once
+// by a Google bill (see placesCache in db/schema.ts).
 const MAX_STOPS_CEILING = 5;
 const DEFAULT_MAX_STOPS = 3;
 // How far off the planned line a landmark may sit. The client passes a
@@ -241,6 +248,18 @@ const plugin: FastifyPluginAsync = async (app) => {
       .from(schema.kyivLore)
       .where(exclude.length ? and(bbox, notInArray(schema.kyivLore.id, exclude)) : bbox)
       .limit(POOL_LIMIT);
+
+    // A truncated pool is a worse walk chosen from a partial city, and it
+    // looks exactly like a good one. The ceiling is set well above the
+    // densest bounding box this endpoint sees, so reaching it means the
+    // corpus grew past the assumption rather than that today's walk is
+    // fine.
+    if (pool.length === POOL_LIMIT) {
+      req.log.warn(
+        { poolLimit: POOL_LIMIT, corridorM },
+        '[lore/route] landmark pool hit its ceiling — stops chosen from a truncated set',
+      );
+    }
 
     const results = routes.map((r) => {
       const totalM = pathLengthM(r.path);
