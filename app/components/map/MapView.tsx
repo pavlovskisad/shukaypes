@@ -18,6 +18,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { MapContext } from './MapContext';
 import {
   LIGHT_PALETTE,
+  PLAY_PALETTE,
   applyCrayonOverride,
   setStreetLabelsVisible,
   fetchCrayonStyleSpec,
@@ -547,6 +548,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // outlive the condition that hid it. Visible → still mounted and
   // sliding away → gone. `deckVisible` is the truth; `deckMounted` is
   // what the DOM holds.
+  // The city goes near-monochrome while territory is drawn over it, so a
+  // dozen owner colours are the only hues on screen. See PLAY_PALETTE.
+  const mapPalette = territoryVisible ? PLAY_PALETTE : LIGHT_PALETTE;
+
   const deckVisible = DOG_CAM && dogCam && onMapScreen && !menuOpen;
   const [deckMounted, setDeckMounted] = useState(deckVisible);
   const [deckAnimating, setDeckAnimating] = useState(false);
@@ -791,6 +796,25 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3500);
     }
   }, [dogCam, showBubble, t]);
+
+  // Entering the territory view, the dog says what it is.
+  //
+  // This mechanic is deliberately nameless everywhere else — D-17: the
+  // rewards are passive so they land on a player who never learns it has
+  // a name. That holds while it is invisible. Once somebody has asked
+  // «хто тримає цей район?» and the city has coloured itself in, silence
+  // is just a puzzle. Init-guarded like the sniff line, so a reload
+  // straight into the view does not open with a lecture.
+  const playBubbleInitRef = useRef(true);
+  useEffect(() => {
+    if (playBubbleInitRef.current) {
+      playBubbleInitRef.current = false;
+      return;
+    }
+    if (appMode !== 'play') return;
+    const lines = t.modes.playIntro;
+    showBubble(lines[Math.floor(Math.random() * lines.length)]!, 4200);
+  }, [appMode, showBubble, t]);
 
   // Territory: the dog announces its own claims. Seq-keyed (the store
   // bumps it once per server-confirmed mark) and init-guarded so a
@@ -2428,7 +2452,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // sets both paint colours AND text-field language, so a lang flip
     // from the profile toggle re-localises street/place labels live.
     const apply = () => {
-      applyCrayonOverride(map, LIGHT_PALETTE, lang);
+      applyCrayonOverride(map, mapPalette, lang);
       // applyCrayonOverride resets transportation_name visibility to
       // 'visible', so re-apply the pitch-based hide right after.
       syncStreetLabels();
@@ -2456,7 +2480,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     return () => {
       map.off('idle', apply);
     };
-  }, [lang, syncStreetLabels]);
+  }, [lang, mapPalette, syncStreetLabels]);
 
   // Nearby players (real + bots) to render as other dogs — only in view, and
   // capped to the nearest N for perf (each walker runs a glide loop + sprite).

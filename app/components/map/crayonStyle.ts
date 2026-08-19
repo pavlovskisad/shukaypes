@@ -90,6 +90,41 @@ export const LIGHT_PALETTE = {
 
 export type Palette = typeof LIGHT_PALETTE;
 
+// The same map with its hue taken out, for the territory view.
+//
+// Owner colours are the subject there — a dozen of them, drawn over the
+// city — and a green park under a green territory is two greens arguing.
+// Every hue below is LIGHT_PALETTE's own, desaturated to 0.35 of its
+// saturation with lightness untouched, so what goes is the colour and
+// not the shape: you can still see where the river runs and where the
+// parks are, by tone.
+//
+// Measured the same way the desaturation above was, CIE76 against the
+// paper:
+//
+//                park vs water   park vs paper   water vs paper   base sat
+//   walking map       24.5            26.8            19.5          0.262
+//   here              10.0            22.7            17.8          0.092
+//   fully grey         5.8            23.0            17.2          0.000
+//
+// 0.35 rather than 0: the structure argument is the same one the file
+// makes above — pale everything the whole way and the river reads as a
+// wide grey street. At 10 the water is still about four JNDs cooler
+// than a lawn, which is enough to tell them apart and not enough to
+// fight an owner's paint. Roads, paper and labels are already neutral
+// and are left alone.
+export const PLAY_PALETTE: Palette = {
+  ...LIGHT_PALETTE,
+  green: '#bec4b8',
+  greenDark: '#a5ad9f',
+  greenLight: '#e0e3dc',
+  blue: '#c7cfd4',
+  blueDark: '#afb8bd',
+  blueLight: '#e4e8e9',
+  labelWater: '#5b737f',
+};
+
+
 const ROAD_WIDTH_SCALE = 0.22;
 
 // ---------------------------------------------------------------------

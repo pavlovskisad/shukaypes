@@ -314,6 +314,12 @@ export interface AppStrings {
     walkDistanceAsk: string;
     visitCategoryAsk: string;
     visitSpotAsk: string;
+    // Said on entering the territory view, because nothing else explains
+    // it: the mechanic is deliberately nameless and passive everywhere
+    // else in the app (D-17), so this is the one place it gets spelled
+    // out. An array so a regular player is not read the same sentence
+    // every time.
+    playIntro: string[];
     // Shown when the user picks "meet" in explore and there is nobody
     // around. Was hardcoded English in Companion.tsx.
     noWalkers: string;
@@ -732,6 +738,11 @@ const uk: AppStrings = {
     walkDistanceAsk: 'тут поруч чи заберемось далі?',
     visitCategoryAsk: 'кава, поїсти, бар, зоомагазин чи ветеринар?',
     visitSpotAsk: 'ось що поруч — куди йдемо?',
+    playIntro: [
+      'ось наша земля. я мічу її сам, поки ми йдемо — просто гуляй, і її більшатиме 🐾',
+      'кольори — це чиїсь райони. пройдемо чужим, і я перемічу його на нас',
+      'що більше тримаємо, то густіші тут лапки. і мені спокійніше на своєму',
+    ],
     noWalkers: 'поки нікого поруч 👥',
     lostSheet: {
       title: 'загубився пес?',
@@ -1106,6 +1117,11 @@ const en: AppStrings = {
     walkDistanceAsk: 'close by, or shall we go further?',
     visitCategoryAsk: 'coffee, food, a bar, a pet shop, or the vet?',
     visitSpotAsk: "here's what's nearby — where are we headed?",
+    playIntro: [
+      "this is our ground. i mark it myself as we walk — just walk, and it grows 🐾",
+      "the colours are other people's districts. walk through one and i'll mark it over to us",
+      'the more we hold, the thicker the paws here. and i rest easier on our own',
+    ],
     noWalkers: 'nobody around just yet 👥',
     lostSheet: {
       title: 'lost your pet?',
