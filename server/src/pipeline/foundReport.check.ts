@@ -29,6 +29,10 @@ for (const t of [
   'найден кот, ищем хозяев',
   'Прибилася собака до двору',
   'знайшлася кішка, чия?',
+  // Seeking the OWNER. These carry шука/ищ, which is otherwise a
+  // lost-side signal — what is being sought is what decides.
+  'Шукаємо вдасника собаки. Знайшли собаку',
+  'Шукаю власника кота, Оболонь',
 ]) check(`found: ${t}`, looksLikeFoundReport(t));
 
 // ---- MUST NOT be, because these are real searches ----
@@ -43,6 +47,11 @@ for (const t of [
   'Пропала собака, дуже просимо допомогти знайти',
   // Says both — ambiguous, so it stays a search for a human to judge.
   'Пропала собака… знайшлася?',
+  // THE ROW THAT CAUGHT THIS. A reward offered to whoever finds him —
+  // «знайде» is the finder, not the poster. Seeking the ANIMAL.
+  'Шукаю кота, хто знайде тому нагорода',
+  'Шукаю собаку, винагорода тому хто знайде',
+  'ищу кота, нашедшему вознаграждение',
 ]) check(`NOT found: ${t}`, !looksLikeFoundReport(t));
 
 if (failures > 0) {
