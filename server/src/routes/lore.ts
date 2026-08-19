@@ -53,12 +53,13 @@ const MAX_PATH_POINTS = 8;
 // by a Google bill (see placesCache in db/schema.ts).
 const MAX_STOPS_CEILING = 5;
 const DEFAULT_MAX_STOPS = 3;
-// How far off the planned line a landmark may sit. The client passes a
-// corridor scaled to the walk; these bound it. 350 m off a straight line
-// is already a visible dog-leg on the map.
+// How far off the planned line a landmark may sit. The client picks the
+// corridor (240 m, swept against the real corpus — see
+// app/services/exploreWalk.ts); these bound what it may ask for. 350 m
+// off a straight line is already a visible dog-leg on the map.
 const MIN_CORRIDOR_M = 60;
 const MAX_CORRIDOR_M = 350;
-const DEFAULT_CORRIDOR_M = 200;
+const DEFAULT_CORRIDOR_M = 240;
 // Extra walking the stops may add, as a share of the planned distance,
 // with a floor so short walks can still detour somewhere and a ceiling
 // so long ones don't wander. A walk asked for at "close" must still feel
@@ -71,11 +72,17 @@ const MAX_DETOUR_M = 900;
 // stops in one square, floored so a 700 m one can still have two.
 const SPACING_SHARE = 0.12;
 const MIN_SPACING_M = 180;
-// Ceiling on how many lore rows one request pulls. A 3 km roundtrip's
-// bounding box over the old centre is the worst case; past this the
-// extra rows are all far outside the corridor anyway and only cost
-// projection time.
-const POOL_LIMIT = 800;
+// Ceiling on how many lore rows one request pulls — a backstop against a
+// pathological request, not a working limit.
+//
+// MEASURED against production: kyiv_lore holds 2671 rows, and the densest
+// 3 km-walk-sized window anywhere in Kyiv (slid over the whole city, ~3 ×
+// 3 km, centred just west of Bessarabka) holds 647. The bounding box of
+// six candidate walks radiating from one walker is that same window, so
+// 647 is the real worst case and this is 3× it. The first draft of this
+// constant was 800, which measurement showed to be a fifth away from
+// truncating the densest neighbourhoods in the city.
+const POOL_LIMIT = 2000;
 
 interface RouteRequest {
   id: string;

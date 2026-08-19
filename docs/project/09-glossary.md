@@ -157,9 +157,19 @@ rather than past. `/lore/route` picks two to four of them along the candidate
 routes the client offers and the client spends its walk on whichever route
 passes the most; they render as numbered discs on the line
 (`WalkStops.tsx`), tap to expand the dog's sentence, tap again for the
-Wikipedia summary. Zero stops is a valid walk — most of the left bank has
-nothing in `kyiv_lore` near it. Same corpus as the **sniff press**, reached
-from the other direction.
+Wikipedia summary. Same corpus as the **sniff press**, reached from the other
+direction.
+
+Zero stops is a valid walk, and on short ones it is common. Measured against
+all 2671 production rows from the 36 neighbourhood centroids in
+`pipeline/landmarks.ts`: a **3 km** walk reaches two stops **95%** of the time
+(best of the client's four candidates), and only Pushcha-Vodytsia is dry in
+every direction. A **1 km** walk reaches two stops **58–72%** of the time, and
+six to twelve of the 36 neighbourhoods — Troieshchyna, Vyrlytsia, Pozniaky,
+Heroiv Dnipra, Hydropark among them — have no direction that does. The corpus
+is centre-weighted: 16% of it sits east of `lng 30.56`. That floor is density,
+not tuning; widening the corridor past 240 m buys a few points for a third
+more walking.
 
 **Wipe** — a deliberate truncate of the territory tables, done via its own
 migration, because every claim in the database was made under a rule that no

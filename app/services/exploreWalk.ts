@@ -38,12 +38,29 @@ import {
 // nothing they asked for.
 const CANDIDATE_COUNT = 4;
 
-// How far off the planned line a landmark may sit, by walk length. A
-// 1 km stroll cannot afford a 250 m dog-leg; a 3 km one barely notices
-// it. The server clamps these and derives the rest (spacing, detour
-// budget) from the path it is given.
-const CORRIDOR_CLOSE_M = 160;
-const CORRIDOR_FAR_M = 260;
+// How far off the planned line a landmark may sit.
+//
+// MEASURED, not guessed. Swept 160→320 m against all 2671 production
+// kyiv_lore rows, from the 36 neighbourhood centroids in
+// pipeline/landmarks.ts, 8 bearings each, scoring the rate at which a
+// walk reaches two stops when the client picks the best of its four
+// candidates:
+//
+//   corridor   close 1-way / roundtrip     far 1-way / roundtrip    worst +m
+//      160 m        53% / 69%                   91% / 93%            125–387
+//      240 m        58% / 72%                   92% / 95%            176–460
+//      320 m        65% / 75%                   94% / 96%            282–687
+//
+// 240 for both, and the two lengths land on it for opposite reasons:
+// short walks are where the yield curve flattens (past 240 the gain is a
+// few points for a third more detour), long walks are where the
+// worst-case detour starts climbing (460 → 687 m for +1%). The floor on
+// short walks in the outer districts is the density of the corpus, not
+// this number — no corridor rescues a kilometre of Troieshchyna.
+//
+// The server clamps this and derives the rest (spacing, detour budget)
+// from the path it is given.
+const CORRIDOR_M = 240;
 
 // Stops per walk. The ask was "at least a few", and three is the point
 // where a walk reads as a route with stops rather than a detour to one
@@ -89,7 +106,7 @@ async function costCandidates(
       plans.map((p, i) => ({ id: String(i), path: p.path })),
       {
         maxStops: distance === 'far' ? MAX_STOPS_FAR : MAX_STOPS_CLOSE,
-        corridorM: distance === 'far' ? CORRIDOR_FAR_M : CORRIDOR_CLOSE_M,
+        corridorM: CORRIDOR_M,
         exclude: loadRecentStopIds(),
       },
     );
