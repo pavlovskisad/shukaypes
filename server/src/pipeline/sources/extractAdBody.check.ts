@@ -21,7 +21,7 @@
 // first: no stylesheet survives, and the description does. A strip that
 // took the description with it would pass a "no CSS" test perfectly.
 
-import { extractAdBody } from './adHtml.js';
+import { extractAdBody, stripSectionLabels, stripSectionLabelLines } from './adHtml.js';
 
 let failures = 0;
 function check(name: string, ok: boolean, detail = ''): void {
@@ -51,6 +51,69 @@ const REAL_SHAPE = `<html><body>
   check('the description survives', text.includes('блакитні очі'));
   check('the whole description survives', text.includes('зможе прихистити'));
   check('the title survives', text.includes('кіт з блакитними очима'));
+  // OLX's own section labels are page furniture, not the owner's post.
+  check('bare-text-node labels go', !text.includes('Повідомлення'), text.slice(0, 60));
+  check('bare-text-node «Опис» goes', !/(^|\n)\s*Опис\s*(\n|$)/.test(text));
+  // The line after the title is the owner's first word, not a label.
+  check('the body now opens with the owner text', !!text.split('\n')[1]?.startsWith('Кіт'), text);
+}
+
+// The same labels wrapped in elements of their own — the other shape OLX
+// has shipped. The text-level strip cannot see this one and the DOM
+// removal cannot see the bare-text one, which is why both exist.
+{
+  const { text } = extractAdBody(
+    `<div data-cy="ad_description">
+       <h4>Повідомлення</h4><span>Опис</span>
+       <p>Зникла кішка Мурка на Оболоні, дуже налякана.</p>
+     </div>`,
+  );
+  check('wrapped label «Повідомлення» goes', !text.includes('Повідомлення'), text.slice(0, 60));
+  check('wrapped label «Опис» goes', !text.includes('Опис'), text.slice(0, 60));
+  check('wrapped description survives', text.includes('Мурка'));
+}
+
+// THE CASE THAT MATTERS MORE THAN EITHER. A strip that also ate the
+// owner's words would pass every assertion above.
+{
+  check(
+    'a label mid-sentence is left alone',
+    stripSectionLabels('Рудий пес, опис зовнішності: білі лапки') ===
+      'Рудий пес, опис зовнішності: білі лапки',
+  );
+  check(
+    'a longer word starting with a label is left alone',
+    stripSectionLabels('Описания немає, телефонуйте') === 'Описания немає, телефонуйте',
+  );
+  check(
+    'a body that is only labels comes back empty rather than mangled',
+    stripSectionLabels('Повідомлення Опис') === '',
+  );
+  check(
+    'both labels go when they arrive together',
+    stripSectionLabels('Повідомлення\nОпис\nПропав пес') === 'Пропав пес',
+  );
+}
+
+// The corpus rule, which has to reach labels sitting mid-text because a
+// stored body opens with the listing title, not with the description.
+{
+  const stored = 'Пропав кіт Мурчик\nПовідомлення\nОпис\nСірий кіт, Оболонь. Дуже боязкий.';
+  check(
+    'labels are removed from the middle of a stored body',
+    stripSectionLabelLines(stored) === 'Пропав кіт Мурчик\nСірий кіт, Оболонь. Дуже боязкий.',
+    JSON.stringify(stripSectionLabelLines(stored)),
+  );
+  check(
+    'a body with no labels is returned untouched, whitespace and all',
+    stripSectionLabelLines('Пропав пес\n  два пробіли на початку\n\nі порожній рядок') ===
+      'Пропав пес\n  два пробіли на початку\n\nі порожній рядок',
+  );
+  check(
+    "a walker's own paragraph breaks are not collapsed",
+    stripSectionLabelLines('Опис\nперший абзац\n\nдругий абзац') ===
+      'перший абзац\n\nдругий абзац',
+  );
 }
 
 // A <script> in the container is the same failure with different noise.
