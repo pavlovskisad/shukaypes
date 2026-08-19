@@ -5,6 +5,7 @@ import { useMaplibreMap } from './MapContext';
 import { MapLibreMarker } from './MapLibreMarker';
 import { api } from '../../services/api';
 import { fetchWalkingRoute } from '../../services/directions';
+import { clampExtract, fetchWikipediaExtract } from '../../services/wikipedia';
 import { useGameStore } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
@@ -76,24 +77,6 @@ interface DiscoveredLore {
   sourceLang: string | null;
   position: LatLng;
   distM: number;
-}
-
-const READ_MORE_MAX_CHARS = 600;
-
-async function fetchWikipediaExtract(
-  lang: string,
-  title: string,
-): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`,
-    );
-    if (!res.ok) return null;
-    const json = (await res.json()) as { extract?: string };
-    return json.extract ?? null;
-  } catch {
-    return null;
-  }
 }
 
 export function SniffPress() {
@@ -535,9 +518,7 @@ export function SniffPress() {
                 whiteSpace: 'pre-line',
               }}
             >
-              {moreText.length > READ_MORE_MAX_CHARS
-                ? moreText.slice(0, READ_MORE_MAX_CHARS).trimEnd() + '…'
-                : moreText}
+              {clampExtract(moreText)}
             </div>
           ) : null}
           {discovered.id !== '__none__' ? (

@@ -1,5 +1,5 @@
-// Walk planner — picks ONE destination from the spots + parks pools
-// and produces the polyline waypoints + a nice human label.
+// Walk planner — picks a destination from the spots + parks pools and
+// produces the polyline waypoints + a nice human label.
 //
 // Design goals:
 // - One-way walks should land somewhere "nice for a walk", with parks
@@ -9,6 +9,11 @@
 //   via-point offset perpendicular to the outbound bearing midpoint —
 //   Google Directions then routes the second leg via different streets
 //   to hit that nudge point. User gets one tap → unique loop home.
+// - A walk is not just a destination. planWalkOptions returns SEVERAL
+//   ranked plans rather than one, because services/exploreWalk.ts then
+//   asks the server which of them passes the most landmarks and spends
+//   the walk on that one. Ranking stays here; the landmark choice stays
+//   on the server, next to the table it reads.
 
 import type { LatLng } from '@shukajpes/shared';
 import { distanceMeters } from './geo';
@@ -223,11 +228,71 @@ export interface WalkPlan {
   // where `via` is a synthetic perpendicular nudge that pushes the
   // return leg onto different streets.
   waypoints: LatLng[];
+  // The same walk WITH the origin on the front, which is the shape
+  // /lore/route wants — it needs to know where the walk starts to know
+  // how far along it each landmark falls.
+  path: LatLng[];
   primary: WalkCandidate;
   // True when we managed to inject a perpendicular nudge — the
   // typical case for roundtrips. False on degenerate routes (zero-
   // length outbound, etc), which fall back to plain out-and-back.
   hasReturnDetour: boolean;
+}
+
+// A landmark the walk goes through, as /lore/route returns it. Mirrors
+// the server's LoreStop (services/loreWalk.ts) rather than importing it
+// — same convention the rest of the wire shapes in this app follow.
+export interface WalkStop {
+  id: string;
+  name: string;
+  category: string;
+  // One in-voice sentence: what the dog says when you get there.
+  story: string;
+  // Handles for the on-demand "read more", when the landmark has a
+  // Wikipedia article. Null for most of the corpus.
+  wikipediaTitle: string | null;
+  sourceLang: string | null;
+  position: LatLng;
+  // Metres from the start of the walk. The visiting order.
+  alongM: number;
+  // How far off the straight line the landmark sits.
+  offRouteM: number;
+}
+
+// Landmarks the walker has already been shown, so consecutive walks
+// through the same district surface different ones. Longer than the
+// destination memory because a single walk burns three or four entries
+// at once — at RECENT_LIMIT (3) the second walk down the same street
+// would repeat everything.
+const RECENT_STOP_LIMIT = 14;
+const RECENT_STOPS_STORAGE_KEY = 'shukajpes.walks.recentStops.v1';
+
+export function loadRecentStopIds(): string[] {
+  if (typeof window === 'undefined' || !window.localStorage) return [];
+  try {
+    const raw = window.localStorage.getItem(RECENT_STOPS_STORAGE_KEY);
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed)
+      ? parsed.filter((x): x is string => typeof x === 'string').slice(0, RECENT_STOP_LIMIT)
+      : [];
+  } catch {
+    return [];
+  }
+}
+
+export function recordRecentStops(ids: string[]): void {
+  if (typeof window === 'undefined' || !window.localStorage) return;
+  if (ids.length === 0) return;
+  try {
+    const prev = loadRecentStopIds().filter((x) => !ids.includes(x));
+    const next = [...ids, ...prev].slice(0, RECENT_STOP_LIMIT);
+    window.localStorage.setItem(RECENT_STOPS_STORAGE_KEY, JSON.stringify(next));
+  } catch {
+    // Storage off — every walk then gets the best landmarks near it
+    // rather than a rotation, which is a worse feature but not a
+    // broken one.
+  }
 }
 
 export function buildCandidates(spots: Spot[], parks: Park[]): WalkCandidate[] {
@@ -269,30 +334,46 @@ function score(
   return distScore + ratingScore + catBias + recentPenalty;
 }
 
-function pickFromQualityBand(
+// Fisher-Yates in place. Uniform, so taking [0] of a shuffled quality
+// band is exactly the uniform pick this planner has always made — the
+// rest of the shuffled order is what gives the landmark step something
+// to choose between.
+function shuffle<T>(xs: T[]): T[] {
+  for (let i = xs.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    const tmp = xs[i]!;
+    xs[i] = xs[j]!;
+    xs[j] = tmp;
+  }
+  return xs;
+}
+
+function orderQualityBand(
   scored: { c: WalkCandidate; s: number }[],
-): WalkCandidate | null {
-  if (scored.length === 0) return null;
+): WalkCandidate[] {
+  if (scored.length === 0) return [];
   // "Best" is subjective when several parks/cafés are roughly
   // comparable. Take everyone within QUALITY_BAND of the leader,
   // capped at TOP_K so a flat city block doesn't put every nearby
-  // spot on the ballot. Then pick uniformly — democratic, no
-  // ranked-bias toward whichever scored a hair higher.
+  // spot on the ballot. Then order uniformly at random — democratic,
+  // no ranked-bias toward whichever scored a hair higher. Candidates
+  // outside the band follow in score order as fallbacks.
   const best = scored[0]!.s;
-  const band = scored
-    .filter((x) => x.s - best <= QUALITY_BAND)
-    .slice(0, TOP_K);
-  if (band.length === 1) return band[0]!.c;
-  const idx = Math.floor(Math.random() * band.length);
-  return band[idx]!.c;
+  const band = scored.filter((x) => x.s - best <= QUALITY_BAND).slice(0, TOP_K);
+  const banded = new Set(band.map((x) => x.c.id));
+  const rest = scored.filter((x) => !banded.has(x.c.id)).map((x) => x.c);
+  return [...shuffle(band.map((x) => x.c)), ...rest];
 }
 
-function pickBest(
+// Every candidate this planner would accept, best-first. The head of the
+// list is the pick planWalk has always made; the tail is what a walk can
+// be traded for when something further down passes more landmarks.
+function rankCandidates(
   candidates: WalkCandidate[],
   origin: LatLng,
   targetM: number,
-): WalkCandidate | null {
-  if (candidates.length === 0) return null;
+): WalkCandidate[] {
+  if (candidates.length === 0) return [];
   const recentIds = loadRecentIds();
   // Distance floor — exclude "too close to count as that walk distance"
   // candidates BEFORE scoring so they can't sneak in via the quality
@@ -314,19 +395,17 @@ function pickBest(
   if (band.length >= MIN_POOL_SIZE) {
     // Dense band — apply the quality-band filter so we only sample
     // candidates that are roughly comparable on score.
-    return pickFromQualityBand(band);
+    return orderQualityBand(band);
   }
   // Sparse band — variety beats distance-fit perfection. Take the
   // top MIN_POOL_SIZE scorers regardless of quality gap (the band of
   // 1-2 candidates collapsed to a deterministic pick after the
   // quality-band filter, which is exactly what we're trying to avoid
   // for long-distance walks in low-density areas). Uniform random
-  // pick within the top-N — recent penalty still rotates between
-  // them across taps.
-  const topN = scored.slice(0, MIN_POOL_SIZE);
-  if (topN.length === 0) return null;
-  const idx = Math.floor(Math.random() * topN.length);
-  return topN[idx]!.c;
+  // order within the top-N — recent penalty still rotates between
+  // them across taps — then the rest as fallbacks.
+  const topN = shuffle(scored.slice(0, MIN_POOL_SIZE).map((x) => x.c));
+  return [...topN, ...scored.slice(MIN_POOL_SIZE).map((x) => x.c)];
 }
 
 // Compute a synthetic via-point offset perpendicular to the
@@ -359,31 +438,31 @@ function perpendicularVia(
   };
 }
 
-export function planWalk(args: {
-  candidates: WalkCandidate[];
-  origin: LatLng;
-  shape: WalkShape;
-  distance: WalkDistance;
-}): WalkPlan | null {
-  const { candidates, origin, shape, distance } = args;
-  if (candidates.length === 0) return null;
-  const totalTargetM = distance === 'far' ? WALK_FAR_M : WALK_CLOSE_M;
-
+// One candidate → the walk it would be. Split out of planWalk so the
+// landmark step can cost SEVERAL candidates before any of them is
+// committed to; planWalk itself is now this applied to the top pick.
+function buildPlan(
+  dest: WalkCandidate,
+  origin: LatLng,
+  shape: WalkShape,
+  totalTargetM: number,
+): WalkPlan {
   if (shape === 'oneway') {
-    const pick = pickBest(candidates, origin, totalTargetM);
-    if (!pick) return null;
-    return { waypoints: [pick.position], primary: pick, hasReturnDetour: false };
+    return {
+      waypoints: [dest.position],
+      path: [origin, dest.position],
+      primary: dest,
+      hasReturnDetour: false,
+    };
   }
-
-  // Roundtrip — pick a destination at half the total budget so out +
-  // back ≈ totalTargetM, then push the return through a perpendicular
-  // via-point so Google Directions takes different streets back.
-  const legM = totalTargetM / 2;
-  const dest = pickBest(candidates, origin, legM);
-  if (!dest) return null;
   const legDist = distanceMeters(origin, dest.position);
   if (legDist === 0) {
-    return { waypoints: [dest.position, origin], primary: dest, hasReturnDetour: false };
+    return {
+      waypoints: [dest.position, origin],
+      path: [origin, dest.position, origin],
+      primary: dest,
+      hasReturnDetour: false,
+    };
   }
   // Short legs (urban arterial back) get a stronger relative nudge —
   // Kyiv side streets are sparse, so a gentle 0.5x perpendicular
@@ -402,8 +481,28 @@ export function planWalk(args: {
   const via = perpendicularVia(origin, dest.position, offsetM, sign);
   return {
     waypoints: [dest.position, via, origin],
+    path: [origin, dest.position, via, origin],
     primary: dest,
     hasReturnDetour: true,
   };
+}
+
+// The walks worth considering, best-first. `count` of them, or fewer if
+// the neighbourhood has fewer candidates. Roundtrip destinations are
+// ranked at HALF the total budget, since out + back has to add up to it.
+export function planWalkOptions(args: {
+  candidates: WalkCandidate[];
+  origin: LatLng;
+  shape: WalkShape;
+  distance: WalkDistance;
+  count: number;
+}): WalkPlan[] {
+  const { candidates, origin, shape, distance, count } = args;
+  if (candidates.length === 0 || count <= 0) return [];
+  const totalTargetM = distance === 'far' ? WALK_FAR_M : WALK_CLOSE_M;
+  const targetM = shape === 'oneway' ? totalTargetM : totalTargetM / 2;
+  return rankCandidates(candidates, origin, targetM)
+    .slice(0, count)
+    .map((c) => buildPlan(c, origin, shape, totalTargetM));
 }
 

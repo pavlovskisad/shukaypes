@@ -24,11 +24,8 @@ import { popPressableEvent } from '../../utils/popOnTap';
 import { pickBottomInset } from '../../services/telegram';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useGameStore } from '../../stores/gameStore';
-import {
-  buildCandidates,
-  planWalk,
-  recordRecentDestination,
-} from '../../utils/walk';
+import { buildCandidates, recordRecentDestination } from '../../utils/walk';
+import { startExplorationWalk } from '../../services/exploreWalk';
 import { fetchWalkingRoute } from '../../services/directions';
 import { api, type CompanionAction, type ChatNearbySpot } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
@@ -87,45 +84,35 @@ export default function ChatScreen() {
             router.push('/');
             return `📍 ${t.chat.showingSpot}`;
           case 'walk': {
-            // Same flow the radial menu's walk leaf runs — pick a
-            // destination from spots+parks via planWalk, fetch a
-            // walking polyline, set it on the store. Routes the user
-            // to the map so the polyline is visible.
+            // Same flow the radial menu's walk leaf runs — rank a few
+            // destinations from spots+parks, let the server say which
+            // route passes the most landmarks, and plot through them.
+            // Routes the user to the map so the polyline is visible.
             const { userPosition: pos, spots: ctxSpots, parks: ctxParks } =
               useGameStore.getState();
             if (!pos) return `🚶 ${t.chat.needLocation}`;
             const candidates = buildCandidates(ctxSpots, ctxParks);
             if (candidates.length === 0) return `🚶 ${t.chat.noNearbySpots}`;
-            const plan = planWalk({
-              candidates,
+            const walk = await startExplorationWalk({
               origin: pos,
+              candidates,
               shape: action.args.shape,
               distance: action.args.distance,
             });
-            if (!plan) return `🚶 ${t.chat.nothingAtDistance}`;
-            const spotId = plan.primary.isSpot ? plan.primary.id : null;
-            const route = await fetchWalkingRoute(pos, plan.waypoints);
-            if (!route && plan.hasReturnDetour && plan.waypoints.length === 3) {
-              const fallback = [plan.waypoints[0]!, plan.waypoints[2]!];
-              const route2 = await fetchWalkingRoute(pos, fallback);
-              if (route2) {
-                useGameStore.getState().setWalkRoute(route2, {
-                  shape: action.args.shape,
-                  spotId,
-                });
-                recordRecentDestination(plan.primary.id);
-              }
-            } else if (route) {
-              useGameStore.getState().setWalkRoute(route, {
+            if (!walk) return `🚶 ${t.chat.couldntPlotRoute}`;
+            useGameStore.getState().setWalkRoute(
+              walk.route,
+              {
                 shape: action.args.shape,
-                spotId,
-              });
-              recordRecentDestination(plan.primary.id);
-            } else {
-              return `🚶 ${t.chat.couldntPlotRoute}`;
-            }
+                spotId: walk.spotId,
+                destinationName: walk.primary.name,
+              },
+              walk.stops,
+            );
             router.push('/');
-            return `🚶 ${t.chat.walkingTo(plan.primary.name)}`;
+            return walk.stops.length
+              ? `🚶 ${t.chat.walkingToVia(walk.primary.name, walk.stops.length)}`
+              : `🚶 ${t.chat.walkingTo(walk.primary.name)}`;
           }
           case 'walk_to_spot': {
             // Companion picked a specific spot from the CONTEXT it was

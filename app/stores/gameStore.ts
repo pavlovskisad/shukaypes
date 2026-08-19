@@ -17,6 +17,7 @@ import {
   type Park,
 } from '../services/places';
 import { distanceMeters } from '../utils/geo';
+import type { WalkStop } from '../utils/walk';
 
 // Re-fetch the cached Places lists (parks for bone seeding +
 // per-park paw rings, spots for the visit menu) when the user has
@@ -49,6 +50,18 @@ export interface DailyTasks {
   lostPetChecks: number;
   spotVisits: number;
   sightings: number;
+}
+
+// What the current walking route IS, as opposed to where it goes.
+export interface WalkRouteMeta {
+  shape: 'roundtrip' | 'oneway';
+  // Null when the destination is a park, or when the route was plotted
+  // to something that isn't a spot at all (a sniffed landmark).
+  spotId: string | null;
+  // Where the walk ends, for the walk-start card. Only the planned-walk
+  // flow sets it; the "walk me to this one place" paths don't need it,
+  // since the thing they route to is already on screen and named.
+  destinationName?: string;
 }
 
 const DAILY_TARGETS = {
@@ -289,7 +302,18 @@ interface GameState {
   // keep alive) — see utils/walk.ts. The map renders the polyline
   // either way; spotId only governs whether the destination spot's
   // pin overrides the spots-toggle visibility.
-  walkRouteMeta: { shape: 'roundtrip' | 'oneway'; spotId: string | null } | null;
+  walkRouteMeta: WalkRouteMeta | null;
+  // Landmarks the current walk goes through, in visiting order, each
+  // with the sentence the dog tells about it. Set alongside walkRoute by
+  // services/exploreWalk.ts; empty for a walk through a district with
+  // nothing in kyiv_lore near it, which is a normal walk.
+  walkStops: WalkStop[];
+  // Which stop's story is expanded on the map, by id. One at a time —
+  // three open bubbles along a route is unreadable.
+  openWalkStopId: string | null;
+  // Cleared once the walker dismisses the list of stops they were shown
+  // when the walk started, so it doesn't come back on every re-render.
+  walkStopsIntroSeen: boolean;
   dailyTasks: DailyTasks;
   syncing: boolean;
   lastSyncError: string | null;
@@ -372,8 +396,14 @@ interface GameState {
   setViewportCenter: (p: LatLng | null) => void;
   setWalkRoute: (
     route: LatLng[] | null,
-    meta: { shape: 'roundtrip' | 'oneway'; spotId: string | null } | null,
+    meta: WalkRouteMeta | null,
+    // Omitted by the callers that plot a route to one named place (a
+    // sniffed landmark, a spot card) — those walks have no stops of
+    // their own, and passing nothing clears the previous walk's.
+    stops?: WalkStop[],
   ) => void;
+  setOpenWalkStop: (id: string | null) => void;
+  dismissWalkStopsIntro: () => void;
   reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean } | void>;
   // Detective quests. Start flips any existing active quest to abandoned
   // server-side. advance checks proximity to the current waypoint and
@@ -489,6 +519,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   viewportCenter: null,
   walkRoute: null,
   walkRouteMeta: null,
+  walkStops: [],
+  openWalkStopId: null,
+  walkStopsIntroSeen: false,
   // Initial state is empty for today's date; refreshDailyTasks() pulls
   // from the server on first app load and again on map-tab refocus.
   dailyTasks: blankTasks(),
@@ -1131,6 +1164,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       // nothing to lose by dropping it.
       walkRoute: null,
       walkRouteMeta: null,
+      walkStops: [],
+      openWalkStopId: null,
       // Cues that were pointing at something in the old mode.
       activeHint: null,
       menuCamera: null,
@@ -1181,7 +1216,19 @@ export const useGameStore = create<GameState>((set, get) => ({
         spotsCategoryFilter !== 'all' ? true : s.spotsVisible,
     })),
 
-  setWalkRoute: (walkRoute, walkRouteMeta) => set({ walkRoute, walkRouteMeta }),
+  setWalkRoute: (walkRoute, walkRouteMeta, stops) =>
+    set({
+      walkRoute,
+      walkRouteMeta,
+      walkStops: stops ?? [],
+      openWalkStopId: null,
+      // A new walk gets its own introduction; clearing one (route null)
+      // leaves nothing to introduce, and the flag being false there
+      // costs nothing.
+      walkStopsIntroSeen: false,
+    }),
+  setOpenWalkStop: (openWalkStopId) => set({ openWalkStopId }),
+  dismissWalkStopsIntro: () => set({ walkStopsIntroSeen: true }),
 
   reportSighting: async (dogId) => {
     const { userPosition } = get();
