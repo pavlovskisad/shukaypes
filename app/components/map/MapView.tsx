@@ -347,6 +347,9 @@ export default function MapViewWeb() {
   // Drives the low chase-camera follow effect + DOGCAM_* constants below.
   const dogCam = useGameStore((s) => s.dogCam);
   const appMode = useGameStore((s) => s.appMode);
+  // The companion's menu is open. Read here so the lost-pet deck can get
+  // out of its way — see the note at the deck's mount.
+  const menuOpen = useGameStore((s) => s.menuOpen);
   // Sniff-and-lead search mode assignment (which lost dog + spot). Set by the
   // search controller below while dogCam is on.
   const searchTarget = useGameStore((s) => s.searchTarget);
@@ -2965,7 +2968,16 @@ export default function MapViewWeb() {
           LostDogCardView is width/height 100%, so it has to be given a
           box. Rendered bare it collapses to nothing, which is exactly
           what it did — the card was there the whole time with no size. */}
-      {DOG_CAM && dogCam && onMapScreen ? (
+      {/* …and it steps aside while the dog is being asked something. The
+          menu hangs under the dog and the deck sits at the bottom of the
+          screen, and in supersniff those are the same place — the four
+          answers landed on top of a pet's photo. Unmounting is the right
+          move rather than dimming: the deck is a swipeable thing with a
+          focused card, and something you can still catch with a thumb
+          under a menu is worse than something that is plainly gone. It
+          comes back the moment the menu closes, on the same state it
+          left. */}
+      {DOG_CAM && dogCam && onMapScreen && !menuOpen ? (
         <View
           style={{
             position: 'absolute',

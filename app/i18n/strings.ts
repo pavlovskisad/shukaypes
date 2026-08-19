@@ -307,6 +307,13 @@ export interface AppStrings {
     // The dog's line over the walking level — three icons that do not
     // explain themselves, named in one breath.
     exploreAsk: string;
+    // …and one for every level below it, so the icons are never a
+    // guessing game and the whole descent reads as one conversation
+    // rather than a menu that stops talking once you commit.
+    walkShapeAsk: string;
+    walkDistanceAsk: string;
+    visitCategoryAsk: string;
+    visitSpotAsk: string;
     // Shown when the user picks "meet" in explore and there is nobody
     // around. Was hardcoded English in Companion.tsx.
     noWalkers: string;
@@ -721,6 +728,10 @@ const uk: AppStrings = {
     // Shown while the walking verbs are on the ring — three icons that
     // do not explain themselves, so the dog names them.
     exploreAsk: 'просто пройтись, заскочити по каву чи в зоомагазин, чи з кимось познайомитись?',
+    walkShapeAsk: 'петлею — і повернемось сюди, чи просто вперед?',
+    walkDistanceAsk: 'тут поруч чи заберемось далі?',
+    visitCategoryAsk: 'кава, поїсти, бар, зоомагазин чи ветеринар?',
+    visitSpotAsk: 'ось що поруч — куди йдемо?',
     noWalkers: 'поки нікого поруч 👥',
     lostSheet: {
       title: 'загубився пес?',
@@ -1091,6 +1102,10 @@ const en: AppStrings = {
     explore: 'i want a walk',
     play: 'who holds this district?',
     exploreAsk: 'just a stroll, a coffee or a pet shop, or shall we go and meet somebody?',
+    walkShapeAsk: 'a loop back to here, or straight onward?',
+    walkDistanceAsk: 'close by, or shall we go further?',
+    visitCategoryAsk: 'coffee, food, a bar, a pet shop, or the vet?',
+    visitSpotAsk: "here's what's nearby — where are we headed?",
     noWalkers: 'nobody around just yet 👥',
     lostSheet: {
       title: 'lost your pet?',

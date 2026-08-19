@@ -760,17 +760,31 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
             : activeHintId === 'map:supersniff-exit'
               ? t.hints.supersniffExit
               : null;
-  // The walking level names itself, every time rather than once.
+  // EVERY LEVEL NAMES ITSELF, every time rather than once.
   //
-  // It used to be a one-shot hint, which was the right shape when the
-  // ring held five or six loosely-related verbs and the line was a
-  // tutorial. Three icons that answer one question is not a tutorial —
-  // it is a question, the same as the one a level above, and a question
-  // that only gets asked on your first ever visit is not much of a
-  // question. `menuHint` is kept for its `seen` flag, which still
-  // decides the camera framing.
-  const menuExplainer =
-    menuOpen && menuPath.length === 0 && !showModes ? t.modes.exploreAsk : null;
+  // It used to be a single one-shot hint over the root, which was the
+  // right shape when that ring held six loosely-related verbs and the
+  // line was a tutorial. Icons that answer one question are not a
+  // tutorial — they are a question, and a question asked only on your
+  // first ever visit is not much of a question. Below the root it was
+  // worse: nothing was said at all, so a walk shape and a walk distance
+  // were two anonymous pairs of discs, and five spot categories were
+  // five guesses. The dog talks the whole way down now.
+  //
+  // `menuHint` is kept for its `seen` flag, which still decides the
+  // camera framing.
+  const menuExplainer = useMemo(() => {
+    if (!menuOpen || showModes) return null;
+    const [head, second] = menuPath;
+    if (!head) return t.modes.exploreAsk;
+    if (head === 'walk') {
+      return second ? t.modes.walkDistanceAsk : t.modes.walkShapeAsk;
+    }
+    if (head === 'visit') {
+      return second ? t.modes.visitSpotAsk : t.modes.visitCategoryAsk;
+    }
+    return null;
+  }, [menuOpen, showModes, menuPath, t]);
   // Supersniff intro bubble — shown over ambient/real barks for its window.
   const supersniffIntro =
     dogCam && supersniffIntroHint.visible ? t.hints.supersniffIntro : null;
@@ -898,11 +912,11 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           // each ring item would clutter the cardinal slots.
           showLabels={menuPath.length === 2 && menuPath[0] === 'visit'}
           variant={showModes ? 'text' : 'icon'}
-          // The two levels the user actually converses with hang under
-          // the dog: four intents in two columns, three walking verbs in
-          // one row. Everything deeper stays a ring, where the items are
-          // 68px discs and there are only two or three of them.
-          layout={showModes ? 'grid' : menuPath.length === 0 ? 'row' : 'ring'}
+          // Every level hangs under the dog now — the four intents in two
+          // columns, and every level of icons in a row. The ring is gone
+          // from the companion entirely: a conversation that answers in
+          // one place and then starts orbiting is two interfaces.
+          layout={showModes ? 'grid' : 'row'}
         />
       </div>
     </MapLibreMarker>

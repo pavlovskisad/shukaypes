@@ -107,8 +107,11 @@ export const TEXT_ITEM = {
 // without leaving a gap you could park a bus in.
 const BELOW_DOG_PX = 46;
 
-// Between the three walking icons in their row.
+// Between the icons in their row.
 const ICON_ROW_GAP = 16;
+
+// Three 68px discs and the two gaps between them.
+const ROW_MAX_W = 3 * BUTTON.size + 2 * ICON_ROW_GAP;
 
 // Trig-positioned radial around a center point with radius R.
 // The container is sized to fit the rim items and centered on the companion.
@@ -245,15 +248,24 @@ export function RadialMenu({
 
   // Shared shell for both under-the-dog layouts: centred on the dog
   // horizontally, hanging below it, and inert except for its buttons.
-  const below = (children: ReactNode, gap: number) => (
+  // `width` is EXPLICIT and has to be. This element is absolutely
+  // positioned inside the companion's 140px box, so left:50% leaves it
+  // 70px of available width to shrink-wrap into — which no-wrap layouts
+  // simply overflowed and ignored, but a wrapping one obeys. Measured:
+  // with only a maxWidth set, three 68px icons wrapped onto three rows.
+  const below = (children: ReactNode, gap: number, width: number) => (
     <div
       style={{
         position: 'absolute',
         left: '50%',
         top: `calc(50% + ${BELOW_DOG_PX}px)`,
         transform: 'translateX(-50%)',
+        width,
         display: 'flex',
-        gap,
+        flexWrap: 'wrap',
+        justifyContent: 'center',
+        rowGap: gap,
+        columnGap: gap,
         pointerEvents: 'none',
       }}
     >
@@ -264,11 +276,47 @@ export function RadialMenu({
   if (layout === 'row') {
     return below(
       actions.map((a, i) => (
-        <div key={a.id} style={entrance(i)}>
+        <div
+          key={a.id}
+          style={{
+            ...entrance(i),
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            width: showLabels ? ITEM_W : undefined,
+          }}
+        >
           {renderButton(a)}
+          {/* The named-spot level needs its names: one cafe disc looks
+              exactly like another. */}
+          {showLabels ? (
+            <span
+              style={{
+                marginTop: S.xs,
+                fontSize: TYPE.caption,
+                fontWeight: 700,
+                color: labelColor,
+                textShadow: labelShadow,
+                whiteSpace: 'nowrap',
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                maxWidth: ITEM_W,
+                textAlign: 'center',
+                pointerEvents: 'none',
+                userSelect: 'none',
+              }}
+            >
+              {a.label}
+            </span>
+          ) : null}
         </div>
       )),
       ICON_ROW_GAP,
+      // Three items across and no more, so the five visit categories
+      // break 3 + 2 rather than running off a 360px screen. Two- and
+      // three-item levels fill it exactly and never wrap. The named-spot
+      // level needs wider cells because it carries labels.
+      showLabels ? 3 * ITEM_W + 2 * ICON_ROW_GAP : ROW_MAX_W,
     );
   }
 
@@ -298,6 +346,7 @@ export function RadialMenu({
         </div>
       )),
       TEXT_ITEM.gap,
+      2 * TEXT_ITEM.maxWidth + TEXT_ITEM.gap,
     );
   }
 
