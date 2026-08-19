@@ -17,7 +17,7 @@
 
 import type { LatLng } from '@shukajpes/shared';
 import { distanceMeters } from './geo';
-import type { Spot, Park } from '../services/places';
+import type { Park } from '../services/places';
 
 export type WalkShape = 'oneway' | 'roundtrip';
 export type WalkDistance = 'close' | 'far';
@@ -65,26 +65,26 @@ const RETURN_NUDGE_FRACTION_LONG = 0.5;
 const RETURN_NUDGE_BREAK_M = 600;
 const RETURN_NUDGE_MAX_M = 800;
 
-// Walk-friendliness bias per category. Lower = more preferred. Park
-// is strongly preferred (negative) so it'll outrank an equidistant
-// cafe; vet/pet-shop are penalties so they only win when nothing
-// nicer is in range.
+// Walk-friendliness bias per category. Lower = more preferred.
 //
-// The bottom four come from OUR tables rather than Google Places (see
-// services/api.ts walkDestinations). They sit between park and cafe on
-// purpose: somewhere with a name and a history is a better end to a
-// walk than a chain café, and not as good as a park, which is the one
-// destination a dog is unambiguously right about.
+// THE ERRAND CATEGORIES ARE GONE FROM THIS TABLE, and that is the point
+// rather than an omission. A planned walk is a small local tour — a
+// stroll through places worth passing — and the app already has separate
+// mechanics for going to a specific business: the radial menu's
+// `visit:spot:<id>` leaves, the chat's `walk_to_spot` action, and the
+// spot card's own route button. This table used to carry cafe,
+// restaurant, bar, pet_store and veterinary_care, which meant "take me
+// for a walk" could answer with the vet.
+//
+// What is left is what a tour is made of: parks and squares from
+// kyiv_gazetteer, museums and landmarks from kyiv_lore. Park stays
+// hardest-preferred — it is the one destination a dog is unambiguously
+// right about.
 const WALK_CATEGORY_BIAS: Record<string, number> = {
   park: -2,
   square: -1,
   museum: -1,
   landmark: -0.5,
-  cafe: 0,
-  restaurant: 0,
-  bar: 0.5,
-  pet_store: 1.5,
-  veterinary_care: 2.5,
 };
 
 // Variety knobs — combat "tap walk → same destination every time".
@@ -227,16 +227,16 @@ export function pickVisitCandidates<T extends VisitCandidate>(
   return scored.slice(0, count).map((x) => x.c);
 }
 
+// Somewhere a tour could end. Note what is NOT here any more: `rating`
+// and `isSpot`, both of which only ever meant something for a Google
+// Places business. Now that walks are made of parks, squares, museums
+// and landmarks, there is no rating to read and no spots-layer marker to
+// keep alive.
 export interface WalkCandidate {
   id: string;
   name: string;
   position: LatLng;
   category: string;
-  rating?: number;
-  // True when this candidate also has a corresponding marker in the
-  // spots layer — lets the route renderer keep the destination pin
-  // visible even when the spots toggle is off. Parks have no marker.
-  isSpot: boolean;
 }
 
 export interface WalkPlan {
@@ -322,9 +322,22 @@ export interface DbDestination {
   distM: number;
 }
 
-// Fold our own destinations in with whatever Places gave us. Places is
-// no longer required for a walk to happen — with its key off, `spots`
-// and `parks` are simply empty and the whole pool comes from here.
+// Google Places parks. Kept in the tour's pool — a park is a park
+// whoever named it — and they cost nothing extra, since the store
+// already fetches them to seed bones around. Places SPOTS (cafés, bars,
+// pet shops, vets) are deliberately not here: see WALK_CATEGORY_BIAS.
+export function parkCandidates(parks: Park[]): WalkCandidate[] {
+  return parks.map((p) => ({
+    id: p.id,
+    name: p.name,
+    position: p.position,
+    category: 'park',
+  }));
+}
+
+// Fold our own destinations in with the Places parks. Nothing here is
+// required: with the Places key off, `parks` is empty and the whole
+// pool comes from our tables.
 //
 // Deduped by POSITION rather than by id, because the two sources have
 // unrelated id spaces and both know about the same big parks: Google's
@@ -334,10 +347,10 @@ export interface DbDestination {
 const DUPLICATE_RADIUS_M = 120;
 
 export function mergeCandidates(
-  fromPlaces: WalkCandidate[],
+  base: WalkCandidate[],
   fromDb: DbDestination[],
 ): WalkCandidate[] {
-  const out = [...fromPlaces];
+  const out = [...base];
   for (const d of fromDb) {
     const already = out.some(
       (c) => distanceMeters(c.position, d.position) < DUPLICATE_RADIUS_M,
@@ -348,33 +361,9 @@ export function mergeCandidates(
       name: d.name,
       position: d.position,
       category: d.category,
-      // No ratings in our tables. score() reads `rating ?? 3`, so
-      // leaving it undefined scores these as "unremarkable", which is
-      // the honest default — a park with no rating should not beat a
-      // 4.8 café on a signal we do not have.
-      isSpot: false,
     });
   }
   return out;
-}
-
-export function buildCandidates(spots: Spot[], parks: Park[]): WalkCandidate[] {
-  const fromSpots: WalkCandidate[] = spots.map((s) => ({
-    id: s.id,
-    name: s.name,
-    position: s.position,
-    category: s.category,
-    rating: s.rating,
-    isSpot: true,
-  }));
-  const fromParks: WalkCandidate[] = parks.map((p) => ({
-    id: p.id,
-    name: p.name,
-    position: p.position,
-    category: 'park',
-    isSpot: false,
-  }));
-  return [...fromSpots, ...fromParks];
 }
 
 function score(
@@ -385,7 +374,11 @@ function score(
 ): number {
   const distErr = Math.abs(distM - targetM) / targetM; // 0 perfect, 1 100% off
   const distScore = distErr * distErr * 10;
-  const ratingScore = -(candidate.rating ?? 3) * 0.4;
+  // There used to be a rating term here, worth -(rating ?? 3) * 0.4. It
+  // came off the Google Places record, and nothing in a tour's pool has
+  // one — parks, squares, museums and landmarks are not rated. Left as a
+  // constant it would have shifted every candidate by the same 1.2 and
+  // decided nothing, so it is gone rather than quietly inert.
   const catBias = WALK_CATEGORY_BIAS[candidate.category] ?? 1;
   // Recent picks sink. recentIdx 0 = most recent (heaviest penalty);
   // entries past RECENT_LIMIT are absent. The penalty is large enough
@@ -394,7 +387,7 @@ function score(
   const recentIdx = recentIds.indexOf(candidate.id);
   const recentPenalty =
     recentIdx >= 0 ? (RECENT_LIMIT - recentIdx) * RECENT_PENALTY_PER_RANK : 0;
-  return distScore + ratingScore + catBias + recentPenalty;
+  return distScore + catBias + recentPenalty;
 }
 
 // Fisher-Yates in place. Uniform, so taking [0] of a shuffled quality

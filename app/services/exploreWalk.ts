@@ -1,8 +1,10 @@
 import type { LatLng } from '@shukajpes/shared';
 import { api } from './api';
 import { fetchWalkingRoute } from './directions';
+import type { Park } from './places';
 import {
   mergeCandidates,
+  parkCandidates,
   planWalkOptions,
   loadRecentStopIds,
   recordRecentStops,
@@ -81,9 +83,6 @@ export interface ExplorationWalk {
   route: LatLng[];
   primary: WalkCandidate;
   shape: WalkShape;
-  // Only set when the destination is a spot with its own marker, so the
-  // map can keep that pin visible regardless of the spots toggle.
-  spotId: string | null;
   // In visiting order. Empty is a normal, valid walk.
   stops: WalkStop[];
   // True when the line is straight segments between the points rather
@@ -154,33 +153,40 @@ function bestCandidate(costed: Costed[]): Costed | null {
   );
 }
 
-// Our own destinations, folded in with whatever Places gave us. A
-// failure here is not fatal — if Places had something, that still
-// works; if it didn't, the caller gets no plans and says so.
+// The tour's pool: parks and squares, museums and landmarks, out of our
+// own tables, plus whatever parks Places happens to know about. A
+// failure fetching ours is not fatal — Places parks alone can still
+// carry a walk; if there are none either, the caller gets no plans and
+// says so.
 async function poolFor(
   origin: LatLng,
-  candidates: WalkCandidate[],
+  parks: Park[],
 ): Promise<WalkCandidate[]> {
+  const base = parkCandidates(parks);
   try {
     const { destinations } = await api.walkDestinations(
       origin,
       DESTINATION_RADIUS_M,
     );
-    return mergeCandidates(candidates, destinations);
+    return mergeCandidates(base, destinations);
   } catch {
-    return candidates;
+    return base;
   }
 }
 
 export async function startExplorationWalk(args: {
   origin: LatLng;
-  candidates: WalkCandidate[];
+  // Google Places parks, which the store already holds for bone
+  // seeding. Places SPOTS are deliberately not a parameter: going to a
+  // named café or the vet is what visit:spot / walk_to_spot are for, and
+  // a walk is a small local tour.
+  parks: Park[];
   shape: WalkShape;
   distance: WalkDistance;
 }): Promise<ExplorationWalk | null> {
-  const { origin, candidates, shape, distance } = args;
+  const { origin, parks, shape, distance } = args;
   const plans = planWalkOptions({
-    candidates: await poolFor(origin, candidates),
+    candidates: await poolFor(origin, parks),
     origin,
     shape,
     distance,
@@ -191,7 +197,6 @@ export async function startExplorationWalk(args: {
   const chosen = bestCandidate(await costCandidates(plans, distance));
   if (!chosen) return null;
   const { plan, stops } = chosen;
-  const spotId = plan.primary.isSpot ? plan.primary.id : null;
 
   const settle = (
     line: { path: LatLng[]; approximate: boolean },
@@ -206,7 +211,6 @@ export async function startExplorationWalk(args: {
       route: line.path,
       primary: plan.primary,
       shape,
-      spotId,
       stops: withStops,
       approximate: line.approximate,
     };

@@ -154,13 +154,19 @@ carousel, and the guided search. Entered from the logo. See **dog-cam**.
 
 **Walk destination** — where a planned walk ends. Comes from `/walk/destinations`
 (307 parks and 82 squares in `kyiv_gazetteer`, plus the museums, churches and
-attractions in `kyiv_lore`) merged with whatever Google Places returned, deduped
-by position at 120 m because the two sources have unrelated ids for the same
-park. Places is no longer required: with its key off, `spots` and `parks` are
-empty and the whole pool comes from our own tables. Streets, neighbourhoods,
-districts, metro stations and `kyiv_lore`'s 1676 `historic` rows are
-deliberately excluded — a street is not a destination and a wall plaque is a
-**walk stop**, not somewhere to walk to.
+attractions in `kyiv_lore`), merged with Google Places **parks** only, deduped by
+position at 120 m because the two sources have unrelated ids for the same park.
+Places is not required: with its key off the whole pool comes from our own
+tables.
+
+Places **spots** — cafés, bars, pet shops, vets — are deliberately NOT walk
+destinations, though they were until PR #493. Going to a named business is a
+different mechanic with its own three entry points (`visit:spot:<id>` in the
+radial menu, the chat's `walk_to_spot`, and the spot card's route button); a
+walk is a small local tour, and mixing the pools meant "take me for a walk"
+could answer with the vet. Streets, neighbourhoods, districts, metro stations
+and `kyiv_lore`'s 1676 `historic` rows are excluded too — a street is not a
+destination and a wall plaque is a **walk stop**, not somewhere to walk to.
 
 **Walk stop** — a `kyiv_lore` landmark a planned walk is routed *through*,
 rather than past. `/lore/route` picks two to four of them along the candidate

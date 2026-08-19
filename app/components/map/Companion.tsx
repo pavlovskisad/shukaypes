@@ -21,7 +21,6 @@ import { distanceMeters } from '../../utils/geo';
 import type { SpotCategory, Spot } from '../../services/places';
 import { startExplorationWalk } from '../../services/exploreWalk';
 import {
-  buildCandidates,
   pickVisitCandidates,
   recordRecentVisit,
   type WalkDistance,
@@ -353,16 +352,22 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
         }
       }
 
-      // Walk leaves: walk:<shape>:<distance>. Pulls candidates from
-      // both the spots layer (cafés, restaurants, bars, pet shops,
-      // vets) AND the parks list, then hands them to
-      // startExplorationWalk, which ranks a few, asks the server which
-      // of them passes the most kyiv_lore landmarks, and routes through
-      // those — so the walk arrives somewhere nice AND has something to
-      // say on the way. Roundtrips still return via a perpendicular
-      // nudge point so the back leg uses different streets. We
-      // deliberately don't setSelectedSpot — that's the "open details
-      // modal" channel and a walk shouldn't pop a modal.
+      // Walk leaves: walk:<shape>:<distance>. A small local tour: it
+      // ends at a park, square, museum or landmark and passes two to
+      // four more on the way, each with something the dog can say about
+      // it. Destinations and stops both come out of our own tables;
+      // startExplorationWalk ranks a few candidate walks, asks the
+      // server which passes the most, and routes through those.
+      // Roundtrips still return via a perpendicular nudge point so the
+      // back leg uses different streets.
+      //
+      // The spots layer is NOT consulted here. Going to a specific
+      // business is a different mechanic with its own entry points —
+      // the visit:spot leaves below, the chat's walk_to_spot, and the
+      // spot card — and mixing them in meant "take me for a walk" could
+      // answer with the vet. We also deliberately don't setSelectedSpot:
+      // that's the "open details modal" channel and a walk shouldn't pop
+      // a modal.
       if (id.startsWith('walk:')) {
         const parts = id.split(':'); // ['walk', shape, distance]
         const shape = (parts[1] ?? 'roundtrip') as WalkShape;
@@ -372,38 +377,28 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           return;
         }
         const ctxParks = useGameStore.getState().parks;
-        const candidates = buildCandidates(ctxSpots, ctxParks);
-        if (candidates.length === 0) {
-          // Places hasn't loaded yet, or has no key at all. Kick a
-          // refresh in case it's the former — but DON'T bail: our own
-          // tables carry parks, squares, museums and churches, and
-          // startExplorationWalk pulls them. A walk no longer needs
-          // Google to have a destination.
-          void useGameStore.getState().syncSpots(ctxPos);
-        }
         // Clear any open spot-detail modal — the user shifted intent.
         setSelectedSpot(null);
         // The landmark step is a round-trip to the server, so say
         // something now rather than leaving the tap unanswered; the
         // real label lands when the route does.
         flash(`${distance === 'far' ? 'long' : 'short'} walk, sniffing the way 🚶`);
-        void startExplorationWalk({ origin: ctxPos, candidates, shape, distance }).then(
+        void startExplorationWalk({ origin: ctxPos, parks: ctxParks, shape, distance }).then(
           (walk) => {
             if (!walk) {
-              flash('no spot at that distance — try the other one');
+              flash('nothing worth walking to at that distance — try the other one');
               return;
             }
-            // walkRouteMeta.spotId only makes sense when destination IS
-            // a spot — keeps its marker visible regardless of toggle.
-            // Park destinations get null; the polyline endpoint speaks
-            // for itself.
+            // spotId stays null: a tour's destination is never a spots-
+            // layer marker, so there is no pin to keep alive. The
+            // polyline endpoint speaks for itself.
             useGameStore
               .getState()
               .setWalkRoute(
                 walk.route,
                 {
                   shape,
-                  spotId: walk.spotId,
+                  spotId: null,
                   destinationName: walk.primary.name,
                   approximate: walk.approximate,
                 },
