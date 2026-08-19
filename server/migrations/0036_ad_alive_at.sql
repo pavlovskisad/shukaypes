@@ -1,0 +1,20 @@
+-- When we last confirmed the owner's ad is still up.
+--
+-- The staleness sweep expires an active pet after 90 days on age alone.
+-- Measured against production: «Льоля» was ingested 21 April, expired by
+-- that rule, and her ad was STILL SERVING four months later — the owner
+-- was renewing a live listing while we quietly took her off the map.
+--
+-- Age is a proxy. "Is the ad still up" is evidence, and the backfill
+-- already asks it every time it fetches. This column remembers the
+-- answer so the sweep can defer to it.
+--
+-- Hand-written for the reason in 0032, and REGISTERED IN
+-- migrations/meta/_journal.json — an unjournalled file is skipped in
+-- silence while migrate still prints "migrations applied", which nearly
+-- shipped a missing column in 0035.
+--
+-- Additive only. Null everywhere means "never checked", which is what
+-- every existing row honestly is, and the sweep treats it exactly as it
+-- does today.
+alter table "scrape_log" add column if not exists "ad_alive_at" timestamptz;
