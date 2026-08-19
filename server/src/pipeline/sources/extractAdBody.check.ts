@@ -110,6 +110,27 @@ const REAL_SHAPE = `<html><body>
     'another lowercase continuation survives',
     stripSectionLabels('Описом не передати') === 'Описом не передати',
   );
+  // THE SHAPES THE SURVIVOR POSITIONS TURNED UP. All at line start, all
+  // welded, and NOT all followed by a capital — the first version of this
+  // guard only knew about capitals and left 30 of them behind.
+  for (const [input, want] of [
+    ['Описзагубився котик в селі', 'загубився котик в селі'],
+    ['Описшукаю свою хаскі', 'шукаю свою хаскі'],
+    ['Описнашли собаку на поводке', 'нашли собаку на поводке'],
+    ['Опис4 июня по ул.Приазёрной', '4 июня по ул.Приазёрной'],
+    ['Опис0961234567', '0961234567'],
+    ['Опис5 листопада в районі', '5 листопада в районі'],
+  ] as const) {
+    check(`welded, non-capital: ${input.slice(0, 22)}`, stripSectionLabels(input) === want,
+      JSON.stringify(stripSectionLabels(input)));
+  }
+  // …and the inflections that must survive all of that. A four-letter
+  // lowercase tail is a declension of «опис»; anything longer, or
+  // anything that is not letters, is a fused heading.
+  for (const word of ['Описи', 'Опису', 'Описом', 'Описах', 'Описів', 'Описами']) {
+    check(`inflection survives: ${word}`, stripSectionLabels(`${word} тварини`) === `${word} тварини`,
+      JSON.stringify(stripSectionLabels(`${word} тварини`)));
+  }
   check(
     'a body that is only labels comes back empty rather than mangled',
     stripSectionLabels('Повідомлення Опис') === '',

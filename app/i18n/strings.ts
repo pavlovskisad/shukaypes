@@ -569,7 +569,7 @@ const uk: AppStrings = {
         'повного тексту цього оголошення в нас немає — воно з’явилось раніше, ніж ми почали їх зберігати.',
       originalAfterSighting:
         'позначиш, що бачив цю тваринку — відкрию оригінал з контактами власника.',
-      openOriginal: 'оригінал на OLX',
+      openOriginal: 'оригінал',
       contactsAfterSighting:
         'контакти власника зʼявляться тут, щойно ти позначиш, що бачив цю тваринку.',
     },
@@ -913,7 +913,7 @@ const en: AppStrings = {
         "we don't have the full text of this one — it was posted before we started keeping them.",
       originalAfterSighting:
         "mark that you've seen this pet and i'll open the original, contact and all.",
-      openOriginal: 'original post',
+      openOriginal: 'original',
       contactsAfterSighting:
         "the owner's contact appears here once you mark that you've seen this pet.",
     },
