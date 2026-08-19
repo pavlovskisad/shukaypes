@@ -27,13 +27,36 @@ const SECTION_LABELS = ['Повідомлення', 'Опис', 'Сообщен�
 //
 // Repeated because the two labels arrive together, and either can be
 // absent on a given layout.
+// THE LABEL IS USUALLY WELDED TO THE NEXT WORD, which the first version
+// of this missed entirely. cheerio's .text() concatenates adjacent text
+// nodes with NO separator, so `<div>Опис</div><div>Загубився…</div>`
+// arrives as
+//
+//     ОписЗагубився кіт на Оболоні
+//
+// Measured, not guessed: after the first strip shipped, «Повідомлення»
+// was gone from 202 of 202 stored bodies and «Опис» survived in 201 of
+// them, because only the first had a newline after it.
+//
+// A capital letter is what tells the two apart. A real word continuing
+// from «Опис» carries on in lowercase — описи, описом, описание — while
+// a welded heading is followed by the first capital of a sentence. That
+// test is case-SENSITIVE on purpose: \p{Lu} under the /i flag matches
+// lowercase too, which would turn this guard into no guard at all and
+// start eating «Описи собаки» from the front.
+function labelBoundary(label: string): RegExp {
+  return new RegExp(`^${label}(?=[\\s:]|$)[\\s:]*`, 'iu');
+}
+function labelWelded(label: string): RegExp {
+  return new RegExp(`^${label}(?=\\p{Lu})`, 'u');
+}
+
 export function stripSectionLabels(body: string): string {
   let out = body.trimStart();
   for (let pass = 0; pass < SECTION_LABELS.length; pass++) {
     const before = out;
     for (const label of SECTION_LABELS) {
-      const re = new RegExp(`^${label}(?=[\\s:]|$)[\\s:]*`, 'iu');
-      out = out.replace(re, '');
+      out = out.replace(labelBoundary(label), '').replace(labelWelded(label), '');
     }
     if (out === before) break;
   }
