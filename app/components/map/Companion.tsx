@@ -32,11 +32,13 @@ import { DogSprite, type DogAnim } from './DogSprite';
 
 const VISIT_LEAVES_PER_CATEGORY = 3;
 
-// Ring radius for the L1 gate. The icon ring's 78 was sized for 68px
-// discs; a 112px word pill at that radius would have «шукати» and
-// «грати» overlapping across the dog. At 86 the container comes out at
-// 308px, which still leaves margins on a 360px-wide phone.
-const GATE_MENU_RADIUS = 86;
+// Ring radius for the four intents, wherever they are shown — the cold
+// start's gate and the level you reach by tapping the dog are the same
+// ring. The icon ring's 78 was sized for 68px discs; a 112px word pill
+// at that radius would have «шукати» and «грати» overlapping across the
+// dog. At 86 the container comes out at 308px, which still leaves
+// margins on a 360px-wide phone.
+const MODE_MENU_RADIUS = 86;
 
 // Builds the visit-leaf actions for the current category. Pulled out
 // so it can be memoised + cached separately from the rest of the menu
@@ -126,6 +128,13 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   const setAppMode = useGameStore((s) => s.setAppMode);
   const setLostFlowOpen = useGameStore((s) => s.setLostFlowOpen);
   const gateOpen = appMode === 'gate';
+  // Whether the ring is currently showing the four intents rather than
+  // the current mode's own verbs. This is a MENU position, not a mode —
+  // being here changes nothing outside the ring. The gate is the one
+  // case where the two coincide: it is the four intents with the rest of
+  // the app held back, and it cannot be left except by answering.
+  const [atModes, setAtModes] = useState(false);
+  const showModes = gateOpen || atModes;
   // Bumped by every mode flip — the signal that anything transient this
   // component owns belongs to the mode we just left.
   const overlayEpoch = useGameStore((s) => s.overlayEpoch);
@@ -290,7 +299,10 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // Reset the drill-down whenever the menu closes (outside tap, action
   // fired, etc). Without this, re-opening would land mid-tree.
   useEffect(() => {
-    if (!menuOpen) setMenuPath([]);
+    if (!menuOpen) {
+      setMenuPath([]);
+      setAtModes(false);
+    }
   }, [menuOpen]);
 
   // The gate opens the menu rather than closing it, so the reset above
@@ -298,8 +310,13 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // we just left would render underneath the four intents. The mode
   // reducer bumps overlayEpoch precisely so component-local state like
   // this can drop itself; that is what it is for.
+  // A real mode change still wipes the menu's position, both the drill
+  // and the level. Only picking a DIFFERENT mode gets here — walking up
+  // to the four intents and back down inside the same mode never bumps
+  // the epoch, which is the whole point of the change.
   useEffect(() => {
     setMenuPath([]);
+    setAtModes(false);
   }, [overlayEpoch]);
 
   const handleTap = useCallback(
@@ -329,31 +346,34 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
         sniffTimerRef.current = setTimeout(() => setSniffing(false), 1500);
         return;
       }
-      // THE DOG IS THE WAY BACK TO THE QUESTION. Tapping it used to open
-      // whatever menu belonged to where you were; now the top of every
-      // menu is the same four words, so a tap on a closed menu goes
-      // straight there rather than opening a mode's own ring first and
-      // making the user tap twice to reach the switcher.
+      // THE DOG OPENS THE FOUR CHOICES — AS A MENU LEVEL, NOT AS A MODE.
+      //
+      // It used to go to 'gate', which meant every tap on the dog paid
+      // the whole mode change: chrome bubbling out, the clear-slate
+      // reducer firing, territory and spots flipping, all to ask a
+      // question the user might answer with the mode they were already
+      // in. So the four words are their own level of THIS menu now, and
+      // nothing outside the ring moves until a different mode is
+      // actually chosen. Someone in explore who wants a walk taps the
+      // dog, taps «гуляти», and drills on — no flicker in between.
       if (!menuOpen) {
         onTapCompanion?.();
-        setAppMode('gate');
+        setAtModes(true);
+        setMenuPath([]);
+        setMenuOpen(true);
         return;
       }
-      // Already open and drilled in: climb one level, so "back out of
-      // the cafes" doesn't overshoot all the way to the question.
-      if (menuPath.length > 0) {
+      // Open, anywhere below the top: the dog is the way back up, and it
+      // is the same way back from every depth.
+      if (!atModes) {
+        setAtModes(true);
         setMenuPath([]);
         return;
       }
-      // At the root of a mode's own menu, the next step up is the question
-      // itself. This is the "tap the dog to get back to the four choices"
-      // gesture — the same one that used to only climb one level.
-      setAppMode('gate');
+      // Already at the top — nothing above it, so this is a dismiss.
+      setMenuOpen(false);
     },
-    // `setMenuOpen` dropped out when the closed-menu branch stopped
-    // opening a menu and started asking the question instead — the mode
-    // reducer owns `menuOpen` now.
-    [menuOpen, menuPath, setAppMode, onTapCompanion, onTap, t, flash]
+    [menuOpen, atModes, setMenuOpen, onTapCompanion, onTap, t, flash]
   );
 
   const fireLeafAction = useCallback(
@@ -485,25 +505,43 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
 
   const handleSelect = useCallback(
     (id: string) => {
-      // The gate answers first — these are modes, not actions, and none
-      // of the drill-down logic below applies to them.
+      // The four intents answer first — they are levels and modes, not
+      // actions, and none of the drill-down logic below applies.
+      //
+      // The rule throughout: only ever call setAppMode when the mode is
+      // genuinely CHANGING. It runs the clear-slate reducer and flips
+      // every piece of chrome, and paying that to re-enter the mode you
+      // are already in is the flicker this whole level exists to avoid.
       if (id.startsWith('mode:')) {
         switch (id) {
-          case 'mode:lost':
-            // The one intent that is not a mode. The map stays where it
-            // was; we open the sheet over the walking view rather than
-            // stranding someone in a mode they did not ask for.
-            setAppMode('explore');
+          case 'mode:lost': {
+            // Not a mode — a sheet. Whatever mode the user was in stays
+            // exactly as it was, so asking about a lost pet from the
+            // territory view does not silently turn the territory off.
+            // The gate is the one exception: it has to be left, or the
+            // sheet opens over a screen with no chrome and a dead map.
+            if (gateOpen) setAppMode('explore');
+            else setMenuOpen(false);
             setLostFlowOpen(true);
             return;
+          }
           case 'mode:search':
-            setAppMode('search');
+            if (appMode !== 'search') setAppMode('search');
+            else setMenuOpen(false);
             return;
           case 'mode:play':
-            setAppMode('play');
+            if (appMode !== 'play') setAppMode('play');
+            else setMenuOpen(false);
             return;
           default:
-            setAppMode('explore');
+            // «гуляти» drops one level rather than closing: it is the
+            // door to walk / visit / meet, and that is what the user
+            // just asked for. Already in explore → no mode change at
+            // all, just the level.
+            if (appMode !== 'explore') setAppMode('explore');
+            setAtModes(false);
+            setMenuPath([]);
+            setMenuOpen(true);
             return;
         }
       }
@@ -537,7 +575,7 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
       fireLeafAction(id);
       setMenuOpen(false);
     },
-    [menuPath, fireLeafAction, setMenuOpen, setAppMode, setLostFlowOpen]
+    [menuPath, fireLeafAction, setMenuOpen, setAppMode, setLostFlowOpen, appMode, gateOpen]
   );
 
   // Visit-leaf cache — keyed by the category drill (path[1] like
@@ -569,7 +607,7 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   );
 
   const currentActions = useMemo(() => {
-    if (gateOpen) return modeActions;
+    if (showModes) return modeActions;
     const nonVisit = getNonVisitActions(menuPath);
     if (nonVisit) return nonVisit;
     // We're at visit:<category>. Use the cached picks if the category
@@ -582,7 +620,7 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
     const leaves = buildVisitLeaves(category, spots, userPosition);
     visitLeavesCacheRef.current = { key: visitKey, leaves };
     return leaves;
-  }, [gateOpen, modeActions, menuPath, spots, userPosition]);
+  }, [showModes, modeActions, menuPath, spots, userPosition]);
 
   // Hide bubbles while the radial menu is open — otherwise the bubble
   // (above the companion) and the top "search" button fight for the
@@ -741,16 +779,19 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // is also paused while a hint shows (see useGameLoop), so this mainly
   // settles same-frame races.
   //
-  // The gate outranks all of it. The question IS the screen at that
-  // point, and an ambient bark or a leftover hint landing in its place
-  // would leave four unexplained words floating around a dog.
+  // The question travels with the four words, wherever they are shown.
+  // It IS their label — four bare verbs orbiting a dog with an ambient
+  // bark above them would read as nonsense. At the gate it also outranks
+  // `hideBubble`, because there the question is the screen.
   const activeBubble = gateOpen
     ? t.modes.ask
     : hideBubble
       ? null
-      : menuOpen
-        ? menuExplainer
-        : supersniffIntro ?? hintBubble ?? localBubble ?? bubble;
+      : atModes
+        ? t.modes.ask
+        : menuOpen
+          ? menuExplainer
+          : supersniffIntro ?? hintBubble ?? localBubble ?? bubble;
 
   // Publish the visible hint so sibling components (the top-left logo
   // in the HUD) can render a matching cue. Clear on unmount.
@@ -766,13 +807,15 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // Deliberately keyed on menuOpen only so the framing doesn't jump
   // when the explainer auto-dismisses while the menu is still open.
   const setMenuCamera = useGameStore((s) => s.setMenuCamera);
-  // The gate always takes the 'explainer' framing, every time and not
-  // just the first: its ring is the widest one we draw and it carries a
-  // question above it, so the dog has to sit low enough that neither the
-  // top pill nor the bubble leaves the screen.
+  // The four intents always take the 'explainer' framing, every time and
+  // not just the first: theirs is the widest ring we draw and it carries
+  // the question above it, so the dog has to sit low enough that neither
+  // the top pill nor the bubble leaves the screen. Keyed on `showModes`
+  // so walking up to that level reframes and walking back down restores
+  // the ordinary menu framing.
   useEffect(() => {
     setMenuCamera(
-      gateOpen
+      showModes
         ? 'explainer'
         : menuOpen
           ? menuHint.seen
@@ -781,7 +824,7 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           : null,
     );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [gateOpen, menuOpen, setMenuCamera]);
+  }, [showModes, menuOpen, setMenuCamera]);
   useEffect(() => () => setMenuCamera(null), [setMenuCamera]);
 
   return (
@@ -825,13 +868,13 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
 
         {/* Explainer rides higher (above the top ring button) so it
             clears the radial menu; every other line tucks just above
-            the nose. The gate's ring is wider still — its top pill
+            the nose. The intents' ring is wider still — its top pill
             reaches ~108px above the dog's centre — so the question has
             to sit higher again or it lands on top of «загубив». */}
         <SpeechBubble
           text={activeBubble}
           bottom={
-            gateOpen
+            showModes
               ? 'calc(50% + 165px)'
               : menuExplainer
                 ? 'calc(50% + 130px)'
@@ -849,11 +892,11 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           // other level has self-explanatory icons and a label below
           // each ring item would clutter the cardinal slots.
           showLabels={menuPath.length === 2 && menuPath[0] === 'visit'}
-          // L1 is words. See the note on TEXT_ITEM in RadialMenu.
-          variant={gateOpen ? 'text' : 'icon'}
+          // The top level is words. See the note on TEXT_ITEM in RadialMenu.
+          variant={showModes ? 'text' : 'icon'}
           // Word pills are wider than icon buttons, so the ring has to
           // open out or opposite pills meet in the middle.
-          radius={gateOpen ? GATE_MENU_RADIUS : undefined}
+          radius={showModes ? MODE_MENU_RADIUS : undefined}
         />
       </div>
     </MapLibreMarker>
