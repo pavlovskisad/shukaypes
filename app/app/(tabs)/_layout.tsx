@@ -6,6 +6,7 @@ import { colors } from '../../constants/colors';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { HERO } from '../../constants/sizing';
+import { INK } from '../../constants/surface';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import { pickBottomInset } from '../../services/telegram';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
@@ -185,7 +186,11 @@ export default function TabsLayout() {
           // On a 64-tall bar that's 32 px corners → capsule shape.
           borderRadius: R.pill,
           backgroundColor: '#ffffff',
-          borderTopWidth: 0,
+          // Ink on all four sides. borderTopWidth used to be zeroed
+          // because the bar bled off the bottom of the screen; it
+          // floats now, so it is a piece of paper like everything else.
+          borderWidth: 2,
+          borderColor: INK,
           // Lifted shadow on all sides (was upward-only since the
           // bar bled to bottom). Centred 8 px offset + soft radius
           // matches the chat input pill / HUD pills.

@@ -138,7 +138,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               fontWeight: 700,
               letterSpacing: 0.4,
               textTransform: 'lowercase',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
+              boxShadow: SURFACE.chip,
               border: SURFACE.hair,
             }}
           >
@@ -162,7 +162,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              boxShadow: SURFACE.chip,
               fontSize: TYPE.display,
               lineHeight: 1,
             }}

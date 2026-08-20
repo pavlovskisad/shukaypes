@@ -50,6 +50,13 @@ export const SURFACE = {
   // Sheets, which cover more and should feel further off the surface.
   lift: '0 10px 26px rgba(0,0,0,0.18)',
 
+  // Chips, badges, close buttons — anything small enough that the card
+  // shadow would swamp it. This existed already, written out by hand in
+  // eight places at four slightly different alphas (0.08, 0.10, 0.15,
+  // 0.18) and two blurs (12 and 14). Nobody chose those differences;
+  // they are what happens when a recipe is copied rather than named.
+  chip: '0 4px 12px rgba(0,0,0,0.16)',
+
   // For a chip lying on top of a photo, where the ink edge alone can
   // land on a dark patch and vanish.
   onPhoto: '0 4px 14px rgba(0,0,0,0.28)',

@@ -127,7 +127,7 @@ export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+          boxShadow: SURFACE.chip,
           fontSize: TYPE.display,
           lineHeight: 1,
           zIndex: 1,

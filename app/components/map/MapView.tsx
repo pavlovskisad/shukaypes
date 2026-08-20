@@ -75,6 +75,7 @@ import type { LatLng } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { SURFACE } from '../../constants/surface';
 
 const TOKEN_REFRESH_MS = 15000;
 // Extra syncs while actually walking, so a fast mover isn't looking at a
@@ -3224,7 +3225,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               fontSize: TYPE.body,
               fontWeight: 800,
               letterSpacing: 0.3,
-              boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+              boxShadow: SURFACE.chip,
             }}
           >
             {navDistance ?? '…'}
@@ -3256,7 +3257,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               fontSize: 20,
               fontWeight: 700,
               color: '#1a1a1a',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+              boxShadow: SURFACE.chip,
             }}
           >
             ✕
@@ -3406,7 +3407,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
+              boxShadow: SURFACE.chip,
               border: '2px solid rgba(255,255,255,0.08)',
             }}
           >

@@ -159,7 +159,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               fontWeight: 700,
               letterSpacing: 0.4,
               textTransform: 'lowercase',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+              boxShadow: SURFACE.chip,
               border: SURFACE.hair,
             }}
           >
@@ -189,7 +189,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                   fontSize: TYPE.small,
                   fontWeight: 700,
                   letterSpacing: 0.3,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+                  boxShadow: SURFACE.chip,
                   border: SURFACE.hair,
                 }}
               >
@@ -211,7 +211,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                boxShadow: SURFACE.chip,
                 fontSize: TYPE.display,
                 lineHeight: 1,
               }}

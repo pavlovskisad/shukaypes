@@ -98,9 +98,8 @@ export const HUD_OVERLAY_PILL: CSSProperties = {
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.small,
   fontWeight: 600,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-  // The house hairline: 1px at 0.06 alpha.
-  border: '1px solid rgba(0,0,0,0.06)',
+  boxShadow: SURFACE.chip,
+  border: SURFACE.hair,
   userSelect: 'none',
   whiteSpace: 'nowrap',
 };
