@@ -7,9 +7,20 @@ import { Splash } from '../components/ui/Splash';
 import { InviteGate } from '../components/ui/InviteGate';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { ConnectionBanner } from '../components/ui/ConnectionBanner';
+import { AboutModal } from '../components/ui/AboutModal';
+import { useGameStore } from '../stores/gameStore';
 import { useAccessStore } from '../stores/accessStore';
 import { notifyTelegramReady } from '../services/telegram';
 import { installGlobalCrashHandlers } from '../services/crashReport';
+// Reads the one flag and renders the one sheet. Split out so the root
+// layout itself does not subscribe to the game store and re-render the
+// whole app every time something in it moves.
+function AboutSheetHost() {
+  const open = useGameStore((s) => s.aboutOpen);
+  const setOpen = useGameStore((s) => s.setAboutOpen);
+  return <AboutModal open={open} onClose={() => setOpen(false)} />;
+}
+
 // Side-effect import — patches RN's Text/TextInput defaults so every
 // instance picks up SYSTEM_FONT even when the component author didn't
 // add fontFamily to its style. Must be imported once at app root.
@@ -68,6 +79,11 @@ export default function RootLayout() {
               sits under the Splash so a cold start is not greeted by a
               warning about a request that has not been made yet. */}
           <ConnectionBanner />
+          {/* Hosted at the root, not on the map, because it is opened
+              from the profile tab now — the companion's ring no longer
+              carries a «?». A sheet mounted inside one tab cannot be
+              opened from another. */}
+          <AboutSheetHost />
           <Splash />
         </ErrorBoundary>
       </SafeAreaProvider>

@@ -10,10 +10,11 @@ import { useHint } from '../../hooks/useHint';
 import { useStrings } from '../../i18n/useStrings';
 import {
   RadialMenu,
-  PRIMARY_ACTIONS,
+  EXPLORE_ACTIONS,
   WALK_SHAPE_ACTIONS,
   WALK_DISTANCE_ACTIONS,
   VISIT_CATEGORY_ACTIONS,
+  MODE_ACTION_IDS,
   type RadialAction,
 } from './RadialMenu';
 import type { LatLng } from '@shukajpes/shared';
@@ -60,7 +61,7 @@ function buildVisitLeaves(
 // computed separately in the component so they can be ref-cached.
 function getNonVisitActions(path: string[]): RadialAction[] | null {
   const head = path[0];
-  if (!head) return PRIMARY_ACTIONS;
+  if (!head) return EXPLORE_ACTIONS;
   if (head === 'walk') {
     if (path.length === 1) return WALK_SHAPE_ACTIONS;
     const shape = path[1]!.replace('walk:', ''); // 'roundtrip' | 'oneway'
@@ -72,7 +73,7 @@ function getNonVisitActions(path: string[]): RadialAction[] | null {
   if (head === 'visit' && path.length === 1) return VISIT_CATEGORY_ACTIONS;
   // null = caller falls through to visit-leaf logic
   if (head === 'visit') return null;
-  return PRIMARY_ACTIONS;
+  return EXPLORE_ACTIONS;
 }
 
 
@@ -112,9 +113,25 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // Supersniff (dog-cam search) mode — used to fire the one-time "how it works"
   // intro hint on entry.
   const dogCam = useGameStore((s) => s.dogCam);
+  // The four-way question. While it's up the ring is the only live thing
+  // on screen, so most of the Companion's usual behaviour is suppressed.
+  const appMode = useGameStore((s) => s.appMode);
+  const setAppMode = useGameStore((s) => s.setAppMode);
+  const setLostFlowOpen = useGameStore((s) => s.setLostFlowOpen);
+  const gateOpen = appMode === 'gate';
+  // Whether the ring is currently showing the four intents rather than
+  // the current mode's own verbs. This is a MENU position, not a mode —
+  // being here changes nothing outside the ring. The gate is the one
+  // case where the two coincide: it is the four intents with the rest of
+  // the app held back, and it cannot be left except by answering.
+  const [atModes, setAtModes] = useState(false);
+  const showModes = gateOpen || atModes;
+  // Bumped by every mode flip — the signal that anything transient this
+  // component owns belongs to the mode we just left.
+  const overlayEpoch = useGameStore((s) => s.overlayEpoch);
   const [localBubble, setLocalBubble] = useState<string | null>(null);
   // Stack of branch ids representing the current menu drill-down. Empty
-  // = root (PRIMARY_ACTIONS). Tapping the companion always resets to
+  // = root (EXPLORE_ACTIONS). Tapping the companion always resets to
   // root from any depth (matches user expectation: "essentials are
   // always one tap away on the dog").
   const [menuPath, setMenuPath] = useState<string[]>([]);
@@ -273,8 +290,25 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // Reset the drill-down whenever the menu closes (outside tap, action
   // fired, etc). Without this, re-opening would land mid-tree.
   useEffect(() => {
-    if (!menuOpen) setMenuPath([]);
+    if (!menuOpen) {
+      setMenuPath([]);
+      setAtModes(false);
+    }
   }, [menuOpen]);
+
+  // The gate opens the menu rather than closing it, so the reset above
+  // never fires on the way in — and a drill-down left over from the mode
+  // we just left would render underneath the four intents. The mode
+  // reducer bumps overlayEpoch precisely so component-local state like
+  // this can drop itself; that is what it is for.
+  // A real mode change still wipes the menu's position, both the drill
+  // and the level. Only picking a DIFFERENT mode gets here — walking up
+  // to the four intents and back down inside the same mode never bumps
+  // the epoch, which is the whole point of the change.
+  useEffect(() => {
+    setMenuPath([]);
+    setAtModes(false);
+  }, [overlayEpoch]);
 
   const handleTap = useCallback(
     (e: React.MouseEvent) => {
@@ -283,37 +317,61 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
       // Google's map-level onClick can race against ours at low zoom and
       // would otherwise close the menu we just opened.
       onTap?.();
-      // Supersniff: the dog is working the trail — no radial menu, and no
-      // onTapCompanion either (its recenter would fight the follow cam).
-      // A tap gets the profile-scene treatment instead: a quick sniff
-      // beat + a random woof. Live store read so the closure can't go
-      // stale across the mode toggle.
-      if (useGameStore.getState().dogCam) {
-        const woofs = t.bubbles.woofs;
-        flash(
-          woofs[Math.floor(Math.random() * woofs.length)] ?? t.bubbles.simpleWoof,
-          2500,
-        );
+      // The gate is a question, and a question you can tap away is not a
+      // question. The dog does not react, does not woof, does not close
+      // the ring — the only way out is one of the four answers.
+      if (useGameStore.getState().appMode === 'gate') return;
+      // Supersniff used to swallow the tap entirely: a sniff beat and a
+      // woof, and nothing else. That was right while the dog's menu was
+      // a pile of walking verbs with no business on a search — but the
+      // top of the menu is the way out of a mode now, and supersniff was
+      // the one mode you could not leave that way. The corner logo is
+      // not a worse answer, it is a different one, and "tap the dog" has
+      // to mean the same thing everywhere or it means nothing.
+      //
+      // So the beat stays — the dog still reacts to being touched — and
+      // the ring opens on top of it. No woof, because the question takes
+      // the bubble and two lines cannot share it.
+      const sniffing = useGameStore.getState().dogCam;
+      if (sniffing) {
         setSniffing(true);
         if (sniffTimerRef.current) clearTimeout(sniffTimerRef.current);
         sniffTimerRef.current = setTimeout(() => setSniffing(false), 1500);
-        return;
       }
+      // THE DOG OPENS THE FOUR CHOICES — AS A MENU LEVEL, NOT AS A MODE.
+      //
+      // It used to go to 'gate', which meant every tap on the dog paid
+      // the whole mode change: chrome bubbling out, the clear-slate
+      // reducer firing, territory and spots flipping, all to ask a
+      // question the user might answer with the mode they were already
+      // in. So the four words are their own level of THIS menu now, and
+      // nothing outside the ring moves until a different mode is
+      // actually chosen. Someone in explore who wants a walk taps the
+      // dog, taps «гуляти», and drills on — no flicker in between.
       if (!menuOpen) {
+        // Recentring is the one thing supersniff still does not want: it
+        // would fight the chase camera that is following the dog down
+        // the trail. The ring does not need it — in that mode the dog is
+        // already framed.
+        if (!sniffing) onTapCompanion?.();
+        setAtModes(true);
+        setMenuPath([]);
         setMenuOpen(true);
-        onTapCompanion?.();
         return;
       }
-      // Already open: tap on the dog jumps back to the root level if
-      // we're drilled in, or closes the menu if we're already at root.
-      // Same gesture handles "back to essentials" and "dismiss".
-      if (menuPath.length > 0) {
+      // Open, anywhere below the top: the dog is the way back up, and it
+      // is the same way back from every depth.
+      if (!atModes) {
+        setAtModes(true);
         setMenuPath([]);
         return;
       }
+      // Already at the top — nothing above it, so this is a dismiss.
       setMenuOpen(false);
     },
-    [menuOpen, menuPath, setMenuOpen, onTapCompanion, onTap, t, flash]
+    // `t` and `flash` left with the supersniff woof — the bubble carries
+    // the question now, so this handler no longer says anything.
+    [menuOpen, atModes, setMenuOpen, onTapCompanion, onTap]
   );
 
   const fireLeafAction = useCallback(
@@ -340,7 +398,7 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
           return;
         }
         case 'meet': {
-          flash('no walkers around yet 👥');
+          flash(t.modes.noWalkers);
           return;
         }
         case 'about': {
@@ -434,14 +492,57 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
         return;
       }
 
-      const label = PRIMARY_ACTIONS.find((a) => a.id === id)?.label ?? id;
+      const label = EXPLORE_ACTIONS.find((a) => a.id === id)?.label ?? id;
       flash(`${label}! coming soon 🐾`);
     },
-    [router, setSelectedDog, setSelectedSpot, flash]
+    // `t` joined the list when the "nobody around" line stopped being a
+    // hardcoded English string. It only changes when the user switches
+    // language, so it costs one rebuild of this callback per toggle.
+    [router, setSelectedDog, setSelectedSpot, flash, t]
   );
 
   const handleSelect = useCallback(
     (id: string) => {
+      // The four intents answer first — they are levels and modes, not
+      // actions, and none of the drill-down logic below applies.
+      //
+      // The rule throughout: only ever call setAppMode when the mode is
+      // genuinely CHANGING. It runs the clear-slate reducer and flips
+      // every piece of chrome, and paying that to re-enter the mode you
+      // are already in is the flicker this whole level exists to avoid.
+      if (id.startsWith('mode:')) {
+        switch (id) {
+          case 'mode:lost': {
+            // Not a mode — a sheet. Whatever mode the user was in stays
+            // exactly as it was, so asking about a lost pet from the
+            // territory view does not silently turn the territory off.
+            // The gate is the one exception: it has to be left, or the
+            // sheet opens over a screen with no chrome and a dead map.
+            if (gateOpen) setAppMode('explore');
+            else setMenuOpen(false);
+            setLostFlowOpen(true);
+            return;
+          }
+          case 'mode:search':
+            if (appMode !== 'search') setAppMode('search');
+            else setMenuOpen(false);
+            return;
+          case 'mode:play':
+            if (appMode !== 'play') setAppMode('play');
+            else setMenuOpen(false);
+            return;
+          default:
+            // «гуляти» drops one level rather than closing: it is the
+            // door to walk / visit / meet, and that is what the user
+            // just asked for. Already in explore → no mode change at
+            // all, just the level.
+            if (appMode !== 'explore') setAppMode('explore');
+            setAtModes(false);
+            setMenuPath([]);
+            setMenuOpen(true);
+            return;
+        }
+      }
       // At root: walk and visit branch deeper, everything else is a leaf.
       if (menuPath.length === 0) {
         if (id === 'walk' || id === 'visit') {
@@ -472,7 +573,7 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
       fireLeafAction(id);
       setMenuOpen(false);
     },
-    [menuPath, fireLeafAction, setMenuOpen]
+    [menuPath, fireLeafAction, setMenuOpen, setAppMode, setLostFlowOpen, appMode, gateOpen]
   );
 
   // Visit-leaf cache — keyed by the category drill (path[1] like
@@ -486,7 +587,25 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
     if (!menuOpen) visitLeavesCacheRef.current = null;
   }, [menuOpen]);
 
+  // The four intents, labelled from i18n. Built here rather than in
+  // RadialMenu because only the ids are static — the words are Ukrainian
+  // by default and come from the strings table.
+  const modeActions = useMemo<RadialAction[]>(
+    () =>
+      MODE_ACTION_IDS.map((id) => ({
+        id,
+        label: {
+          'mode:lost': t.modes.lost,
+          'mode:search': t.modes.search,
+          'mode:explore': t.modes.explore,
+          'mode:play': t.modes.play,
+        }[id],
+      })),
+    [t],
+  );
+
   const currentActions = useMemo(() => {
+    if (showModes) return modeActions;
     const nonVisit = getNonVisitActions(menuPath);
     if (nonVisit) return nonVisit;
     // We're at visit:<category>. Use the cached picks if the category
@@ -499,7 +618,7 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
     const leaves = buildVisitLeaves(category, spots, userPosition);
     visitLeavesCacheRef.current = { key: visitKey, leaves };
     return leaves;
-  }, [menuPath, spots, userPosition]);
+  }, [showModes, modeActions, menuPath, spots, userPosition]);
 
   // Hide bubbles while the radial menu is open — otherwise the bubble
   // (above the companion) and the top "search" button fight for the
@@ -524,8 +643,21 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   const hintsAllowed = useGameStore((s) => s.hintsAllowed);
   const noRealBubble = !menuOpen && !hideBubble && !bubble && !localBubble;
   const hintsReady = hintsAllowed && noRealBubble;
-  const longPressHint = useHint('map:long-press-to-sniff', {
+  // FIRST, because the logo is the one control that changes what the
+  // whole screen IS, and a brand mark in a corner gives no clue that it
+  // does anything at all. It used to be last, on the reasoning that
+  // supersniff was the deepest feature and the user should learn the map
+  // first — but the button is not one feature any more, it is the way
+  // between all three, and somebody who never discovers it only ever
+  // sees a third of the app.
+  const modesHint = useHint('map:modes', {
     ready: hintsReady,
+    showDelayMs: 1200,
+    autoDismissMs: 6000,
+    persist: false,
+  });
+  const longPressHint = useHint('map:long-press-to-sniff', {
+    ready: hintsReady && modesHint.seen && !modesHint.visible,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     // FIXME(hints): persist:false while we iterate on the
@@ -550,17 +682,6 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // arrive strictly one at a time. Pulses the pill via activeHint.
   const spotsHint = useHint('map:spots-toggle', {
     ready: hintsReady && hudMetersHint.seen && !hudMetersHint.visible,
-    showDelayMs: 1200,
-    autoDismissMs: 6000,
-    persist: false,
-  });
-  // Soft fan-out, final step: super-sniff (the top-left logo toggles it —
-  // a mode-switching brand logo is undiscoverable on its own). Saved for
-  // last because it's the deepest feature (hunting lost dogs); by now the
-  // user knows the map basics. Chained after the spots toggle so the map
-  // hints arrive strictly one at a time. Pulses the logo via activeHint.
-  const supersniffHint = useHint('map:supersniff', {
-    ready: hintsReady && spotsHint.seen && !spotsHint.visible,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     persist: false,
@@ -614,14 +735,14 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // state: once a hint has fired (it only fires when idle) it owns the
   // bubble for its full window — the snap-to-dog ease it triggers would
   // otherwise flip `hintsReady` false and yank the bubble away mid-show.
-  const activeHintId = longPressHint.visible
-    ? 'map:long-press-to-sniff'
-    : hudMetersHint.visible
-      ? 'map:hud-meters'
-      : spotsHint.visible
-        ? 'map:spots-toggle'
-        : supersniffHint.visible
-          ? 'map:supersniff'
+  const activeHintId = modesHint.visible
+    ? 'map:modes'
+    : longPressHint.visible
+      ? 'map:long-press-to-sniff'
+      : hudMetersHint.visible
+        ? 'map:hud-meters'
+        : spotsHint.visible
+          ? 'map:spots-toggle'
           : // Gated on dogCam so the line + logo pulse drop the moment the
             // user exits (the hinted gesture) instead of riding out the
             // window into normal mode, where "get back to walks" is stale.
@@ -629,24 +750,42 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
             ? 'map:supersniff-exit'
             : null;
   const hintBubble =
-    activeHintId === 'map:long-press-to-sniff'
-      ? t.hints.longPressToSniff
-      : activeHintId === 'map:hud-meters'
-        ? t.hints.hudMeters
-        : activeHintId === 'map:spots-toggle'
-          ? t.hints.spotsToggle
-          : activeHintId === 'map:supersniff'
-            ? t.hints.supersniff
+    activeHintId === 'map:modes'
+      ? t.hints.modes
+      : activeHintId === 'map:long-press-to-sniff'
+        ? t.hints.longPressToSniff
+        : activeHintId === 'map:hud-meters'
+          ? t.hints.hudMeters
+          : activeHintId === 'map:spots-toggle'
+            ? t.hints.spotsToggle
             : activeHintId === 'map:supersniff-exit'
               ? t.hints.supersniffExit
               : null;
-  // While the menu is open we normally suppress the bubble — except
-  // for the one-shot radial-menu explainer, which is meant to sit
-  // alongside the open menu at root and name the options.
-  const menuExplainer =
-    menuOpen && menuPath.length === 0 && menuHint.visible
-      ? t.hints.radialMenu
-      : null;
+  // EVERY LEVEL NAMES ITSELF, every time rather than once.
+  //
+  // It used to be a single one-shot hint over the root, which was the
+  // right shape when that ring held six loosely-related verbs and the
+  // line was a tutorial. Icons that answer one question are not a
+  // tutorial — they are a question, and a question asked only on your
+  // first ever visit is not much of a question. Below the root it was
+  // worse: nothing was said at all, so a walk shape and a walk distance
+  // were two anonymous pairs of discs, and five spot categories were
+  // five guesses. The dog talks the whole way down now.
+  //
+  // `menuHint` is kept for its `seen` flag, which still decides the
+  // camera framing.
+  const menuExplainer = useMemo(() => {
+    if (!menuOpen || showModes) return null;
+    const [head, second] = menuPath;
+    if (!head) return t.modes.exploreAsk;
+    if (head === 'walk') {
+      return second ? t.modes.walkDistanceAsk : t.modes.walkShapeAsk;
+    }
+    if (head === 'visit') {
+      return second ? t.modes.visitSpotAsk : t.modes.visitCategoryAsk;
+    }
+    return null;
+  }, [menuOpen, showModes, menuPath, t]);
   // Supersniff intro bubble — shown over ambient/real barks for its window.
   const supersniffIntro =
     dogCam && supersniffIntroHint.visible ? t.hints.supersniffIntro : null;
@@ -657,11 +796,20 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // parent bubbles (greeting / narration / ambient). Ambient generation
   // is also paused while a hint shows (see useGameLoop), so this mainly
   // settles same-frame races.
-  const activeBubble = hideBubble
-    ? null
-    : menuOpen
-      ? menuExplainer
-      : supersniffIntro ?? hintBubble ?? localBubble ?? bubble;
+  //
+  // The question travels with the four words, wherever they are shown.
+  // It IS their label — four bare verbs orbiting a dog with an ambient
+  // bark above them would read as nonsense. At the gate it also outranks
+  // `hideBubble`, because there the question is the screen.
+  const activeBubble = gateOpen
+    ? t.modes.ask
+    : hideBubble
+      ? null
+      : atModes
+        ? t.modes.ask
+        : menuOpen
+          ? menuExplainer
+          : supersniffIntro ?? hintBubble ?? localBubble ?? bubble;
 
   // Publish the visible hint so sibling components (the top-left logo
   // in the HUD) can render a matching cue. Clear on unmount.
@@ -677,10 +825,24 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // Deliberately keyed on menuOpen only so the framing doesn't jump
   // when the explainer auto-dismisses while the menu is still open.
   const setMenuCamera = useGameStore((s) => s.setMenuCamera);
+  // The four intents always take the 'explainer' framing, every time and
+  // not just the first: theirs is the widest ring we draw and it carries
+  // the question above it, so the dog has to sit low enough that neither
+  // the top pill nor the bubble leaves the screen. Keyed on `showModes`
+  // so walking up to that level reframes and walking back down restores
+  // the ordinary menu framing.
   useEffect(() => {
-    setMenuCamera(menuOpen ? (menuHint.seen ? 'center' : 'explainer') : null);
+    setMenuCamera(
+      showModes
+        ? 'explainer'
+        : menuOpen
+          ? menuHint.seen
+            ? 'center'
+            : 'explainer'
+          : null,
+    );
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menuOpen, setMenuCamera]);
+  }, [showModes, menuOpen, setMenuCamera]);
   useEffect(() => () => setMenuCamera(null), [setMenuCamera]);
 
   return (
@@ -722,24 +884,40 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
             instead of the sprite div. */}
         <DogSprite anim={anim} facingLeft={facingLeft} />
 
-        {/* Explainer rides higher (above the top ring button) so it
-            clears the radial menu; every other line tucks just above
-            the nose. */}
+        {/* No offset any more, in any state. Both menus the dog speaks
+            over hang BELOW it now, so there is nothing at twelve
+            o'clock to clear and the line sits at its nose like
+            everything else it says. The 150px and 81px lifts this
+            carried existed only to climb over a button that is gone. */}
         <SpeechBubble
           text={activeBubble}
-          bottom={menuExplainer ? 'calc(50% + 130px)' : undefined}
+          // Two rings, two clearances. The intents put a pill at twelve
+          // o'clock whose top edge is ~140px above the dog's centre, so
+          // the question has to start above that. The walking ring is
+          // upside down and has nothing up there at all, so its line
+          // tucks in at the nose like every other thing the dog says.
         />
         <RadialMenu
           open={menuOpen}
           actions={currentActions}
           onSelect={handleSelect}
-          // The map is light, so the menu is dark — a light-frosted menu
-          // disappeared into it.
-          inverted
+          // White buttons, black text and icons — the same way round as
+          // the HUD pills and the dashboard, so the dog's menu now reads
+          // as part of the app's chrome rather than as a dark object
+          // dropped on top of it. `inverted` also drives the Icon's
+          // invert filter, so leaving it off is what turns the glyphs
+          // black; the two cannot be set apart.
+          inverted={false}
           // Show readable names at the named-spot leaves only — every
           // other level has self-explanatory icons and a label below
           // each ring item would clutter the cardinal slots.
           showLabels={menuPath.length === 2 && menuPath[0] === 'visit'}
+          variant={showModes ? 'text' : 'icon'}
+          // Every level hangs under the dog now — the four intents in two
+          // columns, and every level of icons in a row. The ring is gone
+          // from the companion entirely: a conversation that answers in
+          // one place and then starts orbiting is two interfaces.
+          layout={showModes ? 'grid' : 'row'}
         />
       </div>
     </MapLibreMarker>

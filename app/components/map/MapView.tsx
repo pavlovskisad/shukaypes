@@ -18,6 +18,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { MapContext } from './MapContext';
 import {
   LIGHT_PALETTE,
+  PLAY_PALETTE,
   applyCrayonOverride,
   setStreetLabelsVisible,
   fetchCrayonStyleSpec,
@@ -328,7 +329,12 @@ export default function MapViewWeb() {
   // "background click" that closes it ~1 frame later. Record every
   // companion tap and suppress the map click for a short window.
   const companionTappedAtRef = useRef<number>(0);
-  const SUPPRESS_MAP_CLICK_MS = 300;
+  // How long the lost-pet deck takes to slide out of the menu's way, and
+// back. Matches the modal family's 280ms so the whole app moves on one
+// clock.
+const DECK_ANIM_MS = 280;
+
+const SUPPRESS_MAP_CLICK_MS = 300;
   // Which cluster is currently "spiderified" — tapping a cluster pops its
   // pets out around the center. Tapping elsewhere (the map background or
   // another cluster) collapses it. Lives locally because nothing else in
@@ -346,6 +352,10 @@ export default function MapViewWeb() {
   // Supersniff (the logo toggle — see index.tsx).
   // Drives the low chase-camera follow effect + DOGCAM_* constants below.
   const dogCam = useGameStore((s) => s.dogCam);
+  const appMode = useGameStore((s) => s.appMode);
+  // The companion's menu is open. Read here so the lost-pet deck can get
+  // out of its way — see the note at the deck's mount.
+  const menuOpen = useGameStore((s) => s.menuOpen);
   // Sniff-and-lead search mode assignment (which lost dog + spot). Set by the
   // search controller below while dogCam is on.
   const searchTarget = useGameStore((s) => s.searchTarget);
@@ -399,6 +409,9 @@ export default function MapViewWeb() {
   // for "just marked here" / "not in the mood to mark".
   const territoryMarks = useGameStore((s) => s.territoryMarks);
   const territoryShapes = useGameStore((s) => s.territoryShapes);
+  // Whether the claims are drawn at all. Visibility only — see the note
+  // at the TerritoryLayer mount below.
+  const territoryVisible = useGameStore((s) => s.territoryVisible);
   const lastMark = useGameStore((s) => s.lastMark);
   const markMood = useGameStore((s) => s.markMood);
   // …and the PvP half: whoever else holds ground within sight, plus the
@@ -527,6 +540,38 @@ export default function MapViewWeb() {
   // map.
   const currentScreen = useGameStore((s) => s.currentScreen);
   const onMapScreen = currentScreen === 'map';
+
+  // THE DECK LEAVES AND ARRIVES, it does not blink.
+  //
+  // Same three states the dashboard uses, for the same reason: an
+  // element that unmounts cannot animate on its way out, so it has to
+  // outlive the condition that hid it. Visible → still mounted and
+  // sliding away → gone. `deckVisible` is the truth; `deckMounted` is
+  // what the DOM holds.
+  // The city goes near-monochrome while territory is drawn over it, so a
+  // dozen owner colours are the only hues on screen. See PLAY_PALETTE.
+  const mapPalette = territoryVisible ? PLAY_PALETTE : LIGHT_PALETTE;
+
+  const deckVisible = DOG_CAM && dogCam && onMapScreen && !menuOpen;
+  const [deckMounted, setDeckMounted] = useState(deckVisible);
+  const [deckAnimating, setDeckAnimating] = useState(false);
+  const deckInitRef = useRef(true);
+  useLayoutEffect(() => {
+    if (deckInitRef.current) {
+      deckInitRef.current = false;
+      setDeckMounted(deckVisible);
+      return;
+    }
+    setDeckAnimating(true);
+    // Mount FIRST when arriving, so the element exists for its own
+    // entrance; unmount LAST when leaving, once the exit has played.
+    if (deckVisible) setDeckMounted(true);
+    const timer = setTimeout(() => {
+      setDeckAnimating(false);
+      if (!deckVisible) setDeckMounted(false);
+    }, DECK_ANIM_MS);
+    return () => clearTimeout(timer);
+  }, [deckVisible]);
   // Hint cue + radial-menu camera mode, consumed by camera/overlay
   // effects below: the long-press hint draws a "press the map" pulse,
   // and the menu camera mode frames the dog (lower for the first-time
@@ -751,6 +796,29 @@ export default function MapViewWeb() {
       showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3500);
     }
   }, [dogCam, showBubble, t]);
+
+  // Entering the territory view, the dog says what it is.
+  //
+  // This mechanic is deliberately nameless everywhere else — D-17: the
+  // rewards are passive so they land on a player who never learns it has
+  // a name. That holds while it is invisible. Once somebody has asked
+  // «хто тримає цей район?» and the city has coloured itself in, silence
+  // is just a puzzle. Init-guarded like the sniff line, so a reload
+  // straight into the view does not open with a lecture.
+  const playBubbleInitRef = useRef(true);
+  useEffect(() => {
+    if (playBubbleInitRef.current) {
+      playBubbleInitRef.current = false;
+      return;
+    }
+    if (appMode !== 'play') return;
+    const lines = t.modes.playIntro;
+    // Double the usual hold. Every other bubble is a reaction to something
+    // the user just did and can be re-triggered by doing it again; this one
+    // is the only explanation of a mode's rules and fires once on entry, so
+    // it gets long enough to actually be read.
+    showBubble(lines[Math.floor(Math.random() * lines.length)]!, 8400);
+  }, [appMode, showBubble, t]);
 
   // Territory: the dog announces its own claims. Seq-keyed (the store
   // bumps it once per server-confirmed mark) and init-guarded so a
@@ -1475,6 +1543,12 @@ export default function MapViewWeb() {
   // pauses, resuming once you're idle on the map again.
   const hintsAllowed =
     onMapScreen &&
+    // The gate is the least calm moment there is: the dog has asked a
+    // question and is waiting. A hint firing here would be spent
+    // invisibly — the bubble is holding the question, and the surfaces
+    // hints point at (the logo, the HUD pin) are bubbled out — and each
+    // one only ever fires once per device.
+    appMode !== 'gate' &&
     !mapMoving &&
     !selectedDogId &&
     !selectedSpotId &&
@@ -2333,6 +2407,12 @@ export default function MapViewWeb() {
         map.on('movestart', () => setMapMoving(true));
         map.on('moveend', () => setMapMoving(false));
         map.on('click', () => {
+          // While the dog is asking, a tap on the map is not a dismiss.
+          // The ring closes by being answered and by nothing else — this
+          // is the "tap-to-discard blocked" half of the gate, and it has
+          // to sit here rather than under an overlay, because the ring
+          // and the dog are themselves children of the map.
+          if (useGameStore.getState().appMode === 'gate') return;
           if (
             Date.now() - companionTappedAtRef.current <
             SUPPRESS_MAP_CLICK_MS
@@ -2376,7 +2456,7 @@ export default function MapViewWeb() {
     // sets both paint colours AND text-field language, so a lang flip
     // from the profile toggle re-localises street/place labels live.
     const apply = () => {
-      applyCrayonOverride(map, LIGHT_PALETTE, lang);
+      applyCrayonOverride(map, mapPalette, lang);
       // applyCrayonOverride resets transportation_name visibility to
       // 'visible', so re-apply the pitch-based hide right after.
       syncStreetLabels();
@@ -2404,7 +2484,7 @@ export default function MapViewWeb() {
     return () => {
       map.off('idle', apply);
     };
-  }, [lang, syncStreetLabels]);
+  }, [lang, mapPalette, syncStreetLabels]);
 
   // Nearby players (real + bots) to render as other dogs — only in view, and
   // capped to the nearest N for perf (each walker runs a glide loop + sprite).
@@ -2886,7 +2966,11 @@ export default function MapViewWeb() {
             the ordinary map and noise on top of a search — same paint,
             different job. See threeBuildingsLayer.territoryPaintHidden,
             which mutes the blocks for the same reason. */}
-        {!(DOG_CAM && dogCam) && !selectedDogId && onMapScreen ? (
+        {/* …and now it is also a lens the user asks for. Ground is claimed
+            on every walk in every mode — marking hangs off /collect/path
+            and is nowhere near this flag — but you only SEE the claims
+            inside 'грати'. The map the app opens on is the clean one. */}
+        {territoryVisible && !(DOG_CAM && dogCam) && !selectedDogId && onMapScreen ? (
           <TerritoryLayer
             shapes={territoryShapes}
             marks={territoryMarks}
@@ -2954,7 +3038,16 @@ export default function MapViewWeb() {
           LostDogCardView is width/height 100%, so it has to be given a
           box. Rendered bare it collapses to nothing, which is exactly
           what it did — the card was there the whole time with no size. */}
-      {DOG_CAM && dogCam && onMapScreen ? (
+      {/* …and it steps aside while the dog is being asked something. The
+          menu hangs under the dog and the deck sits at the bottom of the
+          screen, and in supersniff those are the same place — the four
+          answers landed on top of a pet's photo. Unmounting is the right
+          move rather than dimming: the deck is a swipeable thing with a
+          focused card, and something you can still catch with a thumb
+          under a menu is worse than something that is plainly gone. It
+          comes back the moment the menu closes, on the same state it
+          left. */}
+      {deckMounted ? (
         <View
           style={{
             position: 'absolute',
@@ -2963,8 +3056,20 @@ export default function MapViewWeb() {
             bottom: -14,
             alignItems: 'center',
             zIndex: Z.HUD_CHIPS,
+            // Slides down and fades as it leaves, back up as it returns.
+            // RN's ViewStyle has no `animation`; RN-Web hands it to CSS
+            // anyway, the same escape hatch the dashboard uses.
+            ...({
+              animation: deckAnimating
+                ? `deck-${deckVisible ? 'in' : 'out'} ${DECK_ANIM_MS}ms ease both`
+                : undefined,
+            } as object),
           }}
-          pointerEvents="box-none"
+          // Deaf the moment it starts leaving. The deck is swipeable, and
+          // a card sliding away under a thumb should not still answer to
+          // it — nor should it swallow a tap meant for the menu that
+          // replaced it.
+          pointerEvents={deckVisible ? 'box-none' : 'none'}
         >
           {focusDog && !(prompt?.kind === 'confirm' && !searchTarget) ? (
             <View style={{ width: 288, height: 252, marginBottom: 30 }} pointerEvents="none">
@@ -3390,15 +3495,19 @@ export default function MapViewWeb() {
         </div>
       ) : null}
 
-      {/* Bubble keyframes for the HUD pills (StatusBar / QuestPill),
-          which bubble out on entering supersniff and back in on
-          leaving. Defined here rather than beside them because this is
-          the one component always mounted on the map screen. */}
+      {/* Keyframes for things only the map draws. The shell's shared
+          pop-in / pop-out used to live here too; they moved to the
+          global stylesheet in public/index.html when the dashboard
+          started using them, because the dashboard outlives this
+          component (see the note there). */}
       <style>{`
-        @keyframes pop-in {
-          0%   { transform: scale(0);    opacity: 0; }
-          70%  { transform: scale(1.10); opacity: 1; }
-          100% { transform: scale(1);    opacity: 1; }
+        @keyframes deck-in {
+          from { transform: translateY(48px); opacity: 0; }
+          to   { transform: translateY(0);    opacity: 1; }
+        }
+        @keyframes deck-out {
+          from { transform: translateY(0);    opacity: 1; }
+          to   { transform: translateY(48px); opacity: 0; }
         }
         @keyframes poke-wave {
           0%   { transform: translateY(0) scale(0.6) rotate(-15deg); opacity: 0; }
@@ -3413,11 +3522,6 @@ export default function MapViewWeb() {
         @keyframes poke-dog-bounce {
           0%,100% { transform: translateY(0); }
           50%     { transform: translateY(-7px); }
-        }
-        @keyframes pop-out {
-          0%   { transform: scale(1);    opacity: 1; }
-          25%  { transform: scale(1.10); opacity: 1; }
-          100% { transform: scale(0);    opacity: 0; }
         }
         @keyframes hint-map-pulse {
           0%   { transform: translate(-50%, -50%) scale(0.4); opacity: 0.5; }

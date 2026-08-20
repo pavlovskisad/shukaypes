@@ -326,6 +326,10 @@ export function SniffPress() {
     };
 
     const startHold = (e: maplibregl.MapMouseEvent | maplibregl.MapTouchEvent) => {
+      // The gate makes the map inert, and that has to include the press —
+      // a long hold on a screen that is asking you a question should not
+      // send the dog off sniffing a landmark behind the ring.
+      if (useGameStore.getState().appMode === 'gate') return;
       // Multi-touch (a pinch-zoom starting) must NOT trigger a hold —
       // the second finger landing should let MapLibre's pinch handler
       // take over. Bail out early for any touch event with > 1 finger.

@@ -178,6 +178,70 @@
           box-shadow: 0 0 60px rgba(0, 0, 0, 0.4);
         }
       }
+
+      /* The chrome's bubble-in / bubble-out, used by the HUD pills, the
+         quest banner and the dashboard as the app changes mode.
+
+         These live here, in the document, rather than in a component's
+         <style> block. MapView used to own them, which was fine while
+         the only consumers were the HUD pills on the map screen —
+         MapView is always mounted there. The dashboard is not: it is the
+         tab bar, it sits ABOVE the tabs, and on any screen that is not
+         the map, MapView is gone and took the keyframes with it. An
+         animation whose keyframes do not exist is silently skipped, so
+         the bar would have snapped instead of popping, on some screens
+         and not others. Global CSS is the honest home for something the
+         whole shell uses. */
+      @keyframes pop-in {
+        0% {
+          transform: scale(0);
+          opacity: 0;
+        }
+        70% {
+          transform: scale(1.1);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(1);
+          opacity: 1;
+        }
+      }
+      @keyframes pop-out {
+        0% {
+          transform: scale(1);
+          opacity: 1;
+        }
+        25% {
+          transform: scale(1.1);
+          opacity: 1;
+        }
+        100% {
+          transform: scale(0);
+          opacity: 0;
+        }
+      }
+
+      /* One ring item arriving. Matches the open/close transition in
+         RadialMenu exactly — same 220ms, same ease, same 0.4 start — so
+         an item that arrives by MOUNTING is indistinguishable from one
+         that arrives by the menu opening.
+
+         That distinction used to be visible. The transition only fires
+         when `open` flips on an element already in the DOM, so the two
+         cases it could not cover were the two that matter most: the
+         cold-start ring, which mounts already open, and every change of
+         level, where the old items unmount and the new ones appear at
+         their final size. Both simply blinked into place. */
+      @keyframes radial-item-in {
+        from {
+          opacity: 0;
+          transform: scale(0.4);
+        }
+        to {
+          opacity: 1;
+          transform: scale(1);
+        }
+      }
     </style>
   </head>
 

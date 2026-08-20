@@ -215,6 +215,16 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
         searchRoute,
         markReady,
       } = useGameStore.getState();
+      // An open menu freezes the dog where it stands — otherwise the
+      // sprite lerps out from under the ring drawn around it.
+      //
+      // But freezing it must not stop it EXISTING. The app now opens
+      // with the gate's ring already up, and every `setPos` in this tick
+      // sits below this line: a dog that never got a first position
+      // never renders, so the question would have hung over an empty
+      // map with no dog and no ring to answer it. Seed the position on
+      // the user first, then freeze.
+      setPos((prev) => prev ?? userPos);
       if (menuOpen) return;
 
       const now = Date.now();

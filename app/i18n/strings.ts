@@ -283,8 +283,11 @@ export interface AppStrings {
   // ride in the dog's SpeechBubble or a tiny callout, not a
   // tutorial modal.
   hints: {
+    // The logo is the only control that changes what the whole screen
+    // IS, and a brand mark in a corner gives no clue that it does
+    // anything — so this one goes first, plainly.
+    modes: string;
     longPressToSniff: string;
-    supersniff: string;
     supersniffIntro: string;
     // Way out of supersniff for users who arrived via the modal's
     // "start search" and never touched the logo.
@@ -293,6 +296,46 @@ export interface AppStrings {
     radialMenu: string;
     spotsToggle: string;
     hudMeters: string;
+  };
+  // The dog's front door. It asks once on entry and the answer picks
+  // the mode. One word per option — they ride inside a 112px pill on
+  // the ring, so anything longer gets clipped rather than wrapped.
+  modes: {
+    // The question in the dog's bubble while the ring is up.
+    ask: string;
+    lost: string;
+    search: string;
+    explore: string;
+    play: string;
+    // The dog's line over the walking level — three icons that do not
+    // explain themselves, named in one breath.
+    exploreAsk: string;
+    // …and one for every level below it, so the icons are never a
+    // guessing game and the whole descent reads as one conversation
+    // rather than a menu that stops talking once you commit.
+    walkShapeAsk: string;
+    walkDistanceAsk: string;
+    visitCategoryAsk: string;
+    visitSpotAsk: string;
+    // Said on entering the territory view, because nothing else explains
+    // it: the mechanic is deliberately nameless and passive everywhere
+    // else in the app (D-17), so this is the one place it gets spelled
+    // out. An array so a regular player is not read the same sentence
+    // every time.
+    playIntro: string[];
+    // Shown when the user picks "meet" in explore and there is nobody
+    // around. Was hardcoded English in Companion.tsx.
+    noWalkers: string;
+    // The "I lost a pet" sheet. Points at the Telegram group, which is
+    // the one path that actually puts a pet on the map today.
+    lostSheet: {
+      title: string;
+      body: string;
+      cta: string;
+      // Shown instead of the CTA when no group link is configured.
+      noLink: string;
+      close: string;
+    };
   };
 }
 
@@ -676,14 +719,41 @@ const uk: AppStrings = {
     },
   },
   hints: {
+    modes: 'тисни лого вгорі ліворуч — воно перемикає режими 🔄',
     longPressToSniff: 'затисни карту щоб понюхати 🐾',
-    supersniff: 'торкнись мене вгорі ліворуч — це супернюх: так винюхую загублених псів 👀',
     supersniffIntro: 'супернюх увімкнено! гортай — наступний пес, тисни — беру слід 🐾',
     supersniffExit: 'щоб повернутись до прогулянок — тисни лого вгорі ліворуч ↖️',
     swipeCards: 'гортай вбік — там ще',
     radialMenu: 'тут усе наше: знайти пса, погуляти, зайти кудись, привітатись, побалакати 🐾',
     spotsToggle: 'шпилька вгорі — показати чи сховати місця 📍',
     hudMeters: 'вгорі: сонце — мій настрій, кістка — голод, лапки — скільки назбирали 🐾',
+  },
+  modes: {
+    ask: 'нюх-нюх! шо ти?',
+    lost: 'загубив друга :(',
+    search: 'я шукайпес!',
+    explore: 'хочу погуляти',
+    play: 'хто тримає цей район?',
+    // Shown while the walking verbs are on the ring — three icons that
+    // do not explain themselves, so the dog names them.
+    exploreAsk: 'просто пройтись, заскочити по каву чи в зоомагазин, чи з кимось познайомитись?',
+    walkShapeAsk: 'туди й назад чи в один бік?',
+    walkDistanceAsk: 'тут поруч чи заберемось далі?',
+    visitCategoryAsk: 'кава, поїсти, бар, зоомагазин чи ветеринар?',
+    visitSpotAsk: 'ось що поруч — куди йдемо?',
+    playIntro: [
+      'ось наша земля. я мічу її сам, поки ми йдемо — просто гуляй, і її більшатиме 🐾',
+      'кольори — це чиїсь райони. пройдемо чужим, і я перемічу його на нас',
+      'що більше тримаємо, то густіші тут лапки. і мені спокійніше на своєму',
+    ],
+    noWalkers: 'поки нікого поруч 👥',
+    lostSheet: {
+      title: 'загубився пес?',
+      body: 'напиши в нашу групу в телеграмі — фото, район, коли востаннє бачили. я одразу візьму той допис і поставлю пса на карту, і його побачить кожен, хто цієї хвилини гуляє містом. так швидше, ніж будь-яка форма.',
+      cta: 'відкрити групу',
+      noLink: 'посилання на групу ще не налаштоване',
+      close: 'потім',
+    },
   },
 };
 
@@ -1030,14 +1100,39 @@ const en: AppStrings = {
     },
   },
   hints: {
+    modes: 'tap the logo top-left — it changes modes 🔄',
     longPressToSniff: 'hold the map and i\'ll have a sniff 🐾',
-    supersniff: 'tap me up in the corner — that\'s supersniff: how i hunt for lost dogs 👀',
     supersniffIntro: 'supersniff on! swipe for the next dog, tap to pick up the trail 🐾',
     supersniffExit: 'to get back to walks — tap the logo top-left ↖️',
     swipeCards: 'swipe sideways — there\'s more',
     radialMenu: 'this is all of us: find a pet, take a walk, drop by a place, say hi, or chat 🐾',
     spotsToggle: 'the pin up top — show or hide places 📍',
     hudMeters: "up top: sun's my mood, bone's hunger, paws are what we've found 🐾",
+  },
+  modes: {
+    ask: 'sniff-sniff! so what is it?',
+    lost: 'lost my friend :(',
+    search: "i'm a pet-finder!",
+    explore: 'i want a walk',
+    play: 'who holds this district?',
+    exploreAsk: 'just a stroll, a coffee or a pet shop, or shall we go and meet somebody?',
+    walkShapeAsk: 'there and back, or one way?',
+    walkDistanceAsk: 'close by, or shall we go further?',
+    visitCategoryAsk: 'coffee, food, a bar, a pet shop, or the vet?',
+    visitSpotAsk: "here's what's nearby — where are we headed?",
+    playIntro: [
+      "this is our ground. i mark it myself as we walk — just walk, and it grows 🐾",
+      "the colours are other people's districts. walk through one and i'll mark it over to us",
+      'the more we hold, the thicker the paws here. and i rest easier on our own',
+    ],
+    noWalkers: 'nobody around just yet 👥',
+    lostSheet: {
+      title: 'lost your pet?',
+      body: "post in our telegram group — a photo, the district, when you last saw them. i'll pick that post up and put your pet on the map straight away, in front of everyone out walking this minute. faster than any form.",
+      cta: 'open the group',
+      noLink: 'the group link isn\'t set up yet',
+      close: 'later',
+    },
   },
 };
 

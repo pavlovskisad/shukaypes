@@ -204,6 +204,7 @@ export default function TasksScreen() {
   // drawn from it) and the owner's freshest mark, so the jump needs no
   // extra fetch; rows without geometry simply don't navigate.
   const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
+  const setAppMode = useGameStore((s) => s.setAppMode);
   const onPickOwner = useCallback(
     (
       ownerId: string,
@@ -212,10 +213,22 @@ export default function TasksScreen() {
       pos?: { lat: number; lng: number },
     ) => {
       if (!ring || ring.length < 3) return;
+      // INTO THE TERRITORY VIEW FIRST, then the flight.
+      //
+      // The standing is on the dashboard, which is up in every mode, so
+      // this row can be tapped from a walk — and territory is only DRAWN
+      // in the territory view. Flying somebody to a piece of ground they
+      // then cannot see is the same as not going. Switching first also
+      // hands them the dog's line explaining the mechanic, which is the
+      // right thing to hear on the way to a stranger's district.
+      //
+      // Guarded because setAppMode is the clear-slate reducer: re-entering
+      // the mode you are already in would wipe the screen for nothing.
+      if (useGameStore.getState().appMode !== 'play') setAppMode('play');
       setFocusedTerritory({ ownerId, ring, ...(mark ? { mark } : {}), ...(pos ? { pos } : {}) });
       router.push('/');
     },
-    [setFocusedTerritory, router],
+    [setFocusedTerritory, setAppMode, router],
   );
 
   useFocusEffect(

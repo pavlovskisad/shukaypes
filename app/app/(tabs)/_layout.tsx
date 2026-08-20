@@ -1,5 +1,6 @@
+import { useLayoutEffect, useRef, useState } from 'react';
 import { Tabs } from 'expo-router';
-import { View } from 'react-native';
+import { View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { R } from '../../constants/radius';
@@ -10,6 +11,13 @@ import { pickBottomInset } from '../../services/telegram';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
+
+// Same overshoot easing the HUD pills use on the map screen — the two
+// surfaces are one piece of chrome and have to move alike.
+const POP_IN = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
+// How long the bar takes to leave. Also how long it stays mounted after
+// being hidden — the two are the same number on purpose.
+const POP_OUT_MS = 320;
 
 // Tab icons are pixel-art SVGs (see components/ui/Icon.tsx). Inactive
 // tabs read as desaturated/dimmed via a wrapper View — RN-Web passes
@@ -56,6 +64,78 @@ export default function TabsLayout() {
   // toggled off via the corner logo. Only ever on the map tab, so this
   // doesn't strand navigation elsewhere.
   const dogCam = useGameStore((s) => s.dogCam);
+  // …and the gate hides it for the same reason: while the dog is asking,
+  // the four answers are the only navigation there is.
+  //
+  // Scoped to the map screen, and that scoping is load-bearing. The note
+  // above holds for supersniff because supersniff can only be turned on
+  // from the map — but the gate is where every cold start BEGINS, on
+  // whatever route the browser was left on. Reload while on the chat tab
+  // and, unscoped, this would hide the dashboard on a screen that has no
+  // dog to tap and no ring to answer: no way back, and the only way out
+  // a reload. The ring lives on the map, so the bar only defers to it
+  // there.
+  const appMode = useGameStore((s) => s.appMode);
+  const currentScreen = useGameStore((s) => s.currentScreen);
+  const hidden = dogCam || (appMode === 'gate' && currentScreen === 'map');
+
+  // THE BAR USED TO JUST VANISH. `display: none` is not animatable, so
+  // for as long as this bar has existed it cut out instantly while the
+  // HUD pills beside it bubbled — two halves of one piece of chrome
+  // moving on different rules.
+  //
+  // It animates now, which means it has to outlive `hidden` long enough
+  // to play the pop-out. Three states, same shape as the modal family:
+  // visible → animating-out (still mounted, `pointerEvents: none` so it
+  // cannot take a tap it no longer looks able to take) → gone.
+  const [mounted, setMounted] = useState(!hidden);
+  const [justChanged, setJustChanged] = useState(false);
+  const initRef = useRef(true);
+  useLayoutEffect(() => {
+    if (initRef.current) {
+      initRef.current = false;
+      return;
+    }
+    setJustChanged(true);
+    if (!hidden) setMounted(true);
+    // Two clocks, deliberately. The bar must disappear the instant its
+    // pop-out ends (POP_OUT_MS) — that is the whole window in which a
+    // shrinking, half-gone bar could still take a tap, and it is not
+    // shortenable any other way (see popAnimation below). Clearing
+    // `justChanged` waits the full 700ms, because the pop-in is a 200ms
+    // delay plus a 360ms run and dropping its animation early would
+    // snap it into place.
+    const unmount = hidden
+      ? setTimeout(() => setMounted(false), POP_OUT_MS)
+      : undefined;
+    const settle = setTimeout(() => setJustChanged(false), 700);
+    return () => {
+      if (unmount) clearTimeout(unmount);
+      clearTimeout(settle);
+    };
+  }, [hidden]);
+
+  // RN's ViewStyle has no `animation` — the HUD pills get away with it
+  // because they are raw <div>s, where the DOM's CSS types apply. The
+  // tab bar's style goes through RN's typing, and RN-Web hands it to CSS
+  // all the same. Same escape hatch the modal family uses to get a
+  // `calc()` past `maxHeight: number`.
+  //
+  // `pointerEvents` is NOT settable here, and it was worth checking
+  // rather than assuming: RN-Web drives it from the View prop and drops
+  // it from style, and the rendered bar's inline style confirms it —
+  // `animation`, `opacity` and `display` all come through, pointer-events
+  // does not. React Navigation owns the element, so the prop is out of
+  // reach. What bounds the exposure instead is UNMOUNT_MS below: the bar
+  // is gone the moment the pop-out ends, and it is scaling toward zero
+  // for that whole window.
+  const popAnimation = {
+    animation: justChanged
+      ? hidden
+        ? `pop-out ${POP_OUT_MS}ms ease-in forwards`
+        : `pop-in 360ms ${POP_IN} 200ms both`
+      : 'none',
+  } as unknown as ViewStyle;
 
   return (
     <Tabs
@@ -75,8 +155,12 @@ export default function TabsLayout() {
         // of the app's chip / pill family. Shadow is now a soft
         // all-around lift instead of an upward-only top shadow.
         tabBarStyle: {
-          // Dashboard off in supersniff — the lost-dogs carousel replaces it.
-          display: dogCam ? 'none' : 'flex',
+          // Only truly gone once the pop-out has finished; until then it
+          // is on screen, shrinking, and deaf to taps.
+          display: mounted ? 'flex' : 'none',
+          opacity: hidden ? 0 : 1,
+          transform: hidden ? [{ scale: 0 }] : [{ scale: 1 }],
+          ...popAnimation,
           position: 'absolute',
           left: S.l,
           right: S.l,
