@@ -75,7 +75,7 @@ import type { LatLng } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { SURFACE } from '../../constants/surface';
+import { INK, SURFACE } from '../../constants/surface';
 
 const TOKEN_REFRESH_MS = 15000;
 // Extra syncs while actually walking, so a fast mover isn't looking at a
@@ -3218,9 +3218,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           <div
             style={{
               padding: '10px 18px',
-              background: '#ffffff',
-              color: '#1a1a1a',
+              background: SURFACE.fill,
+              color: INK,
               borderRadius: R.pill,
+              border: SURFACE.hair,
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.body,
               fontWeight: 800,
@@ -3249,7 +3250,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               width: 44,
               height: 44,
               borderRadius: R.pill,
-              background: '#ffffff',
+              background: SURFACE.fill,
+              border: SURFACE.hair,
+              boxSizing: 'border-box',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -3558,11 +3561,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // it reliably stacks above the HUD on web/PWA.
             zIndex: Z.HUD_PILLS_OVERLAY,
             cursor: 'pointer',
-            background: '#ffffff',
+            background: SURFACE.fill,
             // Round on the LEFT side only so it reads as docked to
-            // the screen edge.
+            // the screen edge — and inked on the three edges you can
+            // see, for the same reason the top sheets skip their top
+            // border: the fourth runs off the screen.
             borderTopLeftRadius: R.card,
             borderBottomLeftRadius: R.card,
+            borderTop: SURFACE.hair,
+            borderBottom: SURFACE.hair,
+            borderLeft: SURFACE.hair,
+            boxSizing: 'border-box',
             width: 56,
             height: 56,
             display: 'flex',
