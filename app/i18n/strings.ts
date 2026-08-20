@@ -385,7 +385,7 @@ const uk: AppStrings = {
     no: 'ні, нікого',
     thanksSeen: (paws) => `записав! +${paws} лапок 🐾`,
     thanksMissed: (paws) => `теж важливо — тепер знаємо, що тут порожньо. +${paws} лапок 🐾`,
-    contactAsk: 'показати оголошення? там є контакти власника',
+    contactAsk: 'показати оголошення? там усе, що написав власник',
     contactOpen: 'відкрити оголошення',
     contactLater: 'пізніше',
     close: 'завершити',
@@ -649,10 +649,10 @@ const uk: AppStrings = {
       notStored:
         'повного тексту цього оголошення в нас немає — воно з’явилось раніше, ніж ми почали їх зберігати.',
       originalAfterSighting:
-        'позначиш, що бачив цю тваринку — відкрию оригінал з контактами власника.',
+        'позначиш, що бачив цю тваринку — відкрию оригінал оголошення.',
       openOriginal: 'оригінал',
       contactsAfterSighting:
-        'контакти власника зʼявляться тут, щойно ти позначиш, що бачив цю тваринку.',
+        'позначиш, що бачив цю тваринку — покажу оголошення повністю і відкрию оригінал.',
       contactsMaskedBySource:
         'номер сховала сама olx — вона показує його лише після натискання. відкрий оригінал і тисни «показати телефон».',
     },
@@ -789,7 +789,7 @@ const en: AppStrings = {
     no: 'no, nobody',
     thanksSeen: (paws) => `logged it! +${paws} paws 🐾`,
     thanksMissed: (paws) => `still useful — now we know this patch is empty. +${paws} paws 🐾`,
-    contactAsk: 'open the original post? the owner left their contact there',
+    contactAsk: "show the post? everything the owner wrote is in it",
     contactOpen: 'open the post',
     contactLater: 'later',
     close: 'finish',
@@ -1030,10 +1030,10 @@ const en: AppStrings = {
       notStored:
         "we don't have the full text of this one — it was posted before we started keeping them.",
       originalAfterSighting:
-        "mark that you've seen this pet and i'll open the original, contact and all.",
+        "mark that you've seen this pet and i'll open the original post.",
       openOriginal: 'original',
       contactsAfterSighting:
-        "the owner's contact appears here once you mark that you've seen this pet.",
+        "mark that you've seen this pet and i'll show the whole post and open the original.",
       contactsMaskedBySource:
         'olx hid the number itself — it only shows in full after a tap. open the original and tap "show phone".',
     },
