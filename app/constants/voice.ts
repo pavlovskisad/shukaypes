@@ -17,7 +17,13 @@ import { SYSTEM_FONT } from './fonts';
 export const VOICE = {
   background: '#1a1a1a',
   color: '#ffffff',
-  border: '1px solid rgba(255,255,255,0.06)',
+  // 2px to match the ink on every other surface, in the bubble's own
+  // colour so a dark bubble stays a dark shape rather than gaining an
+  // outline. It is the geometry that carries across, not the paint:
+  // same weight, same corner (R.chip, now shared with R.card), so the
+  // dog's voice is cut from the same material as the cards it sits
+  // among.
+  border: '2px solid #1a1a1a',
   shadow: '0 4px 14px rgba(0,0,0,0.22)',
   fontFamily: SYSTEM_FONT,
 } as const;

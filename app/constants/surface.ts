@@ -30,15 +30,18 @@ export const SURFACE = {
   // not assumed: getComputedStyle reported 2px for a 2.5px rule on a
   // dpr-3 viewport.
   //
-  // Cards, sheets, popups — anything that is a page of paper in its own
-  // right. The reference's stroke runs about 1.4% of card height; 3px
-  // on our 252px card is 1.19%, near enough to read as the same hand.
-  stroke: `3px solid ${INK}`,
+  // ONE WEIGHT, for a card and for the button inside it alike. Measured
+  // off a real device screenshot rather than the marketing composition:
+  // the reference's stroke is about 0.68% of card height, where 3px on
+  // our 252px card was 1.19% — nearly double. 2px lands at 0.79%.
+  //
+  // The earlier two-step scale (3px paper / 2px chips) is gone. Once
+  // fractions are off the table there is only one step available
+  // between 2px and a hairline, and spending it made the paper shout.
+  stroke: `2px solid ${INK}`,
 
-  // Chips, badges, close buttons, small pills. One step down, so a 36px
-  // control doesn't read as heavier than the 400px card behind it —
-  // and one step is all there is room for once fractions are off the
-  // table.
+  // Kept as a name so call sites reading "hair" still say what they
+  // mean, but it is the same ink as everything else now.
   hair: `2px solid ${INK}`,
 
   // Resting shadow for a card sitting on the map.

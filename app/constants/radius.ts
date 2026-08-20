@@ -14,7 +14,13 @@
 export const R = {
   sm: 4,
   md: 12,
-  chip: 24,
-  card: 28,
+  // chip and card used to be 24 and 28. Measured against a device
+  // screenshot of the reference, whose cards turn a corner at about
+  // 5.9% of their height where ours were at 11.1% — the app read
+  // noticeably softer than the thing it is meant to look like. 18 puts
+  // our 252px card at 7.1%, and collapsing the two to one value means a
+  // speech bubble, a card and a sheet all turn the same corner.
+  chip: 18,
+  card: 18,
   pill: 999,
 } as const;

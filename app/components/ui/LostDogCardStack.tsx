@@ -233,7 +233,7 @@ const styles = StyleSheet.create({
     borderRadius: R.card,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: INK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
@@ -325,7 +325,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: '#ffffff',
-    borderTopWidth: 3,
+    borderTopWidth: 2,
     borderTopColor: INK,
     // ~7% of card width, matching the reference's inner margin.
     paddingHorizontal: 20,

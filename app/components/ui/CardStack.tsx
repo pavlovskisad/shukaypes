@@ -633,7 +633,7 @@ export function CardStackSkeleton({
               backgroundRepeat: 'no-repeat',
               animation: 'card-stack-shimmer 1.8s ease-in-out infinite',
               borderRadius: R.card,
-              borderWidth: 3,
+              borderWidth: 2,
               borderColor: INK,
               transform: [{ scale: TOP_SCALE }],
               shadowColor: '#000',
@@ -682,7 +682,7 @@ const styles = StyleSheet.create({
   greyDeckCard: {
     backgroundColor: '#e6e6e6',
     borderRadius: R.card,
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: INK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },

@@ -122,7 +122,7 @@ const styles = StyleSheet.create({
     borderRadius: R.card,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
-    borderWidth: 3,
+    borderWidth: 2,
     borderColor: INK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },

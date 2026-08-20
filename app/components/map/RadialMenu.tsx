@@ -3,6 +3,7 @@ import { balance } from '../../constants/balance';
 import { BUTTON } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { SURFACE } from '../../constants/surface';
 import { playPopThen } from '../../utils/popOnTap';
 import { Icon, type IconName } from '../../components/ui/Icon';
 
@@ -205,7 +206,11 @@ export function RadialMenu({
         // family, and at 60 tall against the disc's 68 they read as
         // siblings rather than as a chip clipped onto a button.
         borderRadius: isText ? TEXT_ITEM.height / 2 : BUTTON.radius,
-        border: 'none',
+        // The same ink as the cards. border-box so the edge grows
+        // inward — BUTTON.size is a fixed 68 and a content-box border
+        // would quietly make every disc 72 and break the row's maths.
+        border: SURFACE.hair,
+        boxSizing: 'border-box',
         background: bg,
         color: fg,
         fontSize: isText ? TYPE.body : TYPE.hero,
