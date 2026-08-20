@@ -132,7 +132,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               left: 14,
               background: '#ffffff',
               color: '#555',
-              borderRadius: R.pill,
+              borderRadius: R.label,
               padding: '6px 12px',
               fontSize: TYPE.small,
               fontWeight: 700,

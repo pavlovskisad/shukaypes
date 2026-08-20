@@ -143,8 +143,9 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               {renderSpot.icon ?? '📍'}
             </span>
           )}
-          {/* Category chip top-left — full-pill + lifted shadow
-              to match the HUD / chat / card chip family. */}
+          {/* Category label top-left — the small corner, not a pill:
+              a label naming what it sits on is a piece of the same
+              paper, not a control. */}
           <span
             style={{
               position: 'absolute',
@@ -152,7 +153,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               left: 14,
               background: '#ffffff',
               color: '#555',
-              borderRadius: R.pill,
+              borderRadius: R.label,
               padding: '6px 12px',
               fontSize: TYPE.small,
               fontWeight: 700,
@@ -164,9 +165,10 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           >
             {categoryLabel}
           </span>
-          {/* Top-right cluster — rating chip (if available) + close
-              button. Rating uses the same white-pill family as the
-              category chip but with gold star + value. */}
+          {/* Top-right cluster — rating label (if available) + close
+              button. Rating takes the same label corner as the category
+              one, with a gold star + value. The close button stays
+              full-round: it is a circle and a control, not a label. */}
           <div
             style={{
               position: 'absolute',
@@ -182,7 +184,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 style={{
                   background: '#ffffff',
                   color: '#d9a030',
-                  borderRadius: R.pill,
+                  borderRadius: R.label,
                   padding: '6px 12px',
                   fontSize: TYPE.small,
                   fontWeight: 700,

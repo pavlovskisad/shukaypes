@@ -264,10 +264,10 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: S.m,
     paddingVertical: S.s,
-    // Full-pill radius + lifted shadow so the chip reads as the
-    // same family as the HUD pills / chat header pill (full
-    // round with CHROME_SHADOW). Scaled down for in-card use.
-    borderRadius: R.pill,
+    // The label corner, not a pill. These name what the card is
+    // (urgent / how far) and belong to the card, where the HUD pills
+    // they used to copy belong to the chrome.
+    borderRadius: R.label,
     borderWidth: 2,
     borderColor: INK,
     shadowColor: '#000',
@@ -282,8 +282,8 @@ const styles = StyleSheet.create({
     textTransform: 'lowercase',
     letterSpacing: 0.4,
   },
-  // Distance chip — mirror of the urgency badge but anchored
-  // top-right. Same full-pill / lifted-shadow family.
+  // Distance label — mirror of the urgency badge but anchored
+  // top-right. Same corner, same ink.
   distChip: {
     position: 'absolute',
     top: 14,
@@ -291,7 +291,7 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
     paddingHorizontal: S.m,
     paddingVertical: S.s,
-    borderRadius: R.pill,
+    borderRadius: R.label,
     borderWidth: 2,
     borderColor: INK,
     shadowColor: '#000',

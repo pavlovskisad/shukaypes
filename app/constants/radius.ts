@@ -22,5 +22,16 @@ export const R = {
   // speech bubble, a card and a sheet all turn the same corner.
   chip: 18,
   card: 18,
+  // Metadata labels that sit ON a card — the urgency badge, the
+  // distance chip, the rating. These were full pills, which made them
+  // lozenges stuck to a surface that had just learned to turn a proper
+  // corner. A label is a small piece of the same paper, so it gets a
+  // small version of the same corner rather than a different shape.
+  //
+  // Not R.card scaled down proportionally: 7.1% of a 33px chip is 2px,
+  // which reads as a sharp rectangle. Corner radius does not scale
+  // linearly with the eye. 10 is the value that still says "rounded"
+  // at this size without going back to a capsule.
+  label: 10,
   pill: 999,
 } as const;
