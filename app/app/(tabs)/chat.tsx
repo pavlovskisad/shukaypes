@@ -24,7 +24,7 @@ import { popPressableEvent } from '../../utils/popOnTap';
 import { pickBottomInset } from '../../services/telegram';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useGameStore } from '../../stores/gameStore';
-import { buildCandidates, recordRecentDestination } from '../../utils/walk';
+import { recordRecentDestination } from '../../utils/walk';
 import { startExplorationWalk } from '../../services/exploreWalk';
 import { fetchWalkingRoute } from '../../services/directions';
 import { api, type CompanionAction, type ChatNearbySpot } from '../../services/api';
@@ -84,18 +84,15 @@ export default function ChatScreen() {
             router.push('/');
             return `📍 ${t.chat.showingSpot}`;
           case 'walk': {
-            // Same flow the radial menu's walk leaf runs — rank a few
-            // destinations from spots+parks, let the server say which
-            // route passes the most landmarks, and plot through them.
-            // Routes the user to the map so the polyline is visible.
-            const { userPosition: pos, spots: ctxSpots, parks: ctxParks } =
-              useGameStore.getState();
+            // Same flow the radial menu's walk leaf runs — a small local
+            // tour out of our own tables. Note it takes parks, not
+            // spots: 'walk_to_spot' below is the action for going to a
+            // named business, and this one is for wandering.
+            const { userPosition: pos, parks: ctxParks } = useGameStore.getState();
             if (!pos) return `🚶 ${t.chat.needLocation}`;
-            const candidates = buildCandidates(ctxSpots, ctxParks);
-            if (candidates.length === 0) return `🚶 ${t.chat.noNearbySpots}`;
             const walk = await startExplorationWalk({
               origin: pos,
-              candidates,
+              parks: ctxParks,
               shape: action.args.shape,
               distance: action.args.distance,
             });
@@ -104,8 +101,9 @@ export default function ChatScreen() {
               walk.route,
               {
                 shape: action.args.shape,
-                spotId: walk.spotId,
+                spotId: null,
                 destinationName: walk.primary.name,
+                approximate: walk.approximate,
               },
               walk.stops,
             );

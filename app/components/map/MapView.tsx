@@ -2930,7 +2930,16 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             today; if we ever differentiate, dashed for one of them
             would be the move. clickable=false so taps go through. */}
         {walkRoute && walkRoute.length > 1 ? (
-          <CrayonRoute path={walkRoute} color="#2f6bff" weight={9} opacity={0.8} />
+          <CrayonRoute
+            path={walkRoute}
+            color="#2f6bff"
+            weight={9}
+            opacity={0.8}
+            // Dashed when the geometry is straight segments rather than
+            // streets — street routing was unavailable, and a solid line
+            // would be a claim about which roads to take.
+            dashed={walkRouteMeta?.approximate === true}
+          />
         ) : null}
 
         {/* The landmarks that walk was routed through — numbered discs

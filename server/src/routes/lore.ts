@@ -29,6 +29,18 @@ import {
 const DEFAULT_RADIUS_M = 350;
 const POOL_SIZE = 10;
 
+// A handful of kyiv_lore rows carry a name with no letters in it — OSM
+// `name` tags that are bare reference numbers ("2104141700", "44 - 48").
+// Four rows out of 2671, and every one of them renders as a landmark
+// whose entire label is a number, which tells the walker nothing and
+// reads as a bug. The story is still fine; the name isn't, and a
+// landmark you can't name isn't one you can point at.
+//
+// Filtered at both readers rather than deleted: the rows are legitimate
+// OSM objects and a re-seed would bring them straight back, so the fix
+// belongs where they're surfaced.
+const HAS_A_LETTER = sql`name ~ '[[:alpha:]]'`;
+
 // ---- /lore/route knobs -------------------------------------------------
 //
 // Ceilings, not preferences: the caller says how many stops it wants and
@@ -128,8 +140,12 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     const dist = sql<number>`(6371000 * acos(cos(radians(${lat})) * cos(radians(lat)) * cos(radians(lng) - radians(${lng})) + sin(radians(${lat})) * sin(radians(lat))))`;
     const whereClauses = exclude.length
-      ? and(sql`${dist} < ${radius}`, notInArray(schema.kyivLore.id, exclude))
-      : sql`${dist} < ${radius}`;
+      ? and(
+          sql`${dist} < ${radius}`,
+          HAS_A_LETTER,
+          notInArray(schema.kyivLore.id, exclude),
+        )
+      : and(sql`${dist} < ${radius}`, HAS_A_LETTER);
     const pool = await db
       .select({
         id: schema.kyivLore.id,
@@ -253,7 +269,11 @@ const plugin: FastifyPluginAsync = async (app) => {
         lng: schema.kyivLore.lng,
       })
       .from(schema.kyivLore)
-      .where(exclude.length ? and(bbox, notInArray(schema.kyivLore.id, exclude)) : bbox)
+      .where(
+        exclude.length
+          ? and(bbox, HAS_A_LETTER, notInArray(schema.kyivLore.id, exclude))
+          : and(bbox, HAS_A_LETTER),
+      )
       .limit(POOL_LIMIT);
 
     // A truncated pool is a worse walk chosen from a partial city, and it
