@@ -84,6 +84,60 @@ async function main() {
     if (r.dogId && active.has(r.dogId)) tallyActive[bucket]++;
   }
 
+  // DO OWNERS ACTUALLY COPY-PASTE? The premise behind looking for the
+  // same text elsewhere on the internet is that a person writing about
+  // their missing animal writes it ONCE and pastes it everywhere. If
+  // that is true, the copy on a platform that does not mask numbers
+  // carries the contact the masked copy hides.
+  //
+  // The premise is testable without a search engine, on rows we already
+  // hold: if people paste verbatim, the same text should already appear
+  // at more than one URL in this table.
+  //
+  // WHAT A POSITIVE RESULT HERE DOES AND DOES NOT MEAN. Our corpus is
+  // one source, so a match is one owner reposting on OLX — evidence
+  // that the copy-paste HABIT is real, not that it crosses platforms.
+  // The cross-platform claim needs a second source in the table before
+  // it can be measured at all, and saying otherwise would be exactly the
+  // reasoned-instead-of-counted mistake this file exists to avoid.
+  //
+  // Word-set Jaccard rather than string equality: a repost usually gains
+  // «АКТУАЛЬНО» or loses a line, and an exact-match test would score
+  // that as unrelated. 202 bodies is 20k comparisons — nothing.
+  const norm = (t: string) =>
+    new Set(
+      t
+        .toLowerCase()
+        .replace(/[^\p{L}\p{N}\s]/gu, ' ')
+        .split(/\s+/)
+        .filter((w) => w.length > 2),
+    );
+
+  const SIMILAR = 0.8;
+  const shaped = rows.map((r) => ({ ...r, words: norm(r.body!) }));
+  let pairs = 0;
+  let pairsSameDog = 0;
+  let pairsContactDiffers = 0;
+
+  for (let i = 0; i < shaped.length; i++) {
+    for (let j = i + 1; j < shaped.length; j++) {
+      const a = shaped[i]!;
+      const b = shaped[j]!;
+      if (a.words.size === 0 || b.words.size === 0) continue;
+      let shared = 0;
+      for (const w of a.words) if (b.words.has(w)) shared++;
+      const jaccard = shared / (a.words.size + b.words.size - shared);
+      if (jaccard < SIMILAR) continue;
+      pairs++;
+      if (a.dogId && a.dogId === b.dogId) pairsSameDog++;
+      // The payoff case: two copies of one post where ONE of them has a
+      // number you could ring. That is the whole idea, demonstrated.
+      const readableA = looksLikeItHadContacts(a.body!);
+      const readableB = looksLikeItHadContacts(b.body!);
+      if (readableA !== readableB) pairsContactDiffers++;
+    }
+  }
+
   const pct = (n: number, of: number) => (of === 0 ? '—' : `${Math.round((n / of) * 100)}%`);
   const line = (label: string, n: number, of: number) =>
     `  ${label.padEnd(10)} ${String(n).padStart(4)}  ${pct(n, of).padStart(4)}`;
@@ -100,10 +154,19 @@ async function main() {
   console.log(line('masked', tally.masked, rows.length));
   console.log(line('none', tally.none, rows.length));
 
+  console.log(`\nDUPLICATED TEXT — do owners paste the same post twice?`);
+  console.log(`  near-identical pairs (≥${SIMILAR * 100}% word overlap): ${pairs}`);
+  console.log(`    … already merged onto one pet:                ${pairsSameDog}`);
+  console.log(`    … where one copy has a ringable contact:      ${pairsContactDiffers}`);
+
   console.log(
     `\n  readable = a walker who reported a sighting can ring somebody.` +
       `\n  masked   = OLX masked it on its own page; the digits were never ours.` +
       `\n  none     = no contact in the ad text at all.` +
+      `\n\n  The pair count is WITHIN ONE SOURCE. It can show that reposting is a` +
+      `\n  habit; it cannot show that the habit crosses platforms, because there` +
+      `\n  is only one platform in this table. That needs a second source before` +
+      `\n  it is a question the database can answer.` +
       `\n\n✓ counts only, nothing written and no value printed.`,
   );
   await pg.end();
