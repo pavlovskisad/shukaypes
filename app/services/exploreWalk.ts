@@ -66,11 +66,15 @@ const CANDIDATE_COUNT = 4;
 // from the path it is given.
 const CORRIDOR_M = 240;
 
-// Stops per walk. The ask was "at least a few", and three is the point
-// where a walk reads as a route with stops rather than a detour to one
-// thing. A long walk can carry a fourth.
-const MAX_STOPS_CLOSE = 3;
-const MAX_STOPS_FAR = 4;
+// Stops per walk. Three at every distance.
+//
+// A long walk used to carry a fourth, on the reasoning that it has room
+// for one. It has room on the GROUND and not on the screen: four stops
+// with names as long as "Міжнародний центр культури і мистецтв" pushed
+// the card past the bottom of a phone and under the tab bar. Three is
+// also where a walk stops being a detour to one thing, so it is the
+// floor and the ceiling both.
+const MAX_STOPS = 3;
 
 // How far out to ask our own tables for destinations. The far walk is
 // the longest the planner proposes, and a one-way version of it puts the
@@ -85,10 +89,6 @@ export interface ExplorationWalk {
   shape: WalkShape;
   // In visiting order. Empty is a normal, valid walk.
   stops: WalkStop[];
-  // True when the line is straight segments between the points rather
-  // than street geometry — Google routing was unavailable. The walk is
-  // real either way; only the drawing of it is approximate.
-  approximate: boolean;
 }
 
 interface Costed {
@@ -116,7 +116,7 @@ async function costCandidates(
     const { results } = await api.loreWalkStops(
       plans.map((p, i) => ({ id: String(i), path: p.path })),
       {
-        maxStops: distance === 'far' ? MAX_STOPS_FAR : MAX_STOPS_CLOSE,
+        maxStops: MAX_STOPS,
         corridorM: CORRIDOR_M,
         exclude: loadRecentStopIds(),
       },
@@ -198,34 +198,25 @@ export async function startExplorationWalk(args: {
   if (!chosen) return null;
   const { plan, stops } = chosen;
 
-  const settle = (
-    line: { path: LatLng[]; approximate: boolean },
-    withStops: WalkStop[],
-  ): ExplorationWalk => {
+  const settle = (route: LatLng[], withStops: WalkStop[]): ExplorationWalk => {
     // Only record what the walker actually got. A destination we
     // couldn't route to must not be penalised on the next tap, and
     // landmarks on a route that never rendered are still unseen.
     recordRecentDestination(plan.primary.id);
     if (withStops.length) recordRecentStops(withStops.map((s) => s.id));
-    return {
-      route: line.path,
-      primary: plan.primary,
-      shape,
-      stops: withStops,
-      approximate: line.approximate,
-    };
+    return { route, primary: plan.primary, shape, stops: withStops };
   };
 
   // First choice: the walk through the landmarks, on real streets.
   const viaStops = await fetchWalkingRoute(origin, chosen.waypoints);
-  if (viaStops) return settle({ path: viaStops, approximate: false }, stops);
+  if (viaStops) return settle(viaStops, stops);
 
   // A stop the directions API can't walk to (inside a closed courtyard,
   // on an island, behind a fence) fails the WHOLE call, taking the walk
   // with it. Retry without the stops to find out whether the stops were
   // the problem or routing is unavailable altogether.
   const plain = await fetchWalkingRoute(origin, plan.waypoints);
-  if (plain) return settle({ path: plain, approximate: false }, []);
+  if (plain) return settle(plain, []);
 
   // Same fallback the roundtrip path has always had: the perpendicular
   // via-point may itself be unroutable (river, gated park), so retry
@@ -235,7 +226,7 @@ export async function startExplorationWalk(args: {
       plan.waypoints[0]!,
       plan.waypoints[2]!,
     ]);
-    if (outAndBack) return settle({ path: outAndBack, approximate: false }, []);
+    if (outAndBack) return settle(outAndBack, []);
   }
 
   // Nothing routed at all, which in practice means Google is not
@@ -247,5 +238,5 @@ export async function startExplorationWalk(args: {
   // Built here rather than through fetchWalkingRouteOrLine, which would
   // spend a fourth request re-asking a service that has already declined
   // three times.
-  return settle({ path: [origin, ...chosen.waypoints], approximate: true }, stops);
+  return settle([origin, ...chosen.waypoints], stops);
 }

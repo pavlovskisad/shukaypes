@@ -210,9 +210,6 @@ export interface AppStrings {
     // The pill under the HUD that reopens the list. Shorter than the
     // heading — it sits beside "cancel walk" and has to stay a pill.
     count: (count: number) => string;
-    // Shown in the card when street routing was unavailable, so the
-    // line is a direct one between the stops rather than a way there.
-    approximate: string;
     // Where the walk ends, under the stops.
     destination: (name: string) => string;
     // How far this landmark sits off the direct line. Shown only for the
@@ -622,7 +619,6 @@ const uk: AppStrings = {
   walkStops: {
     heading: (count) => `${count} ${ukStops(count)} по дорозі`,
     count: (count) => `${count} ${ukStops(count)}`,
-    approximate: 'лінія навпростець — веду приблизно, дивись на місці',
     destination: (name) => `а в кінці — ${name}`,
     offRoute: (metres) => `${metres} м убік`,
     dismiss: 'ходімо',
@@ -1009,7 +1005,6 @@ const en: AppStrings = {
   walkStops: {
     heading: (count) => `${count} ${count === 1 ? 'stop' : 'stops'} on the way`,
     count: (count) => `${count} ${count === 1 ? 'stop' : 'stops'}`,
-    approximate: 'straight line — a rough direction, not the streets',
     destination: (name) => `and at the end — ${name}`,
     offRoute: (metres) => `${metres} m aside`,
     dismiss: "let's go",

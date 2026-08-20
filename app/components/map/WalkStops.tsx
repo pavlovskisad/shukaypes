@@ -17,12 +17,11 @@ import type { WalkStop } from '../../utils/walk';
 
 // The landmarks a planned walk goes through, on the map.
 //
-// Each stop is a small numbered green disc sitting on the cyan dashed
-// line — the pairing the product reference uses, and the reason a tour
-// reads as a route WITH stops rather than as a line among some pins.
-// Numbered because the order is the walk. Tap one and the dog says its
-// sentence; tap "ще" inside that and the Wikipedia summary opens under
-// it.
+// Each stop is a plain green dot sitting on the cyan dashed line — the
+// pairing the product reference uses, and the reason a tour reads as a
+// route WITH stops rather than as a line among some pins. Tap one and
+// the dog says its sentence; tap "ще" inside that and the Wikipedia
+// summary opens under it.
 //
 // ONE OPEN AT A TIME, held in the store rather than here: the walk-start
 // list also opens stops (tapping a row flies the camera to it and expands
@@ -34,14 +33,25 @@ import type { WalkStop } from '../../utils/walk';
 // be told before they commit to the walk.
 const NOTABLE_DETOUR_M = 80;
 
-// The numbered disc, on the map and in the list. Dark numerals on the
-// bright green rather than white: at this size white on #5fd726 is
-// under the contrast a number has to clear to be read at a glance, and
-// black-on-bright is the pairing the accent colour already uses
-// elsewhere in the app.
-const STOP_DISC_MAP = 26;
-const STOP_DISC_MAP_OPEN = 30;
-const STOP_DISC_CARD = 24;
+// Plain green dots, unnumbered and unbordered — the reference again.
+//
+// They carried numbers at first, on the reasoning that the order is the
+// walk. It isn't: these are four places near your route, and which one
+// you reach first depends on which way you actually turn. Numbering
+// them promised a sequence the walk doesn't enforce, and a bare dot
+// promises nothing but "something here".
+//
+// The map dot grows a little while its story is open, which is the only
+// state it has.
+const STOP_DOT_MAP = 16;
+const STOP_DOT_MAP_OPEN = 22;
+const STOP_DOT_CARD = 10;
+
+// Invisible padding around the map dot, so the thing you have to hit to
+// hear a story is a ~40 px target rather than a 16 px one. The marker is
+// bottom-anchored, so the padding would lift the dot off its point —
+// the marker offset below puts it back.
+const STOP_DOT_HIT_PAD = 12;
 
 export function WalkStops() {
   const stops = useGameStore((s) => s.walkStops);
@@ -51,11 +61,10 @@ export function WalkStops() {
   if (stops.length === 0) return null;
   return (
     <>
-      {stops.map((stop, i) => (
+      {stops.map((stop) => (
         <StopMarker
           key={stop.id}
           stop={stop}
-          index={i + 1}
           open={openId === stop.id}
           onToggle={() => setOpenWalkStop(openId === stop.id ? null : stop.id)}
         />
@@ -66,12 +75,10 @@ export function WalkStops() {
 
 function StopMarker({
   stop,
-  index,
   open,
   onToggle,
 }: {
   stop: WalkStop;
-  index: number;
   open: boolean;
   onToggle: () => void;
 }) {
@@ -122,6 +129,9 @@ function StopMarker({
       // the POI field around it; a closed disc belongs down with the
       // route it marks.
       zIndex={open ? Z.HUD_SNIFF_BUBBLE : Z.MARKER_WALK_STOP}
+      // Cancels the hit-area padding under the dot — see
+      // STOP_DOT_HIT_PAD.
+      offset={[0, STOP_DOT_HIT_PAD]}
     >
       <div
         style={{
@@ -188,7 +198,8 @@ function StopMarker({
             </div>
           </div>
         ) : null}
-        {/* The disc itself. Numbered, because the order is the walk. */}
+        {/* The dot itself. Bare green, no ring and no number, inside a
+            transparent pad that does the catching. */}
         <div
           role="button"
           aria-label={stop.name}
@@ -200,22 +211,21 @@ function StopMarker({
           style={{
             cursor: 'pointer',
             userSelect: 'none',
-            width: open ? STOP_DISC_MAP_OPEN : STOP_DISC_MAP,
-            height: open ? STOP_DISC_MAP_OPEN : STOP_DISC_MAP,
-            borderRadius: R.pill,
-            background: colors.walkStop,
-            color: colors.black,
-            border: `2px solid ${colors.white}`,
-            boxShadow: '0 2px 8px rgba(0,0,0,0.22)',
-            fontFamily: SYSTEM_FONT,
-            fontSize: TYPE.small,
-            fontWeight: 700,
+            padding: STOP_DOT_HIT_PAD,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
           }}
         >
-          {index}
+          <div
+            style={{
+              width: open ? STOP_DOT_MAP_OPEN : STOP_DOT_MAP,
+              height: open ? STOP_DOT_MAP_OPEN : STOP_DOT_MAP,
+              borderRadius: R.pill,
+              background: colors.walkStop,
+              boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+            }}
+          />
         </div>
       </div>
     </MapLibreMarker>
@@ -268,7 +278,6 @@ export function WalkStopsCard({
   const stops = useGameStore((s) => s.walkStops);
   const walkRoute = useGameStore((s) => s.walkRoute);
   const destinationName = useGameStore((s) => s.walkRouteMeta?.destinationName);
-  const approximate = useGameStore((s) => s.walkRouteMeta?.approximate === true);
   const open = useGameStore((s) => s.walkStopsOpen);
   const setOpen = useGameStore((s) => s.setWalkStopsOpen);
   const setOpenWalkStop = useGameStore((s) => s.setOpenWalkStop);
@@ -292,6 +301,11 @@ export function WalkStopsCard({
         color: colors.black,
         borderRadius: R.card,
         fontFamily: SYSTEM_FONT,
+        // Belt and braces on top of the three-stop cap: a phone in
+        // landscape, or a run of very long names, still cannot push the
+        // CTA off the bottom of the screen.
+        maxHeight: '62vh',
+        overflowY: 'auto',
         // House card shadow (CardStack) + the house hairline the modals
         // and spot cards use.
         boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
@@ -307,7 +321,7 @@ export function WalkStopsCard({
       >
         {t.walkStops.heading(stops.length)}
       </div>
-      {stops.map((stop, i) => (
+      {stops.map((stop) => (
         <div
           key={stop.id}
           role="button"
@@ -324,23 +338,18 @@ export function WalkStopsCard({
             padding: `${S.s}px 0`,
           }}
         >
+          {/* Bullet, matching the dots on the map. Nudged down to sit
+              on the name's optical centre rather than its box top. */}
           <div
             style={{
               flex: '0 0 auto',
-              width: STOP_DISC_CARD,
-              height: STOP_DISC_CARD,
+              width: STOP_DOT_CARD,
+              height: STOP_DOT_CARD,
+              marginTop: 6,
               borderRadius: R.pill,
               background: colors.walkStop,
-              color: colors.black,
-              fontSize: TYPE.small,
-              fontWeight: 700,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
             }}
-          >
-            {i + 1}
-          </div>
+          />
           <div style={{ minWidth: 0 }}>
             <div style={{ fontSize: TYPE.body, fontWeight: 700 }}>
               {stop.name}
@@ -359,7 +368,7 @@ export function WalkStopsCard({
                 marginTop: 2,
                 // Two lines of the story is a taste of it — the whole
                 // sentence is one tap away on the map, and a card that
-                // grows with four long stories covers the route it is
+                // grows with three long stories covers the route it is
                 // describing.
                 display: '-webkit-box',
                 WebkitLineClamp: 2,
@@ -383,22 +392,6 @@ export function WalkStopsCard({
           }}
         >
           {t.walkStops.destination(destinationName)}
-        </div>
-      ) : null}
-      {/* The line on the map is straight segments between the stops
-          because street routing was unavailable. Said here rather than
-          drawn: every walk's line is dashed, so the dashes cannot also
-          mean "this one is a guess". */}
-      {approximate ? (
-        <div
-          style={{
-            marginTop: S.xs,
-            fontSize: TYPE.caption,
-            color: colors.grey,
-            lineHeight: 1.4,
-          }}
-        >
-          {t.walkStops.approximate}
         </div>
       ) : null}
       {/* House CTA pill, same recipe as every modal's primary action. */}

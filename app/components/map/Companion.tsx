@@ -458,7 +458,6 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
                   shape,
                   spotId: null,
                   destinationName: walk.primary.name,
-                  approximate: walk.approximate,
                 },
                 walk.stops,
               );
