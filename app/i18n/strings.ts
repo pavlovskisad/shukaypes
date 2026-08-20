@@ -734,7 +734,7 @@ const uk: AppStrings = {
     // Shown while the walking verbs are on the ring — three icons that
     // do not explain themselves, so the dog names them.
     exploreAsk: 'просто пройтись, заскочити по каву чи в зоомагазин, чи з кимось познайомитись?',
-    walkShapeAsk: 'петлею — і повернемось сюди, чи просто вперед?',
+    walkShapeAsk: 'туди й назад чи в один бік?',
     walkDistanceAsk: 'тут поруч чи заберемось далі?',
     visitCategoryAsk: 'кава, поїсти, бар, зоомагазин чи ветеринар?',
     visitSpotAsk: 'ось що поруч — куди йдемо?',
@@ -1113,7 +1113,7 @@ const en: AppStrings = {
     explore: 'i want a walk',
     play: 'who holds this district?',
     exploreAsk: 'just a stroll, a coffee or a pet shop, or shall we go and meet somebody?',
-    walkShapeAsk: 'a loop back to here, or straight onward?',
+    walkShapeAsk: 'there and back, or one way?',
     walkDistanceAsk: 'close by, or shall we go further?',
     visitCategoryAsk: 'coffee, food, a bar, a pet shop, or the vet?',
     visitSpotAsk: "here's what's nearby — where are we headed?",
