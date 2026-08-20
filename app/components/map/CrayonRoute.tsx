@@ -119,7 +119,11 @@ function jitteredCoords(path: LatLng[]): GeoJSON.Position[] {
 export function CrayonRoute({
   path,
   color = colors.routeLine,
-  weight = 9,
+  // 7.2 rather than a round number because it is 9 × 0.8 — the line
+  // read as too heavy at 9 on a phone. The dash pattern is expressed in
+  // LINE WIDTHS, so the marks and gaps narrowed with it and the rhythm
+  // is unchanged.
+  weight = 7.2,
   opacity = 0.95,
   autoFit = true,
   dashed = true,
