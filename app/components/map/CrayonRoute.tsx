@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo, useRef } from 'react';
 import maplibregl from 'maplibre-gl';
 import type { LatLng } from '@shukajpes/shared';
 import { useMaplibreMap } from './MapContext';
+import { colors } from '../../constants/colors';
 
 // Hand-drawn walking route — rendered as a NATIVE MapLibre line layer
 // off a GeoJSON source. Earlier versions painted an absolute-positioned
@@ -18,6 +19,13 @@ import { useMaplibreMap } from './MapContext';
 // with a deterministic seed (same path → same wobble, no flicker) and
 // a small line-blur for soft pencil edges.
 
+// THE DEFAULTS BELOW ARE THE HOUSE ROUTE STYLE, and every route in the
+// app is expected to take them: a planned walk, a detective quest, the
+// line the dog leads you along in supersniff. They were three different
+// weights and opacities on the same blue once, which read as three
+// unrelated things rather than as one app speaking consistently.
+//
+// Override only with a reason worth writing down next to it.
 interface CrayonRouteProps {
   path: LatLng[];
   color?: string;
@@ -28,10 +36,10 @@ interface CrayonRouteProps {
   // also includes the user position, so the dog can see themselves
   // relative to the quest waypoints.
   autoFit?: boolean;
-  // Draw the line broken rather than solid. How a PLANNED WALK is
-  // drawn, per the product reference: chunky dashes with green stops
-  // sitting on them. Quest and search routes stay solid — they point at
-  // one place, and a tour is a different object.
+  // Draw the line broken rather than solid — the product reference's
+  // chunky dashes, and now how every route is drawn. Kept as a prop
+  // rather than hard-wired so a solid line stays one word away if some
+  // future route earns one.
   dashed?: boolean;
 }
 
@@ -110,11 +118,11 @@ function jitteredCoords(path: LatLng[]): GeoJSON.Position[] {
 
 export function CrayonRoute({
   path,
-  color = '#2f6bff',
+  color = colors.routeLine,
   weight = 9,
-  opacity = 0.8,
+  opacity = 0.95,
   autoFit = true,
-  dashed = false,
+  dashed = true,
 }: CrayonRouteProps) {
   const map = useMaplibreMap();
   const uid = useId().replace(/[:]/g, '');

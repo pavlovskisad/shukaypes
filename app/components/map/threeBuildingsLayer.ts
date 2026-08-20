@@ -38,6 +38,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { OWN_COLOR_RGB, ownerColorRgb, pointInRing } from './territoryColor';
 import { DOG_CAM } from '../../constants/experiments';
 import { jitterInRadius } from '../../utils/cluster';
+import { colors } from '../../constants/colors';
 
 export const THREE_BUILDINGS_LAYER_ID = 'three-buildings';
 
@@ -115,7 +116,11 @@ export const CLEAR_BAND = 240;
 // Sniff-and-lead preview: a brand-blue "beacon" glow washed over the previewed
 // dog's search zone, weighted by the distance haze so the target area lights up
 // as blue fog toward the horizon rather than flat paint up close.
-export const PREVIEW_GLOW_COLOR = 0x2f6bff;
+//
+// Derived from colors.sniffBlue rather than repeating its hex: Three.js wants
+// the colour as a number, which is the only reason this looks different from
+// every other use of it.
+export const PREVIEW_GLOW_COLOR = parseInt(colors.sniffBlue.slice(1), 16);
 
 // Fixed radius of the cinematic dog view's blue beacon glow (normal-mode
 // pet card open), centred on the pet's jittered PIN position. The camera

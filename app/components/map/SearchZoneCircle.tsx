@@ -2,6 +2,7 @@ import { useEffect, useId, useMemo } from 'react';
 import type maplibregl from 'maplibre-gl';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import { useMaplibreMap } from './MapContext';
+import { colors } from '../../constants/colors';
 
 const URGENCY_COLOR: Record<UrgencyLevel, string> = {
   urgent: '#e84040',
@@ -12,7 +13,7 @@ const URGENCY_COLOR: Record<UrgencyLevel, string> = {
 // Highlighted (cinematic dog view / preview) zones are always the brand
 // blue — matching the beacon fog that lights the area — regardless of
 // urgency. Red/amber rings fought the blue glow and read as warnings.
-const HIGHLIGHT_COLOR = '#2f6bff';
+const HIGHLIGHT_COLOR = colors.sniffBlue;
 
 interface SearchZoneCircleProps {
   center: LatLng;
