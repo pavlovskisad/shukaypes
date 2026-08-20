@@ -35,6 +35,11 @@ const ALLOWED = new Map<string, string>([
   ['db/schema.ts', 'declares the column'],
   ['pipeline/adBody.ts', 'caps the text on the way in'],
   ['pipeline/sources/olx.ts', 'writes it at ingest'],
+  // The public-channel scraper, which TELEGRAM_CHANNELS turns on. It
+  // stores the message text for the same reason olx.ts stores the ad —
+  // and it had been the one ingest path that did not, so a pet from a
+  // channel arrived with a one-line title and no body.
+  ['pipeline/sources/telegram.ts', 'writes it at ingest'],
   ['services/telegramIngest.ts', 'writes it at ingest'],
   // THE ONLY READER OF THE TEXT. Gated on a sightings row for this user,
   // and it redacts contacts when there is not one.
