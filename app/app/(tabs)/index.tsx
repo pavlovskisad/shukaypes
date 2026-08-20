@@ -23,9 +23,9 @@ const HUD_ICON_SIZE = 59;
 const POP_IN = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
 
 export default function MapScreen() {
-  // Supersniff — the corner-logo button toggles it.
+  // Supersniff is one of the three the corner logo rotates through.
   const dogCam = useGameStore((s) => s.dogCam);
-  const toggleDogCam = useGameStore((s) => s.toggleDogCam);
+  const cycleAppMode = useGameStore((s) => s.cycleAppMode);
   const appMode = useGameStore((s) => s.appMode);
   const lostFlowOpen = useGameStore((s) => s.lostFlowOpen);
   const setLostFlowOpen = useGameStore((s) => s.setLostFlowOpen);
@@ -68,9 +68,9 @@ export default function MapScreen() {
   }, [immersive]);
 
   // The logo needs its OWN window, not `sniffJustChanged`. It stays put
-  // through a supersniff toggle — it IS the supersniff toggle — and only
-  // bubbles for the gate, so keying it on `immersive` would animate it
-  // out and back every time somebody tapped it.
+  // through a mode change — it IS the mode switch — and only bubbles for
+  // the gate, so keying it on `immersive` would animate it out and back
+  // every time somebody tapped it.
   const [gateJustChanged, setGateJustChanged] = useState(false);
   const gateInitRef = useRef(true);
   useLayoutEffect(() => {
@@ -129,10 +129,18 @@ export default function MapScreen() {
             }}
           >
           <Pressable
-            onPress={toggleDogCam}
+            onPress={cycleAppMode}
             onPressIn={popPressableEvent}
             accessibilityRole="button"
-            accessibilityLabel={dogCam ? 'turn supersniff off' : 'turn supersniff on'}
+            // Names where the NEXT tap goes, not where you are — the
+            // button's whole job is the thing it is about to do.
+            accessibilityLabel={
+              appMode === 'explore'
+                ? 'show the district'
+                : appMode === 'play'
+                  ? 'turn supersniff on'
+                  : 'back to walking'
+            }
             hitSlop={8}
             style={{ position: 'relative' }}
           >

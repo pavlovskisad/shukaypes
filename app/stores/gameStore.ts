@@ -408,6 +408,8 @@ interface GameState {
   // clear-slate rules below are applied exactly once, in one place.
   setAppMode: (mode: AppMode) => void;
   toggleDogCam: () => void;
+  // The corner logo's rotation. See the implementation for the order.
+  cycleAppMode: () => void;
   setTerritoryVisible: (visible: boolean) => void;
   setDogCamViaSearch: (dogCamViaSearch: boolean) => void;
   setSearchTarget: (t: { dogId: string; spot: LatLng } | null) => void;
@@ -1256,6 +1258,25 @@ export const useGameStore = create<GameState>((set, get) => ({
   // answered the question once.
   toggleDogCam: () =>
     get().setAppMode(get().dogCam ? 'explore' : 'search'),
+  // THE LOGO ROTATES THROUGH THE THREE PLACES YOU CAN BE:
+  // explore → play → search → explore.
+  //
+  // It was a two-state toggle when there were two states. There are
+  // three now, and the fourth intent («загубив друга») is a sheet rather
+  // than a place, so it has no slot in the rotation.
+  //
+  // The order follows how loud each one is: the plain walk, then the
+  // same walk with the ground coloured in, then the search that takes
+  // the whole screen — and round to the quiet one again.
+  //
+  // 'gate' cannot reach here (the logo is bubbled out while the dog is
+  // asking), but indexOf returns -1 for it and lands on explore, which
+  // is where «хочу погуляти» would have put them anyway.
+  cycleAppMode: () => {
+    const order: AppMode[] = ['explore', 'play', 'search'];
+    const next = order[(order.indexOf(get().appMode) + 1) % order.length];
+    get().setAppMode(next ?? 'explore');
+  },
   setTerritoryVisible: (territoryVisible) => set({ territoryVisible }),
   setDogCamViaSearch: (dogCamViaSearch) => set({ dogCamViaSearch }),
   setSearchTarget: (searchTarget) => set({ searchTarget }),

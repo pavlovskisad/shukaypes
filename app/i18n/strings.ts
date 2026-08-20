@@ -717,7 +717,7 @@ const uk: AppStrings = {
   },
   hints: {
     longPressToSniff: 'затисни карту щоб понюхати 🐾',
-    supersniff: 'торкнись мене вгорі ліворуч — це супернюх: так винюхую загублених псів 👀',
+    supersniff: 'лого вгорі ліворуч гортає нас: прогулянка → район → супернюх 🔄',
     supersniffIntro: 'супернюх увімкнено! гортай — наступний пес, тисни — беру слід 🐾',
     supersniffExit: 'щоб повернутись до прогулянок — тисни лого вгорі ліворуч ↖️',
     swipeCards: 'гортай вбік — там ще',
@@ -1098,7 +1098,7 @@ const en: AppStrings = {
   },
   hints: {
     longPressToSniff: 'hold the map and i\'ll have a sniff 🐾',
-    supersniff: 'tap me up in the corner — that\'s supersniff: how i hunt for lost dogs 👀',
+    supersniff: 'the logo up in the corner cycles us: walk → district → supersniff 🔄',
     supersniffIntro: 'supersniff on! swipe for the next dog, tap to pick up the trail 🐾',
     supersniffExit: 'to get back to walks — tap the logo top-left ↖️',
     swipeCards: 'swipe sideways — there\'s more',
