@@ -22,6 +22,7 @@ import { inArray } from 'drizzle-orm';
 import { db, schema } from '../../db/index.js';
 import { parseDogPost } from '../parser.js';
 import { upsertLostDog } from '../upsert.js';
+import { capBody } from '../adBody.js';
 import { emptySummary, recordError, type Source, type SourceRunSummary } from '../source.js';
 import { looksLikeLostPet, looksLikeRehoming } from '../keywords.js';
 
@@ -233,6 +234,25 @@ export class TelegramSource implements Source {
             source: tag,
             title,
             dogId: result.id,
+            // KEEP THE POST. Without this a Telegram pet arrives with
+            // `title` — one line — and the app tells its walker "we do not
+            // have the full text of this one", which is the state PR #472
+            // existed to remove. The bot-webhook path
+            // (services/telegramIngest.ts) has always stored it; this
+            // path, which is the one TELEGRAM_CHANNELS turns on, never
+            // did. Switching channels on without this would have quietly
+            // refilled the map with body-less pets.
+            //
+            // It matters more here than it does for OLX. OLX masks the
+            // owner's number on its own page, so of 166 reachable pets
+            // exactly 2 carry a phone anybody could ring. Telegram has
+            // nothing in the middle that wants to hide it — verified on
+            // two channels, numbers printed in full — so this column is
+            // where a readable contact would actually arrive.
+            //
+            // Same cap as every other source, so the stored corpus stays
+            // consistent for parse scoring.
+            rawBody: capBody(msg.text),
             parseConfidence: parsed.parseConfidence,
             ingestAction: result.action,
             skipReason: result.skipReason,
