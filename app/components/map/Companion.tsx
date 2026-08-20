@@ -644,8 +644,21 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   const hintsAllowed = useGameStore((s) => s.hintsAllowed);
   const noRealBubble = !menuOpen && !hideBubble && !bubble && !localBubble;
   const hintsReady = hintsAllowed && noRealBubble;
-  const longPressHint = useHint('map:long-press-to-sniff', {
+  // FIRST, because the logo is the one control that changes what the
+  // whole screen IS, and a brand mark in a corner gives no clue that it
+  // does anything at all. It used to be last, on the reasoning that
+  // supersniff was the deepest feature and the user should learn the map
+  // first — but the button is not one feature any more, it is the way
+  // between all three, and somebody who never discovers it only ever
+  // sees a third of the app.
+  const modesHint = useHint('map:modes', {
     ready: hintsReady,
+    showDelayMs: 1200,
+    autoDismissMs: 6000,
+    persist: false,
+  });
+  const longPressHint = useHint('map:long-press-to-sniff', {
+    ready: hintsReady && modesHint.seen && !modesHint.visible,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     // FIXME(hints): persist:false while we iterate on the
@@ -670,17 +683,6 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // arrive strictly one at a time. Pulses the pill via activeHint.
   const spotsHint = useHint('map:spots-toggle', {
     ready: hintsReady && hudMetersHint.seen && !hudMetersHint.visible,
-    showDelayMs: 1200,
-    autoDismissMs: 6000,
-    persist: false,
-  });
-  // Soft fan-out, final step: super-sniff (the top-left logo toggles it —
-  // a mode-switching brand logo is undiscoverable on its own). Saved for
-  // last because it's the deepest feature (hunting lost dogs); by now the
-  // user knows the map basics. Chained after the spots toggle so the map
-  // hints arrive strictly one at a time. Pulses the logo via activeHint.
-  const supersniffHint = useHint('map:supersniff', {
-    ready: hintsReady && spotsHint.seen && !spotsHint.visible,
     showDelayMs: 1200,
     autoDismissMs: 6000,
     persist: false,
@@ -734,14 +736,14 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
   // state: once a hint has fired (it only fires when idle) it owns the
   // bubble for its full window — the snap-to-dog ease it triggers would
   // otherwise flip `hintsReady` false and yank the bubble away mid-show.
-  const activeHintId = longPressHint.visible
-    ? 'map:long-press-to-sniff'
-    : hudMetersHint.visible
-      ? 'map:hud-meters'
-      : spotsHint.visible
-        ? 'map:spots-toggle'
-        : supersniffHint.visible
-          ? 'map:supersniff'
+  const activeHintId = modesHint.visible
+    ? 'map:modes'
+    : longPressHint.visible
+      ? 'map:long-press-to-sniff'
+      : hudMetersHint.visible
+        ? 'map:hud-meters'
+        : spotsHint.visible
+          ? 'map:spots-toggle'
           : // Gated on dogCam so the line + logo pulse drop the moment the
             // user exits (the hinted gesture) instead of riding out the
             // window into normal mode, where "get back to walks" is stale.
@@ -749,14 +751,14 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
             ? 'map:supersniff-exit'
             : null;
   const hintBubble =
-    activeHintId === 'map:long-press-to-sniff'
-      ? t.hints.longPressToSniff
-      : activeHintId === 'map:hud-meters'
-        ? t.hints.hudMeters
-        : activeHintId === 'map:spots-toggle'
-          ? t.hints.spotsToggle
-          : activeHintId === 'map:supersniff'
-            ? t.hints.supersniff
+    activeHintId === 'map:modes'
+      ? t.hints.modes
+      : activeHintId === 'map:long-press-to-sniff'
+        ? t.hints.longPressToSniff
+        : activeHintId === 'map:hud-meters'
+          ? t.hints.hudMeters
+          : activeHintId === 'map:spots-toggle'
+            ? t.hints.spotsToggle
             : activeHintId === 'map:supersniff-exit'
               ? t.hints.supersniffExit
               : null;

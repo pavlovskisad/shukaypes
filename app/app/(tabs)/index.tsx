@@ -38,13 +38,14 @@ export default function MapScreen() {
   // rather than two that drift.
   const immersive = dogCam || gateOpen;
   // When a logo-targeting hint is showing, pulse the logo so the spoken
-  // line has a target: 'map:supersniff' calls the user to TRY the mode,
-  // 'map:supersniff-exit' shows modal-arrived searchers the way BACK to
-  // walks. Hint visibility is computed in the Companion and published to
-  // the store as `activeHint`.
+  // line has a target: 'map:modes' is the first thing the dog says on an
+  // idle screen and points at the control that changes what the screen
+  // IS; 'map:supersniff-exit' shows modal-arrived searchers the way BACK
+  // to walks. Hint visibility is computed in the Companion and published
+  // to the store as `activeHint`.
   const activeHint = useGameStore((s) => s.activeHint);
   const pulseLogo =
-    activeHint === 'map:supersniff' || activeHint === 'map:supersniff-exit';
+    activeHint === 'map:modes' || activeHint === 'map:supersniff-exit';
   // Pop animations on the HUD pills should only run during the brief
   // window around an actual sniff toggle, not on every re-render or
   // on initial mount. Static styles handle the steady state.

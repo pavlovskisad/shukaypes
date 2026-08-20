@@ -283,8 +283,11 @@ export interface AppStrings {
   // ride in the dog's SpeechBubble or a tiny callout, not a
   // tutorial modal.
   hints: {
+    // The logo is the only control that changes what the whole screen
+    // IS, and a brand mark in a corner gives no clue that it does
+    // anything — so this one goes first, plainly.
+    modes: string;
     longPressToSniff: string;
-    supersniff: string;
     supersniffIntro: string;
     // Way out of supersniff for users who arrived via the modal's
     // "start search" and never touched the logo.
@@ -716,8 +719,8 @@ const uk: AppStrings = {
     },
   },
   hints: {
+    modes: 'тисни лого вгорі ліворуч — воно перемикає режими 🔄',
     longPressToSniff: 'затисни карту щоб понюхати 🐾',
-    supersniff: 'лого вгорі ліворуч гортає нас: прогулянка → район → супернюх 🔄',
     supersniffIntro: 'супернюх увімкнено! гортай — наступний пес, тисни — беру слід 🐾',
     supersniffExit: 'щоб повернутись до прогулянок — тисни лого вгорі ліворуч ↖️',
     swipeCards: 'гортай вбік — там ще',
@@ -1097,8 +1100,8 @@ const en: AppStrings = {
     },
   },
   hints: {
+    modes: 'tap the logo top-left — it changes modes 🔄',
     longPressToSniff: 'hold the map and i\'ll have a sniff 🐾',
-    supersniff: 'the logo up in the corner cycles us: walk → district → supersniff 🔄',
     supersniffIntro: 'supersniff on! swipe for the next dog, tap to pick up the trail 🐾',
     supersniffExit: 'to get back to walks — tap the logo top-left ↖️',
     swipeCards: 'swipe sideways — there\'s more',

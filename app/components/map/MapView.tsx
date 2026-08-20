@@ -813,7 +813,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     }
     if (appMode !== 'play') return;
     const lines = t.modes.playIntro;
-    showBubble(lines[Math.floor(Math.random() * lines.length)]!, 4200);
+    // Double the usual hold. Every other bubble is a reaction to something
+    // the user just did and can be re-triggered by doing it again; this one
+    // is the only explanation of a mode's rules and fires once on entry, so
+    // it gets long enough to actually be read.
+    showBubble(lines[Math.floor(Math.random() * lines.length)]!, 8400);
   }, [appMode, showBubble, t]);
 
   // Territory: the dog announces its own claims. Seq-keyed (the store
