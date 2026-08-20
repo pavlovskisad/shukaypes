@@ -8,6 +8,7 @@ import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
 import type { UrgencyLevel } from '@shukajpes/shared';
+import { HUD_OVERLAY_PILL } from '../../constants/buttons';
 import { colors } from '../../constants/colors';
 import { balance } from '../../constants/balance';
 import { R } from '../../constants/radius';
@@ -68,7 +69,7 @@ import { PoiCluster } from './PoiCluster';
 import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import { SniffPress } from './SniffPress';
-import { WalkStops, WalkStopsIntro } from './WalkStops';
+import { WalkStops, WalkStopsCard, WalkStopsToggle } from './WalkStops';
 import { TerritoryLayer } from './TerritoryLayer';
 import type { LatLng } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
@@ -2421,7 +2422,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           }
           setExpandedClusterKey(null);
           useGameStore.getState().setMenuOpen(false);
-          setWalkRoute(null, null);
+          // A WALK IS NOT DISMISSED BY TAPPING THE MAP. It used to be,
+          // which meant any stray tap while reading the route — panning,
+          // missing a stop disc, closing the radial menu — threw away a
+          // planned walk with its landmarks and its stories, silently
+          // and with nothing to undo it. Leaving a walk is a decision,
+          // and it has a pill under the HUD that says so.
         });
         setMapInstance(map);
       } catch (err) {
@@ -2932,13 +2938,15 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         {walkRoute && walkRoute.length > 1 ? (
           <CrayonRoute
             path={walkRoute}
-            color="#2f6bff"
+            // A planned walk is drawn as the product reference draws it:
+            // a chunky cyan DASHED line with green stops on it. Dashed
+            // always, not as a status — see WalkStopsCard, which is
+            // where "this line is a rough direction" is said in words
+            // when street routing wasn't available.
+            color={colors.walkLine}
             weight={9}
-            opacity={0.8}
-            // Dashed when the geometry is straight segments rather than
-            // streets — street routing was unavailable, and a solid line
-            // would be a claim about which roads to take.
-            dashed={walkRouteMeta?.approximate === true}
+            opacity={0.95}
+            dashed
           />
         ) : null}
 
@@ -3281,10 +3289,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         </div>
       ) : null}
 
-      {/* Cancel pills — small floating chips that drop in below the
-          HUD when a route or quest is active. Stacked vertically so
-          both can show at once (rare but valid: a walk + a separate
-          quest). Tapping a pill clears the corresponding state. */}
+      {/* The overlay that drops in below the HUD while a route or quest
+          is running: the ways OUT of that state on the HUD's own line,
+          and under them whatever the state has to show.
+
+          THE CONTAINER SETS NO z-index, deliberately. A positioned
+          ancestor with one opens a stacking context that traps every
+          descendant at the ancestor's level — which is how the stops
+          card, nominally at 40, ended up painting UNDER the companion
+          at 42. Each child carries its own tier instead, and both are
+          then measured against the markers rather than against each
+          other. Don't add a z-index here. */}
       {(walkRoute || activeQuest) && !(DOG_CAM && dogCam) ? (
         <div
           style={{
@@ -3296,74 +3311,64 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             flexDirection: 'column',
             alignItems: 'center',
             gap: S.s,
-            zIndex: Z.HUD_PILLS_OVERLAY,
             pointerEvents: 'none',
           }}
         >
-          {/* What this walk has to show, listed once when it starts.
-              Above the cancel pill because it's the walk being
-              introduced and the pill is how you back out of it. */}
-          <WalkStopsIntro
-            onFocusStop={(position) =>
-              // Same downward offset the sniff discovery uses: the
-              // story bubble stacks ABOVE its disc, so centring the
-              // disc would push the text under the HUD.
-              mapRef.current?.easeTo({
-                center: [position.lng, position.lat],
-                padding: { top: 0, bottom: 0, left: 0, right: 0 },
-                offset: [0, 70],
-                duration: 600,
-              })
-            }
-          />
-          {walkRoute ? (
-            <div
-              role="button"
-              aria-label={t.hud.cancelWalk}
-              onClick={() => setWalkRoute(null, null)}
-              style={{
-                pointerEvents: 'auto',
-                cursor: 'pointer',
-                padding: '8px 16px',
-                background: '#ffffff',
-                color: '#1a1a1a',
-                borderRadius: R.pill,
-                fontFamily: SYSTEM_FONT,
-                fontSize: TYPE.small,
-                fontWeight: 600,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                border: '1px solid rgba(0,0,0,0.06)',
-                userSelect: 'none',
-              }}
-            >
-              × {t.hud.cancelWalk}
-            </div>
-          ) : null}
-          {activeQuest ? (
-            <div
-              role="button"
-              aria-label={t.hud.abandonQuest}
-              onClick={() => {
-                void abandonActiveQuest();
-              }}
-              style={{
-                pointerEvents: 'auto',
-                cursor: 'pointer',
-                padding: '8px 16px',
-                background: '#ffffff',
-                color: '#1a1a1a',
-                borderRadius: R.pill,
-                fontFamily: SYSTEM_FONT,
-                fontSize: TYPE.small,
-                fontWeight: 600,
-                boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
-                border: '1px solid rgba(0,0,0,0.06)',
-                userSelect: 'none',
-              }}
-            >
-              × {t.hud.abandonQuest}
-            </div>
-          ) : null}
+          {/* Pills first, so leaving is always in the same place —
+              right under the HUD — whether or not the walk has a list
+              of stops under it. */}
+          <div
+            style={{
+              position: 'relative',
+              zIndex: Z.HUD_PILLS_OVERLAY,
+              display: 'flex',
+              justifyContent: 'center',
+              flexWrap: 'wrap',
+              gap: S.s,
+            }}
+          >
+            {walkRoute ? <WalkStopsToggle /> : null}
+            {walkRoute ? (
+              <div
+                role="button"
+                aria-label={t.hud.cancelWalk}
+                onClick={() => setWalkRoute(null, null)}
+                style={HUD_OVERLAY_PILL}
+              >
+                × {t.hud.cancelWalk}
+              </div>
+            ) : null}
+            {activeQuest ? (
+              <div
+                role="button"
+                aria-label={t.hud.abandonQuest}
+                onClick={() => {
+                  void abandonActiveQuest();
+                }}
+                style={HUD_OVERLAY_PILL}
+              >
+                × {t.hud.abandonQuest}
+              </div>
+            ) : null}
+          </div>
+          {/* What this walk has to show. Above the dog and its speech
+              bubble, because it describes the walk the dog just
+              proposed. */}
+          <div style={{ position: 'relative', zIndex: Z.HUD_WALK_CARD }}>
+            <WalkStopsCard
+              onFocusStop={(position) =>
+                // Same downward offset the sniff discovery uses: the
+                // story bubble stacks ABOVE its disc, so centring the
+                // disc would push the text under the HUD.
+                mapRef.current?.easeTo({
+                  center: [position.lng, position.lat],
+                  padding: { top: 0, bottom: 0, left: 0, right: 0 },
+                  offset: [0, 70],
+                  duration: 600,
+                })
+              }
+            />
+          </div>
         </div>
       ) : null}
 

@@ -68,3 +68,29 @@ export const MODAL_PILL_DISABLED: CSSProperties = {
   cursor: 'default',
   boxShadow: 'none',
 };
+
+// The floating pills that drop in under the HUD while something is
+// running — cancel walk, abandon quest, the walk's stop-list toggle.
+//
+// A separate recipe from the modal pills on purpose: these sit on the
+// MAP rather than inside a card, so they are white with a slightly
+// stronger shadow to lift off the basemap, and a touch quieter in
+// weight because they are ways OUT of a state rather than the primary
+// action in it. `pointerEvents: auto` because the row they live in is
+// pass-through, so the map underneath stays draggable between them.
+export const HUD_OVERLAY_PILL: CSSProperties = {
+  pointerEvents: 'auto',
+  cursor: 'pointer',
+  padding: '8px 16px',
+  background: '#ffffff',
+  color: '#1a1a1a',
+  borderRadius: R.pill,
+  fontFamily: SYSTEM_FONT,
+  fontSize: TYPE.small,
+  fontWeight: 600,
+  boxShadow: '0 4px 12px rgba(0,0,0,0.12)',
+  // The house hairline: 1px at 0.06 alpha.
+  border: '1px solid rgba(0,0,0,0.06)',
+  userSelect: 'none',
+  whiteSpace: 'nowrap',
+};

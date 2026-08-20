@@ -28,11 +28,10 @@ interface CrayonRouteProps {
   // also includes the user position, so the dog can see themselves
   // relative to the quest waypoints.
   autoFit?: boolean;
-  // Draw the line broken rather than solid. Used for a walk whose
-  // geometry is straight segments between its points because street
-  // routing was unavailable — a solid line there would be a claim about
-  // which streets to take that we cannot make. Dashes say "this way,
-  // roughly" without pretending otherwise.
+  // Draw the line broken rather than solid. How a PLANNED WALK is
+  // drawn, per the product reference: chunky dashes with green stops
+  // sitting on them. Quest and search routes stay solid — they point at
+  // one place, and a tour is a different object.
   dashed?: boolean;
 }
 
@@ -119,9 +118,11 @@ export function CrayonRoute({
   const sourceId = useMemo(() => `route-${uid}`, [uid]);
   const layerId = `${sourceId}-line`;
   // Dash lengths are in LINE WIDTHS, not pixels, so this reads the same
-  // at any weight the callers pass.
+  // at any weight the callers pass. Dash longer than gap, so the line
+  // still reads as one continuous route at a glance — the reference's
+  // dashes are chunky marks with breathing room, not a dotted trail.
   const dashPattern = useMemo(
-    () => (dashed ? [0.6, 0.9] : undefined),
+    () => (dashed ? [1.4, 0.9] : undefined),
     [dashed],
   );
   // Only autofit ONCE per route instance — re-centering on every prop

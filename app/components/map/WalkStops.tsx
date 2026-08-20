@@ -3,6 +3,8 @@ import type { LatLng } from '@shukajpes/shared';
 import { MapLibreMarker } from './MapLibreMarker';
 import { useGameStore } from '../../stores/gameStore';
 import { clampExtract, fetchWikipediaExtract } from '../../services/wikipedia';
+import { HUD_OVERLAY_PILL, MODAL_PILL_DARK } from '../../constants/buttons';
+import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
@@ -15,23 +17,31 @@ import type { WalkStop } from '../../utils/walk';
 
 // The landmarks a planned walk goes through, on the map.
 //
-// Each stop is a small numbered disc sitting on the route, in the same
-// blue the route is drawn in so it reads as part of the line rather than
-// as one more POI. Tap one and the dog says its sentence; tap "ще" inside
-// that and the Wikipedia summary opens underneath.
+// Each stop is a small numbered green disc sitting on the cyan dashed
+// line — the pairing the product reference uses, and the reason a tour
+// reads as a route WITH stops rather than as a line among some pins.
+// Numbered because the order is the walk. Tap one and the dog says its
+// sentence; tap "ще" inside that and the Wikipedia summary opens under
+// it.
 //
 // ONE OPEN AT A TIME, held in the store rather than here: the walk-start
 // list also opens stops (tapping a row flies the camera to it and expands
 // it), so the two surfaces have to agree on which one is showing, and a
 // piece of state two components drive belongs above both of them.
 
-// Same blue as the walk polyline in MapView.
-const WALK_COLOR = '#2f6bff';
-
 // Below this, a stop is on the way and saying anything about the detour
 // is noise. Above it, the walker is being sent round a corner and should
 // be told before they commit to the walk.
 const NOTABLE_DETOUR_M = 80;
+
+// The numbered disc, on the map and in the list. Dark numerals on the
+// bright green rather than white: at this size white on #5fd726 is
+// under the contrast a number has to clear to be read at a glance, and
+// black-on-bright is the pairing the accent colour already uses
+// elsewhere in the app.
+const STOP_DISC_MAP = 26;
+const STOP_DISC_MAP_OPEN = 30;
+const STOP_DISC_CARD = 24;
 
 export function WalkStops() {
   const stops = useGameStore((s) => s.walkStops);
@@ -190,13 +200,13 @@ function StopMarker({
           style={{
             cursor: 'pointer',
             userSelect: 'none',
-            width: open ? 30 : 26,
-            height: open ? 30 : 26,
+            width: open ? STOP_DISC_MAP_OPEN : STOP_DISC_MAP,
+            height: open ? STOP_DISC_MAP_OPEN : STOP_DISC_MAP,
             borderRadius: R.pill,
-            background: WALK_COLOR,
-            color: '#ffffff',
-            border: '2px solid #ffffff',
-            boxShadow: '0 2px 8px rgba(47,107,255,0.4)',
+            background: colors.walkStop,
+            color: colors.black,
+            border: `2px solid ${colors.white}`,
+            boxShadow: '0 2px 8px rgba(0,0,0,0.22)',
             fontFamily: SYSTEM_FONT,
             fontSize: TYPE.small,
             fontWeight: 700,
@@ -212,16 +222,44 @@ function StopMarker({
   );
 }
 
-// The list of stops, shown once when a walk starts: what this walk is,
-// before the walker has taken a step. Rows fly the camera to a stop and
-// open its story, which is also the discovery path for the numbered
-// discs — somebody who dismisses this card has already been told the
-// numbers mean something.
+// The pill that opens the list back up, for the HUD's overlay row next
+// to "cancel walk". Closing the card must not be a one-way door: the
+// stops are the walk, and once they were behind a dismissed card the
+// only way back to them was to plan a different walk.
+export function WalkStopsToggle() {
+  const t = useStrings();
+  const stops = useGameStore((s) => s.walkStops);
+  const open = useGameStore((s) => s.walkStopsOpen);
+  const setOpen = useGameStore((s) => s.setWalkStopsOpen);
+  if (stops.length === 0) return null;
+  return (
+    <div
+      role="button"
+      aria-label={t.walkStops.heading(stops.length)}
+      aria-expanded={open}
+      onClick={(e) => {
+        playPop(e.currentTarget);
+        setOpen(!open);
+      }}
+      style={{ ...HUD_OVERLAY_PILL, opacity: open ? 0.7 : 1 }}
+    >
+      {t.walkStops.count(stops.length)}
+    </div>
+  );
+}
+
+// What this walk has to show. Opens itself when the walk starts, and is
+// reopened from the pill above.
+//
+// Rows fly the camera to a stop and close the card, because the card
+// sits over the middle of the map and would cover the very thing it was
+// just asked to show. Closing it is not losing it — the pill brings it
+// back, and the walk itself is untouched either way. NOTHING here
+// cancels the route; that is the cancel pill's single job.
 //
 // The camera move comes in as a prop rather than off MapContext: this
-// card lives in MapView's HUD stack, outside the map's own provider,
-// alongside the cancel-walk pill it sits above.
-export function WalkStopsIntro({
+// card lives in MapView's HUD stack, outside the map's own provider.
+export function WalkStopsCard({
   onFocusStop,
 }: {
   onFocusStop: (position: LatLng) => void;
@@ -230,15 +268,16 @@ export function WalkStopsIntro({
   const stops = useGameStore((s) => s.walkStops);
   const walkRoute = useGameStore((s) => s.walkRoute);
   const destinationName = useGameStore((s) => s.walkRouteMeta?.destinationName);
-  const seen = useGameStore((s) => s.walkStopsIntroSeen);
-  const dismiss = useGameStore((s) => s.dismissWalkStopsIntro);
+  const approximate = useGameStore((s) => s.walkRouteMeta?.approximate === true);
+  const open = useGameStore((s) => s.walkStopsOpen);
+  const setOpen = useGameStore((s) => s.setWalkStopsOpen);
   const setOpenWalkStop = useGameStore((s) => s.setOpenWalkStop);
 
-  if (!walkRoute || seen || stops.length === 0) return null;
+  if (!walkRoute || !open || stops.length === 0) return null;
 
   const focus = (position: LatLng, id: string) => {
     setOpenWalkStop(id);
-    dismiss();
+    setOpen(false);
     onFocusStop(position);
   };
 
@@ -246,23 +285,24 @@ export function WalkStopsIntro({
     <div
       style={{
         pointerEvents: 'auto',
-        maxWidth: 320,
-        width: '86%',
-        padding: `${S.m}px ${S.l}px`,
-        background: '#ffffff',
-        color: '#1a1a1a',
+        maxWidth: 340,
+        width: '88%',
+        padding: `${S.l}px ${S.l}px ${S.m}px`,
+        background: colors.white,
+        color: colors.black,
         borderRadius: R.card,
         fontFamily: SYSTEM_FONT,
-        boxShadow: '0 6px 18px rgba(0,0,0,0.14)',
+        // House card shadow (CardStack) + the house hairline the modals
+        // and spot cards use.
+        boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
         border: '1px solid rgba(0,0,0,0.06)',
       }}
     >
       <div
         style={{
-          fontSize: TYPE.small,
+          fontSize: TYPE.title,
           fontWeight: 700,
-          textTransform: 'lowercase',
-          marginBottom: S.s,
+          marginBottom: S.m,
         }}
       >
         {t.walkStops.heading(stops.length)}
@@ -280,19 +320,19 @@ export function WalkStopsIntro({
             userSelect: 'none',
             display: 'flex',
             alignItems: 'flex-start',
-            gap: S.s,
-            padding: `${S.xs}px 0`,
+            gap: S.m,
+            padding: `${S.s}px 0`,
           }}
         >
           <div
             style={{
               flex: '0 0 auto',
-              width: 20,
-              height: 20,
+              width: STOP_DISC_CARD,
+              height: STOP_DISC_CARD,
               borderRadius: R.pill,
-              background: WALK_COLOR,
-              color: '#ffffff',
-              fontSize: TYPE.caption,
+              background: colors.walkStop,
+              color: colors.black,
+              fontSize: TYPE.small,
               fontWeight: 700,
               display: 'flex',
               alignItems: 'center',
@@ -302,10 +342,10 @@ export function WalkStopsIntro({
             {i + 1}
           </div>
           <div style={{ minWidth: 0 }}>
-            <div style={{ fontSize: TYPE.small, fontWeight: 600 }}>
+            <div style={{ fontSize: TYPE.body, fontWeight: 700 }}>
               {stop.name}
               {stop.offRouteM >= NOTABLE_DETOUR_M ? (
-                <span style={{ fontWeight: 400, opacity: 0.45 }}>
+                <span style={{ fontWeight: 400, color: colors.grey }}>
                   {' · '}
                   {t.walkStops.offRoute(stop.offRouteM)}
                 </span>
@@ -313,12 +353,13 @@ export function WalkStopsIntro({
             </div>
             <div
               style={{
-                fontSize: TYPE.caption,
-                opacity: 0.55,
-                lineHeight: 1.35,
+                fontSize: TYPE.small,
+                color: colors.grey,
+                lineHeight: 1.4,
+                marginTop: 2,
                 // Two lines of the story is a taste of it — the whole
                 // sentence is one tap away on the map, and a card that
-                // grows with three long stories covers the route it is
+                // grows with four long stories covers the route it is
                 // describing.
                 display: '-webkit-box',
                 WebkitLineClamp: 2,
@@ -334,34 +375,43 @@ export function WalkStopsIntro({
       {destinationName ? (
         <div
           style={{
-            marginTop: S.xs,
-            paddingTop: S.xs,
+            marginTop: S.s,
+            paddingTop: S.s,
             borderTop: '1px solid rgba(0,0,0,0.06)',
-            fontSize: TYPE.caption,
-            opacity: 0.55,
+            fontSize: TYPE.small,
+            color: colors.grey,
           }}
         >
           {t.walkStops.destination(destinationName)}
         </div>
       ) : null}
-      <div
-        role="button"
-        onClick={(e) => {
-          playPop(e.currentTarget);
-          dismiss();
-        }}
-        style={{
-          marginTop: S.s,
-          textAlign: 'center',
-          cursor: 'pointer',
-          userSelect: 'none',
-          fontSize: TYPE.caption,
-          fontWeight: 700,
-          textTransform: 'lowercase',
-          opacity: 0.6,
-        }}
-      >
-        {t.walkStops.dismiss}
+      {/* The line on the map is straight segments between the stops
+          because street routing was unavailable. Said here rather than
+          drawn: every walk's line is dashed, so the dashes cannot also
+          mean "this one is a guess". */}
+      {approximate ? (
+        <div
+          style={{
+            marginTop: S.xs,
+            fontSize: TYPE.caption,
+            color: colors.grey,
+            lineHeight: 1.4,
+          }}
+        >
+          {t.walkStops.approximate}
+        </div>
+      ) : null}
+      {/* House CTA pill, same recipe as every modal's primary action. */}
+      <div style={{ display: 'flex', marginTop: S.m }}>
+        <button
+          onClick={(e) => {
+            playPop(e.currentTarget);
+            setOpen(false);
+          }}
+          style={{ ...MODAL_PILL_DARK, appearance: 'none' }}
+        >
+          {t.walkStops.dismiss}
+        </button>
       </div>
     </div>
   );

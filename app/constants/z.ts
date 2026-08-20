@@ -63,6 +63,18 @@ export const Z = {
   // Top of the HUD tier so it dominates marker re-renders during
   // viewport refetches.
   HUD_SNIFF_BUBBLE: 45,
+  // The walk's list of stops. ABOVE the companion (42) and its speech
+  // bubble, which is the whole point: the card describes the walk the
+  // dog just proposed, and the dog standing in front of its own
+  // itinerary is unreadable.
+  //
+  // NB this only works because the container it lives in sets no
+  // z-index of its own. A positioned ancestor WITH one opens a new
+  // stacking context and traps every descendant at the ancestor's
+  // level, no matter how high they number themselves — which is
+  // exactly how the card ended up under the dog while nominally
+  // sitting at 40 next to a 42.
+  HUD_WALK_CARD: 50,
 
   // ───────────────────────────────────────────────────────────────
   // TIER 3 — modals over the map (cover the map, not global UI)
