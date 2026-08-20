@@ -194,13 +194,20 @@ routes the client offers and the client spends its walk on whichever route
 passes the most. Same corpus as the **sniff press**, reached from the other
 direction.
 
-They render per the product reference (`WalkStops.tsx`): numbered **green**
-discs (`colors.walkStop`) on a chunky **cyan dashed** line
+They render per the product reference (`WalkStops.tsx`): plain **green** dots
+(`colors.walkStop`, `#7CFB00`) on a chunky **cyan dashed** line
 (`colors.walkLine`) — a tour is a route *with stops*, so it does not reuse
-`routeBlue`, which paints quest routes and the sniff ring. Tap a disc for the
-dog's sentence, tap again for the Wikipedia summary. The dashes are styling,
-not status: when street routing was unavailable the line is straight segments
-and the **stops card** says so in words.
+`routeBlue`, which paints quest routes and the sniff ring. Tap a dot for the
+dog's sentence, tap again for the Wikipedia summary.
+
+The dots are **not numbered** and carry no ring. Numbering promised a sequence
+the walk doesn't enforce — which stop you reach first depends on which way you
+turn — and these are simply three places near your route. Three is the cap at
+every distance: a fourth fits on the ground but not on a phone screen.
+
+A dashed line needs **butt caps**. A round cap extends each dash by half the
+line width at both ends, so at weight 9 the caps close an 8 px gap and the
+"dashes" render as one solid line with bulges.
 
 The card lists the stops, opens itself when the walk starts, and is reopened
 from a pill under the HUD beside "cancel walk". It sits at `Z.HUD_WALK_CARD`

@@ -103,7 +103,6 @@ export default function ChatScreen() {
                 shape: action.args.shape,
                 spotId: null,
                 destinationName: walk.primary.name,
-                approximate: walk.approximate,
               },
               walk.stops,
             );

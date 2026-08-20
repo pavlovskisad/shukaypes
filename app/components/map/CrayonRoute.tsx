@@ -44,6 +44,9 @@ const MAX_SEG_M = 8;
 // street it follows.
 const JITTER_M = 1.1;
 
+// Blur on a SOLID route — the soft pencil edge. Dashed routes use 0.
+const SOLID_BLUR = 0.6;
+
 function rng(seed: number): () => number {
   let s = seed >>> 0 || 1;
   return () => {
@@ -118,11 +121,12 @@ export function CrayonRoute({
   const sourceId = useMemo(() => `route-${uid}`, [uid]);
   const layerId = `${sourceId}-line`;
   // Dash lengths are in LINE WIDTHS, not pixels, so this reads the same
-  // at any weight the callers pass. Dash longer than gap, so the line
-  // still reads as one continuous route at a glance — the reference's
-  // dashes are chunky marks with breathing room, not a dotted trail.
+  // at any weight the callers pass. Roughly square marks with a gap a
+  // touch under them: the line still reads as one route at a glance,
+  // but you can see it is made of marks. Only meaningful with butt caps
+  // — see the layout block below.
   const dashPattern = useMemo(
-    () => (dashed ? [1.4, 0.9] : undefined),
+    () => (dashed ? [1.1, 0.85] : undefined),
     [dashed],
   );
   // Only autofit ONCE per route instance — re-centering on every prop
@@ -155,9 +159,11 @@ export function CrayonRoute({
           map.setPaintProperty(layerId, 'line-color', color);
           map.setPaintProperty(layerId, 'line-width', weight);
           map.setPaintProperty(layerId, 'line-opacity', opacity);
-          // undefined clears the dash back to solid, so a walk replanned
-          // once routing recovers doesn't stay broken.
+          map.setPaintProperty(layerId, 'line-blur', dashed ? 0 : SOLID_BLUR);
+          // undefined clears the dash back to solid, so a route
+          // re-rendered as a different kind doesn't keep the wrong one.
           map.setPaintProperty(layerId, 'line-dasharray', dashPattern);
+          map.setLayoutProperty(layerId, 'line-cap', dashed ? 'butt' : 'round');
         }
         return;
       }
@@ -171,12 +177,20 @@ export function CrayonRoute({
           'line-width': weight,
           'line-opacity': opacity,
           // Soft pencil edge — keeps the crayon feel without the
-          // expensive SVG filter the old implementation used.
-          'line-blur': 0.6,
+          // expensive SVG filter the old implementation used. A DASHED
+          // line gets none: blur on a short dash eats its ends and the
+          // whole pattern turns to mush.
+          'line-blur': dashed ? 0 : SOLID_BLUR,
           ...(dashPattern ? { 'line-dasharray': dashPattern } : {}),
         },
         layout: {
-          'line-cap': 'round',
+          // BUTT CAPS ON A DASHED LINE, and this is not cosmetic. A round
+          // cap extends every dash by half the line width at BOTH ends —
+          // at weight 9 that is +9 px of ink per dash against an ~8 px
+          // gap, so the caps meet in the middle and the "dashes" render
+          // as one solid line with bulges. Round caps are right for a
+          // solid route and fatal for a dashed one.
+          'line-cap': dashed ? 'butt' : 'round',
           'line-join': 'round',
         },
       });
@@ -218,7 +232,7 @@ export function CrayonRoute({
       if (map.getLayer(layerId)) map.removeLayer(layerId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
     };
-  }, [map, path, color, weight, opacity, sourceId, layerId, autoFit, dashPattern]);
+  }, [map, path, color, weight, opacity, sourceId, layerId, autoFit, dashed, dashPattern]);
 
   return null;
 }

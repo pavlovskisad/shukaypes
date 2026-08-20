@@ -63,24 +63,18 @@ function asWaypoint(p: LatLng) {
 // destination, the landmarks, the stories and the order to see them in
 // all come out of our own tables — so when routing is the only missing
 // piece, joining the points with straight lines still shows the walk,
-// still puts the stops on the map, and still lets you tap them. It just
-// doesn't know about streets, which is why it comes back flagged and
-// the map draws it dashed rather than passing it off as a real route.
-export interface WalkLine {
-  path: LatLng[];
-  // True when this is the joined-up straight line rather than street
-  // geometry from the Routes API.
-  approximate: boolean;
-}
-
+// still puts the stops on the map, and still lets you tap them.
+//
+// The caller is not told which of the two it got, and deliberately: a
+// planned walk is drawn dashed either way, so there is no branch left
+// for the answer to feed. Anything that needs to KNOW should call
+// fetchWalkingRoute and handle the null itself.
 export async function fetchWalkingRouteOrLine(
   origin: LatLng,
   waypoints: LatLng[],
-): Promise<WalkLine | null> {
+): Promise<LatLng[] | null> {
   if (waypoints.length === 0) return null;
-  const routed = await fetchWalkingRoute(origin, waypoints);
-  if (routed) return { path: routed, approximate: false };
-  return { path: [origin, ...waypoints], approximate: true };
+  return (await fetchWalkingRoute(origin, waypoints)) ?? [origin, ...waypoints];
 }
 
 export async function fetchWalkingRoute(

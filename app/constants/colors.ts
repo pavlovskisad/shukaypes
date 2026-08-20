@@ -33,11 +33,8 @@ export const colors = {
   // tour is a route with stops, and they should not read as the same
   // object.
   //
-  // NB these two hexes are read off the reference artwork rather than
-  // from a source of truth; if the brand file has exact values, they
-  // belong here.
   walkLine: '#29a8ff',
-  walkStop: '#5fd726',
+  walkStop: '#7CFB00',
 } as const;
 
 export type ColorKey = keyof typeof colors;
