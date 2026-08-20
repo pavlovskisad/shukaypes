@@ -3,10 +3,10 @@
 What is wrong right now, ranked. Where an item came from `AUDIT_FINDINGS.md`
 its original ID is kept so the two can be read together.
 
-Re-verified against the code at `8266bc6` on 15 Aug 2026. The 12–14 Aug
-beta-readiness pass (PRs #416–#430) closed a lot of this list — the closed
-items are struck off at the bottom rather than left to rot at the top, and
-the owner's live checklist is `HANDOFF.md` §0.2.
+Re-verified against the code at `43808c6` on 20 Aug 2026. Two weeks of work
+(PRs #416–#494) closed most of this list — closed items are struck off at
+the bottom rather than left to rot at the top, and the owner's live
+checklist is `HANDOFF.md` §0.2.
 
 ---
 
@@ -33,59 +33,61 @@ the question.
 
 ## P0 — do before anyone outside the team touches it
 
-### P0-1 · The lost-pet engine has never been validated end to end
-*`AUDIT_FINDINGS` had no equivalent; `PILOT_ROADMAP` §5.1 called it the
-pilot blocker, and it still is.*
+### P0-1 · Parse accuracy on real posts has never been measured
+*`PILOT_ROADMAP` §5.1 called this the pilot blocker in July. It is now the
+**last** engine gap standing, and everything needed to close it exists.*
 
-There is no evidence the full loop has been walked with real data: a real
-owner's post parsed correctly (species, last-seen location, photo), shown in
-the right place, a walker submitting a credible sighting, the owner
-notified. **Parsing accuracy and location correctness on real posts are the
-single biggest unknown in the product**, and no measured numbers exist.
+There is still no measured number for the core claim: that a real post
+comes out of the parser with the right species, the right place and a
+usable photo. The blockers that used to sit in front of it are gone — the
+ad text is now stored (`raw_body`), so scoring a batch no longer means
+re-fetching anything.
 
-The 10–11 Aug work made this worse-looking and better-understood: 89 of 261
-active pets could not be drawn at all, and 17 were in other cities. Both are
-now partly addressed, and neither was known before somebody counted.
+Two facts sharpen the urgency. **`parseDogPost` had been reading
+CSS-polluted text all along** — every classification to date spent part of
+its input on stylesheet noise, and whether that changed any verdict is
+**unmeasured; do not claim an improvement without scoring it.** And the
+first 94 ads the `created_at:desc` fix surfaced produced **zero pets**, all
+rejected by the title filter — either the filter is too strict or those
+queries surface non-lost-pet traffic, and `skip_reason` distinguishes
+`title-filter` from `rehoming` well enough to settle it.
 
-**What it needs:** a manual pass over a batch of real Kyiv posts —
-parse output vs source post, pin vs reality, dedupe across reposts — with
-the numbers written down.
+**What it needs:** score ~50 stored bodies against their parse output —
+species, place, photo, and the reject reasons — and write the numbers down.
+An afternoon, and the strongest slide a deck could carry.
 
-### P0-2 · Ingestion coverage is degraded and half-dark — but not stopped
-*Corrected 15 Aug against production logs. An earlier version of this item
-said "no source is currently producing pets"; that was too strong.*
+### P0-2 · Ingestion works; coverage beyond OLX is still one source deep
+*Rewritten 20 Aug. The two previous versions of this item — "no source is
+producing pets" and then "OLX is half-blocked" — were **both wrong**, in
+the same direction, for a month. See [`03`](03-lost-pet-engine.md).*
 
-- **OLX** — **partially blocked**: 7 of 13 listing URLs 403, the other 6
-  serve, and pets kept arriving (17 in the 7 days to 11 Aug; same shape
-  verified live 15 Aug). The ads on the refused listings are invisible —
-  lost coverage, not an outage. A `SCRAPE_PROXY_URL` seam exists and is
-  unset; buying a proxy **buys back the missing half of coverage** rather
-  than restarting a dead pipeline, so it is a real gap but not a fire.
-  **Do not probe OLX by hand to check on it** — a by-hand 403 proves
-  nothing (the cron gets different answers from the same address) and
-  probing risks the half that works. Read the tick summaries instead.
-- **Telegram channel scrape** — never configured. Free, unblocked from the
-  Fly host, one env var. Needs a curated channel list, which is human
-  judgement.
+- **OLX** — **working, and was never blocked.** The 403s were a 50% coin
+  flip (`403 200 403 200 …`) that a retry rescues; errors 7 → 0, discovery
+  251 → 508. A separate saturation bug — relevance-ordered page one meaning
+  the scraper had run out of new ads to see — was the real reason nothing
+  arrived, fixed with `created_at:desc`.
+- **`SCRAPE_PROXY_URL` should stay unset.** Residential exits were refused
+  *more* than the datacentre, not less. There is nothing to buy here.
+- **Telegram channel scrape** — still never configured. Free, unblocked,
+  one env var, needs a curated channel list. **This is now the whole item**:
+  OLX is a single point of failure and Telegram is the cheapest second leg.
 - **Facebook** — parked; needs a burner account (`FACEBOOK_COOKIES`).
-- **Telegram bot ingest** — works, but has only ever been pointed at the
-  owner's test chats.
+- **Telegram bot ingest** — works, but only ever pointed at test chats.
 
-**Cheapest first:** set `TELEGRAM_CHANNELS`. It costs nothing and it is the
-only thing that stops half-blocked OLX being a single point of failure.
+**Cheapest first, unchanged:** set `TELEGRAM_CHANNELS`.
 
-### P0-3 · The ingest alert is dormant
-*`services/ingestAlert.ts`, PR #412, retuned against a real tick in #413.*
+### P0-3 · Four features are built and switched off for want of a value
+*Each is one `fly secrets set`.*
 
-Built, tested, shipped — and silent, because `ALERT_CHAT_ID` is unset. One
-value, no purchase. Until it is set, a source dying is invisible until
-somebody reads the heartbeat by hand, which is exactly how OLX sat blocked
-unnoticed.
+| Secret | What stays dark without it |
+| --- | --- |
+| `ALERT_CHAT_ID` | The ingest alert. A source dying stays invisible until somebody reads the heartbeat by hand — exactly how the OLX problem survived a month. |
+| `DASHBOARD_TOKEN` | `/admin/console` and `/admin/metrics` 401 for everyone, including the agent. Three questions during the 18 Aug session needed a deploy or a log tail because of this. |
+| `DEV_TOOLS_PASSWORD` | `/dev` refuses everyone, so the walk simulator is off everywhere. |
+| `INVITE_REQUIRED` | The beta door stays open. Mint codes first (`invite --new`); existing accounts are never gated. |
 
-Still the highest value-per-effort item on the list — now joined by three
-sibling one-value items: `DASHBOARD_TOKEN` (the console 401s for everyone),
-`DEV_TOOLS_PASSWORD` (the walk simulator is off everywhere), and
-`INVITE_REQUIRED` (the door is open until it is set).
+Collectively the highest value-per-effort on the list, and unchanged for a
+week. Any random string will do for the two read-only ones.
 
 ### P0-4 · Compromised Google Maps key still committed — in a public repo
 *`AUDIT_FINDINGS` §1.1 · `docs/TECHNICAL.md:236`,
@@ -116,6 +118,14 @@ moderation of user-submitted sightings.
 
 Minimum floor before invites: a visible contact path (a landing-page
 change, not code). The owner is considering a support-ticket form.
+
+**Raised since 17 Aug:** the app now *displays owners' contact details* to
+walkers who report a sighting, and stores ad bodies containing them. That
+is the owner's deliberate decision and the containment is enforced by a
+source-level fixture check (D-47, D-48) — but it raises what a takedown is
+worth, and sharpens the fact that the person whose phone number is in the
+database has no way to reach us. Note `expire:pet` doubles as contact
+removal, since expired pets 404 on the post route.
 
 ---
 
@@ -191,14 +201,23 @@ device-id must stay first-class, issue an HMAC token on first contact.
 *(P1-7 — client error tracking — and P1-8 — the ungated frontend deploy —
 are both closed; see the bottom.)*
 
-### P1-9 · Parse accuracy over ~50 real posts, measured
-*Promoted from P0-1's "what it needs" — it is now the single named next
-step, and the strongest slide a fundraising deck could carry.*
+*(P1-9 — parse accuracy — was promoted to **P0-1**: it is now the last
+engine gap, and the ad text it needed is stored.)*
 
-No measured number exists for the core claim: that a real post comes out of
-the parser with the right species, the right place and a usable photo. The
-blocker is partly a decision about reading production ad text (the ad body
-is stored nowhere — only ingest sees it), partly an afternoon of work.
+### P1-10 · Found strays and lost pets share one presentation
+*Raised 18 Aug, partly addressed by PR #480*
+
+Ads where somebody has *found* an animal are ingested on purpose — a found
+stray needs its owner found — but they were displayed under «загублені»
+with «терміново», asking a walker to go search the streets for an animal
+already in somebody's flat. They are now flagged (`is_found_report`) and
+kept off the map, which stops the wrong ask but also means **that half of
+the corpus currently does nothing.**
+
+The product decision is open: give them their own badge and a different
+call to action («знаєш чий це?» rather than «шукати»), or drop them from
+ingest entirely. The schema deliberately keeps them so the first option
+stays available.
 
 ---
 
@@ -206,7 +225,9 @@ is stored nowhere — only ingest sees it), partly an afternoon of work.
 
 | ID | Issue | Where |
 | --- | --- | --- |
-| P2-1 | **81 active pets sit on the fallback pin and cannot be drawn.** The genuine geocoding-failure population. Rescuing them needs precision work on the gazetteer *measured before anything is written* — see the trap in [`03-lost-pet-engine.md`](03-lost-pet-engine.md) | `pipeline/parser.ts` |
+| P2-1 | **Pets on the fallback pin cannot be drawn.** The geocoding-failure population — 81 of 244 before the base refresh; **not re-measured against the current 78 active.** Rescuing them needs precision work on the gazetteer *measured before anything is written* — see the trap in [`03-lost-pet-engine.md`](03-lost-pet-engine.md) | `pipeline/parser.ts` |
+| P2-17 | **One pet has `last_seen_at` 94 days in the future**, printed as `-94d ago`. It would dodge the staleness sweep for six months. A parser date bug, not traced | `pipeline/parser.ts` |
+| P2-18 | **`--sample=N` draws from an unshuffled list**, so it reported "4 of 5 ads are live" when the true rate was nearer 1 in 3. A biased estimate presented as a measurement | `db/*.ts` |
 | P2-2 | **No uptime monitor on `/health/deep`.** It exists and returns 503 correctly; nothing watches it | ops |
 | P2-3 | **Redis has no uptime alert** and silently degrades everywhere. Also unconfirmed whether the current tier is persistent or another idle-reapable free database | `AUDIT_FINDINGS` §4.1 |
 | P2-4 | **`spawnCooldown` fails open when Redis is down** → every 15s sync re-spawns, no cooldown, no claim lock. Global caps bound the on-screen count but not the write churn. (The chat budget now fails open the same way, as a stated decision — D-34) | `AUDIT_FINDINGS` §3.4 |
@@ -237,6 +258,20 @@ is stored nowhere — only ingest sees it), partly an afternoon of work.
 ## Closed since the July audits
 
 Kept so nobody re-files them.
+
+### Closed by the engine rescue (15–20 Aug, PRs #433–#494)
+
+| Was | Now |
+| --- | --- |
+| "OLX is half-blocked, buy a proxy" | ✅ **The diagnosis was wrong.** Not a block — a 50% coin flip, fixed by re-enabling a retry that was already in the code. Errors 7 → 0. A residential proxy was measured to be *worse*, so the pending purchase is cancelled. |
+| "Coverage is degraded but pets are arriving" | ✅ Also wrong, in the other direction: after the retry fix, discovery doubled and **still produced nothing**, because the scraper had saturated against relevance-ordered page one. Fixed with `created_at:desc`. |
+| The corpus had never been checked against reality | ✅ 221 active → 78, with a deleted ad taken as the found-signal. `ad_alive_at` (migration `0036`) stops the age sweep expiring pets whose owners are still renewing live ads. |
+| The ad body was stored nowhere | ✅ `raw_body` (migration `0034`), served one pet at a time by `/dogs/:id/post`. Which then exposed that every stored body was mostly CSS — fixed and repaired, with `check:ad-extract` pinning it. |
+| No way to answer "is this actually the dog?" mid-search | ✅ `PostModal` reads the owner's real ad, contacts redacted until a sighting is reported. |
+| Found strays presented as pets to search for | 🟡 Flagged and hidden (P1-10); their own screen is a product decision still open. |
+| A walk could not happen without a Google Places key | ✅ `/walk/destinations` serves our own tables; the route line falls back to dashed straight segments that keep the stops. |
+| Walks could send you to the vet | ✅ Errand categories removed from the destination pool entirely, not merely outranked. |
+| The app never said what it was for | ✅ The dog asks first; the logo rotates three modes (PR #494). |
 
 ### Closed by the beta-readiness pass (12–14 Aug, PRs #416–#430)
 

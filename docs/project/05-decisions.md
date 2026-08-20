@@ -452,3 +452,184 @@ typechecks fine and fails at runtime).
 Tap-to-collect remains while the collection animation is tuned. The
 consequence to carry into any reading of beta numbers: collection counts
 will not prove anybody walked. `search_results` and distance still will.
+
+---
+
+## The ingestion rescue and the front door (15–20 Aug 2026)
+
+### D-43 · The scrape retry fires with no delay, and that is load-bearing ✅
+*PR #448, corrected in production · `lib/scrapeFetch.ts`*
+
+OLX refuses roughly every second request from a given connection. A
+back-to-back retry reuses the warm connection and is let through; **any**
+pause opens a fresh one and is refused again. Measured:
+
+```
+no delay      424242        500ms apart  444444        3s apart  444444
+```
+
+`RETRY_DELAY_MS = 0`. A backoff here looks like an obvious politeness
+improvement and silently disables the entire fix — the first version
+shipped with 500ms and changed nothing. A local mock cannot catch this,
+because a mock has no connection behaviour to reuse.
+
+### D-44 · A residential proxy is not the fix; the seam stays unset ✅
+*PR #448 — established at the cost of a proxy subscription*
+
+Four Ukrainian residential exits, two in Kyiv, full browser headers:
+403/919 every single time, while the Fly datacentre alternates 403/200 and
+a different datacentre returns 200 five times out of five. Whatever the
+edge is keying on, it is not "is this address residential".
+`SCRAPE_PROXY_URL` remains as a narrow seam — scraping only, never the
+Anthropic/Google/Telegram traffic — for the day the edge really does
+harden.
+
+The methodological lesson is the more valuable half: the original "the
+address is blocked" conclusion compared a home *browser* against a
+datacentre *Node client* and attributed the gap to the address. Two
+variables, one conclusion. And the probe that appeared to confirm it used
+an **invented** URL rather than one taken from the source.
+
+### D-45 · Listing pages are ordered newest-first ✅
+*PR #457*
+
+OLX orders page one by relevance, so page one is a nearly fixed set. With a
+small ledger most of it is new; after 12,381 rows the scraper had seen
+everything relevance ordering would ever show it and discovery sat at 100%
+already-seen while every log line read `tick complete`. It had not broken —
+it had **run out of page**. `search[order]=created_at:desc` is the fix, and
+`SourceRunSummary.fresh` exists so the condition is visible: `skipped`
+lumps already-seen with title-filtered, so `discovered - skipped` could not
+answer it. **`fresh === 0` is a log level, never an alert.**
+
+### D-46 · A deleted ad is the found-signal; age is only a proxy ✅
+*PRs #482, #483 · migration `0036`*
+
+A lost-pet ad taken down usually means the story ended, which is far better
+evidence than "this row is 90 days old" — an age rule expires a pet still
+being searched for and keeps one that went home in April. Production had
+exactly that failure: «Льоля» was expired by the age sweep while her
+owner was still renewing a live listing.
+
+So `backfill:ad-bodies` records `ad_alive_at` whenever it confirms a live
+ad, `expire:no-post` acts only on `404/410` (`ad-gone`), and **anything
+else is left alone** — a 403 that survived its retries says nothing about
+whether an ad exists, and treating one as gone would take a searched-for
+pet off the map.
+
+### D-47 · Contacts are stored and shown, gated behind a reported sighting ✅
+*PRs #454, #455, #491 · owner's decision*
+
+The walker needs the ad twice for two different reasons: **during** a
+search to answer "is this the dog?" (collar, temperament, name), and
+**after** reporting a sighting to reach the owner. The first view runs
+through `redactContacts`, the second does not. The effect is that an
+owner's phone rings when somebody has actually seen their animal.
+
+**The link to the original ad is gated with the contacts**, and that was a
+change of mind mid-work: the first pass masked the phone while still
+handing over the OLX url, which made the mask decoration. `sourceUrl` is
+now `seen ? url : null`. The accepted consequence, stated in the copy: a
+pet with no stored body and no sighting shows an explanation and a close
+button, because the alternative was a gate anybody could walk around.
+
+Redaction deliberately **errs toward readability** — anything under nine
+digits stays, because that is a house number, a year or a time, and a
+redaction that swallows "Оболонь, буд. 12" helps nobody. A number that
+slips through is one the walker could get thirty seconds later by
+reporting the sighting.
+
+### D-48 · Containment is checked at the source, not the response ✅
+*PR #455 · `check:ad-body`*
+
+The fixture fails if any file outside a five-name allowlist mentions
+`raw_body`, or if `routes/dogs.ts` stops mentioning `redactContacts` or
+`schema.sightings`. Source-level on purpose: a response check only sees the
+pets a seeded database happens to hold, and passes happily if the leak sits
+behind a branch the fixture never takes. Both mutations were run and both
+failed the check.
+
+### D-49 · Found reports are kept in the table and hidden from the map ✅
+*PR #480 · migration `0035`*
+
+Somebody who *has* an animal and wants its owner is not somebody who lost
+one — but both look identical to a keyword filter, and deliberately so:
+`LOST_KEYWORDS` includes `знайд|знайш|найден|нашли|found` and four listing
+queries search for found animals, because a found stray needs its owner
+found. The defect was presentational: «песик (знайдений)» appeared under
+«загублені» with «терміново», sending a walker to search the streets for an
+animal already sitting in somebody's flat.
+
+Flagged with `is_found_report` and excluded from the map query, **not**
+filtered at ingest, so they can get their own screen and their own call to
+action («знаєш чий це?») later. `check:found-report` pins the rule and
+**ambiguity stays a search**.
+
+### D-50 · The walk loop does not depend on Google ✅
+*PR #493 · `routes/walkDestinations.ts`*
+
+With the Places key off a walk could not happen at all — the radial menu
+answered "sniffing out spots…" forever; with the Routes key off there was
+no line. A core loop was hostage to a billing account.
+
+Destinations now come from our own tables (307 parks and 82 squares in
+`kyiv_gazetteer`; museums, churches and attractions in `kyiv_lore`), merged
+with Places **parks only** and deduped by position at 120m because Google's
+`place_id` and our `osm:way:…` are different strings for the same park.
+When routing declines, the line is drawn **dashed** between the walk's own
+points, keeping the stops: the destination and the stories are ours, only
+the streets were Google's, and a solid line would claim knowledge of them
+we do not have.
+
+### D-51 · A walk is a tour; businesses are not destinations ✅
+*PR #493*
+
+Cafés, bars, pet shops and vets were live walk destinations, so "take me
+for a walk" could answer with the vet. Going to a named business is a
+different mechanic with three entry points of its own (`visit:spot:<id>`,
+the chat's `walk_to_spot`, the spot card's route button). The errand
+categories were **removed from the pool** rather than merely outranked, so
+no combination of distance and recency can resurface one. Streets,
+districts and `kyiv_lore`'s 1676 `historic` rows are excluded too — a
+street is not a destination and a wall plaque is a *stop*.
+
+### D-52 · Walk stops are spread by equal stretches, not proximity ✅
+*PR #490 · `services/loreWalk.ts`*
+
+Taking "the N landmarks closest to the line" puts three plaques in the
+first block, because the dense old centre wins every slot. Cutting the walk
+into equal stretches and taking the best candidate in each is the whole
+difference between a walk that unfolds and a walk that front-loads.
+
+Every parameter came from the real corpus rather than a guess — the 240m
+corridor sits where the yield curve flattens on short walks and where
+worst-case detour starts climbing on long ones; the first guesses were 160
+and 260. The measurement also caught `POOL_LIMIT` sitting *inside* its
+working range (800, against a real four-candidate Maidan request pulling
+702 rows) — a backstop 14% from the working maximum is one growth spurt
+from silently choosing stops out of a truncated city.
+
+### D-53 · The dog is the front door, not a menu ✅
+*PR #494*
+
+The app opened onto a map with a six-verb radial menu and nothing saying
+what it was for. Now the dog asks «нюх-нюх! шо ти?» and the answer picks a
+mode; the corner logo rotates explore → district → supersniff and is the
+first thing the dog points at when the screen goes idle. Every level speaks
+its own line, so the icons stopped being a guessing game.
+
+Client-only by construction — no server code, no migrations, nothing
+written to `lost_dogs`, `sightings` or `users` — so the whole restructure
+reverts in a single deploy with `git revert -m 1`.
+
+### D-54 · Territory's soft field is a render change, not a return to Model 1 ✅
+*PR #433 · `territoryHeatLayer.ts`*
+
+Ground is drawn as a blurred scent field rather than hard polygons, which
+looks like the heat map Model 1 died with. The distinction is recorded in
+the source: **Model 1's failure was the grid data model, not the
+softness.** Ownership is still stored polygons with cuts applied at mark
+time; the blur is re-thresholded so borders stay exactly where the server
+put them. The old flat fill survives as a fallback, because territory
+vanishing on a device with an unlucky GL stack would be worse than an
+ugly edge.

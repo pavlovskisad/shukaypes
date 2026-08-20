@@ -37,7 +37,7 @@ Deploying is a mutating action. Ask first.
 | `REPORT_TOKEN` | **Deliberately unset** (PR #408). `checkReportAuth` still accepts it, so re-opening the read endpoint to a narrow reader is one `fly secrets set` away. |
 | `ALERT_CHAT_ID` | **Not set.** The Telegram chat ingest alerts go to. Until it is set, a stalled pipeline is logged and nothing is sent. Not a secret — a chat id. |
 | `TELEGRAM_CHANNELS` | **Not set.** The channel-scrape source is a no-op until it is. |
-| `SCRAPE_PROXY_URL` | **Not set.** The proxy seam is inert; scrape traffic goes out direct. |
+| `SCRAPE_PROXY_URL` | **Not set, and should stay that way.** Measured 17 Aug: residential exits are refused *more* than the Fly datacentre, not less. The seam is for the day the edge really hardens. |
 | `DASHBOARD_TOKEN` | **Not set.** Read-only key for `/admin/console` + `/admin/metrics` — the only one of the three keys safe to keep in a browser. Until it is set the console 401s for everyone. |
 | `DEV_TOOLS_PASSWORD` | **Not set.** Unlocks `/dev` (walk simulator + destructive territory test routes) per browser. Until it is set the dev affordances are off everywhere. |
 | `INVITE_REQUIRED` | **Not set — the door is open.** With it set, new device ids must redeem an invite code; existing accounts are never gated. Mint codes with `pnpm --filter @shukajpes/server invite --new --uses=N --note=...` before flipping it. |
@@ -139,7 +139,14 @@ or locally against a `DATABASE_URL`.
 | `expire:out-of-area [--apply]` | Catch-up sweep for out-of-city rows. **Dry by default.** Needs no network. |
 | `expire:pet --id=<id> [--apply] [--photo] [--restore]` | **The takedown tool.** Dry by default; expire is reversible, `--photo` is not (opt-in, and the dry run says so); `--restore --photo` is refused rather than half-done. An unknown id fails loudly — a takedown that quietly matched nothing is the worst outcome, because somebody would report it as done. |
 | `invite --new --uses=N --note=...` | Mint beta invite codes, ahead of flipping `INVITE_REQUIRED`. |
-| `check` (`pnpm check`) | All seven fixture checks — out-of-area, ingest alert, pet identity, per-user rate limiting, invite gate, dev auth, route coverage. **Runs in CI on PRs and before deploy.** |
+| `backfill:ad-bodies [--apply] [--repair]` | Fetch each pet's ad by its stored URL. **Three outcomes kept apart:** 200 stores the body, 404/410 marks `ad-gone`, anything else is left alone. `--repair` re-fetches bodies already stored (used to undo the CSS pollution). |
+| `expire:no-post [--apply]` | Expire only the `ad-gone` rows. Refuses to write if no scraped pet has a body at all. Dry run lists **newest first** behind an age histogram. |
+| `census-contacts` | How much owner contact the corpus holds, in counts only — never a fragment of a body. |
+| `audit-ingest` | What the ingest missed and what it let through. |
+| `clean:ad-bodies [--apply]` | Strip OLX section labels welded to the next word (`Описменя`). |
+| `flag-found-reports [--apply]` | Mark ads where somebody *found* an animal, so they stop appearing as pets to go looking for. |
+| `revive:live-ads` | Bring back a pet whose ad is serving again. |
+| `check` (`pnpm check`) | All **twelve** fixture checks — out-of-area, ingest alert, pet identity, per-user rate limiting, invite gate, dev auth, contact redaction, ad-body containment, ad extraction, found reports, walk stops, route coverage. **Runs in CI on PRs and before deploy.** |
 | `seed:lore`, `seed:gazetteer` | One-off corpus builds from OSM. |
 | `db:seed-dogs` | Local dev only. Production runs on real scraped pets. |
 | `wipe:stats` | Clears stats. |
@@ -251,6 +258,38 @@ so at a level that shows up. Plus a give-up threshold at 8 consecutive 403s.
 **PR #412** added the alert that would have caught it in 36 hours instead of
 days — and that alert is still dormant for want of `ALERT_CHAT_ID`.
 
+*Postscript, 17–18 Aug: the 403s were never a block at all, and the reason
+nothing new was arriving was a third thing again. See below.*
+
+### OLX: a month spent working around a diagnosis that was wrong
+
+The most expensive mistake in the record, and it was a *reasoning* failure
+rather than an outage. `scrapeFetch.ts` asserted "CloudFront blocks the
+address, not the request", and that sentence disabled the retry sitting
+directly below it. Half of every scrape tick was thrown away for weeks,
+described as "OLX is half-blocked", and planned around — including a proxy
+subscription bought to solve it.
+
+The original observation was real but **confounded**: it compared a home
+*browser* with a datacentre *Node client* and attributed the difference to
+the address. Two variables, one conclusion. A later probe that seemed to
+confirm the block used a URL that had been **invented** rather than taken
+from the source, so its "page not found" was evidence about a fake path.
+
+Separating the variables took eight requests: `403 200 403 200 403 200 403
+200`. Fixed by deleting one condition. Errors 7 → 0, discovery 251 → 508.
+
+Then the *real* reason no pets were arriving turned out to be different
+again — the scraper had saturated against relevance-ordered page one and
+had literally run out of new ads to see, while every log line read `tick
+complete`.
+
+**Operational rules that came out of it:** do not add a backoff to the
+scrape retry (it rides the warm connection; any pause disables it); do not
+set `SCRAPE_PROXY_URL` on the current evidence; and read `scrape_log` or a
+tick summary rather than probing OLX by hand — a hand-run request and the
+cron's get different answers from the same address.
+
 ### Rate limiting was global, silently, since it was added
 
 The plugin installed at `onRequest`; auth sets `req.userId` at
@@ -289,8 +328,11 @@ sits in front of — is worth remembering.
   follow-up work rather than stacking onto merged history.
 - `pnpm -r typecheck`, `pnpm -r lint` and `pnpm check` before every PR. The
   lint baseline is **0 errors, 21 `react-hooks/exhaustive-deps` warnings**;
-  `pnpm check` is seven fixture checks and all must pass. Verified on
-  15 Aug at `8266bc6`.
+  `pnpm check` is twelve fixture checks and all must pass. Verified on
+  20 Aug at `43808c6`. **The lint baseline is 23, not the 21 `CLAUDE.md`
+  still states** — it drifted to 22 during the walk work and to 23 with
+  `LostFlowModal`, both ordinary `exhaustive-deps` warnings matching
+  sibling modals.
 - When a check cannot run — blocked, throttled, unauthenticated — **say so
   loudly.** A check that read nothing must never be reported as a check that
   found nothing.

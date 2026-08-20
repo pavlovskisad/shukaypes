@@ -14,9 +14,9 @@ most of the recent work has been about making silence audible.
 failing does not starve the others. The whole cron skips if
 `ANTHROPIC_API_KEY` is missing, because the parser would throw anyway.
 
-| Source | File | Status (verified 15 Aug 2026) |
+| Source | File | Status (verified 20 Aug 2026) |
 | --- | --- | --- |
-| **OLX** | `pipeline/sources/olx.ts` | **Partially blocked — degraded, not stopped.** ~Half the listing URLs 403; the other half serve and pets keep arriving. See below. |
+| **OLX** | `pipeline/sources/olx.ts` | **Working — and it was never blocked.** The 403s were a 50% coin flip; a retry fixed them and listing coverage doubled. Then a second, larger problem was found and fixed: the scraper had run out of page. See below. |
 | **Telegram (channel scrape)** | `pipeline/sources/telegram.ts` | **Unconfigured.** `TELEGRAM_CHANNELS` is unset, so the source is a no-op. Not blocked — verified reachable from the Fly IP. |
 | **Telegram (bot webhook)** | `routes/telegram.ts` → `services/telegramIngest.ts` | Working, but only ever pointed at the owner's own test chats. |
 | **Facebook** | `pipeline/sources/facebook.ts` | **Parked.** Needs a burner account (`FACEBOOK_COOKIES` unset; logs one expected error per tick). |
@@ -32,74 +32,121 @@ URL) stops the same ad being re-parsed.
 
 **It is the only source that has ever inserted a real pet.**
 
-**The block is partial, and the earlier "ingestion has stopped" framing
-was wrong.** An earlier version of this section (and this doc set) said
-OLX was blocked outright. Measured 11 Aug and re-verified from production
-logs on 15 Aug, the same shape both times:
+### It was never blocked (17 Aug, PR #448)
+
+This corrects three weeks of this project's own writing, including two
+earlier versions of this document. `scrapeFetch.ts` opened by asserting
+"CloudFront blocks the address, not the request." Measured from the Fly
+machine, no proxy, **the same URL eight times in a row**:
 
 ```
-11 Aug tick:  7 of 13 listing URLs -> 403; 6 served, 251 ads discovered
-              OLX pets inserted, 7 days to 11 Aug: 17
-15 Aug 06:47: 7 of 13 listing URLs -> 403; 6 served, 247 ads discovered
-              (all 247 already seen — a normal quiet hour; only ~4
-              genuinely new ads exist per day against 24 ticks)
+403 200 403 200 403 200 403 200
 ```
 
-So roughly half the listing sweeps are refused and the other half work,
-and pets have kept arriving at a few a day throughout. This is **lost
-coverage** — the ads on the seven refused listings are invisible — not an
-outage. A proxy therefore *buys back the missing half of coverage*; it
-does not restart a dead pipeline, and nothing is on fire while it is
-unbought.
+**Fifty per cent, alternating, deterministic.** Not a block — a coin flip.
+An 8-second gap between requests changed nothing, so it is not time-based
+throttling; the same URL from a different datacentre returned 200 five
+times out of five, so it is not a ban on datacentres either.
 
-**Do not probe OLX by hand.** Recorded in `HANDOFF.md` §3.1/§5 so nobody
-repeats it: ~23 paced by-hand requests from the Fly host itself got 403 on
-*every* URL — while the scheduled tick minutes either side was getting 6
-of the same 13 through. A hand-run request and the cron's request get
-different answers from the same address for reasons nobody could explain,
-so **a by-hand 403 proves nothing about whether ingestion works** — read
-`scrape_log` (or the tick summaries in the Fly logs), which is free and
-cannot be misread. And every probe is a request at a WAF that has already
-refused us; a widened block would cost real coverage on the only source
-that inserts pets.
+The retry that fixes this **already existed and was switched off** unless a
+proxy was configured, on the reasoning written into the file: that retrying
+a fixed address is "pure waste — the answer is the same every time." It is
+not. That one condition is why "OLX is half-blocked" was the story for
+weeks: half of every tick was discarded on the first refusal.
 
-**What has been ruled out.** A full browser header set (`sec-fetch-*`,
-`sec-ch-ua`, `accept`, `upgrade-insecure-requests`) changes nothing. The
-official route is a checked dead end: OLX has a Partner API, but every
-advert endpoint is scoped to the authenticated partner's own listings
-(`GET /adverts` is "Get user adverts"). There is no public search. It
-cannot see other people's lost-pet ads.
+```
+before   discovered 251, errors 7
+after    discovered 508, errors 0
+```
 
-**The seam that exists.** PR #407 added `SCRAPE_PROXY_URL`
-(`lib/scrapeFetch.ts`): set it to any HTTP(S) proxy URL and scrape traffic
-routes through an undici `ProxyAgent`; unset, behaviour is unchanged. No
-provider is hardcoded. Boot logs `[scrape] outbound: proxy <host>` so you
-can tell from the logs whether it is actually on. It is currently **unset**,
-so it is inert in production.
+**The retry must fire with NO delay, and this is a trap.** The first
+version shipped with a 500ms pause for politeness and changed nothing —
+the tick after deploy logged the same seven failures. Measured:
 
-**The volume, measured** from `scrape_log` over 14–21 days. An earlier
-estimate here was wrong by about 24×:
+```
+no delay      424242     <- every second request succeeds
+500ms apart   444444     <- all refused
+3s apart      444444     <- all refused
+```
+
+Back-to-back requests reuse the warm connection and the second is let
+through; any pause opens a fresh one and is refused. `RETRY_DELAY_MS = 0`
+is load-bearing. **Adding a backoff looks like an obvious improvement and
+silently disables the whole thing.** A local mock cannot catch this — a
+mock has no connection behaviour to reuse.
+
+**A residential proxy is not the fix, and establishing that cost a
+subscription.** Four Ukrainian residential exits, two in Kyiv, with a full
+browser header set: 403/919 every single time.
+
+| client | exit | result |
+| --- | --- | --- |
+| Node | Fly datacentre | 403/200 alternating |
+| Node | UA residential ×4 | 403 every time |
+| Node | other datacentre | 200 ×5 |
+
+`SCRAPE_PROXY_URL` (`lib/scrapeFetch.ts`) stays as a seam for the day the
+edge really does harden — set it and scrape traffic routes through an
+undici `ProxyAgent`, unset and nothing changes — and is **not set**. The
+seam is deliberately narrow: it wraps scraping only, because routing an
+Anthropic or Google key through a third-party proxy to solve a problem
+those hosts do not have would be a bad trade.
+
+How the old diagnosis went wrong is worth keeping: it compared a home
+**browser** against a datacentre **Node client** and attributed the gap to
+the address — two variables, one conclusion. And the probe that seemed to
+confirm it used a URL that had been *invented* rather than taken from the
+source, so the "page not found" it produced was evidence about a fake path.
+
+### Then it turned out the scraper had run out of page (18 Aug)
+
+Doubling listing coverage did not produce pets. A clean tick, no errors:
+
+```
+[olx] discovered 506, skipped 506, parsed 0, inserted 0, errors 0
+```
+
+Every discovered URL was already in `scrape_log`, so every one stopped at
+the `seenUrls` gate and nothing reached the ad fetch.
+
+**Nothing broke — it saturated.** Each listing URL serves page one only,
+and OLX ordered that page by **relevance, not date**, so page one is a
+nearly fixed set. Early on, with a small ledger, most of it was new. After
+a few weeks and 12,381 rows the scraper had seen everything relevance
+ordering would ever show it, and a genuinely new ad does not rank onto page
+one immediately. Discovery hit 100% already-seen and stayed there — while
+every log line read `tick complete`.
+
+Fix: `search[order]=created_at:desc` on every listing URL. Measured after
+deploy, `fresh` went 0 → 88 (the backlog), then settles to single digits
+per tick, which is what a few new ads a day looks like against 24 ticks.
+
+`SourceRunSummary.fresh` — URLs never seen before, whatever became of them
+— was added for exactly this: `skipped` lumps already-seen together with
+title-filtered, so `discovered - skipped` does not answer the question and
+nothing else did. **`fresh === 0` is a log level, never an alert**, for the
+reason `ingestAlert.ts` already documents.
+
+**Fresh ads are not pets, and that gap is still open.** The first 94 fresh
+ads produced 0 pets, all rejected by the title filter — either the filter
+is too strict or those queries surface non-lost-pet traffic.
+`scrape_log.skip_reason` distinguishes `title-filter` from `rehoming` and
+would settle it.
+
+### Volume, measured
 
 ```
 13 listing URLs × hourly            = 312 requests/day
-ad bodies actually fetched          ≈   4 requests/day
-pets inserted                       =  2–9/day, no zero days in 21
+ad bodies actually fetched          ≈   4 requests/day  (pre-refresh)
+pets inserted                       =  2–9/day in early Aug
 
 14-day title filter: 926 title-filter + 386 rehoming rejected
                      BEFORE any page fetch; only 55 ads fetched
 ```
 
-So ~99% of proxied traffic would be the hourly listing sweep, and the whole
-job is ~9,500 requests/month. Bandwidth is what a residential proxy bills
-for and nothing records page sizes, so plan on low single-digit GB/month and
-measure once a proxy is on. Because the volume is this small, prefer a
-**managed unblocker in proxy mode** over raw residential IPs — the provider
-absorbs WAF changes instead of you. It must expose a `host:port` proxy
-endpoint; an API-wrapper service (`GET api.x.com/?url=…`) would need code,
-not just an env var.
-
-The scraper gives up after **8 consecutive 403s** rather than hammering the
-WAF (PR #403).
+~99% of the traffic is the hourly listing sweep; the whole job is ~9,500
+requests/month. Note this is the *pre-`created_at:desc`* shape — the
+request count is unchanged, but what those requests now surface is not.
 
 ### Telegram channel scrape
 
@@ -174,14 +221,103 @@ between untrusted scraped text and the companion's chat context — an
 indirect prompt-injection surface, bounded because the companion has no
 tools that touch money or other users.
 
+## The ad body
+
+Since 17 Aug (migration `0034`) `scrape_log.raw_body` stores the ad text
+the parser actually read, and `GET /dogs/:id/post` serves it **one pet at a
+time, behind auth**. This is what makes "is this actually the dog?"
+answerable mid-search — the parser's 280-char English summary never was.
+
+**Every stored body was mostly CSS, and nobody noticed for a day.**
+cheerio's `.text()` concatenates every descendant text node, and a
+`<style>` tag's contents *are* a text node; OLX injects CSS-in-JS `<style>`
+elements inside the description container. Bodies opened with several
+hundred characters of `.css-4upmi{text-transform:uppercase…}` before the
+description. It was invisible for as long as the body was only ever
+*written* — the first thing that ever read one back was the modal, in front
+of a user, and the owner found it by opening one.
+
+`extractAdBody` now strips `style, script, noscript` first and lives in
+`pipeline/sources/adHtml.ts` — pure HTML in, text out. It had been inside
+`olx.ts`, which imports the db module, so a check for it could not run
+without a `DATABASE_URL`; that is most of why a pure function had no test.
+`check:ad-extract` now asserts both halves: no stylesheet survives **and**
+the description does. Repaired in production via `--repair`, 66 bodies
+re-fetched — clean bodies are 86–189 chars where the polluted ones were
+1300–1430.
+
+**`parseDogPost` had been reading that same polluted text all along**, so
+every classification to date spent part of its input on CSS. Whether that
+changed any verdict is **unmeasured** — do not claim an improvement without
+scoring it.
+
+A second cleanup pass (`clean:ad-bodies`) removed OLX's section labels
+welded to the following word (`Описменя`). 227 bodies cleaned across two
+passes; **0 of 202 stored bodies still carry a label.**
+
+## Contacts, and who sees them
+
+Contact details are stored and shown **deliberately** — the owner's
+decision — and the safeguard is structural rather than a promise.
+
+- **During a search** the walker gets the body through
+  `pipeline/redactContacts.ts`, which replaces phones, e-mails and
+  @handles with «[контакт приховано]». It deliberately errs toward keeping
+  the description readable: anything with fewer than nine digits stays,
+  because that is a house number, a year, a price or a time, and a
+  redaction that swallows "Оболонь, буд. 12" helps nobody. A number that
+  slips through is one the walker could get thirty seconds later anyway.
+- **After reporting a sighting** the phone is visible. An owner's phone
+  rings when somebody has actually seen their animal, not every time a
+  stranger opens a pin.
+- **The link to the original ad is gated with the contacts.** This was a
+  change of mind during the work: the first pass masked the phone while
+  still handing over the OLX url, so one tap made the mask decoration.
+  `sourceUrl` is now `seen ? url : null`. Consequence, deliberate and
+  stated in the copy: a pet with no stored body and no sighting shows an
+  explanation and a close button.
+- **Contacts never enter a bulk payload.** Verified 0 occurrences in
+  `/sync/map`, `/dogs/nearby` and `/stats`. Expired pets 404, so
+  `expire:pet` doubles as contact removal.
+
+`check:ad-body` is a **source-level** fixture: it fails if any file outside
+a five-name allowlist mentions `raw_body`, or if `routes/dogs.ts` stops
+mentioning `redactContacts` or `schema.sightings`. Source-level on purpose
+— a response check only sees the pets a seeded database happens to hold and
+passes happily if the leak sits behind a branch the fixture never takes.
+Both mutations were run and both failed the check.
+
+**How much contact we actually hold** (`census-contacts`, PR #492). The
+mechanism was settled — OLX masks on its own page, we store the page
+verbatim, so the stars were never ours — but the distribution was a guess,
+and guessing is how this project has been wrong before. Three buckets by
+what the walker experiences: `readable` (a full number survives in the
+body), `masked` (OLX's stars and nothing readable), `none` (no contact in
+the text at all — the phone lives in OLX's contact panel, which is not part
+of the page body). `readable` beats `masked` when an ad has both. The
+census prints **counts only, never a fragment of any body**, and is
+allowlisted in `check:ad-body` on that basis.
+
 ## Gates
 
-Between a parse and a row there are four filters, in order:
+Between a parse and a row there are five filters, in order:
 
 1. **Title keywords** (`pipeline/keywords.ts`) — `looksLikeLostPet` and
    `looksLikeRehoming`, stem-friendly Ukrainian and Russian regexes. This
    runs *before* any page fetch and rejects ~96% of discovered ads.
 2. **Confidence** — a low-confidence parse is logged and dropped.
+2b. **Found-report classification** (`pipeline/foundReport.ts`, migration
+   `0035`) — somebody who *has* an animal and is looking for its owner is
+   not somebody who lost one. Both look identical to the keyword filter,
+   and by design: `LOST_KEYWORDS` includes `знайд|знайш|найден|нашли|found`
+   and four of the thirteen listing queries are «знайшли-собаку» /
+   «нашли-кошку», because a found stray needs its owner found. The bug was
+   presentational — «песик (знайдений)» appeared under «загублені» with
+   «терміново», asking a walker to search the streets for an animal already
+   sitting in somebody's flat. Now flagged with `is_found_report` and kept
+   out of the map query. Kept **in the table** rather than filtered at
+   ingest so they can get their own screen later. `check:found-report`
+   pins the rule, and **ambiguity stays a search**.
 3. **`detectOtherCity`** (`pipeline/outOfArea.ts`, PR #409) — reads the city
    out of the post text at parse time. Built around the trap that Kyiv has
    streets named after other cities (Львівська площа, Харківське шосе, метро
@@ -263,6 +399,10 @@ failing silently.
 | `pnpm --filter @shukajpes/server clean:lost-dogs [--apply]` | The half that has to go out and ask the internet questions — dead photo detection and city checks. **Dry by default.** Gives up after 8 consecutive 403s. |
 | `pnpm --filter @shukajpes/server expire:out-of-area [--apply]` | The catch-up sweep for out-of-city rows already in the table. Dry by default. Needs no network, so it runs from the app host. |
 | `pnpm --filter @shukajpes/server expire:pet --id=<id>` | **The takedown tool** (PR #424) — for when an owner asks for their pet removed. Dry by default; `--apply` expires (reversible), `--photo` also nulls the photo (irreversible, opt-in, and the dry run says so in those words), `--restore` undoes. `--restore --photo` is refused rather than half-done. Prints the source permalink so a request can be checked against the post it came from. |
+| `pnpm --filter @shukajpes/server backfill:ad-bodies [--apply] [--repair]` | Fetches each pet's ad by the URL already in `scrape_log` — no rediscovery, ~226 requests instead of ~12,000. **Three outcomes kept apart, and that separation is the safety property:** 200 stores the body, 404/410 marks `skip_reason='ad-gone'`, **anything else is left alone.** A 403 that survived its retries says nothing about whether an ad exists, and treating one as gone would expire a pet somebody is still looking for. |
+| `pnpm --filter @shukajpes/server expire:no-post [--apply]` | Expires only the `ad-gone` rows. Refuses to write when no scraped pet has a body at all — the guard that covers the "the write never landed" state. Its dry run lists **newest first** behind a complete age histogram; the first version listed the 60 oldest and capped the rest, hiding all 83 rows newer than those shown. |
+| `pnpm --filter @shukajpes/server census-contacts` | How much owner contact the corpus actually holds. Counts only, never a fragment of a body. |
+| `pnpm --filter @shukajpes/server audit-ingest` | What the ingest missed and what it let through. |
 | `pnpm --filter @shukajpes/server check:out-of-area` | 31 fixture cases for `detectOtherCity`. |
 | `pnpm --filter @shukajpes/server check:same-pet` | The four production dedupe pairs plus the guards. |
 | `pnpm --filter @shukajpes/server check:ingest-alert` | Exercises the alert state machine against an in-memory store, messaging nobody. |
@@ -280,10 +420,11 @@ failing silently.
   three consecutive ticks. Retuned in PR #413 against a real tick: the
   first rule ("discovered things, parsed none, errored") would have fired
   on a perfectly normal quiet hour, because OLX discovers ~250 already-seen
-  ads hourly and parses none of them. The threshold is deliberately above
-  the current partial block's steady 7 errors — degraded coverage is a
-  known state, not a page; error-counting also keeps unconfigured sources
-  quiet (Facebook emits exactly one expected error per tick).
+  ads hourly and parses none of them. Error-counting also keeps
+  unconfigured sources quiet (Facebook emits exactly one expected error per
+  tick). Note the threshold was sized against the old steady 7 errors —
+  with the retry in place a healthy tick now errors **0** times, so it has
+  more headroom than it was designed with.
 - *Has everything stopped?* — nothing inserted by any source for
   `INGEST_STALL_HOURS` (default 36; the measured baseline is 2–9/day with no
   zero days in 21). This is the check that asks the question that actually
@@ -298,7 +439,36 @@ not re-announce everything.
 log-only. Setting it is one value, no purchase, and it is what stops a dying
 source from being invisible — which is exactly how OLX sat blocked unnoticed.
 
-## The table, as measured on 11 Aug 2026
+## The table: the base refresh of 18 Aug
+
+The corpus had accumulated months of rows nobody had checked against
+reality. `backfill:ad-bodies` asked OLX about each one, and
+`expire:no-post` acted only on the definitive answers:
+
+```
+221 active  →  78 active
+   67 with full ad text
+   11 no verdict (8 serve a 200 page we cannot parse, 3 refused)
+  143 expired — the ad was deleted from OLX
+```
+
+**A deleted ad is the best found-signal this data has.** Far better than an
+age threshold, which expires a pet still being searched for and keeps one
+that went home in April. For a lost pet, the owner taking the ad down
+usually means the story ended. Reversible with one UPDATE.
+
+29 sightings existed and **all survived** — expiring does not cascade. (The
+owner confirms those were their own UI testing, not real use.)
+
+The same lesson produced migration `0036`, `ad_alive_at`: the staleness
+sweep expired an active pet after 90 days on age alone, and «Льоля» was
+ingested in April, expired by that rule, and **her ad was still serving
+four months later** — the owner was renewing a live listing while we
+quietly took her off the map. Age is a proxy; "is the ad still up" is
+evidence, and the backfill already asks it every time it fetches. The
+column remembers the answer so the sweep can defer to it.
+
+### Earlier: the invisible-pet sweep of 11 Aug
 
 ```
 before the sweep     261 active,  89 on the fallback pin
@@ -308,17 +478,10 @@ after                244 active,  81 on the fallback pin
 
 The map draws pets that `/dogs/nearby` returns, and that endpoint filters
 out the fallback pin and bounds the rest by radius. So a row can be active,
-correct, and undrawable. The 81 still on the pin are the genuine
-geocoding-failure population, and rescuing them is the open job.
-
-Composition of the invisible set, measured before the sweep:
-
-```
-56  medium urgency
-33  urgent
- 0  rehoming
- 0  with no description text to re-geocode from
-```
+correct, and undrawable — the genuine geocoding-failure population, and
+rescuing it is still an open job (see the gazetteer trap below). Note the
+81 figure predates the base refresh; the proportion has not been
+re-measured against the 78.
 
 The reversal SQL for the 17 expired rows is recorded in `HANDOFF.md` §3.2.
 Two rows flagged only by the parser's English description were deliberately
@@ -360,9 +523,18 @@ nothing. Print the intermediate before trusting the aggregate.
 - **`source = 'scrape'` matches nothing.** `lost_dogs.source` stores the
   ingest's actual name (`olx`, `telegram:<channel>`, `admin-sideload`),
   never the literal `'scrape'` the column comment implies.
-- **The ad body is stored nowhere.** Only the title, the URL and the
-  parser's English summary. Ingest is the only moment the full text exists,
-  so anything that needs the original wording has to happen there.
+- **Fresh ads are not pets.** The first 94 ads the `created_at:desc` fix
+  surfaced produced zero pets, all rejected by the title filter. Either the
+  filter is too strict or those queries surface non-lost-pet traffic;
+  `skip_reason` distinguishes `title-filter` from `rehoming` and would
+  settle it. **Do not read a non-zero `fresh` as a healthy pipeline.**
+- **`--sample=N` draws from an unshuffled list.** It reported "4 of 5 ads
+  are live" when the true rate was nearer 1 in 3, because the query order
+  put the freshest first. Shuffle before drawing, or the sample is a biased
+  estimate presented as a measurement.
+- **One pet has `last_seen_at` 94 days in the future**, printed as
+  `-94d ago`. It would dodge the staleness sweep for six months. A parser
+  date bug, not yet traced.
 - **Raw `sql` fragments in Drizzle render interpolated columns unqualified.**
   `${schema.scrapeLog.dogId} = ${schema.lostDogs.id}` came out as
   `"dog_id" = "id"`. Prefer two plain queries and a Map, and render with

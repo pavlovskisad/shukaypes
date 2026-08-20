@@ -50,10 +50,23 @@ inside it go with the ground. Paired with **grow**.
 travel. The flag is `DOG_CAM`; the user-facing name is **supersniff**. The
 store field is `dogCam`. Same thing, three names — this trips people up.
 
+**Explore / district / supersniff** — the three modes the corner logo
+rotates through since PR #494. Explore is the ordinary map; district is the
+territory lens (base map desaturated so ownership colours read against a
+calm ground); supersniff is the search mode. The logo is the switch, and
+the first thing the dog points at when the screen goes idle.
+
 **Fallback pin** — `50.4501, 30.5234`, Kyiv city centre. Where the parser
 puts a pet whose location it could not resolve. `/dogs/nearby` filters it
 out, so a pet on the fallback pin is active, correct and **invisible**. 81
 pets sat there as of 11 Aug 2026.
+
+**Found report** — an ad where somebody *has* an animal and wants its
+owner, rather than having lost one (`is_found_report`, migration `0035`).
+Ingested deliberately — a found stray needs its owner found — but kept off
+the map, because presenting one under «загублені» asks a walker to go
+search the streets for an animal already sitting in somebody's flat. Their
+own screen and their own call to action are an open product decision.
 
 **Ground** — the stored polygons in `territory_ground` that are the
 ownership record. Distinct from **marks**, which are the dots showing where
@@ -93,6 +106,13 @@ Dormant until the flag is set.
 `minDistanceM` (40m) of the last one. Expires after `markTtlDays` (4), which
 only limits the hull the *next* mark draws. Every mark is equal — there are
 no strength tiers any more.
+
+**PostModal** — the top sheet that shows the owner's actual ad text during
+a search (`components/ui/PostModal.tsx`), reachable from the pet card and
+the end-of-search prompt. Contacts are redacted and the link to the
+original ad is withheld until a sighting is reported — the two are gated
+together on purpose, since a masked phone next to a working link is
+decoration.
 
 **Paw** — the collectible token. Pure happiness, no hunger effect. Table
 `tokens`. Also the currency search results are paid in (20 for a find, 10
