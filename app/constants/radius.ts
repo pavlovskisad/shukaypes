@@ -11,6 +11,25 @@
 //          via the 999 trick; replaces the old `borderRadius: 18`
 //          on 36×36 close buttons since both render the same).
 
+// THE RULE, so this stops being decided by feel each time:
+//
+//   Content that can WRAP gets a corner. Content that cannot gets a
+//   capsule.
+//
+// A card, a sheet, a chat bubble, a pet card — all of them grow a
+// second line, so they are surfaces, and surfaces turn a corner (18).
+// A meter, a toggle, a CTA, a name tag on the map — one line, height
+// is its own, nothing to wrap — so they stay capsules (pill).
+//
+// This is not a compromise between two systems. It is what the
+// reference does: its card is a squarish rounded rect and the two
+// buttons INSIDE it are full capsules. The corner carries meaning
+// rather than just being uniform.
+//
+// A pill radius on a SQUARE box is a circle, not a capsule — close
+// buttons, the send button, map pins, the radial discs. Those never
+// enter the question.
+
 export const R = {
   sm: 4,
   md: 12,

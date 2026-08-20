@@ -1,7 +1,6 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
-import { CHIP } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
@@ -80,7 +79,12 @@ const styles = StyleSheet.create({
     // CHIP.height (48) was a fixed cap and clashed with
     // wrapping labels.
     paddingVertical: S.s,
-    borderRadius: CHIP.radius,
+    // R.card, not CHIP.radius. CHIP.radius is half of a 48px chip, so
+    // it is a capsule only while this pill stays one line — and this
+    // pill's height is content-driven precisely so long pet names can
+    // wrap. At two lines a 24 radius on a ~70px box is neither a
+    // capsule nor the family corner. It wraps, so it is a surface.
+    borderRadius: R.card,
     paddingLeft: S.l,
     paddingRight: S.s,
     backgroundColor: GLASS_BG,
