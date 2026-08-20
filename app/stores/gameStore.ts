@@ -348,9 +348,11 @@ interface GameState {
   // Which stop's story is expanded on the map, by id. One at a time —
   // three open bubbles along a route is unreadable.
   openWalkStopId: string | null;
-  // Cleared once the walker dismisses the list of stops they were shown
-  // when the walk started, so it doesn't come back on every re-render.
-  walkStopsIntroSeen: boolean;
+  // Whether the list of stops is showing. Opens itself when a walk with
+  // stops starts, closes when you tap a stop to go look at it, and is
+  // reopened from the pill under the HUD — closing it must never be a
+  // one-way door, which is what "seen" used to make it.
+  walkStopsOpen: boolean;
   dailyTasks: DailyTasks;
   syncing: boolean;
   lastSyncError: string | null;
@@ -447,7 +449,7 @@ interface GameState {
     stops?: WalkStop[],
   ) => void;
   setOpenWalkStop: (id: string | null) => void;
-  dismissWalkStopsIntro: () => void;
+  setWalkStopsOpen: (open: boolean) => void;
   reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean } | void>;
   // Detective quests. Start flips any existing active quest to abandoned
   // server-side. advance checks proximity to the current waypoint and
@@ -575,7 +577,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   walkRouteMeta: null,
   walkStops: [],
   openWalkStopId: null,
-  walkStopsIntroSeen: false,
+  walkStopsOpen: false,
   // Initial state is empty for today's date; refreshDailyTasks() pulls
   // from the server on first app load and again on map-tab refocus.
   dailyTasks: blankTasks(),
@@ -1248,6 +1250,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       walkRouteMeta: null,
       walkStops: [],
       openWalkStopId: null,
+      walkStopsOpen: false,
       // Cues that were pointing at something in the old mode.
       activeHint: null,
       menuCamera: null,
@@ -1332,13 +1335,13 @@ export const useGameStore = create<GameState>((set, get) => ({
       walkRouteMeta,
       walkStops: stops ?? [],
       openWalkStopId: null,
-      // A new walk gets its own introduction; clearing one (route null)
-      // leaves nothing to introduce, and the flag being false there
-      // costs nothing.
-      walkStopsIntroSeen: false,
+      // A new walk introduces itself. Clearing one (route null) leaves
+      // nothing to show, and a walk through a district with no
+      // landmarks has no list to open.
+      walkStopsOpen: (stops?.length ?? 0) > 0,
     }),
   setOpenWalkStop: (openWalkStopId) => set({ openWalkStopId }),
-  dismissWalkStopsIntro: () => set({ walkStopsIntroSeen: true }),
+  setWalkStopsOpen: (walkStopsOpen) => set({ walkStopsOpen }),
 
   reportSighting: async (dogId) => {
     const { userPosition } = get();

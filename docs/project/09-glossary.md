@@ -191,10 +191,22 @@ destination and a wall plaque is a **walk stop**, not somewhere to walk to.
 **Walk stop** — a `kyiv_lore` landmark a planned walk is routed *through*,
 rather than past. `/lore/route` picks two to four of them along the candidate
 routes the client offers and the client spends its walk on whichever route
-passes the most; they render as numbered discs on the line
-(`WalkStops.tsx`), tap to expand the dog's sentence, tap again for the
-Wikipedia summary. Same corpus as the **sniff press**, reached from the other
+passes the most. Same corpus as the **sniff press**, reached from the other
 direction.
+
+They render per the product reference (`WalkStops.tsx`): numbered **green**
+discs (`colors.walkStop`) on a chunky **cyan dashed** line
+(`colors.walkLine`) — a tour is a route *with stops*, so it does not reuse
+`routeBlue`, which paints quest routes and the sniff ring. Tap a disc for the
+dog's sentence, tap again for the Wikipedia summary. The dashes are styling,
+not status: when street routing was unavailable the line is straight segments
+and the **stops card** says so in words.
+
+The card lists the stops, opens itself when the walk starts, and is reopened
+from a pill under the HUD beside "cancel walk". It sits at `Z.HUD_WALK_CARD`
+(50) — above the companion at 42 — and its container must set **no z-index**,
+or the card is trapped under the dog. Only the cancel pill ends a walk;
+tapping the map does not, and neither does working through the stops.
 
 Zero stops is a valid walk, and on short ones it is common. Measured against
 all 2671 production rows from the 36 neighbourhood centroids in
