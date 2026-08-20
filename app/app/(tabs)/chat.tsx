@@ -20,6 +20,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK, SURFACE } from '../../constants/surface';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { pickBottomInset } from '../../services/telegram';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
@@ -35,7 +36,6 @@ import { useLangStore } from '../../stores/langStore';
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 
-const ACCENT_BLUE = 'rgba(0,60,255,0.85)';
 
 function linkify(text: string): Array<{ kind: 'text' | 'link'; value: string }> {
   const parts: Array<{ kind: 'text' | 'link'; value: string }> = [];
@@ -580,8 +580,10 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     marginTop: S.m,
     marginBottom: S.s,
-    backgroundColor: '#ffffff',
+    backgroundColor: SURFACE.fill,
     borderRadius: R.pill,
+    borderWidth: 2,
+    borderColor: INK,
     paddingVertical: S.s,
     paddingHorizontal: S.l,
     flexDirection: 'row',
@@ -593,7 +595,7 @@ const styles = StyleSheet.create({
     width: 36,
     height: 36,
     borderRadius: R.pill,
-    backgroundColor: '#ffffff',
+    backgroundColor: SURFACE.fill,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -625,12 +627,16 @@ const styles = StyleSheet.create({
   },
   assistantBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: '#ffffff',
+    backgroundColor: SURFACE.fill,
+    borderWidth: 2,
+    borderColor: INK,
     ...CARD_SHADOW,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: ACCENT_BLUE,
+    backgroundColor: INK,
+    borderWidth: 2,
+    borderColor: INK,
     ...CARD_SHADOW,
   },
   bubbleText: {
@@ -690,7 +696,9 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: R.pill,
-    backgroundColor: ACCENT_BLUE,
+    backgroundColor: INK,
+    borderWidth: 2,
+    borderColor: INK,
     alignItems: 'center',
     justifyContent: 'center',
   },

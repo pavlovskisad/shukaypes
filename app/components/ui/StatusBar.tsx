@@ -5,6 +5,7 @@ import { colors } from '../../constants/colors';
 import { CHIP } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK, SURFACE } from '../../constants/surface';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
@@ -21,7 +22,7 @@ const PILL_HEIGHT = CHIP.height;
 const PILL_MIN_WIDTH = 50;
 
 const PROGRESS_BLUE = 'rgb(0,60,255)';
-const GLASS_BG = '#ffffff';
+const GLASS_BG = SURFACE.fill;
 const GLASS_SHADOW_COLOR = '#000';
 // HUD icons are pixel-art SVGs (see components/ui/Icon.tsx). 18px
 // renders crisp at the 38px pill height; smaller (the previous emoji
@@ -279,6 +280,14 @@ const styles = StyleSheet.create({
     borderRadius: PILL_HEIGHT / 2,
     overflow: 'hidden',
     backgroundColor: GLASS_BG,
+    // The HUD pills were the last chrome without an edge, and they are
+    // the chrome that spends the most time on screen. RN puts the
+    // border inside the box, so PILL_HEIGHT is unchanged and the meter
+    // fill underneath now stops at the ink instead of at the pill's
+    // outer bound — which is what you want: the bar reads as filling a
+    // drawn container rather than as a coloured pill of its own.
+    borderWidth: 2,
+    borderColor: INK,
     shadowColor: GLASS_SHADOW_COLOR,
     // Bumped from { 0, 4 } / 0.1 / 16 to the chat CHROME_SHADOW
     // values so HUD pills feel like the same family as the chat
