@@ -14,6 +14,7 @@ import { api, type TerritoryRanking } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import type { SceneMode } from '../../components/profile/ProfileSceneBackdrop';
 import { HERO, CHIP } from '../../constants/sizing';
+import { INK } from '../../constants/surface';
 import { MeterPill, CounterPill } from '../../components/ui/StatusBar';
 import { useStrings } from '../../i18n/useStrings';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
@@ -455,6 +456,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: S.m,
     borderRadius: CHIP.height / 2,
     backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: INK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.14,
@@ -490,13 +493,19 @@ const styles = StyleSheet.create({
     height: 150,
     backgroundColor: '#ffffff',
     borderRadius: R.card,
+    // Same paper as the pet and spot cards. These were the last white
+    // surfaces still floating on shadow alone, and against the profile
+    // scene's flat green field a shadow does almost nothing — the card
+    // read as a lighter patch of grass rather than as a card.
+    borderWidth: 2,
+    borderColor: INK,
     paddingTop: S.m,
     paddingBottom: S.m,
     paddingHorizontal: S.l,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
     elevation: 6,
   },
   // Section titles bumped to match the tasks / spots tabs —

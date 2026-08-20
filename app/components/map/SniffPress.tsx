@@ -16,6 +16,7 @@ import { Z } from '../../constants/z';
 import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import { VOICE } from '../../constants/voice';
+import { INK, SURFACE } from '../../constants/surface';
 
 // Long-press "sniff this place" gesture.
 //
@@ -567,13 +568,19 @@ export function SniffPress() {
               // buttons across the app — padding 6/14 → 10/18,
               // type 12 → 14.
               padding: '10px 18px',
-              background: SNIFF_COLOR,
+              // Ink, not sniff-blue. This one survived the first pass
+              // because it lives on a map marker rather than in a modal,
+              // but it is a button, and blue here means the circle and
+              // the dot below it — the place being pointed at — not the
+              // thing you tap.
+              background: INK,
               color: '#ffffff',
               borderRadius: R.pill,
+              border: SURFACE.hair,
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.small,
               fontWeight: 700,
-              boxShadow: '0 4px 12px rgba(47,107,255,0.35)',
+              boxShadow: SURFACE.shadow,
               userSelect: 'none',
               opacity: routing ? 0.6 : 1,
             }}
