@@ -1,6 +1,6 @@
 # 02 — Architecture
 
-Current as of `f421b7e`, 11 Aug 2026. Where this disagrees with the code,
+Current as of `43808c6`, 20 Aug 2026. Where this disagrees with the code,
 the code is right.
 
 ## Repo layout
@@ -8,8 +8,8 @@ the code is right.
 pnpm monorepo, three workspaces (`pnpm-workspace.yaml`).
 
 ```
-app/          Expo RN app (web-first). Expo Router. 23,191 lines TS/TSX.
-server/       Fastify API. 16,030 lines TS.
+app/          Expo RN app (web-first). Expo Router. ~28,700 lines TS/TSX.
+server/       Fastify API. ~23,100 lines TS.
 shared/       TypeScript types only (145 lines). No build step.
 docs/         Documentation. docs/project/ is this set.
 reference/    The original single-file HTML prototype. Read-only history.
@@ -35,6 +35,7 @@ Fastify API  (one Fly machine: shared-cpu-1x / 512MB, fra, min 1)
    ├── Redis               presence GEO, spawn cooldowns, path anchor, lang cache
    ├── Anthropic API       companion chat, lost-pet parsing, lore, quest narration
    ├── Google Maps         Places (server-proxied + cached) / Routes (client-side)
+   │                        Both now OPTIONAL — walks fall back to our own tables
    └── Telegram Bot API    Mini App auth, webhook ingest, photo proxy
 Map tiles: OpenFreeMap "liberty", heavily overridden. Glyphs self-hosted.
 ```
@@ -123,11 +124,11 @@ This is why `three` cannot be code-split.
 
 Floating tab bar in `_layout.tsx`.
 
-**State.** Zustand, one large store: `stores/gameStore.ts` (1,172 lines) —
-map data, companion stats, quests, spots, territory, multiplayer, dog-cam,
-daylight. `stores/langStore.ts` for language (uk / en, `i18n/strings.ts`).
+**State.** Zustand, one large store: `stores/gameStore.ts` — map data,
+companion stats, quests, spots, territory, multiplayer, dog-cam, walk
+stops, the menu/mode state, daylight. `stores/langStore.ts` for language (uk / en, `i18n/strings.ts`).
 
-**Map.** `components/map/MapView.tsx` (3,429 lines) is the nerve centre.
+**Map.** `components/map/MapView.tsx` (~3,900 lines) is the nerve centre.
 MapLibre GL JS v5 with a heavily-overridden "crayon" style
 (`crayonStyle.ts`, 780 lines, based on OpenFreeMap liberty). Markers are DOM
 overlays via `MapLibreMarker.tsx` — companion, user dot, paws, bones, spots,
@@ -137,8 +138,16 @@ other walkers, lost-dog pins and clusters.
 
 - `groundFogLayer.ts` — ground/sky fog with an off-screen warm sun and god
   rays, plus a custom ground layer under the city.
-- `TerritoryLayer.tsx` — territory ground fills and marks, coloured per
-  owner (`territoryColor.ts`).
+- `territoryHeatLayer.ts` — territory drawn as a soft "scent field" rather
+  than hard polygons: the server's shapes triangulated (`earcut`) into a
+  quarter-resolution buffer, blurred by a separable gaussian whose radius
+  tracks zoom so the soft edge stays a roughly constant ~22 **metres of
+  ground**, then re-thresholded so borders stay exactly where the server
+  put them. Two owners' ground crossfades through a gradient where they
+  meet instead of butting at a hairline. `TerritoryLayer.tsx` keeps the old
+  flat fill as a fallback if the GL setup fails — territory never silently
+  disappears.
+- `WalkStops.tsx` — numbered discs for the landmarks a walk passes through.
 - `threeBuildingsLayer.ts` (1,161 lines) — Three.js extruded buildings with
   true per-distance and per-height fog, a see-through corridor along the
   camera-to-dog sight line, and gradient ground shadows.
@@ -218,6 +227,9 @@ new route ships unlimited.
 | `photos.ts` | `/photos/:fileId` — Telegram photo proxy |
 | `telegram.ts` | `/telegram/webhook` + Mini App plumbing (554 lines) |
 | `admin.ts` | `/admin/lost-dogs/{ingest,scrape-now,scrape-log,report}` |
+| `walkDestinations.ts` | `/walk/destinations` — where a walk can end, from our own tables merged with Places parks only. Removes Google as a hard dependency of the walk loop |
+| `lore.ts` | `/lore/nearby` + **`POST /lore/route`** — takes several candidate walks and answers, for each, which landmarks it passes and what the walk looks like re-plotted through them |
+| `dogs.ts` | `/dogs/nearby`, **`/dogs/:id/post`** — the owner's ad text, one pet at a time, contacts redacted unless a sighting exists |
 | `adminMetrics.ts` | `/admin/metrics[?format=text]` — DAU/WAU/retention/funnel/token spend, bots separated. `DASHBOARD_TOKEN` or `ADMIN_TOKEN` |
 | `adminConsole.ts` | `/admin/console` — the read-only console: one self-contained page, no build step, served by the API that owns the data. Opens via `?k=<token>` (stripped from the URL bar, redacted in logs) |
 | `clientErrors.ts` | `POST /client-errors` — crash reports, auth-exempt, capped + deduped client-side |
@@ -246,6 +258,19 @@ new route ships unlimited.
   a cohort of ten.
 - `invites.ts` + `lib/inviteGate.ts` — invite codes and the pure predicate
   that decides who needs one.
+- `loreWalk.ts` — the landmark-walk geometry, pure and checkable: project
+  every landmark in the bbox onto the planned line, keep what sits inside a
+  **240m corridor**, cut the walk into equal stretches and take the best
+  candidate in each, enforce spacing, then drop stops until the added
+  walking fits a detour budget. Equal stretches rather than "the N closest
+  to the line" is the difference between a walk that unfolds and a walk
+  with three plaques in its first block — the dense old centre wins every
+  slot otherwise. 25 fixture expectations in `check:lore-walk`.
+- `pipeline/redactContacts.ts` — takes an owner's contacts out of an ad and
+  nothing else. Errs toward keeping the description readable.
+- `pipeline/sources/adHtml.ts` — pure HTML in, ad text out. Pure and
+  db-free *on purpose*: it used to live in `olx.ts`, which imports the db
+  module, so a check for it could not run without a `DATABASE_URL`.
 - `anthropic.ts`, `memory*.ts`, `quest*.ts`, `gazetteer.ts`, `lostDogsReport.ts`,
   `placesCache.ts`, `decay.ts`, `lostDogCleanup.ts`, `searchZoneExpansion.ts`.
 
@@ -267,7 +292,7 @@ single change that blocks horizontal scaling.
 **DB** (`db/`): `schema.ts` (Drizzle), `index.ts`
 (`postgres(url, { prepare: false })`, default pool ~10), `redis.ts`
 (`ioredis`, `lazyConnect`, throttled error log), `migrate.ts` run at
-container start. 34 migrations, latest `0033_search_results.sql`.
+container start. 37 migrations, latest `0036_ad_alive_at.sql`.
 
 **Migrations `0032`+ are hand-written, and that is a rule now:**
 `migrations/meta` holds snapshots for 0000–0002 and nothing for 0003–0031,
@@ -305,6 +330,9 @@ territory, a bbox range scan on plain B-trees.
 | `territory_raids` | "Somebody took your ground" — queued in Postgres so an overnight raid still lands |
 | `invite_codes` | Beta invite codes, minted by the `invite` CLI (migration `0032`) |
 | `search_results` | **Every** completed search — found or not — with the paws paid. Separate from `sightings` on purpose: a sighting asserts *the pet was here* and drives pin-moving; a search result may assert nothing. History starts 14 Aug 2026 (migration `0033`) |
+| `scrape_log.raw_body` | The ad text the parser actually read (migration `0034`). Served only by `/dogs/:id/post`, never in a bulk payload — enforced by a source-level fixture check |
+| `lost_dogs.is_found_report` | Somebody *has* this animal and is looking for its owner (migration `0035`). Kept in the table rather than filtered at ingest so these can get their own screen later; the map query simply does not return them |
+| `lost_dogs.ad_alive_at` | When we last confirmed the owner's ad is still up (migration `0036`). Age is a proxy for "is this pet still lost"; a live ad is evidence, and the staleness sweep defers to it |
 
 Indexes are plain B-trees: `tokens(owner_id)`, `tokens(collected_at)`,
 `food_items(owner_id)`, `lost_dogs(status)`, `messages(user_id, created_at)`,
@@ -391,8 +419,9 @@ server:  needs: checks → flyctl deploy --remote-only
 
 The gate is real (PR #274). `react-hooks/rules-of-hooks` is an **error** —
 that is the class of bug that white-screened prod once. `pnpm check` (added
-PR #416) runs the seven fixture checks: out-of-area, ingest alert, pet
-identity, per-user rate limiting, invite gate, dev auth, route coverage.
+PR #416) runs the **twelve** fixture checks: out-of-area, ingest alert, pet identity, per-user rate limiting,
+invite gate, dev auth, contact redaction, ad-body containment, ad
+extraction, found reports, walk stops, route coverage.
 They existed before and **nothing ran them** — a broken rule deciding which
 pets get expired or merged would have shipped on the strength of having
 compiled.

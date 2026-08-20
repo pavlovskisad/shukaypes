@@ -1,6 +1,6 @@
 # 10 — Product brief & running costs
 
-Written 15 Aug 2026, for business and strategy work. **Self-contained on
+Written 15 Aug 2026, updated 20 Aug 2026, for business and strategy work. **Self-contained on
 purpose** — it repeats things the other docs say so it can be handed to
 someone (or a planning session) that reads nothing else. Where a number is
 measured it says so and carries its date; where it is an estimate it says
@@ -45,20 +45,30 @@ one codebase, one deployment. **Market:** Kyiv, Ukrainian-first UI.
 **What makes it defensible** is not any single mechanic but the data
 engine underneath: an ingestion pipeline (marketplace listings, Telegram
 channels, a real-time bot) → LLM parsing with local-knowledge geocoding →
-dedupe tuned against real Kyiv data → a curated 16k-place gazetteer of the
-city. That machinery is city-specific and compounding, and it is the part
-a copycat cannot lift from screenshots.
+dedupe tuned against real Kyiv data → a curated 16k-place gazetteer and a
+2,671-entry landmark corpus with a written story for each. That machinery
+is city-specific and compounding, and it is the part a copycat cannot lift
+from screenshots. It is also what makes the walking half work without
+paying Google: the destinations, the stops and the stories are all ours.
 
-## 2. Where it stands (15 Aug 2026)
+## 2. Where it stands (20 Aug 2026)
 
 **Built and live:** the full game (map, companion, chat, quests,
 territory, multiplayer presence with 30 labelled bots), the full search
-flow, the ingestion pipeline, an admin metrics console, crash reporting,
-per-user rate limiting, LLM spend ceilings, an invite gate. The
+flow — including reading the owner's actual ad mid-search, with contacts
+gated behind a reported sighting — landmark walks that route you through
+Kyiv's history, the ingestion pipeline, an admin metrics console, crash
+reporting, per-user rate limiting, LLM spend ceilings, an invite gate. The
 engineering posture is unusually disciplined for the stage: CI gates both
-deploys on typecheck + lint + seven fixture checks, data mutations are
+deploys on typecheck + lint + twelve fixture checks, data mutations are
 dry-run-first, and production numbers separate bots from humans
 structurally "because these numbers are going into a fundraise".
+
+**Since 20 Aug the app also explains itself.** It used to open on a map
+with a six-verb icon menu and no statement of purpose; now the dog asks
+what you are here for and the answer picks a mode. That is the difference
+between a beta tester understanding the product in five seconds and not at
+all.
 
 **The declared next step** is a **closed beta of ~50–150 invite-gated
 testers on real data.** Phase 1 of that plan ("safe to hand to a
@@ -67,27 +77,34 @@ rotate/restrict the one compromised Google Maps key, mint invite codes and
 flip `INVITE_REQUIRED`, set three one-value config secrets, add a contact
 route, and decide the presence-privacy posture.
 
-**The two honest gaps**, unchanged for a month and named in every internal
-doc:
+**The honest gaps:**
 
-- **Ingestion coverage is degraded.** OLX — the only source that has ever
-  produced real pets (2–9/day measured) — is *half*-blocked by a WAF:
-  about half its listing sweeps are refused, the other half serve, and
-  pets keep arriving at a few a day (verified live 15 Aug). The ads on
-  the blocked half are simply invisible. Buying back that coverage is a
-  ~$10–50/mo managed proxy plus one env var, seam already built; adding
-  Telegram channel scraping is free and needs only a curated channel
-  list. Days of work, not months — but until then the product sees only
-  part of the Kyiv lost-pet conversation.
+- **Ingestion works, but sits on one source.** OLX — the only source that
+  has ever produced real pets — was believed for a month to be blocked by
+  a WAF. It was not: the refusals were a 50% coin flip that a retry
+  rescues, and the real reason nothing new was arriving was that the
+  scraper had exhausted a relevance-ordered first page. Both fixed 17–18
+  Aug at no cost, and **the proxy subscription that was the pending
+  purchase is cancelled** — residential exits measured *worse* than the
+  datacentre. What remains is concentration risk: a second source
+  (Telegram channels, free, one env var, needs a curated list) is the
+  cheapest insurance.
 - **Parse accuracy on real posts has never been measured.** The core
   claim — a real post comes out with the right species, place and photo —
-  has no number behind it. An afternoon of work; also the strongest slide
-  a deck could carry.
+  has no number behind it. This is now the *last* engine gap, and the
+  obstacle that used to sit in front of it is gone: ad text is stored, so
+  scoring a batch needs no re-fetching. An afternoon of work; also the
+  strongest slide a deck could carry.
 
-**Data as of the last count:** 244 active lost-pet records (real posts,
-no synthetic data in production); ~543 registered accounts (drive-by web
-visitors included — the product has never been promoted); measured chat
-usage is near zero because nobody has been invited yet.
+**Data as of the last count (18 Aug):** **78 active lost-pet records**,
+down from 221 — the corpus was checked against its sources for the first
+time and 143 pets whose ads had been *deleted from OLX* were expired, on
+the reasoning that for a lost pet a deleted ad usually means the story
+ended. 67 of the survivors carry the owner's full ad text. All real posts;
+production has held no synthetic data since boot-seeding was removed.
+~543 registered accounts (drive-by web visitors included — the product has
+never been promoted); measured chat usage is near zero because nobody has
+been invited yet.
 
 ## 3. What it costs to run
 
@@ -125,26 +142,35 @@ There is currently no custom domain (~$15/yr when bought) and no paid
 monitoring, crash-reporting or analytics service — metrics and crash
 reports are self-hosted in the same VM and logs, by decision.
 
-### 3.3 The one pending purchase
+### 3.3 The pending purchase that turned out not to be needed
 
-**A scraping proxy for OLX: ~$10–50/mo.** The volume is measured and
-small — ~9,500 requests/month, low single-digit GB — so the recommendation
-on file is a managed unblocker in proxy mode (the provider absorbs WAF
-changes) rather than raw residential IPs. This buys back the blocked half
-of the primary source's coverage — the pipeline is degraded, not dead, so
-it is the highest-value purchase pending rather than an emergency.
+An earlier version of this document listed **a scraping proxy at
+~$10–50/mo** as the one thing standing between the product and its primary
+data source. It is **cancelled**, and the reasoning is worth keeping
+because it is the only line item that ever threatened to become recurring
+infrastructure spend.
+
+The 403s from OLX were diagnosed as an IP-level block. Measured properly on
+17 Aug they were a **50% coin flip** — the same URL alternating 403/200 —
+which a zero-delay retry rescues completely, and which a residential proxy
+made *worse* (four Ukrainian exits, refused every time). The fix was
+deleting one condition in code that already existed.
+
+So the running cost of ingestion is **zero**, and the remaining ingestion
+work (a second source via Telegram channels) is also free. There is no
+pending purchase.
 
 ### 3.4 Closed beta (50–150 testers) — estimate
 
 | Item | Monthly | Notes |
 | --- | ---: | --- |
 | Fly.io | $5–10 | Same VM; egress grows but a walk costs the server ~6.6MB/h/user (measured, after the Aug data-diet halved it) — 150 daily walkers ≈ 30GB/mo ≈ $0.60 |
-| Scrape proxy | $10–50 | The purchase above |
+| Scrape proxy | **$0** | Was $10–50 in the previous version of this table. Not needed — see 3.3 |
 | Anthropic API | $10–60 | **The swing factor** — scales with chat engagement, which is unknown until real users exist. Bounded hard: 50 Opus turns/user/day, 1,000/day global, ambient capped, kill switch. The global ceiling caps worst-case spend at roughly $30–80/day; typical engagement lands orders of magnitude below it |
 | Upstash Redis | $0–10 | Presence + counters may outgrow the free tier; pay-as-you-go |
-| Google Maps | $0–15 | Routes (walking routes) is the only per-user Google call; likely within free credit |
+| Google Maps | $0–15 | Routes (walking routes) is the only per-user Google call; likely within free credit. **Now optional** — with the key off, walks fall back to our own destination pool and a dashed line, so this line can be driven to zero by choice rather than by outage |
 | Supabase / Vercel | $0 | Still inside free tiers |
-| **Total at beta** | **≈ $30–150** | Dominated by proxy + LLM; everything else ≈ today |
+| **Total at beta** | **≈ $20–100** | Dominated by the LLM line; everything else ≈ today |
 
 ### 3.5 If it grows (≈1,000 DAU) — rough sketch
 
@@ -184,14 +210,20 @@ mapped fixes.
 
 ## 4. The numbers that exist for a deck, and the ones that do not
 
-**Exist, measured:** ingest volume (2–9 pets/day from one source, no zero
-days in 21); the pet table (244 active); wire cost of a walk (6.6MB/h);
+**Exist, measured:** ingest volume (2–9 pets/day from one source in early
+Aug); the pet table (**78 active**, 67 with full ad text, after the first
+check against source reality); wire cost of a walk (6.6MB/h);
 sync latency (<20ms steady state); the fact that every user-facing metric
 excludes bots structurally. From 14 Aug, the search funnel (every
 completed search, found or not) accumulates in `search_results`, and
 `/admin/metrics` computes DAU / WAU / D1 / D7 / funnel / LLM spend on
 demand — with retention refusing to print percentages on cohorts under
 ten, so small-beta numbers cannot quietly mislead.
+
+Also measurable now and worth putting in a deck: **landmark density** — a
+3km walk passes two storied landmarks 95% of the time across 36
+neighbourhood centroids, from a 2,671-entry curated corpus. That is a
+defensible number about the city knowledge the product owns.
 
 **Do not exist yet:** any retention or engagement number (nobody has been
 invited); parse accuracy (§2); coverage of the Kyiv lost-pet conversation
@@ -212,8 +244,8 @@ existing ecosystem rather than a replacement for it.
 
 ---
 
-*Numbers verified against the codebase and PR record at `8266bc6`,
-15 Aug 2026. For depth: product detail in
+*Numbers verified against the codebase and PR record at `43808c6`,
+20 Aug 2026. For depth: product detail in
 [`01-product.md`](01-product.md), architecture in
 [`02-architecture.md`](02-architecture.md), the data engine in
 [`03-lost-pet-engine.md`](03-lost-pet-engine.md), open risks in

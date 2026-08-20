@@ -1,6 +1,6 @@
 # 06 — How we got here
 
-430 merged PRs between 20 April and 14 August 2026, on a repo built from a
+494 merged PRs between 20 April and 20 August 2026, on a repo built from a
 single-file HTML prototype (`reference/shukajpes-demo.html`, still in-tree,
 read-only). Almost all of them are one-idea PRs merged within minutes of
 opening — the working rhythm is small change, preview URL, look at it, merge
@@ -246,6 +246,71 @@ grow the habit of measuring before building — the dedupe fix, the data-cost
 fix and the chat-budget sizing all started with a measurement that
 contradicted the plan.
 
+## Era 10 — The engine rescue, and a front door
+**#433–#494 · 15–20 Aug · 6 days · 62 PRs**
+
+Three strands at once: the territory *render* was rebuilt (#433–#484), the
+ingestion pipeline was found to have been misdiagnosed for a month
+(#448–#492), and the app got a front door that explains itself (#490–#494).
+
+**The correction that reframes a month of work (#448).** OLX was never
+blocked. Measured from Fly, no proxy, the same URL eight times:
+`403 200 403 200 403 200 403 200` — fifty per cent, alternating,
+deterministic. A coin flip, not a wall. The retry that fixes it **already
+existed in the code and was switched off**, on the written reasoning that
+retrying a fixed address is "pure waste — the answer is the same every
+time." That one condition is why "OLX is half-blocked" had been the story
+for weeks: half of every tick was discarded on the first refusal. Errors
+went 7 → 0, discovery 251 → 508.
+
+Two sub-lessons worth as much as the fix. The retry must have **no delay**
+— a 500ms politeness pause negates it entirely, because the second request
+only succeeds by riding the same warm connection, and no local mock could
+have caught that. And a **residential proxy is not the fix**, established
+at the cost of a subscription: four Ukrainian exits, two in Kyiv, 403 every
+time.
+
+**Then the deeper problem (#457).** Doubling listing coverage produced no
+pets. A clean tick: `discovered 506, skipped 506, parsed 0, inserted 0,
+errors 0`. Every URL was already known. The scraper had not broken — it had
+**run out of page**: OLX orders page one by relevance, so after 12,381
+ledger rows it had seen everything relevance would ever show it, while
+every log line read `tick complete`. Fixed with `created_at:desc`.
+
+**Then the corpus was checked against reality for the first time
+(#482–#488).** 221 active pets → 78, with a deleted ad taken as the best
+found-signal the data has. Along the way: every stored ad body turned out
+to be mostly **CSS** (cheerio's `.text()` includes `<style>` contents; OLX
+injects CSS-in-JS inside the description container), invisible for as long
+as bodies were only ever *written* — the owner found it by opening one in
+the app.
+
+| PR | What it found |
+| --- | --- |
+| #448 | OLX was never blocked; the retry was disabled by a wrong comment |
+| #451, #452 | The ad text we already fetched was being thrown away |
+| #454, #455 | Read the owner's post in-app; gate the contacts *and* the link behind a sighting |
+| #457 | The scraper had saturated — relevance ordering meant page one never changed |
+| #470 | Pets city-wide in the quests tab, 5km in supersniff |
+| #474–#488 | Ad bodies stored, CSS stripped, section labels stripped, `ad-gone` detection, the base refresh |
+| #480 | Found strays were being displayed as lost pets asking walkers to search |
+| #492 | Counted how much owner contact the corpus actually holds, rather than guessing |
+
+**The visual strand (#433–#484)** rebuilt territory as a soft scent field —
+polygons triangulated, blurred at constant ground-metres, re-thresholded so
+borders stay where the server put them — plus a leaderboard where each row
+draws its owner's real territory as a portrait, and a fullscreen board that
+jumps the camera to a rival's dog.
+
+**The front door (#490–#494)** is the era's product change. Walks became
+tours routed *through* landmarks with tappable stories, stopped depending
+on Google for either destinations or the line, and stopped offering the vet
+as somewhere to go for a stroll. Then #494 replaced the six-verb radial
+menu with the dog asking «нюх-нюх! шо ти?» — four intents, every level
+speaking its own line, the logo rotating three modes. It is the first
+version of the app that explains itself to somebody who arrives knowing
+nothing.
+
 ---
 
 ## The pivots, in one list
@@ -263,6 +328,9 @@ contradicted the plan.
 | 9 | **Points → paws** | #394, 10 Aug | An abstract score → the currency people already pick up off the pavement. |
 | 10 | **Seeded pets → real pets only** | `index.ts` | Boot-seeding removed; production runs on scraped posts. |
 | 11 | **Undefined pilot → closed beta** | #416–#430, Aug | "What is the pilot" answered in shape: 50–150 invite-gated strangers on real data, with a phased readiness plan driving the work. |
+| 12 | **"OLX is blocked" → OLX was never blocked** | #448, 17 Aug | A month of planning around a WAF that turned out to be a 50% coin flip, with the fix already in the codebase behind a disabled flag. |
+| 13 | **Errand walks → landmark tours** | #490, #493, 19 Aug | A line to one nice place → a route *through* two to four Kyiv landmarks with stories, from our own corpus, with Google optional. |
+| 14 | **Menu → conversation** | #494, 20 Aug | A six-verb radial menu on a silent map → the dog asking what you are here for, and a logo that rotates three modes. |
 
 ## What the history is trying to tell you
 

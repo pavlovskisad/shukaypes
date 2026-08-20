@@ -243,6 +243,40 @@ re-cutting a neighbour on the far side. Measured on prod, pieces spanned up
 to 1184m. At 250, with marks landing every ~55m, a claim is the polygon
 around the eight or ten marks nearest the one that made it.
 
+## How it looks
+
+The data model and the render are separate concerns, and the render was
+reworked across ~25 PRs in August (#433–#484) without the ownership rules
+moving at all.
+
+**Ground is drawn as a soft "scent field", not as polygons**
+(`territoryHeatLayer.ts`, PR #433). The server's shapes are triangulated
+with `earcut` into a quarter-resolution offscreen buffer, blurred by a
+separable gaussian whose radius tracks zoom so the soft edge stays a
+roughly constant **~22 metres of ground** — soft underfoot at street zoom,
+near-crisp when the whole city is on screen — then re-thresholded with a
+smoothstep centred on 0.5 so **borders stay exactly where the server put
+them**. A world-anchored noise wobble gives the edge a meander, and
+un-premultiplying the blurred colours makes two owners' ground crossfade
+through a gradient where they meet instead of butting at a hairline. Your
+own ground still draws last, so "which bit is mine" stays authoritative.
+
+This deliberately revisits the heat look that **Model 1 died with** — and
+the distinction matters: Model 1's failure was the *grid data model*, not
+the softness. Soft rendering over stored polygons is not the same thing as
+owning ground on a grid.
+
+`TerritoryLayer.tsx` keeps the old flat fill as a fallback: if the custom
+layer's GL setup fails on a device it reports once and swaps back, so
+territory never silently disappears.
+
+**Buildings take their paint from the ground field** so they fade with it,
+and the territory lens desaturates the base map so ownership colours read
+against a calm ground. The leaderboard draws each owner's actual territory
+as a portrait silhouette (`BoardRow.tsx`, `TerritoryMini.tsx`) in the map's
+own palette, and tapping a row jumps the camera to that ground — to the
+owner's dog itself when they are online.
+
 ## Reliability
 
 **Geometry runs in a worker thread** (`services/groundWorker.ts`), bounded
