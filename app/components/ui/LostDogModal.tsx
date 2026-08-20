@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { colors } from '../../constants/colors';
 import { VOICE } from '../../constants/voice';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
@@ -100,10 +101,12 @@ const PILL_DISABLED: CSSProperties = {
   boxShadow: 'none',
 };
 
-// Status tint on the dark bubble — brand blue only (lightened for
-// legibility on #1a1a1a). Red/amber urgency colouring is retired from
-// this view: everything the dog view marks is blue.
-const BADGE_ON_DARK = '#8fb0ff';
+// Status tint. This was '#8fb0ff' — brand blue lightened to survive on
+// a #1a1a1a bubble. The bubble is white paper now, so it takes the
+// blue at full strength instead: same meaning, legible on the surface
+// it actually sits on. Red/amber urgency colouring stays retired from
+// this view — everything the dog view marks is blue.
+const BADGE_TINT = colors.sniffBlue;
 
 function relativeTime(iso: string, t: AppStrings): string {
   const then = new Date(iso).getTime();
@@ -116,8 +119,8 @@ function relativeTime(iso: string, t: AppStrings): string {
   return t.time.ago(diffD, 'd');
 }
 
-// Minimal lost-pet card in the SniffPress discovery style: a dark story
-// bubble + action pills floating just above the big centred photo pin.
+// Minimal lost-pet card in the SniffPress discovery style: a white
+// paper panel + action pills floating just above the big centred photo pin.
 // No photo inside — the pin IS the photo. Transparent scrim (the
 // cinematic zone shot is the content); outside tap closes; horizontal
 // swipe cycles the nearby pets when onPrev/onNext are wired.
@@ -196,7 +199,7 @@ export function LostDogModal({
 
   const urgent = renderDog.urgency === 'urgent';
   const badgeText = urgent ? t.modals.lostDog.badgeUrgent : t.modals.lostDog.badgeSearching;
-  const badgeFg = BADGE_ON_DARK;
+  const badgeFg = BADGE_TINT;
   const distLabel = userPos
     ? formatDistance(distanceMeters(userPos, renderDog.lastSeen.position))
     : null;
@@ -253,9 +256,9 @@ export function LostDogModal({
           <div
             style={{
               padding: '14px 18px',
-              background: VOICE.background,
-              color: VOICE.color,
-              borderRadius: R.chip,
+              background: SURFACE.fill,
+              color: INK,
+              borderRadius: R.card,
               fontFamily: VOICE.fontFamily,
               boxShadow: VOICE.shadow,
               border: VOICE.border,
@@ -272,7 +275,7 @@ export function LostDogModal({
             >
               {renderDog.name}
               {renderDog.breed ? (
-                <span style={{ fontWeight: 600, opacity: 0.7 }}>
+                <span style={{ fontWeight: 600, color: '#777' }}>
                   {' '}
                   · {renderDog.breed}
                 </span>
@@ -293,7 +296,7 @@ export function LostDogModal({
               style={{
                 marginTop: 4,
                 fontSize: TYPE.caption,
-                opacity: 0.75,
+                color: '#777',
               }}
             >
               {t.modals.lostDog.questCta(renderDog.rewardPoints)}
@@ -306,7 +309,7 @@ export function LostDogModal({
                   padding: 0,
                   border: 'none',
                   background: 'none',
-                  color: BADGE_ON_DARK,
+                  color: BADGE_TINT,
                   fontFamily: SYSTEM_FONT,
                   fontSize: TYPE.caption,
                   fontWeight: 700,

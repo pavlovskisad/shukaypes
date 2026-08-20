@@ -86,7 +86,7 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
             fontSize: TYPE.body,
             fontWeight: 800,
             padding: '14px 22px',
-            borderRadius: R.pill,
+            borderRadius: R.button,
             cursor: 'pointer',
             // Past the 44px tap target — these are pressed outdoors,
             // one-handed, usually while walking — and matched to the

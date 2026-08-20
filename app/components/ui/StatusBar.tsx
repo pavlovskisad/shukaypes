@@ -9,6 +9,7 @@ import { INK, SURFACE } from '../../constants/surface';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
+import { R } from '../../constants/radius';
 
 // Four white-frosted-glass pills laid out identically: icon + value with
 // a consistent gap so happiness / hunger / tokens / spots-toggle read
@@ -52,7 +53,7 @@ export function PillPulseRing() {
           // past the edges at the start of each pulse, not hidden behind.
           width: 'calc(100% + 10px)',
           height: 'calc(100% + 10px)',
-          borderRadius: 999,
+          borderRadius: R.pill,
           border: '3px solid rgba(0,0,0,0.55)',
           transform: 'translate(-50%, -50%) scale(0.85)',
           animation: 'hint-pill-ring 1.4s ease-out infinite',

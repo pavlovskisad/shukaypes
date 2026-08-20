@@ -23,6 +23,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { View, Text, StyleSheet } from 'react-native';
 import { useConnectionStore } from '../../stores/connectionStore';
 import { useStrings } from '../../i18n/useStrings';
+import { R } from '../../constants/radius';
 
 export function ConnectionBanner() {
   const status = useConnectionStore((s) => s.status);
@@ -61,7 +62,7 @@ const styles = StyleSheet.create({
   text: {
     paddingVertical: 7,
     paddingHorizontal: 16,
-    borderRadius: 999,
+    borderRadius: R.pill,
     backgroundColor: 'rgba(43,43,38,0.88)',
     color: '#F3F0E7',
     fontSize: 13,

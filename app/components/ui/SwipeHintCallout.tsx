@@ -1,5 +1,6 @@
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { TYPE } from '../../constants/type';
+import { R } from '../../constants/radius';
 
 // Small "swipe sideways" nudge that overlays a carousel deck — a pill
 // near the top of the card (clear of the corner badges) with an arrow
@@ -32,7 +33,7 @@ export function SwipeHintCallout({ text }: { text: string }) {
           fontSize: TYPE.small,
           fontWeight: 700,
           padding: '7px 13px',
-          borderRadius: 999,
+          borderRadius: R.pill,
           boxShadow: '0 4px 12px rgba(0,0,0,0.25)',
         }}
       >

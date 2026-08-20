@@ -18,6 +18,7 @@
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { reportCrash } from '../../services/crashReport';
+import { R } from '../../constants/radius';
 
 interface Props {
   children: ReactNode;
@@ -96,7 +97,7 @@ const styles = StyleSheet.create({
     marginTop: 26,
     paddingVertical: 12,
     paddingHorizontal: 28,
-    borderRadius: 999,
+    borderRadius: R.button,
     backgroundColor: '#2B2B26',
   },
   buttonText: { color: '#F3F0E7', fontSize: 15 },

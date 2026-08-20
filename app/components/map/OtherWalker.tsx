@@ -8,6 +8,7 @@ import { ownerColorCss } from './territoryColor';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
 import { haptic } from '../../utils/haptics';
+import { R } from '../../constants/radius';
 
 // One other player's dog on the map (real player or bot). Presence updates
 // arrive every ~15s (real) / ~3.5s (bots), so we GLIDE the dog toward its
@@ -183,7 +184,7 @@ export function OtherWalker({ player }: Props) {
             font: `600 10px ${SYSTEM_FONT}`,
             color: '#ffffff',
             background: ownerColorCss(player.id),
-            borderRadius: 8,
+            borderRadius: R.label,
             padding: '1px 6px',
             marginBottom: 2,
             whiteSpace: 'nowrap',

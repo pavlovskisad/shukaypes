@@ -4,6 +4,7 @@ import { BUTTON } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { SURFACE } from '../../constants/surface';
+import { R } from '../../constants/radius';
 import { playPopThen } from '../../utils/popOnTap';
 import { Icon, type IconName } from '../../components/ui/Icon';
 
@@ -205,7 +206,11 @@ export function RadialMenu({
         // Text pills are capsules; icon buttons are circles. Same
         // family, and at 60 tall against the disc's 68 they read as
         // siblings rather than as a chip clipped onto a button.
-        borderRadius: isText ? TEXT_ITEM.height / 2 : BUTTON.radius,
+        // R.button for the text answers — the same corner every other
+        // button in the app turns. The icon discs stay BUTTON.radius,
+        // which is half of 68: a pill radius on a square box is a
+        // circle, and a circle is what an icon wants.
+        borderRadius: isText ? R.button : BUTTON.radius,
         // The same ink as the cards. border-box so the edge grows
         // inward — BUTTON.size is a fixed 68 and a content-box border
         // would quietly make every disc 72 and break the row's maths.

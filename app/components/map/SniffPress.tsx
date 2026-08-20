@@ -497,14 +497,17 @@ export function SniffPress() {
             // padding 8/12 → 12/14, radius 14 → 22, type 13/1.35
             // → 16/1.4.
             padding: '12px 14px',
-            background: VOICE.background,
-            color: VOICE.color,
-            borderRadius: R.chip,
+            // White paper, not the dog's dark voice — see the note in
+            // this file's header. This panel carries a place you can
+            // walk to and a button to do it.
+            background: SURFACE.fill,
+            color: INK,
+            borderRadius: R.card,
             fontFamily: VOICE.fontFamily,
             fontSize: TYPE.body,
             lineHeight: 1.4,
-            boxShadow: VOICE.shadow,
-            border: VOICE.border,
+            boxShadow: SURFACE.shadow,
+            border: SURFACE.stroke,
             textAlign: 'center',
           }}
         >
@@ -515,7 +518,7 @@ export function SniffPress() {
               style={{
                 marginTop: S.s,
                 paddingTop: S.s,
-                borderTop: '1px solid rgba(255,255,255,0.12)',
+                borderTop: '1px solid rgba(0,0,0,0.12)',
                 fontSize: TYPE.small,
                 lineHeight: 1.45,
                 opacity: 0.85,
@@ -575,7 +578,7 @@ export function SniffPress() {
               // thing you tap.
               background: INK,
               color: '#ffffff',
-              borderRadius: R.pill,
+              borderRadius: R.button,
               border: SURFACE.hair,
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.small,
