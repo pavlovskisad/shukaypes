@@ -62,6 +62,11 @@ const ALLOWED = new Map<string, string>([
   // fragment, not a redacted window, only three integers. A census does
   // not need to show a phone number to say how many there are.
   ['db/census-contacts.ts', 'counts contact-shapes across bodies, prints integers only'],
+  // Prints ONE descriptive sentence per ad, for a human to search for
+  // elsewhere. Digit-free by construction — a sentence with numbers in
+  // it is a date, an address or the remains of a phone number — and
+  // redacted on top of that. No contact can survive both rules.
+  ['db/probe-crosspost.ts', 'prints a digit-free descriptive phrase to search for'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
   // Only asks `raw_body is not null` to PICK a candidate ad to probe —
   // it never selects the column. And it masks every digit it prints, so
