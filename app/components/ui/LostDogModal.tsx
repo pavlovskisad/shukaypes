@@ -61,7 +61,7 @@ const STACK_TOP = 'calc(env(safe-area-inset-top, 0px) + 122px)';
 // a dark doorway alike.
 const PILL_BASE: CSSProperties = {
   padding: '10px 18px',
-  borderRadius: R.pill,
+  borderRadius: R.button,
   border: SURFACE.hair,
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.small,

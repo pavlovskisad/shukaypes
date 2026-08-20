@@ -13,21 +13,27 @@
 
 // THE RULE, so this stops being decided by feel each time:
 //
-//   Content that can WRAP gets a corner. Content that cannot gets a
-//   capsule.
+//   Nested things take a TIGHTER corner than what contains them.
+//   Free-floating things are capsules.
 //
-// A card, a sheet, a chat bubble, a pet card — all of them grow a
-// second line, so they are surfaces, and surfaces turn a corner (18).
-// A meter, a toggle, a CTA, a name tag on the map — one line, height
-// is its own, nothing to wrap — so they stay capsules (pill).
+// This replaces an earlier rule here that said "content that can wrap
+// gets a corner, content that cannot gets a capsule", which was built
+// on a misreading of the reference. Measured off the screenshot: its
+// card turns a corner at 5.8% of its own height, and the two buttons
+// INSIDE that card turn one at 23.2% of theirs. A capsule is 50%.
+// Neither of them is a capsule — the buttons are rounded rectangles
+// with a corner tighter than the card's, which is the nested-radius
+// principle and not a special case.
 //
-// This is not a compromise between two systems. It is what the
-// reference does: its card is a squarish rounded rect and the two
-// buttons INSIDE it are full capsules. The corner carries meaning
-// rather than just being uniform.
+// So: a card is 18, a button sitting inside one is 12, a label naming
+// one is 10. Each step down is a step further inside.
 //
-// A pill radius on a SQUARE box is a circle, not a capsule — close
-// buttons, the send button, map pins, the radial discs. Those never
+// Capsules are for elements that float on their own with nothing
+// containing them — HUD pills, the dog's answer pills, the cancel-walk
+// row, the tab bar. Nothing nests them, so nothing sets their corner.
+//
+// And a pill radius on a SQUARE box is a circle, not a capsule — close
+// buttons, the send arrow, map pins, the radial discs. Those never
 // enter the question.
 
 export const R = {
@@ -52,5 +58,9 @@ export const R = {
   // linearly with the eye. 10 is the value that still says "rounded"
   // at this size without going back to a capsule.
   label: 10,
+  // An action button sitting inside a card or a sheet. Tighter than
+  // the 18 of the surface holding it, looser than the 10 of a label
+  // that merely names it — a button is a thing you press, not a tag.
+  button: 12,
   pill: 999,
 } as const;

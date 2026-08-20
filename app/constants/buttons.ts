@@ -25,7 +25,7 @@ export const MODAL_PILL_BASE: CSSProperties = {
   // (now 34) dominates the silhouette — the icon should be doing
   // most of the glance-weight, the label is a quiet confirmation.
   padding: '8px 14px',
-  borderRadius: R.pill,
+  borderRadius: R.button,
   border: 'none',
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.small,
