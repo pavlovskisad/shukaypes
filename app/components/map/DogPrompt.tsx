@@ -30,12 +30,13 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { INK, SURFACE } from '../../constants/surface';
 
 export interface PromptAction {
   label: string;
   onPress: () => void;
-  // The one that carries the conversation forward. Brand blue and solid;
-  // everything else is a quiet outline so there is never a question about
+  // The one that carries the conversation forward. Solid ink; everything
+  // else is white with the same edge, so there is never a question about
   // which button is the answer and which is the way out.
   primary?: boolean;
 }
@@ -74,11 +75,13 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
           onClick={a.onPress}
           style={{
             appearance: 'none',
-            // The house hairline (modals, spot cards): 1px at 0.06 alpha.
-            // Anything heavier reads as a different design language.
-            border: a.primary ? 'none' : '1px solid rgba(0,0,0,0.06)',
-            background: a.primary ? 'rgb(0,60,255)' : '#ffffff',
-            color: a.primary ? '#ffffff' : '#1a1a1a',
+            // The house edge — same ink on both, so the two buttons are
+            // the same size and only their fill says which is the
+            // answer. On the primary the edge is ink-on-ink and
+            // invisible; it is there to keep the heights equal.
+            border: SURFACE.hair,
+            background: a.primary ? INK : '#ffffff',
+            color: a.primary ? '#ffffff' : INK,
             fontFamily: SYSTEM_FONT,
             fontSize: TYPE.body,
             fontWeight: 800,
@@ -89,9 +92,7 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
             // one-handed, usually while walking — and matched to the
             // corner logo's height so the strip reads as one HUD line.
             minHeight: 52,
-            boxShadow: a.primary
-              ? '0 6px 18px rgba(0,60,255,0.35)'
-              : '0 4px 14px rgba(0,0,0,0.16)',
+            boxShadow: SURFACE.shadow,
             // Staggered pop-in, the way-out first and the answer landing
             // on top of it a beat later.
             animation: `dog-prompt-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 70}ms both`,

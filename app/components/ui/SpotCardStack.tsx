@@ -16,6 +16,7 @@ import { R } from '../../constants/radius';
 import { ICON_HERO, EMOJI_HERO } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK } from '../../constants/surface';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
 import { Icon, iconForCategory } from './Icon';
@@ -121,10 +122,12 @@ const styles = StyleSheet.create({
     borderRadius: R.card,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: INK,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
     elevation: 6,
   },
   iconHero: {
@@ -155,6 +158,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: S.m,
     paddingVertical: S.s,
     borderRadius: R.pill,
+    borderWidth: 1.5,
+    borderColor: INK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.14,
@@ -175,6 +180,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: S.m,
     paddingVertical: S.s,
     borderRadius: R.pill,
+    borderWidth: 1.5,
+    borderColor: INK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.14,

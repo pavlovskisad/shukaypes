@@ -14,6 +14,7 @@ import type { Spot } from '../../services/places';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
+import { SURFACE } from '../../constants/surface';
 import { playPopThen } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { SpotCardView } from './SpotCardStack';
@@ -119,7 +120,7 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
           width: 36,
           height: 36,
           borderRadius: R.pill,
-          border: '1px solid rgba(0,0,0,0.06)',
+          border: SURFACE.hair,
           background: '#ffffff',
           color: '#1a1a1a',
           padding: 0,

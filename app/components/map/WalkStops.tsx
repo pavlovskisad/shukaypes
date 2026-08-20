@@ -11,6 +11,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
+import { SURFACE } from '../../constants/surface';
 import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import type { WalkStop } from '../../utils/walk';
@@ -309,7 +310,7 @@ export function WalkStopsCard({
         // House card shadow (CardStack) + the house hairline the modals
         // and spot cards use.
         boxShadow: '0 4px 12px rgba(0,0,0,0.08)',
-        border: '1px solid rgba(0,0,0,0.06)',
+        border: SURFACE.hair,
       }}
     >
       <div

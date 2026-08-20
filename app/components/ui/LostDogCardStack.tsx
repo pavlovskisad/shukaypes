@@ -10,6 +10,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
@@ -94,11 +95,11 @@ export function LostDogCardStack({
 // module keep working without a churning rename across the app.
 export const LostDogCardStackSkeleton = CardStackSkeleton;
 
-// Photo full-bleed top, dark-to-transparent gradient mask
-// carrying name + meta over the bottom of the photo. Urgency
-// badge top-left, distance chip top-right. No photo → soft grey
-// card with the emoji centred. Exported so the "see all" modal
-// can render the same visual at a wider size.
+// Photo full-bleed, with an inked white label band across the bottom
+// carrying name + breed. Urgency badge top-left, distance chip
+// top-right. No photo → soft grey card with the emoji centred.
+// Exported so the "see all" modal can render the same visual at a
+// wider size.
 export function LostDogCardView({
   dog,
   t,
@@ -197,7 +198,6 @@ export function LostDogCardView({
           <Text style={styles.photoEmoji}>{dog.emoji ?? '🐶'}</Text>
         </View>
       )}
-      <View style={styles.gradient} />
       {chips ? (
         <View style={styles.badge}>
           <Text style={[styles.badgeText, { color: badgeFg }]}>{badgeText}</Text>
@@ -233,10 +233,12 @@ const styles = StyleSheet.create({
     borderRadius: R.card,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
+    borderWidth: 2,
+    borderColor: INK,
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
     elevation: 6,
   },
   photo: {
@@ -255,17 +257,6 @@ const styles = StyleSheet.create({
     fontSize: 120,
     opacity: 0.6,
   },
-  gradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '48%',
-    // RN-Web passes `backgroundImage` straight through to CSS. Kept light — just
-    // enough to keep the white name legible — so the photo doesn't read as dark.
-    backgroundImage:
-      'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.03) 45%, rgba(0,0,0,0.5) 100%)',
-  } as unknown as object,
   badge: {
     position: 'absolute',
     top: 14,
@@ -277,6 +268,8 @@ const styles = StyleSheet.create({
     // same family as the HUD pills / chat header pill (full
     // round with CHROME_SHADOW). Scaled down for in-card use.
     borderRadius: R.pill,
+    borderWidth: 1.5,
+    borderColor: INK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.14,
@@ -299,6 +292,8 @@ const styles = StyleSheet.create({
     paddingHorizontal: S.m,
     paddingVertical: S.s,
     borderRadius: R.pill,
+    borderWidth: 1.5,
+    borderColor: INK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.14,
@@ -311,28 +306,41 @@ const styles = StyleSheet.create({
     color: '#555',
     letterSpacing: 0.3,
   },
+  // A PAPER LABEL STUCK ON A PHOTO, not text floating over it.
+  //
+  // This used to be white type sitting directly on the picture, held
+  // legible by a dark gradient washed up from the bottom edge. That
+  // gradient was doing real work — a photo can be any colour, and white
+  // on a snowy pavement is nothing — but it darkened the bottom half of
+  // every pet's photo to buy it, and a fading black veil is the exact
+  // opposite of the paper-and-ink the rest of the app is drawn in.
+  //
+  // So the name gets its own piece of paper instead: opaque white,
+  // inked along the top edge where it meets the photo. Legibility stops
+  // depending on what the photo happens to look like, and the photo
+  // stops being dimmed to make room for words.
   cardBody: {
     position: 'absolute',
-    left: 18,
-    right: 18,
-    bottom: 18,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: '#ffffff',
+    borderTopWidth: 2,
+    borderTopColor: INK,
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 14,
   },
   cardName: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.display,
     fontWeight: '800',
-    color: '#ffffff',
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    color: INK,
   },
   cardMeta: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.small,
-    color: 'rgba(255,255,255,0.92)',
+    color: '#777',
     marginTop: S.xs,
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
 });

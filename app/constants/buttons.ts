@@ -1,4 +1,4 @@
-// Shared button styles for modal CTAs. Two flavours (dark / blue) +
+// Shared button styles for modal CTAs. Two flavours (dark / light) +
 // a disabled state, all on the same tight pill recipe:
 //   - 10×18 padding, 13px text, 999 radius
 //   - subtle drop shadow
@@ -16,6 +16,7 @@ import type { CSSProperties } from 'react';
 import { SYSTEM_FONT } from './fonts';
 import { R } from './radius';
 import { S } from './spacing';
+import { INK, SURFACE } from './surface';
 import { TYPE } from './type';
 
 export const MODAL_PILL_BASE: CSSProperties = {
@@ -40,31 +41,40 @@ export const MODAL_PILL_BASE: CSSProperties = {
 
 export const MODAL_PILL_DARK: CSSProperties = {
   ...MODAL_PILL_BASE,
-  background: '#1a1a1a',
+  background: INK,
   color: '#ffffff',
+  // Ink on ink — invisible, and that is the point. The light pill
+  // carries a 1.5px edge, and these two sit side by side in every
+  // action row in the app; without the same border the dark one comes
+  // out 3px shorter and the row stops lining up.
+  border: SURFACE.hair,
 };
 
-// Light/white pill — used when a dark pill would read poorly, e.g. on
-// top of a photo (the LostDogModal's on-image action row). Solid white
-// with dark text + a slightly stronger shadow so it lifts off the
-// image. Pair with a non-inverted (dark) Icon.
+// Light/white pill — the counterweight to the dark one, and the second
+// half of the only two-colour button system the app has. Carries the
+// ink edge so it still reads as a button on white paper, where a
+// borderless white pill would be nothing but its own shadow.
 export const MODAL_PILL_LIGHT: CSSProperties = {
   ...MODAL_PILL_BASE,
   background: '#ffffff',
-  color: '#1a1a1a',
+  color: INK,
+  border: SURFACE.hair,
   boxShadow: '0 4px 12px rgba(0,0,0,0.22)',
 };
 
-export const MODAL_PILL_BLUE: CSSProperties = {
-  ...MODAL_PILL_BASE,
-  background: 'rgb(0,60,255)',
-  color: '#ffffff',
-};
+// There is no third colour. A blue pill used to be the "primary" for
+// SpotModal's walk CTA and LostDogModal's start-search — but blue is
+// spoken for elsewhere in this app: it is the colour of YOUR territory,
+// of the sniff circle, of the walking route on the map. A button
+// wearing it was borrowing a word that already meant something. Dark
+// vs light now carries the whole weight of primary vs secondary, which
+// is all the hierarchy a two-button row has ever needed.
 
 export const MODAL_PILL_DISABLED: CSSProperties = {
   ...MODAL_PILL_BASE,
-  background: '#e8e8f2',
+  background: '#f0f0f0',
   color: '#777',
+  border: '1.5px solid #ddd',
   cursor: 'default',
   boxShadow: 'none',
 };

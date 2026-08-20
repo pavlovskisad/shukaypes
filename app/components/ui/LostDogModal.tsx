@@ -2,13 +2,13 @@ import type { CSSProperties, TouchEvent as ReactTouchEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { NearbyLostDog } from '../../services/api';
-import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { VOICE } from '../../constants/voice';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK, SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { useGameStore } from '../../stores/gameStore';
@@ -54,14 +54,15 @@ const SHEET_ANIM_MS = 240;
 // Keep in sync with DOG_VIEW_* in MapView if retuned.
 const STACK_TOP = 'calc(env(safe-area-inset-top, 0px) + 122px)';
 
-// Matches the SniffPress discovery CTA — the brand-blue pill under the
-// dark story bubble.
-const SNIFF_BLUE = colors.sniffBlue;
-
+// These pills sit ON the pet's photo, which is the hardest surface in
+// the app to put a button on: it can be any colour, light or dark, and
+// it changes with every pet. Ink edge on both, and a deeper shadow than
+// the paper elsewhere, so the pair holds its shape over a bright sky or
+// a dark doorway alike.
 const PILL_BASE: CSSProperties = {
   padding: '10px 18px',
   borderRadius: R.pill,
-  border: 'none',
+  border: SURFACE.hair,
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.small,
   fontWeight: 700,
@@ -76,22 +77,25 @@ const PILL_BASE: CSSProperties = {
 
 const PILL_PRIMARY: CSSProperties = {
   ...PILL_BASE,
-  background: SNIFF_BLUE,
+  background: INK,
   color: '#ffffff',
-  boxShadow: '0 4px 12px rgba(47,107,255,0.35)',
+  boxShadow: SURFACE.onPhoto,
 };
 
 const PILL_SECONDARY: CSSProperties = {
   ...PILL_BASE,
   background: '#ffffff',
-  color: '#1a1a1a',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+  color: INK,
+  boxShadow: SURFACE.onPhoto,
 };
 
 const PILL_DISABLED: CSSProperties = {
   ...PILL_BASE,
   background: 'rgba(255,255,255,0.25)',
   color: 'rgba(255,255,255,0.8)',
+  // Its own translucent edge rather than the ink one — a solid black
+  // outline around a ghosted pill reads as enabled.
+  border: '1.5px solid rgba(255,255,255,0.45)',
   cursor: 'default',
   boxShadow: 'none',
 };
@@ -315,8 +319,8 @@ export function LostDogModal({
             ) : null}
           </div>
 
-          {/* Action pills — brand-blue primary (start search), white
-              secondary (i've seen), side by side under the bubble. */}
+          {/* Action pills — ink primary (start search), white secondary
+              (i've seen), side by side under the bubble. */}
           <div style={{ display: 'flex', gap: S.s }}>
             <button
               onClick={(e) =>

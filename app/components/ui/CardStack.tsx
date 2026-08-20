@@ -35,6 +35,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { R } from '../../constants/radius';
+import { INK } from '../../constants/surface';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
@@ -632,6 +633,8 @@ export function CardStackSkeleton({
               backgroundRepeat: 'no-repeat',
               animation: 'card-stack-shimmer 1.8s ease-in-out infinite',
               borderRadius: R.card,
+              borderWidth: 2,
+              borderColor: INK,
               transform: [{ scale: TOP_SCALE }],
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 8 },
@@ -679,6 +682,8 @@ const styles = StyleSheet.create({
   greyDeckCard: {
     backgroundColor: '#e6e6e6',
     borderRadius: R.card,
+    borderWidth: 2,
+    borderColor: INK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -690,10 +695,11 @@ const styles = StyleSheet.create({
     color: '#777',
     fontWeight: '600',
   },
-  // Classic web hyperlink — same blue + underline used in the
-  // rest of the app (xp bars, sniff toggle, chat accent).
+  // Underlined, in ink. It used to be web-hyperlink blue, which made
+  // it the only blue control left once the CTA pills went black and
+  // white — and blue in this app means the map, not "tap here".
   counterLink: {
-    color: 'rgba(0,60,255,0.85)',
+    color: INK,
     textDecorationLine: 'underline',
   },
   counterPressed: {

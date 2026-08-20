@@ -26,6 +26,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
+import { SURFACE } from '../../constants/surface';
 import { api } from '../../services/api';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -143,7 +144,15 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
           display: 'flex',
           flexDirection: 'column',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+          boxShadow: SURFACE.lift,
+          // A top sheet slides down from off-screen and runs to both
+          // screen edges, so it has exactly one edge the eye can see:
+          // the bottom, with its two rounded corners. Inking all four
+          // would draw a line along the top that is never on screen and
+          // two down the sides that sit flush against the bezel.
+          borderBottom: SURFACE.stroke,
+          borderLeft: SURFACE.stroke,
+          borderRight: SURFACE.stroke,
           overflow: 'hidden',
         }}
       >
