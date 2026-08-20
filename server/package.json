@@ -41,7 +41,8 @@
     "flag:found-reports": "tsx src/db/flag-found-reports.ts",
     "revive:live-ads": "tsx src/db/revive-live-ads.ts",
     "clean:ad-bodies": "tsx src/db/clean-ad-bodies.ts",
-    "census:contacts": "tsx src/db/census-contacts.ts"
+    "census:contacts": "tsx src/db/census-contacts.ts",
+    "probe:crosspost": "tsx src/db/probe-crosspost.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
