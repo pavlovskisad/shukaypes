@@ -7,6 +7,7 @@ import { api } from '../../services/api';
 import { fetchWalkingRouteOrLine } from '../../services/directions';
 import { clampExtract, fetchWikipediaExtract } from '../../services/wikipedia';
 import { useGameStore } from '../../stores/gameStore';
+import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
@@ -40,7 +41,7 @@ const MOVE_CANCEL_PX = 16;
 const RADIUS_SEGMENTS = 48;
 const EARTH_R = 6371000;
 const MAX_RADIUS_M = 280;
-const SNIFF_COLOR = '#2f6bff';
+const SNIFF_COLOR = colors.sniffBlue;
 
 function circlePolygon(center: LatLng, radiusM: number): GeoJSON.Feature {
   const ring: [number, number][] = [];

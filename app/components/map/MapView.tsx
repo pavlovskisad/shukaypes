@@ -2861,29 +2861,24 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         {activeQuest && !(DOG_CAM && dogCam) ? (
           <>
             {/* Walking route through the waypoints. When the Directions
-                API answers, we draw the street-hugging path — a bit
-                heavier and clearly "walk here". Otherwise (Directions
-                still in flight / failed / quota), fall back to a thin
-                straight line between waypoints so the user always sees
-                *some* ordering hint. clickable=false on both so the
-                line never steals taps from overlays on top. */}
+                API answers we draw the street-hugging path; otherwise
+                (still in flight / failed / quota) a straight line
+                between waypoints, so the user always sees the ordering.
+                Both take the house route style — they used to be drawn
+                at different weights and opacities to mark which was
+                which, and that distinction is gone on purpose: a walk's
+                own fallback line is drawn identically too, and one app
+                should not have four ways of saying "go this way".
+                autoFit=false because MapView does its own fit that also
+                includes the user position. */}
             {questRoute && questRoute.length > 1 ? (
-              <CrayonRoute
-                path={questRoute}
-                color="#2f6bff"
-                weight={10}
-                opacity={0.92}
-                autoFit={false}
-              />
+              <CrayonRoute path={questRoute} autoFit={false} />
             ) : (
               <CrayonRoute
                 path={activeQuest.waypoints.map((w) => ({
                   lat: w.position.lat,
                   lng: w.position.lng,
                 }))}
-                color="#2f6bff"
-                weight={6.5}
-                opacity={0.65}
                 autoFit={false}
               />
             )}
@@ -2929,25 +2924,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           </>
         ) : null}
 
-        {/* Walking route from the companion's "walk" radial leaf.
-            Distinct visual from quest routes: thinner + slightly more
-            transparent so it reads as "suggested route" not "active
-            mission." Roundtrip and one-way share the same styling
-            today; if we ever differentiate, dashed for one of them
-            would be the move. clickable=false so taps go through. */}
+        {/* The planned walk from the companion's "walk" radial leaf —
+            the one route that also carries stops. House style, like
+            every other route. */}
         {walkRoute && walkRoute.length > 1 ? (
-          <CrayonRoute
-            path={walkRoute}
-            // A planned walk is drawn as the product reference draws it:
-            // a chunky cyan DASHED line with green stops on it. Dashed
-            // always, not as a status — see WalkStopsCard, which is
-            // where "this line is a rough direction" is said in words
-            // when street routing wasn't available.
-            color={colors.walkLine}
-            weight={9}
-            opacity={0.95}
-            dashed
-          />
+          <CrayonRoute path={walkRoute} />
         ) : null}
 
         {/* The landmarks that walk was routed through — numbered discs
@@ -3013,13 +2994,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
 
         {/* Sniff-and-lead: the route the dog is leading you along. */}
         {DOG_CAM && dogCam && searchRoute && searchRoute.length >= 2 ? (
-          <CrayonRoute
-            path={searchRoute}
-            color="#2f6bff"
-            weight={9}
-            opacity={0.85}
-            autoFit={false}
-          />
+          <CrayonRoute path={searchRoute} autoFit={false} />
         ) : null}
       </MapContext.Provider>
 

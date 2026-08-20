@@ -209,6 +209,16 @@ A dashed line needs **butt caps**. A round cap extends each dash by half the
 line width at both ends, so at weight 9 the caps close an 8 px gap and the
 "dashes" render as one solid line with bulges.
 
+**Route line** — how the app draws *any* route: a planned walk, a detective
+quest, the line the dog leads you along in supersniff. Cyan
+(`colors.routeLine`), dashed, weight 9, opacity 0.95 — and all of that lives in
+`CrayonRoute`'s own defaults, so a route is drawn by rendering one and passing
+no styling at all. The three used to differ in weight and opacity, including a
+thinner "this is only the fallback" variant on quests; that is gone, since one
+app should not have four ways of saying *go this way*. Not to be confused with
+`colors.sniffBlue`, the older `#2f6bff`, which is the app pointing AT something
+— the sniff ring, a search zone, a selected pet — and is never a route.
+
 The card lists the stops, opens itself when the walk starts, and is reopened
 from a pill under the HUD beside "cancel walk". It sits at `Z.HUD_WALK_CARD`
 (50) — above the companion at 42 — and its container must set **no z-index**,

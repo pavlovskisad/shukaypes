@@ -2,6 +2,7 @@ import type { CSSProperties, TouchEvent as ReactTouchEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { NearbyLostDog } from '../../services/api';
+import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { VOICE } from '../../constants/voice';
 import { Z } from '../../constants/z';
@@ -55,7 +56,7 @@ const STACK_TOP = 'calc(env(safe-area-inset-top, 0px) + 122px)';
 
 // Matches the SniffPress discovery CTA — the brand-blue pill under the
 // dark story bubble.
-const SNIFF_BLUE = '#2f6bff';
+const SNIFF_BLUE = colors.sniffBlue;
 
 const PILL_BASE: CSSProperties = {
   padding: '10px 18px',
