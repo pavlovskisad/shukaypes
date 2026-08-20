@@ -23,14 +23,23 @@ export const INK = '#1a1a1a';
 export const SURFACE = {
   fill: '#ffffff',
 
+  // INTEGERS ONLY. Chrome floors border-width to whole CSS pixels, at
+  // every device pixel ratio — a 2.5px stroke renders at 2, and the
+  // 1.5px this file first shipped with was rendering at 1, which is the
+  // hairline weight the whole change exists to get away from. Measured,
+  // not assumed: getComputedStyle reported 2px for a 2.5px rule on a
+  // dpr-3 viewport.
+  //
   // Cards, sheets, popups — anything that is a page of paper in its own
-  // right. 2px because 1px disappears on a 3× phone screen at the size
-  // these render, and 3px starts to look like a cartoon outline.
-  stroke: `2px solid ${INK}`,
+  // right. The reference's stroke runs about 1.4% of card height; 3px
+  // on our 252px card is 1.19%, near enough to read as the same hand.
+  stroke: `3px solid ${INK}`,
 
-  // Chips, badges, close buttons, small pills. Same ink, thinner, so a
-  // 36px control doesn't read as heavier than the 400px card behind it.
-  hair: `1.5px solid ${INK}`,
+  // Chips, badges, close buttons, small pills. One step down, so a 36px
+  // control doesn't read as heavier than the 400px card behind it —
+  // and one step is all there is room for once fractions are off the
+  // table.
+  hair: `2px solid ${INK}`,
 
   // Resting shadow for a card sitting on the map.
   shadow: '0 6px 18px rgba(0,0,0,0.14)',

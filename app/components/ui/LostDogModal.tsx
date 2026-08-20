@@ -95,7 +95,7 @@ const PILL_DISABLED: CSSProperties = {
   color: 'rgba(255,255,255,0.8)',
   // Its own translucent edge rather than the ink one — a solid black
   // outline around a ghosted pill reads as enabled.
-  border: '1.5px solid rgba(255,255,255,0.45)',
+  border: '2px solid rgba(255,255,255,0.45)',
   cursor: 'default',
   boxShadow: 'none',
 };

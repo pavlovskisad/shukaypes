@@ -44,7 +44,7 @@ export const MODAL_PILL_DARK: CSSProperties = {
   background: INK,
   color: '#ffffff',
   // Ink on ink — invisible, and that is the point. The light pill
-  // carries a 1.5px edge, and these two sit side by side in every
+  // carries a 2px edge, and these two sit side by side in every
   // action row in the app; without the same border the dark one comes
   // out 3px shorter and the row stops lining up.
   border: SURFACE.hair,
@@ -74,7 +74,7 @@ export const MODAL_PILL_DISABLED: CSSProperties = {
   ...MODAL_PILL_BASE,
   background: '#f0f0f0',
   color: '#777',
-  border: '1.5px solid #ddd',
+  border: '2px solid #ddd',
   cursor: 'default',
   boxShadow: 'none',
 };
