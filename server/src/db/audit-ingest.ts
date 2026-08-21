@@ -231,7 +231,14 @@ async function auditRecent(days: number) {
     if (!byDay.has(r.day)) byDay.set(r.day, new Map());
     const d = byDay.get(r.day)!;
     d.set(key, (d.get(key) ?? 0) + r.n);
-    if (r.reason) reasons.set(r.reason, (reasons.get(r.reason) ?? 0) + r.n);
+    // GROUP BY THE PART BEFORE THE COLON. Reasons carry detail now —
+    // 'not-kyiv:харків', 'error: <url> -> 403' — and counting the full
+    // string turns one problem into thirty one-line entries that hide
+    // the shape. The detail is still there; it comes back in the sample.
+    if (r.reason) {
+      const family = r.reason.split(':')[0]!.trim();
+      reasons.set(family, (reasons.get(family) ?? 0) + r.n);
+    }
   }
 
   console.log(`\nNEW LEDGER ROWS PER DAY — every message we looked at, last ${days}d\n`);
@@ -265,23 +272,34 @@ async function auditRecent(days: number) {
   //
   // Titles only, through redactContacts. A listing title is the least
   // sensitive text we store and this prints no body at all.
-  const TOP_REASONS = [...reasons].sort((a, b) => b[1] - a[1]).slice(0, 3);
-  for (const [reason] of TOP_REASONS) {
-    if (reason.startsWith('error:')) continue;
+  const TOP_REASONS = [...reasons].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  for (const [family] of TOP_REASONS) {
+    if (family === 'error') continue;
     const sample = await db
-      .select({ title: schema.scrapeLog.title })
+      .select({
+        title: schema.scrapeLog.title,
+        url: schema.scrapeLog.url,
+        reason: schema.scrapeLog.skipReason,
+      })
       .from(schema.scrapeLog)
       .where(
-        sql`${schema.scrapeLog.skipReason} = ${reason}
+        sql`(${schema.scrapeLog.skipReason} = ${family}
+             or ${schema.scrapeLog.skipReason} like ${family + ':%'})
             and ${schema.scrapeLog.firstSeenAt} > now() - (${days}::int * interval '1 day')
             and ${schema.scrapeLog.title} is not null`,
       )
       .orderBy(sql`random()`)
       .limit(12);
     if (sample.length === 0) continue;
-    console.log(`\n  a random 12 of what «${reason}» rejected:`);
+    console.log(`\n  a random 12 of what «${family}» rejected:`);
     for (const s of sample) {
-      console.log(`    ${redactContacts(s.title!).slice(0, 72)}`);
+      // The detail after the colon, when there is one — «not-kyiv:одеса»
+      // answers in one word what the flat reason could not.
+      const detail = s.reason && s.reason.includes(':') ? ` [${s.reason.split(':').slice(1).join(':').trim()}]` : '';
+      console.log(`    ${redactContacts(s.title!).slice(0, 60)}${detail}`);
+      // The ad's own address, so a title that looks wrong can be opened
+      // and settled rather than argued about. A URL carries no contact.
+      if (family === 'not-kyiv') console.log(`      ${s.url}`);
     }
   }
 
