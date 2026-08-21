@@ -31,12 +31,20 @@ export const Z = {
   // cluster's stacking context, but bumped here so they paint
   // above other map markers while expanded.
   MARKER_CLUSTER_CHILD: 18,
-  // Numbered stops on a planned walk. Above the ordinary POI field so
-  // the points the route was built around stay findable in it, below
-  // the dog. An OPEN stop's story bubble goes to HUD_SNIFF_BUBBLE
-  // instead — it's the same voice, and it has to clear the other
+  // Stops on a planned walk. These are NOT in the marker tier's own
+  // range, deliberately: the dots are the only way to hear a stop's
+  // story now that the roster card is gone, so while a walk is on the
+  // map they are the most important thing to be able to hit. At 20 they
+  // sat under the dog, under its speech bubble, and under every HUD
+  // chip — a dot could be right there and refuse the tap.
+  //
+  // They exist only while `walkStops` is non-empty, so "above the HUD"
+  // is scoped to a live walk on its own; there is no state where these
+  // numbers cover chrome with no walk under it.
+  MARKER_WALK_STOP: 46,
+  // An open stop's story bubble, one notch up so it clears the other
   // stops' discs.
-  MARKER_WALK_STOP: 20,
+  MARKER_WALK_STOP_OPEN: 50,
 
   // ───────────────────────────────────────────────────────────────
   // TIER 2 — map-area HUD (DOM children of MapView, above markers)
@@ -57,23 +65,21 @@ export const Z = {
   HUD_CHIP_COMPANION: 38,
   // Cancel-walk / abandon-quest / restack-all pills. Above chips
   // because they're contextual actions and the user is reaching
-  // for them.
-  HUD_PILLS_OVERLAY: 40,
+  // for them — and above the walk stops, which is the one exception
+  // to "the dots are on top": the route runs across the whole
+  // viewport, so a dot can land exactly on the pill that leaves the
+  // walk, and leaving must never be the thing you cannot press.
+  HUD_PILLS_OVERLAY: 54,
   // Sniff "sniffing…" indicator + discovered-place story bubble.
   // Top of the HUD tier so it dominates marker re-renders during
   // viewport refetches.
   HUD_SNIFF_BUBBLE: 45,
-  // The walk's list of stops. ABOVE the companion (42) and its speech
-  // bubble, which is the whole point: the card describes the walk the
-  // dog just proposed, and the dog standing in front of its own
-  // itinerary is unreadable.
   //
-  // NB this only works because the container it lives in sets no
-  // z-index of its own. A positioned ancestor WITH one opens a new
-  // stacking context and traps every descendant at the ancestor's
-  // level, no matter how high they number themselves — which is
-  // exactly how the card ended up under the dog while nominally
-  // sitting at 40 next to a 42.
+  // NB the walk-stop numbers above only clear this tier because the
+  // container they live in sets no z-index of its own. A positioned
+  // ancestor WITH one opens a new stacking context and traps every
+  // descendant at the ancestor's level, no matter how high they
+  // number themselves.
 
   // ───────────────────────────────────────────────────────────────
   // TIER 3 — modals over the map (cover the map, not global UI)

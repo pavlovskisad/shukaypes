@@ -120,7 +120,11 @@ function jitteredCoords(path: LatLng[]): GeoJSON.Position[] {
 // destination. Exported because WalkStops paces its dots against this:
 // a stop pops when the line reaches it, which only reads as one motion
 // if both sides agree on the clock.
-export const ROUTE_DRAW_MS = 900;
+// 900ms was over before the eye had followed it — the line arrived
+// rather than being drawn, and the stops popping along it read as a
+// single burst near the start. Longer lets the dots arrive one at a
+// time, which is the point of pacing them against the line at all.
+export const ROUTE_DRAW_MS = 1500;
 
 // Near-overhead while a route is on screen. Not a flat 0: a little tilt
 // keeps the city readable as a place rather than a diagram.

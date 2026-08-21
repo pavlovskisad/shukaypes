@@ -3,15 +3,12 @@ import type { LatLng } from '@shukajpes/shared';
 import { MapLibreMarker } from './MapLibreMarker';
 import { useGameStore } from '../../stores/gameStore';
 import { clampExtract, fetchWikipediaExtract } from '../../services/wikipedia';
-import { HUD_OVERLAY_PILL, MODAL_PILL_DARK } from '../../constants/buttons';
 import { colors } from '../../constants/colors';
-import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
-import { SURFACE } from '../../constants/surface';
 import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import type { WalkStop } from '../../utils/walk';
@@ -31,11 +28,6 @@ import { distanceMeters } from '../../utils/geo';
 // list also opens stops (tapping a row flies the camera to it and expands
 // it), so the two surfaces have to agree on which one is showing, and a
 // piece of state two components drive belongs above both of them.
-
-// Below this, a stop is on the way and saying anything about the detour
-// is noise. Above it, the walker is being sent round a corner and should
-// be told before they commit to the walk.
-const NOTABLE_DETOUR_M = 80;
 
 // Plain green dots, unnumbered and unbordered — the reference again.
 //
@@ -182,10 +174,8 @@ function StopMarker({
     <MapLibreMarker
       position={stop.position}
       anchor="bottom"
-      // An open stop's bubble has to clear the other stops' discs and
-      // the POI field around it; a closed disc belongs down with the
-      // route it marks.
-      zIndex={open ? Z.HUD_SNIFF_BUBBLE : Z.MARKER_WALK_STOP}
+      // An open stop's bubble has to clear the other stops' discs.
+      zIndex={open ? Z.MARKER_WALK_STOP_OPEN : Z.MARKER_WALK_STOP}
       // Cancels the hit-area padding under the dot — see
       // STOP_DOT_HIT_PAD.
       offset={[0, STOP_DOT_HIT_PAD]}
@@ -282,9 +272,10 @@ function StopMarker({
               background: colors.walkStop,
               boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
               // `both` fill so the dot is invisible through its delay
-              // instead of sitting there and then jumping. The overshoot
-              // curve is the one the radial menu and the HUD pills
-              // already use, so a stop arriving reads as the same hand.
+              // instead of sitting there and then jumping. Keeps the
+              // springy overshoot the radial menu items arrive on: a
+              // dot is a small thing landing on a line and can afford
+              // the bounce the full-width chrome no longer takes.
               animation: `walk-stop-pop 320ms cubic-bezier(0.34,1.56,0.64,1) ${Math.round(popDelayMs)}ms both`,
             }}
           />

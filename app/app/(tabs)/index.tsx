@@ -16,11 +16,13 @@ import { useGameStore } from '../../stores/gameStore';
 // rather than dominating the map.
 const HUD_ICON_SIZE = 59;
 
-// Bubble easing for the HUD pills as the mode changes. Slight overshoot
-// on the way in reads as "popping into place"; the pop-in / pop-out
-// keyframes are global CSS in public/index.html, because the dashboard
-// shares them and outlives this screen.
-const POP_IN = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
+// Easing for the HUD pills as the mode changes. A decelerating curve
+// with NO overshoot of its own — the 1% cross-over lives in the
+// keyframes, and stacking a springy curve on top of it was what made
+// the chrome lurch. The pop-in / pop-out keyframes are global CSS in
+// public/index.html, because the dashboard shares them and outlives
+// this screen; it uses the same curve, and the two have to match.
+const POP_IN = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
 export default function MapScreen() {
   // Supersniff is one of the three the corner logo rotates through.

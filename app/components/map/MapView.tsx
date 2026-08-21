@@ -2423,6 +2423,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           }
           setExpandedClusterKey(null);
           useGameStore.getState().setMenuOpen(false);
+          // An open stop's story IS dismissed by tapping the map. The
+          // bubble is a thing the dog said about one dot; putting it
+          // away should not require finding that dot again under it.
+          // The dots stopPropagation on their own taps, so this only
+          // ever fires on a tap that missed every stop.
+          useGameStore.getState().setOpenWalkStop(null);
           // A WALK IS NOT DISMISSED BY TAPPING THE MAP. It used to be,
           // which meant any stray tap while reading the route — panning,
           // missing a stop disc, closing the radial menu — threw away a

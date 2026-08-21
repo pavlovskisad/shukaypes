@@ -192,13 +192,23 @@
          the bar would have snapped instead of popping, on some screens
          and not others. Global CSS is the honest home for something the
          whole shell uses. */
+      /* GENTLE. These used to run 0 → 1.1 → 1 on the way in and
+         1 → 1.1 → 0 on the way out, with a springy overshoot curve on
+         top of the overshoot already in the keyframes. On a small
+         element that reads as bounce; on the dashboard, which is a
+         full-width bar, and on the HUD row across the top of the
+         screen, it read as the whole chrome lurching.
+
+         So: start near size rather than from nothing, cross over the
+         mark by 1%, and settle. The bounce lives on the small things
+         now — ring items, walk-stop dots — where it belongs. */
       @keyframes pop-in {
         0% {
-          transform: scale(0);
+          transform: scale(0.92);
           opacity: 0;
         }
-        70% {
-          transform: scale(1.1);
+        60% {
+          transform: scale(1.01);
           opacity: 1;
         }
         100% {
@@ -206,14 +216,19 @@
           opacity: 1;
         }
       }
+      /* Fades out over the first half and only then finishes shrinking.
+         The tail to scale(0) is invisible but not pointless: the tab bar
+         cannot be given pointer-events (React Navigation owns the
+         element), so it spends its last frames at zero area and takes no
+         taps — see the note in (tabs)/_layout.tsx. */
       @keyframes pop-out {
         0% {
           transform: scale(1);
           opacity: 1;
         }
-        25% {
-          transform: scale(1.1);
-          opacity: 1;
+        55% {
+          transform: scale(0.94);
+          opacity: 0;
         }
         100% {
           transform: scale(0);

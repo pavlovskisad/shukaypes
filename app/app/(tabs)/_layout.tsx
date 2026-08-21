@@ -12,9 +12,10 @@ import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 
-// Same overshoot easing the HUD pills use on the map screen — the two
-// surfaces are one piece of chrome and have to move alike.
-const POP_IN = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
+// Same easing the HUD pills use on the map screen — the two surfaces
+// are one piece of chrome and have to move alike. Decelerating, no
+// spring: see the note on POP_IN in (tabs)/index.tsx.
+const POP_IN = 'cubic-bezier(0.22, 1, 0.36, 1)';
 // How long the bar takes to leave. Also how long it stays mounted after
 // being hidden — the two are the same number on purpose.
 const POP_OUT_MS = 320;
