@@ -52,6 +52,16 @@ const PLACES: GazetteerPlace[] = [
   check('the short name still resolves alone', r?.name === 'Борщагівка', String(r?.name));
 }
 
+// ---- ABBREVIATIONS: also how people actually write ----
+{
+  const r = resolvePlace('Загубився пес, Солом’янський р-н', PLACES);
+  check('«р-н» reads as «район»', r?.name === "Солом'янський район", String(r?.name));
+}
+{
+  const r = resolvePlace('Зник кіт, вул. Садова 12', PLACES);
+  check('«вул.» still resolves and marks', r?.name === 'Садова' && r?.marked === true, String(r?.name));
+}
+
 // ---- INFLECTION: how people actually write ----
 {
   check(
