@@ -230,7 +230,11 @@ function noiseFn(seed: number, closed: boolean, period: number) {
 // no cusps, no self-intersection, no matter how uneven the spacing.
 const CR_ALPHA = 0.5;
 
-function splinePath(pts: { x: number; y: number }[], closed: boolean): string {
+// Exported because it is the app's ONE answer to "draw a smooth line
+// through these points" — the territory chips on the board run their
+// simplified outlines through it so a claim reads as a drawn shape
+// rather than a polygon. Same curve, same reasoning, one implementation.
+export function splinePath(pts: { x: number; y: number }[], closed: boolean): string {
   const n = pts.length;
   if (n < 2) return '';
   const at = (i: number) => pts[closed ? ((i % n) + n) % n : Math.max(0, Math.min(n - 1, i))]!;
