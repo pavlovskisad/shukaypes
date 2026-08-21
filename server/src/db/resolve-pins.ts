@@ -65,6 +65,9 @@ async function main() {
       lat: schema.kyivGazetteer.lat,
       lng: schema.kyivGazetteer.lng,
       category: schema.kyivGazetteer.category,
+      // The alternate-spelling column that has been sitting unread while
+      // twelve Russian-spelled Kyiv places were reported as missing.
+      aliases: schema.kyivGazetteer.aliases,
     })
     .from(schema.kyivGazetteer);
 

@@ -32,6 +32,15 @@ export interface GazetteerPlace {
   lat: number;
   lng: number;
   category: string;
+  // ALREADY IN THE TABLE, AND I WAS NOT READING IT.
+  //
+  // kyiv_gazetteer.aliases exists for exactly the case that defeated the
+  // first three rounds of this: «Подольском районе» is Подільський
+  // район written in Russian, and the schema comment says aliases hold
+  // "alternate spellings/inflections (e.g. 'Khreshchatyk' for
+  // 'Хрещатик')". The probe reported twelve Kyiv places as "not in the
+  // gazetteer" while matching against nameUk alone.
+  aliases?: string[];
 }
 
 export interface ResolvedPlace {
@@ -163,6 +172,52 @@ export function placeStems(key: string): string[] {
   return out;
 }
 
+// THE GENERIC WORD IS NOT PART OF THE NAME.
+//
+// The gazetteer stores «Армійська вулиця» and «Солом'янський район»;
+// an ad writes «районі вулиць Архипенка-Йорданська». Requiring the
+// generic word to appear, in that form, next to the name means «вулиць»
+// (plural) defeats «вулиця» (singular) — on a word carrying no
+// information at all. Twelve real Kyiv places came back as "not in the
+// gazetteer" and this is part of why.
+//
+// So a place offers two keys: its full name, and its name with the
+// generic word taken off. «армійська» matches «вулиць Армійська» and
+// «на Армійській» alike, while the full form still scores higher when
+// it is actually present.
+const GENERIC_WORDS = new Set([
+  'вулиця',
+  'проспект',
+  'бульвар',
+  'площа',
+  'провулок',
+  'мікрорайон',
+  'масив',
+  'район',
+  'селище',
+  'село',
+  'станція',
+  'житловий',
+]);
+
+function stripGeneric(key: string): string {
+  const kept = key.split(' ').filter((w) => !GENERIC_WORDS.has(w));
+  return kept.join(' ');
+}
+
+/** Every spelling of this place we are willing to look for. */
+export function matchKeys(p: GazetteerPlace): string[] {
+  const keys = new Set<string>();
+  for (const raw of [p.name, ...(p.aliases ?? [])]) {
+    if (!raw) continue;
+    const key = normalisePlaceText(raw);
+    if (key.length >= MIN_PLACE_CHARS) keys.add(key);
+    const bare = stripGeneric(key);
+    if (bare !== key && bare.length >= MIN_PLACE_CHARS) keys.add(bare);
+  }
+  return [...keys];
+}
+
 /**
  * The best place named in `text`, or null when nothing is named.
  *
@@ -180,36 +235,36 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   const hits: { place: ResolvedPlace; key: string; score: number }[] = [];
 
   for (const p of places) {
-    const key = normalisePlaceText(p.name);
-    if (key.length < MIN_PLACE_CHARS) continue;
-    // Exact first, stem second. An exact hit is worth more than an
-    // inflected one and should not be outranked by a longer stem match.
-    let at = hay.indexOf(key);
-    let exact = at >= 0;
-    if (at < 0) {
-      for (const stem of placeStems(key)) {
-        at = hay.indexOf(stem);
-        if (at >= 0) break;
+    for (const key of matchKeys(p)) {
+      // Exact first, stem second. An exact hit is worth more than an
+      // inflected one and should not be outranked by a longer stem match.
+      let at = hay.indexOf(key);
+      const exact = at >= 0;
+      if (at < 0) {
+        for (const stem of placeStems(key)) {
+          at = hay.indexOf(stem);
+          if (at >= 0) break;
+        }
+        if (at < 0) continue;
       }
-      if (at < 0) continue;
+
+      const before = hay.slice(Math.max(0, at - 22), at);
+      const marked = MARKERS.test(before);
+      // Marked dominates everything else, then specificity, then length.
+      // Scaled so no combination of the lower two can outrank a marked
+      // match — that ordering is the whole defence against prose.
+      const score =
+        (marked ? 10_000 : 0) +
+        (exact ? 1_000 : 0) +
+        (SPECIFICITY[p.category] ?? 0) * 100 +
+        Math.min(key.length, 60);
+
+      hits.push({
+        place: { name: p.name, lat: p.lat, lng: p.lng, category: p.category, marked },
+        key,
+        score,
+      });
     }
-
-    const before = hay.slice(Math.max(0, at - 22), at);
-    const marked = MARKERS.test(before);
-    // Marked dominates everything else, then specificity, then length.
-    // Scaled so no combination of the lower two can outrank a marked
-    // match — that ordering is the whole defence against prose.
-    const score =
-      (marked ? 10_000 : 0) +
-      (exact ? 1_000 : 0) +
-      (SPECIFICITY[p.category] ?? 0) * 100 +
-      Math.min(key.length, 60);
-
-    hits.push({
-      place: { name: p.name, lat: p.lat, lng: p.lng, category: p.category, marked },
-      key,
-      score,
-    });
   }
 
   if (hits.length === 0) return null;
