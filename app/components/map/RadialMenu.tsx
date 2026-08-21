@@ -114,21 +114,20 @@ export const TEXT_ITEM = {
 // without leaving a gap you could park a bus in.
 const BELOW_DOG_PX = 46;
 
-// Between the icons in their row. The labelled variant keeps the tight
-// gap because its cells are 112px wide and three of those plus two big
-// gaps would run off a 360px screen.
+// Between the icons in their row — ONE number, for the bare discs and
+// the labelled cells alike.
+//
+// The discs had their own wider gap for a while, on the theory that a
+// 236px block with ~77px of empty screen on either side was wasting the
+// width. It was tried at 71px (matching the text answers' margins) and
+// then at 34, and both read as five separate buttons that happen to be
+// near each other rather than one control with five faces — which is
+// what a category picker is. A block of reading wants the screen's
+// width; a cluster of discs wants to stay a cluster.
 const ICON_ROW_GAP = 16;
-// The bare discs have no such problem and were sitting in a 236px block
-// with ~77px of empty screen on either side. Same reasoning as
-// TEXT_ITEM.colGap: spread them toward the edges.
-// Matching the text answers' margins meant 71px between three 68px
-// discs, and that was too far: the answers are a block of reading that
-// wants the screen's width, three discs are one control that wants to
-// stay one control. Back to the modest spread.
-const ICON_ROW_GAP_WIDE = 34;
 
 // Three 68px discs and the two gaps between them.
-const ROW_MAX_W = 3 * BUTTON.size + 2 * ICON_ROW_GAP_WIDE;
+const ROW_MAX_W = 3 * BUTTON.size + 2 * ICON_ROW_GAP;
 
 // THE ANSWERS RUN CLOSE TO THE SCREEN EDGES, and how close is a fixed
 // number of pixels rather than a fraction of the width — the margin is
@@ -365,7 +364,7 @@ export function RadialMenu({
           ) : null}
         </div>
       )),
-      showLabels ? ICON_ROW_GAP : ICON_ROW_GAP_WIDE,
+      ICON_ROW_GAP,
       // Three items across and no more, so the five visit categories
       // break 3 + 2 rather than running off a 360px screen. Two- and
       // three-item levels fill it exactly and never wrap. The named-spot
