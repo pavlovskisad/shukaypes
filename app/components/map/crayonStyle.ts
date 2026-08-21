@@ -30,38 +30,39 @@ const MAP_FONT = 'Annex Fam Normal';
 // pale sky blue, soft cards. Keeps crayon dark for legibility but the
 // nature fills move from "vivid sticker" to "pastel storybook".
 //
-// GEOGRAPHY IS THE BACKGROUND NOW. Territory is painted over all of this
-// in a dozen saturated colours, and grass and water were competing with
-// it — a vivid green park read as somebody's claim rather than as a park.
-// Saturation is cut by 45% and lightness raised toward the paper, so the
-// city recedes to a tinted sketch and the only strong colour on screen is
-// somebody's ground.
+// THE PALING WAS A DEBT THIS MAP NO LONGER OWES.
 //
-// HOW FAR TO GO IS A MEASUREMENT, not a taste, because paling everything
-// toward white also pales it toward EACH OTHER. Pushed harder (saturation
-// x0.42) the river and the parks landed dE 18 apart — still visible, but a
-// river that reads the same tone as a lawn is a worse map. At x0.55 they
-// sit 25 apart, roughly ten times a just-noticeable difference, while the
-// base is barely half as saturated as it was:
+// Saturation was cut by 45% here because territory used to be painted
+// over the walking map in a dozen saturated colours, and a vivid green
+// park read as somebody's claim rather than as a park. That is not the
+// arrangement any more: territory is a lens now, it only paints in play
+// mode, and play mode has its own palette (PLAY_PALETTE below) which
+// takes the hue out for exactly that reason. So the walking map was
+// paying for a conflict that had moved somewhere else — a grey-green
+// city under a bright white HUD, on an app about going outside.
+//
+// Saturation goes back x1.9, to 0.49 base — where it was before the
+// paling — with LIGHTNESS UNTOUCHED, so the parks and the river get
+// their colour back without getting heavier. Measured the same way the
+// cut was, CIE76:
 //
 //              water vs park   vs paper   base saturation
-//   before          66           34/57         0.48
-//   here            25           20/27         0.26
-//   too far         18           18/23         0.20
+//   original        66           34/57         0.48
+//   paled           25           20/27         0.26
+//   here            46           24/38         0.49
 //
-// And the thing that actually matters is untouched: painted ground still
-// separates from unpainted by dE ~48, composited at the 0.42 the territory
-// layer draws at.
+// PLAY_PALETTE is untouched by this: it names its own greens and blues,
+// so the territory view stays as quiet as it was.
 export const LIGHT_PALETTE = {
   paper: '#ffffff',
   crayon: '#2a2a2a',
   greyRoad: '#d4d4d4',
-  green: '#bfcfad',
-  greenDark: '#a3ba92',
-  greenLight: '#e2e9d6',
-  blue: '#bcd3df',
-  blueDark: '#a2bdca',
-  blueLight: '#deeaef',
+  green: '#c0de9e',
+  greenDark: '#a0cc80',
+  greenLight: '#e4f2cd',
+  blue: '#acd8ef',
+  blueDark: '#90c3dc',
+  blueLight: '#d6edf7',
   // Road wobble clone colours — kept close to greyRoad so the offset
   // copies read as a subtle "double line" texture instead of as a
   // stack of dark cables crossing the city.
@@ -78,11 +79,16 @@ export const LIGHT_PALETTE = {
   labelStreet: '#3a3a3a',
   // Multiply overlay opacity (lightens darken effect).
   paperOpacity: 0.48,
-  // Sky dome + horizon haze. Desaturated, near-grey "game" palette (way
-  // less blue): a pale blue-grey dome fading to a light neutral-grey
+  // Sky dome + horizon haze: a blue dome fading to a light neutral-grey
   // horizon that matches the grey depth-fog layer so the join is seamless.
+  //
+  // The dome deepens with the parks and the river below it — raising its
+  // saturation alone did nothing, because at lightness 0.91 the blue was
+  // already clipping. Taking it down to 0.88 is what makes it read as
+  // sky. The horizon and the fog stay exactly where they were: they ARE
+  // the join, and the dome now simply has further to fade.
   sky: {
-    skyColor: '#dbe8f7',
+    skyColor: '#cadff6',
     horizonColor: '#e6eaee',
     fogColor: '#e9ebed',
   },
