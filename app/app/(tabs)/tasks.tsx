@@ -5,7 +5,6 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK } from '../../constants/surface';
@@ -24,6 +23,7 @@ import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColo
 import { BoardRow } from '../../components/ui/BoardRow';
 import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
 import { useHint } from '../../hooks/useHint';
+import { HandDrawnBar } from '../../components/ui/HandDrawn';
 
 interface QuestHistoryRow {
   id: string;
@@ -566,14 +566,7 @@ export default function TasksScreen() {
               single bar at the top makes "how done am I overall?"
               readable without summing five row widths. */}
           <View style={styles.summaryBarTrack}>
-            <View
-              style={[
-                styles.summaryBarFill,
-                {
-                  width: `${Math.round((doneCount / TASKS.length) * 100)}%` as unknown as number,
-                },
-              ]}
-            />
+            <HandDrawnBar progress={doneCount / TASKS.length} seed="daily-summary" />
           </View>
           {TASKS.map((row, i) => {
             const value = Math.min(dailyTasks[row.key], row.target);
@@ -606,14 +599,9 @@ export default function TasksScreen() {
                     have to do anything about. A finished row already
                     says so twice — a full-width bar and a ✓ — and it
                     does not need a second colour to say it a third
-                    time. */}
+                    time. Drawn, like everything else on this card. */}
                 <View style={styles.barTrack}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      { width: `${progress * 100}%` as unknown as number },
-                    ]}
-                  />
+                  <HandDrawnBar progress={progress} seed={row.key} />
                 </View>
               </View>
             );
@@ -779,15 +767,7 @@ const styles = StyleSheet.create({
   // anchors the X / Y tally to a quick "how done?" glance.
   summaryBarTrack: {
     height: 6,
-    borderRadius: R.sm,
-    backgroundColor: '#f0f0f0',
-    overflow: 'hidden',
     marginBottom: S.s,
-  },
-  summaryBarFill: {
-    height: '100%',
-    borderRadius: R.sm,
-    backgroundColor: INK,
   },
   // Roomier task row: padding 12 → 16, gap 10 → 14, icon column
   // 22 → 44 to actually fit the 34px pixel icon (was being clipped
@@ -852,13 +832,11 @@ const styles = StyleSheet.create({
   // The daily tasks' progress bars. The standing used to share these —
   // its rows carried a bar each — but it draws silhouettes now, so the
   // track lives on for the tasks card alone.
+  // Just the row the bar is drawn into now — the track and the fill are
+  // both strokes inside it. See HandDrawnBar.
   barTrack: {
     height: 6,
-    backgroundColor: '#f0f0f0',
-    borderRadius: R.sm,
-    overflow: 'hidden',
   },
-  barFill: { height: '100%', borderRadius: R.sm, backgroundColor: INK },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

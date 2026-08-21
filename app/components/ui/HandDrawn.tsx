@@ -348,6 +348,150 @@ export function HandDrawnLine({
   );
 }
 
+// Sampled points along a horizontal run, wobbled. Shared by the paper
+// edge and the bars below.
+function wobbleRun(w: number, seed: string | number, amp: number, y0: number) {
+  const noise = noiseFn(hashSeed(seed), false, w);
+  const n = Math.max(2, Math.round(w / STEP_PX));
+  return Array.from({ length: n + 1 }, (_, i) => {
+    const x = (w * i) / n;
+    return { x, y: y0 + noise(x) * amp };
+  });
+}
+
+// A PIECE OF PAPER WHOSE TOP EDGE IS THE DRAWN LINE.
+//
+// The pet card lays a white band across the bottom of the photo and
+// inks the join. With a straight-edged band and a wobbly rule over it,
+// the two disagree by a pixel or so all the way along — and wherever
+// the rule dipped below the band's real edge, a sliver of white showed
+// ABOVE the ink, between the photo and its own line. The photo looked
+// cut by a ruler and then underlined slightly lower down.
+//
+// So the paper and the line are one shape: a filled path whose top runs
+// along the wobble, with the same wobble stroked on top of it. There is
+// nothing left to disagree.
+export function HandDrawnPaperTop({
+  seed,
+  color = INK,
+  fill = '#ffffff',
+  strokeWidth = 2,
+  amp = 1,
+  // How far above the element the paper starts, so the wobble has room
+  // to rise into instead of being clipped at the top of its own box.
+  overhang = 6,
+}: {
+  seed?: string | number;
+  color?: string;
+  fill?: string;
+  strokeWidth?: number;
+  amp?: number;
+  overhang?: number;
+}) {
+  const { ref, size } = useBoxSize();
+  const [ownSeed] = useState(() => Math.floor(Math.random() * 1e9));
+  let fillD = '';
+  let strokeD = '';
+  if (size.w > 1 && size.h > 1) {
+    const pts = wobbleRun(size.w, seed ?? ownSeed, amp, overhang);
+    strokeD = splinePath(pts, false);
+    fillD = `${strokeD} L ${size.w.toFixed(2)} ${size.h.toFixed(2)} L 0 ${size.h.toFixed(2)} Z`;
+  }
+  return (
+    <div
+      ref={ref}
+      aria-hidden
+      // NO z-index. Its siblings inside the band are positioned too (an
+      // RN View is position:relative on web), so DOM order alone puts
+      // the words above the paper.
+      style={{ position: 'absolute', left: 0, right: 0, top: -overhang, bottom: 0, pointerEvents: 'none' }}
+    >
+      {fillD ? (
+        <svg
+          width="100%"
+          height="100%"
+          viewBox={`0 0 ${size.w} ${size.h}`}
+          style={{ display: 'block', overflow: 'visible' }}
+        >
+          <path d={fillD} fill={fill} stroke="none" />
+          <path d={strokeD} fill="none" stroke={color} strokeWidth={strokeWidth} strokeLinecap="round" />
+        </svg>
+      ) : null}
+    </div>
+  );
+}
+
+// A PROGRESS BAR AS A STROKE, not as two nested rectangles.
+//
+// A rectangle inside a rectangle is the one shape on these screens that
+// could only have been laid out by a machine. Drawn instead: one line
+// the height of the bar, wobbling gently along its length, with the
+// filled part painted over the track on the same path — so the two can
+// never disagree about where the bar runs. Round caps give the ends
+// their radius for free, and the leading edge of the fill lands on the
+// track like a marker stopping.
+//
+// The fill is the SAME path with `pathLength=1` and a dash of the
+// progress fraction, which is exact along the curve rather than a width
+// percentage that would ignore the wobble.
+export function HandDrawnBar({
+  progress,
+  seed,
+  height = 6,
+  color = INK,
+  trackColor = '#ececec',
+  amp = 0.6,
+}: {
+  // 0…1.
+  progress: number;
+  seed?: string | number;
+  height?: number;
+  color?: string;
+  trackColor?: string;
+  amp?: number;
+}) {
+  const { ref, size } = useBoxSize();
+  const [ownSeed] = useState(() => Math.floor(Math.random() * 1e9));
+  const p = Math.max(0, Math.min(1, progress));
+  let d = '';
+  if (size.w > 1) {
+    // Inset by half the stroke so the round caps sit inside the box
+    // rather than hanging off both ends.
+    const inset = height / 2;
+    const run = Math.max(1, size.w - height);
+    const pts = wobbleRun(run, seed ?? ownSeed, amp, height / 2).map((q) => ({
+      x: q.x + inset,
+      y: q.y,
+    }));
+    d = splinePath(pts, false);
+  }
+  return (
+    <div ref={ref} style={{ position: 'relative', width: '100%', height }}>
+      {d ? (
+        <svg
+          width="100%"
+          height={height}
+          viewBox={`0 0 ${size.w} ${height}`}
+          style={{ display: 'block', overflow: 'visible' }}
+        >
+          <path d={d} fill="none" stroke={trackColor} strokeWidth={height} strokeLinecap="round" />
+          {p > 0 ? (
+            <path
+              d={d}
+              fill="none"
+              stroke={color}
+              strokeWidth={height}
+              strokeLinecap="round"
+              pathLength={1}
+              strokeDasharray={`${p} 1`}
+            />
+          ) : null}
+        </svg>
+      ) : null}
+    </div>
+  );
+}
+
 interface FrameProps {
   // Corner radius the frame should trace. Match whatever the element
   // itself is rounded to, or the ink and the fill disagree.

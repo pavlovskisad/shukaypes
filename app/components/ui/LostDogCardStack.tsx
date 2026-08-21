@@ -16,7 +16,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
 import type { LatLng } from '@shukajpes/shared';
 import { CardStack, CardStackSkeleton } from './CardStack';
-import { HandDrawnFrame, HandDrawnLine } from './HandDrawn';
+import { HandDrawnFrame, HandDrawnPaperTop } from './HandDrawn';
 import { Icon } from './Icon';
 import { INLINE_ICON } from '../../constants/sizing';
 
@@ -206,8 +206,10 @@ export function LostDogCardView({
           you see it. See HandDrawn.tsx. */}
       <HandDrawnFrame radius={R.card} seed={dog.id} />
       <View style={styles.cardBody}>
-        {/* The band's top edge, drawn like the frame around it. */}
-        <HandDrawnLine seed={`${dog.id}-band`} />
+        {/* The band IS its top edge — one filled shape, so the paper
+            and the ink can never disagree about where the photo ends.
+            See HandDrawnPaperTop. */}
+        <HandDrawnPaperTop seed={`${dog.id}-band`} />
         <View style={styles.cardBodyRow}>
           <View style={styles.cardBodyText}>
             <Text style={styles.cardName} numberOfLines={1}>
@@ -287,8 +289,8 @@ const styles = StyleSheet.create({
     left: 0,
     right: 0,
     bottom: 0,
-    backgroundColor: '#ffffff',
-    // Top edge drawn, not bordered — see HandDrawnLine above.
+    // No background: the paper is painted by HandDrawnPaperTop above,
+    // which is also what draws its top edge.
     // ~7% of card width, matching the reference's inner margin.
     paddingHorizontal: 20,
     paddingTop: 12,

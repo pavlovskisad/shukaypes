@@ -14,13 +14,12 @@ import { api, type TerritoryRanking } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import type { SceneMode } from '../../components/profile/ProfileSceneBackdrop';
 import { HERO, CHIP } from '../../constants/sizing';
-import { INK } from '../../constants/surface';
 import { MeterPill, CounterPill } from '../../components/ui/StatusBar';
 import { useStrings } from '../../i18n/useStrings';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useLangStore } from '../../stores/langStore';
 import { CardStack, CARD_W } from '../../components/ui/CardStack';
-import { HandDrawnFrame } from '../../components/ui/HandDrawn';
+import { HandDrawnBar, HandDrawnFrame } from '../../components/ui/HandDrawn';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
 // aggregate counts from /profile/me on focus, with the live game
@@ -208,21 +207,15 @@ export default function ProfileScreen() {
             </Text>
             {data ? (
               <View style={styles.xpBarTrack}>
-                <View
-                  style={[
-                    styles.xpBarFill,
-                    {
-                      width: `${
-                        data.companion.level >= data.companion.maxLevel
-                          ? 100
-                          : Math.round(
-                              (data.companion.xpInLevel /
-                                Math.max(1, data.companion.xpForNextLevel)) *
-                                100,
-                            )
-                      }%` as unknown as number,
-                    },
-                  ]}
+                <HandDrawnBar
+                  seed="xp"
+                  height={5}
+                  progress={
+                    data.companion.level >= data.companion.maxLevel
+                      ? 1
+                      : data.companion.xpInLevel /
+                        Math.max(1, data.companion.xpForNextLevel)
+                  }
                 />
               </View>
             ) : null}
@@ -540,20 +533,11 @@ const styles = StyleSheet.create({
     color: '#555',
     marginBottom: S.s,
   },
+  // Just the row the bar is drawn into — track and fill are both
+  // strokes inside it. See HandDrawnBar.
   xpBarTrack: {
     height: 5,
-    borderRadius: R.sm,
-    backgroundColor: '#f0f0f0',
-    overflow: 'hidden',
     marginBottom: S.s,
-  },
-  // Ink, like the daily-quest bars. It was the last blue bar left in the
-  // app, on the one card that sits over a flat green field — which is
-  // exactly where a stray accent shows most.
-  xpBarFill: {
-    height: '100%',
-    backgroundColor: INK,
-    borderRadius: R.sm,
   },
   // Denser stat rows for the walks / helping cards.
   statRow: {
