@@ -36,7 +36,11 @@
 // literally, the line spends its whole length turning and the chip
 // reads as a scribble. Douglas–Peucker at a tolerance stated in
 // rendered pixels drops exactly the detail that cannot be seen as
-// shape, and moves no vertex that survives.
+// shape, and moves no vertex that survives. Before and after that, the
+// ring's fold-backs are unpicked — see the Slits block — because the
+// board is sent outer rings with the holes dropped, and a pocket that
+// reaches the edge comes back as a zero-width slit that stroking turns
+// into a line straight through the claim.
 //
 // KNOWN AND ACCEPTED: the chip no longer matches the map's finish. The
 // map paints territory as a soft field with deliberately no borders (see
@@ -57,11 +61,16 @@ const BOX = 64;
 const PAD = 5;
 
 // In viewBox units. At the board's 92px the box scales by ~1.44, so
-// these land at ~2.9px of ink and a ~7px dash — chunky enough to read as
-// a drawn boundary rather than a hairline, at the size it is actually
-// seen.
-const STROKE_W = 2;
-const DASH = '5 3.5';
+// these land at ~2.3px of ink with a ~5px dash and a ~4px gap.
+//
+// Finer than the first cut (2 / 5 / 3.5, i.e. ~3px of ink and a 7px
+// dash). That weight was set against the board's biggest claims, where
+// the outline has room; on a small one the dashes were nearly as thick
+// as the shape's own features and the chip read as heavy. A shorter dash
+// also takes a corner better — a long one spanning a turn draws it as a
+// bent stick, and a claim's outline is mostly corners.
+const STROKE_W = 1.6;
+const DASH = '3.6 2.6';
 // The wash behind the line. Low, because the line is doing the work: at
 // anything denser the chip goes back to being a coloured blob with a
 // decoration around it.
@@ -105,6 +114,68 @@ const SIMPLIFY_PX = 3.2;
 // stopped being recognisable as anywhere, so a claim that reduces that
 // far keeps the last tolerance that keeps it above the floor.
 const MIN_VERTS = 8;
+
+// ── Slits ───────────────────────────────────────────────────────────
+// THE RING WALKS INTO THE SHAPE AND BACK OUT, AND WE HAVE TO UNPICK IT.
+//
+// Simplification alone left the board with lines running through the
+// middle of several claims — Найда, Марс and Рекс all had one. It is not
+// noise and no tolerance removes it, because the vertices are real: the
+// board is sent the OUTER RING ONLY (ground.ts:117 — "at thumbnail size
+// a hole is noise"), and a pocket that reaches the piece's edge cannot
+// be expressed as a hole in an outer ring. The clipper renders it as a
+// zero-width slit instead: the boundary walks in along one side of the
+// pocket and back out along the other. On the map that slit is invisible
+// — it has no width. Stroked at 2px it is a line straight through the
+// claim, and where two of them cross, the nonzero fill turns inside out.
+//
+// A slit's tip is a vertex whose two edges point in OPPOSITE directions
+// — the path folds back on itself. So: drop those, and the two sides of
+// the slit become adjacent; their tips now fold back too, and the next
+// pass takes them. The slit unzips from the inside out in a handful of
+// passes, and nothing that isn't a fold-back is touched.
+//
+// A genuine peninsula narrow enough to look like a fold-back goes with
+// them, and that is the right trade at this size: it was one pixel wide
+// and unreadable as ground either way.
+//
+// cos(160°) — the two edges have to be within 20° of a true reversal.
+const SPIKE_COS = -0.94;
+// Passes. A slit is peeled a vertex at a time from each end, so the
+// count bounds how deep a slit can be unpicked; measured against real
+// claims, everything resolved inside four.
+const SPIKE_PASSES = 12;
+// The floor for the pass that runs AFTER simplification. Lower than
+// MIN_VERTS on purpose — see the call site.
+const SPIKE_FLOOR = 6;
+
+function dropSpikes(pts: [number, number][], floor: number): [number, number][] {
+  let ring = pts;
+  for (let pass = 0; pass < SPIKE_PASSES; pass++) {
+    if (ring.length <= floor) return ring;
+    const keep: [number, number][] = [];
+    for (let i = 0; i < ring.length; i++) {
+      const prev = ring[(i - 1 + ring.length) % ring.length]!;
+      const cur = ring[i]!;
+      const next = ring[(i + 1) % ring.length]!;
+      const ax = cur[0] - prev[0];
+      const ay = cur[1] - prev[1];
+      const bx = next[0] - cur[0];
+      const by = next[1] - cur[1];
+      const la = Math.hypot(ax, ay);
+      const lb = Math.hypot(bx, by);
+      // A duplicated vertex has no direction to judge; drop it, since it
+      // is exactly what a collapsed slit leaves behind.
+      if (la === 0 || lb === 0) continue;
+      if ((ax * bx + ay * by) / (la * lb) < SPIKE_COS) continue;
+      keep.push(cur);
+    }
+    if (keep.length === ring.length) return ring;
+    if (keep.length < floor) return ring;
+    ring = keep;
+  }
+  return ring;
+}
 
 // Perpendicular distance from p to the segment ab, squared.
 function segDist2(
@@ -211,16 +282,32 @@ export function TerritoryMini({
     // any real size. SIMPLIFY_PX is rendered pixels; the viewBox is BOX
     // units wide and drawn `size` across, hence the conversion.
     const tol = (SIMPLIFY_PX * BOX) / Math.max(1, size);
-    let simple = simplifyRing(fitted, tol);
+    // Slits first, THEN simplify. The other order fails: a slit's two
+    // sides are a matched pair of near-identical chains, and
+    // Douglas–Peucker thins each of them independently, so they stop
+    // lining up and what was a clean fold-back becomes a thin wedge no
+    // angle test recognises.
+    const clean = dropSpikes(fitted, MIN_VERTS);
+    let simple = simplifyRing(clean, tol);
     // Backing off rather than giving up: a shape that simplifies below
     // the floor gets progressively gentler tolerances until it clears it,
     // and keeps its full outline if even that can't.
     for (let t = tol; simple.length < MIN_VERTS && t > tol / 8; t /= 2) {
-      simple = simplifyRing(fitted, t / 2);
+      simple = simplifyRing(clean, t / 2);
     }
-    if (simple.length < 3) simple = fitted;
+    if (simple.length < 3) simple = clean.length >= 3 ? clean : fitted;
 
-    return simple.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+    // AND AGAIN, AFTER. Measured: cleaning slits before simplification
+    // got self-crossings to zero but left 173° fold-backs behind, because
+    // simplification MAKES needles as readily as it removes them — the
+    // two sides of a narrow neck get thinned independently and no longer
+    // cancel. So the same test runs over the finished ring, on a dozen
+    // vertices rather than a hundred, with a lower floor: by this point
+    // every vertex left is load-bearing, and a spike among them is worth
+    // more than the count.
+    const drawn = dropSpikes(simple, SPIKE_FLOOR);
+
+    return drawn.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
   }, [points, size]);
 
   // One shape, one wash, one dashed edge — the same paint whether we have
