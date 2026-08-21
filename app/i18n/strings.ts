@@ -131,6 +131,12 @@ export interface AppStrings {
     boardYou: string;
     boardEmpty: string;
     boardSeeAll: string;
+    // The two actions on a card in the full board. "wave" is only
+    // offered on someone who is out walking right now — a poke to a
+    // closed app lands nowhere, so it isn't offered.
+    boardShow: string;
+    boardWave: string;
+    boardWaved: string;
   };
   spots: {
     nearbySpots: string;
@@ -515,6 +521,9 @@ const uk: AppStrings = {
     boardYou: 'ти',
     boardEmpty: 'місто ще нічиє — познач перший',
     boardSeeAll: 'показати всіх',
+    boardShow: 'на мапі',
+    boardWave: 'помахати',
+    boardWaved: 'помахав 👋',
   },
   spots: {
     nearbySpots: 'місця поряд',
@@ -912,6 +921,9 @@ const en: AppStrings = {
     boardYou: 'you',
     boardEmpty: 'nobody holds the city yet — go and mark',
     boardSeeAll: 'see all',
+    boardShow: 'on the map',
+    boardWave: 'wave',
+    boardWaved: 'waved 👋',
   },
   spots: {
     nearbySpots: 'nearby spots',
