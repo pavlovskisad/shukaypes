@@ -3325,8 +3325,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // the HUD's own paddingTop (S.xxl) + half the 59px logo,
             // less half this row's ~40px height.
             top: 'calc(env(safe-area-inset-top, 0px) + 34px)',
-            left: S.m,
-            right: S.m,
+            // Tighter than the HUD row's S.m: the ✕ is a bare circle
+            // whose ink runs to its own edge, where the corner logo and
+            // the meter pills all carry padding inside theirs. Matched
+            // on the inset they LOOK like rather than the one they are.
+            left: S.s,
+            right: S.s,
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
