@@ -202,22 +202,6 @@ export interface AppStrings {
     cantReachWalk: () => string;
     inputPlaceholder: string;
   };
-  // The landmarks a planned walk goes through — the list shown when the
-  // walk starts, and the story bubbles on the route itself.
-  walkStops: {
-    // Heading over the list of stops, e.g. "3 stops on the way".
-    heading: (count: number) => string;
-    // The pill under the HUD that reopens the list. Shorter than the
-    // heading — it sits beside "cancel walk" and has to stay a pill.
-    count: (count: number) => string;
-    // Where the walk ends, under the stops.
-    destination: (name: string) => string;
-    // How far this landmark sits off the direct line. Shown only for the
-    // ones far enough off it to be a noticeable detour — a walk should
-    // not promise a stop is "on the way" when it is a block away.
-    offRoute: (metres: number) => string;
-    dismiss: string;
-  };
   // Shown by the connection banner when calls stop getting through.
   connection: {
     offline: string;
@@ -616,13 +600,6 @@ const uk: AppStrings = {
     cantReachWalk: () => '*нюх-нюх* — зараз не дістаємось до маршруту, спробуймо ще раз',
     inputPlaceholder: 'скажи що хочеш…',
   },
-  walkStops: {
-    heading: (count) => `${count} ${ukStops(count)} по дорозі`,
-    count: (count) => `${count} ${ukStops(count)}`,
-    destination: (name) => `а в кінці — ${name}`,
-    offRoute: (metres) => `${metres} м убік`,
-    dismiss: 'ходімо',
-  },
   connection: {
     offline: 'звʼязку немає — мапа зачекає',
     slow: 'звʼязок повільний…',
@@ -1001,13 +978,6 @@ const en: AppStrings = {
       `walking to ${name} — ${stops} ${stops === 1 ? 'stop' : 'stops'} on the way`,
     cantReachWalk: () => "*sniff sniff* — can't reach the walk right now, let's try again",
     inputPlaceholder: 'say anything…',
-  },
-  walkStops: {
-    heading: (count) => `${count} ${count === 1 ? 'stop' : 'stops'} on the way`,
-    count: (count) => `${count} ${count === 1 ? 'stop' : 'stops'}`,
-    destination: (name) => `and at the end — ${name}`,
-    offRoute: (metres) => `${metres} m aside`,
-    dismiss: "let's go",
   },
   connection: {
     offline: 'no connection — the map will wait',

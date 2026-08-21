@@ -74,7 +74,6 @@ export const Z = {
   // level, no matter how high they number themselves — which is
   // exactly how the card ended up under the dog while nominally
   // sitting at 40 next to a 42.
-  HUD_WALK_CARD: 50,
 
   // ───────────────────────────────────────────────────────────────
   // TIER 3 — modals over the map (cover the map, not global UI)

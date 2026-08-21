@@ -346,7 +346,6 @@ interface GameState {
   // stops starts, closes when you tap a stop to go look at it, and is
   // reopened from the pill under the HUD — closing it must never be a
   // one-way door, which is what "seen" used to make it.
-  walkStopsOpen: boolean;
   dailyTasks: DailyTasks;
   syncing: boolean;
   lastSyncError: string | null;
@@ -443,7 +442,6 @@ interface GameState {
     stops?: WalkStop[],
   ) => void;
   setOpenWalkStop: (id: string | null) => void;
-  setWalkStopsOpen: (open: boolean) => void;
   reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean } | void>;
   // Detective quests. Start flips any existing active quest to abandoned
   // server-side. advance checks proximity to the current waypoint and
@@ -571,7 +569,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   walkRouteMeta: null,
   walkStops: [],
   openWalkStopId: null,
-  walkStopsOpen: false,
   // Initial state is empty for today's date; refreshDailyTasks() pulls
   // from the server on first app load and again on map-tab refocus.
   dailyTasks: blankTasks(),
@@ -1244,7 +1241,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       walkRouteMeta: null,
       walkStops: [],
       openWalkStopId: null,
-      walkStopsOpen: false,
       // Cues that were pointing at something in the old mode.
       activeHint: null,
       menuCamera: null,
@@ -1332,10 +1328,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       // A new walk introduces itself. Clearing one (route null) leaves
       // nothing to show, and a walk through a district with no
       // landmarks has no list to open.
-      walkStopsOpen: (stops?.length ?? 0) > 0,
     }),
   setOpenWalkStop: (openWalkStopId) => set({ openWalkStopId }),
-  setWalkStopsOpen: (walkStopsOpen) => set({ walkStopsOpen }),
 
   reportSighting: async (dogId) => {
     const { userPosition } = get();

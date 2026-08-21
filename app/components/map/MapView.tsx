@@ -69,7 +69,7 @@ import { PoiCluster } from './PoiCluster';
 import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import { SniffPress } from './SniffPress';
-import { WalkStops, WalkStopsCard, WalkStopsToggle } from './WalkStops';
+import { WalkStops } from './WalkStops';
 import { TerritoryLayer } from './TerritoryLayer';
 import type { LatLng } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
@@ -3306,7 +3306,6 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               gap: S.s,
             }}
           >
-            {walkRoute ? <WalkStopsToggle /> : null}
             {walkRoute ? (
               <div
                 role="button"
@@ -3330,24 +3329,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               </div>
             ) : null}
           </div>
-          {/* What this walk has to show. Above the dog and its speech
-              bubble, because it describes the walk the dog just
-              proposed. */}
-          <div style={{ position: 'relative', zIndex: Z.HUD_WALK_CARD }}>
-            <WalkStopsCard
-              onFocusStop={(position) =>
-                // Same downward offset the sniff discovery uses: the
-                // story bubble stacks ABOVE its disc, so centring the
-                // disc would push the text under the HUD.
-                mapRef.current?.easeTo({
-                  center: [position.lng, position.lat],
-                  padding: { top: 0, bottom: 0, left: 0, right: 0 },
-                  offset: [0, 70],
-                  duration: 600,
-                })
-              }
-            />
-          </div>
+          {/* The stops roster used to render here. The dots on the
+              route carry their own stories now, and they do the same
+              camera nudge this card's onFocusStop did. */}
         </div>
       ) : null}
 

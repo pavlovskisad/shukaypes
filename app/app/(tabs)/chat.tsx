@@ -11,9 +11,7 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
-  Image,
 } from 'react-native';
-import logoNose from '../../assets/logo-nose.png';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -55,7 +53,6 @@ export default function ChatScreen() {
   const lang = useLangStore((s) => s.lang);
   const router = useRouter();
   const userPosition = useGameStore((s) => s.userPosition);
-  const companionName = useGameStore((s) => s.companionName);
   const startQuest = useGameStore((s) => s.startQuest);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -286,7 +283,6 @@ export default function ChatScreen() {
     }
   }, [draft, sending, userPosition, dispatchAction, t, lang]);
 
-  const header = useMemo(() => companionName || 'шукайпес', [companionName]);
 
   const iosInsets = useSafeAreaInsets();
   // In TG Mini App, TG handles the home-indicator strip. Using iOS's
@@ -381,19 +377,10 @@ export default function ChatScreen() {
         pointerEvents="none"
       />
 
-      {/* Top pill — compact companion-handle so it reads as "who
-          you're talking to" rather than a hero card. */}
-      <View
-        style={[styles.topBand, { paddingTop: insets.top }]}
-        pointerEvents="box-none"
-      >
-        <View style={styles.headerCard} pointerEvents="auto">
-          <View style={styles.headerLogoPill}>
-            <Image source={logoNose} style={styles.headerLogo} resizeMode="contain" />
-          </View>
-          <Text style={styles.headerTitle}>{header}</Text>
-        </View>
-      </View>
+      {/* No masthead. It named a screen you had already navigated to,
+          and it was the one thing stopping the transcript from simply
+          dissolving into the top fade. The fade above does the whole
+          job on its own. */}
 
       {/* Bottom frosted band — sits just above the dashboard tab bar.
           KAV pushes it up when the keyboard appears on iOS native;
@@ -525,7 +512,9 @@ const CHROME_SHADOW = {
 // Approximate visible heights for the floating pills. Used as scroll
 // content padding so the first/last bubble can scroll past each pill
 // without ever sitting flush against it.
-const HEADER_BAND_HEIGHT = 56;   // compact pill + its top/bottom margins
+// No pill up there any more — this is purely the height over which
+// a message dissolves as it scrolls under the status bar.
+const HEADER_BAND_HEIGHT = 28;
 const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 // Visible reserved bottom space = the floating dashboard pill
 // (58 px, post-trim) plus the 24 px gap it hovers above the
@@ -544,13 +533,6 @@ const styles = StyleSheet.create({
   root: {
     flex: 1,
     backgroundColor: colors.greyBg,
-  },
-  topBand: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 5,
   },
   bottomBandWrap: {
     position: 'absolute',
@@ -576,42 +558,6 @@ const styles = StyleSheet.create({
   // White header pill with a stronger CHROME_SHADOW so it
   // separates cleanly from the chat background and reads as
   // floating chrome rather than melting into the bubbles below.
-  headerCard: {
-    alignSelf: 'center',
-    marginTop: S.m,
-    marginBottom: S.s,
-    backgroundColor: SURFACE.fill,
-    // R.label, not a capsule. This names the screen; it is not a
-    // control and nothing presses it, so it takes the label corner the
-    // urgency badges and distance chips take.
-    borderRadius: R.label,
-    borderWidth: 2,
-    borderColor: INK,
-    paddingVertical: S.s,
-    paddingHorizontal: S.l,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: S.s,
-    ...CHROME_SHADOW,
-  },
-  headerLogoPill: {
-    width: 36,
-    height: 36,
-    borderRadius: R.pill,
-    backgroundColor: SURFACE.fill,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerLogo: {
-    width: 26,
-    height: 26,
-  },
-  headerTitle: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.body,
-    fontWeight: '700',
-    color: colors.black,
-  },
   listContent: {
     paddingHorizontal: S.l,
     // paddingTop/paddingBottom are set inline so the bands' on-screen
