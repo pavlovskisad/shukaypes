@@ -145,9 +145,33 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               drawn cup, a bowl, a paw — the word кав'ярня underneath
               was the same fact twice, in a patch that had to be drawn
               to hold it. */}
-          {/* Top-right — bare rating (if available) + the close button,
-              which stays full-round because it is a circle and a
-              control rather than a label. */}
+          {/* Rating LEFT, where the category label used to be. No patch:
+              the hero band behind it is already white, so the chip was
+              a white rectangle drawn on white to hold two characters
+              and all it added was an outline. Matches the spot card,
+              which puts the rating on the same side. */}
+          {hasRating ? (
+            <span
+              style={{
+                position: 'absolute',
+                top: SAFE_TOP,
+                left: 14,
+                color: INK,
+                fontSize: TYPE.body,
+                fontWeight: 800,
+                letterSpacing: 0.3,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <span style={{ color: colors.amber }}>★</span>
+              {renderSpot.rating!.toFixed(1)}
+            </span>
+          ) : null}
+          {/* The close button keeps the right corner to itself, and
+              stays full-round: it is a circle and a control, not a
+              readout. */}
           <div
             style={{
               position: 'absolute',
@@ -158,27 +182,6 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               gap: S.s,
             }}
           >
-            {hasRating ? (
-              <span
-                style={{
-                  // No patch. The hero band behind it is already white,
-                  // so the chip was a white rectangle drawn on white to
-                  // hold two characters — all it added was an outline.
-                  // Bigger and darker instead, since it now has to carry
-                  // itself rather than lean on a container.
-                  color: INK,
-                  fontSize: TYPE.body,
-                  fontWeight: 800,
-                  letterSpacing: 0.3,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 4,
-                }}
-              >
-                <span style={{ color: colors.amber }}>★</span>
-                {renderSpot.rating!.toFixed(1)}
-              </span>
-            ) : null}
             <button
               onClick={(e) => playPopThen(e.currentTarget, onClose)}
               aria-label={t.modals.common.close}

@@ -16,6 +16,8 @@ import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
 import type { LatLng } from '@shukajpes/shared';
 import { CardStack, CardStackSkeleton } from './CardStack';
+import { Icon } from './Icon';
+import { INLINE_ICON } from '../../constants/sizing';
 
 interface Props {
   dogs: NearbyLostDog[];
@@ -211,9 +213,12 @@ export function LostDogCardView({
             ) : null}
           </View>
           {chips && distLabel ? (
-            <Text style={styles.distText} numberOfLines={1}>
-              {'\u{1F4CD} '}{distLabel}
-            </Text>
+            <View style={styles.distRow}>
+              <Icon name="pin" size={INLINE_ICON.badge} />
+              <Text style={styles.distText} numberOfLines={1}>
+                {distLabel}
+              </Text>
+            </View>
           ) : null}
         </View>
       </View>
@@ -301,6 +306,12 @@ const styles = StyleSheet.create({
   // container because the background underneath was unknowable. Down
   // here the background is white paper, so the text can just be text —
   // and bigger, since it now carries itself.
+  distRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    flexShrink: 0,
+  },
   distText: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.body,
