@@ -21,7 +21,7 @@
     "expire:out-of-area": "tsx src/db/expire-out-of-area.ts",
     "expire:pet": "tsx src/db/expire-pet.ts",
     "expire:no-post": "tsx src/db/expire-no-post.ts",
-    "check": "pnpm check:lore-walk && pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:redact && pnpm check:ad-body && pnpm check:ad-extract && pnpm check:found-report && pnpm check:route-coverage",
+    "check": "pnpm check:lore-walk && pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:redact && pnpm check:ad-body && pnpm check:ad-extract && pnpm check:found-report && pnpm check:resolve-place && pnpm check:route-coverage",
     "check:same-pet": "tsx src/pipeline/samePet.check.ts",
     "check:lore-walk": "tsx src/services/loreWalk.check.ts",
     "render:dedupe-sql": "tsx src/db/render-dedupe-sql.ts",
@@ -42,7 +42,11 @@
     "revive:live-ads": "tsx src/db/revive-live-ads.ts",
     "clean:ad-bodies": "tsx src/db/clean-ad-bodies.ts",
     "census:contacts": "tsx src/db/census-contacts.ts",
-    "probe:crosspost": "tsx src/db/probe-crosspost.ts"
+    "probe:crosspost": "tsx src/db/probe-crosspost.ts",
+    "audit:pins": "tsx src/db/audit-pins.ts",
+    "resolve:pins": "tsx src/db/resolve-pins.ts",
+    "probe:location-text": "tsx src/db/probe-location-text.ts",
+    "check:resolve-place": "tsx src/pipeline/resolvePlace.check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

@@ -174,15 +174,162 @@ async function auditRehoming() {
   );
 }
 
+// IS THE PIPELINE STILL PRODUCING, AND IF NOT, WHERE DOES IT STOP?
+//
+// The alert says «no new pets for 36.4h» and, in the same breath,
+// «olx: 469 found, 0 errors». Those two lines are consistent with two
+// completely different worlds:
+//
+//   QUIET     the 469 are ads we already hold, and Kyiv genuinely did
+//             not lose a pet that OLX heard about. Nothing is broken.
+//   BLOCKED   new ads ARE arriving and something downstream is refusing
+//             every one — a filter, the dedupe, the city gate.
+//
+// The alert cannot tell them apart, and neither can anybody reading it.
+// This can: a scrape_log row is written for EVERY message we look at,
+// including the ones we throw away and why. So count rows by the day
+// they first appeared, split by what we decided about them.
+//
+// A day with no new rows at all is the quiet world. A day with new rows
+// that all carry a skip_reason is the blocked one, and the reason names
+// the culprit.
+//
+// This distinction has been got wrong here before, in the expensive
+// direction: the OLX scraper once reported «discovered 506, skipped 506»
+// for days and read as healthy, because every URL it found was already
+// known. It had saturated its own listing page and stopped seeing
+// anything new. That is exactly the shape this prints.
+async function auditRecent(days: number) {
+  const rows = await db
+    .select({
+      day: sql<string>`to_char(${schema.scrapeLog.firstSeenAt}, 'YYYY-MM-DD')`,
+      source: sql<string>`split_part(${schema.scrapeLog.source}, ':', 1)`,
+      action: schema.scrapeLog.ingestAction,
+      reason: schema.scrapeLog.skipReason,
+      n: sql<number>`count(*)::int`,
+    })
+    .from(schema.scrapeLog)
+    .where(sql`${schema.scrapeLog.firstSeenAt} > now() - (${days}::int * interval '1 day')`)
+    .groupBy(
+      sql`to_char(${schema.scrapeLog.firstSeenAt}, 'YYYY-MM-DD')`,
+      sql`split_part(${schema.scrapeLog.source}, ':', 1)`,
+      schema.scrapeLog.ingestAction,
+      schema.scrapeLog.skipReason,
+    );
+
+  if (rows.length === 0) {
+    console.log(`\n!! NOT ONE ledger row in ${days} days. That is not "a quiet week" —`);
+    console.log('   the scraper writes a row for every message it LOOKS at, including');
+    console.log('   the ones it rejects. Zero rows means it is not looking.');
+    return;
+  }
+
+  const byDay = new Map<string, Map<string, number>>();
+  const reasons = new Map<string, number>();
+  for (const r of rows) {
+    const key = `${r.source}/${r.action ?? 'null'}`;
+    if (!byDay.has(r.day)) byDay.set(r.day, new Map());
+    const d = byDay.get(r.day)!;
+    d.set(key, (d.get(key) ?? 0) + r.n);
+    // GROUP BY THE PART BEFORE THE COLON. Reasons carry detail now —
+    // 'not-kyiv:харків', 'error: <url> -> 403' — and counting the full
+    // string turns one problem into thirty one-line entries that hide
+    // the shape. The detail is still there; it comes back in the sample.
+    if (r.reason) {
+      const family = r.reason.split(':')[0]!.trim();
+      reasons.set(family, (reasons.get(family) ?? 0) + r.n);
+    }
+  }
+
+  console.log(`\nNEW LEDGER ROWS PER DAY — every message we looked at, last ${days}d\n`);
+  for (const day of [...byDay.keys()].sort().reverse()) {
+    const d = byDay.get(day)!;
+    const total = [...d.values()].reduce((a, b) => a + b, 0);
+    const parts = [...d.entries()]
+      .sort((a, b) => b[1] - a[1])
+      .map(([k, n]) => `${k}=${n}`)
+      .join('  ');
+    console.log(`  ${day}  ${String(total).padStart(4)}   ${parts}`);
+  }
+
+  if (reasons.size > 0) {
+    console.log('\nWHY THEY WERE THROWN AWAY:');
+    for (const [reason, n] of [...reasons].sort((a, b) => b[1] - a[1]).slice(0, 12)) {
+      console.log(`  ${String(n).padStart(5)}  ${reason}`);
+    }
+  }
+
+  // A COUNT CANNOT SAY WHETHER A FILTER IS RIGHT.
+  //
+  // «title-filter: 2233» is the correct answer for two thousand sale
+  // listings and the symptom of a broken rule if even a tenth of them
+  // are somebody's missing animal. The number is identical either way,
+  // and it is the number that would be reported as healthy.
+  //
+  // So print the titles. The reader decides in about ten seconds —
+  // «Продам щенков хаски» is the filter working, «Пропала собака,
+  // Оболонь» in this list is a bug that has been costing us pets.
+  //
+  // Titles only, through redactContacts. A listing title is the least
+  // sensitive text we store and this prints no body at all.
+  const TOP_REASONS = [...reasons].sort((a, b) => b[1] - a[1]).slice(0, 4);
+  for (const [family] of TOP_REASONS) {
+    if (family === 'error') continue;
+    const sample = await db
+      .select({
+        title: schema.scrapeLog.title,
+        url: schema.scrapeLog.url,
+        reason: schema.scrapeLog.skipReason,
+      })
+      .from(schema.scrapeLog)
+      .where(
+        sql`(${schema.scrapeLog.skipReason} = ${family}
+             or ${schema.scrapeLog.skipReason} like ${family + ':%'})
+            and ${schema.scrapeLog.firstSeenAt} > now() - (${days}::int * interval '1 day')
+            and ${schema.scrapeLog.title} is not null`,
+      )
+      .orderBy(sql`random()`)
+      .limit(12);
+    if (sample.length === 0) continue;
+    console.log(`\n  a random 12 of what «${family}» rejected:`);
+    for (const s of sample) {
+      // The detail after the colon, when there is one — «not-kyiv:одеса»
+      // answers in one word what the flat reason could not.
+      const detail = s.reason && s.reason.includes(':') ? ` [${s.reason.split(':').slice(1).join(':').trim()}]` : '';
+      console.log(`    ${redactContacts(s.title!).slice(0, 60)}${detail}`);
+      // The ad's own address, so a title that looks wrong can be opened
+      // and settled rather than argued about. A URL carries no contact.
+      if (family === 'not-kyiv') console.log(`      ${s.url}`);
+    }
+  }
+
+  console.log(
+    `\n  A day with NO rows means nothing new was discovered — the quiet world,` +
+      `\n  or a scraper that has saturated its own listing page and stopped seeing.` +
+      `\n  A day with rows that all carry a reason is the blocked world, and the` +
+      `\n  reason above names what did the blocking.`,
+  );
+}
+
 async function main() {
   const idArg = process.argv.find((a) => a.startsWith('--id='))?.split('=')[1];
   const urlArg = process.argv.find((a) => a.startsWith('--url='))?.split('=')[1];
   const rehoming = process.argv.includes('--rehoming');
+  const recentArg = process.argv.find((a) => a === '--recent' || a.startsWith('--recent='));
+  const recentDays = recentArg
+    ? Number(recentArg.split('=')[1] ?? 7) || 7
+    : 0;
 
   const token = idArg ?? urlArg?.match(/-?(ID[A-Za-z0-9]+)\.html/)?.[1] ?? null;
 
+  if (recentDays > 0) {
+    await auditRecent(recentDays);
+    await pg.end();
+    return;
+  }
+
   if (!token && !rehoming) {
-    console.log('pass --id=ID10hIzS, --url=<olx url>, or --rehoming');
+    console.log('pass --id=ID10hIzS, --url=<olx url>, --rehoming, or --recent[=days]');
     await pg.end();
     return;
   }

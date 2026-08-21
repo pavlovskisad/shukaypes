@@ -150,8 +150,30 @@ const OTHER_CITIES =
 // the same test as the gate — two copies of this rule would drift, and
 // then the map and the guard would disagree about which city a pet is in.
 export function looksNotKyiv(html: string): boolean {
-  if (KYIV_WORDS.test(html)) return false;
-  return OTHER_CITIES.test(html);
+  return detectNotKyivCity(html) !== null;
+}
+
+// WHICH city, not just "somewhere else".
+//
+// The ledger recorded a flat 'not-kyiv', and a flat reason cannot be
+// audited. Ten days of it produced 29 rejections whose titles read
+// «Пропала собака стаф», «Загубилась собака», «Розшукуємо собаку!» —
+// real searches, with no geography in the title at all. Whether the ad's
+// own page named Kharkiv, or a recommendations sidebar did, the reason
+// string said the same thing either way, so nobody could tell a working
+// gate from one throwing away Kyiv pets.
+//
+// 29 in ten days is ~3/day against an insertion rate of 0.5/day. If even
+// half of them are local, this bucket is several times larger than
+// everything we accept, which makes "we cannot tell" an expensive place
+// to leave it.
+//
+// The word it matched costs nothing to keep and settles the question on
+// the next run. Behaviour is unchanged — same test, same decision, only
+// the recorded reason gets more specific.
+export function detectNotKyivCity(html: string): string | null {
+  if (KYIV_WORDS.test(html)) return null;
+  return html.match(OTHER_CITIES)?.[0] ?? null;
 }
 
 function parseCards(html: string, baseUrl: string): Card[] {
@@ -251,7 +273,8 @@ export class OlxSource implements Source {
 
       try {
         const adHtml = await fetchText(card.url);
-        if (looksNotKyiv(adHtml)) {
+        const otherCity = detectNotKyivCity(adHtml);
+        if (otherCity) {
           await db
             .insert(schema.scrapeLog)
             .values({
@@ -259,7 +282,10 @@ export class OlxSource implements Source {
               source: SOURCE,
               title: card.title,
               ingestAction: 'skipped',
-              skipReason: 'not-kyiv',
+              // The matched word, so a later audit can tell a working
+              // gate from one eating local pets. Lowercased so «Одеса»
+              // and «одеса» group as one reason rather than two.
+              skipReason: `not-kyiv:${otherCity.toLowerCase()}`,
             })
             .onConflictDoNothing({ target: schema.scrapeLog.url });
           summary.skipped++;
