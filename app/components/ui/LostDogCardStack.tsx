@@ -96,10 +96,9 @@ export function LostDogCardStack({
 export const LostDogCardStackSkeleton = CardStackSkeleton;
 
 // Photo full-bleed, with an inked white label band across the bottom
-// carrying name + breed. Urgency badge top-left, distance chip
-// top-right. No photo → soft grey card with the emoji centred.
-// Exported so the "see all" modal can render the same visual at a
-// wider size.
+// carrying name + breed on the left and how far away on the right.
+// No photo → soft grey card with the emoji centred. Exported so the
+// "see all" modal can render the same visual at a wider size.
 export function LostDogCardView({
   dog,
   t,
@@ -116,14 +115,18 @@ export function LostDogCardView({
   active?: boolean;
   // Heavier drop shadow (contact + ambient) to lift the card off a busy bg.
   strongShadow?: boolean;
-  // The urgency badge and distance chip. On in the deck and the "see
-  // all" list, where you are comparing pets and both are the point.
+  // The distance readout. On in the deck and the "see all" list, where
+  // you are comparing pets and how far each one is matters.
   //
   // Off once a pet is THE pet — during a confirmation or a running
-  // search there is only one card on screen, so "we're searching" is
-  // just the screen restating itself, and the distance belongs in the
-  // nav readout at the top rather than on the photo. What's left is
-  // the face, which is the only thing you're actually looking for.
+  // search there is only one card on screen and the distance belongs
+  // in the nav readout at the top. What's left is the face, which is
+  // the only thing you're actually looking for.
+  //
+  // The urgency badge used to ride alongside it. It is gone: on a deck
+  // where most pets are "шукаємо" it labelled almost every card with
+  // the same word, which is not a distinction, and it cost a patch on
+  // the photograph to say it.
   chips?: boolean;
 }) {
   useEffect(() => {
@@ -139,9 +142,6 @@ export function LostDogCardView({
     `;
     document.head.appendChild(el);
   }, []);
-  const urgent = dog.urgency === 'urgent';
-  const badgeText = urgent ? t.tasks.badgeUrgent : t.tasks.badgeSearching;
-  const badgeFg = urgent ? '#e84040' : '#d9a030';
   const distLabel = userPos
     ? formatDistance(distanceMeters(userPos, dog.lastSeen.position))
     : null;
@@ -198,25 +198,24 @@ export function LostDogCardView({
           <Text style={styles.photoEmoji}>{dog.emoji ?? '🐶'}</Text>
         </View>
       )}
-      {chips ? (
-        <View style={styles.badge}>
-          <Text style={[styles.badgeText, { color: badgeFg }]}>{badgeText}</Text>
-        </View>
-      ) : null}
-      {chips && distLabel ? (
-        <View style={styles.distChip}>
-          <Text style={styles.distChipText}>{distLabel}</Text>
-        </View>
-      ) : null}
       <View style={styles.cardBody}>
-        <Text style={styles.cardName} numberOfLines={1}>
-          {dog.name}
-        </Text>
-        {dog.breed ? (
-          <Text style={styles.cardMeta} numberOfLines={1}>
-            {dog.breed}
-          </Text>
-        ) : null}
+        <View style={styles.cardBodyRow}>
+          <View style={styles.cardBodyText}>
+            <Text style={styles.cardName} numberOfLines={1}>
+              {dog.name}
+            </Text>
+            {dog.breed ? (
+              <Text style={styles.cardMeta} numberOfLines={1}>
+                {dog.breed}
+              </Text>
+            ) : null}
+          </View>
+          {chips && distLabel ? (
+            <Text style={styles.distText} numberOfLines={1}>
+              {'\u{1F4CD} '}{distLabel}
+            </Text>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -257,55 +256,8 @@ const styles = StyleSheet.create({
     fontSize: 120,
     opacity: 0.6,
   },
-  badge: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: S.m,
-    paddingVertical: S.s,
-    // The label corner, not a pill. These name what the card is
-    // (urgent / how far) and belong to the card, where the HUD pills
-    // they used to copy belong to the chrome.
-    borderRadius: R.label,
-    borderWidth: 2,
-    borderColor: INK,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  badgeText: {
-    fontSize: TYPE.caption,
-    fontWeight: '700',
-    textTransform: 'lowercase',
-    letterSpacing: 0.4,
-  },
   // Distance label — mirror of the urgency badge but anchored
   // top-right. Same corner, same ink.
-  distChip: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: S.m,
-    paddingVertical: S.s,
-    borderRadius: R.label,
-    borderWidth: 2,
-    borderColor: INK,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  distChipText: {
-    fontSize: TYPE.caption,
-    fontWeight: '700',
-    color: '#555',
-    letterSpacing: 0.3,
-  },
   // A PAPER LABEL STUCK ON A PHOTO, not text floating over it.
   //
   // This used to be white type sitting directly on the picture, held
@@ -331,6 +283,30 @@ const styles = StyleSheet.create({
     paddingHorizontal: 20,
     paddingTop: 12,
     paddingBottom: 14,
+  },
+  // Name + breed on the left, distance on the right — one row, so the
+  // distance sits on the same paper as the name instead of floating on
+  // the photograph.
+  cardBodyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: S.m,
+  },
+  cardBodyText: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  // No patch. It used to be a white pill on the photo, which needed a
+  // container because the background underneath was unknowable. Down
+  // here the background is white paper, so the text can just be text —
+  // and bigger, since it now carries itself.
+  distText: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: TYPE.body,
+    fontWeight: '700',
+    color: INK,
+    flexShrink: 0,
   },
   cardName: {
     fontFamily: SYSTEM_FONT,

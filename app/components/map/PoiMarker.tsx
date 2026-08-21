@@ -4,6 +4,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { ICON_HERO } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
+import { INK } from '../../constants/surface';
 import { Icon, iconForCategory } from '../ui/Icon';
 import { MapLibreMarker } from './MapLibreMarker';
 
@@ -67,12 +68,14 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
             width: 44,
             height: 44,
             borderRadius: R.pill,
-            // Selected: solid brand blue with an inverted (white)
-            // icon so the chosen spot reads instantly against the
-            // grid of plain-white markers, even at the small
-            // marker scale on a busy map. Unselected stays the
-            // calm white disc.
-            background: selected ? 'rgb(0,60,255)' : '#ffffff',
+            // Selected: solid INK with an inverted (white) icon, so
+            // the chosen spot reads instantly against the grid of
+            // plain-white markers. It was brand blue, which made a
+            // selected café the loudest thing on a map where blue
+            // already means your territory and the route you are
+            // walking. Filled-dark says "this is the active one"
+            // everywhere else in the app; it says it here too.
+            background: selected ? INK : '#ffffff',
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'center',
@@ -80,7 +83,7 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
             // Selected lifts harder with a tinted shadow so the
             // pin reads as "raised + active".
             boxShadow: selected
-              ? '0 6px 18px rgba(0,60,255,0.35), 0 2px 4px rgba(0,0,0,0.15)'
+              ? '0 6px 18px rgba(0,0,0,0.30), 0 2px 4px rgba(0,0,0,0.15)'
               : '0 2px 6px rgba(0,0,0,0.12), 0 1px 1px rgba(0,0,0,0.06)',
           }}
         >

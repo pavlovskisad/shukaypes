@@ -8,7 +8,8 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
-import { SURFACE } from '../../constants/surface';
+import { INK, SURFACE } from '../../constants/surface';
+import { colors } from '../../constants/colors';
 import { playPopThen } from '../../utils/popOnTap';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
@@ -35,7 +36,6 @@ const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
 // timeout runs the slide-down before unmounting.
 export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   const t = useStrings();
-  const CATEGORY_LABEL: Record<string, string> = t.modals.spot.categories;
   const [renderSpot, setRenderSpot] = useState<Spot | null>(spot);
   const [closing, setClosing] = useState(false);
 
@@ -58,7 +58,6 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   if (!renderSpot) return null;
   if (typeof document === 'undefined') return null;
 
-  const categoryLabel = CATEGORY_LABEL[renderSpot.category] ?? renderSpot.category;
   const iconSlot = iconForCategory(renderSpot.category);
   const hasRating = typeof renderSpot.rating === 'number';
 
@@ -116,11 +115,10 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           overflow: 'hidden',
         }}
       >
-        {/* Hero block — soft-grey tinted band carrying a big centred
-            category icon. Category chip top-left, rating chip +
-            close button top-right. Same "hero on top of card" shape
-            as the LostDogModal photo header so the two read as one
-            family. */}
+        {/* Hero block — a big centred category icon on white, with the
+            rating and the close button top-right. Same "hero on top of
+            card" shape as the LostDogModal photo header so the two read
+            as one family. */}
         <div
           style={{
             position: 'relative',
@@ -143,32 +141,13 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               {renderSpot.icon ?? '📍'}
             </span>
           )}
-          {/* Category label top-left — the small corner, not a pill:
-              a label naming what it sits on is a piece of the same
-              paper, not a control. */}
-          <span
-            style={{
-              position: 'absolute',
-              top: SAFE_TOP,
-              left: 14,
-              background: '#ffffff',
-              color: '#555',
-              borderRadius: R.label,
-              padding: '6px 12px',
-              fontSize: TYPE.small,
-              fontWeight: 700,
-              letterSpacing: 0.4,
-              textTransform: 'lowercase',
-              boxShadow: SURFACE.chip,
-              border: SURFACE.hair,
-            }}
-          >
-            {categoryLabel}
-          </span>
-          {/* Top-right cluster — rating label (if available) + close
-              button. Rating takes the same label corner as the category
-              one, with a gold star + value. The close button stays
-              full-round: it is a circle and a control, not a label. */}
+          {/* No category label. The hero icon directly above it is a
+              drawn cup, a bowl, a paw — the word кав'ярня underneath
+              was the same fact twice, in a patch that had to be drawn
+              to hold it. */}
+          {/* Top-right — bare rating (if available) + the close button,
+              which stays full-round because it is a circle and a
+              control rather than a label. */}
           <div
             style={{
               position: 'absolute',
@@ -182,18 +161,22 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             {hasRating ? (
               <span
                 style={{
-                  background: '#ffffff',
-                  color: '#d9a030',
-                  borderRadius: R.label,
-                  padding: '6px 12px',
-                  fontSize: TYPE.small,
-                  fontWeight: 700,
+                  // No patch. The hero band behind it is already white,
+                  // so the chip was a white rectangle drawn on white to
+                  // hold two characters — all it added was an outline.
+                  // Bigger and darker instead, since it now has to carry
+                  // itself rather than lean on a container.
+                  color: INK,
+                  fontSize: TYPE.body,
+                  fontWeight: 800,
                   letterSpacing: 0.3,
-                  boxShadow: SURFACE.chip,
-                  border: SURFACE.hair,
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
                 }}
               >
-                ★ {renderSpot.rating!.toFixed(1)}
+                <span style={{ color: colors.amber }}>★</span>
+                {renderSpot.rating!.toFixed(1)}
               </span>
             ) : null}
             <button
