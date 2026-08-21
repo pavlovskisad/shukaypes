@@ -111,15 +111,23 @@ const FILL_ALPHA = 0.22;
 // drawn THROUGH these points — so what is decided here is which corners
 // are real, and nothing here invents one.
 //
-// 3.2px, chosen by measuring both candidates on hulls built to look like
-// the real ones (a staircase blob, one with a bite out of it, one nearly
-// round). At 2.2 the noisiest shape came out at 27 vertices with 3px
-// edges — still shorter than the dash period, still visibly rippling. At
-// 3.2 it is 13 vertices with a 17px mean edge, the bite is untouched,
-// and the perimeter is within 7% of the original. Douglas–Peucker's own
-// guarantee bounds the error: no drawn edge is further than this from
-// the outline it replaced, i.e. 3.5% of the chip.
-const SIMPLIFY_PX = 3.2;
+// 4.2px, measured on hulls built to look like the real ones (a
+// staircase blob, one with a neighbour's bite out of it, one nearly
+// round). The ladder, on the noisiest of them:
+//
+//   raw   90 vertices, 2.6px mean edge — the scribble
+//   2.2   27 vertices, 8.8px  — still rippling, edges under the dash
+//   3.2   13 vertices, 16.9px — quiet
+//   4.2    8 vertices, 26.9px — a form
+//
+// The last step is the owner's call and is deliberately an accuracy
+// trade: at 4.2 a shallow lobe flattens into the body and a claim comes
+// out as a form rather than a survey. What it may NOT cost is identity,
+// and that is what the fixtures check: the bite still reads as a bite at
+// 4.2, and the perimeter is within 8% of the original. Douglas–Peucker
+// bounds the error at the tolerance itself — no drawn edge sits further
+// than this from the outline it replaced, i.e. 4.6% of the chip.
+const SIMPLIFY_PX = 4.2;
 // Never simplify a shape down to a triangle. Below this the outline has
 // stopped being recognisable as anywhere, so a claim that reduces that
 // far keeps the last tolerance that keeps it above the floor.
@@ -206,6 +214,101 @@ function dropSpikes(
     if (keep.length === ring.length) return ring;
     if (keep.length < floor) return ring;
     ring = keep;
+  }
+  return ring;
+}
+
+// ── Necks ───────────────────────────────────────────────────────────
+// AN ARM IS NOT A VERTEX, SO STOP TESTING VERTICES.
+//
+// The fold-back test above cleared the slits, and a per-vertex width
+// test was added after it for the arms that were merely thin rather than
+// folded — and the arms survived anyway. They survived because they are
+// not one vertex. An arm is a run of them: out along one side, round a
+// tip, back along the other. No single vertex in it looks wrong. The
+// per-vertex test could only ever catch the tip, and cutting the tip off
+// an arm leaves a slightly shorter arm.
+//
+// What actually defines an arm is its NECK — two points that are close
+// together on the page but far apart along the outline. Walk the ring
+// from one to the other the short way and you have gone all the way out
+// and back; walk it the long way and you have gone round the whole
+// claim. So: find the closest such pair, and if the short way round is a
+// small enough share of the whole outline, drop everything between them.
+// The arm comes off at the neck in one cut, not a vertex at a time.
+//
+// THE SHARE IS THE SAFETY RAIL. A claim really can be two lobes joined
+// by an isthmus — walk a park and then the street behind it and that is
+// what you get — and that second lobe is not a hair, it is half of what
+// somebody holds. Cutting is therefore refused once the piece being
+// removed is more than about a third of the outline: below that it is a
+// hair on a shape, above it, it is one of the shape's two halves.
+//
+// In rendered pixels, like every other threshold here.
+const NECK_W_PX = 7;
+// And the excursion has to be a real one — at least this many necks'
+// worth of outline — so a merely dented edge is left alone.
+const NECK_MIN_ARC = 2.2;
+// Above this share of the perimeter it is not an arm, it is a lobe.
+const NECK_MAX_FRAC = 0.34;
+// One arm per pass; a claim with more than a few is already unreadable.
+const NECK_PASSES = 6;
+
+function cutNecks(
+  pts: [number, number][],
+  neckW: number,
+  floor: number,
+): [number, number][] {
+  let ring = pts;
+  for (let pass = 0; pass < NECK_PASSES; pass++) {
+    const n = ring.length;
+    if (n <= floor) return ring;
+    const seg: number[] = [];
+    let total = 0;
+    for (let i = 0; i < n; i++) {
+      const a = ring[i]!;
+      const b = ring[(i + 1) % n]!;
+      const d = Math.hypot(b[0] - a[0], b[1] - a[1]);
+      seg.push(d);
+      total += d;
+    }
+    if (total <= 0) return ring;
+    // Forward arc length from i to j, wrapping.
+    const arc = (i: number, j: number) => {
+      let s = 0;
+      for (let k = i; k !== j; k = (k + 1) % n) s += seg[k]!;
+      return s;
+    };
+    // The tightest neck worth cutting. Tightest rather than first, so a
+    // shape with two arms loses the more egregious one first and the
+    // next pass re-measures against what is left.
+    let best: { from: number; to: number; gap: number } | null = null;
+    for (let i = 0; i < n; i++) {
+      for (let j = i + 2; j < n; j++) {
+        if (i === 0 && j === n - 1) continue;
+        const a = ring[i]!;
+        const b = ring[j]!;
+        const gap = Math.hypot(b[0] - a[0], b[1] - a[1]);
+        if (gap >= neckW) continue;
+        const fwd = arc(i, j);
+        const back = total - fwd;
+        // Cut whichever side is the excursion: the shorter one.
+        const [from, to, cut] = fwd <= back ? [i, j, fwd] : [j, i, back];
+        if (cut < neckW * NECK_MIN_ARC) continue;
+        if (cut > total * NECK_MAX_FRAC) continue;
+        // Removing the interior must leave a ring, not a line.
+        const removed = (to - from + n) % n;
+        if (n - (removed - 1) < floor) continue;
+        if (!best || gap < best.gap) best = { from, to, gap };
+      }
+    }
+    if (!best) return ring;
+    const kept: [number, number][] = [];
+    for (let k = best.to; ; k = (k + 1) % n) {
+      kept.push(ring[k]!);
+      if (k === best.from) break;
+    }
+    ring = kept;
   }
   return ring;
 }
@@ -319,12 +422,20 @@ export function TerritoryMini({
     const px = BOX / Math.max(1, size);
     const tol = SIMPLIFY_PX * px;
     const needleW = NEEDLE_W_PX * px;
+    const neckW = NECK_W_PX * px;
     // Slits first, THEN simplify. The other order fails: a slit's two
     // sides are a matched pair of near-identical chains, and
     // Douglas–Peucker thins each of them independently, so they stop
     // lining up and what was a clean fold-back becomes a thin wedge no
     // angle test recognises.
-    const clean = dropSpikes(fitted, MIN_VERTS, needleW);
+    // Fold-backs, then arms, THEN simplify. Order matters twice over: a
+    // slit's two sides are a matched pair of near-identical chains, and
+    // Douglas–Peucker thins each of them independently, so simplifying
+    // first turns a clean fold-back into a wedge no angle test
+    // recognises — and the neck search wants the dense ring, where the
+    // two sides of a neck still have points opposite each other to be
+    // found by.
+    const clean = cutNecks(dropSpikes(fitted, MIN_VERTS, needleW), neckW, MIN_VERTS);
     let simple = simplifyRing(clean, tol);
     // Backing off rather than giving up: a shape that simplifies below
     // the floor gets progressively gentler tolerances until it clears it,
@@ -342,7 +453,25 @@ export function TerritoryMini({
     // vertices rather than a hundred, with a lower floor: by this point
     // every vertex left is load-bearing, and a spike among them is worth
     // more than the count.
-    const drawn = dropSpikes(simple, SPIKE_FLOOR, needleW);
+    const cut = cutNecks(dropSpikes(simple, SPIKE_FLOOR, needleW), neckW, SPIKE_FLOOR);
+
+    // LAST GATE, AND IT IS NOT DECORATION.
+    //
+    // Every stage above can remove points, each has its own floor, and
+    // the floors are per-stage — so a pathological ring can walk down
+    // through all of them and arrive with two points, which splinePath
+    // correctly refuses to make a shape out of. A probe caught exactly
+    // that and the chip rendered an EMPTY path: no outline, no wash, a
+    // blank square where a claim should be. Whatever else the cleanup
+    // decides, the answer has to be a shape.
+    const drawn =
+      cut.length >= 3
+        ? cut
+        : simple.length >= 3
+          ? simple
+          : clean.length >= 3
+            ? clean
+            : fitted;
 
     // DRAWN AS A CURVE, NOT A POLYGON.
     //
