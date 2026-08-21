@@ -131,6 +131,33 @@ export function ownerColorRgb(id: string): [number, number, number] {
   return hsl(paintFor(id));
 }
 
+// THE SAME COLOUR, DARK ENOUGH TO BE A LINE.
+//
+// Everything above was tuned for PAINT: a 42% fill over pale map paper,
+// scored composited rather than raw, because that is how the map shows
+// it. A stroke on a white card is the other case entirely, and the
+// palette fails it — measured against white, eight of the sixteen hues
+// in the light tone come in under 1.6:1, and the yellow at 1.24:1 is a
+// line you cannot see. A blob at that contrast still reads (it is mass);
+// a 2px dashed outline does not.
+//
+// Scaling lightness by 0.62 puts the worst case at 2.03:1 and leaves the
+// two tones 0.036 apart in luminance — so a hue collision is still two
+// visibly different lines, which is the whole reason there are two tones.
+//
+// Only the hashed palette is touched. Your own brand blue arrives as
+// rgb() and is returned untouched: it is already 6.8:1 on white, and it
+// is an identity colour that must be the same blue everywhere it appears
+// — the map's first job is answering "is this mine".
+const HSL_CSS = /^hsl\(\s*([\d.]+)\s*,\s*([\d.]+)%\s*,\s*([\d.]+)%\s*\)$/;
+const LINE_DARKEN = 0.62;
+
+export function lineColorCss(css: string): string {
+  const m = HSL_CSS.exec(css);
+  if (!m) return css;
+  return `hsl(${m[1]}, ${m[2]}%, ${Math.round(Number(m[3]) * LINE_DARKEN)}%)`;
+}
+
 // Even-odd ray cast in raw degrees — the projection cancels out of an
 // inside/outside test. Shared so the ground and the buildings decide
 // which zone a spot belongs to the same way.

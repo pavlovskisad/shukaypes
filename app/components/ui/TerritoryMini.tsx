@@ -1,80 +1,63 @@
 // A territory, small enough to sit next to a name.
 //
-// The board draws each owner's LARGEST piece as a silhouette in their
-// colour — the same shape their claim has on the map, so a player who has
-// walked past "the red blob by the fountain" recognises it in the
-// standings. It is identity, not measurement: the miniature is normalised
-// to fit its box, so a huge claim and a modest one draw at the same size
-// and the area counter next to it stays the honest number.
+// The board draws each owner's LARGEST piece in their colour — the same
+// shape their claim has on the map, so a player who has walked past "the
+// red blob by the fountain" recognises it in the standings. It is
+// identity, not measurement: the miniature is normalised to fit its box,
+// so a huge claim and a modest one draw at the same size and the area
+// counter next to it stays the honest number.
 //
 // Raw DOM <svg>, the ProfileSceneBackdrop pattern — react-native-web
 // passes it straight through, and the quests tab is already web-committed
 // (it injects keyframes into document.head). No native path exists yet;
 // the native map itself is a stub.
 //
-// A HEAT BLOB WITH HARD EDGES — CONTOURS, NOT BLUR.
+// A CLAIMED FIELD: PALE INSIDE, DASHED AT THE EDGE.
 //
-// This is the third construction, and the first two are why it looks
-// like this. Both built the chip the way the MAP builds its field: blur
-// the shape into a coverage field, then threshold that field into
-// bands. On the map that is right — a claim is hundreds of pixels wide,
-// so the blurred ramp lands entirely in the border and the interior is
-// a solid, evenly-held body. Shrink the same construction to 92px and
-// both halves fail: the ramp is a quarter of the whole chip (fog), and
-// tightening it until the edge is crisp leaves the interior a single
-// flat step — a sticker in the owner's colour, with none of the heat.
+// Three constructions came before this one and all three were trying to
+// reproduce the MAP's finish — a soft heat field, blurred at the border
+// and hot in the core. The last of them got close (contour bands eroded
+// inward, hard steps, density building toward the middle) and it is gone
+// anyway, because reproducing the map's finish was never the job. What a
+// row needs is a SHAPE you can recognise, and a blob with a soft edge is
+// the one thing a shape cannot survive at 92px: the outline is where the
+// identity lives, and every version so far spent its best pixels
+// dissolving exactly that.
 //
-// So the bands are drawn as CONTOURS instead. Each is the silhouette
-// eroded a little further inward (feMorphology, a true offset — not a
-// blur, which would round the shape away), filled at the same modest
-// alpha, and stacked: where four bands overlap the colour has built up
-// four times, so density rises toward the middle exactly as a heat
-// field does, while every band boundary stays a hard step. Crisp, and
-// hot in the core.
+// So the outline is now the loudest thing in the chip — a dashed stroke
+// at full strength — and the fill drops to a wash behind it. Dashed
+// rather than solid because a claim is a boundary somebody walked, not a
+// fence: the same reason a surveyor's plot and a national border are
+// drawn broken on every map that isn't trying to say "wall".
 //
-// What carries over from the map unchanged: the owner's hue and the
-// fill alpha its palette was contrast-tuned at. Two of the map's stages
-// are deliberately absent, both for the same reason — they need room a
-// 92px chip hasn't got:
-//
-//   PUFF RELIEF. feDiffuseLighting reproduces it exactly, but at this
-//   size it only ever lands on the outermost band, darkening it to a
-//   grey ring that reads as a blurry drop shadow around the chip.
-//
-//   THE EDGE MEANDER. Turbulence bends the map's borders so they don't
-//   look machined; here it fed the erosions a fuzzy edge and the bands
-//   came back melted together. A claim's outline is the hull of a walk
-//   — it already meanders without help.
+// KNOWN AND ACCEPTED: the chip no longer matches the map's finish. The
+// map paints territory as a soft field with deliberately no borders (see
+// TerritoryLayer's header, which argues that case at length and is still
+// right — at city scale, over three hundred pixels of ground, an outline
+// reads as a diagram). The SHAPE is what carries between the two, and
+// that is unchanged: same hull, same proportions, north up.
 
-import React, { useId, useMemo } from 'react';
+import { useMemo } from 'react';
+import { lineColorCss } from '../map/territoryColor';
 
-// Big enough that the erosion steps survive rasterisation, small enough
-// that 48-corner polygons stay cheap. Rendered size is per-use.
+// Big enough that a 48-corner hull keeps its corners, small enough to
+// stay cheap on a sheet holding a hundred of these. Rendered size is
+// per-use.
 const BOX = 64;
-// Breathing room inside the box. The field no longer spreads past the
-// polygon — the outermost contour IS the polygon — so this is much
-// tighter than the blurred versions needed, and the silhouette is
-// correspondingly bigger in its box.
-const PAD = 6;
+// Breathing room inside the box — the stroke is centred on the outline,
+// so half of STROKE_W hangs outside the polygon and has to fit.
+const PAD = 5;
 
-// ── Contours ────────────────────────────────────────────────────────
-// Erosion depth per band, in viewBox units, outermost first. The first
-// is zero: band one is the claim's true outline, so the shape a player
-// recognises from the map is drawn exactly, and every hotter band sits
-// inside it. Depths are uneven on purpose — tight near the edge where
-// the eye reads contour spacing as steepness, wider toward the middle
-// so the core reads as a plateau rather than a bullseye.
-const CONTOURS = [0, 2.4, 5.2, 8.6];
-// Alpha PER BAND, not cumulative. Four of these stack to ~0.55 in the
-// core; the map's field peaks at 0.42 over pale paper, and the chip
-// sits on a white card, so a slightly higher peak lands at the same
-// density. The outermost band alone is the palest — the claim's cool
-// fringe.
-const BAND_ALPHA = 0.18;
-// Just enough blur to put back the antialiasing erosion throws away.
-// Any more and the steps start to smear into each other, which is the
-// fog this construction exists to replace.
-const EDGE_SOFTEN = 0.3;
+// In viewBox units. At the board's 92px the box scales by ~1.44, so
+// these land at ~2.9px of ink and a ~7px dash — chunky enough to read as
+// a drawn boundary rather than a hairline, at the size it is actually
+// seen.
+const STROKE_W = 2;
+const DASH = '5 3.5';
+// The wash behind the line. Low, because the line is doing the work: at
+// anything denser the chip goes back to being a coloured blob with a
+// decoration around it.
+const FILL_ALPHA = 0.22;
 
 export function TerritoryMini({
   points,
@@ -85,11 +68,6 @@ export function TerritoryMini({
   color: string;
   size: number;
 }) {
-  // One filter id per mounted instance — ids are document-global in SVG,
-  // and ten board rows all pointing at the first row's filter is the
-  // kind of bug that only shows once a row unmounts.
-  const uid = useId().replace(/[^a-zA-Z0-9_-]/g, '');
-  const fid = `tm-field-${uid}`;
   const pts = useMemo(() => {
     if (!points || points.length < 3) return null;
     // Locally flat projection: metres east vs metres north (scaled by
@@ -116,80 +94,31 @@ export function TerritoryMini({
       .join(' ');
   }, [points]);
 
+  // One shape, one wash, one dashed edge — the same paint whether we have
+  // a real hull or the placeholder. No piece to draw (an older server, or
+  // ground lost mid-read) falls back to a circle: a claim we cannot draw,
+  // drawn as the most neutral shape there is, rather than a gap in the
+  // column where every other row has something.
+  // The wash is the owner's colour as the map paints it; the line is the
+  // same colour taken down far enough to BE a line on a white card — see
+  // lineColorCss, which measures the case the palette was never scored
+  // for. Your own blue passes through unchanged.
+  const paint = {
+    fill: color,
+    fillOpacity: FILL_ALPHA,
+    stroke: lineColorCss(color),
+    strokeWidth: STROKE_W,
+    strokeDasharray: DASH,
+    strokeLinejoin: 'round' as const,
+    strokeLinecap: 'round' as const,
+  };
+
   return (
-    <svg
-      viewBox={`0 0 ${BOX} ${BOX}`}
-      width={size}
-      height={size}
-      aria-hidden
-      style={{ overflow: 'visible' }}
-    >
-      <defs>
-        <filter
-          id={fid}
-          x="-15%"
-          y="-15%"
-          width="130%"
-          height="130%"
-          // sRGB, not the filter default of linearRGB: the map composites
-          // in sRGB, and in linear the same alphas come out visibly paler.
-          colorInterpolationFilters="sRGB"
-        >
-          {/* No blur and no meander before the contours, and both were
-              tried. Softening the silhouette first, or bending it with
-              turbulence, feeds every erosion below a fuzzy edge — the
-              bands come back melted into one another, which is the
-              gradient this construction exists to replace. A real
-              claim's outline already meanders (it is the hull of a walk);
-              it does not need noise to look organic. */}
-          <feFlood floodColor={color} result="hue" />
-
-          {CONTOURS.map((depth, i) => (
-            <React.Fragment key={i}>
-              {/* Erode inward — a true offset of the outline, so a
-                  claim's fingers and inlets survive as contour detail
-                  instead of being rounded away. Depth 0 passes the
-                  silhouette through untouched. */}
-              {depth > 0 ? (
-                <feMorphology
-                  in="SourceAlpha"
-                  operator="erode"
-                  radius={depth}
-                  result={`e${i}`}
-                />
-              ) : null}
-              <feComponentTransfer in={depth > 0 ? `e${i}` : 'SourceAlpha'} result={`m${i}`}>
-                <feFuncA type="linear" slope={BAND_ALPHA} intercept={0} />
-              </feComponentTransfer>
-              <feComposite in="hue" in2={`m${i}`} operator="in" result={`band${i}`} />
-            </React.Fragment>
-          ))}
-
-          {/* Stacked, so the colour builds up where the bands overlap —
-              which is what makes the core hot without any band being
-              painted darker than the rest. */}
-          <feMerge result="bands">
-            {CONTOURS.map((_, i) => (
-              <feMergeNode key={i} in={`band${i}`} />
-            ))}
-          </feMerge>
-          {/* ONE softening pass over the finished stack rather than one
-              per band: erosion returns a hard aliased edge (it takes the
-              minimum over its kernel, which throws the antialiasing
-              away), and this puts just enough back. Doing it once is
-              four primitives cheaper on a sheet that can hold a hundred
-              of these. */}
-          <feGaussianBlur in="bands" stdDeviation={EDGE_SOFTEN} />
-        </filter>
-      </defs>
-      {/* The source is a bare silhouette — every band above is the
-          filter's doing. No shape (older server, or ground lost
-          mid-read) falls back to a disc, which the same contours turn
-          into the same kind of blob. */}
+    <svg viewBox={`0 0 ${BOX} ${BOX}`} width={size} height={size} aria-hidden>
       {pts ? (
-        <polygon points={pts} fill="#000" filter={`url(#${fid})`} />
+        <polygon points={pts} {...paint} />
       ) : (
-        <circle cx={BOX / 2} cy={BOX / 2} r={BOX / 4} fill="#000" filter={`url(#${fid})`} />
+        <circle cx={BOX / 2} cy={BOX / 2} r={BOX / 2 - PAD} {...paint} />
       )}
     </svg>
   );
