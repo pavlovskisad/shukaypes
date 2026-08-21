@@ -72,6 +72,11 @@ const ALLOWED = new Map<string, string>([
   // it is a date, an address or the remains of a phone number — and
   // redacted on top of that. No contact can survive both rules.
   ['db/probe-crosspost.ts', 'prints a digit-free descriptive phrase to search for'],
+  // Reads bodies to find the PLACE NAMES in them and compare those to
+  // where the pet was pinned. It prints pet names, gazetteer street
+  // names and distances — never a line of the ad — so no contact can
+  // reach the output.
+  ['db/audit-pins.ts', 'matches place names in bodies against the pin, prints distances'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
   // Only asks `raw_body is not null` to PICK a candidate ad to probe —
   // it never selects the column. And it masks every digit it prints, so
