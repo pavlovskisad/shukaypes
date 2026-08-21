@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { MapLibreMarker } from './MapLibreMarker';
 import { useGameStore } from '../../stores/gameStore';
@@ -16,6 +16,8 @@ import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import type { WalkStop } from '../../utils/walk';
 import { useMaplibreMap } from './MapContext';
+import { ROUTE_DRAW_MS } from './CrayonRoute';
+import { distanceMeters } from '../../utils/geo';
 
 // The landmarks a planned walk goes through, on the map.
 //
@@ -60,9 +62,37 @@ const STOP_DOT_HIT_PAD = 12;
 // at any zoom.
 const STOP_OPEN_DROP_PX = 150;
 
+const POP_KEYFRAMES = `
+  @keyframes walk-stop-pop {
+    0%   { transform: scale(0); opacity: 0; }
+    100% { transform: scale(1); opacity: 1; }
+  }
+`;
+
 export function WalkStops() {
   const map = useMaplibreMap();
   const stops = useGameStore((s) => s.walkStops);
+  const route = useGameStore((s) => s.walkRoute);
+  // Each stop pops when the drawing line reaches it. `alongM` is metres
+  // from the start of the walk, so the delay is just that as a fraction
+  // of the route's length, on the same clock CrayonRoute draws with.
+  // Measured against the real path rather than staggered evenly by
+  // index: stops are not evenly spaced, and an even stagger drifts
+  // visibly out of step with the line on a walk with a long final leg.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    if (document.getElementById('walk-stop-pop-style')) return;
+    const el = document.createElement('style');
+    el.id = 'walk-stop-pop-style';
+    el.textContent = POP_KEYFRAMES;
+    document.head.appendChild(el);
+  }, []);
+  const routeLenM = useMemo(() => {
+    if (!route || route.length < 2) return 0;
+    let sum = 0;
+    for (let i = 1; i < route.length; i++) sum += distanceMeters(route[i - 1]!, route[i]!);
+    return sum;
+  }, [route]);
   const openId = useGameStore((s) => s.openWalkStopId);
   const setOpenWalkStop = useGameStore((s) => s.setOpenWalkStop);
 
@@ -74,6 +104,11 @@ export function WalkStops() {
           key={stop.id}
           stop={stop}
           open={openId === stop.id}
+          popDelayMs={
+            routeLenM > 0
+              ? Math.min(ROUTE_DRAW_MS, (stop.alongM / routeLenM) * ROUTE_DRAW_MS)
+              : 0
+          }
           onToggle={() => {
             const opening = openId !== stop.id;
             setOpenWalkStop(opening ? stop.id : null);
@@ -96,10 +131,12 @@ export function WalkStops() {
 function StopMarker({
   stop,
   open,
+  popDelayMs,
   onToggle,
 }: {
   stop: WalkStop;
   open: boolean;
+  popDelayMs: number;
   onToggle: () => void;
 }) {
   const t = useStrings();
@@ -244,6 +281,11 @@ function StopMarker({
               borderRadius: R.pill,
               background: colors.walkStop,
               boxShadow: '0 2px 6px rgba(0,0,0,0.25)',
+              // `both` fill so the dot is invisible through its delay
+              // instead of sitting there and then jumping. The overshoot
+              // curve is the one the radial menu and the HUD pills
+              // already use, so a stop arriving reads as the same hand.
+              animation: `walk-stop-pop 320ms cubic-bezier(0.34,1.56,0.64,1) ${Math.round(popDelayMs)}ms both`,
             }}
           />
         </div>

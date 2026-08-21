@@ -3221,7 +3221,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               background: SURFACE.fill,
               color: INK,
               borderRadius: R.pill,
-              border: SURFACE.hair,
+              // No edge. This is a readout — it tells you how far, you
+              // never press it — and readouts lost their ink with the
+              // HUD meters. The ✕ beside it keeps its edge, because
+              // that one is a control.
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.body,
               fontWeight: 800,
