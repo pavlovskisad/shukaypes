@@ -47,7 +47,9 @@
 // hand-drawn border in the app uses. A dozen hard corners at 92px read
 // as a cut-out; the same dozen points on a smooth line read as a place.
 // The curve passes through every one of them, so the corners stay where
-// the ground turns — they are only no longer sharp.
+// the ground turns — they are only no longer sharp. It is drawn at
+// PART curvature (see ROUNDNESS): the full curve made pebbles of the
+// claims, and ground has corners on it.
 //
 // KNOWN AND ACCEPTED: the chip no longer matches the map's finish. The
 // map paints territory as a soft field with deliberately no borders (see
@@ -84,6 +86,18 @@ const DASH = '3.6 2.6';
 // anything denser the chip goes back to being a coloured blob with a
 // decoration around it.
 const FILL_ALPHA = 0.22;
+
+// HOW MUCH OF A CURVE, on the scale splinePath takes: 1 is the full
+// Catmull-Rom, 0 is the polygon it was fitted to.
+//
+// It went out at 1 and came back as too rounded, which is fair — a claim
+// is ground with corners on it, and at full curvature the chips started
+// to read as pebbles. This is the dial between the two complaints: at
+// 0.55 a corner still turns rather than folds, but it turns over a short
+// enough run that the straight between two corners is visibly straight.
+// Nothing about which corners exist changes; only how sharply each one
+// is taken.
+const ROUNDNESS = 0.55;
 
 // ── Simplification ──────────────────────────────────────────────────
 // HOW MUCH DETAIL IS TOO SMALL TO BE DETAIL, in RENDERED pixels.
@@ -489,6 +503,7 @@ export function TerritoryMini({
     return splinePath(
       drawn.map(([x, y]) => ({ x, y })),
       true,
+      ROUNDNESS,
     );
   }, [points, size]);
 

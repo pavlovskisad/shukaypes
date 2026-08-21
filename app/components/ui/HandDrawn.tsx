@@ -234,7 +234,19 @@ const CR_ALPHA = 0.5;
 // through these points" — the territory chips on the board run their
 // simplified outlines through it so a claim reads as a drawn shape
 // rather than a polygon. Same curve, same reasoning, one implementation.
-export function splinePath(pts: { x: number; y: number }[], closed: boolean): string {
+//
+// `roundness` pulls both control handles back toward the points they
+// belong to: 1 is the full Catmull-Rom curve, 0 puts every handle ON its
+// own knot, which is a cubic that draws a straight line — so the same
+// path data spans "curve" and "polygon" with one number and no second
+// code path. Everything between is a corner that turns over a shorter
+// run. Defaulted to 1 so every hand-drawn border is byte-identical; the
+// territory chip is the only caller that asks for less.
+export function splinePath(
+  pts: { x: number; y: number }[],
+  closed: boolean,
+  roundness = 1,
+): string {
   const n = pts.length;
   if (n < 2) return '';
   const at = (i: number) => pts[closed ? ((i % n) + n) % n : Math.max(0, Math.min(n - 1, i))]!;
@@ -257,7 +269,16 @@ export function splinePath(pts: { x: number; y: number }[], closed: boolean): st
     const c2y =
       (d3 * d3 * p1.y - d2 * d2 * p3.y + (2 * d3 * d3 + 3 * d3 * d2 + d2 * d2) * p2.y) /
       (3 * d3 * (d3 + d2));
-    d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
+    // Handles pulled toward their own knot — see `roundness`. The full
+    // curve short-circuits rather than multiplying by 1: p + (c - p) is
+    // the identity in algebra and not quite in floating point, and every
+    // hand-drawn border in the app takes this branch.
+    const full = roundness === 1;
+    const h1x = full ? c1x : p1.x + (c1x - p1.x) * roundness;
+    const h1y = full ? c1y : p1.y + (c1y - p1.y) * roundness;
+    const h2x = full ? c2x : p2.x + (c2x - p2.x) * roundness;
+    const h2y = full ? c2y : p2.y + (c2y - p2.y) * roundness;
+    d += ` C ${h1x.toFixed(2)} ${h1y.toFixed(2)} ${h2x.toFixed(2)} ${h2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
   }
   return closed ? `${d} Z` : d;
 }
