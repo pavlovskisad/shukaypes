@@ -50,8 +50,16 @@ const MIN_PLACE_CHARS = 6;
 
 // What somebody writes in front of a name when they mean a place. The
 // text is normalised before this runs, so «вул.» is already «вул».
+// Written against the EXPANDED forms, because normalisePlaceText has
+// already turned «вул.» into «вулиця» by the time this runs. The first
+// version listed the abbreviations and stopped matching the moment
+// expansion landed — the marker silently went missing and every address
+// downgraded to a bare name.
+//
+// The trailing \p{L}{0,3} carries the case ending: «на вулиці Садовій»,
+// «в районі», «біля станції» are all how this appears in a real post.
 const MARKERS =
-  /(вул|вулиц|просп|проспект|бульвар|площ|провул|мкр|масив|район|селищ|село|смт|метро|станц|жм)\s*$/;
+  /(вулиц|проспект|бульвар|площ|провул|мікрорайон|масив|район|селищ|село|смт|метро|станц)\p{L}{0,3}\s*$/u;
 
 // A street is a block; a district is four kilometres across. When both
 // match, the narrower one is the more useful answer — and when only a
@@ -66,12 +74,58 @@ const SPECIFICITY: Record<string, number> = {
   district: 1,
 };
 
+// ABBREVIATIONS, EXPANDED ON BOTH SIDES.
+//
+// «Оболонський р-н» and «Оболонський район» are the same words, and the
+// first is how people type. Stripping punctuation turns «р-н» into
+// «р н», which matches nothing — so the gazetteer entry «Оболонський
+// район» was invisible to any ad that abbreviated it, and the audit
+// counted those ads as naming no place at all.
+//
+// Expanding is better than stemming harder here. Stemming «район» to
+// «рай» would match «райдужний» and every other word starting that way;
+// spelling the abbreviation out leaves an exact, unambiguous token. Run
+// over the gazetteer name too, so both sides normalise to one form and
+// neither has to know what the other did.
+// Matched on TOKENS, not with \b. JavaScript's \b is ASCII-only: «й» is
+// not a word character to the engine, so /\bр н\b/ never fires inside
+// Cyrillic text and the whole expansion silently does nothing. The
+// fixture for «Солом'янський р-н» caught that on the first run.
+const ABBREV_PAIRS: Record<string, string> = {
+  'р н': 'район',
+  'пр т': 'проспект',
+  'ж м': 'житловий масив',
+};
+const ABBREV_WORDS: Record<string, string> = {
+  рн: 'район',
+  вул: 'вулиця',
+  ул: 'вулиця',
+  просп: 'проспект',
+  бул: 'бульвар',
+  пров: 'провулок',
+  мкр: 'мікрорайон',
+};
+
 export function normalisePlaceText(s: string): string {
-  return s
+  const tokens = s
     .toLowerCase()
     .replace(/['’ʼ`]/g, '')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
-    .trim();
+    .trim()
+    .split(' ')
+    .filter(Boolean);
+
+  const out: string[] = [];
+  for (let i = 0; i < tokens.length; i++) {
+    const pair = `${tokens[i]} ${tokens[i + 1] ?? ''}`;
+    if (ABBREV_PAIRS[pair]) {
+      out.push(ABBREV_PAIRS[pair]!);
+      i++;
+      continue;
+    }
+    out.push(ABBREV_WORDS[tokens[i]!] ?? tokens[i]!);
+  }
+  return out.join(' ');
 }
 
 // UKRAINIAN INFLECTS, AND THE FIRST VERSION OF THIS DID NOT KNOW.
