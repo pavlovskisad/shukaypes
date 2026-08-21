@@ -144,7 +144,7 @@ async function fetchText(url: string): Promise<string> {
 // drop a real one over a missing word.
 const KYIV_WORDS = /Київ|Києв|Киев|Kyiv|Kiev/i;
 const OTHER_CITIES =
-  /Харків|Харьков|Kharkiv|Львів|Львов|Lviv|Одес|Odes|Дніпро|Днепр|Dnipro|Запоріж|Запорож|Zapor|Вінниц|Винниц|Vinnyts|Полтав|Poltav|Черкас|Cherkas|Чернігів|Чернигов|Chernihiv|Житомир|Zhytomyr|Миколаїв|Николаев|Mykolaiv|Херсон|Kherson|Тернопіль|Тернополь|Ternopil|Ужгород|Uzhhorod|Івано-Франківськ|Ивано-Франковск|Луцьк|Луцк|Lutsk|Рівне|Ровно|Rivne|Суми|Сумы|Sumy|Кропивницьк|Кировоград|Хмельницьк|Хмельницк/i;
+  /Харків|Харьков|Kharkiv|Львів|Львов|Lviv|Одес|Odes|Дніпро|Днепр|Dnipro|Запоріж|Запорож|Zapor|Вінниц|Винниц|Vinnyts|Полтав|Poltav|Черкас|Cherkas|Чернігів|Чернигов|Chernihiv|Житомир|Zhytomyr|Миколаїв|Николаев|Mykolaiv|Херсон|Kherson|Тернопіль|Тернополь|Ternopil|Ужгород|Uzhhorod|Івано-Франківськ|Ивано-Франковск|Луцьк|Луцк|Lutsk|Рівне|Ровно|Rivne|Суми|Сумы|Sumy|Кропивницьк|Кировоград|Хмельницьк|Хмельницк|Красилів|Красилов|Заліщик|Залещик/i;
 
 // Exported so the backfill sweep judges already-ingested pets by exactly
 // the same test as the gate — two copies of this rule would drift, and

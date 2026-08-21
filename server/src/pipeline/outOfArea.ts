@@ -102,6 +102,39 @@ const CITIES: CityPattern[] = [
   { label: 'Obukhiv', stems: ['обухів', 'obukhiv'] },
   { label: 'Fastiv', stems: ['фастів', 'fastiv'] },
   { label: 'Beremytske', forms: ['беремицьке', 'беремицького'] },
+  // Observed on the fall-through pin, August: an ad reading «районі
+  // Левади в Красилові». The і→о alternation is why both stems are
+  // here — Красилів becomes Красилова, and matching only the
+  // nominative finds neither.
+  { label: 'Krasyliv', stems: ['красилів', 'красилов', 'krasyliv'] },
+  // Named in an OLX ad the scraper fetched and was refused: «пропала
+  // собака в околиці м. Заліщики».
+  { label: 'Zalishchyky', stems: ['заліщик', 'залещик', 'zalishchyky'] },
+
+  // DISTRICTS OF OTHER CITIES, which the city list cannot see.
+  //
+  // «АНД районі» is Амур-Нижньодніпровський район — Dnipro — and the ad
+  // never says Dnipro, so every city stem above misses it. Same shape
+  // for «Хортицький район» in Zaporizhzhia. These sat on the
+  // fall-through pin looking exactly like unplaceable Kyiv pets.
+  //
+  // They have to be MULTI-WORD. A bare «хортицьк» is adjectival, and
+  // the rule above rejects adjectival forms on purpose, because that is
+  // what tells a Kyiv street named after a city from the city itself.
+  // Pairing the stem with «район» restores the signal that the
+  // adjective ending removed.
+  //
+  // Each inflection is listed rather than derived: multi-word stems are
+  // matched by plain substring, so «Хортицькому районі» needs its own
+  // entry. Better an obvious list than a clever rule nobody can audit.
+  {
+    label: 'Dnipro (AND district)',
+    stems: ['анд район', 'анд р н', 'амур нижньодніпровськ'],
+  },
+  {
+    label: 'Zaporizhzhia (Khortytskyi district)',
+    stems: ['хортицький район', 'хортицькому район', 'хортицкий район'],
+  },
 ];
 
 // DELIBERATELY ABSENT: Bucha, Irpin, Brovary, Boryspil, Vyshhorod,
