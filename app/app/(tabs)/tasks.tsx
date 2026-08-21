@@ -125,7 +125,7 @@ export default function TasksScreen() {
   const lostDogs = useGameStore((s) => s.lostDogs);
   const lostDogsLoaded = useGameStore((s) => s.lostDogsLoaded);
   const userPos = useGameStore((s) => s.userPosition);
-  const setSelectedDog = useGameStore((s) => s.setSelectedDog);
+  const setSearchIntent = useGameStore((s) => s.setSearchIntent);
   const currentScreen = useGameStore((s) => s.currentScreen);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
   // The territory standing. Null until the first fetch settles; a
@@ -188,16 +188,23 @@ export default function TasksScreen() {
     persist: false,
   });
 
-  // Tapping a dog (card or "see all" row) jumps to the map with the
-  // pet selected — the map snaps the camera onto it and opens the
-  // LostDogModal there. Same pattern the spots tab uses (setSelected +
-  // route to '/'); no local modal on this tab anymore.
+  // Tapping a dog (card or "see all" row) jumps to the map and puts the
+  // dog's own «ходімо?» question up about that pet, in supersniff.
+  //
+  // It used to select the pet instead, which opened the preview sheet on
+  // the map: the same photo, the same name and the same distance as the
+  // card that had just been tapped, plus one button that started the
+  // search. Nothing on it was new, and the one thing it offered was the
+  // thing the tap already meant. The question is the destination now,
+  // and the pet's card is under it — with the ad one tap away on the
+  // photo, which is the only thing the sheet carried that the card
+  // does not.
   const onPickDog = useCallback(
     (dog: NearbyLostDog) => {
-      setSelectedDog(dog.id);
+      setSearchIntent(dog.id);
       router.push('/');
     },
-    [setSelectedDog, router],
+    [setSearchIntent, router],
   );
 
   // Tap a row on the standing → the map, landed on that owner's ground.

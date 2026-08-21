@@ -209,6 +209,18 @@ interface GameState {
   // into existence later and shoving the daily-quests card down.
   lostDogsLoaded: boolean;
   selectedDogId: string | null;
+  // "Go and look for THIS one" — set by a surface that is not the map
+  // (the quests tab's deck and its see-all list) and consumed by
+  // MapView, which turns supersniff on and puts the dog's own «ходімо?»
+  // question up. A tap over there used to select the pet instead, which
+  // opened the preview card on the map: a sheet with the same photo,
+  // the same name and the same distance as the card just tapped, and
+  // one button. The question IS the destination; the card in between
+  // was the app asking you to confirm you meant the thing you did.
+  //
+  // Cleared the moment MapView acts on it, so a second visit to the map
+  // does not re-ask.
+  searchIntentDogId: string | null;
   spots: Spot[];
   // Same logic as lastParksFetchPos — Google Places returns spots
   // within ~800m of the centre, so a long walk drifts off the cached
@@ -401,6 +413,8 @@ interface GameState {
   syncPresence: (pos: LatLng) => Promise<void>;
   pokePlayer: (targetId: string) => Promise<void>;
   setSelectedDog: (id: string | null) => void;
+  // See searchIntentDogId. Pass null to drop an intent unacted on.
+  setSearchIntent: (id: string | null) => void;
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
@@ -538,6 +552,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   markMood: null,
   lostDogsLoaded: false,
   selectedDogId: null,
+  searchIntentDogId: null,
   spots: [],
   lastSpotsFetchPos: null,
   spotsLoading: false,
@@ -1117,6 +1132,15 @@ export const useGameStore = create<GameState>((set, get) => ({
   setSelectedDog: (selectedDogId) => {
     set({ selectedDogId });
     if (selectedDogId) get().tickDailyTask('lostPetChecks');
+  },
+
+  setSearchIntent: (searchIntentDogId) => {
+    set({ searchIntentDogId });
+    // Same tick setSelectedDog does. Deciding to go and look for a pet
+    // is at least as much of a "check" as opening its card was, and the
+    // daily task should not quietly stop counting because the card in
+    // the middle went away.
+    if (searchIntentDogId) get().tickDailyTask('lostPetChecks');
   },
 
   syncSpots: async (pos) => {

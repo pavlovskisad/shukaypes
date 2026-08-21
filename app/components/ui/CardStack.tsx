@@ -404,11 +404,17 @@ export function CardStack<T>({
   // any low-travel release. Peek taps also route to onTap(topItem);
   // simpler than per-slot hit-testing and matches carousel
   // expectations ("the centre card is what you interact with").
-  // Both freeze while focused: the confirmation's answers are buttons,
-  // and a deck that still swiped under them could change WHICH dog is
-  // centred out from under the question being asked.
+  // THE PAN freezes while focused: a deck that still swiped under the
+  // confirmation's answers could change WHICH dog is centred out from
+  // under the question being asked.
+  //
+  // The tap does not. It was frozen alongside the pan and did not need
+  // to be — a tap moves nothing, so the question keeps its pet either
+  // way. What it cost was the one card on screen during the question
+  // being deaf, when the obvious thing to want from a photo of a lost
+  // animal is to read what its owner wrote. The caller decides what a
+  // tap means while focused; here it just still arrives.
   const tap = Gesture.Tap()
-    .enabled(!focused)
     .onEnd(() => {
       runOnJS(handleTap)();
     });
