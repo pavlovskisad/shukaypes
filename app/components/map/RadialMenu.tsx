@@ -121,12 +121,11 @@ const ICON_ROW_GAP = 16;
 // The bare discs have no such problem and were sitting in a 236px block
 // with ~77px of empty screen on either side. Same reasoning as
 // TEXT_ITEM.colGap: spread them toward the edges.
-// Sized so the row lands on the SAME margins as the four text answers
-// (see clampToScreen below): three 68px discs across 346px leaves 71
-// between them. A wide gap between three circles is not emptiness — it
-// is the row using the screen it is on, the way the answers above it
-// do.
-const ICON_ROW_GAP_WIDE = 71;
+// Matching the text answers' margins meant 71px between three 68px
+// discs, and that was too far: the answers are a block of reading that
+// wants the screen's width, three discs are one control that wants to
+// stay one control. Back to the modest spread.
+const ICON_ROW_GAP_WIDE = 34;
 
 // Three 68px discs and the two gaps between them.
 const ROW_MAX_W = 3 * BUTTON.size + 2 * ICON_ROW_GAP_WIDE;

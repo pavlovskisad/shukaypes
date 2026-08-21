@@ -32,6 +32,21 @@ const DEFAULT_AMP = 1.1;
 // potatoes: two slow waves around a short perimeter is a bow on a long
 // edge and a dent on a small one. So the amplitude scales with the
 // element down to a floor, and small things stay nearly round.
+
+// HOW MUCH PAPER SHOWS OUTSIDE THE LINE, in CSS px, on every surface
+// that draws one. A sticker has a margin of backing around its artwork
+// and that is the look; the amount just has to be the SAME everywhere,
+// which it was not — a card drew its line flush to its own edge while a
+// pill drew it 2px in, because the pill keeps a transparent border to
+// hold the size a real one gave it and an inset:0 overlay lands inside
+// that. One number now, applied from the border box out.
+//
+// It also has to clear DEFAULT_AMP, or on a big surface — where the
+// wobble runs at full amplitude — the line bows OUT past the paper it
+// is drawn on. Measured at 1: the pet cards came back at -0.44px, ink
+// hanging over the edge.
+export const PAPER_EDGE = 1.5;
+
 const AMP_FULL_AT_PX = 150;
 const AMP_MIN_SCALE = 0.3;
 
@@ -275,6 +290,14 @@ export function handDrawnRectPath(
 function useBoxSize() {
   const ref = useRef<HTMLDivElement | null>(null);
   const [size, setSize] = useState<{ w: number; h: number }>({ w: 0, h: 0 });
+  // How wide the HOST's border is. Several of these elements keep a
+  // transparent 2px border purely to hold the size a real one gave them
+  // (see MODAL_PILL_LIGHT), and an absolutely-positioned child at
+  // inset:0 lands on the PADDING box — 2px inside the paper's real
+  // edge. Left alone, those surfaces showed 2px of white outside the
+  // ink while a card with no border showed none, which is the "some
+  // bigger, some smaller" the frames were called out for.
+  const [hostBorder, setHostBorder] = useState(0);
   useLayoutEffect(() => {
     const el = ref.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
@@ -288,6 +311,13 @@ function useBoxSize() {
     // The layout size is the honest one, and the SVG is scaled by the
     // same transform as everything else afterwards.
     const read = () => {
+      const host = el.parentElement;
+      const bw = host
+        ? Math.round(parseFloat(getComputedStyle(host).borderTopWidth) || 0)
+        : 0;
+      setHostBorder((prev) => (prev === bw ? prev : bw));
+      // With `inset: -hostBorder` below, this div spans the host's
+      // BORDER box — the outline of the paper itself.
       const w = el.offsetWidth;
       const h = el.offsetHeight;
       setSize((prev) => (prev.w === w && prev.h === h ? prev : { w, h }));
@@ -296,8 +326,8 @@ function useBoxSize() {
     const ro = new ResizeObserver(read);
     ro.observe(el);
     return () => ro.disconnect();
-  }, []);
-  return { ref, size };
+  }, [hostBorder]);
+  return { ref, size, hostBorder };
 }
 
 // A single drawn rule, for the places that ink one edge rather than
@@ -516,16 +546,19 @@ export function HandDrawnFrame({
   amp,
   open,
 }: FrameProps) {
-  const { ref, size } = useBoxSize();
+  const { ref, size, hostBorder } = useBoxSize();
   // One seed per mount when the caller has nothing stable to offer. In
   // state, not a ref computed inline, so a re-render never re-rolls it.
   const [ownSeed] = useState(() => Math.floor(Math.random() * 1e9));
-  const inset = strokeWidth / 2;
+  // Where the line sits, measured from the paper's outer edge: PAPER_EDGE
+  // of white, then the stroke. Same number on a card, a pill, a disc and
+  // a close button — see the constant.
+  const inset = PAPER_EDGE + strokeWidth / 2;
   const d =
     size.w > 0
       ? handDrawnRectPath(
-          size.w - strokeWidth,
-          size.h - strokeWidth,
+          size.w - inset * 2,
+          size.h - inset * 2,
           Math.max(0, radius - inset),
           seed ?? ownSeed,
           { ...(amp != null ? { amp } : {}), ...(open ? { open } : {}) },
@@ -537,7 +570,10 @@ export function HandDrawnFrame({
       aria-hidden
       style={{
         position: 'absolute',
-        inset: 0,
+        // Out to the host's BORDER box, so the ink is measured from the
+        // edge of the paper rather than from the inside of a border that
+        // is only there to hold a size. See useBoxSize.
+        inset: -hostBorder,
         pointerEvents: 'none',
         // Above the element's own content — this is its edge, and an
         // edge that a photo can paint over is not an edge.

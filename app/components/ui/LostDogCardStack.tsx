@@ -16,7 +16,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
 import type { LatLng } from '@shukajpes/shared';
 import { CardStack, CardStackSkeleton } from './CardStack';
-import { HandDrawnFrame, HandDrawnPaperTop } from './HandDrawn';
+import { HandDrawnFrame, HandDrawnPaperTop, PAPER_EDGE } from './HandDrawn';
 import { Icon } from './Icon';
 import { INLINE_ICON } from '../../constants/sizing';
 
@@ -98,7 +98,11 @@ export function LostDogCardStack({
 // module keep working without a churning rename across the app.
 export const LostDogCardStackSkeleton = CardStackSkeleton;
 
-// Photo full-bleed, with an inked white label band across the bottom
+// How far the photo sits inside the card: the paper margin the drawn
+// line is measured from, plus the line itself. See PAPER_EDGE.
+const PHOTO_INSET = PAPER_EDGE + 2;
+
+// Photo mounted on paper, with an inked white label band across the bottom
 // carrying name + breed on the left and how far away on the right.
 // No photo → soft grey card with the emoji centred. Exported so the
 // "see all" modal can render the same visual at a wider size.
@@ -174,26 +178,27 @@ export function LostDogCardView({
         // CSS-level guaranteed fill regardless of the photo's
         // intrinsic aspect ratio.
         //
-        // NO borderRadius here — the parent card already has
-        // borderRadius + overflow:hidden which clips this div
-        // to the card's rounded shape.
-        //
-        // transform: scale(1.04) gives the photo a 2 % overshoot
-        // on each side, which the card's overflow:hidden clips
-        // away. Belt-and-braces against sub-pixel rendering
-        // gaps along the edges — even when scale(0.74) on the
-        // peek cards quantises differently per axis, the photo
-        // still reaches all four card edges. User's "lil zoom"
-        // suggestion was the right call.
+        // The 4% overshoot that used to live here is gone with the
+        // full bleed it existed for: it guaranteed the photo reached
+        // all four card edges through sub-pixel rounding, and reaching
+        // the edges is now exactly what it must NOT do. It also swallowed
+        // the mount whole — 4% of a 320px card is 6px, against a 3.5px
+        // inset.
         <div
           style={{
             position: 'absolute',
-            inset: 0,
+            // INSIDE the drawn line, not under it. A pet's photo used to
+            // run to the card's own edge, so the sliver of surface that
+            // shows outside the ink was blue sky or somebody's pavement
+            // rather than white paper — the card read as a photo with a
+            // line on it instead of as a photo mounted on a card. Now
+            // it is a mount: white, then the line, then the picture.
+            inset: PHOTO_INSET,
+            borderRadius: Math.max(0, R.card - PHOTO_INSET),
             backgroundImage: `url("${dog.photoUrl}")`,
             backgroundSize: 'cover',
             backgroundPosition: 'center center',
             backgroundRepeat: 'no-repeat',
-            transform: 'scale(1.04)',
           }}
         />
       ) : (
@@ -253,13 +258,14 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 6,
   },
+  // The no-photo fallback takes the same mount as the photo above.
   photo: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    borderRadius: R.card,
+    top: PHOTO_INSET,
+    left: PHOTO_INSET,
+    right: PHOTO_INSET,
+    bottom: PHOTO_INSET,
+    borderRadius: Math.max(0, R.card - PHOTO_INSET),
   },
   photoFallback: {
     alignItems: 'center',
