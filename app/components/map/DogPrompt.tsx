@@ -31,6 +31,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { INK, SURFACE } from '../../constants/surface';
+import { HandDrawnFrame } from '../ui/HandDrawn';
 
 export interface PromptAction {
   label: string;
@@ -75,11 +76,13 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
           onClick={a.onPress}
           style={{
             appearance: 'none',
-            // The house edge — same ink on both, so the two buttons are
+            // The house edge — same 2px on both, so the two buttons are
             // the same size and only their fill says which is the
-            // answer. On the primary the edge is ink-on-ink and
-            // invisible; it is there to keep the heights equal.
-            border: SURFACE.hair,
+            // answer. Transparent here because the edge is DRAWN (the
+            // frame below); on the primary it would be ink-on-ink and
+            // invisible anyway, and it is only kept for the heights.
+            border: '2px solid transparent',
+            position: 'relative',
             background: a.primary ? INK : '#ffffff',
             color: a.primary ? '#ffffff' : INK,
             fontFamily: SYSTEM_FONT,
@@ -98,6 +101,10 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
             animation: `dog-prompt-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 70}ms both`,
           }}
         >
+          {/* Drawn edge. Not on the primary: an ink line on an ink
+              button is nothing, and drawing it would only cost a
+              measurement. */}
+          {a.primary ? null : <HandDrawnFrame radius={R.button} />}
           {a.label}
         </button>
       ))}

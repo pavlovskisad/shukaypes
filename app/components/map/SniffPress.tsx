@@ -17,6 +17,7 @@ import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import { VOICE } from '../../constants/voice';
 import { INK, SURFACE } from '../../constants/surface';
+import { HandDrawnFrame } from '../ui/HandDrawn';
 
 // Long-press "sniff this place" gesture.
 //
@@ -507,10 +508,12 @@ export function SniffPress() {
             fontSize: TYPE.body,
             lineHeight: 1.4,
             boxShadow: SURFACE.shadow,
-            border: SURFACE.stroke,
+            position: 'relative',
             textAlign: 'center',
           }}
         >
+          {/* Drawn edge — see HandDrawn.tsx. */}
+          <HandDrawnFrame radius={R.card} />
           <div style={{ fontWeight: 700, marginBottom: 2 }}>{discovered.name}</div>
           <div>{discovered.story}</div>
           {moreOpen && moreText ? (
@@ -579,6 +582,7 @@ export function SniffPress() {
               background: INK,
               color: '#ffffff',
               borderRadius: R.button,
+              // Ink on ink — kept for the height, never seen.
               border: SURFACE.hair,
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.small,

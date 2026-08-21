@@ -58,7 +58,13 @@ export const MODAL_PILL_LIGHT: CSSProperties = {
   ...MODAL_PILL_BASE,
   background: '#ffffff',
   color: INK,
-  border: SURFACE.hair,
+  // The edge is DRAWN, by a HandDrawnFrame the call site puts inside
+  // the button — but the 2px still has to be here, transparent, or the
+  // light pill comes out 4px smaller than the dark one it sits beside
+  // and the action row stops lining up. Same reason the dark pill
+  // carries an ink-on-ink border it cannot show.
+  border: '2px solid transparent',
+  position: 'relative',
   boxShadow: '0 4px 12px rgba(0,0,0,0.22)',
 };
 
@@ -99,7 +105,9 @@ export const HUD_OVERLAY_PILL: CSSProperties = {
   fontSize: TYPE.small,
   fontWeight: 600,
   boxShadow: SURFACE.chip,
-  border: SURFACE.hair,
+  // Drawn, like the modal pills — see MODAL_PILL_LIGHT.
+  border: '2px solid transparent',
+  position: 'relative',
   userSelect: 'none',
   whiteSpace: 'nowrap',
 };

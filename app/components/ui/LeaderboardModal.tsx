@@ -15,6 +15,7 @@ import { TYPE } from '../../constants/type';
 import { SURFACE } from '../../constants/surface';
 import { playPopThen } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
+import { HandDrawnFrame } from './HandDrawn';
 import { OWN_COLOR_CSS, ownerColorCss } from '../map/territoryColor';
 import { BoardRow } from './BoardRow';
 
@@ -123,7 +124,9 @@ export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
           width: 36,
           height: 36,
           borderRadius: R.pill,
-          border: SURFACE.hair,
+          // Drawn ring — see the HandDrawnFrame child. The 2px stays
+          // so the button keeps the size it had.
+          border: '2px solid transparent',
           background: '#ffffff',
           color: '#1a1a1a',
           padding: 0,
@@ -137,6 +140,7 @@ export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
           zIndex: 1,
         }}
       >
+        <HandDrawnFrame radius={R.pill} />
         ×
       </button>
     </div>,

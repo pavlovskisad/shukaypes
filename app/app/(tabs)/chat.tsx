@@ -31,6 +31,7 @@ import { distanceMeters } from '../../utils/geo';
 import type { ChatMessage } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
+import { HandDrawnFrame } from '../../components/ui/HandDrawn';
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 
@@ -405,6 +406,7 @@ export default function ChatScreen() {
               }}
             />
             <Pressable style={styles.sendBtn} onPress={send} onPressIn={popPressableEvent} disabled={sending}>
+              <HandDrawnFrame radius={R.pill} />
               {sending ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
@@ -428,6 +430,9 @@ function Bubble({ msg }: { msg: ChatMessage }) {
         isUser ? styles.userBubble : styles.assistantBubble,
       ]}
     >
+      {/* Drawn edge — only on the user's white bubble. The dog's is ink
+          on ink, where a line is nothing. */}
+      {isUser ? <HandDrawnFrame radius={R.card} seed={msg.id ?? msg.content} /> : null}
       <Text
         style={[
           styles.bubbleText,
@@ -562,8 +567,7 @@ const styles = StyleSheet.create({
   userBubble: {
     alignSelf: 'flex-end',
     backgroundColor: SURFACE.fill,
-    borderWidth: 2,
-    borderColor: INK,
+    // Drawn edge — see HandDrawnFrame in Bubble.
     ...CARD_SHADOW,
   },
   bubbleText: {
@@ -624,8 +628,7 @@ const styles = StyleSheet.create({
     height: 44,
     borderRadius: R.pill,
     backgroundColor: SURFACE.fill,
-    borderWidth: 2,
-    borderColor: INK,
+    // Drawn edge — see HandDrawnFrame in the button.
     alignItems: 'center',
     justifyContent: 'center',
   },

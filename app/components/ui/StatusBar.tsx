@@ -10,6 +10,7 @@ import { popPressableEvent } from '../../utils/popOnTap';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { R } from '../../constants/radius';
+import { HandDrawnFrame } from './HandDrawn';
 
 // Four white-frosted-glass pills laid out identically: icon + value with
 // a consistent gap so happiness / hunger / tokens / spots-toggle read
@@ -269,6 +270,7 @@ function SpotsTogglePill() {
           pressed && { opacity: 0.7 },
         ]}
       >
+        <HandDrawnFrame radius={R.pill} />
         <Icon name="pin" size={ICON_SIZE} opacity={visible ? 1 : 0.45} />
       </Pressable>
     </PulseWrap>
@@ -341,11 +343,8 @@ const styles = StyleSheet.create({
   },
   togglePill: {
     paddingHorizontal: S.m,
-    // The one pressable thing in the HUD row, so the one with an edge.
-    // Composes over `pill`, and over togglePillOff too, so both the on
-    // and the off state carry it.
-    borderWidth: 2,
-    borderColor: INK,
+    // The one pressable thing in the HUD row, so the one with an edge —
+    // drawn, see the HandDrawnFrame inside it.
   },
   // Sniff toggle's OFF state — solid muted grey so the toggle
   // still reads as inactive vs the white ON state, without

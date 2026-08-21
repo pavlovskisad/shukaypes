@@ -7,6 +7,7 @@ import { TYPE } from '../../constants/type';
 import { INK, SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import { popPressableEvent } from '../../utils/popOnTap';
+import { HandDrawnFrame } from './HandDrawn';
 
 // Active-quest indicator. Renders nothing when no quest is live; when
 // one is, shows a pill with pet name + progress (2/3) + an X to abandon.
@@ -34,6 +35,7 @@ export function QuestPill() {
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.pill}>
+        <HandDrawnFrame radius={R.card} />
         <Text style={styles.emoji}>🔍</Text>
         {/* Wraps to multiple lines on long pet names instead
             of truncating — the pill grows vertically and the
@@ -88,8 +90,7 @@ const styles = StyleSheet.create({
     paddingLeft: S.l,
     paddingRight: S.s,
     backgroundColor: GLASS_BG,
-    borderWidth: 2,
-    borderColor: INK,
+    // Drawn edge — see HandDrawnFrame above.
     // Cap the pill width so a long pet name wraps inside
     // the cap instead of pushing the close button off-screen.
     maxWidth: '100%',

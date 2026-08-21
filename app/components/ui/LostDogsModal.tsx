@@ -16,6 +16,7 @@ import { SURFACE } from '../../constants/surface';
 import { playPopThen } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { useStrings } from '../../i18n/useStrings';
+import { HandDrawnFrame } from './HandDrawn';
 import { LostDogCardView } from './LostDogCardStack';
 
 const SHEET_ANIM_MS = 240;
@@ -105,7 +106,9 @@ export function LostDogsModal({ dogs, onClose, onPick }: Props) {
           width: 36,
           height: 36,
           borderRadius: R.pill,
-          border: SURFACE.hair,
+          // Drawn ring — see the HandDrawnFrame child. The 2px stays
+          // so the button keeps the size it had.
+          border: '2px solid transparent',
           background: '#ffffff',
           color: '#1a1a1a',
           padding: 0,
@@ -119,6 +122,7 @@ export function LostDogsModal({ dogs, onClose, onPick }: Props) {
           zIndex: 1,
         }}
       >
+        <HandDrawnFrame radius={R.pill} />
         ×
       </button>
     </div>,

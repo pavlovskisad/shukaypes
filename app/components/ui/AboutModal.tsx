@@ -8,6 +8,7 @@ import { TYPE } from '../../constants/type';
 import { SURFACE } from '../../constants/surface';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
+import { HandDrawnFrame } from './HandDrawn';
 import { playPopThen } from '../../utils/popOnTap';
 
 interface AboutModalProps {
@@ -106,12 +107,12 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           // the bottom, with its two rounded corners. Inking all four
           // would draw a line along the top that is never on screen and
           // two down the sides that sit flush against the bezel.
-          borderBottom: SURFACE.stroke,
-          borderLeft: SURFACE.stroke,
-          borderRight: SURFACE.stroke,
           overflow: 'hidden',
         }}
       >
+        {/* Those three edges, drawn rather than bordered — see
+            HandDrawn.tsx. The fourth is never on screen. */}
+        <HandDrawnFrame radius={R.card} open="top" />
         {/* Header strip — badge top-left, close button top-right.
             Both offset by SAFE_TOP so they clear the iPhone notch
             on a top-anchored modal. */}
@@ -139,9 +140,10 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               letterSpacing: 0.4,
               textTransform: 'lowercase',
               boxShadow: SURFACE.chip,
-              border: SURFACE.hair,
+              border: '2px solid transparent',
             }}
           >
+            <HandDrawnFrame radius={R.label} />
             {t.modals.about.badge}
           </span>
           <button
@@ -154,7 +156,8 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               width: 36,
               height: 36,
               borderRadius: R.pill,
-              border: SURFACE.hair,
+              // Drawn ring — see the HandDrawnFrame child.
+              border: '2px solid transparent',
               background: '#ffffff',
               color: '#1a1a1a',
               padding: 0,
@@ -167,6 +170,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               lineHeight: 1,
             }}
           >
+            <HandDrawnFrame radius={R.pill} />
             ×
           </button>
 

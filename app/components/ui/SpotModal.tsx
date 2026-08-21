@@ -13,6 +13,7 @@ import { colors } from '../../constants/colors';
 import { playPopThen } from '../../utils/popOnTap';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
+import { HandDrawnFrame } from './HandDrawn';
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -109,12 +110,13 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           // the bottom, with its two rounded corners. Inking all four
           // would draw a line along the top that is never on screen and
           // two down the sides that sit flush against the bezel.
-          borderBottom: SURFACE.stroke,
-          borderLeft: SURFACE.stroke,
-          borderRight: SURFACE.stroke,
+          position: 'relative',
           overflow: 'hidden',
         }}
       >
+        {/* Those three edges, drawn rather than bordered — see
+            HandDrawn.tsx. The fourth is never on screen. */}
+        <HandDrawnFrame radius={R.card} open="top" />
         {/* Hero block — a big centred category icon on white, with the
             rating and the close button top-right. Same "hero on top of
             card" shape as the LostDogModal photo header so the two read
@@ -189,7 +191,9 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 width: 36,
                 height: 36,
                 borderRadius: R.pill,
-                border: SURFACE.hair,
+                // Drawn ring — see the HandDrawnFrame child.
+                border: '2px solid transparent',
+                position: 'relative',
                 background: '#ffffff',
                 color: '#1a1a1a',
                 padding: 0,
@@ -202,6 +206,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 lineHeight: 1,
               }}
             >
+              <HandDrawnFrame radius={R.pill} />
               ×
             </button>
           </div>
@@ -265,6 +270,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             }
             style={MODAL_PILL_LIGHT}
           >
+            <HandDrawnFrame radius={R.button} />
             {/* Not inverted any more — the pill under it went from blue
                 to white, and a white icon on white is nothing. */}
             <Icon name="roundtrip" size={INLINE_ICON.cta} />

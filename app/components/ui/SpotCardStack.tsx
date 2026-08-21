@@ -21,6 +21,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
 import { Icon, iconForCategory } from './Icon';
 import { CardStack, CardStackSkeleton } from './CardStack';
+import { HandDrawnFrame } from './HandDrawn';
 
 interface Props {
   spots: Spot[];
@@ -79,6 +80,8 @@ export function SpotCardView({
 
   return (
     <View style={styles.card}>
+      {/* Drawn edge, seeded on the spot — see HandDrawn.tsx. */}
+      <HandDrawnFrame radius={R.card} seed={spot.id} />
       <View style={styles.iconHero}>
         {iconSlot ? (
           <Icon name={iconSlot} size={ICON_HERO.card} />
@@ -124,8 +127,7 @@ const styles = StyleSheet.create({
     borderRadius: R.card,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
-    borderWidth: 2,
-    borderColor: INK,
+    // No borderWidth — the edge is drawn, see HandDrawnFrame above.
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.14,

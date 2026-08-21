@@ -20,6 +20,7 @@ import { useStrings } from '../../i18n/useStrings';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useLangStore } from '../../stores/langStore';
 import { CardStack, CARD_W } from '../../components/ui/CardStack';
+import { HandDrawnFrame } from '../../components/ui/HandDrawn';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
 // aggregate counts from /profile/me on focus, with the live game
@@ -192,6 +193,7 @@ export default function ProfileScreen() {
         id: 'companion',
         content: (
           <View style={styles.sectionCard}>
+            <HandDrawnFrame radius={R.card} />
             <Text style={styles.sectionTitle}>{t.profile.stats.companionStats}</Text>
             <Text style={styles.companionNameBig}>
               {data?.companion.name ?? companionName}
@@ -232,6 +234,7 @@ export default function ProfileScreen() {
         id: 'walks',
         content: (
           <View style={styles.sectionCard}>
+            <HandDrawnFrame radius={R.card} />
             <Text style={styles.sectionTitle}>{t.profile.stats.walksTogether}</Text>
             <StatRow
               label={t.profile.stats.distanceWalked}
@@ -246,6 +249,7 @@ export default function ProfileScreen() {
         id: 'territory',
         content: (
           <View style={styles.sectionCard}>
+            <HandDrawnFrame radius={R.card} />
             <Text style={styles.sectionTitle}>{t.profile.stats.territory}</Text>
             <StatRow
               label={t.profile.stats.territoryArea}
@@ -280,6 +284,7 @@ export default function ProfileScreen() {
         id: 'helping',
         content: (
           <View style={styles.sectionCard}>
+            <HandDrawnFrame radius={R.card} />
             <Text style={styles.sectionTitle}>{t.profile.stats.helpingPets}</Text>
             <StatRow label={t.profile.stats.petsSearched} value={data?.stats.petsSearched} />
             <StatRow
@@ -367,6 +372,7 @@ export default function ProfileScreen() {
             accessibilityLabel={lang === 'uk' ? 'Switch to English' : 'Перемкнути на українську'}
             style={({ pressed }) => [styles.langPill, pressed && { opacity: 0.7 }]}
           >
+            <HandDrawnFrame radius={CHIP.height / 2} />
             <Text style={styles.langPillText}>{lang === 'uk' ? 'EN' : 'UA'}</Text>
           </Pressable>
           {/* The about sheet lives here. It used to hang off the
@@ -385,6 +391,7 @@ export default function ProfileScreen() {
             accessibilityLabel={t.modals.about.header}
             style={({ pressed }) => [styles.langPill, pressed && { opacity: 0.7 }]}
           >
+            <HandDrawnFrame radius={CHIP.height / 2} />
             <Text style={styles.langPillText}>?</Text>
           </Pressable>
         </View>
@@ -456,8 +463,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: S.m,
     borderRadius: CHIP.height / 2,
     backgroundColor: '#ffffff',
-    borderWidth: 2,
-    borderColor: INK,
+    // Drawn edge — see HandDrawnFrame in the pills above.
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.14,
@@ -496,9 +502,8 @@ const styles = StyleSheet.create({
     // Same paper as the pet and spot cards. These were the last white
     // surfaces still floating on shadow alone, and against the profile
     // scene's flat green field a shadow does almost nothing — the card
-    // read as a lighter patch of grass rather than as a card.
-    borderWidth: 2,
-    borderColor: INK,
+    // read as a lighter patch of grass rather than as a card. Drawn
+    // edge, like the rest of the paper — see HandDrawnFrame above.
     paddingTop: S.m,
     paddingBottom: S.m,
     paddingHorizontal: S.l,

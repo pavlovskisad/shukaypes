@@ -76,6 +76,7 @@ import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { INK, SURFACE } from '../../constants/surface';
+import { HandDrawnFrame } from '../ui/HandDrawn';
 
 const TOKEN_REFRESH_MS = 15000;
 // Extra syncs while actually walking, so a fast mover isn't looking at a
@@ -3372,7 +3373,8 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               height: 44,
               borderRadius: R.pill,
               background: SURFACE.fill,
-              border: SURFACE.hair,
+              // Drawn ring — see the HandDrawnFrame child below.
+              border: '2px solid transparent',
               boxSizing: 'border-box',
               display: 'flex',
               alignItems: 'center',
@@ -3384,6 +3386,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               boxShadow: SURFACE.chip,
             }}
           >
+            <HandDrawnFrame radius={R.pill} />
             ✕
           </div>
         </div>
@@ -3673,9 +3676,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // border: the fourth runs off the screen.
             borderTopLeftRadius: R.card,
             borderBottomLeftRadius: R.card,
-            borderTop: SURFACE.hair,
-            borderBottom: SURFACE.hair,
-            borderLeft: SURFACE.hair,
+            // Drawn — three edges, the fourth runs off the screen. The
+            // 2px stays so the glyph inside keeps its position.
+            border: '2px solid transparent',
             boxSizing: 'border-box',
             width: 56,
             height: 56,
@@ -3688,6 +3691,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             userSelect: 'none',
           }}
         >
+          {/* Drawn edge. The path closes on the right too, off the
+              screen edge, where nobody sees it — same as the border did.
+              R.card because that is what the two visible corners are. */}
+          <HandDrawnFrame radius={R.card} open="right" />
           {/* Three stacked bars — the longer bottom bar reads as
               "stack" the way a hamburger-but-tapered glyph does. */}
           <div style={{ width: 18, height: 3, background: '#1a1a1a', borderRadius: R.sm }} />

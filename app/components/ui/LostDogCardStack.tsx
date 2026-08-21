@@ -16,6 +16,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
 import type { LatLng } from '@shukajpes/shared';
 import { CardStack, CardStackSkeleton } from './CardStack';
+import { HandDrawnFrame, HandDrawnLine } from './HandDrawn';
 import { Icon } from './Icon';
 import { INLINE_ICON } from '../../constants/sizing';
 
@@ -200,7 +201,13 @@ export function LostDogCardView({
           <Text style={styles.photoEmoji}>{dog.emoji ?? '🐶'}</Text>
         </View>
       )}
+      {/* The card's edge, drawn rather than bordered — and seeded on the
+          pet, so this animal's poster is this animal's poster every time
+          you see it. See HandDrawn.tsx. */}
+      <HandDrawnFrame radius={R.card} seed={dog.id} />
       <View style={styles.cardBody}>
+        {/* The band's top edge, drawn like the frame around it. */}
+        <HandDrawnLine seed={`${dog.id}-band`} />
         <View style={styles.cardBodyRow}>
           <View style={styles.cardBodyText}>
             <Text style={styles.cardName} numberOfLines={1}>
@@ -237,8 +244,7 @@ const styles = StyleSheet.create({
     borderRadius: R.card,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
-    borderWidth: 2,
-    borderColor: INK,
+    // No borderWidth — the edge is drawn, see HandDrawnFrame above.
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 6 },
     shadowOpacity: 0.14,
@@ -282,8 +288,7 @@ const styles = StyleSheet.create({
     right: 0,
     bottom: 0,
     backgroundColor: '#ffffff',
-    borderTopWidth: 2,
-    borderTopColor: INK,
+    // Top edge drawn, not bordered — see HandDrawnLine above.
     // ~7% of card width, matching the reference's inner margin.
     paddingHorizontal: 20,
     paddingTop: 12,

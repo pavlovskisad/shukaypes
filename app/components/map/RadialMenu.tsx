@@ -7,6 +7,7 @@ import { SURFACE } from '../../constants/surface';
 import { R } from '../../constants/radius';
 import { playPopThen } from '../../utils/popOnTap';
 import { Icon, type IconName } from '../../components/ui/Icon';
+import { HandDrawnFrame } from '../ui/HandDrawn';
 
 export interface RadialAction {
   id: string;
@@ -211,10 +212,12 @@ export function RadialMenu({
         // which is half of 68: a pill radius on a square box is a
         // circle, and a circle is what an icon wants.
         borderRadius: isText ? R.button : BUTTON.radius,
-        // The same ink as the cards. border-box so the edge grows
-        // inward — BUTTON.size is a fixed 68 and a content-box border
-        // would quietly make every disc 72 and break the row's maths.
-        border: SURFACE.hair,
+        // The same ink as the cards, and DRAWN like them — the child
+        // below carries the visible line. The 2px stays, transparent,
+        // with border-box: BUTTON.size is a fixed 68 and dropping the
+        // border outright would move every disc's contents by 2px.
+        border: '2px solid transparent',
+        position: 'relative',
         boxSizing: 'border-box',
         background: bg,
         color: fg,
@@ -233,6 +236,11 @@ export function RadialMenu({
       }}
       aria-label={a.label}
     >
+      {/* The drawn edge. Skipped on an inverted (dark) item, where an
+          ink line on ink is nothing. */}
+      {inverted ? null : (
+        <HandDrawnFrame radius={isText ? R.button : BUTTON.radius} />
+      )}
       {/* Icon sized via the shared BUTTON token — 0.79 ratio reads calm
           against the dark disc without feeling sparse. */}
       {isText ? (

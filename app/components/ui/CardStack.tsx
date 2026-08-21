@@ -685,6 +685,12 @@ const styles = StyleSheet.create({
     // browsers that don't support `will-change` ignore it too.
     willChange: 'transform, opacity',
   } as unknown as object,
+  // THE PLACEHOLDERS KEEP A PLAIN BORDER. Everything real in this app
+  // draws its edge by hand now, and these deliberately do not: a
+  // skeleton is a rectangle standing in for a card that has not
+  // arrived, and giving it the drawn line — the thing that says "this
+  // is a piece of paper somebody made" — would be the loading state
+  // claiming to be the content.
   greyDeckCard: {
     backgroundColor: '#e6e6e6',
     borderRadius: R.card,

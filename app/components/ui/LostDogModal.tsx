@@ -15,6 +15,7 @@ import type { AppStrings } from '../../i18n/strings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
 import { playPopThen } from '../../utils/popOnTap';
+import { HandDrawnFrame } from './HandDrawn';
 
 function formatDistance(m: number): string {
   if (m < 1000) return `${Math.round(m / 50) * 50} m`;
@@ -63,7 +64,11 @@ const STACK_TOP = 'calc(env(safe-area-inset-top, 0px) + 122px)';
 const PILL_BASE: CSSProperties = {
   padding: '10px 18px',
   borderRadius: R.button,
-  border: SURFACE.hair,
+  // 2px kept so both pills are the same size; the light one shows a
+  // DRAWN edge instead (its call site puts a HandDrawnFrame inside),
+  // and on the ink pill the line would be invisible anyway.
+  border: '2px solid transparent',
+  position: 'relative',
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.small,
   fontWeight: 700,
@@ -331,6 +336,7 @@ export function LostDogModal({
               }
               style={PILL_SECONDARY}
             >
+              <HandDrawnFrame radius={R.button} />
               {t.modals.lostDog.iveSeen}
             </button>
             <button

@@ -29,6 +29,7 @@ import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { SURFACE } from '../../constants/surface';
 import { api } from '../../services/api';
 import { useStrings } from '../../i18n/useStrings';
+import { HandDrawnFrame } from './HandDrawn';
 
 const SHEET_ANIM_MS = 280;
 
@@ -150,12 +151,13 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
           // the bottom, with its two rounded corners. Inking all four
           // would draw a line along the top that is never on screen and
           // two down the sides that sit flush against the bezel.
-          borderBottom: SURFACE.stroke,
-          borderLeft: SURFACE.stroke,
-          borderRight: SURFACE.stroke,
+          position: 'relative',
           overflow: 'hidden',
         }}
       >
+        {/* Those three edges, drawn rather than bordered — see
+            HandDrawn.tsx. The fourth is never on screen. */}
+        <HandDrawnFrame radius={R.card} open="top" />
         <div
           style={{
             padding: `calc(env(safe-area-inset-top, 0px) + ${S.l}px) ${S.l}px ${S.s}px`,
@@ -280,6 +282,7 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
             </button>
           ) : null}
           <button onClick={onClose} style={MODAL_PILL_LIGHT}>
+            <HandDrawnFrame radius={R.button} />
             {t.modals.common.close}
           </button>
         </div>
