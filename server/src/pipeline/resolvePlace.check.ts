@@ -52,6 +52,24 @@ const PLACES: GazetteerPlace[] = [
   check('the short name still resolves alone', r?.name === 'Борщагівка', String(r?.name));
 }
 
+// ---- THE SAME PLACE, NAMED TWICE ----
+//
+// An ad names its district in the title and again in the body. Under an
+// `includes` test without a length comparison the two hits cancelled and
+// the whole ad resolved to null — invisible in every single-mention
+// fixture, and the normal case in production.
+{
+  const twice = 'Загубився кіт, Виноградар. Бачили на Виноградарі біля школи.';
+  check('a place named twice still resolves', resolvePlace(twice, PLACES)?.name === 'Виноградар',
+    String(resolvePlace(twice, PLACES)?.name));
+}
+{
+  // And three times, in three different cases.
+  const thrice = 'Бортничі! Пропав пес у Бортничах, бачили біля Бортничів.';
+  check('three inflections of one place resolve', resolvePlace(thrice, PLACES)?.name === 'Бортничі',
+    String(resolvePlace(thrice, PLACES)?.name));
+}
+
 // ---- ALIASES AND GENERIC WORDS ----
 //
 // Both of these came back from production as "not in the gazetteer"

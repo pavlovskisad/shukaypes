@@ -215,6 +215,50 @@ function stripGeneric(key: string): string {
 // caller drops the array, and no cache to invalidate.
 const KEY_CACHE = new WeakMap<GazetteerPlace, string[]>();
 
+// The longest name anybody writes out: «вулиця Олександра Архипенка».
+export const MAX_GRAM_WORDS = 4;
+
+// key (and every stem of it) → the places that answer to it.
+//
+// Built once per gazetteer array and cached on the array itself, so a
+// caller that loads the table once pays for this once — including the
+// ingest path, where the alternative is rebuilding 16,917 rows' worth of
+// keys for every pet that arrives.
+const INDEX_CACHE = new WeakMap<GazetteerPlace[], Map<string, GazetteerPlace[]>>();
+
+export function buildPlaceIndex(places: GazetteerPlace[]): Map<string, GazetteerPlace[]> {
+  const cached = INDEX_CACHE.get(places);
+  if (cached) return cached;
+
+  const index = new Map<string, GazetteerPlace[]>();
+  const add = (key: string, p: GazetteerPlace) => {
+    // MIN_STEM_CHARS, not MIN_PLACE_CHARS. The six-character floor
+    // belongs on the place NAME — matchKeys already applies it — and a
+    // stem is deliberately shorter: «Лісова» stems to «лісов», five
+    // characters, which the stricter floor silently refused to index.
+    // «біля Лісової» then resolved to nothing.
+    if (key.length < MIN_STEM_CHARS) return;
+    // More words than a text n-gram can ever be is a key nothing will
+    // look up — indexing it only grows the map.
+    if (key.split(' ').length > MAX_GRAM_WORDS) return;
+    const bucket = index.get(key);
+    if (bucket) bucket.push(p);
+    else index.set(key, [p]);
+  };
+
+  for (const p of places) {
+    for (const key of matchKeys(p)) {
+      add(key, p);
+      // Index the stems too, so an inflected n-gram from the ad and the
+      // table's nominative meet at the same string.
+      for (const stem of placeStems(key)) add(stem, p);
+    }
+  }
+
+  INDEX_CACHE.set(places, index);
+  return index;
+}
+
 /** Every spelling of this place we are willing to look for. */
 export function matchKeys(p: GazetteerPlace): string[] {
   const cached = KEY_CACHE.get(p);
@@ -248,38 +292,62 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   const hay = normalisePlaceText(text);
   if (!hay) return null;
 
+  const index = buildPlaceIndex(places);
+  const words = hay.split(' ').filter(Boolean);
   const hits: { place: ResolvedPlace; key: string; score: number }[] = [];
 
-  for (const p of places) {
-    for (const key of matchKeys(p)) {
-      // Exact first, stem second. An exact hit is worth more than an
-      // inflected one and should not be outranked by a longer stem match.
-      let at = hay.indexOf(key);
-      const exact = at >= 0;
-      if (at < 0) {
-        for (const stem of placeStems(key)) {
-          at = hay.indexOf(stem);
-          if (at >= 0) break;
+  // WALK THE TEXT, NOT THE TABLE.
+  //
+  // The previous version asked every one of 16,917 places whether it
+  // appeared in the ad — 50,000 substring searches over a 2KB string,
+  // per pet. It took long enough to time out a five-minute command, and
+  // it is the same call that would run per pet at ingest.
+  //
+  // An ad is a few hundred words. Looking up its n-grams in a prepared
+  // map is bounded by the AD's length instead of the gazetteer's, which
+  // is the difference between a lookup and a scan.
+  //
+  // Four words, because «вулиця Олександра Архипенка» is three and a
+  // marker in front makes four; nothing in the table is longer that a
+  // person would write out.
+  for (let i = 0; i < words.length; i++) {
+    for (let n = 1; n <= MAX_GRAM_WORDS && i + n <= words.length; n++) {
+      const gram = words.slice(i, i + n).join(' ');
+      if (gram.length < MIN_PLACE_CHARS) continue;
+
+      // Exact first, stem second, and BOTH sides are stemmed to the same
+      // form — the index holds each key's stems too, so «оболоні» in an
+      // ad and «Оболонь» in the table meet at «оболон».
+      let found = index.get(gram);
+      const exact = found !== undefined;
+      if (!found) {
+        for (const stem of placeStems(gram)) {
+          found = index.get(stem);
+          if (found) break;
         }
-        if (at < 0) continue;
       }
+      if (!found) continue;
 
-      const before = hay.slice(Math.max(0, at - 22), at);
+      const before = words.slice(Math.max(0, i - 2), i).join(' ');
       const marked = MARKERS.test(before);
-      // Marked dominates everything else, then specificity, then length.
-      // Scaled so no combination of the lower two can outrank a marked
-      // match — that ordering is the whole defence against prose.
-      const score =
-        (marked ? 10_000 : 0) +
-        (exact ? 1_000 : 0) +
-        (SPECIFICITY[p.category] ?? 0) * 100 +
-        Math.min(key.length, 60);
 
-      hits.push({
-        place: { name: p.name, lat: p.lat, lng: p.lng, category: p.category, marked },
-        key,
-        score,
-      });
+      for (const p of found) {
+        // Score on the MATCHED gram, not the place's full name. An ad
+        // writing «Архипенка» should not inherit the length of
+        // «вулиця Олександра Архипенка» it happened to hit — the score
+        // is meant to reward what the owner actually wrote.
+        const score =
+          (marked ? 10_000 : 0) +
+          (exact ? 1_000 : 0) +
+          (SPECIFICITY[p.category] ?? 0) * 100 +
+          Math.min(gram.length, 60);
+
+        hits.push({
+          place: { name: p.name, lat: p.lat, lng: p.lng, category: p.category, marked },
+          key: gram,
+          score,
+        });
+      }
     }
   }
 
@@ -298,8 +366,20 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   // the one the owner actually wrote. No category ranking should be able
   // to overturn that, so this happens before scoring rather than inside
   // it.
+  // STRICTLY LONGER, and the word "strictly" is load-bearing.
+  //
+  // Written as `other !== h && other.key.includes(h.key)`, two hits with
+  // the SAME key cancelled each other: «оболоні» contains «оболоні», the
+  // objects differ, so each dropped the other and the function returned
+  // null. Any ad naming a place twice — the title and then the body,
+  // which is most of them — resolved to nothing at all.
+  //
+  // It only showed up under repetition, so every fixture passed and a
+  // 16,917-place benchmark caught it by accident. Comparing length
+  // first restores the intent: a longer name supersedes the shorter one
+  // inside it, and an equal name is the same match seen twice.
   const survivors = hits.filter(
-    (h) => !hits.some((other) => other !== h && other.key.includes(h.key)),
+    (h) => !hits.some((other) => other.key.length > h.key.length && other.key.includes(h.key)),
   );
 
   survivors.sort((a, b) => b.score - a.score);
