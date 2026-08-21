@@ -77,11 +77,12 @@ const ALLOWED = new Map<string, string>([
   // names and distances — never a line of the ad — so no contact can
   // reach the output.
   ['db/audit-pins.ts', 'matches place names in bodies against the pin, prints distances'],
-  // Same job, forward-looking: reads bodies to ask whether the gazetteer
-  // COULD place the pets currently sitting on the fall-through. Prints
-  // pet names, gazetteer place names and counts — never a line of the
-  // ad — and writes nothing at all.
+  // Both read bodies to find the PLACE in them. resolve-pins matches
+  // offline; probe-location-text sends the text to Haiku and asks. They
+  // print a place name and whether it resolved — never a line of the ad
+  // — so no contact can reach the output or the model's reply.
   ['db/resolve-pins.ts', 'dry-run: could the gazetteer place these pets, counts only'],
+  ['db/probe-location-text.ts', 'asks the model for the place, prints the phrase only'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
   // Only asks `raw_body is not null` to PICK a candidate ad to probe —
   // it never selects the column. And it masks every digit it prints, so
