@@ -58,6 +58,12 @@ const CENTRE_RING_M = 160;
 // a word; six characters is where a match starts meaning something.
 const MIN_PLACE_CHARS = 6;
 
+// Words an owner puts in front of a place when they mean a place. The
+// text is normalised before this runs, so «вул.» has already become
+// «вул» and the dots cannot be relied on.
+const MARKERS =
+  /(вул|вулиц|просп|проспект|бульвар|площ|провул|мкр|масив|район|селищ|село|смт|метро|станц|ж\s?м|жм)\s*$/;
+
 function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): number {
   const R = 6371000;
   const dLat = ((bLat - aLat) * Math.PI) / 180;
@@ -127,27 +133,76 @@ async function main() {
 
   console.log(`\nactive pets: ${pets.length}   gazetteer places: ${places.length}`);
 
-  // THE CENTRE PILE, which needs no text at all to detect.
-  const centre = pets.filter((p) => haversineM(p.lat, p.lng, MAIDAN.lat, MAIDAN.lng) <= CENTRE_RING_M);
-  console.log(
-    `\nPINNED ON MAIDAN (within ${CENTRE_RING_M}m, jitter is ${JITTER_M}m): ${centre.length}`,
+  // THE CENTRE PILE — and the split inside it is the whole point.
+  //
+  // The first version of this counted a 160m ring around Maidan and
+  // called them all "placed on the landmark". Wrong: nearly every one
+  // was sitting on the fall-through coordinate itself, 22m away, which
+  // BOTH map queries filter exactly. Those pets are not misplaced in the
+  // centre — they are invisible, which is a different and larger problem.
+  //
+  // So separate the two, because the fixes have nothing in common:
+  //
+  //   HIDDEN   exactly the fall-through. Filtered from every map query,
+  //            so the walker never sees them. A pet in this bucket is
+  //            one nobody can be asked to look for.
+  //   VISIBLE  near Maidan but NOT the fall-through — the model named
+  //            the landmark, or the jitter moved it off the exact point.
+  //            These DO render, in the wrong place, which is what
+  //            somebody looking at the map actually reports.
+  const FALLBACK = { lat: 50.4501, lng: 30.5234 };
+  const isFallback = (p: { lat: number; lng: number }) =>
+    Math.abs(p.lat - FALLBACK.lat) < 1e-9 && Math.abs(p.lng - FALLBACK.lng) < 1e-9;
+
+  const hidden = pets.filter(isFallback);
+  const nearCentre = pets.filter(
+    (p) => !isFallback(p) && haversineM(p.lat, p.lng, MAIDAN.lat, MAIDAN.lng) <= CENTRE_RING_M,
   );
-  for (const p of centre.slice(0, 15)) {
+
+  console.log(
+    `\nON THE FALL-THROUGH COORDINATE — filtered from every map query: ${hidden.length}` +
+      ` of ${pets.length}`,
+  );
+  console.log(
+    `  The pet is active, the walker cannot see it, and nothing reports this.`,
+  );
+
+  console.log(
+    `\nNEAR MAIDAN BUT VISIBLE (within ${CENTRE_RING_M}m, jitter is ${JITTER_M}m): ${nearCentre.length}`,
+  );
+  for (const p of nearCentre.slice(0, 15)) {
     console.log(`  ${p.name.padEnd(28)} ${p.lat.toFixed(5)}, ${p.lng.toFixed(5)}`);
   }
-  if (centre.length > 15) console.log(`  … and ${centre.length - 15} more`);
-  if (centre.length > 0) {
+  if (nearCentre.length > 15) console.log(`  … and ${nearCentre.length - 15} more`);
+  if (nearCentre.length > 0) {
     console.log(
-      `\n  These are pets the model placed on the landmark rather than on a\n` +
-        `  street. They are 22m from the fall-through coordinate the map\n` +
-        `  filters out, which is why they are visible at all.`,
+      `\n  These render on the map, in the middle of Khreshchatyk. This is the\n` +
+        `  bucket somebody looking at the map would report.`,
     );
+  }
+
+  // WHAT THE GAZETTEER ACTUALLY HOLDS.
+  //
+  // "Should we improve the gazetteer" is answerable, and the answer is
+  // not obvious: every place named in the mismatch list — Софіївська
+  // Борщагівка, Васильків, Зазим'я, Бортничі, Виноградар — was matched
+  // FROM this table, so it already contains them. A table that already
+  // holds the answers is not the thing to expand first.
+  const byCategory = new Map<string, number>();
+  for (const c of await db
+    .select({ category: schema.kyivGazetteer.category })
+    .from(schema.kyivGazetteer)) {
+    byCategory.set(c.category, (byCategory.get(c.category) ?? 0) + 1);
+  }
+  console.log('\nWHAT THE GAZETTEER HOLDS:');
+  for (const [cat, n] of [...byCategory].sort((a, b) => b[1] - a[1])) {
+    console.log(`  ${String(n).padStart(6)}  ${cat}`);
   }
 
   // THE COMPARISON PROPER: what the owner wrote vs where we put them.
   let checked = 0;
   let noPlace = 0;
-  const far: { name: string; place: string; m: number }[] = [];
+  const far: { name: string; place: string; m: number; marked: boolean }[] = [];
 
   for (const pet of pets) {
     const text = `${pet.desc ?? ''}\n${bodies.get(pet.id) ?? ''}`.trim();
@@ -168,20 +223,49 @@ async function main() {
     }
 
     const m = haversineM(pet.lat, pet.lng, best.lat, best.lng);
-    if (m > thresholdM) far.push({ name: pet.name, place: best.name, m });
+    if (m > thresholdM) {
+      // «Собачка» is a Kyiv street AND the word for a small dog, and the
+      // first run of this matched four pets on it. «Садова», «Перемога»,
+      // «Дніпро» are the same trap. A bare name in a lost-pet ad is more
+      // likely to be prose than an address.
+      //
+      // So ask whether the owner MARKED it as a place — вул., проспект,
+      // район, масив, село. A marked match is evidence; a bare one is a
+      // lead. Kept apart rather than filtered, because throwing away the
+      // bare ones would hide real addresses written casually.
+      const key = norm(best.name);
+      const at = hay.indexOf(key);
+      const before = hay.slice(Math.max(0, at - 22), at);
+      const marked = MARKERS.test(before);
+      far.push({ name: pet.name, place: best.name, m, marked });
+    }
   }
 
   console.log(`\nPETS WHOSE AD NAMES A PLACE: ${checked - noPlace} of ${checked} with text`);
   console.log(`  … no gazetteer place named:  ${noPlace}`);
-  console.log(`\nPIN MORE THAN ${(thresholdM / 1000).toFixed(1)}km FROM THE PLACE THE AD NAMES: ${far.length}\n`);
+  const marked = far.filter((f) => f.marked);
+  const bare = far.filter((f) => !f.marked);
 
-  for (const f of far.sort((a, b) => b.m - a.m).slice(0, 25)) {
-    console.log(
-      `  ${f.name.padEnd(26)} ad says «${f.place}»`.padEnd(70) +
-        ` ${(f.m / 1000).toFixed(1)}km away`,
-    );
-  }
-  if (far.length > 25) console.log(`  … and ${far.length - 25} more`);
+  console.log(
+    `\nPIN MORE THAN ${(thresholdM / 1000).toFixed(1)}km FROM THE PLACE THE AD NAMES: ${far.length}`,
+  );
+  console.log(`  … the owner marked it as a place (вул/район/село): ${marked.length}  ← evidence`);
+  console.log(`  … a bare name, could be prose:                     ${bare.length}  ← leads\n`);
+
+  const show = (rows: typeof far, label: string) => {
+    if (rows.length === 0) return;
+    console.log(`  ${label}`);
+    for (const f of rows.sort((a, b) => b.m - a.m).slice(0, 20)) {
+      console.log(
+        `    ${f.name.padEnd(26)} ad says «${f.place}»`.padEnd(70) +
+          ` ${(f.m / 1000).toFixed(1)}km away`,
+      );
+    }
+    if (rows.length > 20) console.log(`    … and ${rows.length - 20} more`);
+    console.log('');
+  };
+  show(marked, 'MARKED AS A PLACE:');
+  show(bare, 'BARE NAME — read before believing:');
 
   console.log(
     `\n  A match is the longest gazetteer name appearing in the ad, so it is` +
