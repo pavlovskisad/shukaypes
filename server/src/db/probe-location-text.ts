@@ -38,6 +38,7 @@ import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { anthropic } from '../services/anthropic.js';
 import { resolvePlace, type GazetteerPlace } from '../pipeline/resolvePlace.js';
+import { detectOtherCity } from '../pipeline/outOfArea.js';
 
 const MODEL = 'claude-haiku-4-5';
 const MAX_SAMPLE = 40;
@@ -48,19 +49,45 @@ const FALLBACK = { lat: 50.4501, lng: 30.5234 };
 // One question, no room to elaborate. The parser's own prompt asks for a
 // coordinate, which is a geography exam; this asks for a transcription,
 // which is the thing models are reliable at.
-const SYSTEM = `Ти читаєш оголошення про загублену тварину з Києва.
+// THE FIRST VERSION SAID «копіюй як написано» AND THE MODEL TRANSLATED
+// ANYWAY. Of 20 ads it found a place in 12 and resolved 0, because the
+// answers came back «Sofiivska square», «Petrovsky district»,
+// «Подольском районе» — English and Russian, against a gazetteer that
+// holds Ukrainian. «Подольском районе» IS in the table, as «Подільський
+// район». The instruction was there; it was not emphatic enough, and a
+// polite constraint is not a constraint.
+//
+// So: say it three ways, show the failure as an example, and forbid the
+// alphabet rather than the behaviour.
+//
+// The second field is the finding that came with it. Several of those
+// ads were «районе центрального рынка» (Kharkiv), «районі Левади в
+// Красилові» (Khmelnytskyi oblast), «Хотянівці» (a village) — pets that
+// are not in Kyiv at all, sitting on the fall-through because the parser
+// could not place a Kharkiv address on a Kyiv map. Asking for the city
+// separately turns that from something I eyeballed into something
+// counted, and it is transcription again rather than judgement.
+const SYSTEM = `Ти читаєш оголошення про загублену тварину.
 
-Питання одне: чи сказано в оголошенні, ДЕ тварина загубилася?
+Два питання:
+1. Чи сказано в оголошенні, ДЕ тварина загубилася?
+2. Чи назване місто або село?
 
 Поверни рівно один рядок JSON:
-{"place": "<місце як написано в оголошенні>"}
-або
-{"place": null}
+{"place": "<місце як написано>", "city": "<місто як написано, або null>"}
 
-Правила:
-- Копіюй місце ЯК НАПИСАНО. Не перекладай, не виправляй, не додавай.
+МОВА ВІДПОВІДІ — МОВА ОГОЛОШЕННЯ. Це найважливіше правило:
+- Копіюй символ у символ, тією самою абеткою.
+- НІКОЛИ не перекладай на англійську. НІКОЛИ не транслітеруй латиницею.
+- Якщо в оголошенні «Подольском районе» — пиши «Подольском районе».
+  НЕ «Podolsky district». НЕ «Подільський район».
+- Якщо в оголошенні «Софіївська площа» — пиши «Софіївська площа».
+  НЕ «Sofiivska square».
+
+Інші правила:
 - Місце — це район, вулиця, масив, село, станція метро, орієнтир.
-- Якщо місця немає — null. Не вгадуй. Не пиши "Київ" просто тому, що це Київ.
+- Якщо місця немає — place: null. Не вгадуй.
+- Не пиши "Київ" у place просто тому, що це Київ.
 - Нічого, крім цього рядка JSON.`;
 
 function numArg(flag: string, fallback: number): number {
@@ -127,10 +154,13 @@ async function main() {
   let resolved = 0;
   let silent = 0;
   let failed = 0;
+  let elsewhere = 0;
+  let latin = 0;
 
   for (const pet of targets.slice(0, sample)) {
     const text = `${pet.desc ?? ''}\n${bodies.get(pet.id) ?? ''}`.trim();
     let phrase: string | null = null;
+    let city: string | null = null;
     try {
       const resp = await anthropic().messages.create({
         model: MODEL,
@@ -141,7 +171,11 @@ async function main() {
       const out = resp.content.find((b) => b.type === 'text');
       const raw = out && out.type === 'text' ? out.text.trim() : '';
       const json = raw.match(/\{[\s\S]*\}/)?.[0];
-      phrase = json ? (JSON.parse(json).place ?? null) : null;
+      if (json) {
+        const parsed = JSON.parse(json);
+        phrase = parsed.place ?? null;
+        city = parsed.city ?? null;
+      }
     } catch (err) {
       failed++;
       console.log(`  !  ${pet.name.padEnd(24)} ${(err as Error).message.slice(0, 50)}`);
@@ -155,7 +189,26 @@ async function main() {
     }
 
     said++;
-    // THE SECOND HALF. A phrase we cannot put on the map is not a pin.
+
+    // OUT OF AREA FIRST, because it is not a placement failure. A pet in
+    // Kharkiv sitting on the fall-through is the parser correctly
+    // declining to put a Kharkiv address on a Kyiv map. Nothing about
+    // the gazetteer would or should fix it — the row wants expiring.
+    // Judged with detectOtherCity, the same rule the ingest gate uses,
+    // so the audit and the gate can never disagree.
+    const other = detectOtherCity(`${city ?? ''} ${phrase}`);
+    if (other) {
+      elsewhere++;
+      console.log(`  ⤫  ${pet.name.padEnd(24)} «${phrase.slice(0, 30)}» → ${other.city}, not Kyiv`);
+      continue;
+    }
+
+    // Did the instruction hold? Latin letters in a Ukrainian ad's place
+    // name mean the model translated despite being told three times not
+    // to, and that is a prompt failure rather than a gazetteer gap —
+    // worth counting separately or the next round misreads it again.
+    if (/[A-Za-z]{4,}/.test(phrase)) latin++;
+
     const hit = resolvePlace(phrase, places);
     if (hit) resolved++;
     console.log(
@@ -165,17 +218,26 @@ async function main() {
   }
 
   const asked = Math.min(sample, targets.length);
-  console.log(`\n  asked:                       ${asked}`);
-  console.log(`  model found a place:         ${said}`);
-  console.log(`    … and it resolves to a pin: ${resolved}   ← what would actually be fixed`);
-  console.log(`    … named but unresolvable:   ${said - resolved}`);
-  console.log(`  model says the ad has none:  ${silent}`);
-  if (failed > 0) console.log(`  call failed:                 ${failed}  ← not evidence either way`);
+  const inKyiv = said - elsewhere;
+  console.log(`\n  asked:                        ${asked}`);
+  console.log(`  model found a place:          ${said}`);
+  console.log(`    … but the pet is elsewhere:  ${elsewhere}   ← expire, do not place`);
+  console.log(`    … a Kyiv place:              ${inKyiv}`);
+  console.log(`       … resolves to a pin:      ${resolved}   ← what wiring would fix`);
+  console.log(`       … not in the gazetteer:   ${inKyiv - resolved}   ← a gap in the table`);
+  console.log(`  model says the ad has none:   ${silent}   ← fall-through is correct`);
+  if (latin > 0) {
+    console.log(`\n!! ${latin} answer(s) came back in Latin letters despite the instruction.`);
+    console.log('   Those are prompt failures, not gazetteer gaps — do not count them');
+    console.log('   as missing places.');
+  }
+  if (failed > 0) console.log(`  call failed:                  ${failed}  ← not evidence either way`);
 
   console.log(
-    `\n  The number that matters is the resolving one. A place the model can` +
-      `\n  read but the gazetteer cannot find is a gap in the table; a place` +
-      `\n  neither can find means the ad genuinely does not say.` +
+    `\n  Three different problems, and only one of them is the gazetteer:` +
+      `\n    elsewhere      the parser was right to refuse; the row wants expiring` +
+      `\n    not in table   the gazetteer is genuinely missing a place` +
+      `\n    no place       the ad does not say, and nothing can fix that` +
       `\n\n✓ read-only. Nothing written.`,
   );
   await pg.end();
