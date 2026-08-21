@@ -350,7 +350,7 @@ export default function ChatScreen() {
               INPUT_GAP_ABOVE_TABS +
               INPUT_BAND_HEIGHT,
             // Mirror of the top — same eased curve.
-            backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${colors.greyBg} 35%, rgba(240,240,240,0.85) 50%, rgba(240,240,240,0.55) 68%, rgba(240,240,240,0.25) 83%, rgba(240,240,240,0.08) 95%, ${TRANSPARENT_BG} 100%)`,
+            backgroundImage: `linear-gradient(to top, ${SURFACE.fill} 0%, ${SURFACE.fill} 35%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0.55) 68%, rgba(255,255,255,0.25) 83%, rgba(255,255,255,0.08) 95%, ${TRANSPARENT_BG} 100%)`,
           } as unknown as object,
         ]}
         pointerEvents="none"
@@ -505,17 +505,23 @@ const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 // the styles section; keep in sync with _layout.tsx's
 // tabBarStyle.height (58) + bottom: insets.bottom + S.xxl (24).
 const TAB_BAR_HEIGHT = 82;
-// CSS-friendly transparent value matching colors.greyBg so the
-// gradient interpolates as alpha-only on the same hue (no
-// shift through grey-tinted intermediate values).
-const TRANSPARENT_BG = 'rgba(240,240,240,0)';
+// CSS-friendly transparent value matching the page background so the
+// gradient interpolates as alpha-only on the same hue (no shift through
+// a tinted intermediate value).
+const TRANSPARENT_BG = 'rgba(255,255,255,0)';
 // Breathing room between input wrap and the tab bar — used in addition
 // to safe-area inset because TG Mini App reports inset.bottom=0.
 const INPUT_GAP_ABOVE_TABS = 10;
 const styles = StyleSheet.create({
+  // WHITE PAPER, like every other surface in the app. The chat sat on
+  // grey, which made the dog's ink bubbles read as cards on a table
+  // rather than as words on the page — and made the user's white ones
+  // the only thing here that WAS a card. The fade strip at the bottom
+  // moves with it: it exists to dissolve the transcript into the page,
+  // so it has to be the page's colour or it draws a band of its own.
   root: {
     flex: 1,
-    backgroundColor: colors.greyBg,
+    backgroundColor: SURFACE.fill,
   },
   bottomBandWrap: {
     position: 'absolute',

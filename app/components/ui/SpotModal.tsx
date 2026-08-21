@@ -29,7 +29,9 @@ const SHEET_ANIM_MS = 280;
 const HERO_HEIGHT_PX = 220;
 // Top-anchored modal — bump the badge / close button down by the
 // safe-area inset so they clear the iPhone notch / status bar.
-const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
+// The overlay holds the sheet clear of the notch now, so this is
+// just the sheet's own inside margin.
+const SAFE_TOP = 12;
 
 // Slide-up POI sheet. Mirrors LostDogModal's hero-on-top layout but
 // with a giant category icon instead of a photo — same visual family,
@@ -80,6 +82,21 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         // Anchored at the TOP — same dashboard-card-from-above
         // shape as the LostDogModal so the two read as one family.
         alignItems: 'flex-start',
+        // THE SHEET HANGS, IT DOES NOT GROW OUT OF THE BEZEL.
+        //
+        // It used to run to all three screen edges with its top edge off
+        // the top of the page — so the two side lines began nowhere,
+        // out of thin air, cut off by the viewport. There is no fixing
+        // that by going further up: viewport-fit=cover means the
+        // INSTALLED app flows under the status bar and could paint
+        // there, but in a browser tab the page simply starts below it
+        // and there is nothing above to reach into. So the sheet stops
+        // being a full-bleed panel and becomes a poster with four
+        // edges, hanging a few px under the inset. Padding on the
+        // OVERLAY rather than margin on the sheet, because a flex item
+        // at width:100% adds its margins on top and overflows.
+        padding: 'calc(env(safe-area-inset-top, 0px) + 8px) 10px 0',
+        boxSizing: 'border-box',
         justifyContent: 'center',
         zIndex: Z.MODAL_MAP,
         opacity: closing ? 0 : 1,
@@ -91,16 +108,13 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         style={{
           background: '#ffffff',
           // Full-bleed top edge, rounded bottom only.
-          borderTopLeftRadius: 0,
-          borderTopRightRadius: 0,
-          borderBottomLeftRadius: R.card,
-          borderBottomRightRadius: R.card,
+          borderRadius: R.card,
           padding: 0,
           width: '100%',
           maxWidth: 460,
           // Cap so the action pills stay above the tab bar even on
           // short viewports.
-          maxHeight: 'calc(100vh - 110px - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
@@ -114,9 +128,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           overflow: 'hidden',
         }}
       >
-        {/* Those three edges, drawn rather than bordered — see
-            HandDrawn.tsx. The fourth is never on screen. */}
-        <HandDrawnFrame radius={R.card} open="top" />
+        {/* All four edges, drawn — see HandDrawn.tsx. */}
+        <HandDrawnFrame radius={R.card} />
         {/* Hero block — a big centred category icon on white, with the
             rating and the close button top-right. Same "hero on top of
             card" shape as the LostDogModal photo header so the two read

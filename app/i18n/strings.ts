@@ -711,7 +711,7 @@ const uk: AppStrings = {
   },
   modes: {
     ask: 'нюх-нюх! шо ти?',
-    lost: 'загубив друга :(',
+    lost: 'загубив друга\u00a0:\u2060(',
     search: 'я шукайпес!',
     explore: 'хочу погуляти',
     play: 'хто тримає цей район?',
@@ -1086,7 +1086,7 @@ const en: AppStrings = {
   },
   modes: {
     ask: 'sniff-sniff! so what is it?',
-    lost: 'lost my friend :(',
+    lost: 'lost my friend\u00a0:\u2060(',
     search: "i'm a pet-finder!",
     explore: 'i want a walk',
     play: 'who holds this district?',
