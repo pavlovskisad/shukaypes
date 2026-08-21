@@ -18,6 +18,12 @@ import { detectOtherCity } from './outOfArea.js';
 
 // Must NOT flag.
 const IN_SCOPE = [
+  // The district rule must not fire on a Kyiv district. Kyiv has ten of
+  // them and every one is adjectival, which is exactly the shape the
+  // new multi-word entries match on.
+  'загубився пес у Солом’янському районі',
+  'зник кіт, Оболонський район',
+  'пропала собака Дніпровський район',
   // Kyiv places named after other cities — the false-positive trap.
   'Загубився пес на Львівській площі',
   'Пропала кішка, Харківське шосе 12',
@@ -45,6 +51,16 @@ const IN_SCOPE = [
 
 // Must flag. Every one is a real title measured on production.
 const OUT_OF_AREA = [
+  // Observed on the fall-through pin in August — pets sitting in the
+  // base looking like unplaceable Kyiv rows, because the city list
+  // could not see them.
+  'районі Левади в Красилові',
+  'пропала собака в околиці м. Заліщики',
+  // District names, where the ad never says which city. «АНД» is
+  // Амур-Нижньодніпровський — Dnipro; «Хортицький» is Zaporizhzhia.
+  'загубився кіт в АНД районі',
+  'пропала собака Хортицький район',
+  'зник пес у Хортицькому районі',
   'Пропав кіт Ужгород',
   'Потерялся кот Харьков Библика 2 В',
   'Загублена собаку, Миколаїв!',
