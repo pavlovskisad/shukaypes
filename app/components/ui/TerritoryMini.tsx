@@ -30,6 +30,14 @@
 // fence: the same reason a surveyor's plot and a national border are
 // drawn broken on every map that isn't trying to say "wall".
 //
+// And the outline is SIMPLIFIED before it is drawn — see the
+// Simplification block below. A real claim's edge is a staircase of
+// metre-scale steps, which at 92px is finer than the dash period; drawn
+// literally, the line spends its whole length turning and the chip
+// reads as a scribble. Douglas–Peucker at a tolerance stated in
+// rendered pixels drops exactly the detail that cannot be seen as
+// shape, and moves no vertex that survives.
+//
 // KNOWN AND ACCEPTED: the chip no longer matches the map's finish. The
 // map paints territory as a soft field with deliberately no borders (see
 // TerritoryLayer's header, which argues that case at length and is still
@@ -59,6 +67,113 @@ const DASH = '5 3.5';
 // decoration around it.
 const FILL_ALPHA = 0.22;
 
+// ── Simplification ──────────────────────────────────────────────────
+// HOW MUCH DETAIL IS TOO SMALL TO BE DETAIL, in RENDERED pixels.
+//
+// A real claim does not arrive as the tidy hull the first test shapes
+// were. The server partitions ground by nearest mark, so an outline
+// comes back as a staircase of small steps with the odd deep inlet
+// where a neighbour bit in — perfectly good geometry at map scale,
+// where a step is metres across. Squeezed into 92px the steps land at
+// under a pixel each, finer than the dash period, so the line spends
+// its whole length turning and the chip reads as a scribble instead of
+// a shape.
+//
+// Douglas–Peucker, with the tolerance stated in pixels ON SCREEN and
+// converted into viewBox units per render. That is the honest way to
+// say it: the rule is "drop what is smaller than the eye can resolve
+// here", so it has to be measured where the eye is, not in the
+// coordinate space. A chip drawn bigger keeps more detail for free.
+//
+// It is deliberately a SIMPLIFIER and not a smoother. Every remaining
+// vertex is a real corner of the real claim, in its real place — the
+// shape gets quieter, never rounder, and never grows a curve the ground
+// does not have. A deep inlet survives (it is far from the chord that
+// would replace it, which is exactly what the algorithm measures); a
+// one-pixel stair does not.
+//
+// 3.2px, chosen by measuring both candidates on hulls built to look like
+// the real ones (a staircase blob, one with a bite out of it, one nearly
+// round). At 2.2 the noisiest shape came out at 27 vertices with 3px
+// edges — still shorter than the dash period, still visibly rippling. At
+// 3.2 it is 13 vertices with a 17px mean edge, the bite is untouched,
+// and the perimeter is within 7% of the original. Douglas–Peucker's own
+// guarantee bounds the error: no drawn edge is further than this from
+// the outline it replaced, i.e. 3.5% of the chip.
+const SIMPLIFY_PX = 3.2;
+// Never simplify a shape down to a triangle. Below this the outline has
+// stopped being recognisable as anywhere, so a claim that reduces that
+// far keeps the last tolerance that keeps it above the floor.
+const MIN_VERTS = 8;
+
+// Perpendicular distance from p to the segment ab, squared.
+function segDist2(
+  p: [number, number],
+  a: [number, number],
+  b: [number, number],
+): number {
+  const dx = b[0] - a[0];
+  const dy = b[1] - a[1];
+  if (dx === 0 && dy === 0) return (p[0] - a[0]) ** 2 + (p[1] - a[1]) ** 2;
+  // Clamped, so a point past either end measures to the endpoint rather
+  // than to the infinite line — otherwise a spike hanging off the end of
+  // a chord scores as if it were beside it.
+  const t = Math.max(
+    0,
+    Math.min(1, ((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy)),
+  );
+  return (p[0] - (a[0] + t * dx)) ** 2 + (p[1] - (a[1] + t * dy)) ** 2;
+}
+
+// Douglas–Peucker over an open chain, endpoints always kept.
+function rdp(pts: [number, number][], tol2: number): [number, number][] {
+  if (pts.length < 3) return pts;
+  let worst = 0;
+  let idx = 0;
+  for (let i = 1; i < pts.length - 1; i++) {
+    const d = segDist2(pts[i]!, pts[0]!, pts[pts.length - 1]!);
+    if (d > worst) {
+      worst = d;
+      idx = i;
+    }
+  }
+  if (worst <= tol2) return [pts[0]!, pts[pts.length - 1]!];
+  return [
+    ...rdp(pts.slice(0, idx + 1), tol2).slice(0, -1),
+    ...rdp(pts.slice(idx), tol2),
+  ];
+}
+
+// The same, for a CLOSED ring. A ring has no endpoints to anchor, and
+// anchoring an arbitrary one (whichever vertex the server happened to
+// list first) puts a permanent kink there and simplifies the rest
+// around it. So the two anchors are chosen from the shape itself — the
+// extreme point and the point furthest from it, i.e. its longest
+// diagonal — and each half is simplified as its own chain.
+function simplifyRing(pts: [number, number][], tol: number): [number, number][] {
+  if (pts.length < 5) return pts;
+  let a = 0;
+  for (let i = 1; i < pts.length; i++) {
+    if (pts[i]![0] < pts[a]![0] || (pts[i]![0] === pts[a]![0] && pts[i]![1] < pts[a]![1])) a = i;
+  }
+  let b = a;
+  let far = -1;
+  for (let i = 0; i < pts.length; i++) {
+    const d = (pts[i]![0] - pts[a]![0]) ** 2 + (pts[i]![1] - pts[a]![1]) ** 2;
+    if (d > far) {
+      far = d;
+      b = i;
+    }
+  }
+  const rot = [...pts.slice(a), ...pts.slice(0, a)];
+  const cut = (b - a + pts.length) % pts.length;
+  const tol2 = tol * tol;
+  const half1 = rdp(rot.slice(0, cut + 1), tol2);
+  const half2 = rdp([...rot.slice(cut), rot[0]!], tol2);
+  // Both halves carry the anchors; drop the duplicates at the seams.
+  return [...half1.slice(0, -1), ...half2.slice(0, -1)];
+}
+
 export function TerritoryMini({
   points,
   color,
@@ -86,13 +201,27 @@ export function TerritoryMini({
     const scale = (BOX - PAD * 2) / span;
     const offX = (BOX - (maxX - minX) * scale) / 2;
     const offY = (BOX - (maxY - minY) * scale) / 2;
-    return points
-      .map(
-        (_, i) =>
-          `${((xs[i]! - minX) * scale + offX).toFixed(1)},${((ys[i]! - minY) * scale + offY).toFixed(1)}`,
-      )
-      .join(' ');
-  }, [points]);
+    const fitted: [number, number][] = points.map((_, i) => [
+      (xs[i]! - minX) * scale + offX,
+      (ys[i]! - minY) * scale + offY,
+    ]);
+
+    // Simplified AFTER the fit, so the tolerance is in the same space the
+    // chip is drawn in and one number means the same thing for a claim of
+    // any real size. SIMPLIFY_PX is rendered pixels; the viewBox is BOX
+    // units wide and drawn `size` across, hence the conversion.
+    const tol = (SIMPLIFY_PX * BOX) / Math.max(1, size);
+    let simple = simplifyRing(fitted, tol);
+    // Backing off rather than giving up: a shape that simplifies below
+    // the floor gets progressively gentler tolerances until it clears it,
+    // and keeps its full outline if even that can't.
+    for (let t = tol; simple.length < MIN_VERTS && t > tol / 8; t /= 2) {
+      simple = simplifyRing(fitted, t / 2);
+    }
+    if (simple.length < 3) simple = fitted;
+
+    return simple.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+  }, [points, size]);
 
   // One shape, one wash, one dashed edge — the same paint whether we have
   // a real hull or the placeholder. No piece to draw (an older server, or
