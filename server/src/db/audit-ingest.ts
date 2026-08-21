@@ -252,6 +252,39 @@ async function auditRecent(days: number) {
     }
   }
 
+  // A COUNT CANNOT SAY WHETHER A FILTER IS RIGHT.
+  //
+  // «title-filter: 2233» is the correct answer for two thousand sale
+  // listings and the symptom of a broken rule if even a tenth of them
+  // are somebody's missing animal. The number is identical either way,
+  // and it is the number that would be reported as healthy.
+  //
+  // So print the titles. The reader decides in about ten seconds —
+  // «Продам щенков хаски» is the filter working, «Пропала собака,
+  // Оболонь» in this list is a bug that has been costing us pets.
+  //
+  // Titles only, through redactContacts. A listing title is the least
+  // sensitive text we store and this prints no body at all.
+  const TOP_REASONS = [...reasons].sort((a, b) => b[1] - a[1]).slice(0, 3);
+  for (const [reason] of TOP_REASONS) {
+    if (reason.startsWith('error:')) continue;
+    const sample = await db
+      .select({ title: schema.scrapeLog.title })
+      .from(schema.scrapeLog)
+      .where(
+        sql`${schema.scrapeLog.skipReason} = ${reason}
+            and ${schema.scrapeLog.firstSeenAt} > now() - (${days}::int * interval '1 day')
+            and ${schema.scrapeLog.title} is not null`,
+      )
+      .orderBy(sql`random()`)
+      .limit(12);
+    if (sample.length === 0) continue;
+    console.log(`\n  a random 12 of what «${reason}» rejected:`);
+    for (const s of sample) {
+      console.log(`    ${redactContacts(s.title!).slice(0, 72)}`);
+    }
+  }
+
   console.log(
     `\n  A day with NO rows means nothing new was discovered — the quiet world,` +
       `\n  or a scraper that has saturated its own listing page and stopped seeing.` +
