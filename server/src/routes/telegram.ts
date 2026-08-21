@@ -198,6 +198,19 @@ async function handleStart(
       return;
     }
   }
+  // ?start=lost — the "I lost my friend" button in the Mini App. The
+  // person tapped it because their pet is missing, so the welcome
+  // ("come for a walk") is the wrong first thing to say to them: open
+  // on the same prompt /lost gives, and the next message they send
+  // goes straight through the ingest.
+  //
+  // Deliberately NOT extended to the older 'lostpet' param: that one
+  // comes off group replies where the bot has already answered about a
+  // specific post, and the app button is the right follow-up there.
+  if (startParam === 'lost') {
+    await handleLostCommand(chatId, lang);
+    return;
+  }
   await sendMessage(chatId, messages[lang].welcome(firstName), {
     reply_markup: openAppKeyboard(lang),
   });

@@ -313,13 +313,13 @@ export interface AppStrings {
     // Shown when the user picks "meet" in explore and there is nobody
     // around. Was hardcoded English in Companion.tsx.
     noWalkers: string;
-    // The "I lost a pet" sheet. Points at the Telegram group, which is
+    // The "I lost a pet" sheet. Points at a DM with our bot, which is
     // the one path that actually puts a pet on the map today.
     lostSheet: {
       title: string;
       body: string;
       cta: string;
-      // Shown instead of the CTA when no group link is configured.
+      // Shown instead of the CTA when no bot link is configured.
       noLink: string;
       close: string;
     };
@@ -730,9 +730,9 @@ const uk: AppStrings = {
     noWalkers: 'поки нікого поруч 👥',
     lostSheet: {
       title: 'загубився пес?',
-      body: 'напиши в нашу групу в телеграмі — фото, район, коли востаннє бачили. я одразу візьму той допис і поставлю пса на карту, і його побачить кожен, хто цієї хвилини гуляє містом. так швидше, ніж будь-яка форма.',
-      cta: 'відкрити групу',
-      noLink: 'посилання на групу ще не налаштоване',
+      body: 'напиши мені в телеграмі — фото, район, коли востаннє бачили. я прочитаю і одразу поставлю пса на карту, і його побачить кожен, хто цієї хвилини гуляє містом. так швидше, ніж будь-яка форма.',
+      cta: 'написати в телеграм',
+      noLink: 'посилання на бота ще не налаштоване',
       close: 'потім',
     },
   },
@@ -1103,9 +1103,9 @@ const en: AppStrings = {
     noWalkers: 'nobody around just yet 👥',
     lostSheet: {
       title: 'lost your pet?',
-      body: "post in our telegram group — a photo, the district, when you last saw them. i'll pick that post up and put your pet on the map straight away, in front of everyone out walking this minute. faster than any form.",
-      cta: 'open the group',
-      noLink: 'the group link isn\'t set up yet',
+      body: "message me on telegram — a photo, the district, when you last saw them. i'll read it and put your pet on the map straight away, in front of everyone out walking this minute. faster than any form.",
+      cta: 'message me on telegram',
+      noLink: 'the bot link isn\'t set up yet',
       close: 'later',
     },
   },

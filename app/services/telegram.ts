@@ -30,6 +30,9 @@ interface TelegramWebApp {
   setBackgroundColor?: (color: string) => void;
   safeAreaInset?: TelegramSafeAreaInset;
   contentSafeAreaInset?: TelegramSafeAreaInset;
+  // Opens a t.me link in the Telegram client itself rather than in a
+  // browser tab. Present since SDK 6.1; feature-detected below.
+  openTelegramLink?: (url: string) => void;
 }
 
 declare global {
@@ -132,6 +135,28 @@ export function pickTopInset(iosTop: number): number {
   const tg = getTelegramSafeAreaInset();
   if (tg) return tg.top;
   return iosTop;
+}
+
+// Open a t.me link — the bot's DM, in practice.
+//
+// window.open on a t.me URL inside the Mini App is the bad path: TG's
+// in-app browser opens a WEB view of the chat, which cannot send a
+// message, so the one thing we sent the user to do is the one thing
+// they cannot do there. openTelegramLink switches the client to the
+// real chat and closes nothing of ours. Outside Telegram (plain web,
+// installed PWA) there is no such bridge and a new tab is correct —
+// t.me hands off to the desktop/mobile app from there.
+export function openTelegramChat(url: string): void {
+  const wa = getTelegramWebApp();
+  if (wa?.openTelegramLink) {
+    try {
+      wa.openTelegramLink(url);
+      return;
+    } catch {
+      /* fall through to the browser path */
+    }
+  }
+  if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
 }
 
 // Configure Mini App chrome to match our brand + smooth the seam.

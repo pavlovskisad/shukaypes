@@ -9,16 +9,22 @@
 // would widen exactly that gap, and it would do so pointed at real
 // people's pets.
 //
-// What we DO have is faster than a form anyway: post in the Telegram group
-// the bot watches and services/telegramIngest.ts parses it with Haiku and
-// puts the pet on the map on the spot, photo included. So this sheet spends
-// its whole surface saying that clearly, to someone who is upset and
-// scanning rather than reading.
+// What we DO have is faster than a form anyway: tell our own bot. A DM that
+// looks like a lost-pet report goes through the same Haiku parse + upsert as
+// a group post (routes/telegram.ts → services/telegramIngest.ts) and the pet
+// is on the map on the spot, photo included. So this sheet spends its whole
+// surface saying that clearly, to someone who is upset and scanning rather
+// than reading.
 //
-// The link is configuration (env.telegramGroupUrl) and may be empty. An
-// empty link must never render a button that goes nowhere — a dead CTA is
-// worse than no CTA for this particular reader. It degrades to a plain
-// line of explanation instead.
+// The bot, not the group, because the report is a private thing: a lost-pet
+// post carries a photo and usually a phone number, and asking for it in a
+// room of strangers is a toll we don't need to charge. The group listener
+// still works for people already posting there.
+//
+// The link is configuration (env.telegramBotUrl) and may be empty. An empty
+// link must never render a button that goes nowhere — a dead CTA is worse
+// than no CTA for this particular reader. It degrades to a plain line of
+// explanation instead.
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
@@ -29,6 +35,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { env } from '../../constants/env';
+import { openTelegramChat } from '../../services/telegram';
 import { SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
@@ -68,7 +75,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
   if (!rendered) return null;
   if (typeof document === 'undefined') return null;
 
-  const groupUrl = env.telegramGroupUrl;
+  const botUrl = env.telegramBotUrl;
 
   return createPortal(
     <div
@@ -164,7 +171,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
 
           {/* No link configured: say so plainly rather than rendering a
               button that does nothing. */}
-          {groupUrl ? null : (
+          {botUrl ? null : (
             <div
               style={{
                 marginTop: S.m,
@@ -190,11 +197,8 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             flexShrink: 0,
           }}
         >
-          {groupUrl ? (
-            <button
-              onClick={() => window.open(groupUrl, '_blank', 'noopener')}
-              style={MODAL_PILL_DARK}
-            >
+          {botUrl ? (
+            <button onClick={() => openTelegramChat(botUrl)} style={MODAL_PILL_DARK}>
               {t.modes.lostSheet.cta}
             </button>
           ) : null}
