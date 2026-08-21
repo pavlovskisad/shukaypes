@@ -98,7 +98,7 @@ export const TEXT_ITEM = {
   // pill is a touch target rather than a block of prose.
   padX: 18,
   // Caps the pill and lets a long answer wrap to two lines.
-  maxWidth: 140,
+  maxWidth: 158,
   // Between pills down a column.
   gap: 12,
   // …and ACROSS one. Wider than the row gap on purpose: the four
@@ -106,9 +106,7 @@ export const TEXT_ITEM = {
   // either side, which read as a small dialog floating in the middle
   // rather than as the screen's own question. Pushing the columns apart
   // moves the pills out toward the edges without making them bigger.
-  // 2×140 + 26 = 306, so a 390px screen keeps ~42px of margin and a
-  // 360px one ~27px.
-  colGap: 26,
+  colGap: 30,
 } as const;
 
 // Below the dog, both menus start here — far enough down to clear the
@@ -123,10 +121,21 @@ const ICON_ROW_GAP = 16;
 // The bare discs have no such problem and were sitting in a 236px block
 // with ~77px of empty screen on either side. Same reasoning as
 // TEXT_ITEM.colGap: spread them toward the edges.
-const ICON_ROW_GAP_WIDE = 34;
+const ICON_ROW_GAP_WIDE = 46;
 
 // Three 68px discs and the two gaps between them.
 const ROW_MAX_W = 3 * BUTTON.size + 2 * ICON_ROW_GAP_WIDE;
+
+// THE ANSWERS RUN CLOSE TO THE SCREEN EDGES, and how close is a fixed
+// number of pixels rather than a fraction of the width — the margin is
+// what your thumb needs, not what the layout wants. So the widths below
+// are an IDEAL clamped against the viewport: the block reaches its full
+// size on a phone wide enough for it, and gives up width rather than
+// margin on one that is not. A plain fixed width would have hung the
+// pills off both sides of a 360px screen at these sizes.
+const EDGE_MARGIN = 20;
+const clampToScreen = (ideal: number) =>
+  `min(${ideal}px, calc(100vw - ${EDGE_MARGIN * 2}px))`;
 
 // Trig-positioned radial around a center point with radius R.
 // The container is sized to fit the rim items and centered on the companion.
@@ -209,7 +218,13 @@ export function RadialMenu({
         // answer is. It used to be a fixed 112 with the label centred,
         // which gave it no padding at all — only leftover space, 27–36px
         // of it, and a different amount on every pill.
-        width: isText ? 'max-content' : BUTTON.size,
+        // Text answers FILL their column (the grid gives each column an
+        // equal half), so all four pills are one width and all four
+        // reach the same distance from the screen edge. Hugging their
+        // words instead left the short ones floating in from the margin
+        // while the long ones sat against it, which read as sloppy
+        // rather than as varied. Icons keep their fixed disc.
+        width: isText ? '100%' : BUTTON.size,
         // Sentence answers must be allowed to wrap rather than run off
         // the screen; 300 keeps the longest to two lines at 360 wide.
         maxWidth: isText ? TEXT_ITEM.maxWidth : undefined,
@@ -286,7 +301,7 @@ export function RadialMenu({
   const below = (
     children: ReactNode,
     gap: number,
-    width: number,
+    width: number | string,
     colGap: number = gap,
   ) => (
     <div
@@ -351,7 +366,7 @@ export function RadialMenu({
       // break 3 + 2 rather than running off a 360px screen. Two- and
       // three-item levels fill it exactly and never wrap. The named-spot
       // level needs wider cells because it carries labels.
-      showLabels ? 3 * ITEM_W + 2 * ICON_ROW_GAP : ROW_MAX_W,
+      clampToScreen(showLabels ? 3 * ITEM_W + 2 * ICON_ROW_GAP : ROW_MAX_W),
     );
   }
 
@@ -367,7 +382,9 @@ export function RadialMenu({
           style={{
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
+            alignItems: 'stretch',
+            // Equal halves — see the width note on the text button.
+            flex: 1,
             gap: TEXT_ITEM.gap,
           }}
         >
@@ -381,7 +398,7 @@ export function RadialMenu({
         </div>
       )),
       TEXT_ITEM.gap,
-      2 * TEXT_ITEM.maxWidth + TEXT_ITEM.colGap,
+      clampToScreen(2 * TEXT_ITEM.maxWidth + TEXT_ITEM.colGap),
       TEXT_ITEM.colGap,
     );
   }
