@@ -9,6 +9,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
 import { haptic } from '../../utils/haptics';
 import { R } from '../../constants/radius';
+import { INK, SURFACE } from '../../constants/surface';
 
 // One other player's dog on the map (real player or bot). Presence updates
 // arrive every ~15s (real) / ~3.5s (bots), so we GLIDE the dog toward its
@@ -61,6 +62,7 @@ export function OtherWalker({ player }: Props) {
   // Brief "👋" confirmation after you poke this walker.
   const [poked, setPoked] = useState(false);
   const pokePlayer = useGameStore((s) => s.pokePlayer);
+  const territoryVisible = useGameStore((s) => s.territoryVisible);
   // Kept in a ref so the []-deps glide interval always reads the current map
   // without re-creating. Used for screen-space facing (rotation-proof).
   const map = useMaplibreMap();
@@ -176,14 +178,24 @@ export function OtherWalker({ player }: Props) {
             👋
           </div>
         ) : null}
-        {/* The name chip carries the colour of the ground this dog holds,
-            so "whose zone is that" is answerable by looking at the dog
-            standing on it — the territory layer paints the same hue. */}
+        {/* The chip carries the colour of the ground this dog holds, so
+            "whose zone is that" is answerable by looking at the dog
+            standing on it — the territory layer paints the same hue.
+            But that question only EXISTS while the ground is painted.
+            On a walking map the colours were a dozen unexplained
+            lozenges competing with everything else on screen, so there
+            the tag is plain paper and just says who it is.
+
+            Keyed to territoryVisible rather than to the mode, so the
+            tag is coloured exactly when the ground under it is. No
+            edge: a name tag is a readout, and readouts lost their ink
+            along with the HUD meters — at 16px tall a 2px stroke is
+            double the weight it carries on a card label anyway. */}
         <div
           style={{
             font: `600 10px ${SYSTEM_FONT}`,
-            color: '#ffffff',
-            background: ownerColorCss(player.id),
+            color: territoryVisible ? '#ffffff' : INK,
+            background: territoryVisible ? ownerColorCss(player.id) : SURFACE.fill,
             borderRadius: R.label,
             padding: '1px 6px',
             marginBottom: 2,

@@ -8,6 +8,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK } from '../../constants/surface';
 import { api, type NearbyLostDog, type TerritoryRanking } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
 import {
@@ -824,7 +825,10 @@ const styles = StyleSheet.create({
   boardSeeAll: {
     fontSize: TYPE.small,
     fontWeight: '700',
-    color: 'rgba(0,60,255,0.85)',
+    // Ink, not web-hyperlink blue. Same fix the deck's counter link
+    // got; this one was missed because it lives on the tasks tab
+    // rather than in the card stack.
+    color: INK,
     textDecorationLine: 'underline',
     textAlign: 'center',
     paddingVertical: S.m,

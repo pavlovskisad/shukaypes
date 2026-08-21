@@ -78,7 +78,11 @@ export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch',
             padding: '20px',
-            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 72px)',
+            // The close button ends at inset + 50 (top 14 + 36 tall),
+            // so 72 left a 22px gap and the board read as starting
+            // late. 60 clears the button by 10 and gets the first
+            // name up where the eye goes first.
+            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 60px)',
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
           } as React.CSSProperties
         }

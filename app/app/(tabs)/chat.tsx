@@ -329,31 +329,9 @@ export default function ChatScreen() {
         {typing ? <TypingIndicator /> : null}
       </ScrollView>
 
-      {/* Fade strips — gradient fully CONTAINED within the
-          chrome zones (no extension into the chat area). Top
-          strip spans status bar + header pill height, fading
-          from greyBg at the screen edge to transparent at the
-          chat-facing edge. Bottom strip mirrors. Bubbles
-          scrolling into the chrome dissolve gradually over the
-          full chrome height; the chat area stays free of any
-          fade overlay. Below z-5 chrome, above the scroll. */}
-      <View
-        style={[
-          styles.fadeStrip,
-          {
-            top: 0,
-            height: insets.top + HEADER_BAND_HEIGHT,
-            // Multi-stop ease curve weighted toward the end —
-            // extra near-transparent stops (0.08 at 95%) so the
-            // last segment fades to nothing without a visible
-            // cutoff line. Solid greyBg 0-35%, then 0.85 →
-            // 0.55 → 0.25 → 0.08 → 0 with the slope decreasing
-            // toward 100%.
-            backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, ${colors.greyBg} 35%, rgba(240,240,240,0.85) 50%, rgba(240,240,240,0.55) 68%, rgba(240,240,240,0.25) 83%, rgba(240,240,240,0.08) 95%, ${TRANSPARENT_BG} 100%)`,
-          } as unknown as object,
-        ]}
-        pointerEvents="none"
-      />
+      {/* One fade strip, at the bottom. The top one is gone: there is
+          no chrome up there for a message to dissolve into any more,
+          so all it did was smear the first line of the transcript. */}
       <View
         style={[
           styles.fadeStrip,
@@ -512,9 +490,9 @@ const CHROME_SHADOW = {
 // Approximate visible heights for the floating pills. Used as scroll
 // content padding so the first/last bubble can scroll past each pill
 // without ever sitting flush against it.
-// No pill up there any more — this is purely the height over which
-// a message dissolves as it scrolls under the status bar.
-const HEADER_BAND_HEIGHT = 28;
+// No masthead and no fade up there any more. This is just the gap
+// between the status bar and the first message.
+const HEADER_BAND_HEIGHT = 8;
 const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 // Visible reserved bottom space = the floating dashboard pill
 // (58 px, post-trim) plus the 24 px gap it hovers above the
