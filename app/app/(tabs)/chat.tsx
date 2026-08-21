@@ -581,7 +581,10 @@ const styles = StyleSheet.create({
     marginTop: S.m,
     marginBottom: S.s,
     backgroundColor: SURFACE.fill,
-    borderRadius: R.pill,
+    // R.label, not a capsule. This names the screen; it is not a
+    // control and nothing presses it, so it takes the label corner the
+    // urgency badges and distance chips take.
+    borderRadius: R.label,
     borderWidth: 2,
     borderColor: INK,
     paddingVertical: S.s,
@@ -627,14 +630,14 @@ const styles = StyleSheet.create({
   },
   assistantBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: SURFACE.fill,
+    backgroundColor: INK,
     borderWidth: 2,
     borderColor: INK,
     ...CARD_SHADOW,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: INK,
+    backgroundColor: SURFACE.fill,
     borderWidth: 2,
     borderColor: INK,
     ...CARD_SHADOW,
@@ -645,10 +648,10 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   assistantText: {
-    color: colors.black,
+    color: '#ffffff',
   },
   userText: {
-    color: '#ffffff',
+    color: INK,
   },
   link: {
     textDecorationLine: 'underline',
@@ -696,14 +699,14 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: R.pill,
-    backgroundColor: INK,
+    backgroundColor: SURFACE.fill,
     borderWidth: 2,
     borderColor: INK,
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendBtnText: {
-    color: '#ffffff',
+    color: INK,
     fontSize: TYPE.title,
     fontWeight: '700',
   },
