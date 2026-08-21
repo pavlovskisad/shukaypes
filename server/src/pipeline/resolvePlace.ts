@@ -205,8 +205,21 @@ function stripGeneric(key: string): string {
   return kept.join(' ');
 }
 
+// MEMOISED, because the keys depend only on the place and the caller
+// asks for them once per PET. The gazetteer is 16,917 rows and the audit
+// runs 176 pets against it — recomputing normalisation every time meant
+// several million token-splits per run, and the first pass after aliases
+// landed took long enough to time out a five-minute command.
+//
+// A WeakMap keyed on the row object: computed once, dropped when the
+// caller drops the array, and no cache to invalidate.
+const KEY_CACHE = new WeakMap<GazetteerPlace, string[]>();
+
 /** Every spelling of this place we are willing to look for. */
 export function matchKeys(p: GazetteerPlace): string[] {
+  const cached = KEY_CACHE.get(p);
+  if (cached) return cached;
+
   const keys = new Set<string>();
   for (const raw of [p.name, ...(p.aliases ?? [])]) {
     if (!raw) continue;
@@ -215,7 +228,10 @@ export function matchKeys(p: GazetteerPlace): string[] {
     const bare = stripGeneric(key);
     if (bare !== key && bare.length >= MIN_PLACE_CHARS) keys.add(bare);
   }
-  return [...keys];
+
+  const out = [...keys];
+  KEY_CACHE.set(p, out);
+  return out;
 }
 
 /**
