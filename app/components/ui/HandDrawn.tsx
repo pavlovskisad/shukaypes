@@ -25,7 +25,7 @@ import { INK } from '../../constants/surface';
 // How far a point may wander off the true outline, in CSS px, on a
 // full-size card. The brief was "a little bit uneven, but not too much"
 // and this is that number.
-const DEFAULT_AMP = 1.25;
+const DEFAULT_AMP = 1.1;
 
 // …but the same 1.25px is not the same amount of wobble on a 320px card
 // and on a 68px disc. Flat, it made the radial menu's circles read as
@@ -105,13 +105,23 @@ function sampleRoundRect(
   const pts: Sample[] = [];
   let t = 0;
 
+  // EVERY SEGMENT IS HALF-OPEN — it emits its start and not its end,
+  // because the next segment's start IS that end.
+  //
+  // Emitting both put a DUPLICATE point at all eight junctions, which is
+  // exactly where the corners are, and a spline through two points in
+  // the same place has a zero-length tangent there: it goes locally
+  // straight and then turns. That is what made the frames read as
+  // "corner, straight bit, corner" — programmatic — instead of as a
+  // line somebody drew. The circles never showed it because a circle is
+  // four arcs with no straight runs between them.
   const line = (
     x0: number, y0: number, x1: number, y1: number,
     nx: number, ny: number,
   ) => {
     const len = Math.hypot(x1 - x0, y1 - y0);
     const n = Math.max(1, Math.round(len / step));
-    for (let i = 0; i <= n; i++) {
+    for (let i = 0; i < n; i++) {
       const f = i / n;
       pts.push({ x: x0 + (x1 - x0) * f, y: y0 + (y1 - y0) * f, nx, ny, t: t + len * f });
     }
@@ -121,7 +131,7 @@ function sampleRoundRect(
   const arc = (cx: number, cy: number, a0: number, a1: number) => {
     const len = Math.abs(a1 - a0) * rr;
     const n = Math.max(2, Math.round(len / step));
-    for (let i = 0; i <= n; i++) {
+    for (let i = 0; i < n; i++) {
       const a = a0 + (a1 - a0) * (i / n);
       pts.push({
         x: cx + Math.cos(a) * rr,
@@ -134,6 +144,12 @@ function sampleRoundRect(
     t += len;
   };
 
+  // The one point a half-open walk leaves out: where an OPEN path stops.
+  // A closed one needs no such thing — it stops where it started.
+  const end = (x: number, y: number, nx: number, ny: number) => {
+    pts.push({ x, y, nx, ny, t });
+  };
+
   if (open === 'top') {
     // Top-left, down the left side, around the bottom, up to top-right.
     line(0, 0, 0, h - rr, -1, 0);
@@ -141,6 +157,7 @@ function sampleRoundRect(
     line(rr, h, w - rr, h, 0, 1);
     arc(w - rr, h - rr, Math.PI / 2, 0);
     line(w, h - rr, w, 0, 1, 0);
+    end(w, 0, 1, 0);
   } else if (open === 'right') {
     // Top-right, back along the top, down the left, out along the
     // bottom to the right edge again.
@@ -149,6 +166,7 @@ function sampleRoundRect(
     line(0, rr, 0, h - rr, -1, 0);
     arc(rr, h - rr, Math.PI, Math.PI / 2);
     line(rr, h, w, h, 0, 1);
+    end(w, h, 0, 1);
   } else {
     line(rr, 0, w - rr, 0, 0, -1);
     arc(w - rr, rr, -Math.PI / 2, 0);
@@ -166,34 +184,60 @@ function sampleRoundRect(
 // closed outline meets itself exactly where it started and there is no
 // seam at the top-left corner. Seeded phases and frequencies are what
 // make one frame differ from the next.
+//
+// SLOW waves. The first cut ran 2–3 and 5–7 cycles around the outline
+// and the faster one carried a third of the weight, which put a visible
+// ripple along every edge. One or two long waves with a quiet second
+// harmonic is what a hand actually does to a straight line: it drifts
+// off and comes back, once, over the whole run.
 function noiseFn(seed: number, closed: boolean, period: number) {
   const rand = rng(seed);
-  const f1 = closed ? 2 + Math.floor(rand() * 2) : 1.5 + rand();
-  const f2 = closed ? 5 + Math.floor(rand() * 3) : 3.5 + rand() * 2;
+  const f1 = closed ? 1 + Math.floor(rand() * 2) : 0.8 + rand() * 0.6;
+  const f2 = closed ? 3 + Math.floor(rand() * 2) : 2 + rand();
   const p1 = rand() * Math.PI * 2;
   const p2 = rand() * Math.PI * 2;
-  const w2 = 0.3 + rand() * 0.25;
+  const w2 = 0.14 + rand() * 0.14;
   return (t: number) => {
     const u = (t / period) * Math.PI * 2;
     return (Math.sin(u * f1 + p1) * (1 - w2) + Math.sin(u * f2 + p2) * w2);
   };
 }
 
-// Catmull-Rom through the jittered points, converted to cubic Béziers.
-// A polyline of 60 short segments would be a technically wobbly line and
-// visually a saw; the spline is what makes it a stroke.
+// CENTRIPETAL Catmull-Rom through the points, as cubic Béziers.
+//
+// The uniform version — control handles at (p2 - p0)/6 — assumes the
+// points are evenly spaced, and ours are not: a corner packs several
+// samples into a 20px arc while a card's edge spreads them over 250px.
+// Uniform handles across that boundary either overshoot into a little
+// loop or collapse toward zero and pinch, and a pinch is exactly what a
+// corner drawn by a program looks like. Weighting each handle by the
+// distance to its neighbour (alpha = 0.5, Barry–Goldman) removes both:
+// no cusps, no self-intersection, no matter how uneven the spacing.
+const CR_ALPHA = 0.5;
+
 function splinePath(pts: { x: number; y: number }[], closed: boolean): string {
   const n = pts.length;
   if (n < 2) return '';
   const at = (i: number) => pts[closed ? ((i % n) + n) % n : Math.max(0, Math.min(n - 1, i))]!;
+  const knot = (a: { x: number; y: number }, b: { x: number; y: number }) =>
+    Math.max(1e-4, Math.pow(Math.hypot(b.x - a.x, b.y - a.y), CR_ALPHA));
   let d = `M ${at(0).x.toFixed(2)} ${at(0).y.toFixed(2)}`;
   const last = closed ? n : n - 1;
   for (let i = 0; i < last; i++) {
     const p0 = at(i - 1); const p1 = at(i); const p2 = at(i + 1); const p3 = at(i + 2);
-    const c1x = p1.x + (p2.x - p0.x) / 6;
-    const c1y = p1.y + (p2.y - p0.y) / 6;
-    const c2x = p2.x - (p3.x - p1.x) / 6;
-    const c2y = p2.y - (p3.y - p1.y) / 6;
+    const d1 = knot(p0, p1); const d2 = knot(p1, p2); const d3 = knot(p2, p3);
+    const c1x =
+      (d1 * d1 * p2.x - d2 * d2 * p0.x + (2 * d1 * d1 + 3 * d1 * d2 + d2 * d2) * p1.x) /
+      (3 * d1 * (d1 + d2));
+    const c1y =
+      (d1 * d1 * p2.y - d2 * d2 * p0.y + (2 * d1 * d1 + 3 * d1 * d2 + d2 * d2) * p1.y) /
+      (3 * d1 * (d1 + d2));
+    const c2x =
+      (d3 * d3 * p1.x - d2 * d2 * p3.x + (2 * d3 * d3 + 3 * d3 * d2 + d2 * d2) * p2.x) /
+      (3 * d3 * (d3 + d2));
+    const c2y =
+      (d3 * d3 * p1.y - d2 * d2 * p3.y + (2 * d3 * d3 + 3 * d3 * d2 + d2 * d2) * p2.y) /
+      (3 * d3 * (d3 + d2));
     d += ` C ${c1x.toFixed(2)} ${c1y.toFixed(2)} ${c2x.toFixed(2)} ${c2y.toFixed(2)} ${p2.x.toFixed(2)} ${p2.y.toFixed(2)}`;
   }
   return closed ? `${d} Z` : d;
