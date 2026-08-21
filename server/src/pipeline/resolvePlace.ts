@@ -74,6 +74,41 @@ export function normalisePlaceText(s: string): string {
     .trim();
 }
 
+// UKRAINIAN INFLECTS, AND THE FIRST VERSION OF THIS DID NOT KNOW.
+//
+// Matching the gazetteer name as an exact substring finds «Оболонь» and
+// misses «на Оболоні», «з Троєщини», «біля Лукʼянівки» — which is how
+// people actually write about where they lost an animal. Measured
+// against the 80 invisible pets it found a place in 6 of them and
+// reported 74 as "no place named", a number that would have killed this
+// whole approach on a defect in the matcher.
+//
+// keywords.ts already says it: "Stems over full forms — Ukrainian/
+// Russian inflect heavily so we match on roots". Same rule, applied here
+// too late.
+//
+// The stem is the name minus its case ending. Trimming two characters
+// covers -ою -ій -ах -ів -ями and the rest; the floor of five keeps the
+// stem long enough to still mean something, so «Лісова» stems to «лісов»
+// and not to noise.
+// Trim one character, then two: -ої and -ів need two, but «Лісова» →
+// «Лісової» only needs one, and a fixed trim of two takes «лісов» below
+// the floor and finds nothing at all. Longest stem first, so the
+// tightest match that can work is the one used.
+const STEM_TRIMS = [1, 2];
+const MIN_STEM_CHARS = 5;
+
+export function placeStems(key: string): string[] {
+  const words = key.split(' ');
+  const last = words[words.length - 1]!;
+  const out: string[] = [];
+  for (const trim of STEM_TRIMS) {
+    if (last.length - trim < MIN_STEM_CHARS) continue;
+    out.push([...words.slice(0, -1), last.slice(0, last.length - trim)].join(' '));
+  }
+  return out;
+}
+
 /**
  * The best place named in `text`, or null when nothing is named.
  *
@@ -88,14 +123,22 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   const hay = normalisePlaceText(text);
   if (!hay) return null;
 
-  let best: ResolvedPlace | null = null;
-  let bestScore = -1;
+  const hits: { place: ResolvedPlace; key: string; score: number }[] = [];
 
   for (const p of places) {
     const key = normalisePlaceText(p.name);
     if (key.length < MIN_PLACE_CHARS) continue;
-    const at = hay.indexOf(key);
-    if (at < 0) continue;
+    // Exact first, stem second. An exact hit is worth more than an
+    // inflected one and should not be outranked by a longer stem match.
+    let at = hay.indexOf(key);
+    let exact = at >= 0;
+    if (at < 0) {
+      for (const stem of placeStems(key)) {
+        at = hay.indexOf(stem);
+        if (at >= 0) break;
+      }
+      if (at < 0) continue;
+    }
 
     const before = hay.slice(Math.max(0, at - 22), at);
     const marked = MARKERS.test(before);
@@ -103,13 +146,37 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
     // Scaled so no combination of the lower two can outrank a marked
     // match — that ordering is the whole defence against prose.
     const score =
-      (marked ? 10_000 : 0) + (SPECIFICITY[p.category] ?? 0) * 100 + Math.min(key.length, 60);
+      (marked ? 10_000 : 0) +
+      (exact ? 1_000 : 0) +
+      (SPECIFICITY[p.category] ?? 0) * 100 +
+      Math.min(key.length, 60);
 
-    if (score > bestScore) {
-      bestScore = score;
-      best = { name: p.name, lat: p.lat, lng: p.lng, category: p.category, marked };
-    }
+    hits.push({
+      place: { name: p.name, lat: p.lat, lng: p.lng, category: p.category, marked },
+      key,
+      score,
+    });
   }
 
-  return best;
+  if (hits.length === 0) return null;
+
+  // CONTAINMENT FIRST, BEFORE ANY SCORE.
+  //
+  // «Софіївська Борщагівка» is a village 8km from Kyiv's «Борщагівка»,
+  // and an ad naming the first contains the second as a substring. On
+  // the production dry run the shorter one won — it is categorised as a
+  // street, and a street outranks a neighbourhood — so a pet would have
+  // been moved confidently into the wrong district.
+  //
+  // When one matched name contains another, they are not two candidates.
+  // They are one place named at two precisions, and the longer name is
+  // the one the owner actually wrote. No category ranking should be able
+  // to overturn that, so this happens before scoring rather than inside
+  // it.
+  const survivors = hits.filter(
+    (h) => !hits.some((other) => other !== h && other.key.includes(h.key)),
+  );
+
+  survivors.sort((a, b) => b.score - a.score);
+  return survivors[0]?.place ?? null;
 }
