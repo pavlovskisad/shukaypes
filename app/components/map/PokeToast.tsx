@@ -5,6 +5,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { DogSprite } from './DogSprite';
 import { haptic } from '../../utils/haptics';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { R } from '../../constants/radius';
 
 // "{name} poked you!" notification. Watches the store's incomingPoke.seq so it
 // fires exactly once per poke: pops in, fires a success haptic, shows the
@@ -61,7 +62,7 @@ export function PokeToast({ onGoTo }: Props) {
         alignItems: 'center',
         gap: 10,
         padding: '8px 14px 8px 8px',
-        borderRadius: 18,
+        borderRadius: R.card,
         background: 'rgba(20,20,25,0.92)',
         color: '#fff',
         boxShadow: '0 6px 20px rgba(0,0,0,0.35)',

@@ -35,6 +35,7 @@ import Animated, {
 } from 'react-native-reanimated';
 import { Gesture, GestureDetector } from 'react-native-gesture-handler';
 import { R } from '../../constants/radius';
+import { INK } from '../../constants/surface';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
@@ -403,11 +404,17 @@ export function CardStack<T>({
   // any low-travel release. Peek taps also route to onTap(topItem);
   // simpler than per-slot hit-testing and matches carousel
   // expectations ("the centre card is what you interact with").
-  // Both freeze while focused: the confirmation's answers are buttons,
-  // and a deck that still swiped under them could change WHICH dog is
-  // centred out from under the question being asked.
+  // THE PAN freezes while focused: a deck that still swiped under the
+  // confirmation's answers could change WHICH dog is centred out from
+  // under the question being asked.
+  //
+  // The tap does not. It was frozen alongside the pan and did not need
+  // to be — a tap moves nothing, so the question keeps its pet either
+  // way. What it cost was the one card on screen during the question
+  // being deaf, when the obvious thing to want from a photo of a lost
+  // animal is to read what its owner wrote. The caller decides what a
+  // tap means while focused; here it just still arrives.
   const tap = Gesture.Tap()
-    .enabled(!focused)
     .onEnd(() => {
       runOnJS(handleTap)();
     });
@@ -632,6 +639,8 @@ export function CardStackSkeleton({
               backgroundRepeat: 'no-repeat',
               animation: 'card-stack-shimmer 1.8s ease-in-out infinite',
               borderRadius: R.card,
+              borderWidth: 2,
+              borderColor: INK,
               transform: [{ scale: TOP_SCALE }],
               shadowColor: '#000',
               shadowOffset: { width: 0, height: 8 },
@@ -676,9 +685,17 @@ const styles = StyleSheet.create({
     // browsers that don't support `will-change` ignore it too.
     willChange: 'transform, opacity',
   } as unknown as object,
+  // THE PLACEHOLDERS KEEP A PLAIN BORDER. Everything real in this app
+  // draws its edge by hand now, and these deliberately do not: a
+  // skeleton is a rectangle standing in for a card that has not
+  // arrived, and giving it the drawn line — the thing that says "this
+  // is a piece of paper somebody made" — would be the loading state
+  // claiming to be the content.
   greyDeckCard: {
     backgroundColor: '#e6e6e6',
     borderRadius: R.card,
+    borderWidth: 2,
+    borderColor: INK,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: 4 },
     shadowOpacity: 0.08,
@@ -690,10 +707,11 @@ const styles = StyleSheet.create({
     color: '#777',
     fontWeight: '600',
   },
-  // Classic web hyperlink — same blue + underline used in the
-  // rest of the app (xp bars, sniff toggle, chat accent).
+  // Underlined, in ink. It used to be web-hyperlink blue, which made
+  // it the only blue control left once the CTA pills went black and
+  // white — and blue in this app means the map, not "tap here".
   counterLink: {
-    color: 'rgba(0,60,255,0.85)',
+    color: INK,
     textDecorationLine: 'underline',
   },
   counterPressed: {

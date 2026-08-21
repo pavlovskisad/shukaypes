@@ -5,9 +5,9 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK } from '../../constants/surface';
 import { api, type NearbyLostDog, type TerritoryRanking } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
 import {
@@ -23,6 +23,7 @@ import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColo
 import { BoardRow } from '../../components/ui/BoardRow';
 import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
 import { useHint } from '../../hooks/useHint';
+import { HandDrawnBar } from '../../components/ui/HandDrawn';
 
 interface QuestHistoryRow {
   id: string;
@@ -124,7 +125,7 @@ export default function TasksScreen() {
   const lostDogs = useGameStore((s) => s.lostDogs);
   const lostDogsLoaded = useGameStore((s) => s.lostDogsLoaded);
   const userPos = useGameStore((s) => s.userPosition);
-  const setSelectedDog = useGameStore((s) => s.setSelectedDog);
+  const setSearchIntent = useGameStore((s) => s.setSearchIntent);
   const currentScreen = useGameStore((s) => s.currentScreen);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
   // The territory standing. Null until the first fetch settles; a
@@ -187,16 +188,23 @@ export default function TasksScreen() {
     persist: false,
   });
 
-  // Tapping a dog (card or "see all" row) jumps to the map with the
-  // pet selected — the map snaps the camera onto it and opens the
-  // LostDogModal there. Same pattern the spots tab uses (setSelected +
-  // route to '/'); no local modal on this tab anymore.
+  // Tapping a dog (card or "see all" row) jumps to the map and puts the
+  // dog's own «ходімо?» question up about that pet, in supersniff.
+  //
+  // It used to select the pet instead, which opened the preview sheet on
+  // the map: the same photo, the same name and the same distance as the
+  // card that had just been tapped, plus one button that started the
+  // search. Nothing on it was new, and the one thing it offered was the
+  // thing the tap already meant. The question is the destination now,
+  // and the pet's card is under it — with the ad one tap away on the
+  // photo, which is the only thing the sheet carried that the card
+  // does not.
   const onPickDog = useCallback(
     (dog: NearbyLostDog) => {
-      setSelectedDog(dog.id);
+      setSearchIntent(dog.id);
       router.push('/');
     },
-    [setSelectedDog, router],
+    [setSearchIntent, router],
   );
 
   // Tap a row on the standing → the map, landed on that owner's ground.
@@ -558,14 +566,7 @@ export default function TasksScreen() {
               single bar at the top makes "how done am I overall?"
               readable without summing five row widths. */}
           <View style={styles.summaryBarTrack}>
-            <View
-              style={[
-                styles.summaryBarFill,
-                {
-                  width: `${Math.round((doneCount / TASKS.length) * 100)}%` as unknown as number,
-                },
-              ]}
-            />
+            <HandDrawnBar progress={doneCount / TASKS.length} seed="daily-summary" />
           </View>
           {TASKS.map((row, i) => {
             const value = Math.min(dailyTasks[row.key], row.target);
@@ -592,18 +593,15 @@ export default function TasksScreen() {
                     {complete ? ' ✓' : ''}
                   </Text>
                 </View>
+                {/* Ink, done or not. The bar used to be blue while you
+                    were working on it and a faded black once finished,
+                    which put the LOUDER colour on the row you no longer
+                    have to do anything about. A finished row already
+                    says so twice — a full-width bar and a ✓ — and it
+                    does not need a second colour to say it a third
+                    time. Drawn, like everything else on this card. */}
                 <View style={styles.barTrack}>
-                  <View
-                    style={[
-                      styles.barFill,
-                      {
-                        width: `${progress * 100}%` as unknown as number,
-                        backgroundColor: complete
-                          ? 'rgba(0,0,0,0.45)'
-                          : 'rgba(0,60,255,0.85)',
-                      },
-                    ]}
-                  />
+                  <HandDrawnBar progress={progress} seed={row.key} />
                 </View>
               </View>
             );
@@ -769,15 +767,7 @@ const styles = StyleSheet.create({
   // anchors the X / Y tally to a quick "how done?" glance.
   summaryBarTrack: {
     height: 6,
-    borderRadius: R.sm,
-    backgroundColor: '#f0f0f0',
-    overflow: 'hidden',
     marginBottom: S.s,
-  },
-  summaryBarFill: {
-    height: '100%',
-    borderRadius: R.sm,
-    backgroundColor: 'rgb(0,60,255)',
   },
   // Roomier task row: padding 12 → 16, gap 10 → 14, icon column
   // 22 → 44 to actually fit the 34px pixel icon (was being clipped
@@ -824,7 +814,10 @@ const styles = StyleSheet.create({
   boardSeeAll: {
     fontSize: TYPE.small,
     fontWeight: '700',
-    color: 'rgba(0,60,255,0.85)',
+    // Ink, not web-hyperlink blue. Same fix the deck's counter link
+    // got; this one was missed because it lives on the tasks tab
+    // rather than in the card stack.
+    color: INK,
     textDecorationLine: 'underline',
     textAlign: 'center',
     paddingVertical: S.m,
@@ -839,13 +832,11 @@ const styles = StyleSheet.create({
   // The daily tasks' progress bars. The standing used to share these —
   // its rows carried a bar each — but it draws silhouettes now, so the
   // track lives on for the tasks card alone.
+  // Just the row the bar is drawn into now — the track and the fill are
+  // both strokes inside it. See HandDrawnBar.
   barTrack: {
     height: 6,
-    backgroundColor: '#f0f0f0',
-    borderRadius: R.sm,
-    overflow: 'hidden',
   },
-  barFill: { height: '100%', borderRadius: R.sm },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',

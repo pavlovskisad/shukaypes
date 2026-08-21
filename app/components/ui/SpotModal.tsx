@@ -7,10 +7,13 @@ import { INLINE_ICON, ICON_HERO, EMOJI_HERO } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
-import { MODAL_PILL_DARK, MODAL_PILL_BLUE } from '../../constants/buttons';
+import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
+import { INK, SURFACE } from '../../constants/surface';
+import { colors } from '../../constants/colors';
 import { playPopThen } from '../../utils/popOnTap';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
+import { HandDrawnFrame } from './HandDrawn';
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -26,7 +29,9 @@ const SHEET_ANIM_MS = 280;
 const HERO_HEIGHT_PX = 220;
 // Top-anchored modal — bump the badge / close button down by the
 // safe-area inset so they clear the iPhone notch / status bar.
-const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
+// The overlay holds the sheet clear of the notch now, so this is
+// just the sheet's own inside margin.
+const SAFE_TOP = 12;
 
 // Slide-up POI sheet. Mirrors LostDogModal's hero-on-top layout but
 // with a giant category icon instead of a photo — same visual family,
@@ -34,7 +39,6 @@ const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
 // timeout runs the slide-down before unmounting.
 export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   const t = useStrings();
-  const CATEGORY_LABEL: Record<string, string> = t.modals.spot.categories;
   const [renderSpot, setRenderSpot] = useState<Spot | null>(spot);
   const [closing, setClosing] = useState(false);
 
@@ -57,7 +61,6 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   if (!renderSpot) return null;
   if (typeof document === 'undefined') return null;
 
-  const categoryLabel = CATEGORY_LABEL[renderSpot.category] ?? renderSpot.category;
   const iconSlot = iconForCategory(renderSpot.category);
   const hasRating = typeof renderSpot.rating === 'number';
 
@@ -79,6 +82,21 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         // Anchored at the TOP — same dashboard-card-from-above
         // shape as the LostDogModal so the two read as one family.
         alignItems: 'flex-start',
+        // THE SHEET HANGS, IT DOES NOT GROW OUT OF THE BEZEL.
+        //
+        // It used to run to all three screen edges with its top edge off
+        // the top of the page — so the two side lines began nowhere,
+        // out of thin air, cut off by the viewport. There is no fixing
+        // that by going further up: viewport-fit=cover means the
+        // INSTALLED app flows under the status bar and could paint
+        // there, but in a browser tab the page simply starts below it
+        // and there is nothing above to reach into. So the sheet stops
+        // being a full-bleed panel and becomes a poster with four
+        // edges, hanging a few px under the inset. Padding on the
+        // OVERLAY rather than margin on the sheet, because a flex item
+        // at width:100% adds its margins on top and overflows.
+        padding: 'calc(env(safe-area-inset-top, 0px) + 8px) 10px 0',
+        boxSizing: 'border-box',
         justifyContent: 'center',
         zIndex: Z.MODAL_MAP,
         opacity: closing ? 0 : 1,
@@ -90,28 +108,32 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         style={{
           background: '#ffffff',
           // Full-bleed top edge, rounded bottom only.
-          borderTopLeftRadius: 0,
-          borderTopRightRadius: 0,
-          borderBottomLeftRadius: R.card,
-          borderBottomRightRadius: R.card,
+          borderRadius: R.card,
           padding: 0,
           width: '100%',
           maxWidth: 460,
           // Cap so the action pills stay above the tab bar even on
           // short viewports.
-          maxHeight: 'calc(100vh - 110px - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+          boxShadow: SURFACE.lift,
+          // A top sheet slides down from off-screen and runs to both
+          // screen edges, so it has exactly one edge the eye can see:
+          // the bottom, with its two rounded corners. Inking all four
+          // would draw a line along the top that is never on screen and
+          // two down the sides that sit flush against the bezel.
+          position: 'relative',
           overflow: 'hidden',
         }}
       >
-        {/* Hero block — soft-grey tinted band carrying a big centred
-            category icon. Category chip top-left, rating chip +
-            close button top-right. Same "hero on top of card" shape
-            as the LostDogModal photo header so the two read as one
-            family. */}
+        {/* All four edges, drawn — see HandDrawn.tsx. */}
+        <HandDrawnFrame radius={R.card} />
+        {/* Hero block — a big centred category icon on white, with the
+            rating and the close button top-right. Same "hero on top of
+            card" shape as the LostDogModal photo header so the two read
+            as one family. */}
         <div
           style={{
             position: 'relative',
@@ -134,29 +156,37 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               {renderSpot.icon ?? '📍'}
             </span>
           )}
-          {/* Category chip top-left — full-pill + lifted shadow
-              to match the HUD / chat / card chip family. */}
-          <span
-            style={{
-              position: 'absolute',
-              top: SAFE_TOP,
-              left: 14,
-              background: '#ffffff',
-              color: '#555',
-              borderRadius: R.pill,
-              padding: '6px 12px',
-              fontSize: TYPE.small,
-              fontWeight: 700,
-              letterSpacing: 0.4,
-              textTransform: 'lowercase',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
-            }}
-          >
-            {categoryLabel}
-          </span>
-          {/* Top-right cluster — rating chip (if available) + close
-              button. Rating uses the same white-pill family as the
-              category chip but with gold star + value. */}
+          {/* No category label. The hero icon directly above it is a
+              drawn cup, a bowl, a paw — the word кав'ярня underneath
+              was the same fact twice, in a patch that had to be drawn
+              to hold it. */}
+          {/* Rating LEFT, where the category label used to be. No patch:
+              the hero band behind it is already white, so the chip was
+              a white rectangle drawn on white to hold two characters
+              and all it added was an outline. Matches the spot card,
+              which puts the rating on the same side. */}
+          {hasRating ? (
+            <span
+              style={{
+                position: 'absolute',
+                top: SAFE_TOP,
+                left: 14,
+                color: INK,
+                fontSize: TYPE.body,
+                fontWeight: 800,
+                letterSpacing: 0.3,
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+              }}
+            >
+              <span style={{ color: colors.amber }}>★</span>
+              {renderSpot.rating!.toFixed(1)}
+            </span>
+          ) : null}
+          {/* The close button keeps the right corner to itself, and
+              stays full-round: it is a circle and a control, not a
+              readout. */}
           <div
             style={{
               position: 'absolute',
@@ -167,22 +197,6 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               gap: S.s,
             }}
           >
-            {hasRating ? (
-              <span
-                style={{
-                  background: '#ffffff',
-                  color: '#d9a030',
-                  borderRadius: R.pill,
-                  padding: '6px 12px',
-                  fontSize: TYPE.small,
-                  fontWeight: 700,
-                  letterSpacing: 0.3,
-                  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
-                }}
-              >
-                ★ {renderSpot.rating!.toFixed(1)}
-              </span>
-            ) : null}
             <button
               onClick={(e) => playPopThen(e.currentTarget, onClose)}
               aria-label={t.modals.common.close}
@@ -190,7 +204,9 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 width: 36,
                 height: 36,
                 borderRadius: R.pill,
-                border: '1px solid rgba(0,0,0,0.06)',
+                // Drawn ring — see the HandDrawnFrame child.
+                border: '2px solid transparent',
+                position: 'relative',
                 background: '#ffffff',
                 color: '#1a1a1a',
                 padding: 0,
@@ -198,11 +214,12 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 alignItems: 'center',
                 justifyContent: 'center',
                 cursor: 'pointer',
-                boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+                boxShadow: SURFACE.chip,
                 fontSize: TYPE.display,
                 lineHeight: 1,
               }}
             >
+              <HandDrawnFrame radius={R.pill} />
               ×
             </button>
           </div>
@@ -264,9 +281,12 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             onClick={(e) =>
               playPopThen(e.currentTarget, () => onWalkHere?.(renderSpot, 'roundtrip'))
             }
-            style={MODAL_PILL_BLUE}
+            style={MODAL_PILL_LIGHT}
           >
-            <Icon name="roundtrip" size={INLINE_ICON.cta} inverted />
+            <HandDrawnFrame radius={R.button} />
+            {/* Not inverted any more — the pill under it went from blue
+                to white, and a white icon on white is nothing. */}
+            <Icon name="roundtrip" size={INLINE_ICON.cta} />
             <span>{t.modals.spot.roundtrip}</span>
           </button>
         </div>

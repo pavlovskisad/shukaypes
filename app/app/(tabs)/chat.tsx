@@ -11,15 +11,14 @@ import {
   Platform,
   Linking,
   ActivityIndicator,
-  Image,
 } from 'react-native';
-import logoNose from '../../assets/logo-nose.png';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK, SURFACE } from '../../constants/surface';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { pickBottomInset } from '../../services/telegram';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
@@ -32,10 +31,10 @@ import { distanceMeters } from '../../utils/geo';
 import type { ChatMessage } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
+import { HandDrawnFrame } from '../../components/ui/HandDrawn';
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 
-const ACCENT_BLUE = 'rgba(0,60,255,0.85)';
 
 function linkify(text: string): Array<{ kind: 'text' | 'link'; value: string }> {
   const parts: Array<{ kind: 'text' | 'link'; value: string }> = [];
@@ -55,7 +54,6 @@ export default function ChatScreen() {
   const lang = useLangStore((s) => s.lang);
   const router = useRouter();
   const userPosition = useGameStore((s) => s.userPosition);
-  const companionName = useGameStore((s) => s.companionName);
   const startQuest = useGameStore((s) => s.startQuest);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   const [messages, setMessages] = useState<ChatMessage[]>([]);
@@ -286,7 +284,6 @@ export default function ChatScreen() {
     }
   }, [draft, sending, userPosition, dispatchAction, t, lang]);
 
-  const header = useMemo(() => companionName || 'шукайпес', [companionName]);
 
   const iosInsets = useSafeAreaInsets();
   // In TG Mini App, TG handles the home-indicator strip. Using iOS's
@@ -333,31 +330,9 @@ export default function ChatScreen() {
         {typing ? <TypingIndicator /> : null}
       </ScrollView>
 
-      {/* Fade strips — gradient fully CONTAINED within the
-          chrome zones (no extension into the chat area). Top
-          strip spans status bar + header pill height, fading
-          from greyBg at the screen edge to transparent at the
-          chat-facing edge. Bottom strip mirrors. Bubbles
-          scrolling into the chrome dissolve gradually over the
-          full chrome height; the chat area stays free of any
-          fade overlay. Below z-5 chrome, above the scroll. */}
-      <View
-        style={[
-          styles.fadeStrip,
-          {
-            top: 0,
-            height: insets.top + HEADER_BAND_HEIGHT,
-            // Multi-stop ease curve weighted toward the end —
-            // extra near-transparent stops (0.08 at 95%) so the
-            // last segment fades to nothing without a visible
-            // cutoff line. Solid greyBg 0-35%, then 0.85 →
-            // 0.55 → 0.25 → 0.08 → 0 with the slope decreasing
-            // toward 100%.
-            backgroundImage: `linear-gradient(to bottom, ${colors.greyBg} 0%, ${colors.greyBg} 35%, rgba(240,240,240,0.85) 50%, rgba(240,240,240,0.55) 68%, rgba(240,240,240,0.25) 83%, rgba(240,240,240,0.08) 95%, ${TRANSPARENT_BG} 100%)`,
-          } as unknown as object,
-        ]}
-        pointerEvents="none"
-      />
+      {/* One fade strip, at the bottom. The top one is gone: there is
+          no chrome up there for a message to dissolve into any more,
+          so all it did was smear the first line of the transcript. */}
       <View
         style={[
           styles.fadeStrip,
@@ -375,25 +350,16 @@ export default function ChatScreen() {
               INPUT_GAP_ABOVE_TABS +
               INPUT_BAND_HEIGHT,
             // Mirror of the top — same eased curve.
-            backgroundImage: `linear-gradient(to top, ${colors.greyBg} 0%, ${colors.greyBg} 35%, rgba(240,240,240,0.85) 50%, rgba(240,240,240,0.55) 68%, rgba(240,240,240,0.25) 83%, rgba(240,240,240,0.08) 95%, ${TRANSPARENT_BG} 100%)`,
+            backgroundImage: `linear-gradient(to top, ${SURFACE.fill} 0%, ${SURFACE.fill} 35%, rgba(255,255,255,0.85) 50%, rgba(255,255,255,0.55) 68%, rgba(255,255,255,0.25) 83%, rgba(255,255,255,0.08) 95%, ${TRANSPARENT_BG} 100%)`,
           } as unknown as object,
         ]}
         pointerEvents="none"
       />
 
-      {/* Top pill — compact companion-handle so it reads as "who
-          you're talking to" rather than a hero card. */}
-      <View
-        style={[styles.topBand, { paddingTop: insets.top }]}
-        pointerEvents="box-none"
-      >
-        <View style={styles.headerCard} pointerEvents="auto">
-          <View style={styles.headerLogoPill}>
-            <Image source={logoNose} style={styles.headerLogo} resizeMode="contain" />
-          </View>
-          <Text style={styles.headerTitle}>{header}</Text>
-        </View>
-      </View>
+      {/* No masthead. It named a screen you had already navigated to,
+          and it was the one thing stopping the transcript from simply
+          dissolving into the top fade. The fade above does the whole
+          job on its own. */}
 
       {/* Bottom frosted band — sits just above the dashboard tab bar.
           KAV pushes it up when the keyboard appears on iOS native;
@@ -440,6 +406,7 @@ export default function ChatScreen() {
               }}
             />
             <Pressable style={styles.sendBtn} onPress={send} onPressIn={popPressableEvent} disabled={sending}>
+              <HandDrawnFrame radius={R.pill} />
               {sending ? (
                 <ActivityIndicator size="small" color="#fff" />
               ) : (
@@ -463,6 +430,9 @@ function Bubble({ msg }: { msg: ChatMessage }) {
         isUser ? styles.userBubble : styles.assistantBubble,
       ]}
     >
+      {/* Drawn edge — only on the user's white bubble. The dog's is ink
+          on ink, where a line is nothing. */}
+      {isUser ? <HandDrawnFrame radius={R.card} seed={msg.id ?? msg.content} /> : null}
       <Text
         style={[
           styles.bubbleText,
@@ -525,7 +495,9 @@ const CHROME_SHADOW = {
 // Approximate visible heights for the floating pills. Used as scroll
 // content padding so the first/last bubble can scroll past each pill
 // without ever sitting flush against it.
-const HEADER_BAND_HEIGHT = 56;   // compact pill + its top/bottom margins
+// No masthead and no fade up there any more. This is just the gap
+// between the status bar and the first message.
+const HEADER_BAND_HEIGHT = 8;
 const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 // Visible reserved bottom space = the floating dashboard pill
 // (58 px, post-trim) plus the 24 px gap it hovers above the
@@ -533,24 +505,23 @@ const INPUT_BAND_HEIGHT = 70;    // inputCard + its top/bottom band padding
 // the styles section; keep in sync with _layout.tsx's
 // tabBarStyle.height (58) + bottom: insets.bottom + S.xxl (24).
 const TAB_BAR_HEIGHT = 82;
-// CSS-friendly transparent value matching colors.greyBg so the
-// gradient interpolates as alpha-only on the same hue (no
-// shift through grey-tinted intermediate values).
-const TRANSPARENT_BG = 'rgba(240,240,240,0)';
+// CSS-friendly transparent value matching the page background so the
+// gradient interpolates as alpha-only on the same hue (no shift through
+// a tinted intermediate value).
+const TRANSPARENT_BG = 'rgba(255,255,255,0)';
 // Breathing room between input wrap and the tab bar — used in addition
 // to safe-area inset because TG Mini App reports inset.bottom=0.
 const INPUT_GAP_ABOVE_TABS = 10;
 const styles = StyleSheet.create({
+  // WHITE PAPER, like every other surface in the app. The chat sat on
+  // grey, which made the dog's ink bubbles read as cards on a table
+  // rather than as words on the page — and made the user's white ones
+  // the only thing here that WAS a card. The fade strip at the bottom
+  // moves with it: it exists to dissolve the transcript into the page,
+  // so it has to be the page's colour or it draws a band of its own.
   root: {
     flex: 1,
-    backgroundColor: colors.greyBg,
-  },
-  topBand: {
-    position: 'absolute',
-    top: 0,
-    left: 0,
-    right: 0,
-    zIndex: 5,
+    backgroundColor: SURFACE.fill,
   },
   bottomBandWrap: {
     position: 'absolute',
@@ -576,37 +547,6 @@ const styles = StyleSheet.create({
   // White header pill with a stronger CHROME_SHADOW so it
   // separates cleanly from the chat background and reads as
   // floating chrome rather than melting into the bubbles below.
-  headerCard: {
-    alignSelf: 'center',
-    marginTop: S.m,
-    marginBottom: S.s,
-    backgroundColor: '#ffffff',
-    borderRadius: R.pill,
-    paddingVertical: S.s,
-    paddingHorizontal: S.l,
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: S.s,
-    ...CHROME_SHADOW,
-  },
-  headerLogoPill: {
-    width: 36,
-    height: 36,
-    borderRadius: R.pill,
-    backgroundColor: '#ffffff',
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  headerLogo: {
-    width: 26,
-    height: 26,
-  },
-  headerTitle: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.body,
-    fontWeight: '700',
-    color: colors.black,
-  },
   listContent: {
     paddingHorizontal: S.l,
     // paddingTop/paddingBottom are set inline so the bands' on-screen
@@ -625,12 +565,15 @@ const styles = StyleSheet.create({
   },
   assistantBubble: {
     alignSelf: 'flex-start',
-    backgroundColor: '#ffffff',
+    backgroundColor: INK,
+    borderWidth: 2,
+    borderColor: INK,
     ...CARD_SHADOW,
   },
   userBubble: {
     alignSelf: 'flex-end',
-    backgroundColor: ACCENT_BLUE,
+    backgroundColor: SURFACE.fill,
+    // Drawn edge — see HandDrawnFrame in Bubble.
     ...CARD_SHADOW,
   },
   bubbleText: {
@@ -639,10 +582,10 @@ const styles = StyleSheet.create({
     lineHeight: 24,
   },
   assistantText: {
-    color: colors.black,
+    color: '#ffffff',
   },
   userText: {
-    color: '#ffffff',
+    color: INK,
   },
   link: {
     textDecorationLine: 'underline',
@@ -690,12 +633,13 @@ const styles = StyleSheet.create({
     width: 44,
     height: 44,
     borderRadius: R.pill,
-    backgroundColor: ACCENT_BLUE,
+    backgroundColor: SURFACE.fill,
+    // Drawn edge — see HandDrawnFrame in the button.
     alignItems: 'center',
     justifyContent: 'center',
   },
   sendBtnText: {
-    color: '#ffffff',
+    color: INK,
     fontSize: TYPE.title,
     fontWeight: '700',
   },

@@ -7,6 +7,7 @@ import { ICON_HERO } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK } from '../../constants/surface';
 
 // Stacked badge shown when 2+ spots of the same category sit close
 // enough that rendering each one as its own pin makes the map a
@@ -70,7 +71,7 @@ function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterP
             paddingLeft: S.xs,
             paddingRight: S.xs,
             borderRadius: R.md,
-            background: 'rgb(0,60,255)',
+            background: INK,
             color: '#ffffff',
             fontFamily: SYSTEM_FONT,
             fontSize: TYPE.caption,

@@ -12,9 +12,10 @@ import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 
-// Same overshoot easing the HUD pills use on the map screen — the two
-// surfaces are one piece of chrome and have to move alike.
-const POP_IN = 'cubic-bezier(0.34, 1.56, 0.64, 1)';
+// Same easing the HUD pills use on the map screen — the two surfaces
+// are one piece of chrome and have to move alike. Decelerating, no
+// spring: see the note on POP_IN in (tabs)/index.tsx.
+const POP_IN = 'cubic-bezier(0.22, 1, 0.36, 1)';
 // How long the bar takes to leave. Also how long it stays mounted after
 // being hidden — the two are the same number on purpose.
 const POP_OUT_MS = 320;
@@ -185,6 +186,10 @@ export default function TabsLayout() {
           // On a 64-tall bar that's 32 px corners → capsule shape.
           borderRadius: R.pill,
           backgroundColor: '#ffffff',
+          // No edge. The bar is the app's frame rather than something
+          // in it — it is on screen always, under everything else, and
+          // an ink outline around the whole bottom of the display read
+          // as a box drawn around the app instead of a piece of it.
           borderTopWidth: 0,
           // Lifted shadow on all sides (was upward-only since the
           // bar bled to bottom). Centred 8 px offset + soft radius

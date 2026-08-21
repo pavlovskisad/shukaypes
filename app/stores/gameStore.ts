@@ -209,6 +209,18 @@ interface GameState {
   // into existence later and shoving the daily-quests card down.
   lostDogsLoaded: boolean;
   selectedDogId: string | null;
+  // "Go and look for THIS one" — set by a surface that is not the map
+  // (the quests tab's deck and its see-all list) and consumed by
+  // MapView, which turns supersniff on and puts the dog's own «ходімо?»
+  // question up. A tap over there used to select the pet instead, which
+  // opened the preview card on the map: a sheet with the same photo,
+  // the same name and the same distance as the card just tapped, and
+  // one button. The question IS the destination; the card in between
+  // was the app asking you to confirm you meant the thing you did.
+  //
+  // Cleared the moment MapView acts on it, so a second visit to the map
+  // does not re-ask.
+  searchIntentDogId: string | null;
   spots: Spot[];
   // Same logic as lastParksFetchPos — Google Places returns spots
   // within ~800m of the centre, so a long walk drifts off the cached
@@ -346,7 +358,6 @@ interface GameState {
   // stops starts, closes when you tap a stop to go look at it, and is
   // reopened from the pill under the HUD — closing it must never be a
   // one-way door, which is what "seen" used to make it.
-  walkStopsOpen: boolean;
   dailyTasks: DailyTasks;
   syncing: boolean;
   lastSyncError: string | null;
@@ -402,6 +413,8 @@ interface GameState {
   syncPresence: (pos: LatLng) => Promise<void>;
   pokePlayer: (targetId: string) => Promise<void>;
   setSelectedDog: (id: string | null) => void;
+  // See searchIntentDogId. Pass null to drop an intent unacted on.
+  setSearchIntent: (id: string | null) => void;
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
@@ -443,7 +456,6 @@ interface GameState {
     stops?: WalkStop[],
   ) => void;
   setOpenWalkStop: (id: string | null) => void;
-  setWalkStopsOpen: (open: boolean) => void;
   reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean } | void>;
   // Detective quests. Start flips any existing active quest to abandoned
   // server-side. advance checks proximity to the current waypoint and
@@ -540,6 +552,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   markMood: null,
   lostDogsLoaded: false,
   selectedDogId: null,
+  searchIntentDogId: null,
   spots: [],
   lastSpotsFetchPos: null,
   spotsLoading: false,
@@ -571,7 +584,6 @@ export const useGameStore = create<GameState>((set, get) => ({
   walkRouteMeta: null,
   walkStops: [],
   openWalkStopId: null,
-  walkStopsOpen: false,
   // Initial state is empty for today's date; refreshDailyTasks() pulls
   // from the server on first app load and again on map-tab refocus.
   dailyTasks: blankTasks(),
@@ -1122,6 +1134,15 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (selectedDogId) get().tickDailyTask('lostPetChecks');
   },
 
+  setSearchIntent: (searchIntentDogId) => {
+    set({ searchIntentDogId });
+    // Same tick setSelectedDog does. Deciding to go and look for a pet
+    // is at least as much of a "check" as opening its card was, and the
+    // daily task should not quietly stop counting because the card in
+    // the middle went away.
+    if (searchIntentDogId) get().tickDailyTask('lostPetChecks');
+  },
+
   syncSpots: async (pos) => {
     // Skip the round-trip when the cache is fresh enough — Places is
     // pricey, and the spots tab calls this on every focus. Re-fetch
@@ -1244,7 +1265,6 @@ export const useGameStore = create<GameState>((set, get) => ({
       walkRouteMeta: null,
       walkStops: [],
       openWalkStopId: null,
-      walkStopsOpen: false,
       // Cues that were pointing at something in the old mode.
       activeHint: null,
       menuCamera: null,
@@ -1332,10 +1352,8 @@ export const useGameStore = create<GameState>((set, get) => ({
       // A new walk introduces itself. Clearing one (route null) leaves
       // nothing to show, and a walk through a district with no
       // landmarks has no list to open.
-      walkStopsOpen: (stops?.length ?? 0) > 0,
     }),
   setOpenWalkStop: (openWalkStopId) => set({ openWalkStopId }),
-  setWalkStopsOpen: (walkStopsOpen) => set({ walkStopsOpen }),
 
   reportSighting: async (dogId) => {
     const { userPosition } = get();

@@ -69,12 +69,14 @@ import { PoiCluster } from './PoiCluster';
 import { WaypointMarker } from './WaypointMarker';
 import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import { SniffPress } from './SniffPress';
-import { WalkStops, WalkStopsCard, WalkStopsToggle } from './WalkStops';
+import { WalkStops } from './WalkStops';
 import { TerritoryLayer } from './TerritoryLayer';
 import type { LatLng } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { INK, SURFACE } from '../../constants/surface';
+import { HandDrawnFrame } from '../ui/HandDrawn';
 
 const TOKEN_REFRESH_MS = 15000;
 // Extra syncs while actually walking, so a fast mover isn't looking at a
@@ -387,6 +389,42 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   const promptRef = useRef(prompt);
   promptRef.current = prompt;
 
+  // "Go and look for this one", left in the store by the quests tab.
+  // Turned into a question by the effect further down; read here too,
+  // because the deck needs it before that effect runs.
+  const searchIntentDogId = useGameStore((s) => s.searchIntentDogId);
+
+  // WHICH PET THE SUPERSNIFF DECK OPENS ON. Mount-time only — see
+  // CardStack.initialId — and the mount is the whole difficulty here.
+  //
+  // Arriving from the quests tab, the card under the question has to be
+  // the animal the question names. `prompt` is the obvious source and it
+  // is too late: the deck mounts, on the nearest pet, in a frame where
+  // the question does not exist yet. The question said Бум and the photo
+  // said Аль.
+  //
+  // There is exactly one frame in which NEITHER the store's intent nor
+  // the prompt is set — clearing the intent re-renders MapView through
+  // useSyncExternalStore before React has processed the setPrompt queued
+  // a line earlier — and the deck mounts inside it. This was measured,
+  // twice, not reasoned: swapping the two writes did not close the gap,
+  // because the store's forced render does not flush the pending React
+  // state with it.
+  //
+  // So the ref: written before the mode flip, read on the way in, and
+  // dropped when the deck goes away again. That is its whole life — it
+  // answers "what does the deck open on NEXT time it mounts", so the
+  // unmount is the honest place to clear it, and it is the one moment
+  // that cannot fall inside the gap. Dropped rather than left standing,
+  // so a later supersniff entered from the corner logo still opens on
+  // the nearest pet.
+  const deckAnchorRef = useRef<string | null>(null);
+  const deckInitialId =
+    (prompt?.kind === 'confirm' ? prompt.dog.id : null) ??
+    searchIntentDogId ??
+    deckAnchorRef.current ??
+    undefined;
+
   // The words the dog is saying right now, if it is asking something.
   // Derived rather than stored so the line always matches the state it
   // came from — a second copy would be one more thing to keep in step.
@@ -573,6 +611,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     }, DECK_ANIM_MS);
     return () => clearTimeout(timer);
   }, [deckVisible]);
+  // See deckAnchorRef: the deck consumed it on the way in, so the deck
+  // leaving is what ends its usefulness.
+  useEffect(() => {
+    if (!deckMounted) deckAnchorRef.current = null;
+  }, [deckMounted]);
   // Hint cue + radial-menu camera mode, consumed by camera/overlay
   // effects below: the long-press hint draws a "press the map" pulse,
   // and the menu camera mode frames the dog (lower for the first-time
@@ -1355,6 +1398,46 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     },
     [setSearchPreview, setSearchTarget, setSearchRoute, spotInZone, userPos, showBubble],
   );
+
+  // "GO AND LOOK FOR THIS ONE", ARRIVING FROM THE QUESTS TAB.
+  //
+  // The tab cannot raise the question itself — the question lives in
+  // supersniff's HUD and its pet lives in supersniff's deck, both of
+  // which are here. So the tab leaves an intent in the store and this
+  // turns it into the dog asking «ходімо?» about that animal.
+  //
+  // TWO PASSES ON PURPOSE. Flipping into supersniff bumps overlayEpoch,
+  // and MapView answers that by clearing `prompt` — a half-answered
+  // question does not survive a mode change. So the first pass only
+  // flips, leaving the intent standing; the flip lands, this effect
+  // re-runs on the far side of it, and the second pass asks. Setting
+  // both at once would have the epoch clear the question a beat later,
+  // which is the kind of bug that looks like a missing render.
+  //
+  // Declared BELOW the overlayEpoch effect on purpose: on the commit
+  // where both fire, effects run in declaration order, so the question
+  // is asked after the clear rather than wiped by it.
+  useEffect(() => {
+    if (!searchIntentDogId) return;
+    const dog = lostDogs.find((d) => d.id === searchIntentDogId);
+    // Not in the list yet — the tab had it, so this is a sync landing
+    // mid-navigation. Leave the intent standing and let the next
+    // lostDogs change bring us back.
+    if (!dog) return;
+    // Written before the flip, so it is already standing when the deck
+    // mounts — see deckInitialId.
+    deckAnchorRef.current = dog.id;
+    if (!(DOG_CAM && useGameStore.getState().dogCam)) {
+      useGameStore.getState().toggleDogCam();
+      // Arrived without touching the logo — same as the modal's old
+      // "start search" path, so the Companion still offers the "tap the
+      // logo to get back to walks" hint.
+      useGameStore.getState().setDogCamViaSearch(true);
+      return;
+    }
+    setPrompt({ kind: 'confirm', dog });
+    useGameStore.getState().setSearchIntent(null);
+  }, [searchIntentDogId, dogCam, lostDogs]);
 
   // Closing a search — the same call whether you arrived or gave up, and
   // whether or not you saw anything. The server decides what it is worth;
@@ -2422,6 +2505,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           }
           setExpandedClusterKey(null);
           useGameStore.getState().setMenuOpen(false);
+          // An open stop's story IS dismissed by tapping the map. The
+          // bubble is a thing the dog said about one dot; putting it
+          // away should not require finding that dot again under it.
+          // The dots stopPropagation on their own taps, so this only
+          // ever fires on a tap that missed every stop.
+          useGameStore.getState().setOpenWalkStop(null);
           // A WALK IS NOT DISMISSED BY TAPPING THE MAP. It used to be,
           // which meant any stray tap while reading the route — panning,
           // missing a stop disc, closing the radial menu — threw away a
@@ -2974,8 +3063,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // A question the dog is asking comes out of the DOG, in the
             // same bubble as everything else it says, and stays up until
             // it is answered. The buttons live down in the thumb zone;
-            // only the words belong up here.
-            bubble={promptText ?? bubble}
+            // only the words belong up here. Passed separately from the
+            // ordinary bubble so the Companion can rank it above the
+            // lines that would otherwise talk over it.
+            bubble={bubble}
+            question={promptText}
             hideBubble={offscreenIndicator != null}
             hidden={offscreenIndicator != null}
             onTap={() => {
@@ -3055,19 +3147,36 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           pointerEvents={deckVisible ? 'box-none' : 'none'}
         >
           {focusDog && !(prompt?.kind === 'confirm' && !searchTarget) ? (
-            <View style={{ width: 288, height: 252, marginBottom: 30 }} pointerEvents="none">
+            // THE PHOTO IS THE AD. Once a pet is the pet — being walked
+            // to, or being asked about — its card is the only thing on
+            // screen carrying its identity, and the thing a searcher
+            // wants next is what the owner actually wrote: the markings,
+            // the collar, the phone number. That used to be reachable
+            // only from the preview sheet, which is exactly the sheet a
+            // supersniff search skips past. So the card answers.
+            //
+            // It was pointerEvents="none" before, which was right when
+            // there was nothing behind the tap.
+            <View style={{ width: 288, height: 252, marginBottom: 30 }}>
               {/* No `active` glow here. That pulsing blue ring exists to
                   pick THIS pet out of a deck of others — and there is no
                   deck any more, just the one card. Marking the only
                   thing on screen as the chosen one is noise, and the
                   ring read as a border around the photo. */}
-              <LostDogCardView
-                dog={focusDog}
-                t={t}
-                userPos={userPos}
-                strongShadow
-                chips={false}
-              />
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t.modals.lostDog.readPost}
+                onPress={() => setPostDog({ id: focusDog.id, name: focusDog.name })}
+                style={{ width: '100%', height: '100%' }}
+              >
+                <LostDogCardView
+                  dog={focusDog}
+                  t={t}
+                  userPos={userPos}
+                  strongShadow
+                  chips={false}
+                />
+              </Pressable>
             </View>
           ) : (
             // The deck STAYS MOUNTED through the confirm prompt — tapping
@@ -3077,13 +3186,24 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // motion and the deck is simply back.
             <LostDogCardStack
               dogs={searchDogs}
-              onTap={(dog) => setPrompt({ kind: 'confirm', dog })}
+              onTap={(dog) => {
+                // A tap on the pet already under the question is not a
+                // second "this one" — it is "let me look at it". Same
+                // rule as the lone focus card above: the photo opens
+                // the owner's ad.
+                if (prompt?.kind === 'confirm' && prompt.dog.id === dog.id) {
+                  setPostDog({ id: dog.id, name: dog.name });
+                  return;
+                }
+                setPrompt({ kind: 'confirm', dog });
+              }}
               onSwipe={previewSearch}
               showCounter={false}
               cardWidth={288}
               cardHeight={252}
               strongShadow
               focused={prompt?.kind === 'confirm' && !searchTarget}
+              {...(deckInitialId ? { initialId: deckInitialId } : {})}
             />
           )}
         </View>
@@ -3217,14 +3337,18 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           <div
             style={{
               padding: '10px 18px',
-              background: '#ffffff',
-              color: '#1a1a1a',
+              background: SURFACE.fill,
+              color: INK,
               borderRadius: R.pill,
+              // No edge. This is a readout — it tells you how far, you
+              // never press it — and readouts lost their ink with the
+              // HUD meters. The ✕ beside it keeps its edge, because
+              // that one is a control.
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.body,
               fontWeight: 800,
               letterSpacing: 0.3,
-              boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+              boxShadow: SURFACE.chip,
             }}
           >
             {navDistance ?? '…'}
@@ -3248,7 +3372,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               width: 44,
               height: 44,
               borderRadius: R.pill,
-              background: '#ffffff',
+              background: SURFACE.fill,
+              // Drawn ring — see the HandDrawnFrame child below.
+              border: '2px solid transparent',
+              boxSizing: 'border-box',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -3256,9 +3383,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               fontSize: 20,
               fontWeight: 700,
               color: '#1a1a1a',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.18)',
+              boxShadow: SURFACE.chip,
             }}
           >
+            <HandDrawnFrame radius={R.pill} />
             ✕
           </div>
         </div>
@@ -3302,7 +3430,6 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               gap: S.s,
             }}
           >
-            {walkRoute ? <WalkStopsToggle /> : null}
             {walkRoute ? (
               <div
                 role="button"
@@ -3326,24 +3453,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               </div>
             ) : null}
           </div>
-          {/* What this walk has to show. Above the dog and its speech
-              bubble, because it describes the walk the dog just
-              proposed. */}
-          <div style={{ position: 'relative', zIndex: Z.HUD_WALK_CARD }}>
-            <WalkStopsCard
-              onFocusStop={(position) =>
-                // Same downward offset the sniff discovery uses: the
-                // story bubble stacks ABOVE its disc, so centring the
-                // disc would push the text under the HUD.
-                mapRef.current?.easeTo({
-                  center: [position.lng, position.lat],
-                  padding: { top: 0, bottom: 0, left: 0, right: 0 },
-                  offset: [0, 70],
-                  duration: 600,
-                })
-              }
-            />
-          </div>
+          {/* The stops roster used to render here. The dots on the
+              route carry their own stories now, and they do the same
+              camera nudge this card's onFocusStop did. */}
         </div>
       ) : null}
 
@@ -3406,7 +3518,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 4px 14px rgba(0,0,0,0.22)',
+              boxShadow: SURFACE.chip,
               border: '2px solid rgba(255,255,255,0.08)',
             }}
           >
@@ -3557,11 +3669,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // it reliably stacks above the HUD on web/PWA.
             zIndex: Z.HUD_PILLS_OVERLAY,
             cursor: 'pointer',
-            background: '#ffffff',
+            background: SURFACE.fill,
             // Round on the LEFT side only so it reads as docked to
-            // the screen edge.
+            // the screen edge — and inked on the three edges you can
+            // see, for the same reason the top sheets skip their top
+            // border: the fourth runs off the screen.
             borderTopLeftRadius: R.card,
             borderBottomLeftRadius: R.card,
+            // Drawn — three edges, the fourth runs off the screen. The
+            // 2px stays so the glyph inside keeps its position.
+            border: '2px solid transparent',
+            boxSizing: 'border-box',
             width: 56,
             height: 56,
             display: 'flex',
@@ -3573,6 +3691,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             userSelect: 'none',
           }}
         >
+          {/* Drawn edge. The path closes on the right too, off the
+              screen edge, where nobody sees it — same as the border did.
+              R.card because that is what the two visible corners are. */}
+          <HandDrawnFrame radius={R.card} open="right" />
           {/* Three stacked bars — the longer bottom bar reads as
               "stack" the way a hamburger-but-tapered glyph does. */}
           <div style={{ width: 18, height: 3, background: '#1a1a1a', borderRadius: R.sm }} />

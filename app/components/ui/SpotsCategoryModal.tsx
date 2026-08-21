@@ -14,9 +14,11 @@ import type { Spot } from '../../services/places';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
+import { SURFACE } from '../../constants/surface';
 import { playPopThen } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { SpotCardView } from './SpotCardStack';
+import { HandDrawnFrame } from './HandDrawn';
 
 const SHEET_ANIM_MS = 240;
 
@@ -119,7 +121,9 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
           width: 36,
           height: 36,
           borderRadius: R.pill,
-          border: '1px solid rgba(0,0,0,0.06)',
+          // Drawn ring — see the HandDrawnFrame child. The 2px stays
+          // so the button keeps the size it had.
+          border: '2px solid transparent',
           background: '#ffffff',
           color: '#1a1a1a',
           padding: 0,
@@ -127,12 +131,13 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+          boxShadow: SURFACE.chip,
           fontSize: TYPE.display,
           lineHeight: 1,
           zIndex: 1,
         }}
       >
+        <HandDrawnFrame radius={R.pill} />
         ×
       </button>
     </div>,

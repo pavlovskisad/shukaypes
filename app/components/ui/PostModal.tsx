@@ -26,8 +26,10 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
+import { SURFACE } from '../../constants/surface';
 import { api } from '../../services/api';
 import { useStrings } from '../../i18n/useStrings';
+import { HandDrawnFrame } from './HandDrawn';
 
 const SHEET_ANIM_MS = 280;
 
@@ -120,6 +122,21 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
         background: 'rgba(20,20,15,0.45)',
         display: 'flex',
         alignItems: 'flex-start',
+        // THE SHEET HANGS, IT DOES NOT GROW OUT OF THE BEZEL.
+        //
+        // It used to run to all three screen edges with its top edge off
+        // the top of the page — so the two side lines began nowhere,
+        // out of thin air, cut off by the viewport. There is no fixing
+        // that by going further up: viewport-fit=cover means the
+        // INSTALLED app flows under the status bar and could paint
+        // there, but in a browser tab the page simply starts below it
+        // and there is nothing above to reach into. So the sheet stops
+        // being a full-bleed panel and becomes a poster with four
+        // edges, hanging a few px under the inset. Padding on the
+        // OVERLAY rather than margin on the sheet, because a flex item
+        // at width:100% adds its margins on top and overflows.
+        padding: 'calc(env(safe-area-inset-top, 0px) + 8px) 10px 0',
+        boxSizing: 'border-box',
         justifyContent: 'center',
         // MODAL_GLOBAL, not MODAL_MAP, because this sheet is opened FROM
         // the tier-3 modals — the pet card and the end-of-search prompt.
@@ -135,21 +152,28 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#ffffff',
-          borderBottomLeftRadius: R.card,
-          borderBottomRightRadius: R.card,
+          borderRadius: R.card,
           width: '100%',
           maxWidth: 460,
-          maxHeight: 'calc(100vh - 110px - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+          boxShadow: SURFACE.lift,
+          // A top sheet slides down from off-screen and runs to both
+          // screen edges, so it has exactly one edge the eye can see:
+          // the bottom, with its two rounded corners. Inking all four
+          // would draw a line along the top that is never on screen and
+          // two down the sides that sit flush against the bezel.
+          position: 'relative',
           overflow: 'hidden',
         }}
       >
+        {/* All four edges, drawn — see HandDrawn.tsx. */}
+        <HandDrawnFrame radius={R.card} />
         <div
           style={{
-            padding: `calc(env(safe-area-inset-top, 0px) + ${S.l}px) ${S.l}px ${S.s}px`,
+            padding: `${S.l}px ${S.l}px ${S.s}px`,
             flexShrink: 0,
           }}
         >
@@ -271,6 +295,7 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
             </button>
           ) : null}
           <button onClick={onClose} style={MODAL_PILL_LIGHT}>
+            <HandDrawnFrame radius={R.button} />
             {t.modals.common.close}
           </button>
         </div>

@@ -10,11 +10,15 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
 import type { LatLng } from '@shukajpes/shared';
 import { CardStack, CardStackSkeleton } from './CardStack';
+import { HandDrawnFrame, HandDrawnPaperTop, PAPER_EDGE } from './HandDrawn';
+import { Icon } from './Icon';
+import { INLINE_ICON } from '../../constants/sizing';
 
 interface Props {
   dogs: NearbyLostDog[];
@@ -94,11 +98,14 @@ export function LostDogCardStack({
 // module keep working without a churning rename across the app.
 export const LostDogCardStackSkeleton = CardStackSkeleton;
 
-// Photo full-bleed top, dark-to-transparent gradient mask
-// carrying name + meta over the bottom of the photo. Urgency
-// badge top-left, distance chip top-right. No photo → soft grey
-// card with the emoji centred. Exported so the "see all" modal
-// can render the same visual at a wider size.
+// How far the photo sits inside the card: the paper margin the drawn
+// line is measured from, plus the line itself. See PAPER_EDGE.
+const PHOTO_INSET = PAPER_EDGE + 2;
+
+// Photo mounted on paper, with an inked white label band across the bottom
+// carrying name + breed on the left and how far away on the right.
+// No photo → soft grey card with the emoji centred. Exported so the
+// "see all" modal can render the same visual at a wider size.
 export function LostDogCardView({
   dog,
   t,
@@ -115,14 +122,18 @@ export function LostDogCardView({
   active?: boolean;
   // Heavier drop shadow (contact + ambient) to lift the card off a busy bg.
   strongShadow?: boolean;
-  // The urgency badge and distance chip. On in the deck and the "see
-  // all" list, where you are comparing pets and both are the point.
+  // The distance readout. On in the deck and the "see all" list, where
+  // you are comparing pets and how far each one is matters.
   //
   // Off once a pet is THE pet — during a confirmation or a running
-  // search there is only one card on screen, so "we're searching" is
-  // just the screen restating itself, and the distance belongs in the
-  // nav readout at the top rather than on the photo. What's left is
-  // the face, which is the only thing you're actually looking for.
+  // search there is only one card on screen and the distance belongs
+  // in the nav readout at the top. What's left is the face, which is
+  // the only thing you're actually looking for.
+  //
+  // The urgency badge used to ride alongside it. It is gone: on a deck
+  // where most pets are "шукаємо" it labelled almost every card with
+  // the same word, which is not a distinction, and it cost a patch on
+  // the photograph to say it.
   chips?: boolean;
 }) {
   useEffect(() => {
@@ -138,9 +149,6 @@ export function LostDogCardView({
     `;
     document.head.appendChild(el);
   }, []);
-  const urgent = dog.urgency === 'urgent';
-  const badgeText = urgent ? t.tasks.badgeUrgent : t.tasks.badgeSearching;
-  const badgeFg = urgent ? '#e84040' : '#d9a030';
   const distLabel = userPos
     ? formatDistance(distanceMeters(userPos, dog.lastSeen.position))
     : null;
@@ -170,26 +178,27 @@ export function LostDogCardView({
         // CSS-level guaranteed fill regardless of the photo's
         // intrinsic aspect ratio.
         //
-        // NO borderRadius here — the parent card already has
-        // borderRadius + overflow:hidden which clips this div
-        // to the card's rounded shape.
-        //
-        // transform: scale(1.04) gives the photo a 2 % overshoot
-        // on each side, which the card's overflow:hidden clips
-        // away. Belt-and-braces against sub-pixel rendering
-        // gaps along the edges — even when scale(0.74) on the
-        // peek cards quantises differently per axis, the photo
-        // still reaches all four card edges. User's "lil zoom"
-        // suggestion was the right call.
+        // The 4% overshoot that used to live here is gone with the
+        // full bleed it existed for: it guaranteed the photo reached
+        // all four card edges through sub-pixel rounding, and reaching
+        // the edges is now exactly what it must NOT do. It also swallowed
+        // the mount whole — 4% of a 320px card is 6px, against a 3.5px
+        // inset.
         <div
           style={{
             position: 'absolute',
-            inset: 0,
+            // INSIDE the drawn line, not under it. A pet's photo used to
+            // run to the card's own edge, so the sliver of surface that
+            // shows outside the ink was blue sky or somebody's pavement
+            // rather than white paper — the card read as a photo with a
+            // line on it instead of as a photo mounted on a card. Now
+            // it is a mount: white, then the line, then the picture.
+            inset: PHOTO_INSET,
+            borderRadius: Math.max(0, R.card - PHOTO_INSET),
             backgroundImage: `url("${dog.photoUrl}")`,
             backgroundSize: 'cover',
             backgroundPosition: 'center center',
             backgroundRepeat: 'no-repeat',
-            transform: 'scale(1.04)',
           }}
         />
       ) : (
@@ -197,26 +206,35 @@ export function LostDogCardView({
           <Text style={styles.photoEmoji}>{dog.emoji ?? '🐶'}</Text>
         </View>
       )}
-      <View style={styles.gradient} />
-      {chips ? (
-        <View style={styles.badge}>
-          <Text style={[styles.badgeText, { color: badgeFg }]}>{badgeText}</Text>
-        </View>
-      ) : null}
-      {chips && distLabel ? (
-        <View style={styles.distChip}>
-          <Text style={styles.distChipText}>{distLabel}</Text>
-        </View>
-      ) : null}
+      {/* The card's edge, drawn rather than bordered — and seeded on the
+          pet, so this animal's poster is this animal's poster every time
+          you see it. See HandDrawn.tsx. */}
+      <HandDrawnFrame radius={R.card} seed={dog.id} />
       <View style={styles.cardBody}>
-        <Text style={styles.cardName} numberOfLines={1}>
-          {dog.name}
-        </Text>
-        {dog.breed ? (
-          <Text style={styles.cardMeta} numberOfLines={1}>
-            {dog.breed}
-          </Text>
-        ) : null}
+        {/* The band IS its top edge — one filled shape, so the paper
+            and the ink can never disagree about where the photo ends.
+            See HandDrawnPaperTop. */}
+        <HandDrawnPaperTop seed={`${dog.id}-band`} />
+        <View style={styles.cardBodyRow}>
+          <View style={styles.cardBodyText}>
+            <Text style={styles.cardName} numberOfLines={1}>
+              {dog.name}
+            </Text>
+            {dog.breed ? (
+              <Text style={styles.cardMeta} numberOfLines={1}>
+                {dog.breed}
+              </Text>
+            ) : null}
+          </View>
+          {chips && distLabel ? (
+            <View style={styles.distRow}>
+              <Icon name="pin" size={INLINE_ICON.badge} />
+              <Text style={styles.distText} numberOfLines={1}>
+                {distLabel}
+              </Text>
+            </View>
+          ) : null}
+        </View>
       </View>
     </View>
   );
@@ -233,19 +251,21 @@ const styles = StyleSheet.create({
     borderRadius: R.card,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
+    // No borderWidth — the edge is drawn, see HandDrawnFrame above.
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
     elevation: 6,
   },
+  // The no-photo fallback takes the same mount as the photo above.
   photo: {
     position: 'absolute',
-    top: 0,
-    left: 0,
-    width: '100%',
-    height: '100%',
-    borderRadius: R.card,
+    top: PHOTO_INSET,
+    left: PHOTO_INSET,
+    right: PHOTO_INSET,
+    bottom: PHOTO_INSET,
+    borderRadius: Math.max(0, R.card - PHOTO_INSET),
   },
   photoFallback: {
     alignItems: 'center',
@@ -255,84 +275,73 @@ const styles = StyleSheet.create({
     fontSize: 120,
     opacity: 0.6,
   },
-  gradient: {
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    height: '48%',
-    // RN-Web passes `backgroundImage` straight through to CSS. Kept light — just
-    // enough to keep the white name legible — so the photo doesn't read as dark.
-    backgroundImage:
-      'linear-gradient(to bottom, rgba(0,0,0,0) 0%, rgba(0,0,0,0.03) 45%, rgba(0,0,0,0.5) 100%)',
-  } as unknown as object,
-  badge: {
-    position: 'absolute',
-    top: 14,
-    left: 14,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: S.m,
-    paddingVertical: S.s,
-    // Full-pill radius + lifted shadow so the chip reads as the
-    // same family as the HUD pills / chat header pill (full
-    // round with CHROME_SHADOW). Scaled down for in-card use.
-    borderRadius: R.pill,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  badgeText: {
-    fontSize: TYPE.caption,
-    fontWeight: '700',
-    textTransform: 'lowercase',
-    letterSpacing: 0.4,
-  },
-  // Distance chip — mirror of the urgency badge but anchored
-  // top-right. Same full-pill / lifted-shadow family.
-  distChip: {
-    position: 'absolute',
-    top: 14,
-    right: 14,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: S.m,
-    paddingVertical: S.s,
-    borderRadius: R.pill,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 4,
-  },
-  distChipText: {
-    fontSize: TYPE.caption,
-    fontWeight: '700',
-    color: '#555',
-    letterSpacing: 0.3,
-  },
+  // Distance label — mirror of the urgency badge but anchored
+  // top-right. Same corner, same ink.
+  // A PAPER LABEL STUCK ON A PHOTO, not text floating over it.
+  //
+  // This used to be white type sitting directly on the picture, held
+  // legible by a dark gradient washed up from the bottom edge. That
+  // gradient was doing real work — a photo can be any colour, and white
+  // on a snowy pavement is nothing — but it darkened the bottom half of
+  // every pet's photo to buy it, and a fading black veil is the exact
+  // opposite of the paper-and-ink the rest of the app is drawn in.
+  //
+  // So the name gets its own piece of paper instead: opaque white,
+  // inked along the top edge where it meets the photo. Legibility stops
+  // depending on what the photo happens to look like, and the photo
+  // stops being dimmed to make room for words.
   cardBody: {
     position: 'absolute',
-    left: 18,
-    right: 18,
-    bottom: 18,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    // No background: the paper is painted by HandDrawnPaperTop above,
+    // which is also what draws its top edge.
+    // ~7% of card width, matching the reference's inner margin.
+    paddingHorizontal: 20,
+    paddingTop: 12,
+    paddingBottom: 14,
+  },
+  // Name + breed on the left, distance on the right — one row, so the
+  // distance sits on the same paper as the name instead of floating on
+  // the photograph.
+  cardBodyRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: S.m,
+  },
+  cardBodyText: {
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  // No patch. It used to be a white pill on the photo, which needed a
+  // container because the background underneath was unknowable. Down
+  // here the background is white paper, so the text can just be text —
+  // and bigger, since it now carries itself.
+  distRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
+    flexShrink: 0,
+  },
+  distText: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: TYPE.body,
+    fontWeight: '700',
+    color: INK,
+    flexShrink: 0,
   },
   cardName: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.display,
     fontWeight: '800',
-    color: '#ffffff',
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
+    color: INK,
   },
   cardMeta: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.small,
-    color: 'rgba(255,255,255,0.92)',
+    color: '#777',
     marginTop: S.xs,
-    textShadowColor: 'rgba(0,0,0,0.4)',
-    textShadowOffset: { width: 0, height: 1 },
-    textShadowRadius: 4,
   },
 });

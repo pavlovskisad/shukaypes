@@ -5,8 +5,10 @@ import { INLINE_ICON } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { SURFACE } from '../../constants/surface';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
+import { HandDrawnFrame } from './HandDrawn';
 import { playPopThen } from '../../utils/popOnTap';
 
 interface AboutModalProps {
@@ -17,7 +19,9 @@ interface AboutModalProps {
 const SHEET_ANIM_MS = 280;
 // Top-anchored modal — bump the badge / close button down by the
 // safe-area inset so they clear the iPhone notch / status bar.
-const SAFE_TOP = 'calc(env(safe-area-inset-top, 0px) + 12px)';
+// The overlay holds the sheet clear of the notch now, so this is
+// just the sheet's own inside margin.
+const SAFE_TOP = 12;
 
 // Icon assignment per about-row index. Stays language-neutral so the
 // strings table only carries the translatable title + body — the
@@ -75,6 +79,21 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         background: 'rgba(0,0,0,0.3)',
         display: 'flex',
         alignItems: 'flex-start',
+        // THE SHEET HANGS, IT DOES NOT GROW OUT OF THE BEZEL.
+        //
+        // It used to run to all three screen edges with its top edge off
+        // the top of the page — so the two side lines began nowhere,
+        // out of thin air, cut off by the viewport. There is no fixing
+        // that by going further up: viewport-fit=cover means the
+        // INSTALLED app flows under the status bar and could paint
+        // there, but in a browser tab the page simply starts below it
+        // and there is nothing above to reach into. So the sheet stops
+        // being a full-bleed panel and becomes a poster with four
+        // edges, hanging a few px under the inset. Padding on the
+        // OVERLAY rather than margin on the sheet, because a flex item
+        // at width:100% adds its margins on top and overflows.
+        padding: 'calc(env(safe-area-inset-top, 0px) + 8px) 10px 0',
+        boxSizing: 'border-box',
         justifyContent: 'center',
         zIndex: 1000,
         opacity: closing ? 0 : 1,
@@ -85,24 +104,28 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         onClick={(e) => e.stopPropagation()}
         style={{
           background: '#ffffff',
-          borderTopLeftRadius: 0,
-          borderTopRightRadius: 0,
-          borderBottomLeftRadius: R.card,
-          borderBottomRightRadius: R.card,
+          borderRadius: R.card,
           padding: 0,
           width: '100%',
           maxWidth: 460,
           // Cap so the content scrolls instead of overlapping the
           // floating dashboard.
-          maxHeight: 'calc(100vh - 110px - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.15)',
+          boxShadow: SURFACE.lift,
+          // A top sheet slides down from off-screen and runs to both
+          // screen edges, so it has exactly one edge the eye can see:
+          // the bottom, with its two rounded corners. Inking all four
+          // would draw a line along the top that is never on screen and
+          // two down the sides that sit flush against the bezel.
           overflow: 'hidden',
         }}
       >
+        {/* All four edges, drawn — see HandDrawn.tsx. */}
+        <HandDrawnFrame radius={R.card} />
         {/* Header strip — badge top-left, close button top-right.
             Both offset by SAFE_TOP so they clear the iPhone notch
             on a top-anchored modal. */}
@@ -123,16 +146,17 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               left: 14,
               background: '#ffffff',
               color: '#555',
-              borderRadius: R.pill,
+              borderRadius: R.label,
               padding: '6px 12px',
               fontSize: TYPE.small,
               fontWeight: 700,
               letterSpacing: 0.4,
               textTransform: 'lowercase',
-              boxShadow: '0 2px 8px rgba(0,0,0,0.10)',
-              border: '1px solid rgba(0,0,0,0.04)',
+              boxShadow: SURFACE.chip,
+              border: '2px solid transparent',
             }}
           >
+            <HandDrawnFrame radius={R.label} />
             {t.modals.about.badge}
           </span>
           <button
@@ -145,7 +169,8 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               width: 36,
               height: 36,
               borderRadius: R.pill,
-              border: '1px solid rgba(0,0,0,0.06)',
+              // Drawn ring — see the HandDrawnFrame child.
+              border: '2px solid transparent',
               background: '#ffffff',
               color: '#1a1a1a',
               padding: 0,
@@ -153,11 +178,12 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               alignItems: 'center',
               justifyContent: 'center',
               cursor: 'pointer',
-              boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+              boxShadow: SURFACE.chip,
               fontSize: TYPE.display,
               lineHeight: 1,
             }}
           >
+            <HandDrawnFrame radius={R.pill} />
             ×
           </button>
 

@@ -3,8 +3,11 @@ import { balance } from '../../constants/balance';
 import { BUTTON } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { SURFACE } from '../../constants/surface';
+import { R } from '../../constants/radius';
 import { playPopThen } from '../../utils/popOnTap';
 import { Icon, type IconName } from '../../components/ui/Icon';
+import { HandDrawnFrame } from '../ui/HandDrawn';
 
 export interface RadialAction {
   id: string;
@@ -94,12 +97,16 @@ export const TEXT_ITEM = {
   // words. Sentences need more room to breathe at this height, and the
   // pill is a touch target rather than a block of prose.
   padX: 18,
-  // Caps the pill and lets a long answer wrap to two lines. Two of these
-  // side by side plus the gap is 272px, which leaves ~44px of margin on
-  // each side of a 360px screen.
-  maxWidth: 130,
-  // Between pills, both across a row and down a column.
+  // Caps the pill and lets a long answer wrap to two lines.
+  maxWidth: 158,
+  // Between pills down a column.
   gap: 12,
+  // …and ACROSS one. Wider than the row gap on purpose: the four
+  // intents used to sit in a 272px block with ~60px of empty screen on
+  // either side, which read as a small dialog floating in the middle
+  // rather than as the screen's own question. Pushing the columns apart
+  // moves the pills out toward the edges without making them bigger.
+  colGap: 30,
 } as const;
 
 // Below the dog, both menus start here — far enough down to clear the
@@ -107,11 +114,32 @@ export const TEXT_ITEM = {
 // without leaving a gap you could park a bus in.
 const BELOW_DOG_PX = 46;
 
-// Between the icons in their row.
+// Between the icons in their row. The labelled variant keeps the tight
+// gap because its cells are 112px wide and three of those plus two big
+// gaps would run off a 360px screen.
 const ICON_ROW_GAP = 16;
+// The bare discs have no such problem and were sitting in a 236px block
+// with ~77px of empty screen on either side. Same reasoning as
+// TEXT_ITEM.colGap: spread them toward the edges.
+// Matching the text answers' margins meant 71px between three 68px
+// discs, and that was too far: the answers are a block of reading that
+// wants the screen's width, three discs are one control that wants to
+// stay one control. Back to the modest spread.
+const ICON_ROW_GAP_WIDE = 34;
 
 // Three 68px discs and the two gaps between them.
-const ROW_MAX_W = 3 * BUTTON.size + 2 * ICON_ROW_GAP;
+const ROW_MAX_W = 3 * BUTTON.size + 2 * ICON_ROW_GAP_WIDE;
+
+// THE ANSWERS RUN CLOSE TO THE SCREEN EDGES, and how close is a fixed
+// number of pixels rather than a fraction of the width — the margin is
+// what your thumb needs, not what the layout wants. So the widths below
+// are an IDEAL clamped against the viewport: the block reaches its full
+// size on a phone wide enough for it, and gives up width rather than
+// margin on one that is not. A plain fixed width would have hung the
+// pills off both sides of a 360px screen at these sizes.
+const EDGE_MARGIN = 20;
+const clampToScreen = (ideal: number) =>
+  `min(${ideal}px, calc(100vw - ${EDGE_MARGIN * 2}px))`;
 
 // Trig-positioned radial around a center point with radius R.
 // The container is sized to fit the rim items and centered on the companion.
@@ -194,7 +222,13 @@ export function RadialMenu({
         // answer is. It used to be a fixed 112 with the label centred,
         // which gave it no padding at all — only leftover space, 27–36px
         // of it, and a different amount on every pill.
-        width: isText ? 'max-content' : BUTTON.size,
+        // Text answers FILL their column (the grid gives each column an
+        // equal half), so all four pills are one width and all four
+        // reach the same distance from the screen edge. Hugging their
+        // words instead left the short ones floating in from the margin
+        // while the long ones sat against it, which read as sloppy
+        // rather than as varied. Icons keep their fixed disc.
+        width: isText ? '100%' : BUTTON.size,
         // Sentence answers must be allowed to wrap rather than run off
         // the screen; 300 keeps the longest to two lines at 360 wide.
         maxWidth: isText ? TEXT_ITEM.maxWidth : undefined,
@@ -204,8 +238,18 @@ export function RadialMenu({
         // Text pills are capsules; icon buttons are circles. Same
         // family, and at 60 tall against the disc's 68 they read as
         // siblings rather than as a chip clipped onto a button.
-        borderRadius: isText ? TEXT_ITEM.height / 2 : BUTTON.radius,
-        border: 'none',
+        // R.button for the text answers — the same corner every other
+        // button in the app turns. The icon discs stay BUTTON.radius,
+        // which is half of 68: a pill radius on a square box is a
+        // circle, and a circle is what an icon wants.
+        borderRadius: isText ? R.button : BUTTON.radius,
+        // The same ink as the cards, and DRAWN like them — the child
+        // below carries the visible line. The 2px stays, transparent,
+        // with border-box: BUTTON.size is a fixed 68 and dropping the
+        // border outright would move every disc's contents by 2px.
+        border: '2px solid transparent',
+        position: 'relative',
+        boxSizing: 'border-box',
         background: bg,
         color: fg,
         fontSize: isText ? TYPE.body : TYPE.hero,
@@ -223,6 +267,11 @@ export function RadialMenu({
       }}
       aria-label={a.label}
     >
+      {/* The drawn edge. Skipped on an inverted (dark) item, where an
+          ink line on ink is nothing. */}
+      {inverted ? null : (
+        <HandDrawnFrame radius={isText ? R.button : BUTTON.radius} />
+      )}
       {/* Icon sized via the shared BUTTON token — 0.79 ratio reads calm
           against the dark disc without feeling sparse. */}
       {isText ? (
@@ -253,7 +302,12 @@ export function RadialMenu({
   // 70px of available width to shrink-wrap into — which no-wrap layouts
   // simply overflowed and ignored, but a wrapping one obeys. Measured:
   // with only a maxWidth set, three 68px icons wrapped onto three rows.
-  const below = (children: ReactNode, gap: number, width: number) => (
+  const below = (
+    children: ReactNode,
+    gap: number,
+    width: number | string,
+    colGap: number = gap,
+  ) => (
     <div
       style={{
         position: 'absolute',
@@ -265,7 +319,7 @@ export function RadialMenu({
         flexWrap: 'wrap',
         justifyContent: 'center',
         rowGap: gap,
-        columnGap: gap,
+        columnGap: colGap,
         pointerEvents: 'none',
       }}
     >
@@ -311,12 +365,12 @@ export function RadialMenu({
           ) : null}
         </div>
       )),
-      ICON_ROW_GAP,
+      showLabels ? ICON_ROW_GAP : ICON_ROW_GAP_WIDE,
       // Three items across and no more, so the five visit categories
       // break 3 + 2 rather than running off a 360px screen. Two- and
       // three-item levels fill it exactly and never wrap. The named-spot
       // level needs wider cells because it carries labels.
-      showLabels ? 3 * ITEM_W + 2 * ICON_ROW_GAP : ROW_MAX_W,
+      clampToScreen(showLabels ? 3 * ITEM_W + 2 * ICON_ROW_GAP : ROW_MAX_W),
     );
   }
 
@@ -332,7 +386,9 @@ export function RadialMenu({
           style={{
             display: 'flex',
             flexDirection: 'column',
-            alignItems: 'center',
+            alignItems: 'stretch',
+            // Equal halves — see the width note on the text button.
+            flex: 1,
             gap: TEXT_ITEM.gap,
           }}
         >
@@ -346,7 +402,8 @@ export function RadialMenu({
         </div>
       )),
       TEXT_ITEM.gap,
-      2 * TEXT_ITEM.maxWidth + TEXT_ITEM.gap,
+      clampToScreen(2 * TEXT_ITEM.maxWidth + TEXT_ITEM.colGap),
+      TEXT_ITEM.colGap,
     );
   }
 

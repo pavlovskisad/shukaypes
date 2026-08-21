@@ -5,9 +5,12 @@ import { colors } from '../../constants/colors';
 import { CHIP } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK, SURFACE } from '../../constants/surface';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
+import { R } from '../../constants/radius';
+import { HandDrawnFrame } from './HandDrawn';
 
 // Four white-frosted-glass pills laid out identically: icon + value with
 // a consistent gap so happiness / hunger / tokens / spots-toggle read
@@ -20,8 +23,18 @@ const PILL_HEIGHT = CHIP.height;
 // that, each pill sizes to its content and grows when the number widens.
 const PILL_MIN_WIDTH = 50;
 
-const PROGRESS_BLUE = 'rgb(0,60,255)';
-const GLASS_BG = '#ffffff';
+const GLASS_BG = SURFACE.fill;
+
+// How a pill lays its contents out. Extracted because the meter pill
+// draws its row TWICE — once in ink and once in white over the fill —
+// and the two copies have to be positioned by the same numbers or the
+// white one lands a pixel off and the icon reads as doubled.
+const ROW_LAYOUT = {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: S.s,
+  gap: S.xs,
+} as const;
 const GLASS_SHADOW_COLOR = '#000';
 // HUD icons are pixel-art SVGs (see components/ui/Icon.tsx). 18px
 // renders crisp at the 38px pill height; smaller (the previous emoji
@@ -51,7 +64,7 @@ export function PillPulseRing() {
           // past the edges at the start of each pulse, not hidden behind.
           width: 'calc(100% + 10px)',
           height: 'calc(100% + 10px)',
-          borderRadius: 999,
+          borderRadius: R.pill,
           border: '3px solid rgba(0,0,0,0.55)',
           transform: 'translate(-50%, -50%) scale(0.85)',
           animation: 'hint-pill-ring 1.4s ease-out infinite',
@@ -156,15 +169,7 @@ export function MeterPill({
     <div ref={popRef} style={{ display: 'inline-flex' }}>
       <PulseWrap active={!!pulse}>
         <View style={[styles.pill, styles.meterPill, solid && styles.pillSolid]}>
-          <View
-            style={[
-              styles.fill,
-              {
-                width: `${fillPct}%` as unknown as number,
-                backgroundColor: PROGRESS_BLUE,
-              },
-            ]}
-          />
+          <View style={[styles.fill, { width: `${fillPct}%` as unknown as number }]} />
           <Icon name={icon} size={ICON_SIZE} />
           {showValue ? (
             <Text
@@ -174,6 +179,33 @@ export function MeterPill({
               {fillPct}%
             </Text>
           ) : null}
+          {/* THE SAME ROW AGAIN, IN WHITE, CLIPPED TO THE FILL.
+              The meter fills with ink now, and ink swallows a black
+              icon whole — at 60% the sun was a black shape half-lost
+              in a black bar. So the pill carries a second copy of its
+              own contents in white and shows exactly the part of it
+              the fill has reached. The icon inverts as the level
+              crosses it, a slice at a time, and the two copies land on
+              each other because they lay out through the same style.
+
+              aria-hidden and deaf to pointers: it is the same
+              information twice, and a screen reader should hear it
+              once. */}
+          <View
+            aria-hidden
+            pointerEvents="none"
+            style={
+              [
+                styles.fillInvert,
+                { clipPath: `inset(0 ${100 - fillPct}% 0 0)` },
+              ] as unknown as object
+            }
+          >
+            <Icon name={icon} size={ICON_SIZE} inverted />
+            {showValue ? (
+              <Text style={[styles.value, styles.valueInvert]}>{fillPct}%</Text>
+            ) : null}
+          </View>
         </View>
       </PulseWrap>
     </div>
@@ -238,6 +270,7 @@ function SpotsTogglePill() {
           pressed && { opacity: 0.7 },
         ]}
       >
+        <HandDrawnFrame radius={R.pill} />
         <Icon name="pin" size={ICON_SIZE} opacity={visible ? 1 : 0.45} />
       </Pressable>
     </PulseWrap>
@@ -279,6 +312,14 @@ const styles = StyleSheet.create({
     borderRadius: PILL_HEIGHT / 2,
     overflow: 'hidden',
     backgroundColor: GLASS_BG,
+    // NO EDGE on the readouts. The meters and the paw counter are not
+    // things you press — they are numbers the app is telling you, and
+    // they sit at the top of every screen for the whole session. Ink
+    // there made the busiest corner of the app read as four buttons
+    // demanding attention. Shadow alone is enough for a readout.
+    //
+    // The spots toggle is the exception and takes its edge below: it IS
+    // a control, and it is the only one in this row.
     shadowColor: GLASS_SHADOW_COLOR,
     // Bumped from { 0, 4 } / 0.1 / 16 to the chat CHROME_SHADOW
     // values so HUD pills feel like the same family as the chat
@@ -287,10 +328,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 20,
     elevation: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: S.s,
-    gap: S.xs,
+    ...ROW_LAYOUT,
   },
   meterPill: {
     minWidth: PILL_MIN_WIDTH,
@@ -305,6 +343,8 @@ const styles = StyleSheet.create({
   },
   togglePill: {
     paddingHorizontal: S.m,
+    // The one pressable thing in the HUD row, so the one with an edge —
+    // drawn, see the HandDrawnFrame inside it.
   },
   // Sniff toggle's OFF state — solid muted grey so the toggle
   // still reads as inactive vs the white ON state, without
@@ -312,16 +352,32 @@ const styles = StyleSheet.create({
   togglePillOff: {
     backgroundColor: '#f0f0f0',
   },
+  // The level itself. Solid ink, not a 0.75 wash of it — the white
+  // copy of the row is laid over exactly this, and a grey bar under
+  // white type is worse than either colour on its own.
   fill: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    opacity: 0.75,
+    backgroundColor: INK,
+  },
+  // The white row, clipped to the fill. Same layout as the pill, same
+  // origin — see ROW_LAYOUT.
+  fillInvert: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    ...ROW_LAYOUT,
   },
   value: {
     color: colors.black,
     fontSize: TYPE.body,
     fontWeight: '700',
+  },
+  valueInvert: {
+    color: SURFACE.fill,
   },
 });

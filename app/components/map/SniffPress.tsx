@@ -16,6 +16,8 @@ import { Z } from '../../constants/z';
 import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import { VOICE } from '../../constants/voice';
+import { INK, SURFACE } from '../../constants/surface';
+import { HandDrawnFrame } from '../ui/HandDrawn';
 
 // Long-press "sniff this place" gesture.
 //
@@ -496,17 +498,22 @@ export function SniffPress() {
             // padding 8/12 → 12/14, radius 14 → 22, type 13/1.35
             // → 16/1.4.
             padding: '12px 14px',
-            background: VOICE.background,
-            color: VOICE.color,
-            borderRadius: R.chip,
+            // White paper, not the dog's dark voice — see the note in
+            // this file's header. This panel carries a place you can
+            // walk to and a button to do it.
+            background: SURFACE.fill,
+            color: INK,
+            borderRadius: R.card,
             fontFamily: VOICE.fontFamily,
             fontSize: TYPE.body,
             lineHeight: 1.4,
-            boxShadow: VOICE.shadow,
-            border: VOICE.border,
+            boxShadow: SURFACE.shadow,
+            position: 'relative',
             textAlign: 'center',
           }}
         >
+          {/* Drawn edge — see HandDrawn.tsx. */}
+          <HandDrawnFrame radius={R.card} />
           <div style={{ fontWeight: 700, marginBottom: 2 }}>{discovered.name}</div>
           <div>{discovered.story}</div>
           {moreOpen && moreText ? (
@@ -514,7 +521,7 @@ export function SniffPress() {
               style={{
                 marginTop: S.s,
                 paddingTop: S.s,
-                borderTop: '1px solid rgba(255,255,255,0.12)',
+                borderTop: '1px solid rgba(0,0,0,0.12)',
                 fontSize: TYPE.small,
                 lineHeight: 1.45,
                 opacity: 0.85,
@@ -567,13 +574,20 @@ export function SniffPress() {
               // buttons across the app — padding 6/14 → 10/18,
               // type 12 → 14.
               padding: '10px 18px',
-              background: SNIFF_COLOR,
+              // Ink, not sniff-blue. This one survived the first pass
+              // because it lives on a map marker rather than in a modal,
+              // but it is a button, and blue here means the circle and
+              // the dot below it — the place being pointed at — not the
+              // thing you tap.
+              background: INK,
               color: '#ffffff',
-              borderRadius: R.pill,
+              borderRadius: R.button,
+              // Ink on ink — kept for the height, never seen.
+              border: SURFACE.hair,
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.small,
               fontWeight: 700,
-              boxShadow: '0 4px 12px rgba(47,107,255,0.35)',
+              boxShadow: SURFACE.shadow,
               userSelect: 'none',
               opacity: routing ? 0.6 : 1,
             }}

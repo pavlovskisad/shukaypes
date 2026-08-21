@@ -116,6 +116,36 @@ function jitteredCoords(path: LatLng[]): GeoJSON.Position[] {
   return out;
 }
 
+// How long the line takes to draw itself from the dog to the
+// destination. Exported because WalkStops paces its dots against this:
+// a stop pops when the line reaches it, which only reads as one motion
+// if both sides agree on the clock.
+// 900ms was over before the eye had followed it — the line arrived
+// rather than being drawn, and the stops popping along it read as a
+// single burst near the start. Longer lets the dots arrive one at a
+// time, which is the point of pacing them against the line at all.
+export const ROUTE_DRAW_MS = 1500;
+
+// Near-overhead while a route is on screen. Not a flat 0: a little tilt
+// keeps the city readable as a place rather than a diagram.
+export const ROUTE_VIEW_PITCH = 20;
+
+function prefixCoords(coords: number[][], t: number): number[][] {
+  if (t >= 1 || coords.length < 2) return coords;
+  const span = (coords.length - 1) * t;
+  const whole = Math.floor(span);
+  const frac = span - whole;
+  const head = coords.slice(0, whole + 1);
+  const a = coords[whole];
+  const b = coords[whole + 1];
+  if (a && b && frac > 0) {
+    head.push([a[0]! + (b[0]! - a[0]!) * frac, a[1]! + (b[1]! - a[1]!) * frac]);
+  }
+  // A LineString needs two positions; below that MapLibre drops the
+  // feature and the line flickers out on the first frame.
+  return head.length >= 2 ? head : coords.slice(0, 2);
+}
+
 export function CrayonRoute({
   path,
   color = colors.routeLine,
@@ -145,6 +175,10 @@ export function CrayonRoute({
   // change would fight the user if they panned to read the route in
   // detail and a tick later we re-flew them home.
   const didFitRef = useRef(false);
+  // Which path we have already drawn. A colour or weight change must
+  // not replay the draw — only a genuinely new route does.
+  const drawnRef = useRef<CrayonRouteProps['path'] | null>(null);
+  const rafRef = useRef<number | null>(null);
 
   useEffect(() => {
     if (!map || path.length < 2) return;
@@ -161,6 +195,29 @@ export function CrayonRoute({
     // not jump above other LINE layers in the style. Passing no
     // `before` argument appends to the top of the style stack; the
     // DOM layering then keeps markers on top automatically.
+    // Draw the line on from its start. Runs once per route: `drawnRef`
+    // is set before the first frame so a re-render mid-animation does
+    // not restart it from zero.
+    const animateDraw = () => {
+      const src = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
+      if (!src) return;
+      const startedAt = performance.now();
+      const frame = () => {
+        const raw = Math.min(1, (performance.now() - startedAt) / ROUTE_DRAW_MS);
+        // Ease-out: quick off the mark, settling into the destination,
+        // which is how a finger draws a line and how the dog's own
+        // camera eases already behave.
+        const t = 1 - Math.pow(1 - raw, 3);
+        src.setData({
+          type: 'Feature',
+          geometry: { type: 'LineString', coordinates: prefixCoords(coords, t) },
+          properties: {},
+        } as GeoJSON.Feature);
+        rafRef.current = raw < 1 ? requestAnimationFrame(frame) : null;
+      };
+      rafRef.current = requestAnimationFrame(frame);
+    };
+
     const add = () => {
       const existing = map.getSource(sourceId) as
         | maplibregl.GeoJSONSource
@@ -179,7 +236,21 @@ export function CrayonRoute({
         }
         return;
       }
-      map.addSource(sourceId, { type: 'geojson', data });
+      const fresh = drawnRef.current !== path;
+      map.addSource(sourceId, {
+        type: 'geojson',
+        // Start as a stub the length of one segment when this is a new
+        // route; the rAF below grows it. An existing route (a remount
+        // from a style reload, say) goes straight to full so the line
+        // does not redraw itself every time the map reloads.
+        data: fresh
+          ? ({
+              type: 'Feature',
+              geometry: { type: 'LineString', coordinates: coords.slice(0, 2) },
+              properties: {},
+            } as GeoJSON.Feature)
+          : data,
+      });
       map.addLayer({
         id: layerId,
         type: 'line',
@@ -206,6 +277,10 @@ export function CrayonRoute({
           'line-join': 'round',
         },
       });
+      if (fresh) {
+        drawnRef.current = path;
+        animateDraw();
+      }
     };
 
     // Once the layer is on the map, ease the view to fit the route.
@@ -227,6 +302,14 @@ export function CrayonRoute({
         padding: { top: 110, bottom: 130, left: 40, right: 40 },
         maxZoom: 17,
         duration: 700,
+        // Helicopter view. The map normally sits pitched for the 3D
+        // buildings, which is the right look for walking but the wrong
+        // one for reading a route: a tilted street turns every stop dot
+        // into an ellipse near the horizon, small and awkward to hit.
+        // Flattening toward overhead for the duration of the route puts
+        // the whole shape on screen and gives every dot its full
+        // diameter as a tap target.
+        pitch: ROUTE_VIEW_PITCH,
       });
     };
 
@@ -241,6 +324,8 @@ export function CrayonRoute({
     }
 
     return () => {
+      if (rafRef.current != null) cancelAnimationFrame(rafRef.current);
+      rafRef.current = null;
       if (map.getLayer(layerId)) map.removeLayer(layerId);
       if (map.getSource(sourceId)) map.removeSource(sourceId);
     };

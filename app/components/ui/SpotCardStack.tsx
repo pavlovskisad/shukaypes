@@ -13,13 +13,15 @@ import type { LatLng } from '@shukajpes/shared';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
-import { ICON_HERO, EMOJI_HERO } from '../../constants/sizing';
+import { ICON_HERO, EMOJI_HERO, INLINE_ICON } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK } from '../../constants/surface';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
 import { Icon, iconForCategory } from './Icon';
 import { CardStack, CardStackSkeleton } from './CardStack';
+import { HandDrawnFrame } from './HandDrawn';
 
 interface Props {
   spots: Spot[];
@@ -59,8 +61,8 @@ function formatDistance(m: number): string {
 }
 
 // White card, big category icon as the centred hero, name +
-// address at the bottom on dark text. Distance chip top-left,
-// optional rating chip top-right. No category chip — the spots
+// address at the bottom on dark text. Rating top-left, distance
+// top-right, both bare. No category chip — the spots
 // tab already groups cards under a category title ("кав'ярні"
 // etc.), so repeating the singular on every card just doubles
 // up the same info.
@@ -78,6 +80,8 @@ export function SpotCardView({
 
   return (
     <View style={styles.card}>
+      {/* Drawn edge, seeded on the spot — see HandDrawn.tsx. */}
+      <HandDrawnFrame radius={R.card} seed={spot.id} />
       <View style={styles.iconHero}>
         {iconSlot ? (
           <Icon name={iconSlot} size={ICON_HERO.card} />
@@ -85,14 +89,16 @@ export function SpotCardView({
           <Text style={styles.heroEmoji}>{spot.icon ?? '📍'}</Text>
         )}
       </View>
-      {distLabel ? (
-        <View style={styles.distChip}>
-          <Text style={styles.distChipText}>{distLabel}</Text>
+      {typeof spot.rating === 'number' ? (
+        <View style={styles.ratingRow}>
+          <Text style={styles.ratingStar}>★</Text>
+          <Text style={styles.ratingText}>{spot.rating.toFixed(1)}</Text>
         </View>
       ) : null}
-      {typeof spot.rating === 'number' ? (
-        <View style={styles.ratingBadge}>
-          <Text style={styles.ratingBadgeText}>★ {spot.rating.toFixed(1)}</Text>
+      {distLabel ? (
+        <View style={styles.distRow}>
+          <Icon name="pin" size={INLINE_ICON.badge} />
+          <Text style={styles.distText}>{distLabel}</Text>
         </View>
       ) : null}
       <View style={styles.cardBody}>
@@ -121,10 +127,11 @@ const styles = StyleSheet.create({
     borderRadius: R.card,
     overflow: 'hidden',
     backgroundColor: '#ffffff',
+    // No borderWidth — the edge is drawn, see HandDrawnFrame above.
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.18,
-    shadowRadius: 20,
+    shadowOffset: { width: 0, height: 6 },
+    shadowOpacity: 0.14,
+    shadowRadius: 18,
     elevation: 6,
   },
   iconHero: {
@@ -147,45 +154,42 @@ const styles = StyleSheet.create({
   },
   // Full-pill chip family — matches the HUD pill / chat header
   // shape + shadow, scaled smaller for in-card use.
-  distChip: {
+  // Both readouts sit bare on the card's own white — no patch, because
+  // the surface behind them is already white paper and a white chip on
+  // white was an outline holding two characters. Rating left, distance
+  // right, so the eye gets "how good" and "how far" without either
+  // fighting the hero icon between them.
+  ratingRow: {
     position: 'absolute',
     top: 14,
     left: 14,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: S.m,
-    paddingVertical: S.s,
-    borderRadius: R.pill,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
   },
-  distChipText: {
-    fontSize: TYPE.caption,
-    fontWeight: '700',
-    color: '#555',
-    letterSpacing: 0.3,
+  ratingStar: {
+    fontSize: TYPE.body,
+    color: colors.amber,
   },
-  ratingBadge: {
+  ratingText: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: TYPE.body,
+    fontWeight: '800',
+    color: INK,
+  },
+  distRow: {
     position: 'absolute',
     top: 14,
     right: 14,
-    backgroundColor: '#ffffff',
-    paddingHorizontal: S.m,
-    paddingVertical: S.s,
-    borderRadius: R.pill,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.14,
-    shadowRadius: 12,
-    elevation: 4,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 2,
   },
-  ratingBadgeText: {
-    fontSize: TYPE.small,
+  distText: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: TYPE.body,
     fontWeight: '700',
-    color: '#d9a030',
-    letterSpacing: 0.3,
+    color: INK,
   },
   cardBody: {
     position: 'absolute',

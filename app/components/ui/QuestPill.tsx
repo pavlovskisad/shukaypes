@@ -1,19 +1,20 @@
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
-import { CHIP } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK, SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import { popPressableEvent } from '../../utils/popOnTap';
+import { HandDrawnFrame } from './HandDrawn';
 
 // Active-quest indicator. Renders nothing when no quest is live; when
 // one is, shows a pill with pet name + progress (2/3) + an X to abandon.
 // Matches the frosted-glass recipe used on the status bar so it reads
 // as part of the same HUD family.
 
-const GLASS_BG = '#ffffff';
+const GLASS_BG = SURFACE.fill;
 
 export function QuestPill() {
   const activeQuest = useGameStore((s) => s.activeQuest);
@@ -34,6 +35,7 @@ export function QuestPill() {
   return (
     <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.pill}>
+        <HandDrawnFrame radius={R.card} />
         <Text style={styles.emoji}>🔍</Text>
         {/* Wraps to multiple lines on long pet names instead
             of truncating — the pill grows vertically and the
@@ -79,10 +81,16 @@ const styles = StyleSheet.create({
     // CHIP.height (48) was a fixed cap and clashed with
     // wrapping labels.
     paddingVertical: S.s,
-    borderRadius: CHIP.radius,
+    // R.card, not CHIP.radius. CHIP.radius is half of a 48px chip, so
+    // it is a capsule only while this pill stays one line — and this
+    // pill's height is content-driven precisely so long pet names can
+    // wrap. At two lines a 24 radius on a ~70px box is neither a
+    // capsule nor the family corner. It wraps, so it is a surface.
+    borderRadius: R.card,
     paddingLeft: S.l,
     paddingRight: S.s,
     backgroundColor: GLASS_BG,
+    // Drawn edge — see HandDrawnFrame above.
     // Cap the pill width so a long pet name wraps inside
     // the cap instead of pushing the close button off-screen.
     maxWidth: '100%',

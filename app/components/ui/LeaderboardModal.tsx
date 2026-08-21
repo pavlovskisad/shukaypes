@@ -12,8 +12,10 @@ import type { TerritoryRanking } from '../../services/api';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
+import { SURFACE } from '../../constants/surface';
 import { playPopThen } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
+import { HandDrawnFrame } from './HandDrawn';
 import { OWN_COLOR_CSS, ownerColorCss } from '../map/territoryColor';
 import { BoardRow } from './BoardRow';
 
@@ -77,7 +79,11 @@ export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch',
             padding: '20px',
-            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 72px)',
+            // The close button ends at inset + 50 (top 14 + 36 tall),
+            // so 72 left a 22px gap and the board read as starting
+            // late. 60 clears the button by 10 and gets the first
+            // name up where the eye goes first.
+            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 60px)',
             paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
           } as React.CSSProperties
         }
@@ -118,7 +124,9 @@ export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
           width: 36,
           height: 36,
           borderRadius: R.pill,
-          border: '1px solid rgba(0,0,0,0.06)',
+          // Drawn ring — see the HandDrawnFrame child. The 2px stays
+          // so the button keeps the size it had.
+          border: '2px solid transparent',
           background: '#ffffff',
           color: '#1a1a1a',
           padding: 0,
@@ -126,12 +134,13 @@ export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
           alignItems: 'center',
           justifyContent: 'center',
           cursor: 'pointer',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+          boxShadow: SURFACE.chip,
           fontSize: TYPE.display,
           lineHeight: 1,
           zIndex: 1,
         }}
       >
+        <HandDrawnFrame radius={R.pill} />
         ×
       </button>
     </div>,

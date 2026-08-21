@@ -80,6 +80,15 @@ function getNonVisitActions(path: string[]): RadialAction[] | null {
 interface CompanionProps {
   position: LatLng;
   bubble: string | null;
+  // A QUESTION IS NOT A BARK, and it outranks every other line the dog
+  // could be saying. It arrived here as just another `bubble`, which was
+  // fine while the only way to be asked something was to already be in
+  // supersniff — and stopped being fine when the quests tab started
+  // dropping people into supersniff AND the question in one move: the
+  // mode's own intro line owns the bubble for its first seconds, so the
+  // dog explained how to swipe a deck that was frozen under a question
+  // it never asked out loud. Buttons with no words above them.
+  question?: string | null;
   // Suppress the in-map bubble — used when the dog is off-screen and
   // MapView wants to render the bubble next to the edge chip instead
   // (so the user can still see the dog's remark while panning around).
@@ -101,7 +110,15 @@ interface CompanionProps {
 // (bubble, menu) live inside this OverlayView div so they move with the map
 // (demo's floatPane pattern). The expanding aura rings were a bit much —
 // we'll revisit that animation later when we have the right sensor metaphor.
-export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion, onTap }: CompanionProps) {
+export function Companion({
+  position,
+  bubble,
+  question,
+  hideBubble,
+  hidden,
+  onTapCompanion,
+  onTap,
+}: CompanionProps) {
   const t = useStrings();
   const router = useRouter();
   const menuOpen = useGameStore((s) => s.menuOpen);
@@ -808,7 +825,11 @@ export function Companion({ position, bubble, hideBubble, hidden, onTapCompanion
         ? t.modes.ask
         : menuOpen
           ? menuExplainer
-          : supersniffIntro ?? hintBubble ?? localBubble ?? bubble;
+          : // A question the dog has asked and is waiting on outranks
+            // everything below it — a hint, the mode's intro, an ambient
+            // bark. Those are things worth saying; this is a thing that
+            // has buttons under it.
+            question ?? supersniffIntro ?? hintBubble ?? localBubble ?? bubble;
 
   // Publish the visible hint so sibling components (the top-left logo
   // in the HUD) can render a matching cue. Clear on unmount.

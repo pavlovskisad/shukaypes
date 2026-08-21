@@ -2,18 +2,20 @@ import type { CSSProperties, TouchEvent as ReactTouchEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { NearbyLostDog } from '../../services/api';
-import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { colors } from '../../constants/colors';
 import { VOICE } from '../../constants/voice';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { INK, SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
 import { playPopThen } from '../../utils/popOnTap';
+import { HandDrawnFrame } from './HandDrawn';
 
 function formatDistance(m: number): string {
   if (m < 1000) return `${Math.round(m / 50) * 50} m`;
@@ -54,14 +56,19 @@ const SHEET_ANIM_MS = 240;
 // Keep in sync with DOG_VIEW_* in MapView if retuned.
 const STACK_TOP = 'calc(env(safe-area-inset-top, 0px) + 122px)';
 
-// Matches the SniffPress discovery CTA — the brand-blue pill under the
-// dark story bubble.
-const SNIFF_BLUE = colors.sniffBlue;
-
+// These pills sit ON the pet's photo, which is the hardest surface in
+// the app to put a button on: it can be any colour, light or dark, and
+// it changes with every pet. Ink edge on both, and a deeper shadow than
+// the paper elsewhere, so the pair holds its shape over a bright sky or
+// a dark doorway alike.
 const PILL_BASE: CSSProperties = {
   padding: '10px 18px',
-  borderRadius: R.pill,
-  border: 'none',
+  borderRadius: R.button,
+  // 2px kept so both pills are the same size; the light one shows a
+  // DRAWN edge instead (its call site puts a HandDrawnFrame inside),
+  // and on the ink pill the line would be invisible anyway.
+  border: '2px solid transparent',
+  position: 'relative',
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.small,
   fontWeight: 700,
@@ -76,30 +83,35 @@ const PILL_BASE: CSSProperties = {
 
 const PILL_PRIMARY: CSSProperties = {
   ...PILL_BASE,
-  background: SNIFF_BLUE,
+  background: INK,
   color: '#ffffff',
-  boxShadow: '0 4px 12px rgba(47,107,255,0.35)',
+  boxShadow: SURFACE.onPhoto,
 };
 
 const PILL_SECONDARY: CSSProperties = {
   ...PILL_BASE,
   background: '#ffffff',
-  color: '#1a1a1a',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.18)',
+  color: INK,
+  boxShadow: SURFACE.onPhoto,
 };
 
 const PILL_DISABLED: CSSProperties = {
   ...PILL_BASE,
   background: 'rgba(255,255,255,0.25)',
   color: 'rgba(255,255,255,0.8)',
+  // Its own translucent edge rather than the ink one — a solid black
+  // outline around a ghosted pill reads as enabled.
+  border: '2px solid rgba(255,255,255,0.45)',
   cursor: 'default',
   boxShadow: 'none',
 };
 
-// Status tint on the dark bubble — brand blue only (lightened for
-// legibility on #1a1a1a). Red/amber urgency colouring is retired from
-// this view: everything the dog view marks is blue.
-const BADGE_ON_DARK = '#8fb0ff';
+// Status tint. This was '#8fb0ff' — brand blue lightened to survive on
+// a #1a1a1a bubble. The bubble is white paper now, so it takes the
+// blue at full strength instead: same meaning, legible on the surface
+// it actually sits on. Red/amber urgency colouring stays retired from
+// this view — everything the dog view marks is blue.
+const BADGE_TINT = colors.sniffBlue;
 
 function relativeTime(iso: string, t: AppStrings): string {
   const then = new Date(iso).getTime();
@@ -112,8 +124,8 @@ function relativeTime(iso: string, t: AppStrings): string {
   return t.time.ago(diffD, 'd');
 }
 
-// Minimal lost-pet card in the SniffPress discovery style: a dark story
-// bubble + action pills floating just above the big centred photo pin.
+// Minimal lost-pet card in the SniffPress discovery style: a white
+// paper panel + action pills floating just above the big centred photo pin.
 // No photo inside — the pin IS the photo. Transparent scrim (the
 // cinematic zone shot is the content); outside tap closes; horizontal
 // swipe cycles the nearby pets when onPrev/onNext are wired.
@@ -192,7 +204,7 @@ export function LostDogModal({
 
   const urgent = renderDog.urgency === 'urgent';
   const badgeText = urgent ? t.modals.lostDog.badgeUrgent : t.modals.lostDog.badgeSearching;
-  const badgeFg = BADGE_ON_DARK;
+  const badgeFg = BADGE_TINT;
   const distLabel = userPos
     ? formatDistance(distanceMeters(userPos, renderDog.lastSeen.position))
     : null;
@@ -249,9 +261,9 @@ export function LostDogModal({
           <div
             style={{
               padding: '14px 18px',
-              background: VOICE.background,
-              color: VOICE.color,
-              borderRadius: R.chip,
+              background: SURFACE.fill,
+              color: INK,
+              borderRadius: R.card,
               fontFamily: VOICE.fontFamily,
               boxShadow: VOICE.shadow,
               border: VOICE.border,
@@ -268,7 +280,7 @@ export function LostDogModal({
             >
               {renderDog.name}
               {renderDog.breed ? (
-                <span style={{ fontWeight: 600, opacity: 0.7 }}>
+                <span style={{ fontWeight: 600, color: '#777' }}>
                   {' '}
                   · {renderDog.breed}
                 </span>
@@ -289,7 +301,7 @@ export function LostDogModal({
               style={{
                 marginTop: 4,
                 fontSize: TYPE.caption,
-                opacity: 0.75,
+                color: '#777',
               }}
             >
               {t.modals.lostDog.questCta(renderDog.rewardPoints)}
@@ -302,7 +314,7 @@ export function LostDogModal({
                   padding: 0,
                   border: 'none',
                   background: 'none',
-                  color: BADGE_ON_DARK,
+                  color: BADGE_TINT,
                   fontFamily: SYSTEM_FONT,
                   fontSize: TYPE.caption,
                   fontWeight: 700,
@@ -315,8 +327,8 @@ export function LostDogModal({
             ) : null}
           </div>
 
-          {/* Action pills — brand-blue primary (start search), white
-              secondary (i've seen), side by side under the bubble. */}
+          {/* Action pills — ink primary (start search), white secondary
+              (i've seen), side by side under the bubble. */}
           <div style={{ display: 'flex', gap: S.s }}>
             <button
               onClick={(e) =>
@@ -324,6 +336,7 @@ export function LostDogModal({
               }
               style={PILL_SECONDARY}
             >
+              <HandDrawnFrame radius={R.button} />
               {t.modals.lostDog.iveSeen}
             </button>
             <button
