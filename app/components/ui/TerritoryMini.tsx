@@ -42,6 +42,13 @@
 // reaches the edge comes back as a zero-width slit that stroking turns
 // into a line straight through the claim.
 //
+// What is left is then drawn as a CURVE through those points rather than
+// as a polygon — splinePath, the same centripetal Catmull-Rom every
+// hand-drawn border in the app uses. A dozen hard corners at 92px read
+// as a cut-out; the same dozen points on a smooth line read as a place.
+// The curve passes through every one of them, so the corners stay where
+// the ground turns — they are only no longer sharp.
+//
 // KNOWN AND ACCEPTED: the chip no longer matches the map's finish. The
 // map paints territory as a soft field with deliberately no borders (see
 // TerritoryLayer's header, which argues that case at length and is still
@@ -51,13 +58,15 @@
 
 import { useMemo } from 'react';
 import { lineColorCss } from '../map/territoryColor';
+import { splinePath } from './HandDrawn';
 
 // Big enough that a 48-corner hull keeps its corners, small enough to
 // stay cheap on a sheet holding a hundred of these. Rendered size is
 // per-use.
 const BOX = 64;
 // Breathing room inside the box — the stroke is centred on the outline,
-// so half of STROKE_W hangs outside the polygon and has to fit.
+// so half of STROKE_W hangs outside the outline and has to fit — as
+// does the little the smoothed curve bows past a corner.
 const PAD = 5;
 
 // In viewBox units. At the board's 92px the box scales by ~1.44, so
@@ -94,12 +103,13 @@ const FILL_ALPHA = 0.22;
 // here", so it has to be measured where the eye is, not in the
 // coordinate space. A chip drawn bigger keeps more detail for free.
 //
-// It is deliberately a SIMPLIFIER and not a smoother. Every remaining
-// vertex is a real corner of the real claim, in its real place — the
-// shape gets quieter, never rounder, and never grows a curve the ground
-// does not have. A deep inlet survives (it is far from the chord that
-// would replace it, which is exactly what the algorithm measures); a
-// one-pixel stair does not.
+// This step is a SIMPLIFIER and not a smoother: it only ever removes,
+// and every vertex it keeps is a real corner of the real claim in its
+// real place. A deep inlet survives (it is far from the chord that would
+// replace it, which is exactly what the algorithm measures); a one-pixel
+// stair does not. The rounding happens later and separately, as a curve
+// drawn THROUGH these points — so what is decided here is which corners
+// are real, and nothing here invents one.
 //
 // 3.2px, chosen by measuring both candidates on hulls built to look like
 // the real ones (a staircase blob, one with a bite out of it, one nearly
@@ -141,6 +151,20 @@ const MIN_VERTS = 8;
 //
 // cos(160°) — the two edges have to be within 20° of a true reversal.
 const SPIKE_COS = -0.94;
+// AND THE ARMS THAT ARE NOT QUITE FOLD-BACKS.
+//
+// The angle test alone left thin arms standing on the live board — Молі
+// and Тузік both had a couple. They are the same artefact as a slit,
+// just not as tight: a pocket that reaches the edge at a slight angle
+// leaves a wedge instead of a zero-width cut, and a wedge turns 140°
+// where a slit turns 180°. Loosening the angle would take real corners
+// with it, so the second test is about WIDTH instead: a vertex whose two
+// neighbours are less than this far apart, and which sticks out further
+// than that gap is wide, is the tip of something thinner than it is
+// long. At the size this is drawn, that is a hair, not ground.
+//
+// In rendered pixels, like every other threshold here.
+const NEEDLE_W_PX = 4.5;
 // Passes. A slit is peeled a vertex at a time from each end, so the
 // count bounds how deep a slit can be unpicked; measured against real
 // claims, everything resolved inside four.
@@ -149,7 +173,11 @@ const SPIKE_PASSES = 12;
 // MIN_VERTS on purpose — see the call site.
 const SPIKE_FLOOR = 6;
 
-function dropSpikes(pts: [number, number][], floor: number): [number, number][] {
+function dropSpikes(
+  pts: [number, number][],
+  floor: number,
+  needleW: number,
+): [number, number][] {
   let ring = pts;
   for (let pass = 0; pass < SPIKE_PASSES; pass++) {
     if (ring.length <= floor) return ring;
@@ -168,6 +196,11 @@ function dropSpikes(pts: [number, number][], floor: number): [number, number][] 
       // is exactly what a collapsed slit leaves behind.
       if (la === 0 || lb === 0) continue;
       if ((ax * bx + ay * by) / (la * lb) < SPIKE_COS) continue;
+      // Thinner than it is long — see NEEDLE_W_PX. The height is measured
+      // to the chord the neighbours span, which is what "sticks out" has
+      // to mean on a shape with no notion of inside.
+      const gap = Math.hypot(next[0] - prev[0], next[1] - prev[1]);
+      if (gap < needleW && segDist2(cur, prev, next) > gap * gap) continue;
       keep.push(cur);
     }
     if (keep.length === ring.length) return ring;
@@ -254,7 +287,9 @@ export function TerritoryMini({
   color: string;
   size: number;
 }) {
-  const pts = useMemo(() => {
+  // The finished outline as an SVG path `d`, or null when there is no
+  // geometry to draw.
+  const d = useMemo(() => {
     if (!points || points.length < 3) return null;
     // Locally flat projection: metres east vs metres north (scaled by
     // cos(lat) so a shape drawn here has the same proportions it has on
@@ -281,13 +316,15 @@ export function TerritoryMini({
     // chip is drawn in and one number means the same thing for a claim of
     // any real size. SIMPLIFY_PX is rendered pixels; the viewBox is BOX
     // units wide and drawn `size` across, hence the conversion.
-    const tol = (SIMPLIFY_PX * BOX) / Math.max(1, size);
+    const px = BOX / Math.max(1, size);
+    const tol = SIMPLIFY_PX * px;
+    const needleW = NEEDLE_W_PX * px;
     // Slits first, THEN simplify. The other order fails: a slit's two
     // sides are a matched pair of near-identical chains, and
     // Douglas–Peucker thins each of them independently, so they stop
     // lining up and what was a clean fold-back becomes a thin wedge no
     // angle test recognises.
-    const clean = dropSpikes(fitted, MIN_VERTS);
+    const clean = dropSpikes(fitted, MIN_VERTS, needleW);
     let simple = simplifyRing(clean, tol);
     // Backing off rather than giving up: a shape that simplifies below
     // the floor gets progressively gentler tolerances until it clears it,
@@ -305,9 +342,25 @@ export function TerritoryMini({
     // vertices rather than a hundred, with a lower floor: by this point
     // every vertex left is load-bearing, and a spike among them is worth
     // more than the count.
-    const drawn = dropSpikes(simple, SPIKE_FLOOR);
+    const drawn = dropSpikes(simple, SPIKE_FLOOR, needleW);
 
-    return drawn.map(([x, y]) => `${x.toFixed(1)},${y.toFixed(1)}`).join(' ');
+    // DRAWN AS A CURVE, NOT A POLYGON.
+    //
+    // Everything above earns its shape by removing things; this is the
+    // one step that adds. A simplified ring is a dozen straight runs
+    // meeting at hard corners, and a dozen hard corners at 92px read as
+    // a cut-out rather than a place. splinePath is the app's one answer
+    // to "draw a smooth line through these points" — the same
+    // centripetal Catmull-Rom every hand-drawn border uses, chosen there
+    // precisely because it does not overshoot or pinch when the points
+    // are unevenly spaced, which after simplification they always are.
+    //
+    // The curve passes THROUGH every vertex, so nothing moves: the
+    // corners are where the ground turns, they are just no longer sharp.
+    return splinePath(
+      drawn.map(([x, y]) => ({ x, y })),
+      true,
+    );
   }, [points, size]);
 
   // One shape, one wash, one dashed edge — the same paint whether we have
@@ -331,8 +384,8 @@ export function TerritoryMini({
 
   return (
     <svg viewBox={`0 0 ${BOX} ${BOX}`} width={size} height={size} aria-hidden>
-      {pts ? (
-        <polygon points={pts} {...paint} />
+      {d ? (
+        <path d={d} {...paint} />
       ) : (
         <circle cx={BOX / 2} cy={BOX / 2} r={BOX / 2 - PAD} {...paint} />
       )}
