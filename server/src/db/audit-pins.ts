@@ -45,6 +45,7 @@ import 'dotenv/config';
 import { eq, isNotNull } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
+import { LANDMARKS, jitterAround } from '../pipeline/landmarks.js';
 
 // The centre pile: Maidan, and the jitter radius the upsert scatters by.
 const MAIDAN = { lat: 50.4503, lng: 30.5234 };
@@ -178,6 +179,45 @@ async function main() {
     console.log(
       `\n  These render on the map, in the middle of Khreshchatyk. This is the\n` +
         `  bucket somebody looking at the map would report.`,
+    );
+  }
+
+  // PLACED ON A LANDMARK, PROVEN RATHER THAN GUESSED AT.
+  //
+  // The Maidan ring above found nothing, which only ruled out ONE of the
+  // 41 landmarks. A pet dropped on Arsenalna or KPI looks perfectly
+  // plausible on the map and is just as much a guess — the model picked
+  // the nearest name it had, not the address the owner wrote.
+  //
+  // A distance ring cannot tell those apart from a pet genuinely lost by
+  // the KPI gates. But jitterAround is DETERMINISTIC — same landmark,
+  // same pet id, same 120m — so the pin can simply be recomputed. If it
+  // reproduces to the metre, that pet was placed on that landmark and
+  // scattered. There is no false positive to argue about.
+  const landmarked = new Map<string, number>();
+  let landmarkedTotal = 0;
+  for (const pet of pets) {
+    for (const lm of LANDMARKS) {
+      const j = jitterAround(lm.lat, lm.lng, pet.id, JITTER_M);
+      if (Math.abs(j.lat - pet.lat) < 1e-9 && Math.abs(j.lng - pet.lng) < 1e-9) {
+        landmarked.set(lm.name, (landmarked.get(lm.name) ?? 0) + 1);
+        landmarkedTotal++;
+        break;
+      }
+    }
+  }
+
+  console.log(
+    `\nPLACED ON A LANDMARK AND SCATTERED — pin reproduces exactly: ${landmarkedTotal} of ${pets.length}`,
+  );
+  for (const [name, n] of [...landmarked].sort((a, b) => b[1] - a[1]).slice(0, 15)) {
+    console.log(`  ${String(n).padStart(4)}  ${name}`);
+  }
+  if (landmarkedTotal > 0) {
+    console.log(
+      `\n  These are visible on the map and look like ordinary pins. They are\n` +
+        `  the model's nearest guess from a list of ${LANDMARKS.length}, not the address the\n` +
+        `  owner wrote — accurate to a district at best.`,
     );
   }
 
