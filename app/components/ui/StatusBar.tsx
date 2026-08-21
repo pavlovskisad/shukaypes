@@ -22,8 +22,18 @@ const PILL_HEIGHT = CHIP.height;
 // that, each pill sizes to its content and grows when the number widens.
 const PILL_MIN_WIDTH = 50;
 
-const PROGRESS_BLUE = 'rgb(0,60,255)';
 const GLASS_BG = SURFACE.fill;
+
+// How a pill lays its contents out. Extracted because the meter pill
+// draws its row TWICE — once in ink and once in white over the fill —
+// and the two copies have to be positioned by the same numbers or the
+// white one lands a pixel off and the icon reads as doubled.
+const ROW_LAYOUT = {
+  flexDirection: 'row',
+  alignItems: 'center',
+  paddingHorizontal: S.s,
+  gap: S.xs,
+} as const;
 const GLASS_SHADOW_COLOR = '#000';
 // HUD icons are pixel-art SVGs (see components/ui/Icon.tsx). 18px
 // renders crisp at the 38px pill height; smaller (the previous emoji
@@ -158,15 +168,7 @@ export function MeterPill({
     <div ref={popRef} style={{ display: 'inline-flex' }}>
       <PulseWrap active={!!pulse}>
         <View style={[styles.pill, styles.meterPill, solid && styles.pillSolid]}>
-          <View
-            style={[
-              styles.fill,
-              {
-                width: `${fillPct}%` as unknown as number,
-                backgroundColor: PROGRESS_BLUE,
-              },
-            ]}
-          />
+          <View style={[styles.fill, { width: `${fillPct}%` as unknown as number }]} />
           <Icon name={icon} size={ICON_SIZE} />
           {showValue ? (
             <Text
@@ -176,6 +178,33 @@ export function MeterPill({
               {fillPct}%
             </Text>
           ) : null}
+          {/* THE SAME ROW AGAIN, IN WHITE, CLIPPED TO THE FILL.
+              The meter fills with ink now, and ink swallows a black
+              icon whole — at 60% the sun was a black shape half-lost
+              in a black bar. So the pill carries a second copy of its
+              own contents in white and shows exactly the part of it
+              the fill has reached. The icon inverts as the level
+              crosses it, a slice at a time, and the two copies land on
+              each other because they lay out through the same style.
+
+              aria-hidden and deaf to pointers: it is the same
+              information twice, and a screen reader should hear it
+              once. */}
+          <View
+            aria-hidden
+            pointerEvents="none"
+            style={
+              [
+                styles.fillInvert,
+                { clipPath: `inset(0 ${100 - fillPct}% 0 0)` },
+              ] as unknown as object
+            }
+          >
+            <Icon name={icon} size={ICON_SIZE} inverted />
+            {showValue ? (
+              <Text style={[styles.value, styles.valueInvert]}>{fillPct}%</Text>
+            ) : null}
+          </View>
         </View>
       </PulseWrap>
     </div>
@@ -297,10 +326,7 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.14,
     shadowRadius: 20,
     elevation: 6,
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: S.s,
-    gap: S.xs,
+    ...ROW_LAYOUT,
   },
   meterPill: {
     minWidth: PILL_MIN_WIDTH,
@@ -327,16 +353,32 @@ const styles = StyleSheet.create({
   togglePillOff: {
     backgroundColor: '#f0f0f0',
   },
+  // The level itself. Solid ink, not a 0.75 wash of it — the white
+  // copy of the row is laid over exactly this, and a grey bar under
+  // white type is worse than either colour on its own.
   fill: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    opacity: 0.75,
+    backgroundColor: INK,
+  },
+  // The white row, clipped to the fill. Same layout as the pill, same
+  // origin — see ROW_LAYOUT.
+  fillInvert: {
+    position: 'absolute',
+    left: 0,
+    right: 0,
+    top: 0,
+    bottom: 0,
+    ...ROW_LAYOUT,
   },
   value: {
     color: colors.black,
     fontSize: TYPE.body,
     fontWeight: '700',
+  },
+  valueInvert: {
+    color: SURFACE.fill,
   },
 });

@@ -600,16 +600,18 @@ export default function TasksScreen() {
                     {complete ? ' ✓' : ''}
                   </Text>
                 </View>
+                {/* Ink, done or not. The bar used to be blue while you
+                    were working on it and a faded black once finished,
+                    which put the LOUDER colour on the row you no longer
+                    have to do anything about. A finished row already
+                    says so twice — a full-width bar and a ✓ — and it
+                    does not need a second colour to say it a third
+                    time. */}
                 <View style={styles.barTrack}>
                   <View
                     style={[
                       styles.barFill,
-                      {
-                        width: `${progress * 100}%` as unknown as number,
-                        backgroundColor: complete
-                          ? 'rgba(0,0,0,0.45)'
-                          : 'rgba(0,60,255,0.85)',
-                      },
+                      { width: `${progress * 100}%` as unknown as number },
                     ]}
                   />
                 </View>
@@ -785,7 +787,7 @@ const styles = StyleSheet.create({
   summaryBarFill: {
     height: '100%',
     borderRadius: R.sm,
-    backgroundColor: 'rgb(0,60,255)',
+    backgroundColor: INK,
   },
   // Roomier task row: padding 12 → 16, gap 10 → 14, icon column
   // 22 → 44 to actually fit the 34px pixel icon (was being clipped
@@ -856,7 +858,7 @@ const styles = StyleSheet.create({
     borderRadius: R.sm,
     overflow: 'hidden',
   },
-  barFill: { height: '100%', borderRadius: R.sm },
+  barFill: { height: '100%', borderRadius: R.sm, backgroundColor: INK },
   cardHeaderRow: {
     flexDirection: 'row',
     alignItems: 'center',
