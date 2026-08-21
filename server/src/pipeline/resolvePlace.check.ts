@@ -52,6 +52,39 @@ const PLACES: GazetteerPlace[] = [
   check('the short name still resolves alone', r?.name === 'Борщагівка', String(r?.name));
 }
 
+// ---- ALIASES AND GENERIC WORDS ----
+//
+// Both of these came back from production as "not in the gazetteer"
+// while being very much in it.
+{
+  const withAlias: GazetteerPlace[] = [
+    {
+      name: 'Подільський район',
+      lat: 50.4700,
+      lng: 30.5000,
+      category: 'district',
+      aliases: ['Подольский район'],
+    },
+  ];
+  const r = resolvePlace('Загубився пес в Подольском районе', withAlias);
+  check('a Russian alias resolves', r?.name === 'Подільський район', String(r?.name));
+}
+{
+  const streets: GazetteerPlace[] = [
+    { name: 'Армійська вулиця', lat: 50.42, lng: 30.44, category: 'street' },
+  ];
+  check(
+    'the generic word need not match in form',
+    resolvePlace('в районі вулиць Армійська і Січова', streets)?.name === 'Армійська вулиця',
+    String(resolvePlace('в районі вулиць Армійська і Січова', streets)?.name),
+  );
+  check(
+    'and the bare name still works',
+    resolvePlace('на Армійській загубився кіт', streets)?.name === 'Армійська вулиця',
+    String(resolvePlace('на Армійській загубився кіт', streets)?.name),
+  );
+}
+
 // ---- ABBREVIATIONS: also how people actually write ----
 {
   const r = resolvePlace('Загубився пес, Солом’янський р-н', PLACES);
