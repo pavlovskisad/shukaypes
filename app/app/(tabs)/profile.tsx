@@ -547,9 +547,12 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
     marginBottom: S.s,
   },
+  // Ink, like the daily-quest bars. It was the last blue bar left in the
+  // app, on the one card that sits over a flat green field — which is
+  // exactly where a stray accent shows most.
   xpBarFill: {
     height: '100%',
-    backgroundColor: 'rgb(0,60,255)',
+    backgroundColor: INK,
     borderRadius: R.sm,
   },
   // Denser stat rows for the walks / helping cards.
