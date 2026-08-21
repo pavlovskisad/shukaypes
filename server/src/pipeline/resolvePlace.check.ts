@@ -31,7 +31,45 @@ const PLACES: GazetteerPlace[] = [
   { name: 'Виноградар', lat: 50.5030, lng: 30.3900, category: 'neighbourhood' },
   { name: "Солом'янський район", lat: 50.4260, lng: 30.4460, category: 'district' },
   { name: 'Лісова', lat: 50.4640, lng: 30.6600, category: 'metro' },
+  // The pair that caught the ranking bug in production: a Kyiv
+  // neighbourhood, and a village 8km away whose name contains it.
+  { name: 'Борщагівка', lat: 50.4560, lng: 30.3700, category: 'street' },
+  { name: 'Софіївська Борщагівка', lat: 50.4020, lng: 30.3320, category: 'neighbourhood' },
 ];
+
+// ---- CONTAINMENT: one place named at two precisions ----
+{
+  const r = resolvePlace('Пропала собака, Софіївська Борщагівка', PLACES);
+  check(
+    'the longer name wins over the one inside it',
+    r?.name === 'Софіївська Борщагівка',
+    String(r?.name),
+  );
+}
+{
+  // …and the short one still resolves when it is the only thing written.
+  const r = resolvePlace('Зник пес, Борщагівка', PLACES);
+  check('the short name still resolves alone', r?.name === 'Борщагівка', String(r?.name));
+}
+
+// ---- INFLECTION: how people actually write ----
+{
+  check(
+    'на Оболоні — locative case',
+    resolvePlace('Загубився кіт на Виноградарі', PLACES)?.name === 'Виноградар',
+    String(resolvePlace('Загубився кіт на Виноградарі', PLACES)?.name),
+  );
+  check(
+    'з Бортничів — genitive plural',
+    resolvePlace('Пес утік з Бортничів', PLACES)?.name === 'Бортничі',
+    String(resolvePlace('Пес утік з Бортничів', PLACES)?.name),
+  );
+  check(
+    'біля Лісової — genitive',
+    resolvePlace('бачили біля Лісової', PLACES)?.name === 'Лісова',
+    String(resolvePlace('бачили біля Лісової', PLACES)?.name),
+  );
+}
 
 // ---- MUST resolve ----
 {
