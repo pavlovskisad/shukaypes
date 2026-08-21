@@ -281,14 +281,14 @@ const styles = StyleSheet.create({
     borderRadius: PILL_HEIGHT / 2,
     overflow: 'hidden',
     backgroundColor: GLASS_BG,
-    // The HUD pills were the last chrome without an edge, and they are
-    // the chrome that spends the most time on screen. RN puts the
-    // border inside the box, so PILL_HEIGHT is unchanged and the meter
-    // fill underneath now stops at the ink instead of at the pill's
-    // outer bound — which is what you want: the bar reads as filling a
-    // drawn container rather than as a coloured pill of its own.
-    borderWidth: 2,
-    borderColor: INK,
+    // NO EDGE on the readouts. The meters and the paw counter are not
+    // things you press — they are numbers the app is telling you, and
+    // they sit at the top of every screen for the whole session. Ink
+    // there made the busiest corner of the app read as four buttons
+    // demanding attention. Shadow alone is enough for a readout.
+    //
+    // The spots toggle is the exception and takes its edge below: it IS
+    // a control, and it is the only one in this row.
     shadowColor: GLASS_SHADOW_COLOR,
     // Bumped from { 0, 4 } / 0.1 / 16 to the chat CHROME_SHADOW
     // values so HUD pills feel like the same family as the chat
@@ -315,6 +315,11 @@ const styles = StyleSheet.create({
   },
   togglePill: {
     paddingHorizontal: S.m,
+    // The one pressable thing in the HUD row, so the one with an edge.
+    // Composes over `pill`, and over togglePillOff too, so both the on
+    // and the off state carry it.
+    borderWidth: 2,
+    borderColor: INK,
   },
   // Sniff toggle's OFF state — solid muted grey so the toggle
   // still reads as inactive vs the white ON state, without
