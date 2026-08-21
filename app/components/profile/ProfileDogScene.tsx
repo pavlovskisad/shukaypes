@@ -112,22 +112,24 @@ function randomBetween([lo, hi]: [number, number]): number {
   return lo + Math.random() * (hi - lo);
 }
 
-// Day from 7:00 to 19:00 local time, otherwise night. Tuned so dawn /
-// dusk both read as "night" — a lit lamppost at 6am feels right.
-function isDayHour(): boolean {
-  const h = new Date().getHours();
-  return h >= 7 && h < 19;
-}
+// DAY ONLY, FOR NOW.
+//
+// The scene used to derive its mode from the wall clock (day 7:00–19:00,
+// night otherwise) and let a tap on the background flip it. Both are off:
+// the profile is one scene, in daylight, until we decide night is worth
+// the second look. The night palettes stay in ProfileSceneBackdrop and
+// the night event pool stays in ProfileSceneBirds — nothing selects them
+// today, and turning this back on is one constant.
+const SCENE_MODE: SceneMode = 'day';
 
 export function ProfileDogScene({
   onModeChange,
   dogBottomInset = 0,
 }: {
-  // Called whenever the scene's day/night mode flips (either from
-  // the time-based auto-derive or a tap-to-toggle on the sky).
-  // The profile tab wires this to its page background so the sky
-  // colour stays in sync with the scene's mood without lifting
-  // the entire mode state up.
+  // Called with the scene's mode. The profile tab wires this to its
+  // page background so the sky colour behind the scene matches the
+  // sky inside it. Fixed at 'day' today (see SCENE_MODE) — the prop
+  // stays because the page still has to be told which sky it is.
   onModeChange?: (mode: SceneMode) => void;
   // Pushes the dog up from the scene container's bottom edge.
   // Default 0 keeps the dog at the bottom (original hero-card
@@ -139,17 +141,9 @@ export function ProfileDogScene({
   const t = useStrings();
   const [anim, setAnim] = useState<DogAnim>('sitting');
   const [facingLeft, setFacingLeft] = useState(false);
-  // Mode auto-derives from wall-clock time. Manual override takes
-  // precedence when set — wired to a tap on the BACKGROUND of the
-  // scene (sky / trees / bench), while a tap on the dog itself fires
-  // a bark instead. So:
-  //   tap dog        → bark
-  //   tap elsewhere  → flip day ↔ night
-  const [autoMode, setAutoMode] = useState<SceneMode>(() =>
-    isDayHour() ? 'day' : 'night',
-  );
-  const [manualMode, setManualMode] = useState<SceneMode | null>(null);
-  const mode: SceneMode = manualMode ?? autoMode;
+  // Fixed — see SCENE_MODE. A tap on the dog still fires a bark; a tap
+  // anywhere else now does nothing, which is the whole change.
+  const mode = SCENE_MODE;
   useEffect(() => {
     onModeChange?.(mode);
   }, [mode, onModeChange]);
@@ -208,23 +202,12 @@ export function ProfileDogScene({
     }
   }, [width]);
 
-  // Re-check the wall clock every minute so the scene drifts from day
-  // to night across a long session without a refresh. Cheap; doesn't
-  // re-render anything if the mode hasn't changed.
-  useEffect(() => {
-    const id = setInterval(() => {
-      setAutoMode(isDayHour() ? 'day' : 'night');
-    }, 60_000);
-    return () => clearInterval(id);
-  }, []);
-
   // Tap on dog → SpeechBubble + a random reaction pose (jump /
   // crouch / sit). The state machine is paused for the reaction's
   // duration and resumes with a fresh step right after — without
   // the pause, the still-ticking machine would pick a new anim
   // mid-reaction and the dog would snap to it (walking / running)
-  // the moment the reaction cleared. stopPropagation keeps the tap
-  // from also firing the background-toggle on the scene container.
+  // the moment the reaction cleared.
   const handleBark = useCallback((e: React.MouseEvent) => {
     e.stopPropagation();
     const woofs = t.bubbles.woofs;
@@ -282,15 +265,6 @@ export function ProfileDogScene({
     [],
   );
 
-  // Tap on background → flip day/night. Manual override sticks; a
-  // second tap returns the scene to the opposite mode.
-  const toggleMode = useCallback(() => {
-    setManualMode((prev) => {
-      const current = prev ?? (isDayHour() ? 'day' : 'night');
-      return current === 'day' ? 'night' : 'day';
-    });
-  }, []);
-
   // State-machine tick — picks a new entry, sets the anim, and (if
   // moving) starts a CSS transition toward a new x. Each tick
   // schedules the next via setTimeout. The step function is held in
@@ -347,11 +321,11 @@ export function ProfileDogScene({
   return (
     <div
       ref={containerRef}
-      onClick={(e) => {
-        playPop(e.currentTarget);
-        toggleMode();
-      }}
-      role="button"
+      // No tap handler any more — the background used to flip day/night
+      // and there is nothing behind it to flip to. role="img" rather
+      // than "button" so a screen reader stops offering an action that
+      // no longer exists, while the scene keeps its description.
+      role="img"
       aria-label={t.profile.sceneA11y(mode)}
       style={{
         position: 'relative',
@@ -365,7 +339,6 @@ export function ProfileDogScene({
         width: '100%',
         height: '100%',
         overflow: 'hidden',
-        cursor: 'pointer',
       }}
     >
       {/* Pixelated city/park backdrop sits behind the dog. Three

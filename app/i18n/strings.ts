@@ -578,8 +578,7 @@ const uk: AppStrings = {
       uk: 'українська',
       en: 'english',
     },
-    sceneA11y: (mode) =>
-      `сцена: ${mode}. натисни на тло — змінити час; натисни на пса — гавкне.`,
+    sceneA11y: (mode) => `сцена: ${mode}. натисни на пса — гавкне.`,
   },
   chat: {
     needLocation: 'потрібна твоя геолокація',
@@ -962,8 +961,7 @@ const en: AppStrings = {
       uk: 'українська',
       en: 'english',
     },
-    sceneA11y: (mode) =>
-      `scene mode: ${mode}. tap background to toggle, tap dog to bark.`,
+    sceneA11y: (mode) => `scene: ${mode}. tap the dog to make them bark.`,
   },
   chat: {
     needLocation: 'need your location first',
