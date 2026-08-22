@@ -100,14 +100,42 @@ const WALK_CATEGORY_BIAS: Record<string, number> = {
 const RECENT_LIMIT = 3;
 const RECENT_PENALTY_PER_RANK = 2.0;
 const TOP_K = 6;
-const QUALITY_BAND = 1.5;
+// How far below the leader a destination can score and still count as
+// "comparable" — i.e. be on the ballot at all. This is what sets the
+// SIZE OF THE BANK a single street corner can draw from.
+//
+// MEASURED against the real destination pool, counting the comparable
+// group and the worst distance error it admits:
+//
+//   band   Podil close / far   Maidan close / far   worst error
+//   1.5        19 / 22             14 / 27          177 m on a 500 m leg
+//   2.5        36 / 41             26 / 53          230 m on a 500 m leg
+//   3.5        40 / 41             30 / 53          294 m on a 500 m leg
+//   5.0        46 / 41             39 / 53          318 m on a 500 m leg
+//
+// 2.5 is the knee: it nearly doubles the bank over 1.5, and past it the
+// gains flatten while the walk drifts further from the distance that was
+// actually asked for. Note the scoring squares the distance error, so a
+// wider band buys candidates at a rapidly increasing distance cost —
+// which is why this stops well short of "let anything in".
+const QUALITY_BAND = 2.5;
 // How far below the leader a candidate may score and still be offered to
 // the landmark step as an ALTERNATIVE destination. Wider than
 // QUALITY_BAND, because a walk worth trading up to three stops for
 // doesn't have to be the single nicest endpoint in range — but finite,
-// because it does have to be a walk somebody would want. Sized to sit
-// under the park→vet gap in WALK_CATEGORY_BIAS (4.5), so "three
-// landmarks on the way to the vet" never outranks a park.
+// because it does have to be a walk somebody would want.
+//
+// This used to be sized against the park→vet gap in WALK_CATEGORY_BIAS.
+// The errand categories are gone from that table, so the widest gap
+// inside it is now park→landmark, 1.5 — every category left is a tour
+// destination and any of them can be traded for. What 3.0 buys instead
+// is DISTANCE headroom: the score squares the distance error, so trading
+// down a full 3.0 on distance alone means ~275 m off a 500 m leg. Past
+// that the alternative stops being the walk that was asked for.
+//
+// It is also only reachable when the comparable group is smaller than
+// the ballot (measured: Obolon close, a group of 3) — everywhere with a
+// real bank, QUALITY_BAND fills TOP_K and `rest` stays empty.
 const ALTERNATIVE_BAND = 3.0;
 const RECENT_STORAGE_KEY = 'shukajpes.walks.recent.v1';
 
@@ -408,18 +436,30 @@ function orderQualityBand(
   scored: { c: WalkCandidate; s: number }[],
 ): WalkCandidate[] {
   if (scored.length === 0) return [];
-  // "Best" is subjective when several parks/cafés are roughly
-  // comparable. Take everyone within QUALITY_BAND of the leader,
-  // capped at TOP_K so a flat city block doesn't put every nearby
-  // spot on the ballot. Then order uniformly at random — democratic,
-  // no ranked-bias toward whichever scored a hair higher.
+  // "Best" is subjective when several parks and squares are roughly
+  // comparable, so everyone within QUALITY_BAND of the leader goes on
+  // the ballot, and the ballot is ordered at random — no bias toward
+  // whichever scored a hair higher.
+  //
+  // SHUFFLE BEFORE TRUNCATING, and this is the whole trick. It used to
+  // slice to TOP_K first and shuffle the survivors, which is a
+  // different thing entirely: sort() is stable, so a group of tied
+  // candidates keeps pool order, and the same six were the ballot every
+  // single time. Measured at Podil: 43 destinations inside the distance
+  // band, 9 of them ever offered across 60 walks. Sampling the
+  // comparable group instead of its first six is what makes the bank
+  // the size of the neighbourhood.
+  //
+  // TOP_K still caps the ballot — it just no longer decides who is on
+  // it.
   const best = scored[0]!.s;
-  const band = scored.filter((x) => x.s - best <= QUALITY_BAND).slice(0, TOP_K);
-  const banded = new Set(band.map((x) => x.c.id));
+  const comparable = scored.filter((x) => x.s - best <= QUALITY_BAND);
+  const band = shuffle(comparable.map((x) => x.c)).slice(0, TOP_K);
+  const banded = new Set(band.map((c) => c.id));
   const rest = scored
     .filter((x) => !banded.has(x.c.id) && x.s - best <= ALTERNATIVE_BAND)
     .map((x) => x.c);
-  return [...shuffle(band.map((x) => x.c)), ...rest];
+  return [...band, ...rest];
 }
 
 // Every candidate this planner would accept, best-first. The head of the
