@@ -41,6 +41,13 @@ export interface ParsedDog {
   // and upsert refuses these — see outOfArea.ts for why the coord-based
   // bbox check in upsert can't catch them on its own.
   outOfArea: OtherCityHit | null;
+  // Which path produced lastSeenLat/Lng — 'gazetteer-marked:<name>',
+  // 'gazetteer-bare:<name>', 'gazetteer-fuzzy:<name>', 'model-geo', or
+  // 'fall-through'. upsert refines 'model-geo' to 'model-landmark:<name>'
+  // when the coord turns out to be one from the prompt's hints table,
+  // and writes the result onto the row, so the next placement audit is
+  // a GROUP BY instead of a recomputation (see migration 0037).
+  placementSource: string;
 }
 
 export type IngestAction = 'inserted' | 'updated' | 'duplicate' | 'skipped';

@@ -1,37 +1,35 @@
-// WOULD THE GAZETTEER RESCUE THE PETS NOBODY CAN SEE? Dry run only.
+// PLACE THE PETS NOBODY CAN SEE, from the ad text already stored.
 //
-// 80 of 176 active pets sit on the fall-through coordinate and are
-// filtered out of every map query. 69 more reproduce exactly as a
-// jittered landmark, which is the model's nearest guess rather than an
-// address. That is 85% of the map placed by something other than what
-// the owner wrote.
+// 80 of 176 active pets sat on the fall-through coordinate, filtered
+// out of every map query. 69 more reproduce exactly as a jittered
+// landmark — the model's nearest guess rather than an address. The
+// ingest path now resolves places against kyiv_gazetteer at parse time
+// (pipeline/parser.ts); this CLI is the backfill for the rows placed
+// before that shipped.
 //
-// The proposed fix is to resolve the place from the ad text against
-// kyiv_gazetteer, which already holds 16,917 real Kyiv places and which
-// no part of the ingest path reads. Before changing how pets are placed
-// — a change that moves pins on a live map — the honest question is
-// whether it would work at all.
+// DRY BY DEFAULT. Run without flags and nothing is written: it prints,
+// for a human to read, exactly which pets would move and where —
+// including the resolved place, its category, and whether the ad marked
+// it as an address («вул. …») or only named it bare. `--apply` performs
+// exactly the moves the dry run printed, and nothing else.
 //
-// So: run the resolver over the stored ad text of exactly those pets and
-// count how many get a place. NOTHING IS WRITTEN. No network either;
-// every pet in scope already has its ad text stored.
-//
-// WHAT A HIGH NUMBER WOULD MEAN, and what it would not. It would mean
-// the text names a place we hold coordinates for — not that those
-// coordinates are right. A resolver that confidently picks the wrong
-// «Садова» sends a walker to the wrong end of the city, which is worse
-// than the honest fall-through it replaced, because the map looks
-// correct. That is why marked and bare are counted apart here, and why
-// the sample prints both for reading rather than a single rate.
+// WHAT --apply WILL NOT TOUCH. Only pets on the exact fall-through
+// coordinate move — they are invisible today, so the worst outcome of a
+// wrong resolution is a visible pet in the wrong place instead of an
+// invisible pet nowhere, and every move is reversible with one UPDATE
+// back to the constant. Landmark-guessed pets are measured below but
+// never moved: they are already visible, their current pin is somebody's
+// best guess, and moving them is a separate decision for a person.
 //
 // Usage:
 //   fly ssh console -a shukajpes-api -C "node dist/db/resolve-pins.js"
+//   fly ssh console -a shukajpes-api -C "node dist/db/resolve-pins.js --apply"
 
 import 'dotenv/config';
 import { eq, isNotNull } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
-import { resolvePlace, type GazetteerPlace } from '../pipeline/resolvePlace.js';
+import { resolvePlace, type GazetteerPlace, type ResolvedPlace } from '../pipeline/resolvePlace.js';
 import { LANDMARKS, jitterAround } from '../pipeline/landmarks.js';
 
 const FALLBACK = { lat: 50.4501, lng: 30.5234 };
@@ -47,7 +45,13 @@ function haversineM(aLat: number, aLng: number, bLat: number, bLng: number): num
   return 2 * R * Math.asin(Math.sqrt(s));
 }
 
+function placementLabel(hit: ResolvedPlace): string {
+  return `${hit.marked ? 'gazetteer-marked' : 'gazetteer-bare'}:${hit.name}`;
+}
+
 async function main() {
+  const apply = process.argv.includes('--apply');
+
   const pets = await db
     .select({
       id: schema.lostDogs.id,
@@ -96,69 +100,95 @@ async function main() {
     return null;
   };
 
-  const groups = {
-    hidden: pets.filter(isFallback),
-    landmark: pets.filter((p) => !isFallback(p) && landmarkOf(p)),
-  };
+  const hidden = pets.filter(isFallback);
+  const landmark = pets.filter((p) => !isFallback(p) && landmarkOf(p));
 
-  for (const [label, rows] of Object.entries(groups)) {
-    const heading =
-      label === 'hidden'
-        ? `THE ${rows.length} INVISIBLE PETS — would the gazetteer place them?`
-        : `THE ${rows.length} LANDMARK-GUESSED PETS — would it place them better?`;
-    console.log(`\n${heading}\n`);
+  // ---- THE INVISIBLE PETS: every candidate move, printed in full ----
+  //
+  // No sampling here. This list is what a person reads before --apply,
+  // so it has to be the whole list.
+  console.log(`\nTHE ${hidden.length} INVISIBLE PETS — every move ${apply ? 'being applied' : 'the apply would make'}:\n`);
 
-    let marked = 0;
-    let bare = 0;
-    let none = 0;
-    let noText = 0;
-    const sample: string[] = [];
-
-    for (const pet of rows) {
-      const text = `${pet.desc ?? ''}\n${bodies.get(pet.id) ?? ''}`.trim();
-      if (!text) {
-        noText++;
-        continue;
-      }
-      const hit = resolvePlace(text, places);
-      if (!hit) {
-        none++;
-        continue;
-      }
-      if (hit.marked) marked++;
-      else bare++;
-
-      if (sample.length < 12) {
-        // For the landmark group, how far the resolver would MOVE the
-        // pet is the number that matters — a 200m correction is noise,
-        // a 6km one is the difference between finding an animal and not.
-        const moved = label === 'landmark' ? haversineM(pet.lat, pet.lng, hit.lat, hit.lng) : 0;
-        sample.push(
-          `    ${pet.name.padEnd(24)} → «${hit.name}»${hit.marked ? ' [marked]' : ''}` +
-            (label === 'landmark' ? `  moves ${(moved / 1000).toFixed(1)}km` : ''),
-        );
-      }
+  const moves: { id: string; name: string; hit: ResolvedPlace }[] = [];
+  let none = 0;
+  let noText = 0;
+  for (const pet of hidden) {
+    const text = `${pet.desc ?? ''}\n${bodies.get(pet.id) ?? ''}`.trim();
+    if (!text) {
+      noText++;
+      continue;
     }
-
-    const placed = marked + bare;
-    console.log(`  would be placed:        ${placed} of ${rows.length}`);
-    console.log(`    … from a marked address: ${marked}   ← high confidence`);
-    console.log(`    … from a bare name:      ${bare}   ← needs the eye`);
-    console.log(`  no place named in the ad: ${none}`);
-    console.log(`  no ad text stored:        ${noText}`);
-    if (sample.length > 0) {
-      console.log('');
-      for (const s of sample) console.log(s);
+    const hit = resolvePlace(text, places);
+    if (!hit) {
+      none++;
+      continue;
     }
+    moves.push({ id: pet.id, name: pet.name, hit });
+    console.log(
+      `    ${pet.name.padEnd(24)} → «${hit.name}» (${hit.category}${hit.marked ? ', marked' : ', bare'})`,
+    );
   }
 
+  const marked = moves.filter((m) => m.hit.marked).length;
+  console.log(`\n  would move:               ${moves.length} of ${hidden.length}`);
+  console.log(`    … from a marked address: ${marked}   ← high confidence`);
+  console.log(`    … from a bare name:      ${moves.length - marked}   ← read the list above`);
+  console.log(`  no place named in the ad: ${none}`);
+  console.log(`  no ad text stored:        ${noText}`);
+
+  // ---- THE LANDMARK-GUESSED PETS: measured, never moved ----
+  console.log(`\nTHE ${landmark.length} LANDMARK-GUESSED PETS — measured only, never moved by this CLI:\n`);
+  let lmPlaced = 0;
+  const lmSample: string[] = [];
+  for (const pet of landmark) {
+    const text = `${pet.desc ?? ''}\n${bodies.get(pet.id) ?? ''}`.trim();
+    if (!text) continue;
+    const hit = resolvePlace(text, places);
+    if (!hit) continue;
+    lmPlaced++;
+    if (lmSample.length < 12) {
+      const moved = haversineM(pet.lat, pet.lng, hit.lat, hit.lng);
+      lmSample.push(
+        `    ${pet.name.padEnd(24)} → «${hit.name}»${hit.marked ? ' [marked]' : ''}  would move ${(moved / 1000).toFixed(1)}km`,
+      );
+    }
+  }
+  console.log(`  the resolver finds a place for ${lmPlaced} of ${landmark.length}`);
+  for (const s of lmSample) console.log(s);
+
+  if (!apply) {
+    console.log(
+      `\n  A pet "moving" means the ad names a place we hold coordinates for.` +
+        `\n  It does not mean those coordinates are right — read the list.` +
+        `\n  Every move is reversible: the previous coordinate of every pet` +
+        `\n  above is exactly the fall-through (${FALLBACK.lat}, ${FALLBACK.lng}).` +
+        `\n\n✓ dry run. Nothing written, no requests made. Re-run with --apply to move them.`,
+    );
+    await pg.end();
+    return;
+  }
+
+  // ---- APPLY: exactly the moves printed above ----
+  let applied = 0;
+  for (const m of moves) {
+    // Same spread-the-centroid jitter ingest uses, seeded by the pet id
+    // so a re-run keeps every pet at the same point.
+    const pin = jitterAround(m.hit.lat, m.hit.lng, m.id, JITTER_M);
+    await db
+      .update(schema.lostDogs)
+      .set({
+        lastSeenLat: pin.lat,
+        lastSeenLng: pin.lng,
+        placementSource: placementLabel(m.hit),
+      })
+      .where(eq(schema.lostDogs.id, m.id));
+    applied++;
+  }
   console.log(
-    `\n  A pet being "placed" means the ad names a place we hold coordinates` +
-      `\n  for. It does not mean those coordinates are right. A resolver that` +
-      `\n  confidently picks the wrong «Садова» sends somebody to the wrong end` +
-      `\n  of the city, which is worse than the fall-through it replaced —` +
-      `\n  because that map looks correct.` +
-      `\n\n✓ dry run. Nothing written, no requests made.`,
+    `\n✓ applied: ${applied} pets moved off the fall-through and onto the map.` +
+      `\n  Reversal, should any move read wrong tomorrow:` +
+      `\n    UPDATE lost_dogs SET last_seen_lat = ${FALLBACK.lat}, last_seen_lng = ${FALLBACK.lng},` +
+      `\n      placement_source = 'fall-through' WHERE id = '<id>';`,
   );
   await pg.end();
 }

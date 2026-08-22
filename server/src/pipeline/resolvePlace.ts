@@ -332,6 +332,25 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
       const marked = MARKERS.test(before);
 
       for (const p of found) {
+        // A BARE STREET NAME IS NOT AN ADDRESS.
+        //
+        // 15,948 of the table's 16,917 places are streets, and street
+        // names are ordinary words: «Собачка» is a street and what you
+        // call a small dog, «Садова» is a street and «садова ділянка»,
+        // «Лісова» is a street and the forest the cat ran into. With
+        // that many candidates, any adjective in an ad probably IS some
+        // street's name — which is exactly the confident-wrong-«Садова»
+        // failure this file's header warns about. So a street only
+        // counts when the owner marked it as one («вул. Зодчих»). The
+        // bare categories that remain — neighbourhoods, districts,
+        // metro, parks, squares — are ~1,000 distinctive proper names
+        // people genuinely write without a marker («Троєщина»).
+        //
+        // The cost is real and accepted: «на Армійській загубився кіт»
+        // no longer resolves. The asymmetry decides it — a miss keeps
+        // the fall-through we already have; a wrong street sends a
+        // person to walk the wrong end of the city.
+        if (!marked && p.category === 'street') continue;
         // Score on the MATCHED gram, not the place's full name. An ad
         // writing «Архипенка» should not inherit the length of
         // «вулиця Олександра Архипенка» it happened to hit — the score

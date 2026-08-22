@@ -91,6 +91,9 @@ const plugin: FastifyPluginAsync = async (app) => {
             lastSeenLat: lat,
             lastSeenLng: lng,
             lastSeenAt: new Date(),
+            // A person standing on a street beats every automated
+            // placement path — record that the pin is now theirs.
+            placementSource: 'sighting',
           })
           .where(eq(schema.lostDogs.id, dogId));
       }
@@ -220,7 +223,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         if (dist <= dog.radiusM * TRUST_MULTIPLIER && dog.status === 'active') {
           await db
             .update(schema.lostDogs)
-            .set({ lastSeenLat: lat, lastSeenLng: lng, lastSeenAt: new Date() })
+            .set({ lastSeenLat: lat, lastSeenLng: lng, lastSeenAt: new Date(), placementSource: 'sighting' })
             .where(eq(schema.lostDogs.id, dogId));
         }
       }
