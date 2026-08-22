@@ -139,6 +139,10 @@ export const lostDogs = pgTable(
     // does not return them. See migration 0035.
     isFoundReport: boolean('is_found_report').notNull().default(false),
     reportedBy: text('reported_by').references(() => users.id, { onDelete: 'set null' }),
+    // How the pin got its coordinates — 'gazetteer-marked:<name>',
+    // 'model-landmark:<name>', 'fall-through', 'sighting', … Null on
+    // rows placed before the column existed. See migration 0037.
+    placementSource: text('placement_source'),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   },
   (t) => ({

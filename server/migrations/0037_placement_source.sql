@@ -1,0 +1,31 @@
+-- How each pet's pin got its coordinates.
+--
+-- The August audit had to prove placement by recomputation: 80 active
+-- pets sat on the fall-through coordinate, 69 reproduced exactly as
+-- jitterAround(<a landmark>, id, 120), and telling those groups apart
+-- meant re-deriving the jitter for every pet against every landmark.
+-- That works once, in a CLI, for a person with time. It should have
+-- been a GROUP BY.
+--
+-- From now on the pipeline writes down which path placed the pin:
+--   gazetteer-marked:<name>  the ad wrote вул./район/… before a name
+--                            we hold coordinates for
+--   gazetteer-bare:<name>    the ad named the place without a marker
+--   gazetteer-fuzzy:<name>   pg_trgm rescue over the model's extracted
+--                            mentions (the pre-existing path)
+--   model-landmark:<name>    the model picked a coord from its 35-entry
+--                            hints table
+--   model-geo                the model emitted a coord that is not in
+--                            the hints table
+--   fall-through             nothing placed it; the row is invisible
+--   sighting                 a person moved the pin by reporting one
+--
+-- Hand-written for the reason in 0032, and REGISTERED IN
+-- migrations/meta/_journal.json — an unjournalled file is skipped in
+-- silence while migrate still prints "migrations applied" (0035 nearly
+-- shipped that way).
+--
+-- Additive only. Null means "placed before this column existed", which
+-- is what every existing row honestly is; the audit CLI still knows how
+-- to classify those by recomputation.
+alter table "lost_dogs" add column if not exists "placement_source" text;

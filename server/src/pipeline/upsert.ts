@@ -188,11 +188,13 @@ export async function upsertLostDog({
         // Same landmark-jitter the insert path uses, seeded by the
         // existing id so the dog stays at the same scattered point.
         const lm = findLandmark(parsed.lastSeenLat, parsed.lastSeenLng);
-        const pin = lm
+        const pin = lm || parsed.placementSource.startsWith('gazetteer-')
           ? jitterAround(parsed.lastSeenLat, parsed.lastSeenLng, match.id, 120)
           : { lat: parsed.lastSeenLat, lng: parsed.lastSeenLng };
         updateFields.lastSeenLat = pin.lat;
         updateFields.lastSeenLng = pin.lng;
+        // The pin moved, so the record of what placed it moves too.
+        updateFields.placementSource = placementLabel(parsed, lm?.name ?? null);
       }
       await db
         .update(schema.lostDogs)
@@ -211,8 +213,13 @@ export async function upsertLostDog({
   // street), jitter the pin ~120 m around the landmark so multiple
   // landmark-matched pets spread out instead of stacking on the
   // pixel. Seeded by the row id so re-upserts keep the same point.
+  //
+  // Gazetteer placements get the same jitter for the same reason: the
+  // resolver hands back a place's centroid, so two pets lost on
+  // «Троєщина» would otherwise sit on the identical pixel. 120 m is
+  // cosmetic against any search zone (500 m floor).
   const landmark = findLandmark(parsed.lastSeenLat, parsed.lastSeenLng);
-  const pin = landmark
+  const pin = landmark || parsed.placementSource.startsWith('gazetteer-')
     ? jitterAround(parsed.lastSeenLat, parsed.lastSeenLng, id, 120)
     : { lat: parsed.lastSeenLat, lng: parsed.lastSeenLng };
   await db.insert(schema.lostDogs).values({
@@ -234,8 +241,23 @@ export async function upsertLostDog({
     status: parsed.urgency === 'resolved' ? 'found' : 'active',
     isFoundReport: isFoundReport ?? false,
     reportedBy: reportedBy ?? null,
+    placementSource: placementLabel(parsed, landmark?.name ?? null),
   });
   return { id, action: 'inserted', parsed };
+}
+
+// The parser labels its own placement ('gazetteer-marked:<name>',
+// 'fall-through', …) but cannot tell a coordinate the model composed
+// from one it copied out of the prompt's hints table — only this module
+// checks the coord against LANDMARKS. Refine 'model-geo' to
+// 'model-landmark:<name>' when that check fires, so the audit that used
+// to prove landmark placement by re-deriving jitter for every pet can
+// just count the column.
+function placementLabel(parsed: ParsedDog, landmarkName: string | null): string {
+  if (parsed.placementSource === 'model-geo' && landmarkName) {
+    return `model-landmark:${landmarkName}`;
+  }
+  return parsed.placementSource;
 }
 
 function sourceSlug(source: string): string {

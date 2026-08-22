@@ -9,10 +9,18 @@
 // The prompt includes a district/landmark coordinate table so coordinates
 // don't drift outside Kyiv. Any text the model can't geolocate → the city-
 // center fallback, with parseConfidence dropped accordingly.
+//
+// PLACEMENT ORDER, since the gazetteer was wired in: the deterministic
+// resolver (resolvePlace over the raw ad text against kyiv_gazetteer)
+// places the pet first; the model's landmark inference is the fallback
+// when the resolver finds nothing; the trgm rescue over extracted
+// mentions runs last, only when the model also fell back. Which path won
+// is recorded in ParsedDog.placementSource and written onto the row.
 
 import { anthropic } from '../services/anthropic.js';
 import { snapToLandIfInRiver } from '../utils/geo.js';
-import { lookupBestPlace } from '../services/gazetteer.js';
+import { lookupBestPlace, loadGazetteerPlaces } from '../services/gazetteer.js';
+import { resolvePlace } from './resolvePlace.js';
 import { detectOtherCity } from './outOfArea.js';
 import type { ParsedDog, Species, Urgency } from './types.js';
 
@@ -228,31 +236,56 @@ export async function parseDogPost(input: ParseDogPostInput): Promise<ParsedDog>
   let confidence =
     typeof raw.parseConfidence === 'number' ? Math.max(0, Math.min(1, raw.parseConfidence)) : 0.5;
 
-  // Gazetteer rescue: Haiku falls back to city center (50.4501,
-  // 30.5234) when it can't geocode from its KYIV_GEO_HINTS table.
-  // Before accepting that fallback, try resolving the post's
-  // location mentions against our OSM-derived gazetteer — covers
-  // streets / metro / parks / squares Haiku doesn't know.
-  const mentions = Array.isArray(raw.locationMentions)
-    ? (raw.locationMentions as unknown[]).filter(
-        (m): m is string => typeof m === 'string' && m.trim().length > 0,
-      )
-    : [];
   const haikuFellBack =
     Math.abs(lat - FALLBACK_LAT) < FALLBACK_TOLERANCE &&
     Math.abs(lng - FALLBACK_LNG) < FALLBACK_TOLERANCE;
-  if (haikuFellBack && mentions.length > 0) {
-    const hit = await lookupBestPlace(mentions).catch(() => null);
-    if (hit) {
-      lat = hit.lat;
-      lng = hit.lng;
-      // Gazetteer hit means we have real coords; never let the
-      // earlier fallback-driven confidence punish us. Floor at 0.6.
-      confidence = Math.max(confidence, 0.6);
+  let placementSource = haikuFellBack ? 'fall-through' : 'model-geo';
+
+  // PLACE THE PET FROM WHAT THE OWNER WROTE, before trusting what the
+  // model inferred. Measured on production before this ran: of 176
+  // active pets, 80 sat invisible on the fall-through and 69 were the
+  // model's nearest-landmark guess — 85% of the map placed by something
+  // other than the ad's own words, while kyiv_gazetteer held 16,917
+  // real places nothing in the ingest path read.
+  //
+  // The resolver is deterministic, fixture-checked, and refuses the
+  // dangerous case on purpose (a bare street name never resolves — see
+  // resolvePlace.ts). Where it finds nothing, everything below behaves
+  // exactly as before: model landmark guess, then the trgm rescue, then
+  // the fall-through. Today's behaviour is the floor.
+  const places = await loadGazetteerPlaces();
+  const resolved = places.length > 0 ? resolvePlace(input.text, places) : null;
+  if (resolved) {
+    lat = resolved.lat;
+    lng = resolved.lng;
+    placementSource = `${resolved.marked ? 'gazetteer-marked' : 'gazetteer-bare'}:${resolved.name}`;
+    // Real coords from the ad's own words; never let a fallback-driven
+    // confidence punish that. A marked address is the strongest signal
+    // placement ever gets.
+    confidence = Math.max(confidence, resolved.marked ? 0.75 : 0.6);
+  } else if (haikuFellBack) {
+    // The pre-existing trgm rescue, now the second attempt: fuzzy
+    // word_similarity over the mentions Haiku extracted. Catches
+    // spellings the deterministic stems miss, at the price of being
+    // approximate — hence last, and labelled as itself.
+    const mentions = Array.isArray(raw.locationMentions)
+      ? (raw.locationMentions as unknown[]).filter(
+          (m): m is string => typeof m === 'string' && m.trim().length > 0,
+        )
+      : [];
+    if (mentions.length > 0) {
+      const hit = await lookupBestPlace(mentions).catch(() => null);
+      if (hit) {
+        lat = hit.lat;
+        lng = hit.lng;
+        placementSource = `gazetteer-fuzzy:${hit.nameUk}`;
+        confidence = Math.max(confidence, 0.6);
+      }
     }
   }
 
   const inKyiv = isInsideKyiv(lat, lng);
+  if (!inKyiv) placementSource = 'fall-through';
   // Listings mentioning the embankment / "near the river" routinely
   // make the LLM emit coords mid-channel. Snap to land here so the
   // stored row is already clean — the client also snaps on display
@@ -304,5 +337,6 @@ export async function parseDogPost(input: ParseDogPostInput): Promise<ParsedDog>
     // ad body exists — nothing stores it, so a later pass would have
     // only the title and an English translation to work from.
     outOfArea: detectOtherCity(input.text),
+    placementSource,
   };
 }

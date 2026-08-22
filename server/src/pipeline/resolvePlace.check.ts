@@ -47,9 +47,12 @@ const PLACES: GazetteerPlace[] = [
   );
 }
 {
-  // …and the short one still resolves when it is the only thing written.
+  // The short one is categorised as a street in the real table, and a
+  // bare street name deliberately does not resolve — see the policy
+  // note in resolvePlace. The pet keeps its fall-through rather than
+  // being guessed onto a street.
   const r = resolvePlace('Зник пес, Борщагівка', PLACES);
-  check('the short name still resolves alone', r?.name === 'Борщагівка', String(r?.name));
+  check('a bare street name does not resolve', r === null, String(r?.name));
 }
 
 // ---- THE SAME PLACE, NAMED TWICE ----
@@ -97,8 +100,12 @@ const PLACES: GazetteerPlace[] = [
     String(resolvePlace('в районі вулиць Армійська і Січова', streets)?.name),
   );
   check(
-    'and the bare name still works',
-    resolvePlace('на Армійській загубився кіт', streets)?.name === 'Армійська вулиця',
+    // The accepted cost of the bare-street policy, pinned so a change
+    // to it is a conscious one: an unmarked street mention stays
+    // unresolved, because «на Армійській» and «на садовій ділянці»
+    // are indistinguishable in form.
+    'an unmarked street mention stays unresolved',
+    resolvePlace('на Армійській загубився кіт', streets) === null,
     String(resolvePlace('на Армійській загубився кіт', streets)?.name),
   );
 }
@@ -190,6 +197,12 @@ const PLACES: GazetteerPlace[] = [
   // outrank an actual address in the same post.
   const r = resolvePlace('загубилася собачка на вул. Зодчих', PLACES);
   check('the animal does not outrank the address', r?.name === 'Зодчих', String(r?.name));
+}
+{
+  // And alone, the animal resolves to nothing at all — «Собачка» is a
+  // street, and bare streets are out.
+  const r = resolvePlace('загубилася собачка, дуже ляклива', PLACES);
+  check('the animal alone resolves to nothing', r === null, String(r?.name));
 }
 
 if (failures > 0) {

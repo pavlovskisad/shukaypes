@@ -27,7 +27,8 @@
 //     positives or false negatives show up in scrape_log.
 
 import { sql } from 'drizzle-orm';
-import { db } from '../db/index.js';
+import { db, schema } from '../db/index.js';
+import type { GazetteerPlace } from '../pipeline/resolvePlace.js';
 
 const MIN_SIMILARITY = 0.55;
 const MIN_QUERY_LEN = 2;
@@ -61,6 +62,56 @@ interface GazetteerRow {
   lat: number;
   lng: number;
   sim: number;
+}
+
+// THE WHOLE TABLE, ONCE PER PROCESS, for the deterministic resolver
+// (pipeline/resolvePlace.ts). The resolver is pure and wants the rows
+// as an argument; loading them fresh per pet would be 16,917 rows per
+// ingest, and the resolver's n-gram index is cached per ARRAY OBJECT
+// (a WeakMap), so handing back the same array every time is what makes
+// the 178ms index build happen once instead of hourly.
+//
+// No TTL. The gazetteer changes only when the seed script runs, and the
+// process restarts on every deploy anyway.
+//
+// Failure returns [] and warns loudly — the caller then behaves exactly
+// as before the resolver existed (model landmark → fall-through), which
+// is the floor, not a crash. Per CLAUDE.md: a load that read nothing
+// must never look like a gazetteer with nothing in it.
+let placesCache: GazetteerPlace[] | null = null;
+let placesLoading: Promise<GazetteerPlace[]> | null = null;
+
+export async function loadGazetteerPlaces(): Promise<GazetteerPlace[]> {
+  if (placesCache) return placesCache;
+  if (placesLoading) return placesLoading;
+  placesLoading = (async () => {
+    try {
+      const rows = await db
+        .select({
+          name: schema.kyivGazetteer.nameUk,
+          lat: schema.kyivGazetteer.lat,
+          lng: schema.kyivGazetteer.lng,
+          category: schema.kyivGazetteer.category,
+          aliases: schema.kyivGazetteer.aliases,
+        })
+        .from(schema.kyivGazetteer);
+      if (rows.length === 0) {
+        // Legitimate on an unseeded local DB; on production it means
+        // placement quietly degraded to landmark guessing. Say so once.
+        console.warn('[gazetteer] table is empty — resolver disabled, placement falls back to model');
+      }
+      placesCache = rows;
+      return rows;
+    } catch (err) {
+      console.warn(`[gazetteer] load failed — resolver disabled for this attempt: ${(err as Error).message}`);
+      // NOT cached: the next pet retries, so a transient DB blip does
+      // not disable the resolver for the whole process lifetime.
+      return [];
+    } finally {
+      placesLoading = null;
+    }
+  })();
+  return placesLoading;
 }
 
 export async function lookupPlace(query: string): Promise<GazetteerHit | null> {
