@@ -45,6 +45,7 @@
     "probe:crosspost": "tsx src/db/probe-crosspost.ts",
     "audit:pins": "tsx src/db/audit-pins.ts",
     "resolve:pins": "tsx src/db/resolve-pins.ts",
+    "label:pins": "tsx src/db/label-pins.ts",
     "probe:location-text": "tsx src/db/probe-location-text.ts",
     "check:resolve-place": "tsx src/pipeline/resolvePlace.check.ts"
   },
