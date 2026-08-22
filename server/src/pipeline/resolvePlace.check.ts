@@ -21,10 +21,12 @@ function check(name: string, ok: boolean, detail = ''): void {
   }
 }
 
-// A slice shaped like the real table: a street that is also an ordinary
-// word, a district, a neighbourhood, a metro station.
+// A slice shaped like the real table: a park that is also an ordinary
+// word (as «Собачка» really is categorised in production — the first
+// dry run found four pets about to move onto it), a district, a
+// neighbourhood, a metro station.
 const PLACES: GazetteerPlace[] = [
-  { name: 'Собачка', lat: 50.4000, lng: 30.5000, category: 'street' },
+  { name: 'Собачка', lat: 50.4000, lng: 30.5000, category: 'park' },
   { name: 'Садова', lat: 50.3000, lng: 30.7000, category: 'street' },
   { name: 'Зодчих', lat: 50.4620, lng: 30.3560, category: 'street' },
   { name: 'Бортничі', lat: 50.3860, lng: 30.7150, category: 'neighbourhood' },
@@ -200,9 +202,39 @@ const PLACES: GazetteerPlace[] = [
 }
 {
   // And alone, the animal resolves to nothing at all — «Собачка» is a
-  // street, and bare streets are out.
+  // park in the real table, and bare parks are out for the same reason
+  // bare streets are: park names are common nouns.
   const r = resolvePlace('загубилася собачка, дуже ляклива', PLACES);
   check('the animal alone resolves to nothing', r === null, String(r?.name));
+}
+{
+  // A park the ad actually marks as one still resolves.
+  const r = resolvePlace('бачили в парку Собачка вчора', PLACES);
+  check('a marked park resolves', r?.name === 'Собачка' && r?.marked === true, String(r?.name));
+}
+
+// ---- ONE NAME, MANY PLACES ----
+//
+// «Набережна вулиця» exists in half the settlements the table covers.
+// The first production dry run picked one arbitrarily and would have
+// moved a pet 25 km under a "marked" label. A name shared by places
+// further apart than a search zone places nothing.
+{
+  const twoStreets: GazetteerPlace[] = [
+    { name: 'Набережна вулиця', lat: 50.46, lng: 30.52, category: 'street' },
+    { name: 'Набережна вулиця', lat: 50.30, lng: 30.70, category: 'street' },
+  ];
+  const r = resolvePlace('Зник кіт, вул. Набережна 5', twoStreets);
+  check('a name shared across the map resolves to nothing', r === null, String(r?.name));
+}
+{
+  // …but the same street stored as nearby segments is one answer.
+  const segments: GazetteerPlace[] = [
+    { name: 'Набережна вулиця', lat: 50.4600, lng: 30.5200, category: 'street' },
+    { name: 'Набережна вулиця', lat: 50.4630, lng: 30.5230, category: 'street' },
+  ];
+  const r = resolvePlace('Зник кіт, вул. Набережна 5', segments);
+  check('street segments still resolve', r?.name === 'Набережна вулиця', String(r?.name));
 }
 
 if (failures > 0) {
