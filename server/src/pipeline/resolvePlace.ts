@@ -68,7 +68,7 @@ const MIN_PLACE_CHARS = 6;
 // The trailing \p{L}{0,3} carries the case ending: «на вулиці Садовій»,
 // «в районі», «біля станції» are all how this appears in a real post.
 const MARKERS =
-  /(вулиц|проспект|бульвар|площ|провул|мікрорайон|масив|район|селищ|село|смт|метро|станц)\p{L}{0,3}\s*$/u;
+  /(вулиц|проспект|бульвар|площ|провул|мікрорайон|масив|район|селищ|село|смт|метро|станц|парк)\p{L}{0,3}\s*$/u;
 
 // A street is a block; a district is four kilometres across. When both
 // match, the narrower one is the more useful answer — and when only a
@@ -160,6 +160,10 @@ export function normalisePlaceText(s: string): string {
 // tightest match that can work is the one used.
 const STEM_TRIMS = [1, 2];
 const MIN_STEM_CHARS = 5;
+
+// See "ONE NAME, MANY PLACES" below: places answering to the same key
+// but further apart than this cannot be told apart by the name alone.
+const AMBIGUOUS_SPREAD_M = 1000;
 
 export function placeStems(key: string): string[] {
   const words = key.split(' ');
@@ -350,7 +354,15 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
         // no longer resolves. The asymmetry decides it — a miss keeps
         // the fall-through we already have; a wrong street sends a
         // person to walk the wrong end of the city.
-        if (!marked && p.category === 'street') continue;
+        //
+        // Parks earn the same rule, and the production dry run is why:
+        // «Собачка» turned out to be categorised as a PARK in the real
+        // table, and four pets whose ads merely said "little dog" would
+        // have moved onto it. Park names are common nouns more often
+        // than any other category — Собачка, Перемога, Юність, Дружба —
+        // so a park counts only when the ad writes «парк» next to it
+        // (which MARKERS now recognises).
+        if (!marked && (p.category === 'street' || p.category === 'park')) continue;
         // Score on the MATCHED gram, not the place's full name. An ad
         // writing «Архипенка» should not inherit the length of
         // «вулиця Олександра Архипенка» it happened to hit — the score
@@ -371,6 +383,48 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   }
 
   if (hits.length === 0) return null;
+
+  // ONE NAME, MANY PLACES: REFUSE, DON'T FLIP A COIN.
+  //
+  // «Набережна вулиця» exists in half the settlements the table covers,
+  // and the production dry run showed what picking the first bucket
+  // entry does: a pet 25 km from where its ad put it, under a "marked,
+  // high confidence" label. Marking doesn't help — «вул. Набережна»
+  // says it is a street, not WHICH of five. When the places answering
+  // to one key sit further apart than a search zone, the name alone
+  // cannot place a pet, so every hit on that key is dropped and the
+  // ad's other names (if any) still get their chance.
+  //
+  // The threshold is deliberately smaller than the smallest search
+  // zone: places within 1 km of each other are one answer for our
+  // purposes (a long street stored as segments, a square and its metro
+  // exit), anything wider is a genuine either/or.
+  const ambiguous = new Set<string>();
+  {
+    const byKey = new Map<string, { lat: number; lng: number }[]>();
+    for (const h of hits) {
+      const list = byKey.get(h.key);
+      if (list) list.push(h.place);
+      else byKey.set(h.key, [h.place]);
+    }
+    for (const [key, coords] of byKey) {
+      outer: for (let a = 0; a < coords.length; a++) {
+        for (let b = a + 1; b < coords.length; b++) {
+          const dLat = (coords[a]!.lat - coords[b]!.lat) * 111_320;
+          const dLng =
+            (coords[a]!.lng - coords[b]!.lng) *
+            111_320 *
+            Math.cos((coords[a]!.lat * Math.PI) / 180);
+          if (dLat * dLat + dLng * dLng > AMBIGUOUS_SPREAD_M * AMBIGUOUS_SPREAD_M) {
+            ambiguous.add(key);
+            break outer;
+          }
+        }
+      }
+    }
+  }
+  const unambiguous = hits.filter((h) => !ambiguous.has(h.key));
+  if (unambiguous.length === 0) return null;
 
   // CONTAINMENT FIRST, BEFORE ANY SCORE.
   //
@@ -397,8 +451,9 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   // 16,917-place benchmark caught it by accident. Comparing length
   // first restores the intent: a longer name supersedes the shorter one
   // inside it, and an equal name is the same match seen twice.
-  const survivors = hits.filter(
-    (h) => !hits.some((other) => other.key.length > h.key.length && other.key.includes(h.key)),
+  const survivors = unambiguous.filter(
+    (h) =>
+      !unambiguous.some((other) => other.key.length > h.key.length && other.key.includes(h.key)),
   );
 
   survivors.sort((a, b) => b.score - a.score);

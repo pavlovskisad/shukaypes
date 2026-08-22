@@ -30,6 +30,7 @@ import { eq, isNotNull } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { resolvePlace, type GazetteerPlace, type ResolvedPlace } from '../pipeline/resolvePlace.js';
+import { detectOtherCity } from '../pipeline/outOfArea.js';
 import { LANDMARKS, jitterAround } from '../pipeline/landmarks.js';
 
 const FALLBACK = { lat: 50.4501, lng: 30.5234 };
@@ -112,10 +113,23 @@ async function main() {
   const moves: { id: string; name: string; hit: ResolvedPlace }[] = [];
   let none = 0;
   let noText = 0;
+  let otherCity = 0;
   for (const pet of hidden) {
     const text = `${pet.desc ?? ''}\n${bodies.get(pet.id) ?? ''}`.trim();
     if (!text) {
       noText++;
+      continue;
+    }
+    // THE GATE INGEST RUNS, RUN HERE TOO. The first dry run confidently
+    // placed a Krasyliv pet on Kyiv's «Левадна вулиця» — the ad reads
+    // «районі Левади в Красилові», and the resolver only knows Kyiv
+    // places, so the out-of-city half of the sentence was invisible to
+    // it. A pet whose ad names another city stays where it is: expiring
+    // it is expire-out-of-area's job, not this CLI's.
+    const away = detectOtherCity(text);
+    if (away) {
+      otherCity++;
+      console.log(`    ${pet.name.padEnd(24)} ✗ stays — ad names ${away.city} («${away.token}»)`);
       continue;
     }
     const hit = resolvePlace(text, places);
@@ -134,6 +148,7 @@ async function main() {
   console.log(`    … from a marked address: ${marked}   ← high confidence`);
   console.log(`    … from a bare name:      ${moves.length - marked}   ← read the list above`);
   console.log(`  no place named in the ad: ${none}`);
+  console.log(`  ad names another city:    ${otherCity}   ← expire-out-of-area's job, not a move`);
   console.log(`  no ad text stored:        ${noText}`);
 
   // ---- THE LANDMARK-GUESSED PETS: measured, never moved ----
