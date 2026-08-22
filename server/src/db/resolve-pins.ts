@@ -13,17 +13,25 @@
 // it as an address («вул. …») or only named it bare. `--apply` performs
 // exactly the moves the dry run printed, and nothing else.
 //
-// WHAT --apply WILL NOT TOUCH. Only pets on the exact fall-through
-// coordinate move — they are invisible today, so the worst outcome of a
-// wrong resolution is a visible pet in the wrong place instead of an
-// invisible pet nowhere, and every move is reversible with one UPDATE
-// back to the constant. Landmark-guessed pets are measured below but
-// never moved: they are already visible, their current pin is somebody's
-// best guess, and moving them is a separate decision for a person.
+// TWO GROUPS, TWO FLAGS, because their risk is not the same.
+//
+// --apply moves only pets on the exact fall-through coordinate — they
+// are invisible today, so the worst outcome of a wrong resolution is a
+// visible pet in the wrong place instead of an invisible pet nowhere,
+// and every move is reversible with one UPDATE back to the constant.
+//
+// --apply-landmarks moves the landmark-guessed pets the resolver can
+// re-place. These are ALREADY VISIBLE at the model's best guess, so a
+// wrong move damages a working pin — which is why the dry run prints
+// each pet's stored description next to the proposed place (the check
+// that validated the first backfill at a glance), and why the apply
+// prints a per-pet reversal with the pet's exact previous coordinates.
+// Read the list before running it. Both flags may be combined.
 //
 // Usage:
 //   fly ssh console -a shukajpes-api -C "node dist/db/resolve-pins.js"
 //   fly ssh console -a shukajpes-api -C "node dist/db/resolve-pins.js --apply"
+//   fly ssh console -a shukajpes-api -C "node dist/db/resolve-pins.js --apply-landmarks"
 
 import 'dotenv/config';
 import { eq, isNotNull } from 'drizzle-orm';
@@ -52,6 +60,7 @@ function placementLabel(hit: ResolvedPlace): string {
 
 async function main() {
   const apply = process.argv.includes('--apply');
+  const applyLandmarks = process.argv.includes('--apply-landmarks');
 
   const pets = await db
     .select({
@@ -151,27 +160,48 @@ async function main() {
   console.log(`  ad names another city:    ${otherCity}   ← expire-out-of-area's job, not a move`);
   console.log(`  no ad text stored:        ${noText}`);
 
-  // ---- THE LANDMARK-GUESSED PETS: measured, never moved ----
-  console.log(`\nTHE ${landmark.length} LANDMARK-GUESSED PETS — measured only, never moved by this CLI:\n`);
-  let lmPlaced = 0;
-  const lmSample: string[] = [];
+  // ---- THE LANDMARK-GUESSED PETS: every candidate, with its own words ----
+  //
+  // Also the whole list, for the same reason — and with each pet's
+  // stored description alongside, because these pets are already
+  // visible and a wrong move damages a working pin. The description is
+  // what lets a reader catch «Контактна вулиця» being the resolver
+  // misreading contact-info boilerplate.
+  console.log(
+    `\nTHE ${landmark.length} LANDMARK-GUESSED PETS — every move ${applyLandmarks ? 'being applied' : '--apply-landmarks would make'}:\n`,
+  );
+  const lmMoves: { id: string; name: string; hit: ResolvedPlace; oldLat: number; oldLng: number }[] = [];
+  let lmNone = 0;
+  let lmOtherCity = 0;
   for (const pet of landmark) {
     const text = `${pet.desc ?? ''}\n${bodies.get(pet.id) ?? ''}`.trim();
-    if (!text) continue;
-    const hit = resolvePlace(text, places);
-    if (!hit) continue;
-    lmPlaced++;
-    if (lmSample.length < 12) {
-      const moved = haversineM(pet.lat, pet.lng, hit.lat, hit.lng);
-      lmSample.push(
-        `    ${pet.name.padEnd(24)} → «${hit.name}»${hit.marked ? ' [marked]' : ''}  would move ${(moved / 1000).toFixed(1)}km`,
-      );
+    if (!text) {
+      lmNone++;
+      continue;
     }
+    const away = detectOtherCity(text);
+    if (away) {
+      lmOtherCity++;
+      console.log(`    ${pet.name.padEnd(24)} ✗ stays — ad names ${away.city} («${away.token}»)`);
+      continue;
+    }
+    const hit = resolvePlace(text, places);
+    if (!hit) {
+      lmNone++;
+      continue;
+    }
+    const moved = haversineM(pet.lat, pet.lng, hit.lat, hit.lng);
+    lmMoves.push({ id: pet.id, name: pet.name, hit, oldLat: pet.lat, oldLng: pet.lng });
+    console.log(
+      `    ${pet.name.padEnd(24)} → «${hit.name}» (${hit.category}${hit.marked ? ', marked' : ', bare'})  ${(moved / 1000).toFixed(1)}km`,
+    );
+    console.log(`        «${(pet.desc ?? '').slice(0, 100)}»`);
   }
-  console.log(`  the resolver finds a place for ${lmPlaced} of ${landmark.length}`);
-  for (const s of lmSample) console.log(s);
+  console.log(`\n  would move:               ${lmMoves.length} of ${landmark.length}`);
+  console.log(`  no place named in the ad: ${lmNone}`);
+  console.log(`  ad names another city:    ${lmOtherCity}`);
 
-  if (!apply) {
+  if (!apply && !applyLandmarks) {
     console.log(
       `\n  A pet "moving" means the ad names a place we hold coordinates for.` +
         `\n  It does not mean those coordinates are right — read the list.` +
@@ -184,27 +214,52 @@ async function main() {
   }
 
   // ---- APPLY: exactly the moves printed above ----
-  let applied = 0;
-  for (const m of moves) {
-    // Same spread-the-centroid jitter ingest uses, seeded by the pet id
-    // so a re-run keeps every pet at the same point.
-    const pin = jitterAround(m.hit.lat, m.hit.lng, m.id, JITTER_M);
-    await db
-      .update(schema.lostDogs)
-      .set({
-        lastSeenLat: pin.lat,
-        lastSeenLng: pin.lng,
-        placementSource: placementLabel(m.hit),
-      })
-      .where(eq(schema.lostDogs.id, m.id));
-    applied++;
+  if (apply) {
+    let applied = 0;
+    for (const m of moves) {
+      // Same spread-the-centroid jitter ingest uses, seeded by the pet
+      // id so a re-run keeps every pet at the same point.
+      const pin = jitterAround(m.hit.lat, m.hit.lng, m.id, JITTER_M);
+      await db
+        .update(schema.lostDogs)
+        .set({
+          lastSeenLat: pin.lat,
+          lastSeenLng: pin.lng,
+          placementSource: placementLabel(m.hit),
+        })
+        .where(eq(schema.lostDogs.id, m.id));
+      applied++;
+    }
+    console.log(
+      `\n✓ applied: ${applied} pets moved off the fall-through and onto the map.` +
+        `\n  Reversal, should any move read wrong tomorrow:` +
+        `\n    UPDATE lost_dogs SET last_seen_lat = ${FALLBACK.lat}, last_seen_lng = ${FALLBACK.lng},` +
+        `\n      placement_source = 'fall-through' WHERE id = '<id>';`,
+    );
   }
-  console.log(
-    `\n✓ applied: ${applied} pets moved off the fall-through and onto the map.` +
-      `\n  Reversal, should any move read wrong tomorrow:` +
-      `\n    UPDATE lost_dogs SET last_seen_lat = ${FALLBACK.lat}, last_seen_lng = ${FALLBACK.lng},` +
-      `\n      placement_source = 'fall-through' WHERE id = '<id>';`,
-  );
+
+  if (applyLandmarks) {
+    // These pets did NOT sit on a shared constant, so the reversal is
+    // per-pet and printed here in full — this transcript is the undo.
+    let applied = 0;
+    console.log(`\n✓ applying ${lmMoves.length} landmark re-placements. Reversals:`);
+    for (const m of lmMoves) {
+      const pin = jitterAround(m.hit.lat, m.hit.lng, m.id, JITTER_M);
+      await db
+        .update(schema.lostDogs)
+        .set({
+          lastSeenLat: pin.lat,
+          lastSeenLng: pin.lng,
+          placementSource: placementLabel(m.hit),
+        })
+        .where(eq(schema.lostDogs.id, m.id));
+      applied++;
+      console.log(
+        `    UPDATE lost_dogs SET last_seen_lat = ${m.oldLat}, last_seen_lng = ${m.oldLng} WHERE id = '${m.id}'; -- ${m.name}`,
+      );
+    }
+    console.log(`✓ applied: ${applied} landmark-guessed pets re-placed from their ads.`);
+  }
   await pg.end();
 }
 
