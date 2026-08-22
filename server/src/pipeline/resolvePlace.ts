@@ -230,6 +230,25 @@ export const MAX_GRAM_WORDS = 4;
 // keys for every pet that arrives.
 const INDEX_CACHE = new WeakMap<GazetteerPlace[], Map<string, GazetteerPlace[]>>();
 
+// Normalised name → every place carrying it, for the namesake half of
+// the ambiguity check. Cached per array for the same reason the main
+// index is: built once, consulted per pet.
+const NAME_INDEX_CACHE = new WeakMap<GazetteerPlace[], Map<string, GazetteerPlace[]>>();
+
+function buildNameIndex(places: GazetteerPlace[]): Map<string, GazetteerPlace[]> {
+  const cached = NAME_INDEX_CACHE.get(places);
+  if (cached) return cached;
+  const index = new Map<string, GazetteerPlace[]>();
+  for (const p of places) {
+    const name = normalisePlaceText(p.name);
+    const bucket = index.get(name);
+    if (bucket) bucket.push(p);
+    else index.set(name, [p]);
+  }
+  NAME_INDEX_CACHE.set(places, index);
+  return index;
+}
+
 export function buildPlaceIndex(places: GazetteerPlace[]): Map<string, GazetteerPlace[]> {
   const cached = INDEX_CACHE.get(places);
   if (cached) return cached;
@@ -399,31 +418,56 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   // zone: places within 1 km of each other are one answer for our
   // purposes (a long street stored as segments, a square and its metro
   // exit), anything wider is a genuine either/or.
-  const ambiguous = new Set<string>();
-  {
-    const byKey = new Map<string, { lat: number; lng: number }[]>();
-    for (const h of hits) {
-      const list = byKey.get(h.key);
-      if (list) list.push(h.place);
-      else byKey.set(h.key, [h.place]);
-    }
-    for (const [key, coords] of byKey) {
-      outer: for (let a = 0; a < coords.length; a++) {
-        for (let b = a + 1; b < coords.length; b++) {
-          const dLat = (coords[a]!.lat - coords[b]!.lat) * 111_320;
-          const dLng =
-            (coords[a]!.lng - coords[b]!.lng) *
-            111_320 *
-            Math.cos((coords[a]!.lat * Math.PI) / 180);
-          if (dLat * dLat + dLng * dLng > AMBIGUOUS_SPREAD_M * AMBIGUOUS_SPREAD_M) {
-            ambiguous.add(key);
-            break outer;
-          }
-        }
+  // Grouped two ways, because the same ambiguity hides behind either:
+  //
+  //   by AD GRAM — «садов» in the text reaches both «Садова» and
+  //   «Садове» through a shared stem; the name alone can't say which.
+  //
+  //   by PLACE NAME — three places are all called «Перемога», and the
+  //   production dry run proved the gram grouping alone misses this: an
+  //   ad written in Russian said «Победа», ONE of the three carried
+  //   that alias, so its gram-bucket held one place and the refusal
+  //   never fired — a coin-flip between three Перемогаs dressed up as
+  //   an unambiguous hit. Grouping by the place's own normalised name
+  //   catches it whichever spelling the ad used.
+  const spreadTooWide = (coords: { lat: number; lng: number }[]): boolean => {
+    for (let a = 0; a < coords.length; a++) {
+      for (let b = a + 1; b < coords.length; b++) {
+        const dLat = (coords[a]!.lat - coords[b]!.lat) * 111_320;
+        const dLng =
+          (coords[a]!.lng - coords[b]!.lng) *
+          111_320 *
+          Math.cos((coords[a]!.lat * Math.PI) / 180);
+        if (dLat * dLat + dLng * dLng > AMBIGUOUS_SPREAD_M * AMBIGUOUS_SPREAD_M) return true;
       }
     }
+    return false;
+  };
+  const ambiguousKeys = new Set<string>();
+  const ambiguousNames = new Set<string>();
+  {
+    const byKey = new Map<string, { lat: number; lng: number }[]>();
+    const byName = new Map<string, { lat: number; lng: number }[]>();
+    for (const h of hits) {
+      const key = h.key;
+      (byKey.get(key) ?? byKey.set(key, []).get(key)!).push(h.place);
+    }
+    // The name grouping consults the whole TABLE, not just the hits —
+    // the other two «Перемога» rows never produced a hit (that was the
+    // hole), so only the table itself can reveal them. Prepared once
+    // per gazetteer array, same as the main index.
+    const namesakes = buildNameIndex(places);
+    const hitNames = new Set(hits.map((h) => normalisePlaceText(h.place.name)));
+    for (const name of hitNames) {
+      const rows = namesakes.get(name);
+      if (rows) byName.set(name, rows);
+    }
+    for (const [key, coords] of byKey) if (spreadTooWide(coords)) ambiguousKeys.add(key);
+    for (const [name, coords] of byName) if (spreadTooWide(coords)) ambiguousNames.add(name);
   }
-  const unambiguous = hits.filter((h) => !ambiguous.has(h.key));
+  const unambiguous = hits.filter(
+    (h) => !ambiguousKeys.has(h.key) && !ambiguousNames.has(normalisePlaceText(h.place.name)),
+  );
   if (unambiguous.length === 0) return null;
 
   // CONTAINMENT FIRST, BEFORE ANY SCORE.

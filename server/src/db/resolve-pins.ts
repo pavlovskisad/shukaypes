@@ -32,6 +32,7 @@
 //   fly ssh console -a shukajpes-api -C "node dist/db/resolve-pins.js"
 //   fly ssh console -a shukajpes-api -C "node dist/db/resolve-pins.js --apply"
 //   fly ssh console -a shukajpes-api -C "node dist/db/resolve-pins.js --apply-landmarks"
+//   … --apply-landmarks --skip=<id>,<id>   rows the reader struck
 
 import 'dotenv/config';
 import { eq, isNotNull } from 'drizzle-orm';
@@ -61,6 +62,13 @@ function placementLabel(hit: ResolvedPlace): string {
 async function main() {
   const apply = process.argv.includes('--apply');
   const applyLandmarks = process.argv.includes('--apply-landmarks');
+  // --skip=id1,id2 — rows the human read struck. The whole point of
+  // printing the list is that a person can disagree with part of it;
+  // without this, one bad row would hold the other thirty hostage.
+  const skipArg = process.argv.find((a) => a.startsWith('--skip='));
+  const skipped = new Set(
+    (skipArg?.slice('--skip='.length) ?? '').split(',').map((s) => s.trim()).filter(Boolean),
+  );
 
   const pets = await db
     .select({
@@ -191,9 +199,13 @@ async function main() {
       continue;
     }
     const moved = haversineM(pet.lat, pet.lng, hit.lat, hit.lng);
+    if (skipped.has(pet.id)) {
+      console.log(`    ${pet.name.padEnd(24)} ✗ stays — struck by --skip  [${pet.id}]`);
+      continue;
+    }
     lmMoves.push({ id: pet.id, name: pet.name, hit, oldLat: pet.lat, oldLng: pet.lng });
     console.log(
-      `    ${pet.name.padEnd(24)} → «${hit.name}» (${hit.category}${hit.marked ? ', marked' : ', bare'})  ${(moved / 1000).toFixed(1)}km`,
+      `    ${pet.name.padEnd(24)} → «${hit.name}» (${hit.category}${hit.marked ? ', marked' : ', bare'})  ${(moved / 1000).toFixed(1)}km  [${pet.id}]`,
     );
     console.log(`        «${(pet.desc ?? '').slice(0, 100)}»`);
   }

@@ -228,6 +228,21 @@ const PLACES: GazetteerPlace[] = [
   check('a name shared across the map resolves to nothing', r === null, String(r?.name));
 }
 {
+  // The alias bypass, caught on production: three places all named
+  // «Перемога», one carrying the Russian alias «Победа». An ad writing
+  // «Победа» hit only that row, so the gram grouping saw one place and
+  // called it unambiguous — a coin-flip between three Перемогаs
+  // dressed up as a confident hit. The namesake grouping must refuse
+  // it whichever spelling the ad used.
+  const threePeremohas: GazetteerPlace[] = [
+    { name: 'Перемога', lat: 50.4371, lng: 30.3950, category: 'neighbourhood', aliases: ['Победа'] },
+    { name: 'Перемога', lat: 50.4448, lng: 30.2799, category: 'neighbourhood' },
+    { name: 'Перемога', lat: 50.5420, lng: 30.8260, category: 'district' },
+  ];
+  const r = resolvePlace('кіт втік у ЖК Победа-3, дуже боязкий', threePeremohas);
+  check('an alias cannot dodge the namesake refusal', r === null, String(r?.name));
+}
+{
   // …but the same street stored as nearby segments is one answer.
   const segments: GazetteerPlace[] = [
     { name: 'Набережна вулиця', lat: 50.4600, lng: 30.5200, category: 'street' },
