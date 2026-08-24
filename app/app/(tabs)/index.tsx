@@ -38,7 +38,11 @@ export default function MapScreen() {
   // carousel; the gate wants it for the question. Same treatment, and
   // deliberately the same flag, so both get the one animation path
   // rather than two that drift.
-  const immersive = dogCam || gateOpen;
+  // Aiming the map for a lost-pet pin is the third member of the family:
+  // one job owns the screen, so the chrome goes the same way it goes for
+  // the other two rather than by a path of its own.
+  const lostPinning = useGameStore((s) => s.lostPinning);
+  const immersive = dogCam || gateOpen || lostPinning;
   // When a logo-targeting hint is showing, pulse the logo so the spoken
   // line has a target: 'map:modes' is the first thing the dog says on an
   // idle screen and points at the control that changes what the screen

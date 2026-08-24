@@ -359,6 +359,8 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // The companion's menu is open. Read here so the lost-pet deck can get
   // out of its way — see the note at the deck's mount.
   const menuOpen = useGameStore((s) => s.menuOpen);
+  // The lost-pet sheet has stepped aside so the owner can aim the map.
+  const lostPinning = useGameStore((s) => s.lostPinning);
   // Sniff-and-lead search mode assignment (which lost dog + spot). Set by the
   // search controller below while dogCam is on.
   const searchTarget = useGameStore((s) => s.searchTarget);
@@ -3068,8 +3070,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // lines that would otherwise talk over it.
             bubble={bubble}
             question={promptText}
-            hideBubble={offscreenIndicator != null}
-            hidden={offscreenIndicator != null}
+            // Out of the frame while the owner aims at the place their
+            // pet was last seen: the crosshair marks the centre of the
+            // map and so does the dog, and only one of them is the
+            // subject.
+            hideBubble={offscreenIndicator != null || lostPinning}
+            hidden={offscreenIndicator != null || lostPinning}
             onTap={() => {
               companionTappedAtRef.current = Date.now();
             }}
