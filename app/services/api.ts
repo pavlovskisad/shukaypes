@@ -384,6 +384,31 @@ export const api = {
       fetchedAt: string | null;
     }>(`/dogs/${encodeURIComponent(id)}/post`),
 
+  // First-party lost-pet report — the «я загубив друга» form. The
+  // photo travels as base64 (downscaled client-side first) and the
+  // server publishes it to our Telegram channel, which doubles as the
+  // photo store. Generous timeout: that upload happens inside this
+  // request.
+  reportLostPet: (input: {
+    species: 'dog' | 'cat';
+    name?: string;
+    description: string;
+    lat: number;
+    lng: number;
+    contactPhone?: string;
+    photoBase64?: string;
+  }) =>
+    req<{
+      dogId: string;
+      action: string;
+      channelPostUrl: string | null;
+      photoStored: boolean;
+    }>('/dogs/report', {
+      method: 'POST',
+      body: JSON.stringify(input),
+      timeoutMs: 45_000,
+    }),
+
   // Bulk variant of the four /tokens/nearby + /food/nearby +
   // /dogs/nearby + /state calls. One round-trip instead of four; the
   // client store can also collapse the resulting state into a single

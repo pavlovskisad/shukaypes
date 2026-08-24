@@ -317,10 +317,37 @@ export interface AppStrings {
     // the one path that actually puts a pet on the map today.
     lostSheet: {
       title: string;
-      body: string;
-      cta: string;
-      // Shown instead of the CTA when no bot link is configured.
-      noLink: string;
+      speciesDog: string;
+      speciesCat: string;
+      nameLabel: string;
+      namePlaceholder: string;
+      descLabel: string;
+      descPlaceholder: string;
+      phoneLabel: string;
+      phonePlaceholder: string;
+      photoLabel: string;
+      photoChange: string;
+      // The pin step: button that enters it, the instruction while the
+      // map is being aimed, and the two bar actions.
+      pickPin: string;
+      pinPicked: string;
+      pinHint: string;
+      pinConfirm: string;
+      pinBack: string;
+      submit: string;
+      submitting: string;
+      doneTitle: string;
+      doneBody: string;
+      doneNoPhoto: string;
+      doneShare: string;
+      doneClose: string;
+      // Secondary path: the bot DM still works and suits TG natives.
+      botLine: string;
+      botCta: string;
+      errShort: string;
+      errNoPin: string;
+      errLimit: string;
+      errGeneric: string;
       close: string;
     };
   };
@@ -728,10 +755,35 @@ const uk: AppStrings = {
     ],
     noWalkers: 'поки нікого поруч 👥',
     lostSheet: {
-      title: 'загубився пес?',
-      body: 'напиши мені в телеграмі — фото, район, коли востаннє бачили. я прочитаю і одразу поставлю пса на карту, і його побачить кожен, хто цієї хвилини гуляє містом. так швидше, ніж будь-яка форма.',
-      cta: 'написати в телеграм',
-      noLink: 'посилання на бота ще не налаштоване',
+      title: 'загубився друг?',
+      speciesDog: '🐕 пес',
+      speciesCat: '🐈 кіт',
+      nameLabel: 'імʼя',
+      namePlaceholder: 'як звати (необовʼязково)',
+      descLabel: 'опис',
+      descPlaceholder: 'який на вигляд, де і коли загубився, як реагує на людей…',
+      phoneLabel: 'телефон',
+      phonePlaceholder: 'для тих, хто побачить (необовʼязково)',
+      photoLabel: '📷 додати фото',
+      photoChange: '📷 інше фото',
+      pickPin: '📍 вказати місце на мапі',
+      pinPicked: '📍 місце вибрано',
+      pinHint: 'наведи центр мапи на місце, де востаннє бачили',
+      pinConfirm: 'тут',
+      pinBack: 'назад',
+      submit: 'поставити на мапу',
+      submitting: 'ставлю на мапу…',
+      doneTitle: 'вже на мапі 🐾',
+      doneBody: 'кожен, хто зараз гуляє поруч, побачить пін. я також переслав оголошення в наш канал і районні групи.',
+      doneNoPhoto: 'фото не вдалося прикріпити — оголошення на мапі без нього.',
+      doneShare: 'переслати оголошення',
+      doneClose: 'готово',
+      botLine: 'зручніше в телеграмі? напиши боту — фото, район, коли бачили.',
+      botCta: 'написати боту',
+      errShort: 'опиши трохи докладніше — хоча б кілька слів.',
+      errNoPin: 'спершу вкажи місце на мапі.',
+      errLimit: 'на сьогодні ліміт оголошень вичерпано.',
+      errGeneric: 'не вдалося поставити на мапу. спробуй ще раз.',
       close: 'потім',
     },
   },
@@ -1100,10 +1152,35 @@ const en: AppStrings = {
     ],
     noWalkers: 'nobody around just yet 👥',
     lostSheet: {
-      title: 'lost your pet?',
-      body: "message me on telegram — a photo, the district, when you last saw them. i'll read it and put your pet on the map straight away, in front of everyone out walking this minute. faster than any form.",
-      cta: 'message me on telegram',
-      noLink: 'the bot link isn\'t set up yet',
+      title: 'lost a friend?',
+      speciesDog: '🐕 dog',
+      speciesCat: '🐈 cat',
+      nameLabel: 'name',
+      namePlaceholder: 'their name (optional)',
+      descLabel: 'description',
+      descPlaceholder: 'what they look like, where and when they went missing, how they react to people…',
+      phoneLabel: 'phone',
+      phonePlaceholder: 'for whoever spots them (optional)',
+      photoLabel: '📷 add a photo',
+      photoChange: '📷 different photo',
+      pickPin: '📍 point on the map',
+      pinPicked: '📍 spot picked',
+      pinHint: 'aim the map centre at where they were last seen',
+      pinConfirm: 'here',
+      pinBack: 'back',
+      submit: 'put on the map',
+      submitting: 'putting on the map…',
+      doneTitle: 'on the map 🐾',
+      doneBody: "everyone walking nearby will see the pin. i've also forwarded the post to our channel and district groups.",
+      doneNoPhoto: "the photo didn't attach — the pin is up without it.",
+      doneShare: 'share the post',
+      doneClose: 'done',
+      botLine: 'prefer telegram? message the bot — a photo, the district, when you saw them.',
+      botCta: 'message the bot',
+      errShort: 'tell a little more — at least a few words.',
+      errNoPin: 'pick the spot on the map first.',
+      errLimit: "that's the report limit for today.",
+      errGeneric: "couldn't put it on the map. try again.",
       close: 'later',
     },
   },
