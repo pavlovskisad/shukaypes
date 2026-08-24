@@ -10,6 +10,8 @@
 //                 Vercel deploy.
 
 import type { FastifyPluginAsync } from 'fastify';
+import { eq } from 'drizzle-orm';
+import { db, schema } from '../db/index.js';
 import {
   looksLikeLostPet as looksLikeLostPetShared,
   looksLikeRehoming as looksLikeRehomingShared,
@@ -17,6 +19,7 @@ import {
 import { ingestFromTelegramPost, type IngestOutcome } from '../services/telegramIngest.js';
 import { messages, parseLangArg, type Lang } from '../i18n/botMessages.js';
 import { getUserLang, setUserLang } from '../services/userLang.js';
+import { alertChatId } from '../services/telegramNotify.js';
 import { limitPolling } from '../lib/rateLimit.js';
 
 const TG_API = 'https://api.telegram.org';
@@ -35,6 +38,14 @@ interface TgUpdate {
     text?: string;
     caption?: string;
     photo?: TgPhoto[];
+  };
+  // Inline-button taps. Today the only button we emit with
+  // callback_data is the owner-alert expire control.
+  callback_query?: {
+    id: string;
+    from?: { id: number };
+    message?: { message_id: number; chat: { id: number } };
+    data?: string;
   };
 }
 
@@ -367,6 +378,47 @@ const plugin: FastifyPluginAsync = async (app) => {
     }
 
     const update = req.body;
+
+    // Owner review control: the alert for every in-app report carries an
+    // inline «прибрати з мапи» button (routes/dogs.ts). Honoured ONLY
+    // when the tap comes from ALERT_CHAT_ID — callback_data is
+    // attacker-suppliable by anyone who can press buttons the bot ever
+    // sent anywhere, so the chat id is the whole authorisation.
+    // Expiring, not deleting: one UPDATE undoes it.
+    const cb = update?.callback_query;
+    if (cb) {
+      const fromAlertChat =
+        cb.message?.chat?.id !== undefined && String(cb.message.chat.id) === alertChatId();
+      const dogId = cb.data?.startsWith('expire:') ? cb.data.slice('expire:'.length) : null;
+      let answer = 'ігнорую';
+      if (fromAlertChat && dogId) {
+        await db
+          .update(schema.lostDogs)
+          .set({ status: 'expired' })
+          .where(eq(schema.lostDogs.id, dogId));
+        answer = 'знято з мапи (status=expired — одна UPDATE повертає)';
+        req.log.info(
+          { kind: 'owner_expire_button', dog_id: dogId },
+          '[telegram] owner expired a report via button',
+        );
+      } else {
+        req.log.warn(
+          { kind: 'owner_expire_button', chat_id: cb.message?.chat?.id, data: cb.data },
+          '[telegram] callback_query ignored',
+        );
+      }
+      // Always answered, or the button spins forever in the owner's UI.
+      const token = process.env.TELEGRAM_BOT_TOKEN;
+      if (token) {
+        await fetch(`${TG_API}/bot${token}/answerCallbackQuery`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ callback_query_id: cb.id, text: answer }),
+        }).catch(() => {});
+      }
+      return { ok: true };
+    }
+
     const msg = update?.message;
     if (msg) {
       // Per-user language preference. Stored in Redis (60-day sliding
@@ -507,7 +559,9 @@ export async function registerTelegramWebhook(
     const secret = process.env.TELEGRAM_WEBHOOK_SECRET;
     const body: Record<string, unknown> = {
       url,
-      allowed_updates: ['message'],
+      // callback_query carries the owner-alert expire button; without
+      // it listed here Telegram simply never delivers the tap.
+      allowed_updates: ['message', 'callback_query'],
       drop_pending_updates: false,
     };
     if (secret) body.secret_token = secret;
