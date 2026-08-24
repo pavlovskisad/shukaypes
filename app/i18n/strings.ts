@@ -325,6 +325,12 @@ export interface AppStrings {
       descPlaceholder: string;
       phoneLabel: string;
       phonePlaceholder: string;
+      // NO EMOJI IN THESE. They label buttons, and a button in this app
+      // wears a drawn icon from the set or nothing at all — an OS emoji
+      // is the one mark on the sheet nobody here drew, and it renders as
+      // a different picture on every platform. There is no camera or dog
+      // in components/ui/Icon.tsx, so those labels are plain text; the
+      // place button gets the real `pin`.
       photoLabel: string;
       photoChange: string;
       // The pin step: button that enters it, the instruction while the
@@ -344,6 +350,10 @@ export interface AppStrings {
       // Secondary path: the bot DM still works and suits TG natives.
       botLine: string;
       botCta: string;
+      // A photo the browser cannot decode — a HEIC straight off an
+      // iPhone, or a file that arrived damaged. Without this the pick
+      // silently does nothing at all.
+      errPhoto: string;
       errShort: string;
       errNoPin: string;
       errLimit: string;
@@ -756,18 +766,18 @@ const uk: AppStrings = {
     noWalkers: 'поки нікого поруч 👥',
     lostSheet: {
       title: 'загубився друг?',
-      speciesDog: '🐕 пес',
-      speciesCat: '🐈 кіт',
+      speciesDog: 'пес',
+      speciesCat: 'кіт',
       nameLabel: 'імʼя',
       namePlaceholder: 'як звати (необовʼязково)',
       descLabel: 'опис',
       descPlaceholder: 'який на вигляд, де і коли загубився, як реагує на людей…',
       phoneLabel: 'телефон',
       phonePlaceholder: 'для тих, хто побачить (необовʼязково)',
-      photoLabel: '📷 додати фото',
-      photoChange: '📷 інше фото',
-      pickPin: '📍 вказати місце на мапі',
-      pinPicked: '📍 місце вибрано',
+      photoLabel: 'додати фото',
+      photoChange: 'інше фото',
+      pickPin: 'вказати місце',
+      pinPicked: 'місце вибрано',
       pinHint: 'наведи центр мапи на місце, де востаннє бачили',
       pinConfirm: 'тут',
       pinBack: 'назад',
@@ -780,6 +790,7 @@ const uk: AppStrings = {
       doneClose: 'готово',
       botLine: 'зручніше в телеграмі? напиши боту — фото, район, коли бачили.',
       botCta: 'написати боту',
+      errPhoto: 'не вдалося прочитати це фото — спробуй інше',
       errShort: 'опиши трохи докладніше — хоча б кілька слів.',
       errNoPin: 'спершу вкажи місце на мапі.',
       errLimit: 'на сьогодні ліміт оголошень вичерпано.',
@@ -1153,18 +1164,18 @@ const en: AppStrings = {
     noWalkers: 'nobody around just yet 👥',
     lostSheet: {
       title: 'lost a friend?',
-      speciesDog: '🐕 dog',
-      speciesCat: '🐈 cat',
+      speciesDog: 'dog',
+      speciesCat: 'cat',
       nameLabel: 'name',
       namePlaceholder: 'their name (optional)',
       descLabel: 'description',
       descPlaceholder: 'what they look like, where and when they went missing, how they react to people…',
       phoneLabel: 'phone',
       phonePlaceholder: 'for whoever spots them (optional)',
-      photoLabel: '📷 add a photo',
-      photoChange: '📷 different photo',
-      pickPin: '📍 point on the map',
-      pinPicked: '📍 spot picked',
+      photoLabel: 'add a photo',
+      photoChange: 'different photo',
+      pickPin: 'point on the map',
+      pinPicked: 'spot picked',
       pinHint: 'aim the map centre at where they were last seen',
       pinConfirm: 'here',
       pinBack: 'back',
@@ -1177,6 +1188,7 @@ const en: AppStrings = {
       doneClose: 'done',
       botLine: 'prefer telegram? message the bot — a photo, the district, when you saw them.',
       botCta: 'message the bot',
+      errPhoto: "couldn't read that photo — try another one",
       errShort: 'tell a little more — at least a few words.',
       errNoPin: 'pick the spot on the map first.',
       errLimit: "that's the report limit for today.",

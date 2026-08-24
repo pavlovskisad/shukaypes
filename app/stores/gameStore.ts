@@ -305,6 +305,17 @@ interface GameState {
   // the store for the same reason aboutOpen does: the ring is a child of
   // MapView, and the sheet is hosted by the map screen.
   lostFlowOpen: boolean;
+  // The lost-pet sheet has stepped aside so the owner can aim the map at
+  // the place their pet was last seen. The map screen treats this as one
+  // more IMMERSIVE state — the same family as supersniff and the gate:
+  // the screen belongs to one job, so the HUD and the dashboard bubble
+  // away and the dog steps out of the frame.
+  //
+  // It is not decoration. Without it the ring stays open underneath the
+  // hidden sheet, and the crosshair lands on top of the dog — so a
+  // person marking where they lost their pet does it over a sprite
+  // asking whether they would like to go for a coffee.
+  lostPinning: boolean;
   // Currently-visible one-shot hint id (or null). Published by the
   // component that owns the hint's primary surface (the companion's
   // speech bubble) so OTHER components can render a matching visual
@@ -436,6 +447,7 @@ interface GameState {
   ) => void;
   setAboutOpen: (open: boolean) => void;
   setLostFlowOpen: (open: boolean) => void;
+  setLostPinning: (pinning: boolean) => void;
   // Credit paws won somewhere other than the pavement (finishing a
   // search). The server has already banked them; this is the HUD
   // catching up, one pickup pulse at a time so it reads as a run of
@@ -574,6 +586,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   searchPreview: null,
   aboutOpen: false,
   lostFlowOpen: false,
+  lostPinning: false,
   activeHint: null,
   menuCamera: null,
   hintsAllowed: false,
@@ -1314,6 +1327,12 @@ export const useGameStore = create<GameState>((set, get) => ({
     ),
   setAboutOpen: (aboutOpen) => set({ aboutOpen }),
   setLostFlowOpen: (lostFlowOpen) => set({ lostFlowOpen }),
+  // Aiming the map closes the ring: it is the dog's menu, and the dog is
+  // not part of this. It stays closed on the way back — the sheet is
+  // over it either way, and re-opening a menu nobody asked for is how
+  // you get a coffee question on top of a lost-pet report.
+  setLostPinning: (lostPinning) =>
+    set(lostPinning ? { lostPinning, menuOpen: false } : { lostPinning }),
   awardPaws: (n) => {
     const step = (left: number) => {
       if (left <= 0) return;
