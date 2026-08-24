@@ -1,13 +1,20 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { and, desc, eq, not, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, not, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { buildPhotoUrl } from '../services/photoUrl.js';
-import { limitPolling, limitRead } from '../lib/rateLimit.js';
+import { limitExpensive, limitPolling, limitRead } from '../lib/rateLimit.js';
 import {
   looksLikeItHadContacts,
   looksLikeSourceMaskedContact,
   redactContacts,
 } from '../pipeline/redactContacts.js';
+import { composeOwnerReport } from '../pipeline/ownerReport.js';
+import { capBody } from '../pipeline/adBody.js';
+import { detectOtherCity } from '../pipeline/outOfArea.js';
+import { upsertLostDog, KYIV_BBOX } from '../pipeline/upsert.js';
+import type { ParsedDog } from '../pipeline/types.js';
+import { publishToChannel, fanOutToGroups } from '../services/crosspost.js';
+import { notifyOwner } from '../services/telegramNotify.js';
 
 interface NearbyQuery {
   lat: string;
@@ -248,6 +255,215 @@ const plugin: FastifyPluginAsync = async (app) => {
       },
     };
   });
+
+  // First-party lost-pet report — the «я загубив друга» form.
+  //
+  // Everything the scraper pipeline has to reconstruct, the owner just
+  // TELLS us: structured fields, their own pin on the map, their own
+  // photo. So nothing here calls Haiku or the gazetteer — the ParsedDog
+  // is assembled directly and placement_source is 'owner', the highest-
+  // provenance label the ledger has.
+  //
+  // The photo path is the part worth reading twice. This app's photo
+  // pipeline runs entirely on Telegram file_ids (routes/photos.ts).
+  // Publishing the report to OUR channel via sendPhoto both stores the
+  // image (the response carries the file_id) and is the first
+  // crosspost. If the channel is unconfigured or down, the pet is still
+  // created — without the photo, and the response says so. A lost-pet
+  // report must never fail because Telegram hiccuped.
+  //
+  // Live instantly, reviewed after (owner's decision): the row is
+  // active at once, and the app owner gets an alert with an inline
+  // expire button (handled in routes/telegram.ts, ALERT_CHAT_ID only).
+  app.post<{
+    Body: {
+      species?: string;
+      name?: string;
+      description?: string;
+      lat?: number;
+      lng?: number;
+      contactPhone?: string;
+      photoBase64?: string;
+    };
+  }>(
+    '/dogs/report',
+    // limitExpensive (10/min) is the burst ceiling; the real quota is
+    // the daily cap below. bodyLimit raised for the base64 photo:
+    // 5MB decoded ≈ 6.7MB encoded, plus the rest of the JSON.
+    { ...limitExpensive, bodyLimit: 8 * 1024 * 1024 },
+    async (req, reply) => {
+      if (!req.userId) {
+        reply.code(401);
+        return { error: 'auth required' };
+      }
+
+      const { species, name, description, lat, lng, contactPhone, photoBase64 } = req.body ?? {};
+      if (species !== 'dog' && species !== 'cat') {
+        reply.code(400);
+        return { error: 'species must be dog or cat' };
+      }
+      if (typeof description !== 'string' || description.trim().length < 10) {
+        reply.code(400);
+        return { error: 'description too short' };
+      }
+      if (typeof lat !== 'number' || typeof lng !== 'number' || !Number.isFinite(lat) || !Number.isFinite(lng)) {
+        reply.code(400);
+        return { error: 'pin required' };
+      }
+      // The same boundary upsert enforces, checked early so the person
+      // gets a readable answer instead of a skipped row — and so no
+      // channel post happens for a pet the map would refuse anyway.
+      if (lat < KYIV_BBOX.south || lat > KYIV_BBOX.north || lng < KYIV_BBOX.west || lng > KYIV_BBOX.east) {
+        reply.code(400);
+        return { error: 'pin outside Kyiv area' };
+      }
+      const away = detectOtherCity(`${name ?? ''} ${description}`);
+      if (away) {
+        reply.code(400);
+        return { error: `post names another city (${away.city}) — the map is Kyiv-only` };
+      }
+
+      // Three reports per person per day. The burst limiter above stops
+      // scripts; this stops a human error loop (resubmitting a failing
+      // form) from wallpapering the map.
+      const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
+      const [{ count: recent }] = (await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.lostDogs)
+        .where(
+          and(eq(schema.lostDogs.reportedBy, req.userId), gte(schema.lostDogs.createdAt, dayAgo)),
+        )) as [{ count: number }];
+      if (recent >= 3) {
+        reply.code(429);
+        return { error: 'daily report limit reached' };
+      }
+
+      const photo = decodePhoto(photoBase64);
+      if (photoBase64 && !photo) {
+        reply.code(400);
+        return { error: 'photo must be jpeg, png or webp, up to 5MB' };
+      }
+
+      const report = composeOwnerReport({ species, name, description, contactPhone });
+
+      // Channel post = photo upload + first crosspost, in one call.
+      const channelPost = await publishToChannel(
+        { caption: report.caption, photo },
+        req.log,
+      );
+
+      const parsed: ParsedDog = {
+        name: report.name,
+        species,
+        breed: 'unknown',
+        emoji: report.emoji,
+        lastSeenLat: lat,
+        lastSeenLng: lng,
+        lastSeenDescription: report.description,
+        lastSeenAt: new Date().toISOString(),
+        urgency: 'medium',
+        searchZoneRadiusM: species === 'cat' ? 500 : 800,
+        rewardPoints: 100,
+        photoUrl: null,
+        photoFileId: channelPost?.photoFileId ?? null,
+        parseConfidence: 1,
+        parseNotes: 'owner report via app',
+        outOfArea: null,
+        placementSource: 'owner',
+      };
+
+      const result = await upsertLostDog({ parsed, source: 'in_app', reportedBy: req.userId });
+      if (result.action === 'skipped' || !result.id) {
+        req.log.warn(
+          { kind: 'owner_report', user: req.userId, reason: result.skipReason },
+          '[report] upsert refused an owner report',
+        );
+        reply.code(400);
+        return { error: result.skipReason ?? 'report refused' };
+      }
+      const dogId = result.id;
+
+      // The full post, phone included, so «показати оголошення» works
+      // for in-app pets exactly as for scraped ones. The owner typed
+      // their number into a lost-pet form — publishing it to a walker
+      // who reported a sighting is the number's intended purpose.
+      await db
+        .insert(schema.scrapeLog)
+        .values({
+          url: `in-app:${dogId}`,
+          source: 'in_app',
+          title: report.name,
+          dogId,
+          rawBody: capBody(report.postText),
+          parseConfidence: 1,
+          ingestAction: result.action,
+        })
+        .onConflictDoNothing();
+
+      req.log.info(
+        { kind: 'owner_report', dog_id: dogId, action: result.action, user: req.userId, has_photo: !!photo },
+        '[report] owner report landed',
+      );
+
+      // Owner alert with the one-tap review control.
+      void notifyOwner(
+        `нове оголошення з застосунку\n${report.emoji} ${report.name}\n${report.description.slice(0, 120)}\nvia user ${req.userId.slice(0, 8)}…${channelPost?.postUrl ? `\n${channelPost.postUrl}` : ''}`,
+        req.log,
+        {
+          reply_markup: {
+            inline_keyboard: [
+              [{ text: '✂ прибрати з мапи', callback_data: `expire:${dogId}` }],
+            ],
+          },
+        },
+      ).catch(() => {});
+
+      // District-group fan-out rides after the response — the poster
+      // should not wait out N sequential Telegram calls.
+      if (channelPost && result.action === 'inserted') {
+        void fanOutToGroups({ channelMessageId: channelPost.messageId, dogId }, req.log).catch(
+          (err) => req.log.warn({ kind: 'crosspost_group', err: (err as Error).message }),
+        );
+      }
+
+      return {
+        dogId,
+        action: result.action,
+        channelPostUrl: channelPost?.postUrl ?? null,
+        photoStored: !!channelPost?.photoFileId,
+      };
+    },
+  );
 };
+
+// Base64 photo (optionally a data: URI) → sniffed bytes, or null when
+// it isn't one of the three formats phones actually produce, or is too
+// large. Magic bytes, not the client's claimed MIME — the claim is one
+// more thing the client can get wrong.
+const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
+function decodePhoto(raw: string | undefined): { bytes: Buffer; mime: string } | null {
+  if (!raw || typeof raw !== 'string') return null;
+  const b64 = raw.startsWith('data:') ? raw.slice(raw.indexOf(',') + 1) : raw;
+  let bytes: Buffer;
+  try {
+    bytes = Buffer.from(b64, 'base64');
+  } catch {
+    return null;
+  }
+  if (bytes.length < 12 || bytes.length > MAX_PHOTO_BYTES) return null;
+  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
+    return { bytes, mime: 'image/jpeg' };
+  }
+  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
+    return { bytes, mime: 'image/png' };
+  }
+  if (
+    bytes.toString('latin1', 0, 4) === 'RIFF' &&
+    bytes.toString('latin1', 8, 12) === 'WEBP'
+  ) {
+    return { bytes, mime: 'image/webp' };
+  }
+  return null;
+}
 
 export default plugin;

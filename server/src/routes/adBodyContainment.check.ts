@@ -41,6 +41,11 @@ const ALLOWED = new Map<string, string>([
   // channel arrived with a one-line title and no body.
   ['pipeline/sources/telegram.ts', 'writes it at ingest'],
   ['services/telegramIngest.ts', 'writes it at ingest'],
+  // Composes the body for a FIRST-PARTY report — the owner typed the
+  // text and the phone into our own form, and postText becomes the
+  // rawBody the gated route serves. A composer, not a reader: nothing
+  // here returns a body to anybody.
+  ['pipeline/ownerReport.ts', 'composes the post an owner submits in-app'],
   // THE ONLY READER OF THE TEXT. Gated on a sightings row for this user,
   // and it redacts contacts when there is not one.
   ['routes/dogs.ts', 'serves it from GET /dogs/:id/post, gated'],

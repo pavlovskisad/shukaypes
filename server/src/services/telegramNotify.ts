@@ -27,8 +27,16 @@ export function alertChatId(): string | null {
 /**
  * Sends `text` to ALERT_CHAT_ID. Resolves true if Telegram accepted it.
  * Never rejects: every failure is logged and swallowed.
+ *
+ * `extra` merges into the API payload — used by the in-app report alert
+ * to attach its inline expire button (reply_markup). Everything said
+ * above about parse_mode still holds: extra must not smuggle one in.
  */
-export async function notifyOwner(text: string, log: Log): Promise<boolean> {
+export async function notifyOwner(
+  text: string,
+  log: Log,
+  extra: Record<string, unknown> = {},
+): Promise<boolean> {
   const chatId = alertChatId();
   const token = process.env.TELEGRAM_BOT_TOKEN;
   if (!chatId || !token) return false;
@@ -42,7 +50,7 @@ export async function notifyOwner(text: string, log: Log): Promise<boolean> {
       // No parse_mode. Alert bodies carry URLs, error strings and raw
       // source names; running those through the HTML parser is a way to
       // have an alert fail to send precisely when something is broken.
-      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true }),
+      body: JSON.stringify({ chat_id: chatId, text, disable_web_page_preview: true, ...extra }),
       signal: ctl.signal,
     });
     const json = (await res.json().catch(() => null)) as
