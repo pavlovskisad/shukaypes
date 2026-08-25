@@ -397,7 +397,30 @@ export function applyCrayonOverride(
     const type = l.type;
     const lower = id.toLowerCase();
 
-    if (id.startsWith('soften-') || id.startsWith('wobble-') || id.startsWith('crayon-')) {
+    if (
+      id.startsWith('soften-') ||
+      id.startsWith('wobble-') ||
+      id.startsWith('crayon-') ||
+      // TERRITORY IS NOT OURS TO HIDE.
+      //
+      // This loop is a whitelist: anything it does not recognise as a
+      // basemap layer falls through to visibility:'none' at the bottom.
+      // That is right for the tiles' own furniture and wrong for layers
+      // another component owns — and map/TerritoryLayer.tsx owns every
+      // id under this prefix.
+      //
+      // It cost an afternoon to find, because the failure does not look
+      // like a hidden layer. MapLibre only tiles a source that some
+      // VISIBLE layer draws, so hiding these left a source that was
+      // present, held the right seven features, and rendered none of
+      // them — while an identical source under a different id rendered
+      // twenty-five. The id was the variable.
+      //
+      // The soft heat field never tripped this because it is a CUSTOM
+      // layer and setLayoutProperty does not touch those. The moment the
+      // ground became a vector fill, it did.
+      id.startsWith('territory-')
+    ) {
       // Layers we've injected previously — re-style updates them via
       // setPaintProperty in the appropriate branch below if needed.
       continue;

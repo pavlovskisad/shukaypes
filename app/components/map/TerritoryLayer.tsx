@@ -34,28 +34,43 @@
 // a single fill layer with a data-driven colour rather than a layer per
 // owner with a stacking order to argue about.
 //
-// No outlines anywhere — not around your shape, not between neighbours.
-// Every stroked version of this has read as a diagram of the mechanic
-// rather than paint on the ground, and the map already has plenty of
-// lines in it. The fill colour alone carries the edge.
+// HOW the ground is painted has changed twice more, and the second time
+// reverses a rule this header used to state flatly.
 //
-// HOW the ground is painted changed once more: the fill is now a soft
-// blurred field (territoryHeatLayer.ts) rather than a hard vector fill.
-// That is a deliberate return towards the heat look this header opens by
-// rejecting — but what was wrong with Model 1 was the DATA (a grid that
-// couldn't make a shape), not the softness. The geometry under the blur
-// is still the exact server partition: dots still explain marks, holes
-// are still holes, borders still sit where the server put them. Only the
-// finish changed, from boardgame diagram to paint that bleeds a little
-// into the street. The flat fill below survives as the fallback for
-// devices where the custom GL layer can't set up.
+// It said: no outlines anywhere, because every stroked version read as a
+// diagram of the mechanic rather than paint on the ground. Then the fill
+// became a soft blurred field (territoryHeatLayer.ts) — a deliberate
+// return toward the heat look the header opened by rejecting, on the
+// grounds that what was wrong with Model 1 was the DATA (a grid that
+// couldn't make a shape), not the softness.
+//
+// It is now a PALE WASH INSIDE A DASHED OUTLINE — the same treatment the
+// board's chips use (ui/TerritoryMini.tsx), brought out here so a claim
+// looks like one thing in both places. See DRAWN_EDGES, which is the
+// single switch back.
+//
+// The old objection is not wrong, it is answered: a DASHED line does not
+// read as a border decree the way a solid one does — it reads as a
+// boundary somebody walked, which is exactly what a claim is. And a
+// separate line layer above the fills avoids the compositing trap that
+// killed the earlier attempts; the stroke section below spells that out.
+//
+// What has never changed through any of it: the geometry is the exact
+// server partition. Dots still explain marks, holes are still holes,
+// borders still sit where the server put them.
 
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { useMaplibreMap } from './MapContext';
 import { THREE_BUILDINGS_LAYER_ID } from './threeBuildingsLayer';
 import type { RivalTerritory, TerritoryMark, TerritoryShape } from '../../services/api';
-import { OWN_COLOR_CSS, OWN_COLOR_RGB, ownerColorCss, ownerColorRgb } from './territoryColor';
+import {
+  OWN_COLOR_CSS,
+  OWN_COLOR_RGB,
+  lineColorCss,
+  ownerColorCss,
+  ownerColorRgb,
+} from './territoryColor';
 import {
   createTerritoryHeatLayer,
   TERRITORY_HEAT_LAYER_ID,
@@ -64,6 +79,7 @@ import {
 
 const AREA_SOURCE = 'territory-area-src';
 const AREA_FILL = 'territory-area-fill';
+const AREA_LINE = 'territory-area-line';
 const LINK_SOURCE = 'territory-link-src';
 const LINK_LAYER = 'territory-link';
 const DOTS_SOURCE = 'territory-dots-src';
@@ -77,6 +93,27 @@ const DOTS_LAYER = 'territory-dots';
 // holds while you notice it, then fades out and leaves the territory
 // behind. Without this the map slowly fills with a hundred old dots and
 // the shape — the thing that actually matters — gets lost in them.
+// ── DRAWN EDGES: THE BOARD'S CHIP, AT CITY SCALE ────────────────────
+// A trial, and the one line that undoes it.
+//
+// The board draws a claim as a pale wash inside a dashed outline in the
+// owner's colour (ui/TerritoryMini.tsx). This paints the map the same
+// way: same wash, same dash, same darkened line colour, so the shape in
+// the standings and the ground under your feet are one visual idea
+// rather than two.
+//
+// Set false and the soft GL field comes back exactly as it was.
+const DRAWN_EDGES = true;
+// Matching the chip: its 1.6px stroke and 3.6/2.6 dash, at 92px. Here
+// the numbers are absolute px and MapLibre states the dash in multiples
+// of the line width, hence the halves.
+const EDGE_WIDTH = 2;
+const EDGE_DASH: [number, number] = [1.8, 1.3];
+// The wash behind it. The old soft field peaked at 0.42 because it was
+// carrying identity alone; with a line around it the fill can drop back
+// to the chip's own value and stop competing with the city underneath.
+const AREA_ALPHA = 0.22;
+
 const DOT_HOLD_MS = 4_000;
 const DOT_FADE_MS = 4_000;
 const DOT_LIFE_MS = DOT_HOLD_MS + DOT_FADE_MS;
@@ -145,7 +182,11 @@ function areaGeoJSON(
           // server has already decided whose it is, so we just cut it out.
           coordinates: [ring(s.points), ...(s.holes ?? []).map(ring)],
         },
-        properties: { color: g.color },
+        // `line` rides alongside `color` for the same reason: one layer,
+        // every owner, no layer-per-neighbour. Darkened, because the
+        // palette was scored as translucent PAINT and a stroke on pale
+        // paper is the other case — see lineColorCss.
+        properties: { color: g.color, line: lineColorCss(g.color) },
       });
     }
   }
@@ -336,7 +377,7 @@ export function TerritoryLayer({
       // The layer is normally the soft GL field; the flat vector fill
       // below is the same data down the fallback path, for a device where
       // the custom layer's GL setup fails.
-      if (!heatFailed) {
+      if (!DRAWN_EDGES && !heatFailed) {
         if (!map.getLayer(TERRITORY_HEAT_LAYER_ID)) {
           const layer = createTerritoryHeatLayer(() => setHeatFailed(true));
           heatRef.current = layer;
@@ -375,31 +416,52 @@ export function TerritoryLayer({
             // colour rather than a tint of the map underneath.
             paint: {
               'fill-color': ['get', 'color'],
-              'fill-opacity': 0.42,
-              // NO BORDERS, and no white threads between zones either.
+              'fill-opacity': AREA_ALPHA,
+              // NO WHITE THREADS BETWEEN ZONES.
               //
               // The thread is an artefact of fill antialiasing: MapLibre
               // feathers each polygon's edge, and two neighbours sharing a
               // border each feather away from it, so a hairline of the
               // paper underneath shows through the gap between them.
-              //
-              // Drawing a stroke to cover it was the wrong instinct and
-              // took two tries to disprove. Every zone lives in ONE fill
-              // layer, so a stroke in one zone's colour extends outward
-              // UNDER its neighbour's fill — red beneath purple composites
-              // to crimson, and the map grows a hard coloured line along
-              // every shared border. There is no stroke colour that avoids
-              // this, because the problem is that two zones' paint meets,
-              // not which paint it is.
-              //
               // Turning the feathering off makes the two polygons meet
               // exactly, which is what they already do in the data — a cut
-              // hands the victim the claimant's own edge. Borders go back
-              // to being where one colour stops and the next begins, with
-              // nothing drawn on them at all. The cost is a slightly
-              // harder edge, which on translucent ground at city zoom is
-              // not something you can see.
+              // hands the victim the claimant's own edge.
               'fill-antialias': false,
+            },
+          },
+          under,
+        );
+      }
+
+      // THE DRAWN EDGE, and why this is not the stroke that failed twice.
+      //
+      // This layer's history says a stroke cannot work here, and it was
+      // right about the stroke it was describing: a fill-outline on the
+      // ONE shared fill layer, which extends outward UNDER the
+      // neighbour's fill, composites red-beneath-purple into crimson, and
+      // draws a hard coloured line along every shared border.
+      //
+      // A separate line layer ABOVE the fills is not that. It is centred
+      // on the boundary and painted on top of both sides, so nothing
+      // composites through anything; and it is dashed, so a shared border
+      // reads as two neighbours' edges drawn over each other rather than
+      // as one hard rule between them — which is the truth of it. Both
+      // owners drew that line.
+      if (DRAWN_EDGES && !map.getLayer(AREA_LINE)) {
+        map.addLayer(
+          {
+            id: AREA_LINE,
+            type: 'line',
+            source: AREA_SOURCE,
+            layout: { 'line-cap': 'butt', 'line-join': 'round' },
+            paint: {
+              'line-color': ['get', 'line'],
+              'line-width': EDGE_WIDTH,
+              // MapLibre states the dash in multiples of the line width,
+              // so this is EDGE_DASH x EDGE_WIDTH px on screen. It is a
+              // constant by design: the property takes no data-driven
+              // expression, and every claim wants the same hand anyway.
+              'line-dasharray': EDGE_DASH,
             },
           },
           under,
@@ -449,7 +511,7 @@ export function TerritoryLayer({
     if (!map) return;
     return () => {
       try {
-        for (const id of [TERRITORY_HEAT_LAYER_ID, AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
+        for (const id of [TERRITORY_HEAT_LAYER_ID, AREA_LINE, AREA_FILL, LINK_LAYER, DOTS_LAYER]) {
           if (map.getLayer(id)) map.removeLayer(id);
         }
         for (const id of [AREA_SOURCE, LINK_SOURCE, DOTS_SOURCE]) {
