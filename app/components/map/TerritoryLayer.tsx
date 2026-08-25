@@ -39,6 +39,31 @@
 // rather than paint on the ground, and the map already has plenty of
 // lines in it. The fill colour alone carries the edge.
 //
+// TRIED AND REJECTED: THE BOARD'S TREATMENT, OUT HERE.
+//
+// The standings draw a claim as a pale wash inside a dashed outline in
+// the owner's colour (ui/TerritoryMini.tsx), and the obvious thought is
+// to paint the map the same way so the two are one idea. It was built
+// and looked at on a real map, and it reads as mess. PR #535 has the
+// diff and a screenshot.
+//
+// The reason is structural, not a tuning miss, which is why it is
+// written here rather than left as a knob to turn. A partition has NO
+// EMPTY SPACE between zones: every internal border belongs to two
+// claims at once and is therefore drawn twice, so a screen with a dozen
+// neighbours becomes a mesh. Dashed or solid changes nothing about
+// that — the number of lines is set by the geometry. The board's chip
+// works for the opposite reason: one claim, alone, on white, with
+// nothing sharing its edge.
+//
+// Anyone trying again should change that fact first — draw only YOUR
+// edge, or only the boundary between you and someone else, or inset
+// each zone so borders stop coinciding — rather than restyling the
+// stroke. And note the trap that cost the first attempt an afternoon:
+// applyCrayonOverride used to hide every layer it did not recognise,
+// this prefix included. That is fixed (see crayonStyle.ts), but it is
+// the kind of thing that makes a correct layer look like a broken one.
+//
 // HOW the ground is painted changed once more: the fill is now a soft
 // blurred field (territoryHeatLayer.ts) rather than a hard vector fill.
 // That is a deliberate return towards the heat look this header opens by

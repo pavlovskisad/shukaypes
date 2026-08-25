@@ -397,7 +397,33 @@ export function applyCrayonOverride(
     const type = l.type;
     const lower = id.toLowerCase();
 
-    if (id.startsWith('soften-') || id.startsWith('wobble-') || id.startsWith('crayon-')) {
+    if (
+      id.startsWith('soften-') ||
+      id.startsWith('wobble-') ||
+      id.startsWith('crayon-') ||
+      // TERRITORY IS NOT OURS TO HIDE.
+      //
+      // This loop is a whitelist: anything it does not recognise as a
+      // basemap layer falls through to visibility:'none' at the bottom.
+      // That is right for the tiles' own furniture and wrong for layers
+      // another component owns — and map/TerritoryLayer.tsx owns every
+      // id under this prefix: the marks (territory-dots) and the link
+      // between two of them (territory-link) are both plain style
+      // layers, and both were exposed to this.
+      //
+      // They survive today only on ordering: the sweep runs on a palette
+      // or language change, and a mark usually lands after it. Run the
+      // two the other way round — change language mid-walk — and the
+      // dots go out.
+      //
+      // WHAT IT LOOKS LIKE WHEN IT BITES, because it is not "a layer is
+      // hidden": MapLibre only tiles a source that some VISIBLE layer
+      // draws. Hiding these leaves a source that is present, holds the
+      // right features, sits inside the viewport, and renders none of
+      // them — while an identical source under a different id renders
+      // fine. Found by exactly that comparison; the id was the variable.
+      id.startsWith('territory-')
+    ) {
       // Layers we've injected previously — re-style updates them via
       // setPaintProperty in the appropriate branch below if needed.
       continue;
