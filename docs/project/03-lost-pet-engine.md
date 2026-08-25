@@ -14,12 +14,24 @@ most of the recent work has been about making silence audible.
 failing does not starve the others. The whole cron skips if
 `ANTHROPIC_API_KEY` is missing, because the parser would throw anyway.
 
-| Source | File | Status (verified 20 Aug 2026) |
+| Source | File | Status (verified 25 Aug 2026) |
 | --- | --- | --- |
 | **OLX** | `pipeline/sources/olx.ts` | **Working — and it was never blocked.** The 403s were a 50% coin flip; a retry fixed them and listing coverage doubled. Then a second, larger problem was found and fixed: the scraper had run out of page. See below. |
 | **Telegram (channel scrape)** | `pipeline/sources/telegram.ts` | **Unconfigured.** `TELEGRAM_CHANNELS` is unset, so the source is a no-op. Not blocked — verified reachable from the Fly IP. |
 | **Telegram (bot webhook)** | `routes/telegram.ts` → `services/telegramIngest.ts` | Working, but only ever pointed at the owner's own test chats. |
 | **Facebook** | `pipeline/sources/facebook.ts` | **Parked.** Needs a burner account (`FACEBOOK_COOKIES` unset; logs one expected error per tick). |
+| **Owners, in-app** | `routes/dogs.ts` → `pipeline/ownerReport.ts` | **Live since 24 Aug.** Not a scraper — a form. Structured fields, own photo, own pin, nothing guessed. See below. |
+
+**Live tick, 25 Aug 10:56 UTC** — healthy and producing nothing:
+
+```
+[olx] discovered 475, skipped 475, parsed 0, inserted 0, errors 0, fresh 32
+```
+
+Zero errors is the retry working. **32 fresh ads and 0 pets** is the open
+question: `skip_reason` distinguishes `title-filter` from `rehoming` and
+would settle whether the filter is too strict or those queries surface
+irrelevant traffic. Do not read a non-zero `fresh` as a healthy pipeline.
 
 ### OLX
 
@@ -220,6 +232,79 @@ free-text description is clamped to 280 chars. That is the only sanitising
 between untrusted scraped text and the companion's chat context — an
 indirect prompt-injection surface, bounded because the companion has no
 tools that touch money or other users.
+
+## First-party reports (the supply side)
+
+Since 24 Aug an owner can post their own lost pet from the app, and this is
+categorically different from every other source: **nothing is inferred.**
+The owner supplies species, name, description, phone, photo and their own
+pin, so `POST /dogs/report` runs no Haiku, consults no gazetteer, and
+records `placement_source: 'owner'` with `parseConfidence: 1`. Existing
+dedupe and the Kyiv bbox gate still apply.
+
+Every inference in this pipeline exists to recover information a scraped
+post does not carry. A first-party report carries it.
+
+**Distribution is automatic** (`services/crosspost.ts`): the report is
+published to a public Telegram channel, `copyMessage`d to every chat in
+`CROSSPOST_GROUP_IDS` with a deep-link button back to the pin, and handed
+back as a `t.me` share link for chats no bot will join. The channel post
+**is** the photo upload — this app stores photos as Telegram `file_id`s, so
+`sendPhoto` returns the id the row stores. One call does storage,
+distribution and the shareable link.
+
+**Abuse rails:** 3 reports/user/day plus a burst limiter, photos accepted
+by magic bytes only (jpeg/png/webp ≤5MB), bbox and other-city violations
+answered as readable 400s before anything publishes. `check:owner-report`
+pins the contact rule — the full post keeps the phone on purpose, the pin
+line never carries contacts.
+
+**Review is after the fact:** each report alerts `ALERT_CHAT_ID` with an
+inline «прибрати з мапи» button, honoured only from that chat, expiring
+rather than deleting. Correct for known testers; the largest open-launch
+risk. See [`08-open-issues.md`](08-open-issues.md) L-1.
+
+## Placement: how a pin gets its coordinates
+
+Rebuilt 21–22 Aug (#506–#530) after `audit:pins` measured it. The parser
+had been inferring coordinates from **~41 hardcoded landmarks** while
+`kyiv_gazetteer` — thousands of real streets, seeded for this exact job —
+was read only by `questPlaces`.
+
+**The Maidan trap, worth keeping because it is invisible from inside.** A
+pet the parser cannot place gets the fall-through coordinate
+(`50.4501, 30.5234`) and is correctly hidden. A pet the model places on
+**Maidan** — the natural answer to "somewhere in Kyiv" — gets
+`50.4503, 30.5234`, **22 metres away**, which is not an exact match, so it
+escapes the fall-through filter and is then scattered by
+`jitterAround(…, 120)` into a ring around Khreshchatyk. Every stage reports
+success. That is what "the pet was in the centre" looked like from outside.
+
+`audit:pins` is deliberately **independent of the parser**: it matches ad
+text against the gazetteer directly rather than re-running the parser's
+logic, because a check that reproduces the thing it checks cannot fail. It
+prints no ad text — names, places and distances only.
+
+Now: `pipeline/resolvePlace.ts` resolves the place the owner wrote, with
+**addresses beating prose, specific beating broad, and silence beating
+guessing** (`check:resolve-place`). Inflected Ukrainian forms and
+abbreviations resolve; the model is asked only on ads a regex gave up on,
+and answers in the ad's own alphabet.
+
+**`placement_source` (migration `0037`) records how each pin happened** —
+`owner`, `gazetteer-marked:<name>`, `model-landmark:<name>`, `fall-through`,
+`sighting`. `label-pins` backfilled the 167 pre-column rows by
+recomputation, never by touching coordinates, so `GROUP BY
+placement_source` now describes the whole active table with no nulls and no
+inference. Fall-through went **81 → 71**.
+
+`resolve-pins` re-places pets dry-run-first. The landmark-guessed group was
+deliberately measured but not moved for a week — those pets are already
+visible at the model's best guess, so a wrong move damages a working pin —
+and when it did move, the dry run printed every candidate with the pet's
+stored description beside it, which is what exposed «Грейс → Контактна
+вулиця» as the resolver misreading contact-info boilerplate. Each applied
+move emits a per-pet reversal UPDATE with the previous coordinates.
 
 ## The ad body
 

@@ -633,3 +633,85 @@ time; the blur is re-thresholded so borders stay exactly where the server
 put them. The old flat fill survives as a fallback, because territory
 vanishing on a device with an unlucky GL stack would be worse than an
 ugly edge.
+
+---
+
+## Supply side, placement, and the open launch (21–25 Aug 2026)
+
+### D-55 · The gazetteer places the pet; the model no longer guesses alone ✅
+*PRs #506–#530 · `pipeline/resolvePlace.ts`*
+
+The parser inferred coordinates from **~41 hardcoded landmarks** while
+`kyiv_gazetteer` — thousands of real streets, seeded for exactly this job —
+was read only by `questPlaces`. So «вул. Зодчих» had to become one of 41
+guesses, and «Софіївська Борщагівка» (a village *west of* Kyiv) landed in
+the city centre with every pipeline stage reporting success.
+
+`audit:pins` found the mechanism, and it is worth keeping: the model
+answers "somewhere in Kyiv" with **Maidan**, which sits **22m** from the
+fall-through coordinate — close enough to look placed, far enough to escape
+the invisible-pin filter, and then jittered into a ring around
+Khreshchatyk. "The pet was in the centre" was a rendering artefact.
+
+The audit was deliberately **independent of the parser**: it matches text
+against the gazetteer directly rather than re-running the parser's logic,
+because a check that reproduces the thing it checks cannot fail.
+
+### D-56 · Placement records how it happened ✅
+*Migration `0037` · `placement_source`*
+
+`owner`, `gazetteer-marked:<name>`, `model-landmark:<name>`, `fall-through`,
+`sighting`. `label-pins` backfilled the 167 rows placed before the column
+existed by recomputation rather than inference, so `GROUP BY
+placement_source` describes the whole active table with no nulls. Placement
+quality stopped being a thing you argue about and became a thing you query.
+
+### D-57 · An owner's own report guesses nothing ✅
+*PR #531 · `POST /dogs/report`*
+
+Structured fields, their own photo, their own pin — so no Haiku, no
+gazetteer, `placement_source: 'owner'`, `parseConfidence: 1`. Every
+inference in the pipeline exists to recover information a scraped post does
+not carry; a first-party report carries it, so inferring anything would be
+strictly worse.
+
+The pin is set by **borrowing the map rather than embedding one**: the
+sheet hides, a crosshair marks the centre, the person pans underneath and
+confirms, and the coordinate is read from the store's existing
+`viewportCenter`. Zero MapView changes for a map-picking UI.
+
+### D-58 · The channel post is the photo upload ✅
+*PR #531 · `services/crosspost.ts`*
+
+This app's photo pipeline already runs entirely on Telegram `file_id`s
+(`routes/photos.ts` is a read proxy; there is no object store anywhere).
+Publishing the report via `sendPhoto` returns the `file_id` the row stores
+— so **one call does storage, first distribution, and the shareable `t.me`
+link at once**. No new dependency, and pet creation survives Telegram being
+down because the crosspost happens after the response.
+
+### D-59 · Reports go live instantly and are reviewed after ⚠️
+*PR #531 · owner's decision*
+
+A lost pet is time-critical: a review queue that adds an hour costs
+searching hours. So the pin is live on submit, and each report alerts the
+ops chat with an inline «прибрати з мапи» button, honoured **only from that
+chat**. Expiry rather than deletion, per the standing reversibility rule.
+
+**This is correct for known testers and is the largest single risk of an
+open launch** — see [`08-open-issues.md`](08-open-issues.md) L-1. The
+mitigation that preserves the decision is to split it: keep the *pin*
+instant, hold the *public crosspost* for approval.
+
+### D-60 · The beta is open, not invite-gated ✅
+*Decided 25 Aug · [`11-strategy.md`](11-strategy.md)*
+
+Two founders announce to a combined ~130K audience; thousands of installs
+land in week one and that data lands *during* the raise rather than before
+it. `INVITE_REQUIRED` stays off by choice — the gate is built, tested, and
+held in reserve as a throttle.
+
+The consequence to carry: **the invite gate was Phase 1's answer to "safe
+to hand to a stranger."** Removing it from the plan without replacing it
+means the load ceiling and the unreviewed publish path are now load-bearing
+in a way they were not designed to be.

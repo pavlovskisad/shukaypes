@@ -3,58 +3,158 @@
 What is wrong right now, ranked. Where an item came from `AUDIT_FINDINGS.md`
 its original ID is kept so the two can be read together.
 
-Re-verified against the code at `43808c6` on 20 Aug 2026. Two weeks of work
-(PRs #416–#494) closed most of this list — closed items are struck off at
-the bottom rather than left to rot at the top, and the owner's live
-checklist is `HANDOFF.md` §0.2.
+Re-verified against the code at `4c7459a` on 25 Aug 2026. Items prefixed
+**L-** are launch-specific and came out of the open-beta decision; they sit
+above the standing P0/P1 list because they are dated. Closed items are
+struck off at the bottom rather than left to rot at the top, and the
+owner's live checklist is `HANDOFF.md` §0.2.
 
 ---
 
-## The blocking question
+## The launch, and what it changes
 
-### Q-1 · The pilot is defined; the door is still open ⚠️
-*Was "pilot is undefined" — resolved in shape during the 12–14 Aug pass.*
+### Q-1 · The beta is OPEN, not invite-gated — decided 25 Aug
+*See [`11-strategy.md`](11-strategy.md). This supersedes the closed-beta
+plan that drove the 12–14 Aug work.*
 
-The answer: a **closed beta of roughly 50–150 testers**, invite-gated, on
-real data, with a phased readiness plan. Phase 1 ("safe to hand to a
-stranger") is complete server-side. What still stands between here and
-invites is entirely the owner's checklist — the Maps key (P0-4), flipping
-`INVITE_REQUIRED` after minting codes, `DASHBOARD_TOKEN` and
-`DEV_TOOLS_PASSWORD`, a contact route (P0-5), and the presence-consent
-decision (P1-1).
+Two founders announce to a combined ~130K audience in early September and
+**thousands of installs land in week one**. That is not a bigger version of
+the closed beta — it is a different risk posture, and three assumptions
+baked into the Phase 1 work no longer hold:
 
-Still genuinely undecided from the old list: **bots on or off** for the
-beta (30 currently on; `MULTIPLAYER_BOTS=0` is one line), and the **success
-criteria** the beta will be judged by — though `/admin/metrics` now
-computes DAU/WAU/retention/funnel, so the instrumentation no longer forces
-the question.
+| Phase 1 assumed | Open launch reality |
+| --- | --- |
+| The invite gate is the safety net | `INVITE_REQUIRED` stays **off** by choice. The gate becomes a throttle in reserve, not a defence. |
+| Testers are known and few | They are strangers and many, arriving in one burst on a known date. |
+| A bad actor is unlikely | Publishing to a public channel is open to anyone, three times a day each. |
+
+`MULTIPLAYER_BOTS` moved from `fly.toml` into a Fly secret, so its value is
+no longer readable from the repo. **Confirm whether bots are on before
+reading any launch engagement number** — the metrics endpoint separates
+them structurally, but only if you know to look.
+
+### L-1 · Owner reports publish to a public channel before anyone reads them 🔴
+*`routes/dogs.ts` → `services/crosspost.ts` · PR #531*
+
+The single largest new risk, and it did not exist when the readiness list
+was written. Any user can post a lost pet from the app; the report goes
+live on the map **and is published to the public Telegram channel
+immediately**, with the owner's phone in the post body by design. Review is
+after the fact: an inline «прибрати з мапи» button in the alert chat.
+
+The rails bound **volume, not content** — 3 reports/user/day, a burst
+limiter, magic-byte photo validation (jpeg/png/webp ≤5MB), the Kyiv bbox
+gate. None of them look at what the text or the image actually is.
+
+**Why this ranks first rather than fourth:** the launch thesis rests on a
+founder with fourteen years of public trust in Ukrainian animal welfare.
+That trust is the collateral on this path. One abusive post to a public
+channel in launch week is a personal reputational problem for a named
+person, and it lands during the raise.
+
+**Cheapest mitigation, and it is an inversion rather than new machinery:**
+hold the *crosspost* until a human taps approve, while the *pin* goes live
+immediately. The pin is the product; the channel is amplification.
+`ALERT_CHAT_ID` is set and the `callback_query` handler already exists.
+
+Also unconfirmed: whether «прибрати з мапи» removes the **channel post** or
+only expires the pin. Those are different things, and only one of them is
+visible to the public.
+
+### L-2 · The launch-day wall is the spawn pipeline, not the cron lock 🔴
+*`routes/syncMap.ts:178` · `db/index.ts` · long-standing P1-5*
+
+Every walker polls `/sync/map` every 15s, and the spawn top-up still runs
+on that path at **8–15 DB round trips per sync per user**. The pool is
+`postgres(url, { prepare: false })` with **no `max` set**, so it is the
+postgres-js default of **10 connections**.
+
+At ~1,000 concurrent walkers that is roughly **500–1,000 queries/second
+against ten connections**.
+
+The strategy memo's load item names the Redis leader lock. That is worth
+doing, but **it does not touch this**: a second machine shares the same
+Postgres and the same per-sync cost. It unblocks the *crons*, not the hot
+path.
+
+Order of work, cheapest first:
+
+1. Gate the whole spawn attempt on the Redis cooldown **before** any
+   probing query, so a sync that will not spawn costs one read instead of
+   fifteen.
+2. Set `max` on the pool explicitly rather than inheriting 10.
+3. Then the leader lock, for the second machine.
+4. A load rehearsal against the bot fleet, which the memo already lists.
+
+### L-3 · The LLM ceiling fails globally, all at once 🟠
+*`services/chatBudget.ts`*
+
+The global cap is **1,000 active turns per day across the entire service**
+(50/user/day, 300 ambient/user/day). If thousands install and one in five
+opens the chat, the cap trips on day one — and because it is a single
+global counter, **every user's dog goes quiet at the same moment**, in
+front of the audience the founders just announced to.
+
+It degrades politely (the refusal returns 200 in the success shape, so the
+dog says something rather than showing an error) but it degrades for
+everyone simultaneously. Raising it is on the memo's list; the failure
+*mode* is what to size against.
+
+### L-4 · A thin map on announce day 🟠
+
+The pipeline is running clean and **inserting nothing**. Measured
+25 Aug 10:56 UTC:
+
+```
+[olx] discovered 475, skipped 475, parsed 0, inserted 0, errors 0, fresh 32
+```
+
+Thirty-two genuinely new ads reached the filter; none became a pet. With
+`ALERT_CHAT_ID` now set, 36h of zero inserts should have fired the stall
+alert — **whether it did is a fast diagnostic**: if yes, the title filter
+is the problem; if no, the alert is.
+
+Announcing to 130K people with a map holding 78 pets and nothing arriving
+is a content problem, not just a data-quality one. `skip_reason`
+distinguishes `title-filter` from `rehoming` and settles it in an
+afternoon.
 
 ---
 
 ## P0 — do before anyone outside the team touches it
 
-### P0-1 · Parse accuracy on real posts has never been measured
-*`PILOT_ROADMAP` §5.1 called this the pilot blocker in July. It is now the
-**last** engine gap standing, and everything needed to close it exists.*
+### P0-1 · Parse accuracy: placement is measured and fixed, classification is not
+*Half-closed by the 21–22 Aug campaign (#506–#530). What remains is
+narrower than it was, and it is on the strategy memo's punch list.*
 
-There is still no measured number for the core claim: that a real post
-comes out of the parser with the right species, the right place and a
-usable photo. The blockers that used to sit in front of it are gone — the
-ad text is now stored (`raw_body`), so scoring a batch no longer means
-re-fetching anything.
+**Placement has been measured and acted on.** `audit:pins` compared where
+each ad says the pet was lost against where it was pinned, and found the
+trap: the model answers "somewhere in Kyiv" with **Maidan**, which sits 22m
+from the fall-through coordinate — close enough to look placed, far enough
+to escape the invisible-pin filter — and was then jittered into a ring
+around Khreshchatyk. Meanwhile `kyiv_gazetteer`, thousands of real streets
+seeded for exactly this, was never consulted; the parser guessed from ~41
+hardcoded landmarks.
 
-Two facts sharpen the urgency. **`parseDogPost` had been reading
-CSS-polluted text all along** — every classification to date spent part of
-its input on stylesheet noise, and whether that changed any verdict is
-**unmeasured; do not claim an improvement without scoring it.** And the
-first 94 ads the `created_at:desc` fix surfaced produced **zero pets**, all
-rejected by the title filter — either the filter is too strict or those
-queries surface non-lost-pet traffic, and `skip_reason` distinguishes
-`title-filter` from `rehoming` well enough to settle it.
+Fixed: the gazetteer is wired into placement (`pipeline/resolvePlace.ts`),
+inflected names and abbreviations resolve, `placement_source` records how
+every active row got its coordinates, and `resolve-pins` re-placed pets
+dry-run-first with per-pet reversal SQL. Fall-through went **81 → 71**.
+
+**Classification has not been measured.** Whether the parser reads species,
+name and urgency correctly from a real post still has no number, and
+`parseDogPost` spent months reading CSS-polluted text, so no historical
+verdict can be assumed good. This is the memo's punch-list item and the
+strongest slide the deck can carry.
 
 **What it needs:** score ~50 stored bodies against their parse output —
-species, place, photo, and the reject reasons — and write the numbers down.
-An afternoon, and the strongest slide a deck could carry.
+species, name, urgency, and the reject reasons — and write the numbers
+down. The ad text is stored, so this needs no re-fetching. An afternoon.
+
+Related and still open: the first 94 ads the `created_at:desc` fix
+surfaced produced **zero pets**, all rejected by the title filter (see
+L-4). Whether that is a strict filter or genuinely irrelevant traffic is
+the same afternoon's work.
 
 ### P0-2 · Ingestion works; coverage beyond OLX is still one source deep
 *Rewritten 20 Aug. The two previous versions of this item — "no source is
@@ -76,18 +176,21 @@ the same direction, for a month. See [`03`](03-lost-pet-engine.md).*
 
 **Cheapest first, unchanged:** set `TELEGRAM_CHANNELS`.
 
-### P0-3 · Four features are built and switched off for want of a value
-*Each is one `fly secrets set`.*
+### P0-3 · Config still dark — two of four now set
+*Verified against `fly secrets list`, 25 Aug.*
 
-| Secret | What stays dark without it |
+| Secret | State |
 | --- | --- |
-| `ALERT_CHAT_ID` | The ingest alert. A source dying stays invisible until somebody reads the heartbeat by hand — exactly how the OLX problem survived a month. |
-| `DASHBOARD_TOKEN` | `/admin/console` and `/admin/metrics` 401 for everyone, including the agent. Three questions during the 18 Aug session needed a deploy or a log tail because of this. |
-| `DEV_TOOLS_PASSWORD` | `/dev` refuses everyone, so the walk simulator is off everywhere. |
-| `INVITE_REQUIRED` | The beta door stays open. Mint codes first (`invite --new`); existing accounts are never gated. |
+| `ALERT_CHAT_ID` | ✅ **Set.** The ingest alert is live, and the owner-report review button rides on it. |
+| `CROSSPOST_CHANNEL_ID` + `_USERNAME` | ✅ **Set.** Owner reports publish to the channel. |
+| `DASHBOARD_TOKEN` | ❌ **Unset.** `/admin/console` and `/admin/metrics` 401 for everyone. **You cannot read your own launch without it** — and the launch is the data the raise runs on. |
+| `DEV_TOOLS_PASSWORD` | ❌ Unset. The walk simulator is off everywhere, including for a load rehearsal. |
+| `CROSSPOST_GROUP_IDS` | ❌ Unset. District groups get no copy; only the channel is wired. |
+| `TELEGRAM_CHANNELS` | ❌ Unset. The free second ingest source still does nothing. |
+| `INVITE_REQUIRED` | ❌ Unset — **now by choice.** See Q-1. |
 
-Collectively the highest value-per-effort on the list, and unchanged for a
-week. Any random string will do for the two read-only ones.
+`DASHBOARD_TOKEN` is the one that hurts: any random string will do, it is
+read-only, and without it launch week produces numbers nobody can see.
 
 ### P0-4 · Compromised Google Maps key still committed — in a public repo
 *`AUDIT_FINDINGS` §1.1 · `docs/TECHNICAL.md:236`,

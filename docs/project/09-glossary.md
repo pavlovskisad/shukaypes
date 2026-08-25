@@ -12,7 +12,9 @@ which is user-initiated and runs on Opus.
 **Bone** — the food item. Only bones feed the dog; paws are a treat. Spawns
 in and around parks. Table `food_items`.
 
-**Bot** — a simulated walker. 30 of them (`MULTIPLAYER_BOTS` in `fly.toml`),
+**Bot** — a simulated walker. `MULTIPLAYER_BOTS` moved from `fly.toml` into
+a **Fly secret**, so the count is no longer readable from the repo — confirm
+it before reading any engagement number. Bots are
 written to the same Redis presence set and marking territory on the same
 cadence rule as real players, so they render and compete identically. Cannot
 be poked.
@@ -59,7 +61,9 @@ the first thing the dog points at when the screen goes idle.
 **Fallback pin** — `50.4501, 30.5234`, Kyiv city centre. Where the parser
 puts a pet whose location it could not resolve. `/dogs/nearby` filters it
 out, so a pet on the fallback pin is active, correct and **invisible**. 81
-pets sat there as of 11 Aug 2026.
+pets sat there on 11 Aug 2026; **71** after the placement campaign of
+21–22 Aug. See **Maidan trap** for the near-miss that is worse than a
+fall-through.
 
 **Found report** — an ad where somebody *has* an animal and wants its
 owner, rather than having lost one (`is_found_report`, migration `0035`).
@@ -99,7 +103,8 @@ always because it is on the **fallback pin**. Not a status; a consequence of
 **Invite gate** — the door in front of account creation
 (`lib/inviteGate.ts`): with `INVITE_REQUIRED` set, a new device id must
 redeem a code; an existing account is *never* gated, exhaustively checked.
-Dormant until the flag is set.
+**Off by choice since 25 Aug** — the beta is open, and the gate is a
+throttle held in reserve rather than the safety net Phase 1 designed it as.
 
 **Mark** — one point where the dog claimed ground. Decided server-side on
 `/collect/path`, at most once per `cooldownMs` (20s) and never within
@@ -113,6 +118,18 @@ the end-of-search prompt. Contacts are redacted and the link to the
 original ad is withheld until a sighting is reported — the two are gated
 together on purpose, since a masked phone next to a working link is
 decoration.
+
+**Owner report** — a lost pet posted by its owner **from the app** rather
+than scraped (`POST /dogs/report`, since 24 Aug). Nothing is inferred:
+structured fields, own photo, own pin, `placement_source: 'owner'`,
+confidence 1. Publishes to the crosspost channel on submit and is reviewed
+after the fact.
+
+**Placement source** — how a pin got its coordinates
+(`lost_dogs.placement_source`, migration `0037`): `owner`,
+`gazetteer-marked:<name>`, `model-landmark:<name>`, `fall-through`,
+`sighting`. The ledger that turned "are the pins any good" from an argument
+into a `GROUP BY`.
 
 **Paw** — the collectible token. Pure happiness, no hunger effect. Table
 `tokens`. Also the currency search results are paid in (20 for a find, 10
@@ -133,6 +150,13 @@ per-id jitter** of ≤25m, so averaging many reads will not de-jitter them.
 **Raid** — somebody marked over your ground. Queued in `territory_raids` in
 Postgres rather than Redis, so a raid that lands overnight still reaches
 you. Delivered on your next sync, then marked seen.
+
+**Maidan trap** — the reason "the pet was in the centre" happened. Asked to
+place a pet it cannot locate, the model answers **Maidan**, whose
+coordinate sits 22m from the fall-through constant — not an exact match, so
+it escapes the invisible-pin filter, and is then jittered into a ring
+around Khreshchatyk. Every pipeline stage reports success throughout. Found
+by `audit:pins`, fixed by wiring the gazetteer into placement.
 
 **Rehoming post** — an adoption ad ("в хороші руки"). Structurally almost
 identical to a lost-pet post and the hardest thing the keyword filter has to
