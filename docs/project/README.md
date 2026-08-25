@@ -1,9 +1,9 @@
 # шукайпес — project documentation
 
-The map and the source of truth. Ten documents, each with one job.
-Written 11 Aug 2026 against `f421b7e`; last updated **20 Aug 2026** against
-`43808c6` (PR #494 merged), folding in the beta-readiness pass, the
-ingestion rescue, landmark walks and the mode-switcher front door.
+The map and the source of truth. Written 11 Aug 2026 against `f421b7e`;
+last updated **25 Aug 2026** against `4c7459a` (PR #533 merged), folding in
+the placement campaign, the in-app lost-pet report, and the decision to run
+an **open** beta rather than a closed one.
 
 ## Read in this order
 
@@ -15,11 +15,12 @@ ingestion rescue, landmark walks and the mode-switcher front door.
 | 03 | [`03-lost-pet-engine.md`](03-lost-pet-engine.md) | The data engine: sources, parsing, dedupe, geo gates, and what the table looks like today |
 | 04 | [`04-territory.md`](04-territory.md) | The territory mechanic: the model, the rules, the invariants, the knobs |
 | 05 | [`05-decisions.md`](05-decisions.md) | Every architectural decision that is still load-bearing, with why and when |
-| 06 | [`06-history.md`](06-history.md) | How we got here — the arc of 494 PRs and every pivot in it |
+| 06 | [`06-history.md`](06-history.md) | How we got here — the arc of 533 PRs and every pivot in it |
 | 07 | [`07-operations.md`](07-operations.md) | Running it: deploys, secrets, admin tools, incidents, the things that have gone down |
 | 08 | [`08-open-issues.md`](08-open-issues.md) | What is wrong right now, ranked, with what has already been fixed struck off |
 | 09 | [`09-glossary.md`](09-glossary.md) | The vocabulary this project uses for its own parts |
 | 10 | [`10-product-brief.md`](10-product-brief.md) | **Standalone** product outline + running costs — the substrate for business/strategy work; readable without the rest |
+| 11 | `11-strategy.md` | The business decisions that shape the doc set: open beta, team, raise shape, timeline. **Not in this repo** — see the note below |
 
 ## Precedence
 
@@ -40,7 +41,7 @@ were real when they were made. But do not plan off them.
 | --- | --- |
 | `AUDIT_BRIEF.md` (PR #267, 2 Jul) | Architecture map, accurate for its date. **Predates territory entirely.** Its §0-corrected claims about PostGIS are wrong — see `AUDIT_FINDINGS.md` §0. |
 | `AUDIT_FINDINGS.md` (2 Jul) | Ranked P0–P3 findings. Several are fixed; see [`08-open-issues.md`](08-open-issues.md) for which. Still the best single writeup of the auth and abuse surface. |
-| `PILOT_ROADMAP.md` (PR #275, 4 Jul) | Product state + road to pilot. Its "in-flight PRs" section stops at #274, and its §4 question ("what does pilot mean") has since been answered — a closed beta of 50–150 on real data. Read it for the gap-by-dimension framing, not for status. |
+| `PILOT_ROADMAP.md` (PR #275, 4 Jul) | Product state + road to pilot. Its "in-flight PRs" section stops at #274, and its §4 question ("what does pilot mean") has been answered twice since — a closed beta of 50–150, then **an open launch** (25 Aug). Read it for the gap-by-dimension framing, not for status. |
 | `HANDOFF.md` (11 Aug, §0 rewritten 13–18 Aug) | Live production state as of the last session, and the deepest record of the August ingestion work — §0.1b–0.1g are worth reading in full before touching the pipeline. §0.2 is the owner's pre-beta checklist. Overlaps [`07-operations.md`](07-operations.md) and [`08-open-issues.md`](08-open-issues.md); those two are the durable versions, HANDOFF is the snapshot. |
 | `README.md` (root) | Setup + deploy instructions. Its "Phases" list stops at Phase 6 and does not describe anything after Phase 5. |
 | `docs/TECHNICAL.md`, `docs/PRODUCT_SPEC.md`, `docs/TRANSFORMATION.md`, `docs/PROJECT_README.md` | Written against the original single-file HTML prototype and the migration plan out of it. Historical. `TECHNICAL.md:236` still contains a compromised Google Maps key — see [`08-open-issues.md`](08-open-issues.md). |
@@ -68,15 +69,28 @@ Cheap rules, because expensive ones get skipped.
    `HANDOFF.md` §5, which is entirely a list of things that turned out
    to be false and is the most-cited section in it.
 
+## Where the strategy doc lives
+
+`11-strategy.md` is referenced by docs 01, 08 and 10 but **is deliberately
+not committed here.** This repository is public, and that memo carries the
+raise target and floor, a cash-runway figure, audience numbers, and two
+named individuals whose affiliations the memo itself lists as unconfirmed.
+Publishing a negotiating floor and somebody else's name to a public repo is
+not reversible by deleting the file later.
+
+Keep it in the business doc set (12–17 live there too) and treat the
+cross-references above as pointers to that set rather than to a path in
+this tree. If the repo ever goes private, move it in.
+
 ## Facts verified at the time of writing
 
-Run against `43808c6` on 20 Aug 2026, with `pnpm install --frozen-lockfile`:
+Run against `4c7459a` on 25 Aug 2026, with `pnpm install --frozen-lockfile`:
 
 ```
 pnpm -r typecheck     shared / server / app — all clean
 pnpm lint             23 problems (0 errors, 23 warnings)
-pnpm check            12 fixture checks — all pass
-                      (48 routes: 45 limited, 3 knowingly exempt)
+pnpm check            14 fixture checks — all pass
+                      (49 routes: 46 limited, 3 knowingly exempt)
 ```
 
 The 23 warnings are all `react-hooks/exhaustive-deps` and that is the
@@ -86,7 +100,8 @@ was true on 11 Aug. PR #490 measured `origin/main` in a scratch worktree at
 sibling modals. Anyone treating 21 as the bar will read two ordinary
 warnings as a regression.
 
-`pnpm check` has run in CI since PR #416 and now carries twelve checks:
+`pnpm check` has run in CI since PR #416 and now carries fourteen checks:
 out-of-area, ingest alert, pet identity, per-user rate limiting, invite
 gate, dev auth, contact redaction, ad-body containment, ad extraction,
-found reports, walk stops, route coverage.
+found reports, walk stops, owner reports, place resolution, route
+coverage.

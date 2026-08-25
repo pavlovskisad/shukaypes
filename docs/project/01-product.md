@@ -37,7 +37,7 @@ and the answer picks a mode. Four intents at the top level:
 
 | | |
 | --- | --- |
-| **загубив друга** | I've lost a pet → an honest sheet pointing at the Telegram group (the in-app report form is a later piece) |
+| **загубив друга** | I've lost a pet → **a working report form** (since PR #531) |
 | **я шукайпес!** | I want to help search → supersniff |
 | **хочу погуляти** | I just want a walk → the old verbs, one level down |
 | **хто тримає цей район?** | Who holds this district? → the territory lens |
@@ -78,6 +78,30 @@ drawn dashed and straight between the walk's own points, keeping the stops.
 A solid line would claim knowledge of streets we do not have. Before this,
 a missing Places key meant the radial menu answered "sniffing out spots…"
 forever — a core loop hostage to a billing account.
+
+### The report loop (new — the supply side)
+
+Since 24 Aug an owner can post a lost pet **from the app**: species, name,
+description, phone, photo, and a pin they set by panning the map under a
+crosshair. `POST /dogs/report` takes it with **nothing guessed** — no
+Haiku, no gazetteer, `placement_source: 'owner'`, confidence 1.
+
+The report then goes outward automatically: published to a public Telegram
+channel, copied to every configured district group, and handed back as a `t.me`
+share link for chats no bot will ever join. The photo pipeline is the
+elegant part — this app stores photos as Telegram `file_id`s, so
+**publishing the channel post *is* the upload**: one `sendPhoto` does
+storage, first distribution, and the shareable link at once. No object
+store, and pet creation survives Telegram being down.
+
+Until this existed, every pet in the database came from scraping somebody
+else's post. The product is now somewhere pets are *reported*, not only
+somewhere they are republished.
+
+Review is **after the fact**: each report alerts the ops chat with an
+inline «прибрати з мапи» button. That is the right shape for known testers
+and the largest open risk for an open launch — see
+[`08-open-issues.md`](08-open-issues.md) L-1.
 
 ### The search loop (the point)
 
@@ -125,14 +149,17 @@ Kyiv dog owners and dog people who already walk daily. The Telegram Mini App
 path exists because that is where the Kyiv audience is and because it gives
 a real signed identity for free.
 
-The pilot question has been decided in shape if not in every detail: the
-next step is a **closed beta of roughly 50–150 testers**, invite-gated, on
-real data. A phased closed-beta plan drove the 12–14 Aug work, and its
-Phase 1 — "safe to hand to a stranger" — is complete on the server side.
-What remains before invites go out is the owner's checklist in
-`HANDOFF.md` §0.2 (Maps key, flipping `INVITE_REQUIRED`, tokens for the
-console and dev tools, a contact route, presence consent). See
-[`08-open-issues.md`](08-open-issues.md).
+**The next step is an OPEN beta**, decided 25 Aug and superseding the
+closed 50–150 plan that drove the 12–14 Aug work. Two founders announce to
+a combined ~130K audience in early September; thousands of installs are
+expected in week one, and that data lands during a raise rather than ahead
+of it. `INVITE_REQUIRED` stays off **by choice** — the gate is built and
+tested, and is now a throttle held in reserve.
+
+That changes what "ready" means: the invite gate was Phase 1's answer to
+"safe to hand to a stranger", and an open launch hands it to thousands at
+once. See [`11-strategy.md`](11-strategy.md) for the decision and
+[`08-open-issues.md`](08-open-issues.md) L-1…L-4 for what it costs.
 
 ## What is actually built
 

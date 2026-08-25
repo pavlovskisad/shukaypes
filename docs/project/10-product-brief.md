@@ -1,6 +1,6 @@
 # 10 — Product brief & running costs
 
-Written 15 Aug 2026, updated 20 Aug 2026, for business and strategy work. **Self-contained on
+Written 15 Aug 2026, updated 25 Aug 2026, for business and strategy work. **Self-contained on
 purpose** — it repeats things the other docs say so it can be handed to
 someone (or a planning session) that reads nothing else. Where a number is
 measured it says so and carries its date; where it is an estimate it says
@@ -51,7 +51,7 @@ is city-specific and compounding, and it is the part a copycat cannot lift
 from screenshots. It is also what makes the walking half work without
 paying Google: the destinations, the stops and the stories are all ours.
 
-## 2. Where it stands (20 Aug 2026)
+## 2. Where it stands (25 Aug 2026)
 
 **Built and live:** the full game (map, companion, chat, quests,
 territory, multiplayer presence with 30 labelled bots), the full search
@@ -60,7 +60,7 @@ gated behind a reported sighting — landmark walks that route you through
 Kyiv's history, the ingestion pipeline, an admin metrics console, crash
 reporting, per-user rate limiting, LLM spend ceilings, an invite gate. The
 engineering posture is unusually disciplined for the stage: CI gates both
-deploys on typecheck + lint + twelve fixture checks, data mutations are
+deploys on typecheck + lint + fourteen fixture checks, data mutations are
 dry-run-first, and production numbers separate bots from humans
 structurally "because these numbers are going into a fundraise".
 
@@ -70,12 +70,20 @@ what you are here for and the answer picks a mode. That is the difference
 between a beta tester understanding the product in five seconds and not at
 all.
 
-**The declared next step** is a **closed beta of ~50–150 invite-gated
-testers on real data.** Phase 1 of that plan ("safe to hand to a
-stranger") completed 12–14 Aug. What remains is an owner checklist:
-rotate/restrict the one compromised Google Maps key, mint invite codes and
-flip `INVITE_REQUIRED`, set three one-value config secrets, add a contact
-route, and decide the presence-privacy posture.
+**Since 24 Aug the app has a supply side.** Owners can post a lost pet
+from the app itself — structured fields, their own photo, their own pin set
+by panning the map — and the report publishes to a public Telegram channel
+and outward to district groups automatically. Until then every pet in the
+database came from scraping somebody else's post. This changes what the
+product *is*: it is now a place lost pets are reported, not only a place
+they are re-published.
+
+**The declared next step is an OPEN beta**, decided 25 Aug and superseding
+the closed 50–150 plan: two founders announce to a combined ~130K audience
+in early September, with thousands of installs expected in week one. See
+[`11-strategy.md`](11-strategy.md). What remains is a punch list —
+load-hardening, the Maps key quota, a review gate on the public
+crosspost, parse-accuracy measurement, and the presence-privacy posture.
 
 **The honest gaps:**
 
@@ -89,15 +97,23 @@ route, and decide the presence-privacy posture.
   datacentre. What remains is concentration risk: a second source
   (Telegram channels, free, one env var, needs a curated list) is the
   cheapest insurance.
-- **Parse accuracy on real posts has never been measured.** The core
-  claim — a real post comes out with the right species, place and photo —
-  has no number behind it. This is now the *last* engine gap, and the
-  obstacle that used to sit in front of it is gone: ad text is stored, so
-  scoring a batch needs no re-fetching. An afternoon of work; also the
-  strongest slide a deck could carry.
+- **Parse accuracy: placement measured and fixed, classification not.**
+  The 21–22 Aug campaign compared where each ad says the pet was lost
+  against where it was pinned, found the parser guessing from ~41 hardcoded
+  landmarks while a 16k-street gazetteer sat unused, wired the gazetteer in,
+  and re-placed pets under dry-run-first review. Invisible pins fell
+  **81 → 71**. What is still unmeasured is *classification* — species,
+  name, urgency — which matters because the parser spent months reading
+  CSS-polluted text, so no historical verdict can be assumed good. An
+  afternoon of work; also the strongest slide a deck could carry.
+- **Load, now that the launch is open.** The spawn top-up runs on the 15s
+  sync path at 8–15 database round trips per user, against a connection
+  pool left at its default of ten. That is the launch-week ceiling, and it
+  is *not* the one the strategy memo names — a second machine shares the
+  same database. Fixable cheaply; see [`08`](08-open-issues.md) L-2.
 
-**Data as of the last count (18 Aug):** **78 active lost-pet records**,
-down from 221 — the corpus was checked against its sources for the first
+**Data as of the last count (18 Aug, pre-launch):** **78 active lost-pet
+records**, down from 221 — the corpus was checked against its sources for the first
 time and 143 pets whose ads had been *deleted from OLX* were expired, on
 the reasoning that for a lost pet a deleted ad usually means the story
 ended. 67 of the survivors carry the owner's full ad text. All real posts;

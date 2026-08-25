@@ -1,6 +1,6 @@
 # 06 — How we got here
 
-494 merged PRs between 20 April and 20 August 2026, on a repo built from a
+533 merged PRs between 20 April and 25 August 2026, on a repo built from a
 single-file HTML prototype (`reference/shukajpes-demo.html`, still in-tree,
 read-only). Almost all of them are one-idea PRs merged within minutes of
 opening — the working rhythm is small change, preview URL, look at it, merge
@@ -311,6 +311,46 @@ speaking its own line, the logo rotating three modes. It is the first
 version of the app that explains itself to somebody who arrives knowing
 nothing.
 
+## Era 11 — The supply side, and placement that can be checked
+**#496–#533 · 20–25 Aug · 6 days · 38 PRs**
+
+Two strands, and the second one changes what the product is.
+
+**Placement stopped being a guess (#506–#530).** `audit:pins` asked, for
+every active pet with a stored ad, where the *owner* said the animal went
+missing and how far that was from the pin. It found the parser inferring
+coordinates from ~41 hardcoded landmarks while a 16k-street gazetteer sat
+unread, and it found the mechanism behind "the pet was in the centre": the
+model answers "somewhere in Kyiv" with **Maidan**, 22m from the
+fall-through coordinate — close enough to look placed, far enough to dodge
+the invisible-pin filter, then jittered into a ring around Khreshchatyk.
+
+What followed was a careful campaign rather than a fix: resolve the place
+the owner wrote (#509), match inflected forms so a village stops losing to
+a street (#510), expand abbreviations (#511), ask the model only on the ads
+a regex gave up on (#512), answer in the ad's own alphabet (#513), read the
+aliases column (#515), teach the out-of-area gate about districts (#524),
+and re-place pets **dry-run-first with per-pet reversal SQL** (#527–#529).
+Migration `0037` records how every pin got its coordinates. Fall-through
+went 81 → 71.
+
+**The app grew a supply side (#531–#533).** «я загубив друга» had been a
+signpost pointing at Telegram. It became a form: species, name,
+description, phone, photo, and a pin set by panning the map under a
+crosshair. `POST /dogs/report` takes it with nothing guessed, and the
+report publishes to a public Telegram channel, copies to district groups,
+and hands back a `t.me` share link — with the channel post doubling as the
+photo upload, because this app's photo pipeline runs on Telegram
+`file_id`s.
+
+Until #531, every pet in the database came from scraping somebody else's
+post. After it, the product is somewhere pets are *reported*.
+
+The era's shape rhymes with Era 9's: **a measurement that inverted the
+plan.** The intent was to fix the parser's prompt; the audit said the
+prompt was asking the wrong system entirely, and the fix was to consult a
+table that had been sitting there since April.
+
 ---
 
 ## The pivots, in one list
@@ -331,6 +371,9 @@ nothing.
 | 12 | **"OLX is blocked" → OLX was never blocked** | #448, 17 Aug | A month of planning around a WAF that turned out to be a 50% coin flip, with the fix already in the codebase behind a disabled flag. |
 | 13 | **Errand walks → landmark tours** | #490, #493, 19 Aug | A line to one nice place → a route *through* two to four Kyiv landmarks with stories, from our own corpus, with Google optional. |
 | 14 | **Menu → conversation** | #494, 20 Aug | A six-verb radial menu on a silent map → the dog asking what you are here for, and a logo that rotates three modes. |
+| 15 | **Landmark guessing → gazetteer placement** | #506–#530, Aug | Coordinates inferred from ~41 hardcoded landmarks → resolved against 16k real Kyiv streets, with a ledger recording how each pin happened. |
+| 16 | **Republisher → reporting network** | #531, 24 Aug | Every pet scraped from somebody else's post → owners post their own, and the app carries it outward. |
+| 17 | **Closed beta → open launch** | 25 Aug | 50–150 invite-gated testers → a founder announcement to ~130K, invite gate held in reserve. |
 
 ## What the history is trying to tell you
 

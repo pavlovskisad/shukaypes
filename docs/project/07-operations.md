@@ -35,7 +35,8 @@ Deploying is a mutating action. Ask first.
 | `FLY_API_TOKEN` | App-scoped deploy token for `shukajpes-api`. May be present in a session's cloud environment. Real production access. |
 | `ADMIN_TOKEN` | Gates the write endpoints and opens the read ones. Value is unknown to anyone — Fly secrets cannot be read back. |
 | `REPORT_TOKEN` | **Deliberately unset** (PR #408). `checkReportAuth` still accepts it, so re-opening the read endpoint to a narrow reader is one `fly secrets set` away. |
-| `ALERT_CHAT_ID` | **Not set.** The Telegram chat ingest alerts go to. Until it is set, a stalled pipeline is logged and nothing is sent. Not a secret — a chat id. |
+| `ALERT_CHAT_ID` | ✅ **Set (as of 25 Aug).** Ingest alerts land here, and the owner-report review button rides on it. |
+| `CROSSPOST_CHANNEL_ID` / `_USERNAME` | ✅ **Set.** Owner reports publish to the public channel. `CROSSPOST_GROUP_IDS` is still unset, so district groups get no copy. |
 | `TELEGRAM_CHANNELS` | **Not set.** The channel-scrape source is a no-op until it is. |
 | `SCRAPE_PROXY_URL` | **Not set, and should stay that way.** Measured 17 Aug: residential exits are refused *more* than the Fly datacentre, not less. The seam is for the day the edge really hardens. |
 | `DASHBOARD_TOKEN` | **Not set.** Read-only key for `/admin/console` + `/admin/metrics` — the only one of the three keys safe to keep in a browser. Until it is set the console 401s for everyone. |
@@ -138,7 +139,11 @@ or locally against a `DATABASE_URL`.
 | `clean:lost-dogs [--apply]` | Dead-photo and city sweep. **Dry by default.** The city half needs a connection OLX will talk to and so cannot run from the app host; it gives up after 8 consecutive 403s. |
 | `expire:out-of-area [--apply]` | Catch-up sweep for out-of-city rows. **Dry by default.** Needs no network. |
 | `expire:pet --id=<id> [--apply] [--photo] [--restore]` | **The takedown tool.** Dry by default; expire is reversible, `--photo` is not (opt-in, and the dry run says so); `--restore --photo` is refused rather than half-done. An unknown id fails loudly — a takedown that quietly matched nothing is the worst outcome, because somebody would report it as done. |
-| `invite --new --uses=N --note=...` | Mint beta invite codes, ahead of flipping `INVITE_REQUIRED`. |
+| `invite --new --uses=N --note=...` | Mint beta invite codes. Held in reserve — the beta is open. |
+| `audit:pins` | Compare where each ad says the pet was lost against where it was pinned. **Independent of the parser on purpose** — matches text against the gazetteer directly, because a check that reproduces the thing it checks cannot fail. Prints no ad text. |
+| `resolve:pins [--apply] [--apply-landmarks]` | Re-place pets from the owner's words. Dry by default; prints every candidate move with the pet's stored description beside it, and emits a **per-pet reversal UPDATE with the previous coordinates**. `--apply` is the invisible group only; `--apply-landmarks` moves pets that are already visible, which is the riskier half. |
+| `label:pins [--apply]` | Backfill `placement_source` for rows placed before the column existed, by recomputation. **Never touches coordinates.** |
+| `probe:location-text`, `probe:crosspost`, `probe:ad-phone` | Read-only probes. |
 | `backfill:ad-bodies [--apply] [--repair]` | Fetch each pet's ad by its stored URL. **Three outcomes kept apart:** 200 stores the body, 404/410 marks `ad-gone`, anything else is left alone. `--repair` re-fetches bodies already stored (used to undo the CSS pollution). |
 | `expire:no-post [--apply]` | Expire only the `ad-gone` rows. Refuses to write if no scraped pet has a body at all. Dry run lists **newest first** behind an age histogram. |
 | `census-contacts` | How much owner contact the corpus holds, in counts only — never a fragment of a body. |

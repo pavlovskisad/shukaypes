@@ -1,6 +1,6 @@
 # 02 — Architecture
 
-Current as of `43808c6`, 20 Aug 2026. Where this disagrees with the code,
+Current as of `4c7459a`, 25 Aug 2026. Where this disagrees with the code,
 the code is right.
 
 ## Repo layout
@@ -229,7 +229,7 @@ new route ships unlimited.
 | `admin.ts` | `/admin/lost-dogs/{ingest,scrape-now,scrape-log,report}` |
 | `walkDestinations.ts` | `/walk/destinations` — where a walk can end, from our own tables merged with Places parks only. Removes Google as a hard dependency of the walk loop |
 | `lore.ts` | `/lore/nearby` + **`POST /lore/route`** — takes several candidate walks and answers, for each, which landmarks it passes and what the walk looks like re-plotted through them |
-| `dogs.ts` | `/dogs/nearby`, **`/dogs/:id/post`** — the owner's ad text, one pet at a time, contacts redacted unless a sighting exists |
+| `dogs.ts` | `/dogs/nearby`, **`/dogs/:id/post`** (the owner's ad text, one pet at a time, contacts redacted unless a sighting exists), **`POST /dogs/report`** (an owner posts their own lost pet — structured fields, own photo, own pin, nothing guessed) |
 | `adminMetrics.ts` | `/admin/metrics[?format=text]` — DAU/WAU/retention/funnel/token spend, bots separated. `DASHBOARD_TOKEN` or `ADMIN_TOKEN` |
 | `adminConsole.ts` | `/admin/console` — the read-only console: one self-contained page, no build step, served by the API that owns the data. Opens via `?k=<token>` (stripped from the URL bar, redacted in logs) |
 | `clientErrors.ts` | `POST /client-errors` — crash reports, auth-exempt, capped + deduped client-side |
@@ -268,6 +268,15 @@ new route ships unlimited.
   slot otherwise. 25 fixture expectations in `check:lore-walk`.
 - `pipeline/redactContacts.ts` — takes an owner's contacts out of an ad and
   nothing else. Errs toward keeping the description readable.
+- `pipeline/resolvePlace.ts` — resolves the place the *owner wrote* against
+  `kyiv_gazetteer`: addresses beat prose, specific beats broad, and silence
+  beats guessing. Handles inflected Ukrainian forms and abbreviations. This
+  is what the parser should have been consulting all along instead of ~41
+  hardcoded landmarks.
+- `pipeline/ownerReport.ts` — validates and assembles a first-party report.
+- `services/crosspost.ts` — publishes a report to the channel and copies it
+  to district groups. Ships dormant; sequential and spaced, each refusal a
+  log line.
 - `pipeline/sources/adHtml.ts` — pure HTML in, ad text out. Pure and
   db-free *on purpose*: it used to live in `olx.ts`, which imports the db
   module, so a check for it could not run without a `DATABASE_URL`.
@@ -292,7 +301,7 @@ single change that blocks horizontal scaling.
 **DB** (`db/`): `schema.ts` (Drizzle), `index.ts`
 (`postgres(url, { prepare: false })`, default pool ~10), `redis.ts`
 (`ioredis`, `lazyConnect`, throttled error log), `migrate.ts` run at
-container start. 37 migrations, latest `0036_ad_alive_at.sql`.
+container start. 38 migrations, latest `0037_placement_source.sql`.
 
 **Migrations `0032`+ are hand-written, and that is a rule now:**
 `migrations/meta` holds snapshots for 0000–0002 and nothing for 0003–0031,
@@ -333,6 +342,7 @@ territory, a bbox range scan on plain B-trees.
 | `scrape_log.raw_body` | The ad text the parser actually read (migration `0034`). Served only by `/dogs/:id/post`, never in a bulk payload — enforced by a source-level fixture check |
 | `lost_dogs.is_found_report` | Somebody *has* this animal and is looking for its owner (migration `0035`). Kept in the table rather than filtered at ingest so these can get their own screen later; the map query simply does not return them |
 | `lost_dogs.ad_alive_at` | When we last confirmed the owner's ad is still up (migration `0036`). Age is a proxy for "is this pet still lost"; a live ad is evidence, and the staleness sweep defers to it |
+| `lost_dogs.placement_source` | **How the pin got its coordinates** (migration `0037`) — `owner`, `gazetteer-marked:<name>`, `model-landmark:<name>`, `fall-through`, `sighting`. The ledger that makes placement quality answerable with a `GROUP BY` instead of an inference |
 
 Indexes are plain B-trees: `tokens(owner_id)`, `tokens(collected_at)`,
 `food_items(owner_id)`, `lost_dogs(status)`, `messages(user_id, created_at)`,
