@@ -221,6 +221,9 @@ export interface AppStrings {
       nextPet: string;
       // Opens the owner's post inside the app.
       readPost: string;
+      // Shown when the pin came from a model guess rather than from a
+      // place named in the ad or a pin the owner dropped.
+      approximate: string;
     };
     // The owner's post, read in-app instead of bouncing out to OLX.
     post: {
@@ -654,6 +657,7 @@ const uk: AppStrings = {
       previousPet: 'попередній',
       nextPet: 'наступний',
       readPost: 'читати оголошення',
+      approximate: 'місце приблизне — дивись оголошення',
     },
     post: {
       title: 'оголошення',
@@ -1057,6 +1061,7 @@ const en: AppStrings = {
       previousPet: 'previous pet',
       nextPet: 'next pet',
       readPost: 'read the post',
+      approximate: 'rough location — check the post',
     },
     post: {
       title: 'the post',
