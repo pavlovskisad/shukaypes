@@ -559,11 +559,43 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
         // so a park counts only when the ad writes «парк» next to it
         // (which MARKERS now recognises).
         if (!marked && (p.category === 'street' || p.category === 'park')) continue;
-        // The short-name guard, scoped to the category that has a lower
-        // floor. Non-landmark stems keep the behaviour they always had —
-        // «біля Лісової» reaches «Лісова» through the five-character
-        // stem «лисов» and must go on working unmarked.
-        if (!marked && p.category === 'landmark' && matchedKey.length < MIN_PLACE_CHARS) continue;
+
+        // ONE SIDE OR THE OTHER HAS TO SAY IT IS A PLACE.
+        //
+        // Transit stops brought the vernacular names we wanted — «Цирк»,
+        // «Зоопарк» — and, in the same breath, thousands named after
+        // ordinary things: «Господар», «Особливі», «Фонтан», «Озера»,
+        // «Рембаза», and one literally called «hospital». Measured on
+        // the backfill they came from, roughly two in five landmark
+        // moves were wrong, every one of them a common noun that
+        // happened to appear in somebody's description of their animal.
+        //
+        // What separated right from wrong was not the ad and not the
+        // category, but whether EITHER SIDE announced a place. The
+        // correct ones were «Вул. Празька», «просп. Григоренка»,
+        // «Мікрорайон Бортничі» — stops whose own name carries the
+        // word — or «Цирк», which the ad itself marked («район цирка»).
+        // The wrong ones announced nothing on either side.
+        if (p.category === 'landmark') {
+          const nameKey = normalisePlaceText(p.name);
+          const withoutGeneric = stripGeneric(nameKey);
+          // A name made of nothing but generic words — a stop called
+          // «Проспект» — is not a name at all, however the ad phrases it.
+          if (!withoutGeneric) continue;
+          // Neither side announced a place: the ad did not mark it and
+          // the name carries no place word of its own.
+          if (!marked && withoutGeneric === nameKey) continue;
+        }
+        // The short-name guard, scoped to the category with the lower
+        // floor and set at the stem floor rather than the name floor.
+        // The noise it exists for came through FOUR-character stems —
+        // «medi» from a Latin alias, «жовт» from an October date. Five
+        // is ordinary inflection: «на Празькій» reaches «Вул. Празька»
+        // through «празк», and refusing that took a correct answer with
+        // the wrong ones. What catches the five-character collisions —
+        // a shop called «Квіти» — is the announce-a-place rule below,
+        // which is about the NAME rather than its length.
+        if (!marked && p.category === 'landmark' && matchedKey.length < MIN_STEM_CHARS) continue;
         // Score on the MATCHED gram, not the place's full name. An ad
         // writing «Архипенка» should not inherit the length of
         // «вулиця Олександра Архипенка» it happened to hit — the score
