@@ -121,6 +121,16 @@ out center tags;`.trim(),
     // malls, the zoo and the circus, big venues, universities, churches
     // and schools. Anything named is fair game; anything unnamed is
     // useless to us and Overpass filters it out.
+    //
+    // SUBWAY STATIONS ARE EXCLUDED FROM THE RAILWAY CLAUSE, and the
+    // first run is why. Kyiv's metro stations carry railway=station as
+    // well as station=subway, so this chunk matched them, and because
+    // the upsert is keyed on the OSM id it OVERWROTE their rows — 53
+    // stations, Лісова and Оболонь and Позняки among them, came back
+    // categorised as landmarks and lost the «метро X» / «м. X» aliases
+    // that only the metro chunk adds. Ranking was unaffected (both
+    // categories score the same), but an ad writing «метро Лісова» had
+    // one fewer way to be understood.
     label: 'landmarks',
     category: 'landmark',
     body: `
@@ -128,8 +138,8 @@ out center tags;`.trim(),
 (
   node["amenity"~"^(hospital|clinic|marketplace|theatre|cinema|university|college|school|place_of_worship)$"]["name"](${KYIV_BBOX.join(',')});
   way["amenity"~"^(hospital|clinic|marketplace|theatre|cinema|university|college|school|place_of_worship)$"]["name"](${KYIV_BBOX.join(',')});
-  node["railway"~"^(station|halt)$"]["name"](${KYIV_BBOX.join(',')});
-  way["railway"~"^(station|halt)$"]["name"](${KYIV_BBOX.join(',')});
+  node["railway"~"^(station|halt)$"]["station"!="subway"]["name"](${KYIV_BBOX.join(',')});
+  way["railway"~"^(station|halt)$"]["station"!="subway"]["name"](${KYIV_BBOX.join(',')});
   node["tourism"~"^(zoo|attraction|museum|theme_park)$"]["name"](${KYIV_BBOX.join(',')});
   way["tourism"~"^(zoo|attraction|museum|theme_park)$"]["name"](${KYIV_BBOX.join(',')});
   way["shop"="mall"]["name"](${KYIV_BBOX.join(',')});
