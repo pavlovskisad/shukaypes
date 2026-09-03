@@ -246,6 +246,31 @@ const PLACES: GazetteerPlace[] = [
     String(resolvePlace('Потерялся щенок, Район цирка Киев', circus)?.name),
   );
 }
+// …WHICH IS WHY THE STOP NAME IS THE ONE THAT MATTERS.
+//
+// OSM maps the venue as «Національний цирк України» and the bus stop
+// outside it as «Цирк» — the second is what an ad writes. Four
+// characters, so it only works because landmarks carry their own floor.
+{
+  const stop: GazetteerPlace[] = [
+    { name: 'Цирк', lat: 50.4479, lng: 30.4925, category: 'landmark' },
+    { name: 'Садова', lat: 50.3000, lng: 30.7000, category: 'street' },
+  ];
+  const r = resolvePlace('Потерялся щенок Коля возраст 7 месяцев Район цирка Киев', stop);
+  check('the stop name catches «район цирка»', r?.name === 'Цирк', String(r?.name));
+  check('and it reads as marked, because «район» precedes it', r?.marked === true);
+}
+{
+  // The floor is landmark-only: a four-character STREET name stays
+  // unmatchable, which is what stops short words matching everything.
+  const shortStreet: GazetteerPlace[] = [
+    { name: 'Лісо', lat: 50.46, lng: 30.52, category: 'street' },
+  ];
+  check(
+    'a four-character street is still refused',
+    resolvePlace('загубився пес на Лісо', shortStreet) === null,
+  );
+}
 
 // ---- MUST NOT resolve ----
 {

@@ -57,6 +57,36 @@ export interface ResolvedPlace {
 // something.
 const MIN_PLACE_CHARS = 6;
 
+// LANDMARKS ARE SHORT WORDS, AND THAT IS THE POINT OF THEM.
+//
+// «Цирк» is four characters. So are «Депо» and «Пошта». The six-char
+// floor above exists because a short STREET name matches half the
+// language, but a landmark is a thing people name precisely because it
+// is unmistakable — and the ad this rule was written for says «Район
+// цирка», which the floor rejected twice over: once as a key, once as
+// a stem.
+//
+// WHAT KEEPS THIS FROM BECOMING NOISE IS THE MARKER, and the first
+// answer — that repetition would do it, since a generic name like
+// «Школа» recurs across the city and the namesake check refuses it —
+// was measured and found wrong. The table holds a flower shop called
+// «Квіти», a clinic «Медіан», a cinema «Жовтень», a clinic «Medicum».
+// Each is unique, so nothing refused them, and eleven pets landed on
+// them: a dog at a florist because its ad mentioned flowers, another
+// at «October» because of a date, four at «Medicum» because its Latin
+// alias stems to «medi» and our descriptions are English.
+//
+// So a short landmark key counts only when the ad marks it as a place
+// — «район цирка» announces one, a sentence containing «квіти» does
+// not. The guard is applied in resolvePlace against the MATCHED KEY,
+// scoped to this category, so ordinary inflection through five-letter
+// stems («біля Лісової» → «лисов») is untouched.
+const MIN_LANDMARK_CHARS = 4;
+
+function minCharsFor(category: string): number {
+  return category === 'landmark' ? MIN_LANDMARK_CHARS : MIN_PLACE_CHARS;
+}
+
 // What somebody writes in front of a name when they mean a place. The
 // text is normalised before this runs, so «вул.» is already «вул».
 // Written against the EXPANDED forms, because normalisePlaceText has
@@ -282,7 +312,7 @@ export function placeStems(key: string): string[] {
   const last = words[words.length - 1]!;
   const out: string[] = [];
   for (const trim of STEM_TRIMS) {
-    if (last.length - trim < MIN_STEM_CHARS) continue;
+    if (last.length - trim < MIN_LANDMARK_CHARS) continue;
     out.push([...words.slice(0, -1), last.slice(0, last.length - trim)].join(' '));
   }
   return out;
@@ -372,7 +402,7 @@ export function buildPlaceIndex(places: GazetteerPlace[]): Map<string, Gazetteer
     // stem is deliberately shorter: «Лісова» stems to «лісов», five
     // characters, which the stricter floor silently refused to index.
     // «біля Лісової» then resolved to nothing.
-    if (key.length < MIN_STEM_CHARS) return;
+    if (key.length < Math.min(MIN_STEM_CHARS, minCharsFor(p.category))) return;
     // More words than a text n-gram can ever be is a key nothing will
     // look up — indexing it only grows the map.
     if (key.split(' ').length > MAX_GRAM_WORDS) return;
@@ -400,12 +430,13 @@ export function matchKeys(p: GazetteerPlace): string[] {
   if (cached) return cached;
 
   const keys = new Set<string>();
+  const floor = minCharsFor(p.category);
   for (const raw of [p.name, ...(p.aliases ?? [])]) {
     if (!raw) continue;
     const key = normalisePlaceText(raw);
-    if (key.length >= MIN_PLACE_CHARS) keys.add(key);
+    if (key.length >= floor) keys.add(key);
     const bare = stripGeneric(key);
-    if (bare !== key && bare.length >= MIN_PLACE_CHARS) keys.add(bare);
+    if (bare !== key && bare.length >= floor) keys.add(bare);
   }
 
   const out = [...keys];
@@ -448,23 +479,57 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   for (let i = 0; i < words.length; i++) {
     for (let n = 1; n <= MAX_GRAM_WORDS && i + n <= words.length; n++) {
       const gram = words.slice(i, i + n).join(' ');
-      if (gram.length < MIN_PLACE_CHARS) continue;
+      // The floor here is the LOOSEST any category allows; the index
+      // decides what a short gram can actually reach, and only
+      // landmarks put short keys in it.
+      if (gram.length < MIN_LANDMARK_CHARS) continue;
 
       // Exact first, stem second, and BOTH sides are stemmed to the same
       // form — the index holds each key's stems too, so «оболоні» in an
       // ad and «Оболонь» in the table meet at «оболон».
       let found = index.get(gram);
       const exact = found !== undefined;
+      // Which index entry actually answered — the gram itself, or one of
+      // its stems. Its LENGTH is what the short-name guard below tests,
+      // and the distinction matters: «medium» is six characters but
+      // reaches the table through the four-character stem «medi».
+      let matchedKey = gram;
       if (!found) {
         for (const stem of placeStems(gram)) {
           found = index.get(stem);
-          if (found) break;
+          if (found) {
+            matchedKey = stem;
+            break;
+          }
         }
       }
       if (!found) continue;
 
       const before = words.slice(Math.max(0, i - 2), i).join(' ');
       const marked = MARKERS.test(before);
+
+      // A SHORT WORD ONLY COUNTS WHEN THE AD SAYS IT IS A PLACE.
+      //
+      // Landmarks carry a lower floor so «Цирк» can be found at all,
+      // and the first attempt let any short gram through on the theory
+      // that a repeated generic name would be refused as a namesake.
+      // Measured against production, that was simply wrong: the table
+      // holds a flower shop called «Квіти», a clinic called «Медіан», a
+      // venue called «Людина», a cinema called «Жовтень». Each is
+      // unique, so the namesake check never fires, and eleven pets
+      // resolved to them — a dog placed at a florist because its ad
+      // mentioned flowers, another at «October» because of a date.
+      //
+      // Repetition was never the discriminator. The marker is: «район
+      // цирка» announces a place, a sentence that happens to contain
+      // «квіти» does not.
+      //
+      // Tested on the MATCHED KEY, not on the words in the ad, because
+      // the collisions come through stems: «Медіан» carries the Latin
+      // alias «Median», which stems to «medi», and the descriptions are
+      // English — so «medium sized» reached it through a six-character
+      // word. «Жовтень» stems to «жовт» and every ad with a date in
+      // October reached that.
 
       for (const p of found) {
         // A BARE STREET NAME IS NOT AN ADDRESS.
@@ -494,6 +559,11 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
         // so a park counts only when the ad writes «парк» next to it
         // (which MARKERS now recognises).
         if (!marked && (p.category === 'street' || p.category === 'park')) continue;
+        // The short-name guard, scoped to the category that has a lower
+        // floor. Non-landmark stems keep the behaviour they always had —
+        // «біля Лісової» reaches «Лісова» through the five-character
+        // stem «лисов» and must go on working unmarked.
+        if (!marked && p.category === 'landmark' && matchedKey.length < MIN_PLACE_CHARS) continue;
         // Score on the MATCHED gram, not the place's full name. An ad
         // writing «Архипенка» should not inherit the length of
         // «вулиця Олександра Архипенка» it happened to hit — the score
