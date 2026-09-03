@@ -131,20 +131,47 @@ out center tags;`.trim(),
     // that only the metro chunk adds. Ranking was unaffected (both
     // categories score the same), but an ad writing «метро Лісова» had
     // one fewer way to be understood.
+    //
+    // `nwr`, NOT `node` + `way`. The first version asked for nodes and
+    // ways only, and the National Circus — the very landmark this whole
+    // thread is about — is `osm:relation:7390464`. Every large venue
+    // mapped as a multipolygon was invisible for the same reason, which
+    // is most of the big ones: stadiums, malls, hospital campuses.
     label: 'landmarks',
     category: 'landmark',
     body: `
 [out:json][timeout:90];
 (
-  node["amenity"~"^(hospital|clinic|marketplace|theatre|cinema|university|college|school|place_of_worship)$"]["name"](${KYIV_BBOX.join(',')});
-  way["amenity"~"^(hospital|clinic|marketplace|theatre|cinema|university|college|school|place_of_worship)$"]["name"](${KYIV_BBOX.join(',')});
-  node["railway"~"^(station|halt)$"]["station"!="subway"]["name"](${KYIV_BBOX.join(',')});
-  way["railway"~"^(station|halt)$"]["station"!="subway"]["name"](${KYIV_BBOX.join(',')});
-  node["tourism"~"^(zoo|attraction|museum|theme_park)$"]["name"](${KYIV_BBOX.join(',')});
-  way["tourism"~"^(zoo|attraction|museum|theme_park)$"]["name"](${KYIV_BBOX.join(',')});
-  way["shop"="mall"]["name"](${KYIV_BBOX.join(',')});
-  node["shop"="mall"]["name"](${KYIV_BBOX.join(',')});
-  way["leisure"~"^(stadium|sports_centre)$"]["name"](${KYIV_BBOX.join(',')});
+  nwr["amenity"~"^(hospital|clinic|marketplace|theatre|cinema|university|college|school|place_of_worship)$"]["name"](${KYIV_BBOX.join(',')});
+  nwr["railway"~"^(station|halt)$"]["station"!="subway"]["name"](${KYIV_BBOX.join(',')});
+  nwr["tourism"~"^(zoo|attraction|museum|theme_park)$"]["name"](${KYIV_BBOX.join(',')});
+  nwr["shop"="mall"]["name"](${KYIV_BBOX.join(',')});
+  nwr["leisure"~"^(stadium|sports_centre)$"]["name"](${KYIV_BBOX.join(',')});
+);
+out center tags;`.trim(),
+  },
+  {
+    // HOW PEOPLE SAY IT, WHICH IS NOT WHAT THE VENUE IS CALLED.
+    //
+    // The ad that started this reads «Район цирка». The venue is mapped
+    // as «Національний цирк України» — nobody writes that. But the bus
+    // stop outside it is named, in OSM, exactly «Цирк», and so are the
+    // stops at the zoo, the market and the hospital. Kyiv's transit
+    // stops carry the vernacular short names ads actually use, pinned
+    // to the right corner of the right street.
+    //
+    // Stops named after streets are the common case and cost nothing:
+    // they agree with the street rows already in the table. Generic
+    // names that repeat across the city («Школа», «Ринок») end up as
+    // namesakes far apart, which the ambiguity rule refuses on its own.
+    label: 'transit-stops',
+    category: 'landmark',
+    body: `
+[out:json][timeout:90];
+(
+  node["highway"="bus_stop"]["name"](${KYIV_BBOX.join(',')});
+  node["railway"="tram_stop"]["name"](${KYIV_BBOX.join(',')});
+  node["public_transport"="platform"]["name"](${KYIV_BBOX.join(',')});
 );
 out center tags;`.trim(),
   },
