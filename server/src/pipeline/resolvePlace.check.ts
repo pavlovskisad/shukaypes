@@ -205,26 +205,61 @@ const PLACES: GazetteerPlace[] = [
 // «Район цирка», «біля жд вокзалу», «район 9-той больницы». Thirteen of
 // the 192 active pets are located this way and every one resolved to
 // nothing, because the table held streets and districts but no circus.
-// What the data alone buys: a landmark the ad NAMES resolves, in either
-// language, and outranks the district it stands in.
+// LANDMARKS: ONE SIDE OR THE OTHER MUST ANNOUNCE A PLACE.
+//
+// Transit stops gave us the vernacular names ads use, and with them
+// thousands named after ordinary things. Measured on the backfill they
+// came from, two in five landmark moves were wrong — «Господар»,
+// «Особливі», «Фонтан», one stop literally called «hospital» — every
+// one a common noun that appeared in somebody's description of their
+// animal. What separated right from wrong was whether EITHER the ad
+// marked it as a place, or the name carried a place word itself.
 {
-  const withLandmark: GazetteerPlace[] = [
-    { name: 'Охматдит', lat: 50.4494, lng: 30.4620, category: 'landmark', aliases: ['Охматдет'] },
-    { name: "Солом'янський район", lat: 50.4260, lng: 30.4460, category: 'district' },
+  const stops: GazetteerPlace[] = [
+    // Its own name announces a place: trustworthy unmarked.
+    { name: 'Вул. Празька', lat: 50.4564, lng: 30.6444, category: 'landmark' },
+    // A common noun. Only the ad can vouch for this one.
+    { name: 'Господар', lat: 50.4000, lng: 30.4000, category: 'landmark' },
+    // Nothing but a generic word: never a name at all.
+    { name: 'Проспект', lat: 50.4100, lng: 30.4100, category: 'landmark' },
   ];
   check(
-    'a landmark resolves',
-    resolvePlace('загубився пес біля Охматдиту', withLandmark)?.name === 'Охматдит',
-    String(resolvePlace('загубився пес біля Охматдиту', withLandmark)?.name),
+    'a stop named after a street resolves unmarked',
+    resolvePlace('білий кіт, загубився на Празькій', stops)?.name === 'Вул. Празька',
+    String(resolvePlace('білий кіт, загубився на Празькій', stops)?.name),
   );
   check(
-    'and beats the district it stands in',
-    resolvePlace("Солом'янський район, біля Охматдиту", withLandmark)?.name === 'Охматдит',
+    'a stop named for a common noun does not',
+    resolvePlace('пес втік від господаря, дуже наляканий', stops) === null,
+    String(resolvePlace('пес втік від господаря, дуже наляканий', stops)?.name),
   );
   check(
-    'the Russian spelling of it too',
-    resolvePlace('потерялся пёс возле Охматдета', withLandmark)?.name === 'Охматдит',
-    String(resolvePlace('потерялся пёс возле Охматдета', withLandmark)?.name),
+    'a stop named only «Проспект» never resolves, marked or not',
+    resolvePlace('загубився пес на проспекті', stops) === null,
+    String(resolvePlace('загубився пес на проспекті', stops)?.name),
+  );
+}
+// THE ACCEPTED COST, written down rather than discovered later.
+//
+// «Охматдит» is a real hospital and an unmistakable proper noun, but
+// its name carries no place word, so an ad that only says «біля
+// Охматдиту» no longer reaches it. We cannot tell a coined name from a
+// dictionary word without a dictionary, and the asymmetry decides it:
+// a miss leaves the pet where it was, a wrong move sends somebody to
+// walk the wrong streets. Marking it in the ad still works.
+{
+  const hospital: GazetteerPlace[] = [
+    { name: 'Охматдит', lat: 50.4494, lng: 30.4620, category: 'landmark' },
+  ];
+  check(
+    'a bare distinctive landmark is refused (accepted cost)',
+    resolvePlace('загубився пес біля Охматдиту', hospital) === null,
+    String(resolvePlace('загубився пес біля Охматдиту', hospital)?.name),
+  );
+  check(
+    'but the ad can still vouch for it',
+    resolvePlace('загубився пес, район Охматдиту', hospital)?.name === 'Охматдит',
+    String(resolvePlace('загубився пес, район Охматдиту', hospital)?.name),
   );
 }
 // WHAT THIS DOES NOT YET REACH, pinned so nobody assumes otherwise.
