@@ -2,6 +2,7 @@ import type { FastifyPluginAsync } from 'fastify';
 import { and, desc, eq, gte, not, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { buildPhotoUrl } from '../services/photoUrl.js';
+import { isApproximatePlacement } from '../services/mapData.js';
 import { limitExpensive, limitPolling, limitRead } from '../lib/rateLimit.js';
 import {
   looksLikeItHadContacts,
@@ -56,6 +57,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         urgency: schema.lostDogs.urgency,
         zoneRadiusM: schema.lostDogs.searchZoneRadiusM,
         rewardPoints: schema.lostDogs.rewardPoints,
+        placementSource: schema.lostDogs.placementSource,
       })
       .from(schema.lostDogs)
       .where(
@@ -89,6 +91,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         rewardPoints: r.rewardPoints,
         searchZoneRadiusM: r.zoneRadiusM,
         lastSeen: { position: { lat: r.lat, lng: r.lng }, at: r.at.toISOString() },
+        ...(isApproximatePlacement(r.placementSource) ? { approximate: true as const } : {}),
       })),
     };
   });

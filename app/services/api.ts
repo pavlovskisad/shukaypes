@@ -135,6 +135,11 @@ export interface NearbyLostDog {
   rewardPoints: number;
   searchZoneRadiusM: number;
   lastSeen: { position: LatLng; at: string };
+  // The pin is a guess, not the ad's own words — the server sets this
+  // when placement came from the model rather than from a place named
+  // in the post or a pin the owner dropped. Absent means placed. See
+  // isApproximatePlacement on the server.
+  approximate?: boolean;
 }
 
 // A cellular hang is the most common failure in this app's target

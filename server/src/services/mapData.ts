@@ -110,6 +110,27 @@ export interface MapLostDog {
   rewardPoints: number;
   searchZoneRadiusM: number;
   lastSeen: { position: LatLng; at: string };
+  // THIS PIN IS A GUESS, AND THE WALKER SHOULD KNOW.
+  //
+  // Placement comes from four kinds of source (migration 0037): the
+  // owner's own pin, a place named in the ad, a coordinate the model
+  // inferred, or nothing at all. Measured on production, roughly half
+  // the map is the third kind — and the owner's own report was that a
+  // pet whose ad says «район цирка» is drawn confidently three
+  // kilometres away, which reads as the app being wrong about
+  // everything rather than uncertain about one thing.
+  //
+  // Sent ONLY when true, so the common case costs nothing on a payload
+  // that goes out every 15s to every walker.
+  approximate?: true;
+}
+
+// Which placement paths are a guess rather than a statement. Null
+// belongs here too: it means the row predates the column, and every one
+// of those was placed by the model.
+export function isApproximatePlacement(source: string | null): boolean {
+  if (!source) return true;
+  return source.startsWith('model-') || source === 'fall-through';
 }
 
 export async function fetchNearbyLostDogs(
@@ -131,6 +152,7 @@ export async function fetchNearbyLostDogs(
       urgency: schema.lostDogs.urgency,
       zoneRadiusM: schema.lostDogs.searchZoneRadiusM,
       rewardPoints: schema.lostDogs.rewardPoints,
+      placementSource: schema.lostDogs.placementSource,
     })
     .from(schema.lostDogs)
     .where(
@@ -169,6 +191,7 @@ export async function fetchNearbyLostDogs(
     rewardPoints: r.rewardPoints,
     searchZoneRadiusM: r.zoneRadiusM,
     lastSeen: { position: { lat: r.lat, lng: r.lng }, at: r.at.toISOString() },
+    ...(isApproximatePlacement(r.placementSource) ? { approximate: true as const } : {}),
   }));
 }
 

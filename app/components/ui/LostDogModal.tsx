@@ -306,6 +306,23 @@ export function LostDogModal({
             >
               {t.modals.lostDog.questCta(renderDog.rewardPoints)}
             </div>
+            {/* SAY WHEN THE PIN IS A GUESS.
+                Half the map is placed by the model rather than by the
+                ad's own words, and a guess drawn with the same
+                confidence as an address is what makes somebody walk the
+                wrong streets and conclude the app is broken. One line,
+                and the post is one tap below it. */}
+            {renderDog.approximate ? (
+              <div
+                style={{
+                  marginTop: 4,
+                  fontSize: TYPE.caption,
+                  color: '#777',
+                }}
+              >
+                {t.modals.lostDog.approximate}
+              </div>
+            ) : null}
             {onOpenPost ? (
               <button
                 onClick={() => onOpenPost(renderDog)}
