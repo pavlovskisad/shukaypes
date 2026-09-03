@@ -107,6 +107,38 @@ out center tags;`.trim(),
 out center tags;`.trim(),
   },
   {
+    // WHAT PEOPLE ACTUALLY NAVIGATE BY, and what the table has never
+    // held. Measured on the 192 active pets: thirteen ads locate the
+    // animal by a landmark — «Район цирка», «біля жд вокзалу», «район
+    // 9-той больницы», «біля школи» — and every one of them resolved to
+    // nothing, because the six categories above are streets,
+    // neighbourhoods, parks, metro, squares and districts. The puppy
+    // Коля sat three kilometres from his circus for exactly this
+    // reason.
+    //
+    // Chosen from the words that actually appeared in those ads rather
+    // than from what OSM happens to offer: hospitals, stations, markets,
+    // malls, the zoo and the circus, big venues, universities, churches
+    // and schools. Anything named is fair game; anything unnamed is
+    // useless to us and Overpass filters it out.
+    label: 'landmarks',
+    category: 'landmark',
+    body: `
+[out:json][timeout:90];
+(
+  node["amenity"~"^(hospital|clinic|marketplace|theatre|cinema|university|college|school|place_of_worship)$"]["name"](${KYIV_BBOX.join(',')});
+  way["amenity"~"^(hospital|clinic|marketplace|theatre|cinema|university|college|school|place_of_worship)$"]["name"](${KYIV_BBOX.join(',')});
+  node["railway"~"^(station|halt)$"]["name"](${KYIV_BBOX.join(',')});
+  way["railway"~"^(station|halt)$"]["name"](${KYIV_BBOX.join(',')});
+  node["tourism"~"^(zoo|attraction|museum|theme_park)$"]["name"](${KYIV_BBOX.join(',')});
+  way["tourism"~"^(zoo|attraction|museum|theme_park)$"]["name"](${KYIV_BBOX.join(',')});
+  way["shop"="mall"]["name"](${KYIV_BBOX.join(',')});
+  node["shop"="mall"]["name"](${KYIV_BBOX.join(',')});
+  way["leisure"~"^(stadium|sports_centre)$"]["name"](${KYIV_BBOX.join(',')});
+);
+out center tags;`.trim(),
+  },
+  {
     label: 'districts',
     category: 'district',
     body: `
@@ -255,6 +287,14 @@ function buildCandidate(el: OverpassElement, category: string): Candidate | null
   aliasSet.add(nameUk);
   if (nameEn) aliasSet.add(nameEn);
   if (tags['name']) aliasSet.add(tags['name']);
+  // THE RUSSIAN NAME, WHICH OSM USUALLY HAS AND WE WERE THROWING AWAY.
+  //
+  // 65 of the 126 ads the resolver refused on production are written in
+  // Russian — the single largest reason it finds nothing. resolvePlace
+  // now folds the two orthographies onto one string, which bridges the
+  // spelling; `name:ru` bridges the cases the fold cannot, where the
+  // two languages simply use different words for the same place.
+  if (tags['name:ru']) aliasSet.add(tags['name:ru']);
   if (tags['alt_name']) {
     for (const a of tags['alt_name'].split(';')) aliasSet.add(a.trim());
   }

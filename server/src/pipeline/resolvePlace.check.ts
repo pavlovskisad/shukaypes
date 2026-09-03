@@ -200,6 +200,53 @@ const PLACES: GazetteerPlace[] = [
   check('metro beats district when both are bare', r?.name === 'Лісова', String(r?.name));
 }
 
+// ---- LANDMARKS: how a great many ads actually say where ----
+//
+// «Район цирка», «біля жд вокзалу», «район 9-той больницы». Thirteen of
+// the 192 active pets are located this way and every one resolved to
+// nothing, because the table held streets and districts but no circus.
+// What the data alone buys: a landmark the ad NAMES resolves, in either
+// language, and outranks the district it stands in.
+{
+  const withLandmark: GazetteerPlace[] = [
+    { name: 'Охматдит', lat: 50.4494, lng: 30.4620, category: 'landmark', aliases: ['Охматдет'] },
+    { name: "Солом'янський район", lat: 50.4260, lng: 30.4460, category: 'district' },
+  ];
+  check(
+    'a landmark resolves',
+    resolvePlace('загубився пес біля Охматдиту', withLandmark)?.name === 'Охматдит',
+    String(resolvePlace('загубився пес біля Охматдиту', withLandmark)?.name),
+  );
+  check(
+    'and beats the district it stands in',
+    resolvePlace("Солом'янський район, біля Охматдиту", withLandmark)?.name === 'Охматдит',
+  );
+  check(
+    'the Russian spelling of it too',
+    resolvePlace('потерялся пёс возле Охматдета', withLandmark)?.name === 'Охматдит',
+    String(resolvePlace('потерялся пёс возле Охматдета', withLandmark)?.name),
+  );
+}
+// WHAT THIS DOES NOT YET REACH, pinned so nobody assumes otherwise.
+//
+// «Район цирка» — the ad that started this — still resolves to nothing,
+// for two reasons worth writing down. placeStems only trims the LAST
+// word, so «Київського національного цирку» cannot meet «Київський
+// національний цирк»; and the head noun on its own, «цирк», is four
+// characters and below MIN_PLACE_CHARS. Landmark data is the first half
+// of that fix; short head-noun aliases and per-word stemming are the
+// second, and they are their own change with their own measurement.
+{
+  const circus: GazetteerPlace[] = [
+    { name: 'Київський національний цирк', lat: 50.4517, lng: 30.4864, category: 'landmark' },
+  ];
+  check(
+    'an inflected multi-word landmark still misses (known, measured)',
+    resolvePlace('Потерялся щенок, Район цирка Киев', circus) === null,
+    String(resolvePlace('Потерялся щенок, Район цирка Киев', circus)?.name),
+  );
+}
+
 // ---- MUST NOT resolve ----
 {
   check('empty text resolves to nothing', resolvePlace('', PLACES) === null);

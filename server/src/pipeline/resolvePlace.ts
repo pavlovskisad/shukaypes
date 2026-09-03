@@ -78,6 +78,11 @@ const SPECIFICITY: Record<string, number> = {
   street: 5,
   square: 4,
   park: 4,
+  // A hospital, a station, the circus: a point on the map, and how a
+  // great many ads describe where the animal went missing. Ranked with
+  // metro because both are landmarks a person navigates to rather than
+  // an area they stand in.
+  landmark: 3,
   metro: 3,
   neighbourhood: 2,
   district: 1,
@@ -493,10 +498,23 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
         // writing «Архипенка» should not inherit the length of
         // «вулиця Олександра Архипенка» it happened to hit — the score
         // is meant to reward what the owner actually wrote.
+        // SPECIFICITY OUTRANKS EXACTNESS, and the order matters more
+        // than it looks. It used to be the other way round, so a place
+        // written in its dictionary form beat a narrower one the ad had
+        // inflected — «Солом'янський район, біля Охматдиту» resolved to
+        // the district, four kilometres of city, because the district
+        // matched letter-for-letter while the hospital matched through
+        // a stem. Ukrainian inflects constantly and a district name is
+        // one of the few things ads tend to write plainly, so that
+        // ordering quietly preferred the vaguest reading of a sentence.
+        //
+        // Marked still wins over everything: «вул. Садова» is an
+        // address and no amount of specificity elsewhere should
+        // overturn what the owner explicitly labelled.
         const score =
-          (marked ? 10_000 : 0) +
-          (exact ? 1_000 : 0) +
-          (SPECIFICITY[p.category] ?? 0) * 100 +
+          (marked ? 100_000 : 0) +
+          (SPECIFICITY[p.category] ?? 0) * 1_000 +
+          (exact ? 100 : 0) +
           Math.min(gram.length, 60);
 
         hits.push({
