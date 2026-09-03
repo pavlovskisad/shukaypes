@@ -119,6 +119,27 @@ export function normalisePlaceText(s: string): string {
   const tokens = s
     .toLowerCase()
     .replace(/['’ʼ`]/g, '')
+    // ONE ALPHABET FOR TWO LANGUAGES.
+    //
+    // The gazetteer is Ukrainian; 65 of the 126 ads the resolver refused
+    // are written in Russian, which is the largest single reason it
+    // finds nothing. «Уманська» and «Уманская» are the same street, but
+    // stemming cannot bridge them: «уманськ» and «уманск» differ by a
+    // soft sign, and no amount of trimming the ending fixes a
+    // difference in the middle.
+    //
+    // Folding the letters that differ between the two orthographies —
+    // and dropping the signs that carry no sound of their own — lands
+    // both spellings on one string. Applied to the gazetteer name and
+    // the ad alike, so neither side has to know what the other did.
+    //
+    // It does make the matcher slightly blunter: «Лісова» and «Лисова»
+    // fold together too. The marker requirement in front of street
+    // names is what keeps that from becoming a wrong address.
+    .replace(/[ьъ]/g, '')
+    .replace(/[іїы]/g, 'и')
+    .replace(/[єэ]/g, 'е')
+    .replace(/ґ/g, 'г')
     .replace(/[^\p{L}\p{N}]+/gu, ' ')
     .trim()
     .split(' ')
@@ -161,9 +182,95 @@ export function normalisePlaceText(s: string): string {
 const STEM_TRIMS = [1, 2];
 const MIN_STEM_CHARS = 5;
 
-// See "ONE NAME, MANY PLACES" below: places answering to the same key
-// but further apart than this cannot be told apart by the name alone.
-const AMBIGUOUS_SPREAD_M = 1000;
+// HOW FAR APART TWO PIECES OF ONE PLACE MAY SIT — see "ONE NAME, MANY
+// PLACES" below.
+//
+// This is a LINK distance, not a diameter, and the difference is the
+// whole bug it replaces. The first version asked whether any two
+// same-named rows were more than a kilometre apart and refused the name
+// if so. But OSM stores a street as a chain of segments, and «Уманська
+// вулиця» is eleven rows spanning 1.3 km — so the test that was meant
+// to catch two different places called Набережна threw away a perfectly
+// good address, and a cat whose ad named her street sat five kilometres
+// away on a landmark guess instead. Measured against the table: 141
+// names are one continuous street wider than a kilometre.
+//
+// Chaining tells the two apart. Consecutive segments of one street are
+// a few hundred metres apart at most, so they link into a single group
+// however long the street runs; two streets of the same name in
+// different districts are kilometres from any of each other's pieces
+// and stay separate. 600 m is comfortably above the gap between
+// segments (a street interrupted by a park still links) and comfortably
+// below the distance between genuine namesakes.
+const NAMESAKE_LINK_M = 600;
+
+interface Namesake {
+  /** How many separated groups the places of this name form. */
+  clusters: number;
+  /** The middle of them all. Meaningful only when `clusters` is 1. */
+  lat: number;
+  lng: number;
+}
+
+function metresBetween(a: { lat: number; lng: number }, b: { lat: number; lng: number }): number {
+  const dLat = (a.lat - b.lat) * 111_320;
+  const dLng = (a.lng - b.lng) * 111_320 * Math.cos((a.lat * Math.PI) / 180);
+  return Math.hypot(dLat, dLng);
+}
+
+/**
+ * Single-linkage grouping: two points join when they are within
+ * NAMESAKE_LINK_M of each other, and the relation chains through
+ * intermediate points — which is what makes a string of street
+ * segments one group rather than many.
+ */
+function describeNamesake(points: { lat: number; lng: number }[]): Namesake {
+  if (points.length === 0) return { clusters: 1, lat: 0, lng: 0 };
+  const seen = new Array<boolean>(points.length).fill(false);
+  let clusters = 0;
+  for (let i = 0; i < points.length; i++) {
+    if (seen[i]) continue;
+    clusters++;
+    const queue = [i];
+    seen[i] = true;
+    while (queue.length > 0) {
+      const cur = queue.pop()!;
+      for (let j = 0; j < points.length; j++) {
+        if (seen[j]) continue;
+        if (metresBetween(points[cur]!, points[j]!) <= NAMESAKE_LINK_M) {
+          seen[j] = true;
+          queue.push(j);
+        }
+      }
+    }
+  }
+  let lat = 0;
+  let lng = 0;
+  for (const p of points) {
+    lat += p.lat;
+    lng += p.lng;
+  }
+  return { clusters, lat: lat / points.length, lng: lng / points.length };
+}
+
+// Grouping a name costs O(n²) in its row count, and the same names come
+// up ad after ad, so each is described once per gazetteer array and kept
+// — lazily, because only the names an ad actually mentions are ever
+// asked about.
+const NAMESAKE_CACHE = new WeakMap<GazetteerPlace[], Map<string, Namesake>>();
+
+function namesakeOf(name: string, places: GazetteerPlace[]): Namesake {
+  let per = NAMESAKE_CACHE.get(places);
+  if (!per) {
+    per = new Map();
+    NAMESAKE_CACHE.set(places, per);
+  }
+  const cached = per.get(name);
+  if (cached) return cached;
+  const described = describeNamesake(buildNameIndex(places).get(name) ?? []);
+  per.set(name, described);
+  return described;
+}
 
 export function placeStems(key: string): string[] {
   const words = key.split(' ');
@@ -414,10 +521,11 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   // cannot place a pet, so every hit on that key is dropped and the
   // ad's other names (if any) still get their chance.
   //
-  // The threshold is deliberately smaller than the smallest search
-  // zone: places within 1 km of each other are one answer for our
-  // purposes (a long street stored as segments, a square and its metro
-  // exit), anything wider is a genuine either/or.
+  // What counts as "many places" is CHAINING, not width — see
+  // NAMESAKE_LINK_M. A street stored as a line of segments is one
+  // answer however long it runs; two streets of one name in different
+  // districts are two answers however tidy each is.
+  //
   // Grouped two ways, because the same ambiguity hides behind either:
   //
   //   by AD GRAM — «садов» in the text reaches both «Садова» and
@@ -430,40 +538,26 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   //   never fired — a coin-flip between three Перемогаs dressed up as
   //   an unambiguous hit. Grouping by the place's own normalised name
   //   catches it whichever spelling the ad used.
-  const spreadTooWide = (coords: { lat: number; lng: number }[]): boolean => {
-    for (let a = 0; a < coords.length; a++) {
-      for (let b = a + 1; b < coords.length; b++) {
-        const dLat = (coords[a]!.lat - coords[b]!.lat) * 111_320;
-        const dLng =
-          (coords[a]!.lng - coords[b]!.lng) *
-          111_320 *
-          Math.cos((coords[a]!.lat * Math.PI) / 180);
-        if (dLat * dLat + dLng * dLng > AMBIGUOUS_SPREAD_M * AMBIGUOUS_SPREAD_M) return true;
-      }
-    }
-    return false;
-  };
   const ambiguousKeys = new Set<string>();
   const ambiguousNames = new Set<string>();
   {
     const byKey = new Map<string, { lat: number; lng: number }[]>();
-    const byName = new Map<string, { lat: number; lng: number }[]>();
     for (const h of hits) {
-      const key = h.key;
-      (byKey.get(key) ?? byKey.set(key, []).get(key)!).push(h.place);
+      const bucket = byKey.get(h.key);
+      if (bucket) bucket.push(h.place);
+      else byKey.set(h.key, [h.place]);
+    }
+    for (const [key, coords] of byKey) {
+      if (describeNamesake(coords).clusters > 1) ambiguousKeys.add(key);
     }
     // The name grouping consults the whole TABLE, not just the hits —
     // the other two «Перемога» rows never produced a hit (that was the
-    // hole), so only the table itself can reveal them. Prepared once
-    // per gazetteer array, same as the main index.
-    const namesakes = buildNameIndex(places);
-    const hitNames = new Set(hits.map((h) => normalisePlaceText(h.place.name)));
-    for (const name of hitNames) {
-      const rows = namesakes.get(name);
-      if (rows) byName.set(name, rows);
+    // hole), so only the table itself can reveal them.
+    for (const h of hits) {
+      const name = normalisePlaceText(h.place.name);
+      if (ambiguousNames.has(name)) continue;
+      if (namesakeOf(name, places).clusters > 1) ambiguousNames.add(name);
     }
-    for (const [key, coords] of byKey) if (spreadTooWide(coords)) ambiguousKeys.add(key);
-    for (const [name, coords] of byName) if (spreadTooWide(coords)) ambiguousNames.add(name);
   }
   const unambiguous = hits.filter(
     (h) => !ambiguousKeys.has(h.key) && !ambiguousNames.has(normalisePlaceText(h.place.name)),
@@ -501,5 +595,25 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   );
 
   survivors.sort((a, b) => b.score - a.score);
-  return survivors[0]?.place ?? null;
+  const winner = survivors[0];
+  if (!winner) return null;
+
+  // THE MIDDLE OF THE STREET, NOT WHICHEVER PIECE SORTED FIRST.
+  //
+  // Eleven rows say «Уманська вулиця» and they are eleven segments of
+  // one road. They all match, they all score identically, and which one
+  // came out on top was down to the order the table was read in — so
+  // the same ad could land a pet at either end of a 1.3 km street.
+  //
+  // Everything that survives to here is a single linked group (the
+  // check above dropped the rest), so its centre is a real answer: on a
+  // straight street it is the middle, and the search radius — 500 m at
+  // its tightest — covers the length from there. On an L-shaped street
+  // the centre can fall a little off the road itself, which is a price
+  // worth paying for an answer that does not move between runs.
+  const namesake = namesakeOf(normalisePlaceText(winner.place.name), places);
+  if (namesake.clusters === 1) {
+    return { ...winner.place, lat: namesake.lat, lng: namesake.lng };
+  }
+  return winner.place;
 }

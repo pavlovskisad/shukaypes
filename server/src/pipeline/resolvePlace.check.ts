@@ -112,6 +112,30 @@ const PLACES: GazetteerPlace[] = [
   );
 }
 
+// ---- THE AD IS IN RUSSIAN, THE TABLE IS IN UKRAINIAN ----
+//
+// The largest single reason the resolver found nothing on production:
+// 65 of 126 refused ads are Russian-spelled. The gazetteer holds
+// «Уманська вулиця»; the ad says «Уманская улица», and no ending-trim
+// bridges «уманськ» to «уманск» — the difference is in the middle of
+// the word. Folding the orthographies is what makes them meet.
+{
+  const streets: GazetteerPlace[] = [
+    { name: 'Уманська вулиця', lat: 50.4408, lng: 30.4637, category: 'street' },
+    { name: 'Оболонський район', lat: 50.5010, lng: 30.4980, category: 'district' },
+  ];
+  check(
+    'a Russian-spelled street resolves to the Ukrainian entry',
+    resolvePlace('Пропала собака, ул. Уманская 25', streets)?.name === 'Уманська вулиця',
+    String(resolvePlace('Пропала собака, ул. Уманская 25', streets)?.name),
+  );
+  check(
+    'a Russian-spelled district too',
+    resolvePlace('потерялся кот в Оболонском районе', streets)?.name === 'Оболонський район',
+    String(resolvePlace('потерялся кот в Оболонском районе', streets)?.name),
+  );
+}
+
 // ---- ABBREVIATIONS: also how people actually write ----
 {
   const r = resolvePlace('Загубився пес, Солом’янський р-н', PLACES);
@@ -250,6 +274,46 @@ const PLACES: GazetteerPlace[] = [
   ];
   const r = resolvePlace('Зник кіт, вул. Набережна 5', segments);
   check('street segments still resolve', r?.name === 'Набережна вулиця', String(r?.name));
+}
+
+// ---- A LONG STREET IS STILL ONE STREET ----
+//
+// The regression this file exists for, in the shape production actually
+// holds it: «Уманська вулиця» is ELEVEN rows, a chain of OSM segments
+// running 1.3 km end to end. The first version of the ambiguity rule
+// measured the widest gap between any two rows and refused anything
+// over a kilometre — so it threw away a real address, and «Рижуля»,
+// whose ad names that exact street, sat 5 km away on a landmark guess.
+// Chaining is what tells one long street from two distant namesakes.
+{
+  const umanska: GazetteerPlace[] = [
+    { name: 'Уманська вулиця', lat: 50.4376, lng: 30.4519, category: 'street' },
+    { name: 'Уманська вулиця', lat: 50.4379, lng: 30.4521, category: 'street' },
+    { name: 'Уманська вулиця', lat: 50.4397, lng: 30.4582, category: 'street' },
+    { name: 'Уманська вулиця', lat: 50.4413, lng: 30.4648, category: 'street' },
+    { name: 'Уманська вулиця', lat: 50.4416, lng: 30.4663, category: 'street' },
+    { name: 'Уманська вулиця', lat: 50.4417, lng: 30.4673, category: 'street' },
+    { name: 'Уманська вулиця', lat: 50.4418, lng: 30.4674, category: 'street' },
+    { name: 'Уманська вулиця', lat: 50.4418, lng: 30.4678, category: 'street' },
+    { name: 'Уманська вулиця', lat: 50.4419, lng: 30.4677, category: 'street' },
+    { name: 'Уманська вулиця', lat: 50.4419, lng: 30.4680, category: 'street' },
+    { name: 'Уманська вулиця', lat: 50.4421, lng: 30.4688, category: 'street' },
+  ];
+  const r = resolvePlace(
+    '16 жовтня в районі будинків вул. Уманська, 25, 25 корпус 1, 27 зник рижий котик',
+    umanska,
+  );
+  check('a 1.3km street stored in pieces resolves', r?.name === 'Уманська вулиця', String(r?.name));
+  // …and it answers with the middle of the street rather than whichever
+  // segment happened to sort first, so the same ad places the same pet
+  // in the same spot every time.
+  const midLat = umanska.reduce((s, p) => s + p.lat, 0) / umanska.length;
+  const midLng = umanska.reduce((s, p) => s + p.lng, 0) / umanska.length;
+  check(
+    'and answers with the middle of it',
+    r !== null && Math.abs(r.lat - midLat) < 1e-9 && Math.abs(r.lng - midLng) < 1e-9,
+    `${r?.lat},${r?.lng}`,
+  );
 }
 
 if (failures > 0) {
