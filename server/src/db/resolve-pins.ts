@@ -20,8 +20,10 @@
 // visible pet in the wrong place instead of an invisible pet nowhere,
 // and every move is reversible with one UPDATE back to the constant.
 //
-// --apply-landmarks moves the landmark-guessed pets the resolver can
-// re-place. These are ALREADY VISIBLE at the model's best guess, so a
+// --apply-landmarks moves the MODEL-PLACED pets the resolver can
+// re-place — landmark-jittered or not; the group is defined by
+// placement_source, not by recomputed arithmetic (see the note at the
+// grouping). These are ALREADY VISIBLE at the model's best guess, so a
 // wrong move damages a working pin — which is why the dry run prints
 // each pet's stored description next to the proposed place (the check
 // that validated the first backfill at a glance), and why the apply
@@ -40,7 +42,7 @@ import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { resolvePlace, type GazetteerPlace, type ResolvedPlace } from '../pipeline/resolvePlace.js';
 import { detectOtherCity } from '../pipeline/outOfArea.js';
-import { LANDMARKS, jitterAround } from '../pipeline/landmarks.js';
+import { jitterAround } from '../pipeline/landmarks.js';
 
 const FALLBACK = { lat: 50.4501, lng: 30.5234 };
 const JITTER_M = 120;
@@ -77,6 +79,7 @@ async function main() {
       lat: schema.lostDogs.lastSeenLat,
       lng: schema.lostDogs.lastSeenLng,
       desc: schema.lostDogs.lastSeenDescription,
+      placementSource: schema.lostDogs.placementSource,
     })
     .from(schema.lostDogs)
     .where(eq(schema.lostDogs.status, 'active'));
@@ -108,18 +111,31 @@ async function main() {
     if (r.dogId && !bodies.has(r.dogId)) bodies.set(r.dogId, r.body!);
   }
 
-  const isFallback = (p: { lat: number; lng: number }) =>
-    Math.abs(p.lat - FALLBACK.lat) < 1e-9 && Math.abs(p.lng - FALLBACK.lng) < 1e-9;
-  const landmarkOf = (p: { id: string; lat: number; lng: number }) => {
-    for (const lm of LANDMARKS) {
-      const j = jitterAround(lm.lat, lm.lng, p.id, JITTER_M);
-      if (Math.abs(j.lat - p.lat) < 1e-9 && Math.abs(j.lng - p.lng) < 1e-9) return lm;
-    }
-    return null;
-  };
+  // ASK THE COLUMN, NOT THE ARITHMETIC.
+  //
+  // This used to identify the two groups by recomputing jitter: a pet
+  // was "landmark-placed" if its coordinate reproduced
+  // jitterAround(<some landmark>, id). That was the only way before
+  // placement_source existed — and it silently missed a third group.
+  //
+  // «Коля», whose ad says «Район цирка», sits on the parser's
+  // Бессарабка hint. That coordinate is not in LANDMARKS (the parser's
+  // hint table and landmarks.ts disagree on it by ~600m), so no jitter
+  // reproduced it, so this CLI never considered him — through two
+  // rounds of backfill and a day of resolver work. Twenty-eight active
+  // pets are in the same position.
+  //
+  // Every row is labelled now, so the label is the answer: a pet placed
+  // by the model is a pet whose ad we should try to read, whichever
+  // hint table the coordinate came from.
+  const isFallback = (p: { lat: number; lng: number; placementSource: string | null }) =>
+    p.placementSource === 'fall-through' ||
+    (Math.abs(p.lat - FALLBACK.lat) < 1e-9 && Math.abs(p.lng - FALLBACK.lng) < 1e-9);
+  const isModelPlaced = (p: { placementSource: string | null }) =>
+    p.placementSource === null || p.placementSource.startsWith('model-');
 
   const hidden = pets.filter(isFallback);
-  const landmark = pets.filter((p) => !isFallback(p) && landmarkOf(p));
+  const landmark = pets.filter((p) => !isFallback(p) && isModelPlaced(p));
 
   // ---- THE INVISIBLE PETS: every candidate move, printed in full ----
   //
@@ -168,7 +184,7 @@ async function main() {
   console.log(`  ad names another city:    ${otherCity}   ← expire-out-of-area's job, not a move`);
   console.log(`  no ad text stored:        ${noText}`);
 
-  // ---- THE LANDMARK-GUESSED PETS: every candidate, with its own words ----
+  // ---- THE MODEL-PLACED PETS: every candidate, with its own words ----
   //
   // Also the whole list, for the same reason — and with each pet's
   // stored description alongside, because these pets are already
@@ -176,7 +192,7 @@ async function main() {
   // what lets a reader catch «Контактна вулиця» being the resolver
   // misreading contact-info boilerplate.
   console.log(
-    `\nTHE ${landmark.length} LANDMARK-GUESSED PETS — every move ${applyLandmarks ? 'being applied' : '--apply-landmarks would make'}:\n`,
+    `\nTHE ${landmark.length} MODEL-PLACED PETS — every move ${applyLandmarks ? 'being applied' : '--apply-landmarks would make'}:\n`,
   );
   const lmMoves: { id: string; name: string; hit: ResolvedPlace; oldLat: number; oldLng: number }[] = [];
   let lmNone = 0;
