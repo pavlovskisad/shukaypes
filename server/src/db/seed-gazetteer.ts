@@ -378,10 +378,37 @@ async function main() {
 
   console.log(`▶ seed-gazetteer — dry=${dry} limit=${limit || 'none'}`);
 
+  // ONE UNREACHABLE CHUNK MUST NOT THROW AWAY THE OTHER SEVEN.
+  //
+  // A run on 3 September fetched every chunk successfully — including
+  // 3,625 transit stops — and then died because `districts`, eighty
+  // rows that had not changed in months, exhausted all three Overpass
+  // endpoints. Everything already fetched was discarded, and the next
+  // attempt had to ask Overpass for all of it again, which is precisely
+  // what got us throttled in the first place.
+  //
+  // The write is an upsert keyed on the OSM id, so a chunk that could
+  // not be fetched simply leaves its existing rows alone. That makes
+  // partial progress safe, and safe partial progress is worth far more
+  // than an all-or-nothing run against a service that rate-limits.
+  //
+  // It must never be silent, though: the failures are printed together
+  // at the end, and the process exits non-zero so a partial run is
+  // never mistaken for a complete one.
   const all: Candidate[] = [];
+  const failed: string[] = [];
   for (const chunk of QUERY_CHUNKS) {
     console.log(`  · ${chunk.label}`);
-    const els = await fetchOverpassChunk(chunk.label, chunk.body);
+    let els: OverpassElement[];
+    try {
+      els = await fetchOverpassChunk(chunk.label, chunk.body);
+    } catch (err) {
+      failed.push(chunk.label);
+      console.error(`    !! ${chunk.label} unreachable: ${(err as Error).message}`);
+      console.error(`       its existing rows are left as they are`);
+      await sleep(800);
+      continue;
+    }
     console.log(`    raw ${els.length}`);
     let kept = 0;
     for (const el of els) {
@@ -393,6 +420,14 @@ async function main() {
     }
     console.log(`    kept ${kept}`);
     await sleep(800);
+  }
+
+  // Everything failing is not partial progress, it is no progress, and
+  // writing zero rows over a working table is the one outcome worth
+  // refusing outright.
+  if (all.length === 0) {
+    console.error('\n✗ every chunk failed — nothing fetched, nothing written.');
+    process.exit(1);
   }
 
   // Dedup by id (an element can appear in two chunks for boundary
@@ -457,6 +492,15 @@ async function main() {
   }
 
   console.log(`\n✓ done. wrote ${writes} rows.`);
+  if (failed.length > 0) {
+    console.error(
+      `\n!! PARTIAL RUN — ${failed.length} chunk(s) never fetched: ${failed.join(', ')}.` +
+        `\n   Their rows are whatever the last successful run left. Re-run when` +
+        `\n   Overpass is willing; the upsert makes a repeat run cheap.`,
+    );
+    await pg.end();
+    process.exit(1);
+  }
 }
 
 const isEntry = import.meta.url === pathToFileURL(process.argv[1] ?? '').href;
