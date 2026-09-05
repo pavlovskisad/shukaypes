@@ -22,22 +22,37 @@ const SHEET_ANIM_MS = 280;
 // The overlay holds the sheet clear of the notch now, so this is
 // just the sheet's own inside margin.
 const SAFE_TOP = 12;
+// Close button, and the gap under it. The header strip has to reserve
+// SAFE_TOP + CLOSE_SIZE + CLOSE_GAP of room or the title runs under the
+// badge and the ✕ — which is exactly what happened while this was a
+// `calc()` with an unitless term in it: one bad operand invalidates the
+// whole expression, the declaration is dropped, and the padding silently
+// becomes 0. Plain arithmetic can't fail that way.
+const CLOSE_SIZE = 36;
+const CLOSE_GAP = 8;
+const HEADER_TOP = SAFE_TOP + CLOSE_SIZE + CLOSE_GAP;
 
 // Icon assignment per about-row index. Stays language-neutral so the
 // strings table only carries the translatable title + body — the
 // 36px pixel icon for "lost pets" is the same red urgent badge in
 // every locale.
+//
+// INDEX-ALIGNED to `modals.about.rows`. Adding a row without adding an
+// icon here silently falls back to the logo — keep the two in step.
 const ROW_ICONS: IconName[] = [
-  'urgent',
-  'eyes',
-  'logo',
-  'pin',
-  'paws',
-  'sun',
-  'task',
-  'chat',
-  'pin',
-  'house',
+  'question', // шо ти? — the gate
+  'urgent', // загубив друга — the report form
+  'search', // я шукайпес — supersniff
+  'eyes', // якщо побачив — sightings
+  'walk', // хочу погуляти
+  'cafe', // куди зайти
+  'map', // хто тримає цей район — territory
+  'pin', // затисни мапу
+  'paws', // лапки + кістки
+  'sun', // як почуваюся
+  'task', // сьогодні
+  'chat', // говори зі мною
+  'house', // де ми все тримаємо
 ];
 
 export function AboutModal({ open, onClose }: AboutModalProps) {
@@ -132,7 +147,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         <div
           style={{
             position: 'relative',
-            paddingTop: `calc(${SAFE_TOP} + 36px + 8px)`,
+            paddingTop: HEADER_TOP,
             paddingLeft: S.xxl,
             paddingRight: S.xxl,
             paddingBottom: S.s,
@@ -166,8 +181,8 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               position: 'absolute',
               top: SAFE_TOP,
               right: 12,
-              width: 36,
-              height: 36,
+              width: CLOSE_SIZE,
+              height: CLOSE_SIZE,
               borderRadius: R.pill,
               // Drawn ring — see the HandDrawnFrame child.
               border: '2px solid transparent',
