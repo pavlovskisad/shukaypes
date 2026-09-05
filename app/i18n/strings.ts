@@ -692,25 +692,41 @@ const uk: AppStrings = {
       badge: 'про мене',
       header: '*нюх-нюх*',
       intro:
-        "привіт! я <strong>шукайпес</strong>. ходимо разом, нюхаємо, знаходимо загублених, потроху вивчаємо це місто. ось що ти побачиш на мапі:",
+        "привіт! я <strong>шукайпес</strong>. ходимо разом, нюхаємо, знаходимо загублених, потроху вивчаємо це місто. ось як це в нас влаштовано:",
       footer:
         '*хвостом* — коли сумніваєшся, просто йди. решту знайдемо разом. 🐾',
       rows: [
         {
-          title: 'загублені',
-          body: "ті, що з червоним сяйвом — їх шукають просто зараз, чиєсь серце важке. натисни на одного — і я поведу тебе до трьох місць, де він може ховатись. вуха догори, ніс донизу, ходімо.",
+          title: 'шо ти?',
+          body: "я питаю це щоразу, коли ти заходиш. чотири відповіді: загубив друга, я шукайпес, хочу погуляти, хто тримає цей район. натисни на мене будь-коли — і ми знову тут, звідки все починається.",
         },
         {
-          title: 'якщо побачив одного',
-          body: "побачив когось із них наживо?! відкрий фотку й натисни на око — я гавкну новину всім, хто шукає. *усім тілом виляє*",
+          title: 'загубив друга',
+          body: "найважче. розкажи мені: фото, імʼя, який на вигляд, і вкажи на мапі, де востаннє бачили. пін стане відразу — його побачить кожен, хто зараз гуляє поруч. оголошення я ще перешлю в наш канал і в районні групи. *ніс до землі*",
         },
         {
-          title: 'режим нюху',
-          body: "натисни на мене ліворуч угорі — і я в режимі полювання. вулиці пригасають, ніс підіймається, а кожен загублений у межах прогулянки визирає на тебе з країв екрана. натисни одного — і ми вирушили.",
+          title: 'я шукайпес',
+          body: "вулиці пригасають, ніс підіймається — і всі загублені поблизу лягають переді мною колодою карток. гортай — наступний. натисни — і ми на сліді, я веду тебе просто до нього. натисни на фото ще раз — відкрию оголошення власника.",
+        },
+        {
+          title: 'якщо побачив',
+          body: "побачив когось із них наживо?! відкрий картку й натисни «я його бачив» — я гавкну новину всім, хто шукає. і «нікого не бачив» теж важливо: тепер знаємо, що тут порожньо. *усім тілом виляє*",
+        },
+        {
+          title: 'хочу погуляти',
+          body: "туди й назад чи в один бік, тут поруч чи заберемось далі — проведу. по дорозі щось розкажу, десь зупинимось. попроси кільцевий — і я поверну тебе додому. обіцяю.",
+        },
+        {
+          title: 'куди зайти',
+          body: "кава, їжа, напій, ветеринари, зоомагазини — шпилька вгорі показує їх і ховає. натисни на будь-яке, і ми разом туди.",
+        },
+        {
+          title: 'хто тримає цей район',
+          body: "поки ми йдемо, я мічу землю за нами — сам, завжди, навіть коли ти цього не бачиш. кольори — чиїсь райони; пройдемо чужим, і я перемічу його на нас. хто скільки тримає — видно в «сьогодні».",
         },
         {
           title: 'затисни мапу',
-          body: "затисни будь-де на мапі й тримай — заплющ очі на дві секунди, я нюхаю. розкажу про старий камінь, двір із секретом, ріг із історією. затисни в іншому місці — буде інша.",
+          body: "затисни будь-де на мапі й тримай — заплющ очі на пару секунд, я нюхаю. розкажу про старий камінь, двір із секретом, ріг із історією. затисни в іншому місці — буде інша.",
         },
         {
           title: 'лапки + кістки',
@@ -722,19 +738,15 @@ const uk: AppStrings = {
         },
         {
           title: 'сьогодні',
-          body: "дрібні справи на щодень — назбирай лапок, зазирни до пса, заскоч до якогось місця. нічого великого. просто привід вивести мене ще раз завтра. *нетерпляче виляє*",
+          body: "дрібні справи на щодень — назбирай лапок, зазирни до пса, заскоч до якогось місця. там же й загублені поблизу, і хто скільки тримає землі. нічого великого. просто привід вивести мене ще раз завтра. *нетерпляче виляє*",
         },
         {
           title: 'говори зі мною',
           body: "будь-коли. я знаю наші вулиці, тих, хто чекає поряд, старі історії, що Київ ховає під вікнами. турбуєшся за свого собаку чи кота? я знаю достатньо, щоб допомогти. і пам'ятаю кожну нашу прогулянку — кожну.",
         },
         {
-          title: 'куди зайти',
-          body: "кава, їжа, напій, ветеринари, зоомагазини. натисни на будь-яке — і ми разом туди. попроси кільцевий маршрут, і я поверну тебе додому. обіцяю.",
-        },
-        {
           title: 'де ми все тримаємо',
-          body: "всі наші прогулянки збираються тут. скільки пройшли, скільки лапок назбирали, скільком псам допомогли. ми зростаємо разом — ти і я. лапа в долоні.",
+          body: "всі наші прогулянки збираються тут. скільки пройшли, скільки лапок назбирали, скільком псам допомогли, скільки землі тримаємо. ми зростаємо разом — ти і я. лапа в долоні.",
         },
       ],
     },
@@ -1093,25 +1105,41 @@ const en: AppStrings = {
       badge: 'about',
       header: '*sniff sniff*',
       intro:
-        "привіт! i'm <strong>шукайпес</strong>. we walk, we sniff, we find lost pets, we learn this city paw by paw. here's what you'll see on the map:",
+        "привіт! i'm <strong>шукайпес</strong>. we walk, we sniff, we find lost pets, we learn this city paw by paw. here's how it all works:",
       footer:
         "*tail wag* — when in doubt, just walk. we'll figure the rest out together. 🐾",
       rows: [
         {
-          title: 'lost pets',
-          body: "the ones with the red glow are missing right now — somebody's heart is heavy. tap one and i'll lead you to three spots where they might be hiding. ears up, nose down, off we go.",
+          title: "what's up?",
+          body: "i ask it every time you come in. four answers: lost a friend, i'm a pet finder, let's just walk, who holds this patch. tap me any time and we're back here, where everything starts.",
         },
         {
-          title: "if you spot one",
-          body: "see one of these pets out there for real?! open their photo and tap the eye — i'll bark the news to everyone else looking. *full body wag*",
+          title: 'lost a friend',
+          body: "the hardest one. tell me: a photo, a name, what they look like, and point on the map at where they were last seen. the pin goes up straight away — everyone walking nearby will see it. i'll forward the post to our channel and the local groups too. *nose to the ground*",
         },
         {
-          title: 'sniff mode',
-          body: "tap me up top-left — i slip into hunting mode. the streets dim, my nose lifts, and every pet within walking distance peeks at you from the edges of the screen. tap one and we're off.",
+          title: "i'm a pet finder",
+          body: "the streets dim, my nose lifts, and every missing pet nearby lands in front of me as a deck of cards. swipe for the next one. tap and we're on the trail — i'll walk you straight to them. tap the photo again and i'll open the owner's post.",
+        },
+        {
+          title: 'if you spot one',
+          body: "see one of these pets out there for real?! open their card and tap “i've seen them” — i'll bark the news to everyone else looking. “nobody here” matters too: now we know this patch is empty. *full body wag*",
+        },
+        {
+          title: "let's just walk",
+          body: "there and back or one way, close by or further out — i'll lead. i'll tell you things on the way, and we'll stop somewhere. ask for a round trip and i'll bring you home after — promise.",
+        },
+        {
+          title: 'places to stop',
+          body: "coffee, food, a drink, vets, pet shops — the pin up top shows them and hides them. tap any one and we'll trot over together.",
+        },
+        {
+          title: 'who holds this patch',
+          body: "as we walk i mark the ground behind us — by myself, always, even when you can't see it. the colours are somebody's patches; walk through one and i'll mark it back over to us. who holds how much is in “today”.",
         },
         {
           title: 'press + hold the map',
-          body: "press anywhere on the map and hold — close your eyes for two seconds, i'm sniffing. i'll tell you about an old stone, a courtyard with a secret, a corner with a story. press somewhere else for another one.",
+          body: "press anywhere on the map and hold — close your eyes for a couple of seconds, i'm sniffing. i'll tell you about an old stone, a courtyard with a secret, a corner with a story. press somewhere else for another one.",
         },
         {
           title: 'paws + bones',
@@ -1123,19 +1151,15 @@ const en: AppStrings = {
         },
         {
           title: 'today',
-          body: "tiny things to chew through each day — find some paws, peek at a pet, visit a place. nothing big. just enough reason to take me out again tomorrow. *eager wag*",
+          body: "tiny things to chew through each day — find some paws, peek at a pet, visit a place. the missing pets nearby are in there too, and who holds how much ground. nothing big. just enough reason to take me out again tomorrow. *eager wag*",
         },
         {
           title: 'talk to me',
           body: "anytime. i know our streets, the pets nearby waiting to be found, the old stories kyiv keeps under its windows. worried about your dog or cat? i know enough to help. and i remember every walk we've taken — every single one.",
         },
         {
-          title: 'places to stop',
-          body: "coffee, food, a drink, vets, pet shops. tap any one and we'll trot over together. ask for a round trip and i'll bring you home after — promise.",
-        },
-        {
           title: "where we keep things",
-          body: "all our walks gather here. how far we've gone, how many paws collected, how many pets we've helped find. we level up together, you and me. paw in hand.",
+          body: "all our walks gather here. how far we've gone, how many paws collected, how many pets we've helped find, how much ground we hold. we level up together, you and me. paw in hand.",
         },
       ],
     },
