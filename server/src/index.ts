@@ -35,6 +35,7 @@ import { startZoneExpansionCron } from './services/searchZoneExpansion.js';
 import { runMemoryCleanupOnce } from './services/memoryCleanup.js';
 import { startScrapeCron } from './services/scrape.js';
 import { startLostDogCleanupCron } from './services/lostDogCleanup.js';
+import { startSpentItemCleanupCron } from './services/spentItemCleanup.js';
 import { startMultiplayerCron } from './services/bots.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
@@ -258,6 +259,7 @@ async function main() {
   const stopScrape = startScrapeCron(app.log);
   const stopZoneExpansion = startZoneExpansionCron(app.log);
   const stopLostDogCleanup = startLostDogCleanupCron(app.log);
+  const stopSpentItemCleanup = startSpentItemCleanupCron(app.log);
   // Multiplayer presence maintenance: purge stale walkers, and (if
   // MULTIPLAYER_BOTS>0) step + publish the bot walkers that populate the
   // presence set. Purge-only when no bots, so real presence still works.
@@ -283,6 +285,7 @@ async function main() {
     stopScrape();
     stopZoneExpansion();
     stopLostDogCleanup();
+    stopSpentItemCleanup();
     stopMultiplayer();
     stopWatchdog();
     process.exit(1);
@@ -292,6 +295,7 @@ async function main() {
     stopDecay();
     stopScrape();
     stopLostDogCleanup();
+    stopSpentItemCleanup();
     stopZoneExpansion();
     stopMultiplayer();
     // The watchdog stays armed THROUGH app.close(), and is only stood down

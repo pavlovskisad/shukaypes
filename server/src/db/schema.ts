@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm';
 import {
   pgTable,
   text,
@@ -86,6 +87,13 @@ export const tokens = pgTable(
   (t) => ({
     ownerIdx: index('tokens_owner_idx').on(t.ownerId),
     collectedIdx: index('tokens_collected_idx').on(t.collectedAt),
+    // The one the map actually wants: a player's LIVE tokens. Without it
+    // the planner reaches for collectedIdx and walks every uncollected
+    // token in the database before filtering down to one owner — see
+    // migration 0038 for the measured plan.
+    ownerUncollectedIdx: index('tokens_owner_uncollected_idx')
+      .on(t.ownerId)
+      .where(sql`${t.collectedAt} is null`),
   }),
 );
 
@@ -105,6 +113,9 @@ export const foodItems = pgTable(
   },
   (t) => ({
     ownerIdx: index('food_owner_idx').on(t.ownerId),
+    ownerUnconsumedIdx: index('food_owner_unconsumed_idx')
+      .on(t.ownerId)
+      .where(sql`${t.consumedAt} is null`),
   }),
 );
 
