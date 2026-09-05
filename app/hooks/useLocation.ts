@@ -3,7 +3,22 @@ import { Platform } from 'react-native';
 import type { LatLng } from '@shukajpes/shared';
 import { DEV_TOOLS } from '../constants/devTools';
 
-const KYIV_FALLBACK: LatLng = { lat: 50.4501, lng: 30.5234 };
+// THE POSITION WE INVENT WHEN WE DO NOT KNOW ONE.
+//
+// Fine for opening a map on something, and never evidence. Exported so
+// the sighting path can refuse it: a report whose coordinate came from
+// here would move a pet to a place nobody stood, and this exact pair is
+// also the parser's fall-through, which both map queries filter out —
+// so it would take the pet off the map entirely. That happened to
+// «Коля» on 3 September.
+export const KYIV_FALLBACK: LatLng = { lat: 50.4501, lng: 30.5234 };
+
+export function isFallbackPosition(pos: LatLng | null | undefined): boolean {
+  if (!pos) return false;
+  return (
+    Math.abs(pos.lat - KYIV_FALLBACK.lat) < 1e-9 && Math.abs(pos.lng - KYIV_FALLBACK.lng) < 1e-9
+  );
+}
 
 // Walk simulator — `?sim=1` on the URL replaces GPS with a synthetic
 // walker, so movement-driven mechanics (path sweep, auto-collect,

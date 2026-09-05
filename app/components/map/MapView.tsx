@@ -3743,6 +3743,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             showBubble(`thanks — moved ${d.name}'s pin 📍`, 5000);
           } else if (res?.ok) {
             showBubble(`thanks — sighting logged 👀`, 5000);
+          } else if (res?.reason === 'no-location') {
+            // Not a failure to send — a refusal to invent. Say which,
+            // or the walker retries a thing that cannot work.
+            showBubble(`i can't see where you are — turn location on 📍`, 6000);
           } else {
             showBubble(`couldn't report that one — try again`, 5000);
           }
