@@ -17,6 +17,33 @@ import { limitRead } from '../lib/rateLimit.js';
 
 const MAX_NOTE_CHARS = 200;
 const TRUST_MULTIPLIER = 2; // 2x search radius = "close enough" to move the pin
+
+// A COORDINATE NOBODY STOOD ON.
+//
+// The client falls back to the middle of Kyiv when geolocation fails or
+// is refused (KYIV_FALLBACK in app/hooks/useLocation.ts) so the map has
+// somewhere to open. That is fine for looking at a map and wrong for
+// everything here: in a sighting the coordinate IS the evidence, and
+// this one was invented by a device that did not know where it was.
+//
+// Measured on production, 3 September: «Коля» had been placed at the
+// circus from his own ad, then a sighting arrived carrying this exact
+// pair. It sat 2.2km away — inside 2× his search radius, so the route
+// trusted it — and moved him here. And here is also the parser's
+// fall-through, which both map queries filter out by exact match, so
+// the pet did not merely move: he disappeared. Reporting a sighting
+// deleted a pet from the map.
+//
+// One constant, three jobs (parser fall-through, client fallback, map
+// filter), which is why the failure was invisible from any one of them.
+const SYNTHETIC_POSITION = { lat: 50.4501, lng: 30.5234 };
+
+function isSyntheticPosition(lat: number, lng: number): boolean {
+  return (
+    Math.abs(lat - SYNTHETIC_POSITION.lat) < 1e-9 &&
+    Math.abs(lng - SYNTHETIC_POSITION.lng) < 1e-9
+  );
+}
 // What one paw is worth in points, matching a token picked up off the map.
 const PAW_POINTS = 3;
 
@@ -50,6 +77,18 @@ const plugin: FastifyPluginAsync = async (app) => {
       if (!dogId || typeof lat !== 'number' || typeof lng !== 'number') {
         reply.code(400);
         return { error: 'dogId + lat + lng required' };
+      }
+      // Refused rather than recorded: a sighting whose position was
+      // invented is not a weak report, it is not a report. The client
+      // knows when it is using the fallback and asks the walker for a
+      // real fix; this stands behind that for any client that does not.
+      if (isSyntheticPosition(lat, lng)) {
+        req.log.warn(
+          { kind: 'sighting_synthetic_position', dogId, user: req.userId },
+          '[sightings] refused a report carrying the client fallback position',
+        );
+        reply.code(400);
+        return { error: 'location unavailable — a sighting needs a real position' };
       }
 
       const [dog] = await db
@@ -209,7 +248,17 @@ const plugin: FastifyPluginAsync = async (app) => {
       const paws = seen ? 20 : 10;
 
       let sightingId: string | null = null;
-      if (seen && typeof lat === 'number' && typeof lng === 'number') {
+      // Same refusal as POST /sightings, but the walk is not refused
+      // with it: the person did walk the zone and has earned the paws
+      // for it. Only the coordinate is dropped, because only the
+      // coordinate is fiction — recording it would file a report nobody
+      // made, and moving the pin to it would take the pet off the map.
+      if (seen && typeof lat === 'number' && typeof lng === 'number' && isSyntheticPosition(lat, lng)) {
+        req.log.warn(
+          { kind: 'sighting_synthetic_position', dogId, user: req.userId, via: 'walk' },
+          '[sightings] walk reported a sighting with the client fallback position',
+        );
+      } else if (seen && typeof lat === 'number' && typeof lng === 'number') {
         sightingId = nanoid();
         await db.insert(schema.sightings).values({
           id: sightingId,

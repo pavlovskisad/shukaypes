@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { balance } from '../constants/balance';
+import { isFallbackPosition } from '../hooks/useLocation';
 import type { FoodItem, LatLng, NearbyPlayer, Quest, Token } from '@shukajpes/shared';
 import {
   api,
@@ -468,7 +469,7 @@ interface GameState {
     stops?: WalkStop[],
   ) => void;
   setOpenWalkStop: (id: string | null) => void;
-  reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean } | void>;
+  reportSighting: (dogId: string) => Promise<{ ok: boolean; trusted?: boolean; reason?: string } | void>;
   // Detective quests. Start flips any existing active quest to abandoned
   // server-side. advance checks proximity to the current waypoint and
   // progresses (or completes). abandon closes the current one. Start +
@@ -1377,6 +1378,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   reportSighting: async (dogId) => {
     const { userPosition } = get();
     if (!userPosition) return;
+    // In a sighting the coordinate IS the report. When geolocation has
+    // not resolved, userPosition is the invented Kyiv fallback — sending
+    // it files a report nobody made, and the server would move the pet
+    // onto the one coordinate the map filters out.
+    if (isFallbackPosition(userPosition)) return { ok: false, reason: 'no-location' };
     try {
       const res = await api.reportSighting(dogId, userPosition);
       get().tickDailyTask('sightings');
