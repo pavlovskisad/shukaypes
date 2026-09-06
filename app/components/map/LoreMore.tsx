@@ -1,4 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useMaplibreMap } from './MapContext';
 import {
   clampExtract,
   fetchWikipediaExtract,
@@ -33,6 +34,24 @@ import { useStrings } from '../../i18n/useStrings';
 // `key={lore.id}` on a bubble that changes landmark, or unmounting the
 // bubble when it closes — rather than by reaching in.
 
+// The bubble is bottom-anchored on its marker, so "more" grows UPWARD —
+// and on a phone the two-to-four sentences plus the Wikipedia lead grow
+// straight under the HUD row, with the top of the text clipped behind
+// the mode buttons. When the block opens (and again when the lead
+// arrives and the block gets taller) the map pans just far enough to
+// bring the marker's top edge below the HUD, without pushing the dot at
+// the bottom under the tab bar.
+//
+// Screen bands, in CSS px from the map container's edges. The HUD row
+// (logo + mode toggles + paw count) ends ~125 px down on an iPhone in
+// Safari; the tab bar plus its safe-area inset take ~110 px at the
+// bottom. Both carry a margin so the bubble's drawn edge clears them.
+const SAFE_TOP_PX = 140;
+const SAFE_BOTTOM_PX = 120;
+// Below this the pan is a twitch, not a fix.
+const MIN_PAN_PX = 4;
+const PAN_MS = 320;
+
 export interface LoreMoreSource {
   detail: string | null;
   wikipediaTitle: string | null;
@@ -50,12 +69,44 @@ export function LoreMore({
   tone: 'paper' | 'voice';
 }) {
   const t = useStrings();
+  const map = useMaplibreMap();
+  // The toggle is always rendered, so it is the stable handle on the
+  // marker this block lives in.
+  const toggleRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [extract, setExtract] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
 
   const hasWiki = !!lore.wikipediaTitle && !!lore.sourceLang;
+
+  // Keep the expanded bubble inside the viewport. Measured after paint
+  // (rAF) because the block has to be in the DOM at its final height
+  // before it can be measured; re-run when the lead lands, since that
+  // is the second time the bubble grows. Only ever pans DOWN the screen
+  // and only on open — closing yanks nothing.
+  useEffect(() => {
+    if (!open || !map) return;
+    const raf = requestAnimationFrame(() => {
+      const markerEl = toggleRef.current?.closest('.maplibregl-marker');
+      if (!markerEl) return;
+      const container = map.getContainer().getBoundingClientRect();
+      const rect = markerEl.getBoundingClientRect();
+      const top = rect.top - container.top;
+      const bottom = rect.bottom - container.top;
+      const need = SAFE_TOP_PX - top;
+      if (need < MIN_PAN_PX) return;
+      // Room below before the dot would slide under the tab bar. A
+      // bubble taller than the band between HUD and tab bar keeps its
+      // bottom on screen and scrolls inside instead.
+      const room = container.height - SAFE_BOTTOM_PX - bottom;
+      const delta = Math.min(need, Math.max(0, room));
+      if (delta < MIN_PAN_PX) return;
+      // Negative y moves the camera up, which moves the marker down.
+      map.panBy([0, -delta], { duration: PAN_MS });
+    });
+    return () => cancelAnimationFrame(raf);
+  }, [open, extract, loading, map]);
 
   // `loading` is deliberately NOT a dependency: setting it inside the
   // effect would re-run the effect, whose cleanup would then abandon the
@@ -133,6 +184,7 @@ export function LoreMore({
         </div>
       ) : null}
       <div
+        ref={toggleRef}
         role="button"
         onClick={(e) => {
           e.stopPropagation();
