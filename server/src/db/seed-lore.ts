@@ -27,6 +27,7 @@ import { sql } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { anthropic, ACTIVE_MODEL } from '../services/anthropic.js';
+import { fetchWikidataDesc, fetchWikipediaSummary } from '../services/wikiResearch.js';
 
 // Kyiv bbox (south, west, north, east) — Overpass takes (S,W,N,E).
 // Pulled from OSM's "Kyiv" relation bounds, padded slightly.
@@ -234,55 +235,17 @@ interface ResearchBlob {
   wikipediaLang: string | null;
 }
 
-async function fetchWikidataDesc(qid: string): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`,
-      { headers: { 'user-agent': 'shukajpes-lore-seed/1.0 (contact: pavlovskisad@gmail.com)' } },
-    );
-    if (!res.ok) return null;
-    const json = (await res.json()) as {
-      entities?: Record<string, { descriptions?: Record<string, { value: string }> }>;
-    };
-    const ent = json.entities?.[qid];
-    if (!ent) return null;
-    return (
-      ent.descriptions?.uk?.value ??
-      ent.descriptions?.en?.value ??
-      ent.descriptions?.ru?.value ??
-      null
-    );
-  } catch {
-    return null;
-  }
-}
-
-async function fetchWikipediaSummary(
-  lang: string,
-  title: string,
-): Promise<string | null> {
-  try {
-    const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-    const res = await fetch(url, {
-      headers: { 'user-agent': 'shukajpes-lore-seed/1.0 (contact: pavlovskisad@gmail.com)' },
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { extract?: string };
-    return json.extract ?? null;
-  } catch {
-    return null;
-  }
-}
-
+// The Wikimedia fetches live in services/wikiResearch.ts, shared with
+// enrich-lore.ts, which later fills in the handles this seed leaves null.
 async function researchOne(c: Candidate): Promise<ResearchBlob> {
   const wikidataDescription = c.wikidataId ? await fetchWikidataDesc(c.wikidataId) : null;
   let wikipediaSummary: string | null = null;
   let wikipediaLang: string | null = null;
   if (c.wikipediaTitle && c.sourceLang) {
-    wikipediaSummary = await fetchWikipediaSummary(c.sourceLang, c.wikipediaTitle);
+    wikipediaSummary = (await fetchWikipediaSummary(c.sourceLang, c.wikipediaTitle))?.extract ?? null;
     wikipediaLang = c.sourceLang;
     if (!wikipediaSummary && c.sourceLang !== 'uk') {
-      wikipediaSummary = await fetchWikipediaSummary('uk', c.wikipediaTitle);
+      wikipediaSummary = (await fetchWikipediaSummary('uk', c.wikipediaTitle))?.extract ?? null;
       if (wikipediaSummary) wikipediaLang = 'uk';
     }
   }
@@ -421,6 +384,7 @@ async function main() {
           wikidataId: c.wikidataId,
           wikipediaTitle: c.wikipediaTitle,
           sourceLang: research.wikipediaLang ?? c.sourceLang,
+          wikiSource: c.wikipediaTitle ? 'osm' : null,
         })
         .onConflictDoNothing({ target: schema.kyivLore.id });
       writes++;

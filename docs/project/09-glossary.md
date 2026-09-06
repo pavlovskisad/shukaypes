@@ -186,6 +186,14 @@ or with the **sniff press**.
 for 2.4s and the dog surfaces a nearby `kyiv_lore` entry with a story bubble
 and a "let's go here" button. Alive and unrelated to sniff mode.
 
+**Read more** — the "ще ▾" under a landmark's one-liner, on the sniff press
+and on a walk stop alike (`LoreMore.tsx`). Opens the dog's longer telling
+(`kyiv_lore.detail`, instant, offline), then the Wikipedia lead under it when
+the row has an article, with a link to the article as attribution. Both used
+to be rare: the seed only linked rows whose OSM object carried a `wikipedia=`
+tag, and wrote no detail at all. `enrich:lore` fills both in — see
+[operations](07-operations.md#server-side-clis).
+
 **Spot** — a POI from Google Places (vet, pet shop, park, café…), served
 through the server's cache. The Spots tab and the map markers.
 
@@ -222,7 +230,7 @@ They render per the product reference (`WalkStops.tsx`): plain **green** dots
 (`colors.walkStop`, `#7CFB00`) on a chunky **cyan dashed** line
 (`colors.walkLine`) — a tour is a route *with stops*, so it does not reuse
 `routeBlue`, which paints quest routes and the sniff ring. Tap a dot for the
-dog's sentence, tap again for the Wikipedia summary.
+dog's sentence, tap "ще" for the **read more**.
 
 The dots are **not numbered** and carry no ring. Numbering promised a sequence
 the walk doesn't enforce — which stop you reach first depends on which way you

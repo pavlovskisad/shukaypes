@@ -50,6 +50,7 @@ function poi(
     name: extra.name ?? `poi-${seq}`,
     category: 'historic',
     story: 'a sentence about it',
+    hasDetail: false,
     wikipediaTitle: null,
     sourceLang: null,
     lat: p.lat,
@@ -286,6 +287,24 @@ function ok(cond: boolean, label: string, detail = ''): void {
   ok(
     stops[0]?.wikipediaTitle === 'Софійський собор' && stops[0]?.sourceLang === 'uk',
     'the read-more handles survive into the stop',
+  );
+
+  // The dog's own longer telling is a read-more too — a row enrich-lore
+  // wrote a detail for, with no article behind it, is just as worth the
+  // extra metres.
+  const told = poi(520, 90, { name: 'told', hasDetail: true });
+  const stops2 = planStops({
+    path,
+    pool: [poi(500, 30, { name: 'plain2' }), told],
+    corridorM: 200,
+    maxStops: 1,
+    minSpacingM: 150,
+    maxDetourM: 500,
+  });
+  ok(
+    stops2.length === 1 && stops2[0]!.name === 'told',
+    'a landmark with a detail wins the same close call',
+    stops2.map((s) => s.name).join(','),
   );
 }
 

@@ -102,6 +102,11 @@ export interface AppStrings {
     opening: string;
     more: string;
     less: string;
+    // In-voice shrug when a landmark has neither a longer telling nor
+    // an article behind "read more".
+    nothingMore: string;
+    // Label of the link to the Wikipedia article under its lead.
+    wikipedia: string;
     sniffingRoute: string;
     letsGoHere: string;
   };
@@ -523,6 +528,8 @@ const uk: AppStrings = {
     opening: 'відкриваю…',
     more: 'ще ▾',
     less: 'менше ▴',
+    nothingMore: '*чухає за вухом* більше не пригадую — тільки те, що сказав.',
+    wikipedia: 'вікіпедія ↗',
     sniffingRoute: 'нюхаю шлях…',
     letsGoHere: 'ходімо сюди →',
   },
@@ -959,6 +966,8 @@ const en: AppStrings = {
     opening: 'opening…',
     more: 'more ▾',
     less: 'less ▴',
+    nothingMore: "*scratches behind the ear* that's all I remember — just what I said.",
+    wikipedia: 'wikipedia ↗',
     sniffingRoute: 'sniffing route…',
     letsGoHere: "let's go here →",
   },

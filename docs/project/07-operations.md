@@ -151,8 +151,9 @@ or locally against a `DATABASE_URL`.
 | `clean:ad-bodies [--apply]` | Strip OLX section labels welded to the next word (`Описменя`). |
 | `flag-found-reports [--apply]` | Mark ads where somebody *found* an animal, so they stop appearing as pets to go looking for. |
 | `revive:live-ads` | Bring back a pet whose ad is serving again. |
-| `check` (`pnpm check`) | All **twelve** fixture checks — out-of-area, ingest alert, pet identity, per-user rate limiting, invite gate, dev auth, contact redaction, ad-body containment, ad extraction, found reports, walk stops, route coverage. **Runs in CI on PRs and before deploy.** |
+| `check` (`pnpm check`) | All **thirteen** fixture checks — out-of-area, ingest alert, pet identity, per-user rate limiting, invite gate, dev auth, contact redaction, ad-body containment, ad extraction, found reports, walk stops, landmark name match, route coverage. **Runs in CI on PRs and before deploy.** |
 | `seed:lore`, `seed:gazetteer` | One-off corpus builds from OSM. |
+| `enrich:lore [--apply] [--only links\|detail] [--limit N] [--id osm:…]` | Gives `kyiv_lore` its "read more". **Dry by default.** `links` finds the Wikipedia article for rows the seed left without one — from the OSM `wikidata=` tag's sitelinks (certain), else from the uk.wikipedia article geotagged at the spot matched by name (fuzzy, stamped `wiki_source = 'geosearch'` so it can be audited or reverted as a group). `detail` has the model write the dog's 2–4-sentence telling from the article for every linked row, and rewrites the one-liner of rows whose story was written before they had an article. Links cost nothing; detail is one Sonnet call a row and the dry run prints the total. Idempotent — a crashed run resumes. |
 | `db:seed-dogs` | Local dev only. Production runs on real scraped pets. |
 | `wipe:stats` | Clears stats. |
 
@@ -333,7 +334,7 @@ sits in front of — is worth remembering.
   follow-up work rather than stacking onto merged history.
 - `pnpm -r typecheck`, `pnpm -r lint` and `pnpm check` before every PR. The
   lint baseline is **0 errors, 21 `react-hooks/exhaustive-deps` warnings**;
-  `pnpm check` is twelve fixture checks and all must pass. Verified on
+  `pnpm check` is thirteen fixture checks and all must pass. Verified on
   20 Aug at `43808c6`. **The lint baseline is 23, not the 21 `CLAUDE.md`
   still states** — it drifted to 22 during the walk work and to 23 with
   `LostFlowModal`, both ordinary `exhaustive-deps` warnings matching

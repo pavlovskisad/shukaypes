@@ -3,6 +3,11 @@
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 
+// How much of a landmark's longer telling goes into the chat prompt.
+// The details are written to 45-90 words, so this is a backstop, not a
+// working limit.
+const LORE_DETAIL_MAX_CHARS = 450;
+
 // NearbySpot is sent from the client per chat call (the server doesn't
 // persist Google Places data — keeping the API quota client-side).
 // Already-distance-sorted, capped to a small handful by the client.
@@ -100,6 +105,11 @@ export async function buildContextBlock({ userId, pos, viewport, spots }: Contex
   // as natural recall about the area on screen, not the area you're
   // physically standing on. Each story is already a dog-voice
   // sentence; the dog can drop one verbatim or paraphrase.
+  //
+  // The longer telling (kyiv_lore.detail) rides along when there is
+  // one, so "tell me more about that" has something true to draw on
+  // instead of a one-liner to embroider. Capped per entry: three
+  // details is a few hundred tokens, three articles would not be.
   let nearbyLore: string[] = [];
   const lorePos = browsePos;
   const browsingViewport = viewport != null && !!pos;
@@ -110,15 +120,17 @@ export async function buildContextBlock({ userId, pos, viewport, spots }: Contex
         name: schema.kyivLore.name,
         category: schema.kyivLore.category,
         story: schema.kyivLore.story,
+        detail: schema.kyivLore.detail,
         dist: loreDist,
       })
       .from(schema.kyivLore)
       .where(sql`${loreDist} < 250`)
       .orderBy(loreDist)
       .limit(3);
-    nearbyLore = lore.map(
-      (l) => `  - ${l.name} (${l.category}, ~${Math.round(l.dist)}m): "${l.story}"`,
-    );
+    nearbyLore = lore.map((l) => {
+      const line = `  - ${l.name} (${l.category}, ~${Math.round(l.dist)}m): "${l.story}"`;
+      return l.detail ? `${line}\n    more, if asked: ${l.detail.slice(0, LORE_DETAIL_MAX_CHARS)}` : line;
+    });
   }
 
   const lines = [

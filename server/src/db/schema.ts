@@ -333,6 +333,21 @@ export const kyivLore = pgTable(
     wikidataId: text('wikidata_id'),
     wikipediaTitle: text('wikipedia_title'),
     sourceLang: text('source_lang'), // uk | en
+    // Where the Wikipedia handle came from. The seed only ever read the
+    // OSM `wikipedia=` tag, which a minority of objects carry; enrich-
+    // lore.ts fills the rest in from Wikidata sitelinks and from a
+    // geosearch-plus-name match on uk.wikipedia. The last of those is a
+    // fuzzy match, and an operator auditing a wrong article wants to
+    // know which rows to distrust first.
+    //   osm | wikidata | geosearch
+    wikiSource: text('wiki_source'),
+    // The dog's longer telling — two to four sentences behind the
+    // one-line story, written from the same research by enrich-lore.ts.
+    // What "read more" shows instantly and offline; null when there was
+    // no research to write it from, because the alternative is making
+    // things up about a real plaque.
+    detail: text('detail'),
+    detailAt: timestamp('detail_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     lastRewroteAt: timestamp('last_rewrote_at', { withTimezone: true }).notNull().defaultNow(),
   },

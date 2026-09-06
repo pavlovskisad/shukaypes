@@ -729,6 +729,9 @@ export const api = {
         name: string;
         category: string;
         story: string;
+        // The dog's longer telling, for "read more". Null until
+        // enrich-lore has written one for the row.
+        detail: string | null;
         wikipediaTitle: string | null;
         sourceLang: string | null;
         position: LatLng;

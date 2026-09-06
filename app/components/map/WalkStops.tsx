@@ -1,8 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { MapLibreMarker } from './MapLibreMarker';
+import { LoreMore } from './LoreMore';
 import { useGameStore } from '../../stores/gameStore';
-import { clampExtract, fetchWikipediaExtract } from '../../services/wikipedia';
 import { colors } from '../../constants/colors';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
@@ -10,7 +10,6 @@ import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
 import { playPop } from '../../utils/popOnTap';
-import { useStrings } from '../../i18n/useStrings';
 import type { WalkStop } from '../../utils/walk';
 import { useMaplibreMap } from './MapContext';
 import { ROUTE_DRAW_MS } from './CrayonRoute';
@@ -21,8 +20,8 @@ import { distanceMeters } from '../../utils/geo';
 // Each stop is a plain green dot sitting on the cyan dashed line — the
 // pairing the product reference uses, and the reason a tour reads as a
 // route WITH stops rather than as a line among some pins. Tap one and
-// the dog says its sentence; tap "ще" inside that and the Wikipedia
-// summary opens under it.
+// the dog says its sentence; tap "ще" inside that and the longer telling
+// and the Wikipedia lead open under it (LoreMore.tsx).
 //
 // ONE OPEN AT A TIME, held in the store rather than here: the walk-start
 // list also opens stops (tapping a row flies the camera to it and expands
@@ -131,45 +130,9 @@ function StopMarker({
   popDelayMs: number;
   onToggle: () => void;
 }) {
-  const t = useStrings();
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [moreLoading, setMoreLoading] = useState(false);
-  const [moreText, setMoreText] = useState<string | null>(null);
-
-  // Collapsing the stop collapses its article too — reopening a stop
-  // should show the dog's sentence first, not the wall of text somebody
-  // left expanded three stops ago. The fetched text is kept so a second
-  // expand is instant.
-  useEffect(() => {
-    if (!open) setMoreOpen(false);
-  }, [open]);
-
-  const expandMore = async () => {
-    if (moreLoading) return;
-    if (moreOpen) {
-      setMoreOpen(false);
-      return;
-    }
-    if (moreText) {
-      setMoreOpen(true);
-      return;
-    }
-    // No article — still open, with the same in-voice shrug the sniff
-    // bubble gives, so the affordance doesn't read as broken.
-    if (!stop.wikipediaTitle || !stop.sourceLang) {
-      setMoreText('*чухає за вухом* більше не пригадую — тільки те, що сказав.');
-      setMoreOpen(true);
-      return;
-    }
-    setMoreLoading(true);
-    const text = await fetchWikipediaExtract(stop.sourceLang, stop.wikipediaTitle);
-    setMoreText(
-      text ?? '*чухає за вухом* більше не пригадую — тільки те, що сказав.',
-    );
-    setMoreOpen(true);
-    setMoreLoading(false);
-  };
-
+  // The bubble below unmounts when the stop closes, and LoreMore's
+  // state goes with it — so reopening a stop shows the dog's sentence
+  // first, not the wall of text somebody left expanded three stops ago.
   return (
     <MapLibreMarker
       position={stop.position}
@@ -206,43 +169,7 @@ function StopMarker({
           >
             <div style={{ fontWeight: 700, marginBottom: 2 }}>{stop.name}</div>
             <div>{stop.story}</div>
-            {moreOpen && moreText ? (
-              <div
-                style={{
-                  marginTop: S.s,
-                  paddingTop: S.s,
-                  borderTop: '1px solid rgba(255,255,255,0.12)',
-                  fontSize: TYPE.small,
-                  lineHeight: 1.45,
-                  opacity: 0.85,
-                  textAlign: 'left',
-                  maxHeight: 180,
-                  overflowY: 'auto',
-                  whiteSpace: 'pre-line',
-                }}
-              >
-                {clampExtract(moreText)}
-              </div>
-            ) : null}
-            <div
-              role="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                playPop(e.currentTarget);
-                void expandMore();
-              }}
-              style={{
-                marginTop: S.s,
-                fontSize: TYPE.caption,
-                fontWeight: 700,
-                opacity: 0.7,
-                textTransform: 'lowercase',
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-            >
-              {moreLoading ? t.sniff.opening : moreOpen ? t.sniff.less : t.sniff.more}
-            </div>
+            <LoreMore lore={stop} tone="voice" />
           </div>
         ) : null}
         {/* The dot itself. Bare green, no ring and no number, inside a
