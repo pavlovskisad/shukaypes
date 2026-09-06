@@ -42,3 +42,6 @@ pnpm-debug.log*
 
 # Expo
 .expo/
+
+# Local permission overrides — not the project policy
+.claude/settings.local.json

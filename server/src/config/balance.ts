@@ -176,6 +176,21 @@ export const balance = {
     // back to the age rule rather than living forever on one old 200.
     adAliveGraceMs: 45 * 24 * 60 * 60 * 1000,
   },
+  // Spent tokens and eaten bones. Nothing reads them once they are
+  // spent — see services/spentItemCleanup.ts for why that is safe and
+  // what it deliberately does not touch.
+  spentItemCleanup: {
+    intervalMs: 24 * 60 * 60 * 1000,
+    // Long enough that the double-collect guard still answers 409 for
+    // any retry a real client could plausibly make, short enough that
+    // the table stays small.
+    retentionMs: 7 * 24 * 60 * 60 * 1000,
+    // Small enough to be invisible on a shared vCPU; 20 of them clears
+    // 100k rows a day, which drains the standing backlog in under a
+    // week without ever making a tick expensive.
+    batchSize: 5_000,
+    maxBatchesPerTick: 20,
+  },
   // Territory marking — the dog claims ground the way a real one does.
   // The companion decides; the human's only lever is walking it somewhere
   // worth marking and keeping it in the mood.
