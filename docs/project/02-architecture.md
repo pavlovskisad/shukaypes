@@ -429,9 +429,10 @@ server:  needs: checks → flyctl deploy --remote-only
 
 The gate is real (PR #274). `react-hooks/rules-of-hooks` is an **error** —
 that is the class of bug that white-screened prod once. `pnpm check` (added
-PR #416) runs the **thirteen** fixture checks: out-of-area, ingest alert, pet identity, per-user rate limiting,
+PR #416) runs the **fourteen** fixture checks: out-of-area, ingest alert, pet identity, per-user rate limiting,
 invite gate, dev auth, contact redaction, ad-body containment, ad
-extraction, found reports, walk stops, landmark name match, route coverage.
+extraction, found reports, walk stops, landmark name match, lore writer
+parse, route coverage.
 They existed before and **nothing ran them** — a broken rule deciding which
 pets get expired or merged would have shipped on the strength of having
 compiled.
