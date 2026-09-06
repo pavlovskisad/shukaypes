@@ -331,7 +331,7 @@ territory, a bbox range scan on plain B-trees.
 | `quests` + `StoredWaypoint[]` jsonb | Detective quest state |
 | `daily_tasks` | Per user per local calendar day |
 | `scrape_log` | One row per URL ever seen — the dedupe key and the ingest heartbeat |
-| `kyiv_lore` | Curated geo-indexed landmark stories (OSM + Wikidata, rewritten by Sonnet) |
+| `kyiv_lore` | Curated geo-indexed landmark stories (OSM + Wikidata, rewritten by Sonnet). `story` is the one-liner; `facts` (jsonb) holds the OSM tags beyond the name — inscription, subject, date; `detail` (2–4 sentences) and the Wikipedia handle behind "read more" are filled by `enrich:lore`, with `wiki_source` saying whether the handle came from the OSM tag, a Wikidata sitelink, the memorial's subject, the row's own name as a title, or a name-matched geosearch |
 | `kyiv_gazetteer` | ~16k Kyiv place names from OSM, for parser geocoding. Trigram fuzzy match |
 | `places_cache` | Google Places results keyed by (cell, category). Since PR #417 the request side is bounded too: radius clamped to 2000m, coordinates must fall inside the Greater Kyiv bbox (a finite ~3,600-cell cache domain), and cell fan-out is capped — one crafted request could previously fan out to 935 Google calls (~$30) |
 | `territory_marks` | Individual marks — where the dog has been |
@@ -429,9 +429,9 @@ server:  needs: checks → flyctl deploy --remote-only
 
 The gate is real (PR #274). `react-hooks/rules-of-hooks` is an **error** —
 that is the class of bug that white-screened prod once. `pnpm check` (added
-PR #416) runs the **twelve** fixture checks: out-of-area, ingest alert, pet identity, per-user rate limiting,
+PR #416) runs the **thirteen** fixture checks: out-of-area, ingest alert, pet identity, per-user rate limiting,
 invite gate, dev auth, contact redaction, ad-body containment, ad
-extraction, found reports, walk stops, route coverage.
+extraction, found reports, walk stops, landmark name match, route coverage.
 They existed before and **nothing ran them** — a broken rule deciding which
 pets get expired or merged would have shipped on the strength of having
 compiled.

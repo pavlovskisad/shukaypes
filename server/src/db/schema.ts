@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import type { LoreFacts } from '../services/overpass.js';
 import {
   pgTable,
   text,
@@ -333,6 +334,31 @@ export const kyivLore = pgTable(
     wikidataId: text('wikidata_id'),
     wikipediaTitle: text('wikipedia_title'),
     sourceLang: text('source_lang'), // uk | en
+    // Where the Wikipedia handle came from. The seed only ever read the
+    // OSM `wikipedia=` tag, which a minority of objects carry; enrich-
+    // lore.ts fills the rest in from Wikidata sitelinks and from a
+    // geosearch-plus-name match on uk.wikipedia. The last of those is a
+    // fuzzy match, and an operator auditing a wrong article wants to
+    // know which rows to distrust first.
+    //   osm       the seed's `wikipedia=` tag
+    //   wikidata  the `wikidata=` entity's own sitelink
+    //   subject   the article about what the memorial is FOR
+    //             (`subject:wikidata` / `subject:wikipedia`)
+    //   title     uk.wikipedia has an article under the row's own name
+    //   geosearch the article geotagged at the spot, matched by name
+    wikiSource: text('wiki_source'),
+    // What the OSM object says about itself beyond its name — the
+    // plaque's inscription, a description, a date, the commemorated
+    // subject. See LoreFacts in services/overpass.ts. Research input for
+    // the longer telling; never shown raw.
+    facts: jsonb('facts').$type<LoreFacts>(),
+    // The dog's longer telling — two to four sentences behind the
+    // one-line story, written from the same research by enrich-lore.ts.
+    // What "read more" shows instantly and offline; null when there was
+    // no research to write it from, because the alternative is making
+    // things up about a real plaque.
+    detail: text('detail'),
+    detailAt: timestamp('detail_at', { withTimezone: true }),
     createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
     lastRewroteAt: timestamp('last_rewrote_at', { withTimezone: true }).notNull().defaultNow(),
   },

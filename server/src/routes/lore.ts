@@ -14,7 +14,7 @@
 //     see and can only know which that is by asking.
 
 import type { FastifyPluginAsync } from 'fastify';
-import { and, notInArray, sql } from 'drizzle-orm';
+import { and, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
 import type { LatLng } from '../utils/geo.js';
 import { db, schema } from '../db/index.js';
 import { limitRead } from '../lib/rateLimit.js';
@@ -152,6 +152,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         name: schema.kyivLore.name,
         category: schema.kyivLore.category,
         story: schema.kyivLore.story,
+        detail: schema.kyivLore.detail,
         wikipediaTitle: schema.kyivLore.wikipediaTitle,
         sourceLang: schema.kyivLore.sourceLang,
         lat: schema.kyivLore.lat,
@@ -173,8 +174,10 @@ const plugin: FastifyPluginAsync = async (app) => {
         name: pick.name,
         category: pick.category,
         story: pick.story,
-        // Wikipedia handles for the on-demand "read more" — client
-        // fetches the public summary endpoint when the user expands.
+        // Behind "read more": the dog's own longer telling, shown at
+        // once, and the Wikipedia handles the client fetches the public
+        // summary for when the user expands. Either may be null.
+        detail: pick.detail,
         wikipediaTitle: pick.wikipediaTitle,
         sourceLang: pick.sourceLang,
         position: { lat: pick.lat, lng: pick.lng },
@@ -257,12 +260,16 @@ const plugin: FastifyPluginAsync = async (app) => {
       corridorM / (111_320 * Math.cos((((minLat + maxLat) / 2) * Math.PI) / 180));
 
     const bbox = sql`lat BETWEEN ${minLat - padLat} AND ${maxLat + padLat} AND lng BETWEEN ${minLng - padLng} AND ${maxLng + padLng}`;
+    // The pool carries a FLAG for the longer telling, not the text: this
+    // reads up to several hundred rows to choose three, and the
+    // paragraphs are fetched below for the chosen ones only.
     const pool: LorePoint[] = await db
       .select({
         id: schema.kyivLore.id,
         name: schema.kyivLore.name,
         category: schema.kyivLore.category,
         story: schema.kyivLore.story,
+        hasDetail: sql<boolean>`(detail is not null)`,
         wikipediaTitle: schema.kyivLore.wikipediaTitle,
         sourceLang: schema.kyivLore.sourceLang,
         lat: schema.kyivLore.lat,
@@ -307,6 +314,21 @@ const plugin: FastifyPluginAsync = async (app) => {
         waypoints: waypointsThrough(r.path, stops),
       };
     });
+
+    // The longer telling for the stops that made the cut — at most
+    // MAX_ROUTES × MAX_STOPS_CEILING rows, one query.
+    const wanted = new Set<string>();
+    for (const r of results) for (const s of r.stops) wanted.add(s.id);
+    if (wanted.size > 0) {
+      const details = await db
+        .select({ id: schema.kyivLore.id, detail: schema.kyivLore.detail })
+        .from(schema.kyivLore)
+        .where(and(inArray(schema.kyivLore.id, [...wanted]), isNotNull(schema.kyivLore.detail)));
+      const byId = new Map(details.map((d) => [d.id, d.detail]));
+      for (const r of results) {
+        for (const s of r.stops) s.detail = byId.get(s.id) ?? null;
+      }
+    }
 
     return { results, poolSize: pool.length };
   });

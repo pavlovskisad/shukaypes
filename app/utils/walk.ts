@@ -293,8 +293,11 @@ export interface WalkStop {
   category: string;
   // One in-voice sentence: what the dog says when you get there.
   story: string;
-  // Handles for the on-demand "read more", when the landmark has a
-  // Wikipedia article. Null for most of the corpus.
+  // Two to four more, for "read more". Null where enrich-lore had no
+  // research to write them from.
+  detail: string | null;
+  // Handles for the Wikipedia lead under the detail, when the landmark
+  // has an article.
   wikipediaTitle: string | null;
   sourceLang: string | null;
   position: LatLng;
