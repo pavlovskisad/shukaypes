@@ -191,7 +191,9 @@ and on a walk stop alike (`LoreMore.tsx`). Opens the dog's longer telling
 (`kyiv_lore.detail`, instant, offline), then the Wikipedia lead under it when
 the row has an article, with a link to the article as attribution. Both used
 to be rare: the seed only linked rows whose OSM object carried a `wikipedia=`
-tag, and wrote no detail at all. `enrich:lore` fills both in — see
+tag — 8% of the corpus, measured — and wrote no detail at all. `enrich:lore`
+fills both in, from Wikidata, from the plaque's own inscription and subject
+tags, and from the person's article when the plaque is named after one — see
 [operations](07-operations.md#server-side-clis).
 
 **Spot** — a POI from Google Places (vet, pet shop, park, café…), served

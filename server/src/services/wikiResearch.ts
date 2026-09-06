@@ -118,6 +118,33 @@ export async function fetchWikipediaSummary(
   };
 }
 
+// The article that sits under a name, redirects followed — "Михайло
+// Грушевський" resolves to "Грушевський Михайло Сергійович". Null when
+// there is no such page, or it is not an article (a category, a
+// disambiguation, anything outside namespace 0). This is how a plaque
+// named after a person finds the person: uk.wikipedia titles people
+// "Прізвище Ім'я По батькові", which is what the mappers wrote.
+export async function resolveWikipediaTitle(lang: string, name: string): Promise<string | null> {
+  const params = new URLSearchParams({
+    action: 'query',
+    titles: name,
+    redirects: '1',
+    prop: 'pageprops',
+    ppprop: 'disambiguation',
+    format: 'json',
+  });
+  const json = await getJson<{
+    query?: {
+      pages?: Record<string, { ns?: number; title?: string; missing?: string; pageprops?: Record<string, string> }>;
+    };
+  }>(`https://${lang}.wikipedia.org/w/api.php?${params.toString()}`);
+  const pages = Object.values(json?.query?.pages ?? {});
+  const page = pages[0];
+  if (!page || page.missing != null || page.ns !== 0 || !page.title) return null;
+  if (page.pageprops && 'disambiguation' in page.pageprops) return null;
+  return page.title;
+}
+
 // Every article geotagged within radiusM of a point. Position only — the
 // caller decides which of them, if any, is the landmark (loreMatch.ts).
 export async function geosearchWikipedia(

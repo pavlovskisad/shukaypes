@@ -249,9 +249,42 @@ function namesAPlaceKindBeyond(candidateTitle: string, subjectNames: string[]): 
 const NEVER_TITLE = /^(Список|Перелік|Категорія|Шаблон|Вулиця|Провулок|Проспект|Бульвар|Узвіз|Площа)(?!\p{L})/u;
 
 // Below this the shared tokens are a coincidence more often than a
-// match. With the overlap coefficient this means "at least half of the
-// shorter name's words are in the other".
-export const MATCH_THRESHOLD = 0.5;
+// match. Started at 0.5 and moved up after a 150-row sample of real
+// geosearch results: the two wrong matches at exactly 0.5 were "Південний
+// Палац" ⇐ "Західний палац київського дитинця" and "Гетьман Петро
+// Конашевич Сагайдачний" ⇐ "Сагайдачного, 24" — one shared word out of
+// two, and the wrong thing both times.
+export const MATCH_THRESHOLD = 0.6;
+
+// A ONE-WORD title matched against a longer name is a district, a
+// street or a person that the name happens to mention — "Пам'яті
+// залізничникам дарничанам…" ⇐ "Дарниця", from the same sample. The
+// other way round (a one-word OSM name inside a longer, disambiguated
+// title) is what a match usually looks like, and stays allowed.
+function titleTooShortFor(title: string, subjectNames: string[]): boolean {
+  const tt = nameTokens(title);
+  if (tt.size !== 1) return false;
+  return subjectNames.every((n) => nameTokens(n).size > 1);
+}
+
+// Whether a name reads as a PROPER name — two to four capitalised words
+// and nothing generic — the shape of a plaque named after the person on
+// it ("Купрін Олександр Іванович", "Леся Українка", "Голда Меїр"). Such a
+// name is worth looking up as an article title directly, which is far
+// more precise than any geosearch. "Пам'ятний знак" and "Жертвам
+// тероризму" are not proper names and are not looked up.
+export function looksLikeProperName(name: string): boolean {
+  const words = name
+    .replace(/[«»"()[\],.:;!?/\\—–]/g, ' ')
+    .split(/\s+/)
+    .filter(Boolean);
+  if (words.length < 2 || words.length > 4) return false;
+  if (!words.every((w) => /^\p{Lu}/u.test(w))) return false;
+  // Every word has to survive the generic filter — a name that is
+  // "Софійський Собор" is a building, and the wikidata/geosearch paths
+  // handle buildings; this path is for people.
+  return nameTokens(name).size === words.length;
+}
 
 // The article for a landmark, if one of the geotagged neighbours is it.
 // The English name is a second chance for the same landmark, not a
@@ -269,6 +302,7 @@ export function pickGeoMatch(
     let score = 0;
     for (const n of names) score = Math.max(score, nameMatchScore(n, c.title));
     if (score < threshold) continue;
+    if (titleTooShortFor(c.title, names)) continue;
     if (namesAPlaceKindBeyond(c.title, names)) continue;
     if (!memorial && titleIsMemorial(c.title)) continue;
     // Ties go to the nearer one — same name twice inside the radius is

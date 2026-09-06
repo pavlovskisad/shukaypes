@@ -11,6 +11,7 @@
 
 import {
   isMemorialLike,
+  looksLikeProperName,
   nameMatchScore,
   nameTokens,
   pickGeoMatch,
@@ -61,6 +62,11 @@ function cands(...titles: Array<string | [string, number]>): GeoCandidate[] {
     ['memorial', "Пам'ятник Шевченку", "Пам'ятник Тарасу Шевченку (Київ)"],
     ['museum', 'Музей Ханенків', 'Національний музей мистецтв імені Богдана та Варвари Ханенків'],
     ['historic', 'Золоті ворота', 'Золоті ворота (Київ)'],
+    // The right matches from the same 150-row sample.
+    ['historic', 'Петру Нестерову', "Пам'ятний знак Петру Нестерову (Київ)"],
+    ['historic', 'ДВТ № 182 КИУР', 'ДОТ № 182 (КиУР)'],
+    ['religious', 'Храм ікони Божої Матері "Живоносне Джерело" (УПЦ МП)', 'Церква ікони Божої Матері «Живоносне Джерело» (Голосіївська пустинь)'],
+    ['religious', 'Храм Успіння Пресвятої Богородиці', 'Церква Успіння Пресвятої Богородиці (Позняки)'],
     ['tourism', 'Дім Городецького', 'Будинок з химерами'],
   ];
   for (const [category, name, title] of pairs) {
@@ -88,6 +94,11 @@ function cands(...titles: Array<string | [string, number]>): GeoCandidate[] {
     ['memorial', 'Меморіальна дошка Миколі Лисенку', 'Вулиця Лисенка (Київ)'],
     ['historic', 'Будинок Сікорського', 'Список пам’яток архітектури Києва'],
     ['memorial', "Пам'ятник Володимиру Великому", 'Володимирська гірка'],
+    // The three wrong matches from a 150-row sample of real geosearch
+    // results, before the threshold and the short-title guard.
+    ['historic', "Пам'яті залізничникам дарничанам які загинули під час великої вітчизняної війни", 'Дарниця'],
+    ['historic', 'Гетьман Петро Конашевич Сагайдачний', 'Сагайдачного, 24'],
+    ['historic', 'Південний Палац', 'Західний палац київського дитинця'],
   ];
   for (const [category, name, title] of falsePairs) {
     const m = pickGeoMatch({ name, nameEn: null, category }, cands(title));
@@ -129,6 +140,25 @@ function cands(...titles: Array<string | [string, number]>): GeoCandidate[] {
     cands('Будинок з химерами', 'House with Chimaeras'),
   );
   ok(m?.title === 'House with Chimaeras', 'the English name can carry the match', m?.title);
+}
+
+// ---------------------------------------------------------------------
+// Which names are worth looking up as an article title directly.
+// ---------------------------------------------------------------------
+{
+  for (const n of ['Купрін Олександр Іванович', 'Леся Українка', 'Голда Меїр', 'Михайло Грушевський']) {
+    ok(looksLikeProperName(n), `proper name: ${n}`);
+  }
+  for (const n of [
+    "Пам'ятний знак",
+    'Жертвам тероризму',
+    'Софійський Собор',
+    'Меморіальна дошка Лесі Українці',
+    "Хрест в пам'ять розстріляних православних священиків",
+    'Київ',
+  ]) {
+    ok(!looksLikeProperName(n), `not a proper name: ${n}`);
+  }
 }
 
 if (failures > 0) {

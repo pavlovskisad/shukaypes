@@ -1,4 +1,5 @@
 import { sql } from 'drizzle-orm';
+import type { LoreFacts } from '../services/overpass.js';
 import {
   pgTable,
   text,
@@ -339,8 +340,18 @@ export const kyivLore = pgTable(
     // geosearch-plus-name match on uk.wikipedia. The last of those is a
     // fuzzy match, and an operator auditing a wrong article wants to
     // know which rows to distrust first.
-    //   osm | wikidata | geosearch
+    //   osm       the seed's `wikipedia=` tag
+    //   wikidata  the `wikidata=` entity's own sitelink
+    //   subject   the article about what the memorial is FOR
+    //             (`subject:wikidata` / `subject:wikipedia`)
+    //   title     uk.wikipedia has an article under the row's own name
+    //   geosearch the article geotagged at the spot, matched by name
     wikiSource: text('wiki_source'),
+    // What the OSM object says about itself beyond its name — the
+    // plaque's inscription, a description, a date, the commemorated
+    // subject. See LoreFacts in services/overpass.ts. Research input for
+    // the longer telling; never shown raw.
+    facts: jsonb('facts').$type<LoreFacts>(),
     // The dog's longer telling — two to four sentences behind the
     // one-line story, written from the same research by enrich-lore.ts.
     // What "read more" shows instantly and offline; null when there was
