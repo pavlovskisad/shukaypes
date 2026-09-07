@@ -94,6 +94,8 @@ import { looksLikeProperName, pickGeoMatch } from '../services/loreMatch.js';
 import {
   CASE_OUTPUT_FORMAT,
   CASE_SYSTEM,
+  caseRetryPrompt,
+  firstNonCaseDiff,
   onlyCaseDiffers,
   parseCased,
   parseWriter,
@@ -595,16 +597,36 @@ async function phaseDetail(
 // system + the text) and ~120 out.
 const EST_USD_PER_CASE = 0.001;
 
-async function recase(name: string, text: string): Promise<string | null> {
+async function askCase(userBlock: string): Promise<string | null> {
   const res = await anthropic().messages.create({
     model: AMBIENT_MODEL,
     max_tokens: 600,
     system: [{ type: 'text', text: CASE_SYSTEM, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: `place: ${name}\n\ntext:\n${text}` }],
+    messages: [{ role: 'user', content: userBlock }],
     output_config: { format: CASE_OUTPUT_FORMAT },
   });
   const out = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
   return parseCased(out);
+}
+
+type Recased =
+  | { kind: 'unchanged' }
+  | { kind: 'changed'; text: string }
+  | { kind: 'refused'; diff: string };
+
+// One text through the small model, with one retry. The first
+// production pass had the guard refuse about one answer in twelve —
+// the model "helpfully" fixing a dash or an apostrophe along with the
+// case — and a second ask that quotes the refused answer back gets most
+// of those right. Two refusals and the text is left as it is.
+async function recase(name: string, text: string): Promise<Recased> {
+  const first = await askCase(`place: ${name}\n\ntext:\n${text}`);
+  if (!first || first === text) return { kind: 'unchanged' };
+  if (onlyCaseDiffers(text, first)) return { kind: 'changed', text: first };
+  const second = await askCase(caseRetryPrompt(name, text, first));
+  if (!second || second === text) return { kind: 'unchanged' };
+  if (onlyCaseDiffers(text, second)) return { kind: 'changed', text: second };
+  return { kind: 'refused', diff: firstNonCaseDiff(text, second) };
 }
 
 async function phaseCase(args: Args): Promise<void> {
@@ -640,16 +662,17 @@ async function phaseCase(args: Args): Promise<void> {
       const before = row[field];
       if (!before) continue;
       try {
-        const after = await recase(row.name, before);
-        if (!after || after === before) {
+        const result = await recase(row.name, before);
+        if (result.kind === 'unchanged') {
           unchanged++;
           continue;
         }
-        if (!onlyCaseDiffers(before, after)) {
+        if (result.kind === 'refused') {
           refused++;
-          console.log(`  [refused ${n}/${rows.length}] ${row.name} ${field}: answer changed more than case`);
+          console.log(`  [refused ${n}/${rows.length}] ${row.name} ${field}: ${result.diff}`);
           continue;
         }
+        const after = result.text;
         patch[field] = after;
         changed++;
         if (!args.apply || shown < 20) {

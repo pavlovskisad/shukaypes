@@ -120,6 +120,26 @@ export function onlyCaseDiffers(before: string, after: string): boolean {
   return before.toLocaleLowerCase('uk') === after.toLocaleLowerCase('uk');
 }
 
+// Where two strings first differ once letter case is set aside — for
+// the log line on a refused answer, so the shape of what the model
+// changed (a dash, an apostrophe, a dropped word) can be read rather
+// than guessed. A short window either side, marked with ⟨ ⟩.
+export function firstNonCaseDiff(before: string, after: string, window = 18): string {
+  const a = before.toLocaleLowerCase('uk');
+  const b = after.toLocaleLowerCase('uk');
+  let i = 0;
+  while (i < a.length && i < b.length && a[i] === b[i]) i++;
+  const cut = (s: string) =>
+    `${i > window ? '…' : ''}${s.slice(Math.max(0, i - window), i)}⟨${s.slice(i, i + window)}⟩`;
+  return `${cut(before)}  vs  ${cut(after)}`;
+}
+
+// What the case pass says when it asks again after a refusal. The first
+// answer is quoted back so the model can see what it changed.
+export function caseRetryPrompt(name: string, text: string, refused: string): string {
+  return `place: ${name}\n\ntext:\n${text}\n\nyour previous answer changed more than letter case (it read: ${refused}). return the text above again, changing ONLY the case of letters — every other character, space and punctuation mark identical.`;
+}
+
 export function parseCased(text: string): string | null {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');
