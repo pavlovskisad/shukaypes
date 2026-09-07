@@ -54,6 +54,25 @@ export type CompanionAction =
       args: { spotId: string; shape: 'roundtrip' | 'oneway' };
     };
 
+// One kyiv_lore landmark as the app carries it between surfaces: what
+// the sniff press discovers, what a walk stop is, what a heart saves.
+// Enough to draw the bubble again without another request.
+export interface LoreRef {
+  id: string;
+  name: string;
+  category: string;
+  story: string;
+  detail: string | null;
+  wikipediaTitle: string | null;
+  sourceLang: string | null;
+  position: LatLng;
+}
+
+export interface LoreFavourite extends LoreRef {
+  // ISO timestamp of the heart.
+  savedAt: string;
+}
+
 // Minimum spot info the chat call needs to send so the companion can
 // reference real nearby spots in its CONTEXT block. Mirrors the
 // server's NearbySpot. Closest-first, capped at ~8 by the caller.
@@ -739,6 +758,15 @@ export const api = {
       } | null;
     }>(`/lore/discover?${params.toString()}`);
   },
+
+  // The places this walker hearted, newest first, in the same shape the
+  // sniff press gets them so a saved place goes back on the map as the
+  // dog first showed it.
+  loreFavourites: () => req<{ favourites: LoreFavourite[] }>('/lore/favourites'),
+  saveLore: (id: string) =>
+    req<{ ok: true }>(`/lore/favourites/${encodeURIComponent(id)}`, { method: 'PUT' }),
+  unsaveLore: (id: string) =>
+    req<{ ok: true }>(`/lore/favourites/${encodeURIComponent(id)}`, { method: 'DELETE' }),
 
   // Places to walk to, out of our own tables (gazetteer parks and
   // squares, lore museums and churches and attractions) rather than

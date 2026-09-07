@@ -8,7 +8,12 @@
 // prose. Each case below is a shape the lenient cut has to survive, and
 // the last ones are shapes it has to refuse rather than half-parse.
 
-import { parseWriter, WRITER_OUTPUT_FORMAT } from '../services/loreWriter.js';
+import {
+  onlyCaseDiffers,
+  parseCased,
+  parseWriter,
+  WRITER_OUTPUT_FORMAT,
+} from '../services/loreWriter.js';
 
 let failures = 0;
 let checks = 0;
@@ -91,6 +96,31 @@ function ok(cond: boolean, label: string, detail = ''): void {
   ok(parseWriter('{"story": "s."}') === null, 'a missing detail is a miss, not a half-row');
   ok(parseWriter('{"story": "", "detail": "d."}') === null, 'an empty story is a miss');
   ok(parseWriter('не можу нічого сказати про це місце.') === null, 'prose with no fields is a miss');
+}
+
+// ---------------------------------------------------------------------
+// The case pass may change letter case and nothing else.
+// ---------------------------------------------------------------------
+{
+  ok(
+    onlyCaseDiffers('тут жив михайло старицький.', 'тут жив Михайло Старицький.'),
+    'a pure case change passes',
+  );
+  ok(!onlyCaseDiffers('тут жив михайло.', 'тут жив михайло.'), 'an unchanged text is not a change');
+  ok(
+    !onlyCaseDiffers('тут жив михайло старицький.', 'тут жив Михайло Старицький'),
+    'a dropped full stop fails the guard',
+  );
+  ok(
+    !onlyCaseDiffers('тут жив михайло.', 'тут мешкав Михайло.'),
+    'a reworded answer fails the guard',
+  );
+  ok(
+    !onlyCaseDiffers('«малютка» — ракета.', '«Малютка» – ракета.'),
+    'a swapped dash fails the guard even with a good case fix',
+  );
+  ok(parseCased('{"text": "Київ."}') === 'Київ.', 'the case answer parses');
+  ok(parseCased('nope') === null, 'no JSON is a miss');
 }
 
 if (failures > 0) {

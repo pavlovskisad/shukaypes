@@ -12,12 +12,18 @@
 //     several candidate walks at once and answers for each, because the
 //     client wants to spend its walk on the candidate with the most to
 //     see and can only know which that is by asking.
+//
+//   /lore/favourites — the places this walker hearted, and the heart
+//     itself (PUT / DELETE by landmark id). The list comes back with
+//     the same shape the two endpoints above return, so the client can
+//     put a saved place back on the map exactly as the dog first showed
+//     it.
 
 import type { FastifyPluginAsync } from 'fastify';
-import { and, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
 import type { LatLng } from '../utils/geo.js';
 import { db, schema } from '../db/index.js';
-import { limitRead } from '../lib/rateLimit.js';
+import { limitInteractive, limitRead } from '../lib/rateLimit.js';
 import {
   pathLengthM,
   planStops,
@@ -332,6 +338,84 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     return { results, poolSize: pool.length };
   });
+
+  // ---- favourites ----------------------------------------------------
+
+  // Newest first, capped — a list past a couple of hundred is not a list
+  // anyone scrolls, and the cap keeps one request from being a table
+  // dump.
+  app.get('/lore/favourites', limitRead, async (req) => {
+    const rows = await db
+      .select({
+        id: schema.kyivLore.id,
+        name: schema.kyivLore.name,
+        category: schema.kyivLore.category,
+        story: schema.kyivLore.story,
+        detail: schema.kyivLore.detail,
+        wikipediaTitle: schema.kyivLore.wikipediaTitle,
+        sourceLang: schema.kyivLore.sourceLang,
+        lat: schema.kyivLore.lat,
+        lng: schema.kyivLore.lng,
+        savedAt: schema.loreFavourites.createdAt,
+      })
+      .from(schema.loreFavourites)
+      .innerJoin(schema.kyivLore, eq(schema.loreFavourites.loreId, schema.kyivLore.id))
+      .where(eq(schema.loreFavourites.userId, req.userId))
+      .orderBy(desc(schema.loreFavourites.createdAt))
+      .limit(FAVOURITES_LIMIT);
+    return {
+      favourites: rows.map(({ lat, lng, savedAt, ...r }) => ({
+        ...r,
+        position: { lat, lng },
+        savedAt: savedAt.toISOString(),
+      })),
+    };
+  });
+
+  // PUT, not POST: hearting a place twice is the same place hearted.
+  app.put<{ Params: { id: string } }>(
+    '/lore/favourites/:id',
+    limitInteractive,
+    async (req, reply) => {
+      const id = req.params.id;
+      if (typeof id !== 'string' || id.length === 0 || id.length > 64) {
+        reply.code(400);
+        return { error: 'invalid id' };
+      }
+      const exists = await db
+        .select({ id: schema.kyivLore.id })
+        .from(schema.kyivLore)
+        .where(eq(schema.kyivLore.id, id))
+        .limit(1);
+      if (exists.length === 0) {
+        reply.code(404);
+        return { error: 'unknown place' };
+      }
+      await db
+        .insert(schema.loreFavourites)
+        .values({ userId: req.userId, loreId: id })
+        .onConflictDoNothing();
+      return { ok: true };
+    },
+  );
+
+  app.delete<{ Params: { id: string } }>(
+    '/lore/favourites/:id',
+    limitInteractive,
+    async (req) => {
+      await db
+        .delete(schema.loreFavourites)
+        .where(
+          and(
+            eq(schema.loreFavourites.userId, req.userId),
+            eq(schema.loreFavourites.loreId, req.params.id),
+          ),
+        );
+      return { ok: true };
+    },
+  );
 };
+
+const FAVOURITES_LIMIT = 200;
 
 export default plugin;

@@ -367,6 +367,27 @@ export const kyivLore = pgTable(
   }),
 );
 
+// Places a walker has hearted. A landmark the dog surfaces is gone the
+// moment the bubble closes; this is the way back to it. Keyed by
+// (user, landmark) so a second tap is a no-op rather than a duplicate,
+// and cascading from both sides: a deleted user takes their list, a
+// re-seeded landmark id takes its hearts.
+export const loreFavourites = pgTable(
+  'lore_favourites',
+  {
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    loreId: text('lore_id')
+      .notNull()
+      .references(() => kyivLore.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    pk: primaryKey({ columns: [t.userId, t.loreId] }),
+  }),
+);
+
 // Kyiv place-name index. Built from OSM (Overpass API) — streets,
 // squares, metro stations, parks, neighbourhoods, districts. Powers
 // the lost-pet parser: when Haiku extracts a location mention like

@@ -5,14 +5,17 @@ import {
   fetchWikipediaExtract,
   wikipediaArticleUrl,
 } from '../../services/wikipedia';
+import type { LoreRef } from '../../services/api';
+import { useGameStore } from '../../stores/gameStore';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 
-// The "read more" under a landmark's one-line story. One component for
-// both places a kyiv_lore row is shown — the sniff-press bubble and a
-// walk stop — so the two can't drift on what "more" means.
+// The "read more" under a landmark's one-line story, and the heart in
+// the corner above it. One component for both places a kyiv_lore row is
+// shown — the sniff-press bubble and a walk stop — so the two can't
+// drift on what "more" means.
 //
 // What's behind the button, in the order it appears:
 //
@@ -21,7 +24,11 @@ import { useStrings } from '../../i18n/useStrings';
 //      tapped — no spinner, no network, no Wikipedia dependency.
 //   2. The Wikipedia lead, when the row has an article. Fetched LAZILY
 //      on the first expand — most landmarks the walker glances at and
-//      moves on from — and shown under the detail as it arrives.
+//      moves on from. Shown in full when it is all there is; clamped to
+//      a few lines under a detail, where it is a second opinion rather
+//      than the story, and the link below it is the way to the rest.
+//      Nothing here scrolls: a scroll box inside a map marker fights
+//      the map for the finger and reads as text cut off for no reason.
 //   3. A link to the article itself. The lead is CC-BY-SA text shown
 //      as-is, and the link is its attribution; it is also where the
 //      walker who wants the whole story goes.
@@ -44,19 +51,23 @@ import { useStrings } from '../../i18n/useStrings';
 //
 // Screen bands, in CSS px from the map container's edges. The HUD row
 // (logo + mode toggles + paw count) ends ~125 px down on an iPhone in
-// Safari; the tab bar plus its safe-area inset take ~110 px at the
-// bottom. Both carry a margin so the bubble's drawn edge clears them.
+// Safari. The bottom band is the tab bar plus its safe-area inset plus
+// the browser's own bar when there is one, and the first cut (120)
+// left the "ходімо сюди" button sitting on the tab bar; 200 leaves it
+// a finger's width of air.
 const SAFE_TOP_PX = 140;
-const SAFE_BOTTOM_PX = 120;
+const SAFE_BOTTOM_PX = 200;
 // Below this the pan is a twitch, not a fix.
 const MIN_PAN_PX = 4;
 const PAN_MS = 320;
 
-export interface LoreMoreSource {
-  detail: string | null;
-  wikipediaTitle: string | null;
-  sourceLang: string | null;
-}
+// How much of the Wikipedia lead shows under a detail. Three lines is
+// enough to see it agrees with the dog and to want the link.
+const EXTRACT_LINES_UNDER_DETAIL = 3;
+
+export type LoreMoreSource = Pick<LoreRef, 'detail' | 'wikipediaTitle' | 'sourceLang'>;
+
+type Tone = 'paper' | 'voice';
 
 export function LoreMore({
   lore,
@@ -66,7 +77,7 @@ export function LoreMore({
   // The bubble this sits in: the sniff bubble is white paper, a walk
   // stop is the dog's dark voice. Only the hairline between story and
   // more changes.
-  tone: 'paper' | 'voice';
+  tone: Tone;
 }) {
   const t = useStrings();
   const map = useMaplibreMap();
@@ -98,7 +109,7 @@ export function LoreMore({
       if (need < MIN_PAN_PX) return;
       // Room below before the dot would slide under the tab bar. A
       // bubble taller than the band between HUD and tab bar keeps its
-      // bottom on screen and scrolls inside instead.
+      // bottom on screen; the top is what gives.
       const room = container.height - SAFE_BOTTOM_PX - bottom;
       const delta = Math.min(need, Math.max(0, room));
       if (delta < MIN_PAN_PX) return;
@@ -146,8 +157,6 @@ export function LoreMore({
             lineHeight: 1.45,
             opacity: 0.85,
             textAlign: 'left',
-            maxHeight: 200,
-            overflowY: 'auto',
             whiteSpace: 'pre-line',
             display: 'flex',
             flexDirection: 'column',
@@ -159,7 +168,23 @@ export function LoreMore({
             <div style={{ opacity: 0.6, fontStyle: 'italic' }}>{t.sniff.opening}</div>
           ) : null}
           {extract ? (
-            <div style={{ opacity: lore.detail ? 0.8 : 1 }}>{clampExtract(extract)}</div>
+            <div
+              style={
+                lore.detail
+                  ? {
+                      opacity: 0.8,
+                      // Clamped, not scrolled — see the header. The
+                      // link right under it is the rest.
+                      display: '-webkit-box',
+                      WebkitBoxOrient: 'vertical',
+                      WebkitLineClamp: EXTRACT_LINES_UNDER_DETAIL,
+                      overflow: 'hidden',
+                    }
+                  : undefined
+              }
+            >
+              {clampExtract(extract)}
+            </div>
           ) : null}
           {empty ? <div>{t.sniff.nothingMore}</div> : null}
           {hasWiki && !failed ? (
@@ -204,5 +229,48 @@ export function LoreMore({
         {open ? t.sniff.less : t.sniff.more}
       </div>
     </>
+  );
+}
+
+// The heart. Sits in the top-right corner of the bubble (the bubble
+// has to be position: relative), fills when the place is saved, and
+// toggles the store optimistically. A glyph rather than an icon: the
+// bubble's other affordances are glyphs too ("ще ▾", "ходімо сюди →"),
+// and a heart in the app's ink reads as drawn on, like the frame.
+//
+// Room for it comes from the title's side padding — see HEART_INSET —
+// so a long name wraps clear of it instead of underneath it.
+export const HEART_INSET = 26;
+
+export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
+  const t = useStrings();
+  const saved = useGameStore((s) => s.loreFavourites.some((f) => f.id === lore.id));
+  const toggle = useGameStore((s) => s.toggleLoreFavourite);
+  return (
+    <div
+      role="button"
+      aria-label={saved ? t.sniff.saved : t.sniff.save}
+      aria-pressed={saved}
+      onClick={(e) => {
+        e.stopPropagation();
+        playPop(e.currentTarget);
+        void toggle(lore);
+      }}
+      style={{
+        position: 'absolute',
+        top: 6,
+        right: 8,
+        // A ~40 px target around an 18 px glyph.
+        padding: 8,
+        fontSize: 18,
+        lineHeight: 1,
+        cursor: 'pointer',
+        userSelect: 'none',
+        color: 'inherit',
+        opacity: saved ? 1 : tone === 'paper' ? 0.35 : 0.5,
+      }}
+    >
+      {saved ? '♥' : '♡'}
+    </div>
   );
 }

@@ -107,6 +107,9 @@ export interface AppStrings {
     nothingMore: string;
     // Label of the link to the Wikipedia article under its lead.
     wikipedia: string;
+    // Accessible names of the heart on a landmark's bubble.
+    save: string;
+    saved: string;
     sniffingRoute: string;
     letsGoHere: string;
   };
@@ -142,6 +145,11 @@ export interface AppStrings {
     nearbyCategory: (category: string) => string;
     emptyAll: string;
     emptyFiltered: (category: string) => string;
+    // The hearted landmarks, at the top of the tab.
+    favourites: string;
+    favouritesEmpty: string;
+    favouritesAll: (n: number) => string;
+    favouritesLess: string;
     filters: {
       all: string;
       cafe: string;
@@ -530,6 +538,8 @@ const uk: AppStrings = {
     less: 'менше ▴',
     nothingMore: '*чухає за вухом* більше не пригадую — тільки те, що сказав.',
     wikipedia: 'вікіпедія ↗',
+    save: 'зберегти місце',
+    saved: 'збережено — натисни, щоб прибрати',
     sniffingRoute: 'нюхаю шлях…',
     letsGoHere: 'ходімо сюди →',
   },
@@ -568,6 +578,11 @@ const uk: AppStrings = {
     nearbyCategory: (category) => `${category} поряд`,
     emptyAll: 'поки нічого поряд — посунь мапу в нове місце, я понюхаю ще',
     emptyFiltered: (category) => `${category} поряд немає — спробуй інший фільтр`,
+    favourites: 'улюблені місця',
+    favouritesEmpty:
+      'поки порожньо. натисни ♡ на місці, яке я винюхав, — і воно чекатиме тут.',
+    favouritesAll: (n) => `усі ${n} ▾`,
+    favouritesLess: 'менше ▴',
     filters: {
       all: 'усі',
       cafe: "кав'ярні",
@@ -968,6 +983,8 @@ const en: AppStrings = {
     less: 'less ▴',
     nothingMore: "*scratches behind the ear* that's all I remember — just what I said.",
     wikipedia: 'wikipedia ↗',
+    save: 'save this place',
+    saved: 'saved — tap to remove',
     sniffingRoute: 'sniffing route…',
     letsGoHere: "let's go here →",
   },
@@ -1006,6 +1023,10 @@ const en: AppStrings = {
     nearbyCategory: (category) => `nearby ${category}`,
     emptyAll: "nothing nearby yet — pan the map somewhere new and i'll sniff again",
     emptyFiltered: (category) => `no ${category} nearby — try another filter`,
+    favourites: 'favourite places',
+    favouritesEmpty: "empty so far. tap ♡ on a place i've sniffed out and it'll wait for you here.",
+    favouritesAll: (n) => `all ${n} ▾`,
+    favouritesLess: 'less ▴',
     filters: {
       all: 'all',
       cafe: 'cafe',
