@@ -135,6 +135,70 @@ const CITIES: CityPattern[] = [
     label: 'Zaporizhzhia (Khortytskyi district)',
     stems: ['хортицький район', 'хортицькому район', 'хортицкий район'],
   },
+
+  // …AND THE NAME LOCALS USE INSTEAD OF A DISTRICT AT ALL.
+  //
+  // Measured on ten active pets, every one ingested BEFORE the OLX gate
+  // existed (its first fire was 17 Aug; the newest of these arrived
+  // 4 Aug). Their bodies read «на хтз», «в районі молдованка», «в районі
+  // левандівки», «4, 5 станции Люстдорфской дороги», «Інгульский
+  // район» — a neighbourhood, a road, a tram stop. Not one names its
+  // city, because nobody writing to their neighbours ever does.
+  //
+  // Nothing downstream can tell: the parser is Kyiv-only by
+  // construction, so it finds the nearest Kyiv-shaped meaning and the
+  // bbox then passes the result because the coordinate really is in
+  // Kyiv. «Берта» sat on the map from a Kharkiv ad for three months.
+  //
+  // ONLY THE UNAMBIGUOUS ONES. Deliberately absent: «Соборний район»
+  // (Dnipro and Zaporizhzhia both have one, and Kyiv has Соборна
+  // площа), «Північний» and «Петровський» (several cities each), «Тіра».
+  // A name that could be read two ways expires real Kyiv pets, and
+  // expiring beats deleting only because it is reversible — it is still
+  // a pet taken off the map.
+  //
+  // Multi-word where the bare word is a common adjective, bare where the
+  // name is a proper noun that means nothing else. Same rule as the
+  // district entries above.
+  { label: 'Kharkiv (KhTZ)', stems: ['хтз'] },
+  { label: 'Odesa (Moldovanka)', stems: ['молдованк', 'молдаванк'] },
+  { label: 'Lviv (Levandivka)', stems: ['левандівк', 'левандовк'] },
+  // FORMS, NOT STEMS, for the two shapes stemming cannot reach.
+  //
+  // «Люстдорфська» and «Інгульський» are ADJECTIVES, and the rule above
+  // rejects adjectival forms on purpose — that is what tells a Kyiv
+  // street named after a city from the city itself. Correct in general,
+  // wrong for a district whose name simply is an adjective, so these
+  // are matched as whole tokens instead.
+  //
+  // «Кохнівка» and «Чорногорка» break stemming a second way: the
+  // locative is «Кохнівці», «Чорногорці», and the к→ц alternation
+  // happens inside the word where no amount of trimming reaches it.
+  //
+  // Listed rather than derived, same as Khmelnytskyi above — an obvious
+  // list beats a clever rule nobody can audit.
+  {
+    label: 'Odesa (Liustdorfska road)',
+    forms: [
+      'люстдорфська', 'люстдорфської', 'люстдорфській', 'люстдорфську',
+      'люстдорфская', 'люстдорфской', 'люстдорфскую',
+    ],
+  },
+  {
+    label: 'Mykolaiv (Inhulskyi district)',
+    forms: [
+      'інгульський', 'інгульського', 'інгульському', 'інгульский',
+      'ингульский', 'ингульском', 'ингульского',
+    ],
+  },
+  {
+    label: 'Kremenchuk (Velyka Kohnivka)',
+    forms: ['кохнівка', 'кохнівки', 'кохнівці', 'кохнівку', 'кохновка', 'кохновке', 'кохновки'],
+  },
+  {
+    label: 'Kherson (Chornohorka)',
+    forms: ['чорногорка', 'чорногорки', 'чорногорці', 'чорногорку', 'черногорка', 'черногорке'],
+  },
 ];
 
 // DELIBERATELY ABSENT: Bucha, Irpin, Brovary, Boryspil, Vyshhorod,
