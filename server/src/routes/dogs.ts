@@ -1,8 +1,9 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { and, desc, eq, gte, not, sql } from 'drizzle-orm';
+import { and, desc, eq, gte, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { buildPhotoUrl } from '../services/photoUrl.js';
 import { isApproximatePlacement } from '../services/mapData.js';
+import { confidentPlacementSqlFragment } from '../services/placementConfidence.js';
 import { limitExpensive, limitPolling, limitRead } from '../lib/rateLimit.js';
 import {
   looksLikeItHadContacts,
@@ -22,14 +23,6 @@ interface NearbyQuery {
   lng: string;
   radius?: string;
 }
-
-// The parser falls back to the Kyiv city-center coord when a post gives no
-// geographic signal. Those pets exist in the DB (they're real lost-pet
-// reports) but they shouldn't render on the map — users see a pile of
-// dozens of pins at exactly one landmark and the clustering goes wild.
-// Filter them here; admin endpoints still see the full set.
-const FALLBACK_LAT = 50.4501;
-const FALLBACK_LNG = 30.5234;
 
 const plugin: FastifyPluginAsync = async (app) => {
   app.get<{ Querystring: NearbyQuery }>('/dogs/nearby', limitPolling, async (req, reply) => {
@@ -63,12 +56,18 @@ const plugin: FastifyPluginAsync = async (app) => {
       .where(
         and(
           eq(schema.lostDogs.status, 'active'),
-          not(
-            and(
-              eq(schema.lostDogs.lastSeenLat, FALLBACK_LAT),
-              eq(schema.lostDogs.lastSeenLng, FALLBACK_LNG),
-            )!,
-          ),
+          // THE CAROUSEL IS A LIST OF SEARCHES TO START, so it needs the
+          // same bar as the map — and it was missed when the bar went in,
+          // which is how «Таруша» stayed offerable as a search target
+          // after she had been taken off the pins. This is the route that
+          // fills the supersniff carousel (app: getLostDogsNearby →
+          // syncLostDogs), so it is the most direct invitation the app
+          // makes. See placementConfidence.ts.
+          sql.raw(confidentPlacementSqlFragment('lost_dogs.placement_source')),
+          // …and a found stray is not a search. mapData has always
+          // excluded them; this query never did, so somebody could be
+          // sent to comb the streets for an animal already safe indoors.
+          eq(schema.lostDogs.isFoundReport, false),
           sql`
             2 * 6371000 * ASIN(SQRT(
               POWER(SIN(RADIANS(${lat} - ${schema.lostDogs.lastSeenLat}) / 2), 2)
