@@ -53,6 +53,14 @@
 // with what the apply would do, and the cost it would spend, and is
 // meant to be read before the apply — same shape as clean:lost-dogs.
 //
+// The phases feed each other: links reads the facts osm wrote, detail
+// reads both. In a dry run nothing is written, so each phase carries
+// its plan forward IN MEMORY and the next phase reads the row as it
+// WOULD be. The first production dry run did not, and reported the
+// subject tier as 0 and the detail phase as 226 rows for $1.36; the
+// apply then found 122 and 1155. A dry run that under-reports is the
+// kind of check this project's CLAUDE.md warns about.
+//
 // Usage:
 //   pnpm --filter @shukajpes/server enrich:lore                 # dry, all phases
 //   pnpm --filter @shukajpes/server enrich:lore -- --apply
@@ -75,6 +83,7 @@ import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { anthropic } from '../services/anthropic.js';
 import { looksLikeProperName, pickGeoMatch } from '../services/loreMatch.js';
+import { parseWriter, type Written } from '../services/loreWriter.js';
 import {
   factsCarryResearch,
   factsFromTags,
@@ -161,7 +170,12 @@ function sleep(ms: number) {
 
 // ---- phase: osm ----------------------------------------------------------
 
-async function phaseOsm(args: Args): Promise<void> {
+// The facts this phase writes (or, dry, would write), by row id, so the
+// later phases can see them either way.
+type PendingFacts = Map<string, LoreFacts>;
+
+async function phaseOsm(args: Args): Promise<PendingFacts> {
+  const pending: PendingFacts = new Map();
   const rows = await db
     .select({ id: schema.kyivLore.id, name: schema.kyivLore.name })
     .from(schema.kyivLore)
@@ -169,7 +183,7 @@ async function phaseOsm(args: Args): Promise<void> {
     .orderBy(schema.kyivLore.id)
     .limit(args.limit || 100_000);
   console.log(`\n▶ osm — ${rows.length} rows without facts`);
-  if (rows.length === 0) return;
+  if (rows.length === 0) return pending;
 
   const elements = await fetchLoreElements();
   const byId = new Map<string, LoreFacts>();
@@ -178,6 +192,7 @@ async function phaseOsm(args: Args): Promise<void> {
     if (f) byId.set(`osm:${el.type}:${el.id}`, f);
   }
   const found = rows.filter((r) => byId.has(r.id));
+  for (const r of found) pending.set(r.id, byId.get(r.id)!);
   const withResearch = found.filter((r) => factsCarryResearch(byId.get(r.id)!));
   console.log(
     `  ${found.length} of ${rows.length} rows carry facts on OSM; ${withResearch.length} of those carry an inscription, description or subject`,
@@ -188,12 +203,13 @@ async function phaseOsm(args: Args): Promise<void> {
   }
   if (!args.apply) {
     console.log(`  (dry) would write facts for ${found.length} rows`);
-    return;
+    return pending;
   }
   for (const r of found) {
     await db.update(schema.kyivLore).set({ facts: byId.get(r.id)! }).where(eq(schema.kyivLore.id, r.id));
   }
   console.log(`  ✓ wrote facts for ${found.length} rows`);
+  return pending;
 }
 
 // ---- phase: links --------------------------------------------------------
@@ -209,8 +225,10 @@ interface LinkPlan {
   distM?: number;
 }
 
-async function phaseLinks(args: Args): Promise<void> {
-  const rows = await db
+type PendingLinks = Map<string, LinkPlan>;
+
+async function phaseLinks(args: Args, pendingFacts: PendingFacts): Promise<PendingLinks> {
+  const stored = await db
     .select({
       id: schema.kyivLore.id,
       name: schema.kyivLore.name,
@@ -231,6 +249,8 @@ async function phaseLinks(args: Args): Promise<void> {
     )
     .orderBy(schema.kyivLore.id)
     .limit(args.limit || 100_000);
+  // Each row as it will be once the osm phase's writes land.
+  const rows = stored.map((r) => ({ ...r, facts: r.facts ?? pendingFacts.get(r.id) ?? null }));
   console.log(`\n▶ links — ${rows.length} rows without a Wikipedia handle`);
 
   const plans = new Map<string, LinkPlan>();
@@ -324,31 +344,13 @@ async function phaseLinks(args: Args): Promise<void> {
   } else {
     console.log(`  (dry) would write ${plans.size} handles — ${JSON.stringify(tally)}`);
   }
+  return plans;
 }
 
 // ---- phase: detail -------------------------------------------------------
 
-interface Written {
-  story: string;
-  detail: string;
-}
-
-function parseWriter(text: string): Written | null {
-  const start = text.indexOf('{');
-  const end = text.lastIndexOf('}');
-  if (start < 0 || end <= start) return null;
-  try {
-    const obj = JSON.parse(text.slice(start, end + 1)) as { story?: unknown; detail?: unknown };
-    if (typeof obj.story !== 'string' || typeof obj.detail !== 'string') return null;
-    const clean = (s: string) => s.trim().replace(/^["“'«]+|["”'»]+$/g, '').trim();
-    const story = clean(obj.story);
-    const detail = clean(obj.detail);
-    if (!story || !detail) return null;
-    return { story, detail };
-  } catch {
-    return null;
-  }
-}
+// Parsing the answer lives in services/loreWriter.ts — strict JSON with
+// a lenient fallback — so enrichLore.check.ts can pin it without a db.
 
 function relationLine(wikiSource: string | null): string {
   switch (wikiSource) {
@@ -376,12 +378,15 @@ interface DetailRow {
   facts: LoreFacts | null;
 }
 
+// The parsed answer, or the raw text so an unparsed row can be read.
+type WriterResult = { ok: Written } | { raw: string };
+
 async function write(
   model: string,
   row: DetailRow,
   summary: WikiSummary | null,
   wikidataDesc: string | null,
-): Promise<Written | null> {
+): Promise<WriterResult> {
   const userBlock = [
     'PLACE',
     `- name: ${row.name}${row.nameEn ? ` (${row.nameEn})` : ''}`,
@@ -405,15 +410,27 @@ async function write(
     messages: [{ role: 'user', content: userBlock }],
   });
   const text = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
-  return parseWriter(text);
+  const parsed = parseWriter(text);
+  return parsed ? { ok: parsed } : { raw: text };
 }
 
-async function phaseDetail(args: Args): Promise<void> {
+async function phaseDetail(
+  args: Args,
+  pendingFacts: PendingFacts,
+  pendingLinks: PendingLinks,
+): Promise<void> {
   // Rows with a Wikipedia handle, or with facts that carry an
   // inscription / description / subject. The jsonb test mirrors
   // factsCarryResearch; the real decision is re-made in code below.
+  //
+  // In a dry run the handles and facts the earlier phases planned are
+  // not in the database yet, so the SQL cannot see them: read every row
+  // without a detail and decide in code, against the row as it WOULD
+  // be. Applying, the earlier phases have written, and the SQL filter
+  // is exact.
   const factsHaveResearch = sql`(facts ? 'inscription' or facts ? 'description' or facts ? 'subjectWikidata' or facts ? 'subjectWikipedia')`;
-  const rows: Array<DetailRow & { createdAt: Date; lastRewroteAt: Date }> = await db
+  const chaining = pendingFacts.size > 0 || pendingLinks.size > 0;
+  const stored: Array<DetailRow & { createdAt: Date; lastRewroteAt: Date }> = await db
     .select({
       id: schema.kyivLore.id,
       name: schema.kyivLore.name,
@@ -433,12 +450,29 @@ async function phaseDetail(args: Args): Promise<void> {
       and(
         isNull(schema.kyivLore.detail),
         HAS_A_LETTER,
-        or(isNotNull(schema.kyivLore.wikipediaTitle), factsHaveResearch),
+        chaining ? undefined : or(isNotNull(schema.kyivLore.wikipediaTitle), factsHaveResearch),
         args.id ? eq(schema.kyivLore.id, args.id) : undefined,
       ),
     )
     .orderBy(schema.kyivLore.id)
-    .limit(args.limit || 100_000);
+    .limit(chaining ? 100_000 : args.limit || 100_000);
+
+  // The row as it will be: a stored handle wins over a planned one,
+  // stored facts over planned ones. A planned handle carries its source
+  // so the writer is told the relation.
+  const rows = stored
+    .map((r) => {
+      const link = r.wikipediaTitle ? null : pendingLinks.get(r.id);
+      return {
+        ...r,
+        facts: r.facts ?? pendingFacts.get(r.id) ?? null,
+        wikipediaTitle: r.wikipediaTitle ?? link?.title ?? null,
+        sourceLang: r.sourceLang ?? link?.lang ?? null,
+        wikiSource: r.wikiSource ?? link?.source ?? null,
+      };
+    })
+    .filter((r) => !!r.wikipediaTitle || factsCarryResearch(r.facts))
+    .slice(0, args.limit || undefined);
 
   console.log(`\n▶ detail — ${rows.length} rows with research and no detail`);
   if (!args.apply) {
@@ -492,12 +526,17 @@ async function phaseDetail(args: Args): Promise<void> {
     }
 
     try {
-      const out = await write(args.model, row, summary, wikidataDesc);
-      if (!out) {
+      const result = await write(args.model, row, summary, wikidataDesc);
+      if (!('ok' in result)) {
         unparsed++;
-        console.log(`  [unparsed ${n}/${rows.length}] ${row.name}`);
+        // The raw answer, one line, so the shape that defeated both
+        // parsers is in the log rather than guessed at afterwards.
+        console.log(
+          `  [unparsed ${n}/${rows.length}] ${row.name}: ${JSON.stringify(result.raw.slice(0, 300))}`,
+        );
         continue;
       }
+      const out = result.ok;
       const now = new Date();
       await db
         .update(schema.kyivLore)
@@ -546,9 +585,13 @@ async function main() {
     `  corpus: ${census?.total ?? 0} rows, ${census?.facts ?? 0} with facts, ${census?.linked ?? 0} with a Wikipedia handle, ${census?.detailed ?? 0} with detail`,
   );
 
-  if (!args.only || args.only === 'osm') await phaseOsm(args);
-  if (!args.only || args.only === 'links') await phaseLinks(args);
-  if (!args.only || args.only === 'detail') await phaseDetail(args);
+  // Each phase hands its plan to the next, so a dry run sees the row as
+  // the apply would leave it. Applying, the plan is already on disk and
+  // the hand-off is redundant but harmless.
+  const facts: PendingFacts = !args.only || args.only === 'osm' ? await phaseOsm(args) : new Map();
+  const links: PendingLinks =
+    !args.only || args.only === 'links' ? await phaseLinks(args, facts) : new Map();
+  if (!args.only || args.only === 'detail') await phaseDetail(args, facts, links);
 
   if (!args.apply) {
     console.log('\n(dry run — nothing written. re-run with --apply once the plan above reads right.)');
