@@ -43,12 +43,16 @@ import { eq, isNotNull } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { detectOtherCity, type OtherCityHit } from '../pipeline/outOfArea.js';
+import { isConfidentPlacement } from '../services/placementConfidence.js';
+import { redactContacts } from '../pipeline/redactContacts.js';
 
-// The ungeocoded fallback pin. Rows here are invisible on the map
-// already (/dogs/nearby filters them out), so expiring one costs
-// nothing that is currently working; rows elsewhere are drawn, and
-// expiring one takes a visible pet off the map. Reported separately for
-// that reason.
+// The ungeocoded fallback pin. Still worth counting — it says how much
+// of the table the parser could not place at all — but it is NO LONGER
+// the test for whether a walker can see a pet. Being off this pin used
+// to mean "drawn on the map"; since the confidence bar it means only
+// "has a coordinate", and most of those coordinates are model guesses
+// that no surface shows. `visible` below asks the question this comment
+// used to answer.
 const FALLBACK_LAT = 50.4501;
 const FALLBACK_LNG = 30.5234;
 const FALLBACK_TOLERANCE = 0.0005;
@@ -67,10 +71,28 @@ interface Flagged {
   // Which stored field the city name came from. Only 'title' is ever
   // written — see the split below, which is not a style choice but a
   // conclusion from reading real rows.
-  evidence: 'title' | 'description';
+  evidence: 'title' | 'description' | 'body';
   text: string;
   onPin: boolean;
+  /** Whether a walker can actually see this pet — see placementConfidence.ts. */
+  visible: boolean;
 }
+
+// WHY THE AD BODY IS READ, AND WHY IT IS NEVER APPLIED EITHER.
+//
+// Ten pets were measured sitting on the Kyiv map from other cities:
+// «на хтз» (Kharkiv), «в районі молдованка» and «4, 5 станции
+// Люстдорфской дороги» (Odesa), «в районі левандівки» (Lviv). The words
+// that give them away are in the BODY — a neighbourhood, a road, a tram
+// stop — because that is where people write directions. This CLI read
+// only the title and the description, so it saw one of the ten.
+//
+// It stays REPORT ONLY, for the same reason descriptions do and one
+// more. A body is a paragraph, and a paragraph about a Kyiv pet can
+// mention another city in passing — where the family evacuated from,
+// where the dog was bought, which shelter called. The title is one line
+// about this animal now; a body is a story. Auto-expiring on a story
+// takes real searches off the map.
 
 // WHY DESCRIPTIONS ARE REPORTED AND NEVER APPLIED.
 //
@@ -101,6 +123,8 @@ async function main() {
       lng: schema.lostDogs.lastSeenLng,
       description: schema.lostDogs.lastSeenDescription,
       source: schema.lostDogs.source,
+      placementSource: schema.lostDogs.placementSource,
+      isFoundReport: schema.lostDogs.isFoundReport,
     })
     .from(schema.lostDogs)
     .where(eq(schema.lostDogs.status, 'active'));
@@ -113,26 +137,45 @@ async function main() {
     .select({
       dogId: schema.scrapeLog.dogId,
       title: schema.scrapeLog.title,
+      body: schema.scrapeLog.rawBody,
       firstSeenAt: schema.scrapeLog.firstSeenAt,
     })
     .from(schema.scrapeLog)
     .where(isNotNull(schema.scrapeLog.dogId));
   const titleByDog = new Map<string, string>();
+  const bodyByDog = new Map<string, string>();
   for (const l of logs.sort((a, b) => a.firstSeenAt.getTime() - b.firstSeenAt.getTime())) {
     // Earliest wins: the ad we first ingested the pet from.
     if (l.dogId && l.title && !titleByDog.has(l.dogId)) titleByDog.set(l.dogId, l.title);
+    if (l.dogId && l.body && !bodyByDog.has(l.dogId)) bodyByDog.set(l.dogId, l.body);
   }
 
   const flagged: Flagged[] = [];
   let withTitle = 0;
+  let withBody = 0;
   for (const row of rows) {
     const title = titleByDog.get(row.id) ?? null;
+    const body = bodyByDog.get(row.id) ?? null;
     if (title) withTitle++;
+    if (body) withBody++;
     const onPin = onFallbackPin(row.lat, row.lng);
+    // WHAT A WALKER CAN ACTUALLY SEE, not what has a coordinate.
+    //
+    // This used to be `!onPin`, which meant "not on the fall-through"
+    // and was the same question until the confidence bar landed. It is
+    // not any more: a model-guessed pet has a real coordinate and is
+    // still hidden. The first run after the bar warned that expiring
+    // «котик» would remove a working pin; it was model-geo, invisible,
+    // and the warning was telling the reader something untrue about the
+    // one thing it exists to protect.
+    const visible =
+      !row.isFoundReport && isConfidentPlacement(row.placementSource);
 
     const titleHit = title ? detectOtherCity(title) : null;
     if (titleHit) {
-      flagged.push({ id: row.id, name: row.name, hit: titleHit, evidence: 'title', text: title!, onPin });
+      flagged.push({
+        id: row.id, name: row.name, hit: titleHit, evidence: 'title', text: title!, onPin, visible,
+      });
       continue;
     }
     const descHit = row.description ? detectOtherCity(row.description) : null;
@@ -144,6 +187,14 @@ async function main() {
         evidence: 'description',
         text: row.description!,
         onPin,
+        visible,
+      });
+      continue;
+    }
+    const bodyHit = body ? detectOtherCity(body) : null;
+    if (bodyHit) {
+      flagged.push({
+        id: row.id, name: row.name, hit: bodyHit, evidence: 'body', text: body!, onPin, visible,
       });
     }
   }
@@ -152,6 +203,7 @@ async function main() {
 
   console.log(`\nactive pets:            ${rows.length}`);
   console.log(`  … with a stored title: ${withTitle}`);
+  console.log(`  … with a stored body:  ${withBody}`);
   console.log(`  … on the fallback pin: ${rows.filter((r) => onFallbackPin(r.lat, r.lng)).length}`);
 
   // A check that read nothing must never look like a check that found
@@ -165,6 +217,7 @@ async function main() {
 
   const byTitle = flagged.filter((f) => f.evidence === 'title');
   const byDescription = flagged.filter((f) => f.evidence === 'description');
+  const byBody = flagged.filter((f) => f.evidence === 'body');
 
   const render = (items: Flagged[]) => {
     const byCity = new Map<string, Flagged[]>();
@@ -172,18 +225,23 @@ async function main() {
     for (const [city, group] of [...byCity].sort((a, b) => b[1].length - a[1].length)) {
       console.log(`  ${city} — ${group.length}`);
       for (const f of group) {
-        const where = f.onPin ? 'pin' : 'MAP';
-        console.log(
-          `    [${where}] ${pad(f.name, 20)} via "${f.hit.token}"  ${pad(f.text.replace(/\s+/g, ' '), 60)}`,
-        );
+        const where = f.visible ? 'SHOWN' : 'hidden';
+        // REDACTED, because one of these three fields is now the ad
+        // body. A title is a line about the animal; a body is the whole
+        // post, phone number included, and the first sixty characters
+        // of it are as likely to be a contact as a place. The evidence
+        // a reader needs is the matched token and enough words around
+        // it to judge the match — never the poster's number.
+        const excerpt = redactContacts(f.text.replace(/\s+/g, ' '));
+        console.log(`    [${where}] ${pad(f.name, 20)} via "${f.hit.token}"  ${pad(excerpt, 60)}`);
       }
     }
   };
 
-  const drawn = byTitle.filter((f) => !f.onPin).length;
+  const drawn = byTitle.filter((f) => f.visible).length;
   console.log(
     `\nWILL EXPIRE — city named in the ad title: ${byTitle.length}` +
-      `  (${byTitle.length - drawn} on the pin, ${drawn} currently drawn on the map)`,
+      `  (${byTitle.length - drawn} hidden, ${drawn} shown to walkers)`,
   );
   render(byTitle);
 
@@ -191,13 +249,20 @@ async function main() {
   console.log('  Not written by --apply. Read them and decide by hand.');
   render(byDescription);
 
+  console.log(`\nREPORT ONLY — city named only in the ad body: ${byBody.length}`);
+  console.log('  Not written by --apply — a body is a paragraph, and a Kyiv pet\'s');
+  console.log('  story can name another city in passing. Read them, then expire the');
+  console.log('  real ones by id with expire:pet.');
+  render(byBody);
+
   // Rows currently drawn deserve a second look before an --apply takes
   // them off the map: those pins work today.
   if (drawn > 0) {
     console.log(
-      `\n!! ${drawn} of the rows above are DRAWN ON THE MAP right now, not sitting\n` +
-        `   invisibly on the pin. Expiring one removes a working pin, so read those\n` +
-        `   [MAP] lines specifically before --apply.`,
+      `\n!! ${drawn} of the rows above are SHOWN TO WALKERS right now — they pass\n` +
+        `   the placement bar, so they are on the map and offerable as searches.\n` +
+        `   Expiring one takes a working pin away, so read those [SHOWN] lines\n` +
+        `   specifically before --apply.`,
     );
   }
 

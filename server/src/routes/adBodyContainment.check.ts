@@ -97,6 +97,15 @@ const ALLOWED = new Map<string, string>([
   // no HTTP surface, and dry by default.
   ['db/relabel-marked.ts', 're-resolves bodies to correct the confidence label, prints place names'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
+  // Reads bodies to answer WHICH CITY, because that is where the answer
+  // lives: ten pets sat on the Kyiv map from Kharkiv, Odesa and Lviv,
+  // and every one named a neighbourhood or a tram stop in the body and
+  // its city nowhere. It prints an excerpt to justify each flag — a
+  // human has to see why a pet was picked before expiring it — and that
+  // excerpt goes through redactContacts first, because unlike a title,
+  // a body's first sixty characters are as likely to be a phone number
+  // as a place. Body hits are REPORT ONLY: --apply never writes them.
+  ['db/expire-out-of-area.ts', 'reads bodies to find the city, prints a redacted excerpt'],
   // Only asks `raw_body is not null` to PICK a candidate ad to probe —
   // it never selects the column. And it masks every digit it prints, so
   // even what it does report cannot carry a contact.
