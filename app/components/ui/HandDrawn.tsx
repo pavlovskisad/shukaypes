@@ -47,6 +47,18 @@ const DEFAULT_AMP = 1.1;
 // hanging over the edge.
 export const PAPER_EDGE = 1.5;
 
+// HOW FAR A PICTURE SITS INSIDE THE PAPER IT IS MOUNTED ON: the margin
+// above, plus the line itself. A photo or a map preview laid flush to
+// the card's own edge puts somebody's pavement in the sliver of surface
+// that shows outside the ink, and the card then reads as a picture with
+// a line drawn on it rather than as a picture mounted on a card.
+//
+// Shared, because the moment two cards pick this number separately they
+// pick it differently — which is exactly what happened: the lost-pet
+// card mounted its photo and the favourite-place card ran its map
+// preview to the bezel.
+export const PICTURE_INSET = PAPER_EDGE + 2;
+
 const AMP_FULL_AT_PX = 150;
 const AMP_MIN_SCALE = 0.3;
 

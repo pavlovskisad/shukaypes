@@ -10,7 +10,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK } from '../../constants/surface';
 import { distanceMeters } from '../../utils/geo';
-import { HandDrawnFrame } from './HandDrawn';
+import { HandDrawnFrame, HandDrawnPaperTop, PICTURE_INSET } from './HandDrawn';
 
 // One hearted place as a card in the favourites carousel: a picture of
 // our own map around it with a dot where it stands, the title (or the
@@ -65,6 +65,12 @@ export function LoreFavouriteCard({
         ) : null}
       </View>
       <View style={styles.body}>
+        {/* The band IS its own top edge — one filled shape, so the paper
+            and the ink can never disagree about where the picture ends.
+            Same treatment as the lost-pet card's label band; the preview
+            used to stop on a ruler-straight cut, the one machine-made
+            line among a screenful of drawn ones. See HandDrawnPaperTop. */}
+        <HandDrawnPaperTop seed={`${place.id}-band`} />
         <Text style={styles.title} numberOfLines={2}>
           {place.title ?? place.name}
         </Text>
@@ -92,8 +98,20 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 6,
   },
+  // MOUNTED ON THE PAPER, not flush to the bezel. The preview used to
+  // be a plain flow block at the card's full width, so the map ran under
+  // the drawn edge and the sliver of surface outside the ink was
+  // somebody's rooftop instead of white paper — the card read as a map
+  // with a line on it. Inset by the same PICTURE_INSET the lost-pet
+  // photo uses, and the top corners follow the card's radius minus that
+  // inset, so the two cards are cut identically. Bottom corners stay
+  // square: the label band covers them.
   preview: {
     height: PREVIEW_H,
+    marginTop: PICTURE_INSET,
+    marginHorizontal: PICTURE_INSET,
+    borderTopLeftRadius: Math.max(0, R.card - PICTURE_INSET),
+    borderTopRightRadius: Math.max(0, R.card - PICTURE_INSET),
     backgroundColor: '#f1f0ec',
     overflow: 'hidden',
   },
