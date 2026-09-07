@@ -132,6 +132,17 @@ export const SCENE_INK: Record<SceneMode, string> = {
   night: PALETTE.night.ink,
 };
 
+// WHERE THE HORIZON LANDS, as a fraction of the scene's height.
+//
+// The layers stretch with preserveAspectRatio="none", so this line is
+// always at the same fraction of the container and never at a fixed
+// pixel depth. Anything that has to stay BELOW it — the dog walking on
+// the lawn — has to be positioned from this number, not from a pixel
+// constant that happens to look right on one screen. See
+// ProfileDogScene, where a fixed inset walked the dog into the tree line
+// on any viewport shorter than the one it was tuned on.
+export const HORIZON_FRACTION = GROUND_Y / VIEW_H;
+
 // ---------------------------------------------------------------------
 // The pen.
 //
@@ -493,6 +504,14 @@ function layerStyle(
   };
 }
 
+// Everything the sun animates about turns around its own centre, in the
+// layer's user units. See the sun's own comment for why fill-box will
+// not do.
+const SUN_ORIGIN = {
+  transformBox: 'view-box',
+  transformOrigin: `${SKY_CX}px ${SKY_CY}px`,
+} as const;
+
 // Shared stroke props. Round caps and joins throughout — a pencil has no
 // mitre.
 const PEN = {
@@ -549,6 +568,16 @@ export function ProfileSceneBackdrop({
           @keyframes cloud-b { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-16px); } }
           @keyframes cloud-c { 0%,100% { transform: translateX(0); } 50% { transform: translateX(24px); } }
           @keyframes cloud-d { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-22px); } }
+          /* Rays reach out and draw back; the disc rocks. Both are tiny
+             on purpose — this is a drawing catching the light, not a
+             loading spinner. */
+          @keyframes sun-ray { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.14); } }
+          @keyframes sun-wobble { 0%, 100% { transform: rotate(-2.5deg); } 50% { transform: rotate(2.5deg); } }
+          @media (prefers-reduced-motion: reduce) {
+            /* Somebody who has asked the system for less movement gets a
+               still sun, and still clouds with it. */
+            [data-sun], [data-cloud] { animation: none !important; }
+          }
         `}</style>
 
         {mode === 'night'
@@ -565,10 +594,35 @@ export function ProfileSceneBackdrop({
 
         {mode === 'day' ? (
           <g>
-            <path d={SUN_DISC} fill={p.sun} stroke="none" />
-            <path d={SUN_DISC} {...PEN} stroke={p.ink} strokeWidth={W_FAR} />
+            {/* THE SUN IS THE ONE THING IN THE SKY THAT SHINES.
+                Each ray breathes out and back on its own delay, so the
+                shimmer travels round the disc instead of the whole star
+                pulsing at once; the disc itself rocks a couple of degrees
+                on a longer, prime-ish period so the two never lock into a
+                single visible beat.
+
+                transform-box: view-box with an explicit origin at the
+                sun's centre — the default (fill-box) would scale each ray
+                about ITS OWN bounding box, which for a short dash pointing
+                outward is nowhere near the sun and would send the rays
+                wandering off across the sky. */}
+            <g data-sun style={{ animation: 'sun-wobble 13s ease-in-out infinite', ...SUN_ORIGIN }}>
+              <path d={SUN_DISC} fill={p.sun} stroke="none" />
+              <path d={SUN_DISC} {...PEN} stroke={p.ink} strokeWidth={W_FAR} />
+            </g>
             {SUN_RAYS.map((d, i) => (
-              <path key={`ray-${i}`} d={d} {...PEN} stroke={p.ink} strokeWidth={W_FAR} />
+              <path
+                key={`ray-${i}`}
+                data-sun
+                d={d}
+                {...PEN}
+                stroke={p.ink}
+                strokeWidth={W_FAR}
+                style={{
+                  animation: `sun-ray 3.4s ease-in-out ${(i * 0.21).toFixed(2)}s infinite`,
+                  ...SUN_ORIGIN,
+                }}
+              />
             ))}
           </g>
         ) : (
@@ -583,7 +637,7 @@ export function ProfileSceneBackdrop({
         )}
 
         {CLOUDS.map((c, i) => (
-          <g key={`cloud-${i}`} style={{ animation: c.animation }}>
+          <g key={`cloud-${i}`} data-cloud style={{ animation: c.animation }}>
             <path d={c.d} fill={p.cloud} stroke="none" />
             <path d={c.d} {...PEN} stroke={p.ink} strokeWidth={W_FAR} />
           </g>

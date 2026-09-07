@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DogSprite, type DogAnim } from '../map/DogSprite';
 import { SpeechBubble } from '../ui/SpeechBubble';
-import { ProfileSceneBackdrop, type SceneMode } from './ProfileSceneBackdrop';
+import { HORIZON_FRACTION, ProfileSceneBackdrop, type SceneMode } from './ProfileSceneBackdrop';
 import { ProfileSceneBirds } from './ProfileSceneBirds';
 import { useStrings } from '../../i18n/useStrings';
 import { playPop } from '../../utils/popOnTap';
@@ -86,6 +86,18 @@ const ANIM_BOTTOM_OFFSET: Record<DogAnim, number> = {
 
 const SPRITE_SCALE = 2.5; // 64 × 2.5 = 160 px on screen
 const SPRITE_PX = 64 * SPRITE_SCALE;
+// How much room the dog needs UNDER the horizon line — see groundInset.
+//
+// Derived, not guessed: `bottom` positions the sprite WRAPPER, whose top
+// edge is SPRITE_PX above it, and the per-anim offset can lift the whole
+// thing by as much as ANIM_BOTTOM_OFFSET.sniffing. So the wrapper's top —
+// the highest the dog can reach in any pose — sits at
+// `inset + SPRITE_PX + 8` above the container's bottom, and the clearance
+// has to cover all of it plus a little air. Eyeballing this at 0.75 ×
+// SPRITE_PX first left the dog's head 15px OVER the line at every height
+// the cap applied to, which the ladder in scratchpad/ground.mjs caught.
+const MAX_ANIM_LIFT = Math.max(...Object.values(ANIM_BOTTOM_OFFSET));
+const HORIZON_CLEARANCE = SPRITE_PX + MAX_ANIM_LIFT + 12;
 // Scene container is taller than the sprite — added sky above the
 // ground line so the dog "lives" lower in the card. The whole hero
 // card grows by ~70 px on the bottom end as a result, with the dog
@@ -125,6 +137,7 @@ const SCENE_MODE: SceneMode = 'day';
 export function ProfileDogScene({
   onModeChange,
   dogBottomInset = 0,
+  dogFloorInset = 0,
 }: {
   // Called with the scene's mode. The profile tab wires this to its
   // page background so the sky colour behind the scene matches the
@@ -137,6 +150,10 @@ export function ProfileDogScene({
   // the dog walks closer to the horizon instead of along the
   // viewport bottom under the tab bar.
   dogBottomInset?: number;
+  // Where the floating stat deck's top edge sits, measured the same way.
+  // The dog is never placed below this, whatever the horizon says — see
+  // groundInset.
+  dogFloorInset?: number;
 } = {}) {
   const t = useStrings();
   const [anim, setAnim] = useState<DogAnim>('sitting');
@@ -170,6 +187,10 @@ export function ProfileDogScene({
   // on phones; SSR initial render uses 0 (hidden until measured).
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
+  // Height too — the horizon is at a FRACTION of it, so the dog's
+  // standing room can only be worked out once we know how tall the
+  // scene actually is. See groundInset below.
+  const [height, setHeight] = useState(0);
   const [x, setX] = useState(0);
   const [transitionMs, setTransitionMs] = useState(0);
   const xRef = useRef(0);
@@ -182,12 +203,16 @@ export function ProfileDogScene({
     if (!el || typeof ResizeObserver === 'undefined') {
       // Fallback for environments without ResizeObserver — read once
       // and don't react to resizes. Still better than zero width.
-      if (el) setWidth(el.clientWidth);
+      if (el) {
+        setWidth(el.clientWidth);
+        setHeight(el.clientHeight);
+      }
       return;
     }
     const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width ?? el.clientWidth;
-      setWidth(w);
+      const box = entries[0]?.contentRect;
+      setWidth(box?.width ?? el.clientWidth);
+      setHeight(box?.height ?? el.clientHeight);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -201,6 +226,36 @@ export function ProfileDogScene({
       setX(center);
     }
   }, [width]);
+
+  // THE DOG WALKS ON THE LAWN, NEVER ON THE SKYLINE.
+  //
+  // `dogBottomInset` arrives as a pixel distance up from the bottom,
+  // enough to clear the floating dashboard. But the horizon is at a
+  // FRACTION of the container height, because the backdrop stretches to
+  // fill it — so the two were being measured in different units, and the
+  // inset was tuned against one tall viewport. On anything shorter (any
+  // phone browser showing its address bar) the lawn below the horizon
+  // shrinks while the inset does not, and the dog walks straight up into
+  // the tree line, standing on the same ground as the bench.
+  //
+  // Capped against the horizon's real pixel position instead. On a tall
+  // screen the cap is slack and nothing moves; on a short one it wins,
+  // and the dog drops back onto the lawn.
+  //
+  // …but not infinitely far down. `dogFloorInset` is where the stat deck
+  // starts, and pushing the dog under THAT just trades one bug for a
+  // worse one — on a 620px viewport the first cut left a head and two
+  // shoulders poking out from behind a card. So the floor wins when the
+  // two conflict. On a phone that short the lawn genuinely cannot hold a
+  // whole dog between the horizon and the deck, and of the two ways to
+  // lose, "feet firmly on the lawn, ears up among the far trees" beats
+  // "dog filed behind the furniture".
+  const groundInset = useMemo(() => {
+    if (height <= 0) return dogBottomInset;
+    const horizonFromBottom = height * (1 - HORIZON_FRACTION);
+    const cap = horizonFromBottom - HORIZON_CLEARANCE;
+    return Math.max(dogFloorInset, Math.min(dogBottomInset, cap));
+  }, [height, dogBottomInset, dogFloorInset]);
 
   // Tap on dog → SpeechBubble + a random reaction pose (jump /
   // crouch / sit). The state machine is paused for the reaction's
@@ -371,7 +426,7 @@ export function ProfileDogScene({
           // dogBottomInset (parent-controlled) lifts the dog further
           // up so it can walk on the lawn instead of along the
           // viewport bottom on the full-bleed profile.
-          bottom: dogBottomInset + ANIM_BOTTOM_OFFSET[anim],
+          bottom: groundInset + ANIM_BOTTOM_OFFSET[anim],
           transform: `translateX(${x}px)`,
           width: SPRITE_PX,
           height: SPRITE_PX,
