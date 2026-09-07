@@ -332,16 +332,16 @@ export function ProfileDogScene({
         // Fill the parent — the profile tab mounts the scene as a
         // full-bleed background so the landscape's horizon line
         // lands around the screen center. SVG layers stretch with
-        // preserveAspectRatio="none" to fill the same area; some
-        // pixel-art elements (sun, trees) end up vertically
-        // elongated as a result, but `imageRendering: pixelated`
-        // keeps the edges crisp.
+        // preserveAspectRatio="none" to fill the same area, so the
+        // drawing carries a slight vertical stretch; its ink is
+        // drawn with non-scaling-stroke so the LINE weight stays
+        // even on both axes regardless.
         width: '100%',
         height: '100%',
         overflow: 'hidden',
       }}
     >
-      {/* Pixelated city/park backdrop sits behind the dog. Three
+      {/* Hand-drawn park backdrop sits behind the dog. Three
           parallax layers (far/mid/near) translate opposite to the
           dog's motion at increasing rates for depth. The transition
           duration matches the dog's, so layers slide in lockstep

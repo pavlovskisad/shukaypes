@@ -12,7 +12,7 @@ import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { api, type TerritoryRanking } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
-import type { SceneMode } from '../../components/profile/ProfileSceneBackdrop';
+import { SCENE_SKY, type SceneMode } from '../../components/profile/ProfileSceneBackdrop';
 import { HERO, CHIP } from '../../constants/sizing';
 import { MeterPill, CounterPill } from '../../components/ui/StatusBar';
 import { useStrings } from '../../i18n/useStrings';
@@ -295,7 +295,7 @@ export default function ProfileScreen() {
     [t, data, board, companionName],
   );
 
-  const skyColor = sceneMode === 'day' ? '#dbeaf4' : '#1c2a44';
+  const skyColor = SCENE_SKY[sceneMode];
 
   return (
     // Full-bleed scene: the dog's habitat takes the entire screen

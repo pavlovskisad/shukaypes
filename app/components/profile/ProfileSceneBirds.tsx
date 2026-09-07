@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { INK } from '../../constants/surface';
 import type { SceneMode } from './ProfileSceneBackdrop';
 
 // Random ambient flyovers / drops over the dog scene. Each "event" is
@@ -151,7 +152,10 @@ function EventSprite({ event, cardWidth }: { event: ActiveEvent; cardWidth: numb
 // flap in lockstep.
 function BirdGlyph({
   size = 1,
-  color = '#34344a',
+  // The app's ink. These marks share the sky with drawn clouds now,
+  // and a navy that is nearly-but-not-quite the black everything else
+  // is drawn in reads as a smudge rather than as a bird.
+  color = INK,
   flapDelayMs = 0,
 }: {
   size?: number;
@@ -282,7 +286,7 @@ function Butterfly({ event, cardWidth }: { event: ActiveEvent; cardWidth: number
           >
             <div style={{ position: 'absolute', left: 0, top: 1, width: 4, height: 6, background: '#e07a3a' }} />
             <div style={{ position: 'absolute', left: 6, top: 1, width: 4, height: 6, background: '#e07a3a' }} />
-            <div style={{ position: 'absolute', left: 4, top: 0, width: 2, height: 8, background: '#34344a' }} />
+            <div style={{ position: 'absolute', left: 4, top: 0, width: 2, height: 8, background: INK }} />
           </div>
         </div>
       </div>
