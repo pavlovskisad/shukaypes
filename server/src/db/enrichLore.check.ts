@@ -9,6 +9,7 @@
 // the last ones are shapes it has to refuse rather than half-parse.
 
 import {
+  firstNonCaseDiff,
   onlyCaseDiffers,
   parseCased,
   parseWriter,
@@ -121,6 +122,11 @@ function ok(cond: boolean, label: string, detail = ''): void {
   );
   ok(parseCased('{"text": "Київ."}') === 'Київ.', 'the case answer parses');
   ok(parseCased('nope') === null, 'no JSON is a miss');
+  ok(
+    firstNonCaseDiff('«малютка» — ракета.', '«Малютка» – ракета.').includes('⟨— ракета.⟩'),
+    'the refusal log points at the character that changed',
+    firstNonCaseDiff('«малютка» — ракета.', '«Малютка» – ракета.'),
+  );
 }
 
 if (failures > 0) {
