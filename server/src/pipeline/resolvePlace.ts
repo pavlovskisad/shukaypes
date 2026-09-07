@@ -117,6 +117,12 @@ const MARKERS =
 const MARKER_HEAD =
   /^(вулиц|проспект|бульвар|площ|провул|мікрорайон|масив|район|селищ|село|смт|метро|станц|парк)\p{L}{0,3}(\s|$)/u;
 
+// The subset of MARKERS that names a station specifically. See the note
+// at its use: a marker that says what KIND of place the poster means is
+// worth honouring, because answering with a different kind of thing of
+// the same name is how a Kharkiv station became a Kyiv square.
+const METRO_MARKERS = /(метро|станц)\p{L}{0,3}\s*$/u;
+
 // A street is a block; a district is four kilometres across. When both
 // match, the narrower one is the more useful answer — and when only a
 // district matches, that is still far better than the wrong side of the
@@ -256,6 +262,43 @@ const MIN_STEM_CHARS = 5;
 // below the distance between genuine namesakes.
 const NAMESAKE_LINK_M = 600;
 
+// A NAME USED AT TWO GRANULARITIES IS NOT TWO PLACES.
+//
+// The rule below used to group every row sharing a name, whatever kind
+// of thing it was. That refused «Оболонь», «Позняки», «Святошин»,
+// «Нивки», «Лісова», «Золоті ворота» — the names Kyiv ads use most —
+// because the gazetteer holds each of them twice: the metro station as a
+// point, and the district it serves as a polygon centroid a kilometre or
+// more away. Two rows, two clusters, refused as namesakes. They are the
+// same place written at two scales.
+//
+// So clusters are counted WITHIN a category. Judged that way the station
+// is one cluster, the district is one cluster, and a name only looks
+// ambiguous when one kind of thing genuinely sits in several places.
+//
+// THAT ALONE WOULD LET «ПЕРЕМОГА» BACK IN, which is the name this guard
+// was built for. Its rows are a district 30km east of the centre, two
+// neighbourhoods 10km west, and two landmarks near each — genuinely
+// different settlements sharing a word, and the district row is a single
+// cluster all by itself. Measured, the pin it produced was 26.5km from
+// where the ad meant.
+//
+// What separates it from «Оболонь» is not the count, it is the spread of
+// everything else called the same thing. Оболонь's other rows sit beside
+// the station; Перемога's sit half a county away. So a reading also has
+// to be DOMINANT: no row of that name, of any kind, further than this
+// from it.
+const DISTANT_NAMESAKE_M = 5_000;
+
+// …with one category exempt from the dominance test. Kyiv has exactly
+// one metro station of any given name — a closed set of about fifty,
+// each unique, and «на Лісовій» in a lost-pet ad means the station or
+// the area around it, never a bus stop of the same name in Vyshhorod.
+// Without this, «Оболонь» and «Лісова» stay refused: their stray rows
+// are 18km away and would fail dominance despite the station itself
+// being unmistakable.
+const UNIQUELY_NAMED_CATEGORY = 'metro';
+
 interface Namesake {
   /** How many separated groups the places of this name form. */
   clusters: number;
@@ -311,16 +354,41 @@ function describeNamesake(points: { lat: number; lng: number }[]): Namesake {
 // asked about.
 const NAMESAKE_CACHE = new WeakMap<GazetteerPlace[], Map<string, Namesake>>();
 
-function namesakeOf(name: string, places: GazetteerPlace[]): Namesake {
+function namesakeOf(
+  name: string,
+  category: string,
+  places: GazetteerPlace[],
+): Namesake {
   let per = NAMESAKE_CACHE.get(places);
   if (!per) {
     per = new Map();
     NAMESAKE_CACHE.set(places, per);
   }
-  const cached = per.get(name);
+  // Keyed by category too: «Оболонь» the station and «Оболонь» the
+  // district are separate questions with separate answers. NUL joins
+  // them because it cannot occur in either half.
+  const cacheKey = `${category}\u0000${name}`;
+  const cached = per.get(cacheKey);
   if (cached) return cached;
-  const described = describeNamesake(buildNameIndex(places).get(name) ?? []);
-  per.set(name, described);
+
+  const all = buildNameIndex(places).get(name) ?? [];
+  const sameKind = all.filter((p) => p.category === category);
+  const described = describeNamesake(sameKind);
+
+  // One kind of thing in several places is a real namesake — refuse it
+  // whatever else the name covers.
+  if (described.clusters === 1 && category !== UNIQUELY_NAMED_CATEGORY) {
+    // Otherwise the reading has to be the dominant one: everything else
+    // called this has to be nearby, or the name means several places and
+    // we cannot tell which the ad meant.
+    for (const other of all) {
+      if (metresBetween(described, other) > DISTANT_NAMESAKE_M) {
+        per.set(cacheKey, { ...described, clusters: 2 });
+        return per.get(cacheKey)!;
+      }
+    }
+  }
+  per.set(cacheKey, described);
   return described;
 }
 
@@ -524,6 +592,20 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
 
       const before = words.slice(Math.max(0, i - 2), i).join(' ');
       const marked = MARKERS.test(before) || MARKER_HEAD.test(gram);
+      // «МЕТРО X» NAMES A STATION, AND ONLY A STATION.
+      //
+      // «Таруша» went missing «в районе Полевая метро Спортивная».
+      // There is no Спортивна station in Kyiv — it is in Kharkiv — but
+      // Kyiv has a Спортивна ПЛОЩА by Palats Sportu, and the «метро» in
+      // front of the word marked it, which made a square in the centre a
+      // confident answer for a dog in another city.
+      //
+      // Honouring the word the poster wrote costs nothing and catches
+      // the whole class: an ad naming a station we do not have is one we
+      // should refuse, not quietly answer with something else of the
+      // same name. It also fixes «метро Золоті ворота», which used to
+      // resolve to «Золота вулиця» because a street outranks a station.
+      const asksForStation = METRO_MARKERS.test(before);
 
       // A SHORT WORD ONLY COUNTS WHEN THE AD SAYS IT IS A PLACE.
       //
@@ -575,6 +657,13 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
         // than any other category — Собачка, Перемога, Юність, Дружба —
         // so a park counts only when the ad writes «парк» next to it
         // (which MARKERS now recognises).
+        // The poster said which kind of place they meant; a station that
+        // is not in our table is a refusal, not an invitation to answer
+        // with a square of the same name. Landmarks are allowed through
+        // because OSM files many stations as «Ст. м. X» rather than as
+        // category metro.
+        if (asksForStation && p.category !== 'metro' && p.category !== 'landmark') continue;
+
         if (!marked && (p.category === 'street' || p.category === 'park')) continue;
 
         // ONE SIDE OR THE OTHER HAS TO SAY IT IS A PLACE.
@@ -675,14 +764,24 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   //   never fired — a coin-flip between three Перемогаs dressed up as
   //   an unambiguous hit. Grouping by the place's own normalised name
   //   catches it whichever spelling the ad used.
+  // BOTH GROUPINGS ARE PER CATEGORY, for the reason spelled out at
+  // DISTANT_NAMESAKE_M: a metro station and the district around it share
+  // a name and sit a kilometre apart, and counting them together made
+  // «Оболонь», «Лісова» and «Золоті ворота» look like namesakes. Mixing
+  // them here would refuse those names again no matter what namesakeOf
+  // decides, because one bad bucket drops every hit that shares the key.
   const ambiguousKeys = new Set<string>();
   const ambiguousNames = new Set<string>();
+  const keyBucket = (h: { key: string; place: GazetteerPlace }) =>
+    `${h.place.category}\u0000${h.key}`;
+  const nameBucket = (p: GazetteerPlace) =>
+    `${p.category}\u0000${normalisePlaceText(p.name)}`;
   {
     const byKey = new Map<string, { lat: number; lng: number }[]>();
     for (const h of hits) {
-      const bucket = byKey.get(h.key);
+      const bucket = byKey.get(keyBucket(h));
       if (bucket) bucket.push(h.place);
-      else byKey.set(h.key, [h.place]);
+      else byKey.set(keyBucket(h), [h.place]);
     }
     for (const [key, coords] of byKey) {
       if (describeNamesake(coords).clusters > 1) ambiguousKeys.add(key);
@@ -691,13 +790,18 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
     // the other two «Перемога» rows never produced a hit (that was the
     // hole), so only the table itself can reveal them.
     for (const h of hits) {
-      const name = normalisePlaceText(h.place.name);
-      if (ambiguousNames.has(name)) continue;
-      if (namesakeOf(name, places).clusters > 1) ambiguousNames.add(name);
+      const bucket = nameBucket(h.place);
+      if (ambiguousNames.has(bucket)) continue;
+      if (
+        namesakeOf(normalisePlaceText(h.place.name), h.place.category, places)
+          .clusters > 1
+      ) {
+        ambiguousNames.add(bucket);
+      }
     }
   }
   const unambiguous = hits.filter(
-    (h) => !ambiguousKeys.has(h.key) && !ambiguousNames.has(normalisePlaceText(h.place.name)),
+    (h) => !ambiguousKeys.has(keyBucket(h)) && !ambiguousNames.has(nameBucket(h.place)),
   );
   if (unambiguous.length === 0) return null;
 
@@ -748,7 +852,7 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
   // its tightest — covers the length from there. On an L-shaped street
   // the centre can fall a little off the road itself, which is a price
   // worth paying for an answer that does not move between runs.
-  const namesake = namesakeOf(normalisePlaceText(winner.place.name), places);
+  const namesake = namesakeOf(normalisePlaceText(winner.place.name), winner.place.category, places);
   if (namesake.clusters === 1) {
     return { ...winner.place, lat: namesake.lat, lng: namesake.lng };
   }

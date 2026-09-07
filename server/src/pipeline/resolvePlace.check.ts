@@ -453,6 +453,77 @@ const PLACES: GazetteerPlace[] = [
   );
 }
 
+// A NAME AT TWO GRANULARITIES IS ONE PLACE.
+//
+// The gazetteer holds «Оболонь» as a metro station (three OSM nodes on
+// one platform) and as the district around it, a kilometre off — plus a
+// same-named village 19km east. Counting all of those together made the
+// most-used name in north Kyiv look like a namesake and refused it, along
+// with «Позняки», «Святошин», «Нивки», «Лісова» and «Золоті ворота».
+{
+  const obolon: GazetteerPlace[] = [
+    { name: 'Оболонь', lat: 50.5015, lng: 30.4982, category: 'metro' },
+    { name: 'Оболонь', lat: 50.5015, lng: 30.4980, category: 'metro' },
+    { name: 'Оболонь', lat: 50.5107, lng: 30.5034, category: 'neighbourhood' },
+    // The village out past Brovary that made the whole name ambiguous.
+    { name: 'Оболонь', lat: 50.5041, lng: 30.7636, category: 'neighbourhood' },
+  ];
+  const r = resolvePlace('загубився рудий кіт на Оболоні, дуже лагідний', obolon);
+  check('a station and its district are one place', r?.name === 'Оболонь', String(r?.name));
+  check(
+    '…and the answer is the station, not the middle of both',
+    r !== null && Math.abs(r.lat - 50.5015) < 0.002,
+    `${r?.lat}`,
+  );
+}
+
+// …BUT A NAME USED FOR GENUINELY DIFFERENT PLACES IS STILL REFUSED.
+//
+// «Перемога» is the case the ambiguity guard was built for: a district
+// 30km east of the centre, two neighbourhoods 10km west, landmarks by
+// each. Counting per category alone would let the lone district row
+// through as "one cluster" and pin a pet 26km from where its ad meant,
+// which is the measured mistake this rule exists to prevent. What saves
+// it is the dominance test — everything else of that name is half a
+// county away.
+{
+  const peremoha: GazetteerPlace[] = [
+    { name: 'Перемога', lat: 50.5420, lng: 30.8260, category: 'district' },
+    { name: 'Перемога', lat: 50.4371, lng: 30.3950, category: 'neighbourhood' },
+    { name: 'Перемога', lat: 50.4448, lng: 30.2799, category: 'neighbourhood' },
+    { name: 'Перемога', lat: 50.4773, lng: 30.3608, category: 'landmark' },
+  ];
+  const r = resolvePlace('зник песик в районі Перемога, відгукується на Бім', peremoha);
+  check('scattered namesakes are still refused', r === null, String(r?.name));
+}
+
+// «МЕТРО X» NAMES A STATION.
+//
+// «Таруша» reads «в районе Полевая метро Спортивная». That station is in
+// Kharkiv; Kyiv has a Спортивна ПЛОЩА by Palats Sportu, and answering
+// with it sent a walker to the centre for a dog in another city.
+{
+  const sportyvna: GazetteerPlace[] = [
+    { name: 'Спортивна площа', lat: 50.4390, lng: 30.5220, category: 'square' },
+    { name: 'Золоті ворота', lat: 50.4485, lng: 30.5130, category: 'metro' },
+    { name: 'Золота вулиця', lat: 50.4600, lng: 30.4900, category: 'street' },
+  ];
+  const kharkiv = resolvePlace('Пропала собака в районе Полевая метро Спортивная', sportyvna);
+  check(
+    'a station we do not have is refused, not answered with a square',
+    kharkiv === null,
+    String(kharkiv?.name),
+  );
+  // And the same rule fixes the station we DO have: «метро» used to mark
+  // «Золота вулиця», and a street outranks a station on specificity.
+  const zoloti = resolvePlace('пес загубився біля метро Золоті ворота', sportyvna);
+  check(
+    'a station we do have wins over a street of a similar name',
+    zoloti?.name === 'Золоті ворота',
+    String(zoloti?.name),
+  );
+}
+
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);
   process.exit(1);
