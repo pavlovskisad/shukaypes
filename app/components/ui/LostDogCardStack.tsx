@@ -16,7 +16,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
 import type { LatLng } from '@shukajpes/shared';
 import { CardStack, CardStackSkeleton } from './CardStack';
-import { HandDrawnFrame, HandDrawnPaperTop, PAPER_EDGE } from './HandDrawn';
+import { HandDrawnFrame, HandDrawnPaperTop, PICTURE_INSET } from './HandDrawn';
 import { Icon } from './Icon';
 import { INLINE_ICON } from '../../constants/sizing';
 
@@ -97,10 +97,6 @@ export function LostDogCardStack({
 // Re-exported so call sites that imported the skeleton from this
 // module keep working without a churning rename across the app.
 export const LostDogCardStackSkeleton = CardStackSkeleton;
-
-// How far the photo sits inside the card: the paper margin the drawn
-// line is measured from, plus the line itself. See PAPER_EDGE.
-const PHOTO_INSET = PAPER_EDGE + 2;
 
 // Photo mounted on paper, with an inked white label band across the bottom
 // carrying name + breed on the left and how far away on the right.
@@ -193,8 +189,8 @@ export function LostDogCardView({
             // rather than white paper — the card read as a photo with a
             // line on it instead of as a photo mounted on a card. Now
             // it is a mount: white, then the line, then the picture.
-            inset: PHOTO_INSET,
-            borderRadius: Math.max(0, R.card - PHOTO_INSET),
+            inset: PICTURE_INSET,
+            borderRadius: Math.max(0, R.card - PICTURE_INSET),
             backgroundImage: `url("${dog.photoUrl}")`,
             backgroundSize: 'cover',
             backgroundPosition: 'center center',
@@ -261,11 +257,11 @@ const styles = StyleSheet.create({
   // The no-photo fallback takes the same mount as the photo above.
   photo: {
     position: 'absolute',
-    top: PHOTO_INSET,
-    left: PHOTO_INSET,
-    right: PHOTO_INSET,
-    bottom: PHOTO_INSET,
-    borderRadius: Math.max(0, R.card - PHOTO_INSET),
+    top: PICTURE_INSET,
+    left: PICTURE_INSET,
+    right: PICTURE_INSET,
+    bottom: PICTURE_INSET,
+    borderRadius: Math.max(0, R.card - PICTURE_INSET),
   },
   photoFallback: {
     alignItems: 'center',

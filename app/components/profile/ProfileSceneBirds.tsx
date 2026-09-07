@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { SceneMode } from './ProfileSceneBackdrop';
+import { SCENE_INK, type SceneMode } from './ProfileSceneBackdrop';
 
 // Random ambient flyovers / drops over the dog scene. Each "event" is
 // a small sprite that crosses the scene once and is then removed.
@@ -145,59 +145,52 @@ function EventSprite({ event, cardWidth }: { event: ActiveEvent; cardWidth: numb
   }
 }
 
-// Tiny "v" silhouette in pure pixel rectangles. Body row stays put;
-// the wing tips + tail tip animate between an "up" and "down" frame
-// to flap. Per-bird flapDelayMs offsets the cycle so a flock doesn't
-// flap in lockstep.
-function BirdGlyph({
-  size = 1,
-  color = '#34344a',
-  flapDelayMs = 0,
-}: {
-  size?: number;
-  color?: string;
-  flapDelayMs?: number;
-}) {
-  const u = 2 * size;
+// Shared pen for every drawn creature here — same ink, same round caps
+// and no fill as the park behind them (see ProfileSceneBackdrop).
+const PEN = {
+  fill: 'none',
+  stroke: SCENE_INK.day,
+  strokeLinecap: 'round',
+  strokeLinejoin: 'round',
+} as const;
+
+// A GULL, DRAWN — not a pixel "v".
+//
+// These used to be seven little squares apiece, which is what the whole
+// scene was made of when they were written. The park behind them is a
+// line drawing now, and a 2px-grid glyph beside a drawn cloud reads as a
+// rendering fault rather than as a bird.
+//
+// Two frames on the same opacity swap as before: wings raised and wings
+// lowered. Both meet the body at the SAME midpoint (10, 6), so the bird
+// flaps around a fixed shoulder instead of jumping up and down the sky.
+// Per-bird flapDelayMs offsets the cycle so a flock doesn't beat in
+// lockstep.
+const WING_UP = 'M 1 2 Q 6 9 10 6 Q 14 9 19 2';
+const WING_DOWN = 'M 1 10 Q 6 4 10 6 Q 14 4 19 10';
+
+function BirdGlyph({ size = 1, flapDelayMs = 0 }: { size?: number; flapDelayMs?: number }) {
   return (
-    <div
-      style={{
-        position: 'relative',
-        width: 7 * u,
-        height: 3 * u,
-        imageRendering: 'pixelated' as const,
-      }}
+    <svg
+      width={20 * size}
+      height={12 * size}
+      viewBox="0 0 20 12"
+      style={{ display: 'block', overflow: 'visible' }}
+      aria-hidden
     >
-      {/* Body — middle row, always visible. */}
-      <div style={{ position: 'absolute', left: 0, top: u, width: u, height: u, background: color }} />
-      <div style={{ position: 'absolute', left: 2 * u, top: u, width: u, height: u, background: color }} />
-      <div style={{ position: 'absolute', left: 4 * u, top: u, width: u, height: u, background: color }} />
-      <div style={{ position: 'absolute', left: 6 * u, top: u, width: u, height: u, background: color }} />
-      {/* Wings UP frame — top corners + bottom tail tip. */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          animation: `bird-flap-up 320ms steps(1) ${flapDelayMs}ms infinite`,
-        }}
-      >
-        <div style={{ position: 'absolute', left: u, top: 0, width: u, height: u, background: color }} />
-        <div style={{ position: 'absolute', left: 5 * u, top: 0, width: u, height: u, background: color }} />
-        <div style={{ position: 'absolute', left: 3 * u, top: 2 * u, width: u, height: u, background: color }} />
-      </div>
-      {/* Wings DOWN frame — top tail tip + bottom corners. */}
-      <div
-        style={{
-          position: 'absolute',
-          inset: 0,
-          animation: `bird-flap-down 320ms steps(1) ${flapDelayMs}ms infinite`,
-        }}
-      >
-        <div style={{ position: 'absolute', left: 3 * u, top: 0, width: u, height: u, background: color }} />
-        <div style={{ position: 'absolute', left: u, top: 2 * u, width: u, height: u, background: color }} />
-        <div style={{ position: 'absolute', left: 5 * u, top: 2 * u, width: u, height: u, background: color }} />
-      </div>
-    </div>
+      <path
+        d={WING_UP}
+        {...PEN}
+        strokeWidth={1.4}
+        style={{ animation: `bird-flap-up 320ms steps(1) ${flapDelayMs}ms infinite` }}
+      />
+      <path
+        d={WING_DOWN}
+        {...PEN}
+        strokeWidth={1.4}
+        style={{ animation: `bird-flap-down 320ms steps(1) ${flapDelayMs}ms infinite` }}
+      />
+    </svg>
   );
 }
 
@@ -271,19 +264,24 @@ function Butterfly({ event, cardWidth }: { event: ActiveEvent; cardWidth: number
         }}
       >
         <div style={{ animation: `${bobName} 700ms ease-in-out infinite` }}>
-          <div
+          {/* Two wing loops off a single body stroke. The orange it
+              used to be was the last saturated colour anywhere in the
+              scene once the park went to pure line. */}
+          <svg
+            width={14}
+            height={11}
+            viewBox="0 0 14 11"
             style={{
+              display: 'block',
+              overflow: 'visible',
               animation: `${flapName} 220ms ease-in-out infinite`,
-              imageRendering: 'pixelated' as const,
-              width: 10,
-              height: 8,
-              position: 'relative',
             }}
+            aria-hidden
           >
-            <div style={{ position: 'absolute', left: 0, top: 1, width: 4, height: 6, background: '#e07a3a' }} />
-            <div style={{ position: 'absolute', left: 6, top: 1, width: 4, height: 6, background: '#e07a3a' }} />
-            <div style={{ position: 'absolute', left: 4, top: 0, width: 2, height: 8, background: '#34344a' }} />
-          </div>
+            <path d="M 7 5 Q 0 0 1 5 Q 0 10 7 5" {...PEN} strokeWidth={1.2} />
+            <path d="M 7 5 Q 14 0 13 5 Q 14 10 7 5" {...PEN} strokeWidth={1.2} />
+            <path d="M 7 1.5 L 7 9" {...PEN} strokeWidth={1.2} />
+          </svg>
         </div>
       </div>
     </>
@@ -313,18 +311,18 @@ function Leaf({ event, cardWidth }: { event: ActiveEvent; cardWidth: number }) {
         }}
       >
         <div style={{ animation: `${swayName} 1200ms ease-in-out infinite` }}>
-          <div
-            style={{
-              imageRendering: 'pixelated' as const,
-              width: 6,
-              height: 6,
-              position: 'relative',
-            }}
+          {/* A pointed oval with a midrib — the shape of a leaf rather
+              than three stacked brown pixels. */}
+          <svg
+            width={9}
+            height={9}
+            viewBox="0 0 9 9"
+            style={{ display: 'block', overflow: 'visible' }}
+            aria-hidden
           >
-            <div style={{ position: 'absolute', left: 1, top: 0, width: 4, height: 2, background: '#c97a2c' }} />
-            <div style={{ position: 'absolute', left: 0, top: 2, width: 6, height: 2, background: '#d68a3a' }} />
-            <div style={{ position: 'absolute', left: 1, top: 4, width: 4, height: 2, background: '#a55d1f' }} />
-          </div>
+            <path d="M 1 8 Q 0 2 8 1 Q 7 7 1 8 Z" {...PEN} strokeWidth={1.1} />
+            <path d="M 1 8 L 6 3" {...PEN} strokeWidth={1.1} />
+          </svg>
         </div>
       </div>
     </>
@@ -352,22 +350,23 @@ function Bat({ event, cardWidth }: { event: ActiveEvent; cardWidth: number }) {
         }}
       >
         <div style={{ animation: `${zigName} 600ms ease-in-out infinite` }}>
-          <div
-            style={{
-              imageRendering: 'pixelated' as const,
-              width: 14,
-              height: 6,
-              position: 'relative',
-            }}
+          {/* Scalloped wings and a small body. Drawn in the night ink
+              (see ProfileSceneBackdrop's palette) rather than the app's
+              black, which is invisible against a midnight sky. */}
+          <svg
+            width={18}
+            height={9}
+            viewBox="0 0 18 9"
+            style={{ display: 'block', overflow: 'visible' }}
+            aria-hidden
           >
-            <div style={{ position: 'absolute', left: 0, top: 2, width: 2, height: 2, background: '#2a2a3a' }} />
-            <div style={{ position: 'absolute', left: 2, top: 0, width: 2, height: 2, background: '#2a2a3a' }} />
-            <div style={{ position: 'absolute', left: 4, top: 2, width: 2, height: 2, background: '#2a2a3a' }} />
-            <div style={{ position: 'absolute', left: 6, top: 2, width: 2, height: 4, background: '#2a2a3a' }} />
-            <div style={{ position: 'absolute', left: 8, top: 2, width: 2, height: 2, background: '#2a2a3a' }} />
-            <div style={{ position: 'absolute', left: 10, top: 0, width: 2, height: 2, background: '#2a2a3a' }} />
-            <div style={{ position: 'absolute', left: 12, top: 2, width: 2, height: 2, background: '#2a2a3a' }} />
-          </div>
+            <path
+              d="M 1 2 Q 3 5 5 3 Q 7 3 9 6 Q 11 3 13 3 Q 15 5 17 2"
+              {...PEN}
+              stroke={SCENE_INK.night}
+              strokeWidth={1.3}
+            />
+          </svg>
         </div>
       </div>
     </>

@@ -1,7 +1,7 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { DogSprite, type DogAnim } from '../map/DogSprite';
 import { SpeechBubble } from '../ui/SpeechBubble';
-import { ProfileSceneBackdrop, type SceneMode } from './ProfileSceneBackdrop';
+import { HORIZON_FRACTION, ProfileSceneBackdrop, type SceneMode } from './ProfileSceneBackdrop';
 import { ProfileSceneBirds } from './ProfileSceneBirds';
 import { useStrings } from '../../i18n/useStrings';
 import { playPop } from '../../utils/popOnTap';
@@ -86,6 +86,25 @@ const ANIM_BOTTOM_OFFSET: Record<DogAnim, number> = {
 
 const SPRITE_SCALE = 2.5; // 64 × 2.5 = 160 px on screen
 const SPRITE_PX = 64 * SPRITE_SCALE;
+// How much room the dog needs UNDER the horizon line — see groundInset.
+//
+// Derived, not guessed: `bottom` positions the sprite WRAPPER, whose top
+// edge is SPRITE_PX above it, and the per-anim offset can lift the whole
+// thing by as much as ANIM_BOTTOM_OFFSET.sniffing. So the wrapper's top —
+// the highest the dog can reach in any pose — sits at
+// `inset + SPRITE_PX + 8` above the container's bottom, and the clearance
+// has to cover all of it plus a little air. Eyeballing this at 0.75 ×
+// SPRITE_PX first left the dog's head 15px OVER the line at every height
+// the cap applied to, which the ladder in scratchpad/ground.mjs caught.
+// Tuned DOWN from SPRITE_PX + lift + 12, which left the dog sitting on
+// the deck with a wide empty band of lawn above it. The standing poses
+// are what this has to clear, and they carry ANIM_BOTTOM_OFFSET −25, so
+// SPRITE_PX − 5 leaves them 20px of air under the line. Sniffing lifts
+// by +8 and would math out to −13 — but its GIF is 64×55, bottom
+// aligned, so the drawn dog stops about 19px short of the frame's top
+// and the ink still clears. Everything here is frame geometry; the ink
+// inside the frame is what the eye actually judges.
+const HORIZON_CLEARANCE = SPRITE_PX - 5;
 // Scene container is taller than the sprite — added sky above the
 // ground line so the dog "lives" lower in the card. The whole hero
 // card grows by ~70 px on the bottom end as a result, with the dog
@@ -125,18 +144,23 @@ const SCENE_MODE: SceneMode = 'day';
 export function ProfileDogScene({
   onModeChange,
   dogBottomInset = 0,
+  dogFloorInset = 0,
 }: {
   // Called with the scene's mode. The profile tab wires this to its
   // page background so the sky colour behind the scene matches the
   // sky inside it. Fixed at 'day' today (see SCENE_MODE) — the prop
   // stays because the page still has to be told which sky it is.
   onModeChange?: (mode: SceneMode) => void;
-  // Pushes the dog up from the scene container's bottom edge.
-  // Default 0 keeps the dog at the bottom (original hero-card
-  // behaviour). The full-bleed profile passes a positive value so
-  // the dog walks closer to the horizon instead of along the
-  // viewport bottom under the tab bar.
+  // Pushes the dog up from the scene container's bottom edge — used
+  // only until the container has been measured, after which the horizon
+  // places the dog (see groundInset). Default 0 keeps the dog at the
+  // bottom, the original hero-card behaviour, for a caller that never
+  // gets a height.
   dogBottomInset?: number;
+  // Where the floating stat deck's top edge sits, measured the same way.
+  // The dog is never placed below this, whatever the horizon says — see
+  // groundInset.
+  dogFloorInset?: number;
 } = {}) {
   const t = useStrings();
   const [anim, setAnim] = useState<DogAnim>('sitting');
@@ -170,6 +194,10 @@ export function ProfileDogScene({
   // on phones; SSR initial render uses 0 (hidden until measured).
   const containerRef = useRef<HTMLDivElement | null>(null);
   const [width, setWidth] = useState(0);
+  // Height too — the horizon is at a FRACTION of it, so the dog's
+  // standing room can only be worked out once we know how tall the
+  // scene actually is. See groundInset below.
+  const [height, setHeight] = useState(0);
   const [x, setX] = useState(0);
   const [transitionMs, setTransitionMs] = useState(0);
   const xRef = useRef(0);
@@ -182,12 +210,16 @@ export function ProfileDogScene({
     if (!el || typeof ResizeObserver === 'undefined') {
       // Fallback for environments without ResizeObserver — read once
       // and don't react to resizes. Still better than zero width.
-      if (el) setWidth(el.clientWidth);
+      if (el) {
+        setWidth(el.clientWidth);
+        setHeight(el.clientHeight);
+      }
       return;
     }
     const ro = new ResizeObserver((entries) => {
-      const w = entries[0]?.contentRect.width ?? el.clientWidth;
-      setWidth(w);
+      const box = entries[0]?.contentRect;
+      setWidth(box?.width ?? el.clientWidth);
+      setHeight(box?.height ?? el.clientHeight);
     });
     ro.observe(el);
     return () => ro.disconnect();
@@ -201,6 +233,41 @@ export function ProfileDogScene({
       setX(center);
     }
   }, [width]);
+
+  // THE DOG WALKS ON THE LAWN, NEVER ON THE SKYLINE.
+  //
+  // `dogBottomInset` arrives as a pixel distance up from the bottom,
+  // enough to clear the floating dashboard. But the horizon is at a
+  // FRACTION of the container height, because the backdrop stretches to
+  // fill it — so the two were being measured in different units, and the
+  // inset was tuned against one tall viewport. On anything shorter (any
+  // phone browser showing its address bar) the lawn below the horizon
+  // shrinks while the inset does not, and the dog walks straight up into
+  // the tree line, standing on the same ground as the bench.
+  //
+  // So the horizon PLACES the dog rather than merely capping it: it
+  // stands as high on the lawn as HORIZON_CLEARANCE allows, on every
+  // screen. Capping a fixed preference instead left the dog hugging the
+  // stat deck on tall viewports, where the preference bound first and
+  // the horizon never got a say — a big empty band of lawn above it and
+  // none below.
+  //
+  // `dogFloorInset` is the one thing that outranks the horizon: it is
+  // where the stat deck starts, and pushing the dog under THAT trades
+  // one bug for a worse one — on a 620px viewport an earlier cut left a
+  // head and two shoulders poking out from behind a card. On a phone
+  // that short the lawn genuinely cannot hold a whole dog between the
+  // horizon and the deck, and of the two ways to lose, "feet firmly on
+  // the lawn, ears up among the far trees" beats "dog filed behind the
+  // furniture".
+  //
+  // `dogBottomInset` survives as the answer before the first measurement
+  // lands (and for any caller that mounts the scene without a height).
+  const groundInset = useMemo(() => {
+    if (height <= 0) return dogBottomInset;
+    const horizonFromBottom = height * (1 - HORIZON_FRACTION);
+    return Math.max(dogFloorInset, horizonFromBottom - HORIZON_CLEARANCE);
+  }, [height, dogBottomInset, dogFloorInset]);
 
   // Tap on dog → SpeechBubble + a random reaction pose (jump /
   // crouch / sit). The state machine is paused for the reaction's
@@ -332,16 +399,16 @@ export function ProfileDogScene({
         // Fill the parent — the profile tab mounts the scene as a
         // full-bleed background so the landscape's horizon line
         // lands around the screen center. SVG layers stretch with
-        // preserveAspectRatio="none" to fill the same area; some
-        // pixel-art elements (sun, trees) end up vertically
-        // elongated as a result, but `imageRendering: pixelated`
-        // keeps the edges crisp.
+        // preserveAspectRatio="none" to fill the same area, so the
+        // drawing carries a slight vertical stretch; its ink is
+        // drawn with non-scaling-stroke so the LINE weight stays
+        // even on both axes regardless.
         width: '100%',
         height: '100%',
         overflow: 'hidden',
       }}
     >
-      {/* Pixelated city/park backdrop sits behind the dog. Three
+      {/* Hand-drawn park backdrop sits behind the dog. Three
           parallax layers (far/mid/near) translate opposite to the
           dog's motion at increasing rates for depth. The transition
           duration matches the dog's, so layers slide in lockstep
@@ -371,7 +438,7 @@ export function ProfileDogScene({
           // dogBottomInset (parent-controlled) lifts the dog further
           // up so it can walk on the lawn instead of along the
           // viewport bottom on the full-bleed profile.
-          bottom: dogBottomInset + ANIM_BOTTOM_OFFSET[anim],
+          bottom: groundInset + ANIM_BOTTOM_OFFSET[anim],
           transform: `translateX(${x}px)`,
           width: SPRITE_PX,
           height: SPRITE_PX,

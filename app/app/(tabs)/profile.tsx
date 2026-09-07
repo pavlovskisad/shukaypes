@@ -12,7 +12,7 @@ import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { api, type TerritoryRanking } from '../../services/api';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
-import type { SceneMode } from '../../components/profile/ProfileSceneBackdrop';
+import { SCENE_SKY, type SceneMode } from '../../components/profile/ProfileSceneBackdrop';
 import { HERO, CHIP } from '../../constants/sizing';
 import { MeterPill, CounterPill } from '../../components/ui/StatusBar';
 import { useStrings } from '../../i18n/useStrings';
@@ -295,7 +295,12 @@ export default function ProfileScreen() {
     [t, data, board, companionName],
   );
 
-  const skyColor = sceneMode === 'day' ? '#dbeaf4' : '#1c2a44';
+  const skyColor = SCENE_SKY[sceneMode];
+  // Where the floating stat deck sits, and therefore where the lawn the
+  // dog walks on runs out. Named once because three things need to agree
+  // on it: the deck's own offset, the card height it renders at, and the
+  // floor the dog scene is not allowed to sink below.
+  const deckBottom = HERO.size + insets.bottom + pwaOvershoot;
 
   return (
     // Full-bleed scene: the dog's habitat takes the entire screen
@@ -319,7 +324,11 @@ export default function ProfileScreen() {
           // tab-bar inset).
           <ProfileDogScene
             onModeChange={setSceneMode}
-            dogBottomInset={260 + HERO.size + insets.bottom + pwaOvershoot}
+            dogBottomInset={260 + deckBottom}
+            // Top edge of the stat deck. The scene keeps the dog above
+            // it, so a short viewport can never park the dog behind a
+            // card — see groundInset in ProfileDogScene.
+            dogFloorInset={deckBottom + DECK_CARD_H}
           />
         ) : null}
       </View>
@@ -395,12 +404,12 @@ export default function ProfileScreen() {
           as tasks / spots (peekScale 1) — the cards stay 320 wide
           here too, so a smaller STEP collapses the peeks under
           the centre card. */}
-      <View style={[styles.deckHolder, { bottom: HERO.size + insets.bottom + pwaOvershoot }]}>
+      <View style={[styles.deckHolder, { bottom: deckBottom }]}>
         <CardStack
           items={sections}
           getId={(s) => s.id}
           renderCard={(s) => s.content}
-          cardHeight={150}
+          cardHeight={DECK_CARD_H}
           showCounter={false}
         />
       </View>
@@ -409,6 +418,10 @@ export default function ProfileScreen() {
     </SafeAreaView>
   );
 }
+
+// Height of one stat card, shared by the deck and by the dog scene's
+// floor calculation.
+const DECK_CARD_H = 150;
 
 const styles = StyleSheet.create({
   root: {
