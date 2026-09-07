@@ -423,6 +423,36 @@ const PLACES: GazetteerPlace[] = [
   );
 }
 
+// THE MARKER CAN BE PART OF THE NAME WE MATCHED.
+//
+// «Буся» went missing «навпроти РТС, приватний сектор, вул.Літня» and the
+// ledger recorded `gazetteer-bare:Вулиця Літня` — a properly written
+// address filed as a guess. The gazetteer entry carries «Вулиця» in its
+// own name, so the match consumed the ad's «вул.» and the two words left
+// in front of it were «приватний сектор».
+//
+// It matters beyond the label: bare street matches are refused outright,
+// so an entry named this way could only ever be reached by whatever
+// category happened not to be a street.
+{
+  const litnia: GazetteerPlace[] = [
+    { name: 'Вулиця Літня', lat: 50.4255, lng: 30.5277, category: 'street' },
+  ];
+  const r = resolvePlace('Пропала навпроти РТС, приватний сектор,вул.Літня', litnia);
+  check('a marker inside the matched name still marks it', r?.marked === true, String(r?.marked));
+  check('…and the street resolves at all', r?.name === 'Вулиця Літня', String(r?.name));
+
+  // The marker has to be the AD's word, not the table's. A bare mention
+  // with no marker anywhere must stay bare — otherwise every entry OSM
+  // happens to name «Вулиця X» would self-certify.
+  const bare = resolvePlace('загубився песик, бігав десь коло Літньої', litnia);
+  check(
+    'a bare mention of the same street stays refused',
+    bare === null,
+    String(bare?.name),
+  );
+}
+
 if (failures > 0) {
   console.error(`\n${failures} failure(s)`);
   process.exit(1);
