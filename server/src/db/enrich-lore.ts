@@ -83,7 +83,7 @@ import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { anthropic } from '../services/anthropic.js';
 import { looksLikeProperName, pickGeoMatch } from '../services/loreMatch.js';
-import { parseWriter, type Written } from '../services/loreWriter.js';
+import { parseWriter, WRITER_PREFILL, type Written } from '../services/loreWriter.js';
 import {
   factsCarryResearch,
   factsFromTags,
@@ -407,9 +407,13 @@ async function write(
     model,
     max_tokens: 400,
     system: [{ type: 'text', text: WRITER_SYSTEM, cache_control: { type: 'ephemeral' } }],
-    messages: [{ role: 'user', content: userBlock }],
+    messages: [
+      { role: 'user', content: userBlock },
+      // Prefill: the answer starts as JSON because it already has.
+      { role: 'assistant', content: WRITER_PREFILL },
+    ],
   });
-  const text = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+  const text = WRITER_PREFILL + res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
   const parsed = parseWriter(text);
   return parsed ? { ok: parsed } : { raw: text };
 }
