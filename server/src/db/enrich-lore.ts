@@ -49,6 +49,14 @@
 //           before they had any research get it rewritten too, and
 //           last_rewrote_at moves.
 //
+//   case    Not run by default; `--only case`. Proper names in every
+//           story and detail get their capitals back — the first
+//           production run wrote "михайло старицький" — through a small
+//           model that may change letter case and nothing else; an
+//           answer that differs in anything but case is thrown away.
+//           Idempotent in effect: a text that is already right comes
+//           back unchanged and is not written.
+//
 // Dry by default. `--apply` writes. The dry run prints one line per row
 // with what the apply would do, and the cost it would spend, and is
 // meant to be read before the apply — same shape as clean:lost-dogs.
@@ -81,9 +89,17 @@ import 'dotenv/config';
 import { and, eq, isNull, isNotNull, or, sql } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
-import { anthropic } from '../services/anthropic.js';
+import { AMBIENT_MODEL, anthropic } from '../services/anthropic.js';
 import { looksLikeProperName, pickGeoMatch } from '../services/loreMatch.js';
-import { parseWriter, WRITER_OUTPUT_FORMAT, type Written } from '../services/loreWriter.js';
+import {
+  CASE_OUTPUT_FORMAT,
+  CASE_SYSTEM,
+  onlyCaseDiffers,
+  parseCased,
+  parseWriter,
+  WRITER_OUTPUT_FORMAT,
+  type Written,
+} from '../services/loreWriter.js';
 import {
   factsCarryResearch,
   factsFromTags,
@@ -124,7 +140,9 @@ type WikiSource = 'wikidata' | 'subject' | 'title' | 'geosearch';
 
 const WRITER_SYSTEM = `you are шукайпес — a dog walking around Kyiv with your human. offline writing task: given a Kyiv place and a research blob, write two things in ukrainian, in your usual dog-voice.
 
-"detail" — what you'd tell the human if they stopped and said "wait, tell me more about this one". two to four short sentences, 30-90 words total — shorter when the research is thin, never padded. pick the most interesting concrete beats in the research: who, when, what happened here, what's odd or lovely about it. lowercase, proper nouns capitalised normally. no markdown, no lists, no emojis, no "wikipedia", no "according to", no "source". one small dog gesture in *asterisks* at most, and not at the start of every sentence.
+"detail" — what you'd tell the human if they stopped and said "wait, tell me more about this one". two to four short sentences, 30-90 words total — shorter when the research is thin, never padded. pick the most interesting concrete beats in the research: who, when, what happened here, what's odd or lovely about it. no markdown, no lists, no emojis, no "wikipedia", no "according to", no "source". one small dog gesture in *asterisks* at most, and not at the start of every sentence.
+
+letter case: your sentences start lowercase — that is your voice. proper names are NOT part of the voice and keep their capitals exactly as ukrainian orthography has them: people (Михайло Старицький, Леся Українка), places (Київ, Поділ, Дніпро), streets and squares (Майдан Незалежності), institutions and monuments (Києво-Печерська лавра, Софійський собор). adjectives from names stay lowercase (київський). a person's name in lowercase is a typo, not a style.
 
 "story" — ONE sentence, max 25 words, same voice: a small observation, a sniff, a thought. never "this is", never "here we have".
 
@@ -140,7 +158,7 @@ answer with JSON only, no prose around it: {"story": "...", "detail": "..."}`;
 
 interface Args {
   apply: boolean;
-  only: 'osm' | 'links' | 'detail' | null;
+  only: 'osm' | 'links' | 'detail' | 'case' | null;
   limit: number;
   id: string | null;
   model: string;
@@ -152,8 +170,8 @@ function parseArgs(argv: string[]): Args {
     return i >= 0 ? (argv[i + 1] ?? null) : null;
   };
   const only = flag('--only');
-  if (only && only !== 'osm' && only !== 'links' && only !== 'detail') {
-    throw new Error(`--only must be osm, links or detail, got ${only}`);
+  if (only && only !== 'osm' && only !== 'links' && only !== 'detail' && only !== 'case') {
+    throw new Error(`--only must be osm, links, detail or case, got ${only}`);
   }
   return {
     apply: argv.includes('--apply'),
@@ -571,6 +589,89 @@ async function phaseDetail(
   }
 }
 
+// ---- phase: case ---------------------------------------------------------
+
+// Rough per-text spend on the small model: ~350 input tokens (cached
+// system + the text) and ~120 out.
+const EST_USD_PER_CASE = 0.001;
+
+async function recase(name: string, text: string): Promise<string | null> {
+  const res = await anthropic().messages.create({
+    model: AMBIENT_MODEL,
+    max_tokens: 600,
+    system: [{ type: 'text', text: CASE_SYSTEM, cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: `place: ${name}\n\ntext:\n${text}` }],
+    output_config: { format: CASE_OUTPUT_FORMAT },
+  });
+  const out = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+  return parseCased(out);
+}
+
+async function phaseCase(args: Args): Promise<void> {
+  const rows = await db
+    .select({
+      id: schema.kyivLore.id,
+      name: schema.kyivLore.name,
+      story: schema.kyivLore.story,
+      detail: schema.kyivLore.detail,
+    })
+    .from(schema.kyivLore)
+    .where(and(HAS_A_LETTER, args.id ? eq(schema.kyivLore.id, args.id) : undefined))
+    .orderBy(schema.kyivLore.id)
+    .limit(args.limit || 100_000);
+  const texts = rows.reduce((n, r) => n + 1 + (r.detail ? 1 : 0), 0);
+  console.log(`\n▶ case — ${rows.length} rows, ${texts} texts (story + detail)`);
+  if (!args.apply) {
+    console.log(
+      `  (dry) would spend ~$${(texts * EST_USD_PER_CASE).toFixed(2)} on ${AMBIENT_MODEL}; showing the first 20 texts it would change`,
+    );
+  }
+
+  let changed = 0;
+  let refused = 0;
+  let unchanged = 0;
+  let shown = 0;
+  let n = 0;
+  for (const row of rows) {
+    n++;
+    if (!args.apply && shown >= 20) break;
+    const patch: { story?: string; detail?: string } = {};
+    for (const field of ['story', 'detail'] as const) {
+      const before = row[field];
+      if (!before) continue;
+      try {
+        const after = await recase(row.name, before);
+        if (!after || after === before) {
+          unchanged++;
+          continue;
+        }
+        if (!onlyCaseDiffers(before, after)) {
+          refused++;
+          console.log(`  [refused ${n}/${rows.length}] ${row.name} ${field}: answer changed more than case`);
+          continue;
+        }
+        patch[field] = after;
+        changed++;
+        if (!args.apply || shown < 20) {
+          shown++;
+          console.log(`  [${args.apply ? 'case' : 'dry'} ${n}/${rows.length}] ${row.name} ${field}\n      ${before}\n    → ${after}`);
+        }
+      } catch (err) {
+        console.error(`  [err ${n}/${rows.length}] ${row.name} ${field}:`, (err as Error).message);
+        await sleep(1000);
+      }
+      await sleep(60);
+    }
+    if (args.apply && Object.keys(patch).length > 0) {
+      await db.update(schema.kyivLore).set(patch).where(eq(schema.kyivLore.id, row.id));
+    }
+    if (args.apply && n % 200 === 0) console.log(`  case: ${n}/${rows.length}…`);
+  }
+  console.log(
+    `  ${args.apply ? '✓' : '(dry)'} case: ${changed} texts ${args.apply ? 'changed' : 'would change'}, ${unchanged} already right, ${refused} answers refused by the guard`,
+  );
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   console.log(
@@ -595,6 +696,9 @@ async function main() {
   const links: PendingLinks =
     !args.only || args.only === 'links' ? await phaseLinks(args, facts) : new Map();
   if (!args.only || args.only === 'detail') await phaseDetail(args, facts, links);
+  // Opt-in: it re-reads every text in the corpus, which the default run
+  // has no reason to do twice.
+  if (args.only === 'case') await phaseCase(args);
 
   if (!args.apply) {
     console.log('\n(dry run — nothing written. re-run with --apply once the plan above reads right.)');

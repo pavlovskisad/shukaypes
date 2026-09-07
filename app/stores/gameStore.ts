@@ -5,6 +5,8 @@ import type { FoodItem, LatLng, NearbyPlayer, Quest, Token } from '@shukajpes/sh
 import {
   api,
   PET_RADIUS_M,
+  type LoreFavourite,
+  type LoreRef,
   type NearbyLostDog,
   type RivalTerritory,
   type TerritoryMark,
@@ -243,6 +245,15 @@ interface GameState {
   // the lists whose interplay is exactly what keeps biting the spot
   // modal.
   focusedTerritory: { ownerId: string; ring: LatLng[]; mark?: LatLng; pos?: LatLng } | null;
+  // The landmarks this walker hearted. Loaded once per session from
+  // /lore/favourites; the heart on a bubble reads membership from here
+  // and toggles optimistically.
+  loreFavourites: LoreFavourite[];
+  loreFavouritesLoaded: boolean;
+  // A saved place to put back on the map. ONE-SHOT, like
+  // focusedTerritory: the spots tab sets it and routes to the map, the
+  // sniff bubble shows it and clears it.
+  focusedLore: LoreRef | null;
   // Where the human is currently LOOKING on the map (viewport centre).
   // Set by MapView on map idle. Distinct from userPosition (GPS): used
   // by chat for lore/lost-pet proximity so the dog comments on the
@@ -431,6 +442,9 @@ interface GameState {
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
   setFocusedTerritory: (v: { ownerId: string; ring: LatLng[]; mark?: LatLng; pos?: LatLng } | null) => void;
+  loadLoreFavourites: () => Promise<void>;
+  toggleLoreFavourite: (lore: LoreRef) => Promise<void>;
+  setFocusedLore: (lore: LoreRef | null) => void;
   // The one mode switch. Every entry into a mode goes through here so the
   // clear-slate rules below are applied exactly once, in one place.
   setAppMode: (mode: AppMode) => void;
@@ -572,6 +586,9 @@ export const useGameStore = create<GameState>((set, get) => ({
   spotsLoaded: false,
   selectedSpotId: null,
   focusedTerritory: null,
+  loreFavourites: [],
+  loreFavouritesLoaded: false,
+  focusedLore: null,
   // Default OFF — the app opens on a clean 3D city view; users turn the
   // spots layer on via the HUD pin toggle (there's a one-shot hint for it).
   spotsVisible: false,
@@ -1210,6 +1227,53 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
   setFocusedTerritory: (focusedTerritory) => set({ focusedTerritory }),
+
+  loadLoreFavourites: async () => {
+    try {
+      const { favourites } = await api.loreFavourites();
+      set({ loreFavourites: favourites, loreFavouritesLoaded: true });
+    } catch {
+      // Offline or a 5xx: the hearts simply read as unsaved until the
+      // next load. Marked loaded so the list shows its empty state
+      // rather than a skeleton forever.
+      set({ loreFavouritesLoaded: true });
+    }
+  },
+
+  // Optimistic: the heart fills the moment it is tapped, and is put
+  // back the way it was only if the server says no.
+  toggleLoreFavourite: async (lore) => {
+    const was = get().loreFavourites;
+    const saved = was.some((f) => f.id === lore.id);
+    if (saved) {
+      set({ loreFavourites: was.filter((f) => f.id !== lore.id) });
+      try {
+        await api.unsaveLore(lore.id);
+      } catch {
+        set({ loreFavourites: was });
+      }
+      return;
+    }
+    const entry: LoreFavourite = {
+      id: lore.id,
+      name: lore.name,
+      category: lore.category,
+      story: lore.story,
+      detail: lore.detail,
+      wikipediaTitle: lore.wikipediaTitle,
+      sourceLang: lore.sourceLang,
+      position: lore.position,
+      savedAt: new Date().toISOString(),
+    };
+    set({ loreFavourites: [entry, ...was] });
+    try {
+      await api.saveLore(lore.id);
+    } catch {
+      set({ loreFavourites: was });
+    }
+  },
+
+  setFocusedLore: (focusedLore) => set({ focusedLore }),
   // FLIPPING THE MODE CLEARS THE SCREEN.
   //
   // Supersniff and walking are two different views of the city, and

@@ -5,7 +5,7 @@ import { useMaplibreMap } from './MapContext';
 import { MapLibreMarker } from './MapLibreMarker';
 import { api } from '../../services/api';
 import { fetchWalkingRouteOrLine } from '../../services/directions';
-import { LoreMore } from './LoreMore';
+import { HEART_INSET, LoreHeart, LoreMore } from './LoreMore';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -117,6 +117,35 @@ export function SniffPress() {
   const excludeRef = useRef<Set<string>>(new Set());
   const userPos = useGameStore((s) => s.userPosition);
   const setWalkRoute = useGameStore((s) => s.setWalkRoute);
+
+  // The hearts read membership from the store; load the list once so a
+  // place saved on an earlier day shows as saved when it comes up again.
+  const favouritesLoaded = useGameStore((s) => s.loreFavouritesLoaded);
+  const loadFavourites = useGameStore((s) => s.loadLoreFavourites);
+  useEffect(() => {
+    if (!favouritesLoaded) void loadFavourites();
+  }, [favouritesLoaded, loadFavourites]);
+
+  // A saved place put back on the map from the spots tab. Shown exactly
+  // as a fresh sniff would show it — same bubble, same "ходімо сюди" —
+  // and consumed, so the next visit to the map does not replay it.
+  // Waits for the map, which is not there on the first render after a
+  // tab switch.
+  const focusedLore = useGameStore((s) => s.focusedLore);
+  const setFocusedLore = useGameStore((s) => s.setFocusedLore);
+  useEffect(() => {
+    if (!focusedLore || !map) return;
+    excludeRef.current.add(focusedLore.id);
+    setSniffingAt(null);
+    setDiscovered({ ...focusedLore, distM: 0 });
+    map.easeTo({
+      center: [focusedLore.position.lng, focusedLore.position.lat],
+      padding: { top: 0, bottom: 0, left: 0, right: 0 },
+      offset: [0, 70],
+      duration: 600,
+    });
+    setFocusedLore(null);
+  }, [focusedLore, map, setFocusedLore]);
 
   // Tell the hint system the map is busy (sniffing or a discovery is
   // up) so it holds the next hint until the user is done reading.
@@ -473,7 +502,18 @@ export function SniffPress() {
         >
           {/* Drawn edge — see HandDrawn.tsx. */}
           <HandDrawnFrame radius={R.card} />
-          <div style={{ fontWeight: 700, marginBottom: 2 }}>{discovered.name}</div>
+          {discovered.id !== '__none__' ? <LoreHeart lore={discovered} tone="paper" /> : null}
+          <div
+            style={{
+              fontWeight: 700,
+              marginBottom: 2,
+              // Clear of the heart in the corner, on both sides so the
+              // name stays centred.
+              padding: discovered.id !== '__none__' ? `0 ${HEART_INSET}px` : 0,
+            }}
+          >
+            {discovered.name}
+          </div>
           <div>{discovered.story}</div>
           {discovered.id !== '__none__' ? (
             <LoreMore key={discovered.id} lore={discovered} tone="paper" />

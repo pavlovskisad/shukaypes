@@ -189,7 +189,19 @@ and a "let's go here" button. Alive and unrelated to sniff mode.
 **Read more** — the "ще ▾" under a landmark's one-liner, on the sniff press
 and on a walk stop alike (`LoreMore.tsx`). Opens the dog's longer telling
 (`kyiv_lore.detail`, instant, offline), then the Wikipedia lead under it when
-the row has an article, with a link to the article as attribution. Both used
+the row has an article — in full when it is all there is, clamped to three
+lines under a detail — with a link to the article as attribution and as the
+way to the rest. Nothing in it scrolls: a scroll box inside a map marker
+fights the map for the finger. Opening it pans the map so the bubble clears
+the HUD without the "ходімо сюди" button touching the tab bar.
+
+**Favourite place** — a `kyiv_lore` landmark the walker hearted (♡ in the
+corner of the sniff bubble or a walk-stop bubble; `LoreHeart` in
+`LoreMore.tsx`). Stored per user in `lore_favourites`, listed newest-first at
+the top of the spots tab; tapping one hands it to the map as a one-shot
+`focusedLore` and the sniff bubble shows it as if the dog had just found it.
+Exists because a landmark was gone the moment its bubble closed, and once the
+read-more carried real stories people wanted a way back. Both used
 to be rare: the seed only linked rows whose OSM object carried a `wikipedia=`
 tag — 8% of the corpus, measured — and wrote no detail at all. `enrich:lore`
 fills both in, from Wikidata, from the plaque's own inscription and subject

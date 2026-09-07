@@ -74,6 +74,64 @@ function extractField(text: string, key: string, otherKeys: string[]): string | 
     .replace(/\\\\/g, '\\');
 }
 
+// ---- letter case ----------------------------------------------------
+//
+// The first production run's details came back with proper names in
+// lowercase — "михайло старицький", "павло вірський" — because the
+// writer prompt said "lowercase, proper nouns capitalised normally" and
+// the model heard the first half. The dog's voice IS lowercase
+// sentences; names are not part of the voice, and a person's name in
+// lowercase reads as a typo on a plaque about them. The case pass asks
+// a small model to fix only that, and the guard below refuses any
+// answer that changed anything else.
+
+export const CASE_SYSTEM = `you fix letter case in short ukrainian texts written in a lowercase "dog voice". return the SAME text with only letter case changed.
+
+capitalise proper names as ukrainian orthography does:
+- people: first names, patronymics, surnames (Михайло Петрович Старицький, Леся Українка)
+- places: cities, rivers, districts, hills (Київ, Дніпро, Поділ, Володимирська гірка)
+- the proper part of streets, squares, parks (вулиця Хрещатик, Майдан Незалежності, парк Шевченка)
+- specific institutions, monuments, churches used as names (Києво-Печерська лавра, Софійський собор, Національний музей історії України)
+- religious names (Бог, Богородиця, Микола Чудотворець)
+- names inside quotes keep their own case («Малютка», «Овод»)
+
+keep lowercase:
+- the start of a sentence — that is the voice, not an error — unless the sentence starts with a proper name
+- adjectives and nouns derived from names (київський, шевченківський, українець)
+- nationalities, languages, months, weekdays, titles and ranks (гетьман, князь, професор)
+
+change NOTHING else: no words added, removed, reordered or respelled; punctuation and spacing identical. the name of the place the text is about is given for reference; if a name in the text is already correct, leave it.`;
+
+export const CASE_OUTPUT_FORMAT = {
+  type: 'json_schema' as const,
+  schema: {
+    type: 'object',
+    properties: { text: { type: 'string' } },
+    required: ['text'],
+    additionalProperties: false,
+  },
+};
+
+// True when the two strings differ in letter case and in nothing else.
+// The whole point of the case pass is that it cannot rewrite; anything
+// that fails this is thrown away, however good it looks.
+export function onlyCaseDiffers(before: string, after: string): boolean {
+  if (before === after) return false;
+  return before.toLocaleLowerCase('uk') === after.toLocaleLowerCase('uk');
+}
+
+export function parseCased(text: string): string | null {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return null;
+  try {
+    const obj = JSON.parse(text.slice(start, end + 1)) as { text?: unknown };
+    return typeof obj.text === 'string' ? obj.text : null;
+  } catch {
+    return null;
+  }
+}
+
 export function parseWriter(text: string): Written | null {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');

@@ -1,7 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { MapLibreMarker } from './MapLibreMarker';
-import { LoreMore } from './LoreMore';
+import { HEART_INSET, LoreHeart, LoreMore } from './LoreMore';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
 import { R } from '../../constants/radius';
@@ -165,9 +165,14 @@ function StopMarker({
               boxShadow: VOICE.shadow,
               border: VOICE.border,
               textAlign: 'center',
+              // Anchor for the heart in the corner.
+              position: 'relative',
             }}
           >
-            <div style={{ fontWeight: 700, marginBottom: 2 }}>{stop.name}</div>
+            <LoreHeart lore={stop} tone="voice" />
+            <div style={{ fontWeight: 700, marginBottom: 2, padding: `0 ${HEART_INSET}px` }}>
+              {stop.name}
+            </div>
             <div>{stop.story}</div>
             <LoreMore lore={stop} tone="voice" />
           </div>
