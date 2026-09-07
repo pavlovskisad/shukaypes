@@ -1,0 +1,85 @@
+// Reading the writer's answer in enrich-lore.ts.
+//
+// The model is asked for {"story": …, "detail": …}. Strict JSON first;
+// when that fails — 20 of 1155 rows on the first production run, and
+// the same rows again on retry, so a property of those inputs rather
+// than luck — fall back to cutting the two fields out by their keys. The
+// usual culprit is the dog quoting a plaque: a bare `"` inside the prose
+// breaks JSON.parse and nothing else.
+//
+// Pure, and kept out of enrich-lore.ts so enrichLore.check.ts can pin it
+// without a DATABASE_URL: importing the script would open the db.
+
+export interface Written {
+  story: string;
+  detail: string;
+}
+
+// The start of the answer, supplied AS the assistant's first tokens so
+// the model continues the JSON rather than deciding what to write. On
+// the second production pass three rows answered with the research
+// blob echoed back under a heading and no JSON at all — the same three
+// on every retry. A prefilled opening brace leaves no room for that.
+// The caller prepends it to what comes back before parsing.
+export const WRITER_PREFILL = '{"story": "';
+
+// Strip DECORATIVE outer quotes — the model wrapping its whole answer in
+// «…» — and only those: a field that opens with a quoted word and ends
+// in a full stop («"Овод" — це машина…») keeps its opening quote, or
+// the first word loses its mark and reads as a typo. Both ends have to
+// be quotes for either to go.
+const OPENS_QUOTED = /^["“'«]/;
+const CLOSES_QUOTED = /["”'»]$/;
+const clean = (s: string): string => {
+  const t = s.trim();
+  if (OPENS_QUOTED.test(t) && CLOSES_QUOTED.test(t)) {
+    return t.replace(/^["“'«]+|["”'»]+$/g, '').trim();
+  }
+  return t;
+};
+
+// One string field out of the near-JSON WITHOUT parsing it as JSON: from
+// the quote after `"key":` to the last quote before the next key (or the
+// closing brace).
+function extractField(text: string, key: string, otherKeys: string[]): string | null {
+  const open = new RegExp(`"${key}"\\s*:\\s*"`).exec(text);
+  if (!open) return null;
+  const start = open.index + open[0].length;
+  let limit = text.lastIndexOf('}');
+  if (limit < start) limit = text.length;
+  for (const k of otherKeys) {
+    const next = new RegExp(`,\\s*"${k}"\\s*:`).exec(text.slice(start));
+    if (next) limit = Math.min(limit, start + next.index);
+  }
+  const segment = text.slice(start, limit);
+  const close = segment.lastIndexOf('"');
+  if (close <= 0) return null;
+  return segment
+    .slice(0, close)
+    .replace(/\\"/g, '"')
+    .replace(/\\n/g, '\n')
+    .replace(/\\\\/g, '\\');
+}
+
+export function parseWriter(text: string): Written | null {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start >= 0 && end > start) {
+    try {
+      const obj = JSON.parse(text.slice(start, end + 1)) as { story?: unknown; detail?: unknown };
+      if (typeof obj.story === 'string' && typeof obj.detail === 'string') {
+        const story = clean(obj.story);
+        const detail = clean(obj.detail);
+        if (story && detail) return { story, detail };
+      }
+    } catch {
+      // fall through to the lenient cut
+    }
+  }
+  const story = extractField(text, 'story', ['detail']);
+  const detail = extractField(text, 'detail', ['story']);
+  if (!story || !detail) return null;
+  const s = clean(story);
+  const d = clean(detail);
+  return s && d ? { story: s, detail: d } : null;
+}

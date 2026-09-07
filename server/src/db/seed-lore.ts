@@ -2,14 +2,18 @@
 // something with a story. One-off batch pipeline:
 //   1. Overpass API → all OSM POIs in the Kyiv bbox tagged with
 //      historic / tourism / memorial / artwork / man_made monuments /
-//      religious buildings.
-//   2. For each: pull Wikidata description (CC0) + Wikipedia summary
-//      (CC-BY-SA) if linked. Facts are our research input — we don't
-//      ship their prose.
+//      religious buildings (services/overpass.ts).
+//   2. For each: keep the tags worth keeping (inscription, subject,
+//      date… — LoreFacts), pull the Wikidata description (CC0) +
+//      Wikipedia summary (CC-BY-SA) if linked. Facts are our research
+//      input — we don't ship their prose.
 //   3. Sonnet rewrites each into ONE short in-voice sentence so the
 //      dog mentions it like a place he knows, not like a tour guide.
 //   4. Upsert to kyiv_lore, keyed by osm:<type>:<id> so a re-run is
-//      idempotent (only writes new + flagged-for-rewrite rows).
+//      idempotent (only writes new rows).
+//
+// The longer telling and the Wikipedia handles for rows the OSM tag
+// doesn't provide are enrich-lore.ts's job, run after this.
 //
 // Usage:
 //   dry run (no API spend, no DB writes, prints what it'd do):
@@ -23,86 +27,19 @@
 // roughly $2.5–$4.5 for a full run, one-time.
 
 import 'dotenv/config';
-import { sql } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { anthropic, ACTIVE_MODEL } from '../services/anthropic.js';
-
-// Kyiv bbox (south, west, north, east) — Overpass takes (S,W,N,E).
-// Pulled from OSM's "Kyiv" relation bounds, padded slightly.
-const KYIV_BBOX = [50.21, 30.24, 50.59, 30.83] as const;
-
-// Query split into category chunks so any one Overpass call stays
-// small enough to dodge "server too busy" 504s. Each chunk returns a
-// few hundred elements rather than ~2k in one go.
-const QUERY_CHUNKS: Array<{ label: string; body: string }> = [
-  {
-    label: 'historic+memorial',
-    body: `
-[out:json][timeout:90];
-(
-  node["historic"](${KYIV_BBOX.join(',')});
-  way["historic"](${KYIV_BBOX.join(',')});
-  relation["historic"](${KYIV_BBOX.join(',')});
-  node["memorial"](${KYIV_BBOX.join(',')});
-  way["memorial"](${KYIV_BBOX.join(',')});
-);
-out center tags;`.trim(),
-  },
-  {
-    label: 'tourism',
-    body: `
-[out:json][timeout:90];
-(
-  node["tourism"~"^(attraction|museum|artwork|gallery)$"](${KYIV_BBOX.join(',')});
-  way["tourism"~"^(attraction|museum|artwork|gallery)$"](${KYIV_BBOX.join(',')});
-  relation["tourism"~"^(attraction|museum|artwork|gallery)$"](${KYIV_BBOX.join(',')});
-);
-out center tags;`.trim(),
-  },
-  {
-    label: 'religious',
-    body: `
-[out:json][timeout:90];
-(
-  way["building"~"^(cathedral|church|chapel|synagogue|mosque|temple)$"](${KYIV_BBOX.join(',')});
-  relation["building"~"^(cathedral|church|chapel|synagogue|mosque|temple)$"](${KYIV_BBOX.join(',')});
-);
-out center tags;`.trim(),
-  },
-  {
-    label: 'monuments',
-    body: `
-[out:json][timeout:90];
-(
-  node["man_made"="obelisk"](${KYIV_BBOX.join(',')});
-  way["man_made"="obelisk"](${KYIV_BBOX.join(',')});
-  node["man_made"="tower"]["tower:type"!="communication"](${KYIV_BBOX.join(',')});
-);
-out center tags;`.trim(),
-  },
-];
-
-// Public Overpass endpoints, tried in order. Main can throw 504 under
-// load; Kumi mirror is the usual fallback.
-const OVERPASS_ENDPOINTS = [
-  'https://overpass-api.de/api/interpreter',
-  'https://overpass.kumi.systems/api/interpreter',
-  'https://lz4.overpass-api.de/api/interpreter',
-];
-
-interface OverpassElement {
-  type: 'node' | 'way' | 'relation';
-  id: number;
-  lat?: number;
-  lon?: number;
-  center?: { lat: number; lon: number };
-  tags?: Record<string, string>;
-}
-
-interface OverpassResult {
-  elements: OverpassElement[];
-}
+import { fetchWikidataDesc, fetchWikipediaSummary } from '../services/wikiResearch.js';
+import {
+  factsFromTags,
+  factsLines,
+  fetchLoreElements,
+  parseWikipediaTag,
+  pickCategory,
+  type LoreFacts,
+  type OverpassElement,
+} from '../services/overpass.js';
 
 interface Candidate {
   osmType: 'node' | 'way' | 'relation';
@@ -115,84 +52,7 @@ interface Candidate {
   wikidataId: string | null;
   wikipediaTitle: string | null;
   sourceLang: string | null;
-}
-
-function pickCategory(tags: Record<string, string>): string {
-  if (tags.historic) return 'historic';
-  if (tags.memorial) return 'memorial';
-  if (tags.tourism === 'museum' || tags.tourism === 'gallery') return 'museum';
-  if (tags.tourism === 'artwork') return 'artwork';
-  if (tags.tourism === 'attraction') return 'tourism';
-  if (tags.building === 'cathedral' || tags.building === 'church' || tags.building === 'chapel') return 'religious';
-  if (tags.building === 'synagogue' || tags.building === 'mosque' || tags.building === 'temple') return 'religious';
-  if (tags.man_made === 'obelisk' || tags.man_made === 'tower') return 'monument';
-  return 'other';
-}
-
-function parseWikipediaTag(value: string | undefined): { lang: string; title: string } | null {
-  if (!value) return null;
-  const m = value.match(/^([a-z-]+):(.+)$/);
-  if (!m) return null;
-  return { lang: m[1]!, title: m[2]! };
-}
-
-async function fetchOverpassChunk(
-  label: string,
-  body: string,
-): Promise<OverpassElement[]> {
-  let lastErr: unknown = null;
-  for (const endpoint of OVERPASS_ENDPOINTS) {
-    for (let attempt = 0; attempt < 3; attempt++) {
-      try {
-        const res = await fetch(endpoint, {
-          method: 'POST',
-          headers: {
-            'content-type': 'application/x-www-form-urlencoded',
-            accept: 'application/json',
-            'user-agent':
-              'shukajpes-lore-seed/1.0 (contact: pavlovskisad@gmail.com)',
-          },
-          body: `data=${encodeURIComponent(body)}`,
-        });
-        if (res.status === 429 || res.status === 504) {
-          // Server told us to back off — wait then retry on same endpoint.
-          const wait = 2000 * Math.pow(2, attempt);
-          console.log(`    ${label}: ${endpoint} ${res.status}, retry in ${wait}ms`);
-          await sleep(wait);
-          continue;
-        }
-        if (!res.ok) {
-          throw new Error(`overpass ${res.status} from ${endpoint}`);
-        }
-        const json = (await res.json()) as OverpassResult;
-        return json.elements;
-      } catch (err) {
-        lastErr = err;
-        const wait = 1500 * Math.pow(2, attempt);
-        console.log(`    ${label}: ${endpoint} failed (${(err as Error).message}), retry in ${wait}ms`);
-        await sleep(wait);
-      }
-    }
-    console.log(`    ${label}: ${endpoint} exhausted, trying next endpoint…`);
-  }
-  throw new Error(
-    `overpass chunk ${label} failed on all endpoints: ${(lastErr as Error)?.message ?? 'unknown'}`,
-  );
-}
-
-async function fetchOverpass(): Promise<OverpassElement[]> {
-  console.log('→ querying Overpass in chunks…');
-  const all: OverpassElement[] = [];
-  for (const chunk of QUERY_CHUNKS) {
-    console.log(`  · ${chunk.label}`);
-    const els = await fetchOverpassChunk(chunk.label, chunk.body);
-    console.log(`    got ${els.length}`);
-    all.push(...els);
-    // Polite gap between chunks so we don't hammer one endpoint.
-    await sleep(800);
-  }
-  console.log(`  total ${all.length} elements across ${QUERY_CHUNKS.length} chunks`);
-  return all;
+  facts: LoreFacts | null;
 }
 
 function buildCandidates(elements: OverpassElement[]): Candidate[] {
@@ -216,6 +76,7 @@ function buildCandidates(elements: OverpassElement[]): Candidate[] {
       wikidataId: tags['wikidata'] ?? null,
       wikipediaTitle: wiki ? wiki.title : null,
       sourceLang: wiki ? wiki.lang : null,
+      facts: factsFromTags(tags),
     });
   }
   // Dedup by (osm type + id).
@@ -234,55 +95,17 @@ interface ResearchBlob {
   wikipediaLang: string | null;
 }
 
-async function fetchWikidataDesc(qid: string): Promise<string | null> {
-  try {
-    const res = await fetch(
-      `https://www.wikidata.org/wiki/Special:EntityData/${qid}.json`,
-      { headers: { 'user-agent': 'shukajpes-lore-seed/1.0 (contact: pavlovskisad@gmail.com)' } },
-    );
-    if (!res.ok) return null;
-    const json = (await res.json()) as {
-      entities?: Record<string, { descriptions?: Record<string, { value: string }> }>;
-    };
-    const ent = json.entities?.[qid];
-    if (!ent) return null;
-    return (
-      ent.descriptions?.uk?.value ??
-      ent.descriptions?.en?.value ??
-      ent.descriptions?.ru?.value ??
-      null
-    );
-  } catch {
-    return null;
-  }
-}
-
-async function fetchWikipediaSummary(
-  lang: string,
-  title: string,
-): Promise<string | null> {
-  try {
-    const url = `https://${lang}.wikipedia.org/api/rest_v1/page/summary/${encodeURIComponent(title)}`;
-    const res = await fetch(url, {
-      headers: { 'user-agent': 'shukajpes-lore-seed/1.0 (contact: pavlovskisad@gmail.com)' },
-    });
-    if (!res.ok) return null;
-    const json = (await res.json()) as { extract?: string };
-    return json.extract ?? null;
-  } catch {
-    return null;
-  }
-}
-
+// The Wikimedia fetches live in services/wikiResearch.ts, shared with
+// enrich-lore.ts.
 async function researchOne(c: Candidate): Promise<ResearchBlob> {
   const wikidataDescription = c.wikidataId ? await fetchWikidataDesc(c.wikidataId) : null;
   let wikipediaSummary: string | null = null;
   let wikipediaLang: string | null = null;
   if (c.wikipediaTitle && c.sourceLang) {
-    wikipediaSummary = await fetchWikipediaSummary(c.sourceLang, c.wikipediaTitle);
+    wikipediaSummary = (await fetchWikipediaSummary(c.sourceLang, c.wikipediaTitle))?.extract ?? null;
     wikipediaLang = c.sourceLang;
     if (!wikipediaSummary && c.sourceLang !== 'uk') {
-      wikipediaSummary = await fetchWikipediaSummary('uk', c.wikipediaTitle);
+      wikipediaSummary = (await fetchWikipediaSummary('uk', c.wikipediaTitle))?.extract ?? null;
       if (wikipediaSummary) wikipediaLang = 'uk';
     }
   }
@@ -317,17 +140,23 @@ interface RewriteInput {
 }
 
 async function rewrite({ c, research }: RewriteInput): Promise<string> {
+  const hasResearch =
+    !!research.wikidataDescription ||
+    !!research.wikipediaSummary ||
+    !!c.facts?.inscription ||
+    !!c.facts?.description;
   const userBlock = [
     `PLACE`,
     `- name: ${c.name}${c.nameEn ? ` (${c.nameEn})` : ''}`,
     `- category: ${c.category}`,
+    ...factsLines(c.facts),
     research.wikidataDescription
       ? `- wikidata: ${research.wikidataDescription}`
       : null,
     research.wikipediaSummary
       ? `- summary (${research.wikipediaLang}): ${research.wikipediaSummary.slice(0, 1200)}`
       : null,
-    !research.wikidataDescription && !research.wikipediaSummary
+    !hasResearch
       ? `- (no external research — write a thin sensory line, no fabricated facts)`
       : null,
   ]
@@ -371,7 +200,7 @@ async function main() {
 
   console.log(`▶ seed-lore — dry=${dry} limit=${limit || 'none'}`);
 
-  const elements = await fetchOverpass();
+  const elements = await fetchLoreElements();
   const candidates = buildCandidates(elements);
   console.log(`  ${candidates.length} candidates after dedup + name filter`);
 
@@ -394,7 +223,9 @@ async function main() {
         console.log(
           `[dry ${done}/${work.length}] ${c.name} (${c.category}) — wiki=${
             research.wikipediaSummary ? 'yes' : 'no'
-          } wd=${research.wikidataDescription ? 'yes' : 'no'}`,
+          } wd=${research.wikidataDescription ? 'yes' : 'no'} facts=${
+            c.facts ? Object.keys(c.facts).join('+') : 'no'
+          }`,
         );
         // Skip the Sonnet call in dry mode — we just want to see what
         // research we'd have to work with.
@@ -421,6 +252,8 @@ async function main() {
           wikidataId: c.wikidataId,
           wikipediaTitle: c.wikipediaTitle,
           sourceLang: research.wikipediaLang ?? c.sourceLang,
+          wikiSource: c.wikipediaTitle ? 'osm' : null,
+          facts: c.facts,
         })
         .onConflictDoNothing({ target: schema.kyivLore.id });
       writes++;

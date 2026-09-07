@@ -29,6 +29,11 @@ export interface LorePoint {
   name: string;
   category: string;
   story: string;
+  // Whether enrich-lore.ts has written the dog's longer telling for
+  // this row. A flag, not the text: the route handler pulls several
+  // hundred of these per request to choose three, and the paragraph
+  // travels only for the ones chosen.
+  hasDetail: boolean;
   wikipediaTitle: string | null;
   sourceLang: string | null;
   lat: number;
@@ -42,6 +47,10 @@ export interface LoreStop {
   name: string;
   category: string;
   story: string;
+  // The longer telling. The planner leaves it null — it only knows
+  // whether one exists — and routes/lore.ts fills it in for the stops
+  // that made the cut.
+  detail: string | null;
   wikipediaTitle: string | null;
   sourceLang: string | null;
   position: LatLng;
@@ -100,11 +109,16 @@ const DEFAULT_HEADROOM_END_M = 120;
 // is two rows with two coordinates tens of metres apart.
 const DEFAULT_VERTEX_CLEARANCE_M = 100;
 
-// A landmark with a Wikipedia handle can be expanded in-app for the
-// walker who wants more than the dog's one sentence. Worth this much
-// off its off-route cost when two candidates compete for the same slot
-// — i.e. we'll walk up to 80 m further for the one with a "read more".
-const WIKI_BONUS_M = 80;
+// A landmark with something behind its "read more" — the dog's own
+// longer telling, or a Wikipedia article — can be expanded in-app for
+// the walker who wants more than one sentence. Worth this much off its
+// off-route cost when two candidates compete for the same slot — i.e.
+// we'll walk up to 80 m further for the one with a "read more".
+const READ_MORE_BONUS_M = 80;
+
+export function hasReadMore(p: Pick<LorePoint, 'hasDetail' | 'wikipediaTitle'>): boolean {
+  return p.hasDetail || !!p.wikipediaTitle;
+}
 
 // Planar working frame. Kyiv walks are a few km across, so a local
 // equirectangular projection in metres is exact enough for corridor
@@ -224,6 +238,7 @@ function toStop(s: Scored): LoreStop {
     name: s.point.name,
     category: s.point.category,
     story: s.point.story,
+    detail: null,
     wikipediaTitle: s.point.wikipediaTitle,
     sourceLang: s.point.sourceLang,
     position: { lat: s.point.lat, lng: s.point.lng },
@@ -278,7 +293,7 @@ export function planStops(opts: StopPlanOptions): LoreStop[] {
     scored.push({
       point,
       proj,
-      cost: proj.offM - (point.wikipediaTitle ? WIKI_BONUS_M : 0),
+      cost: proj.offM - (hasReadMore(point) ? READ_MORE_BONUS_M : 0),
     });
   }
   if (scored.length === 0) return [];

@@ -11,9 +11,15 @@
 //
 // Shared by the long-press sniff bubble and the stops on a planned walk
 // — both surface the same kyiv_lore rows and so both want the same
-// article behind them.
+// article behind them (through components/map/LoreMore.tsx).
 
 export const READ_MORE_MAX_CHARS = 600;
+
+// The article itself, for the link under the lead. Wikipedia's canonical
+// URL takes spaces as underscores; everything else is percent-encoded.
+export function wikipediaArticleUrl(lang: string, title: string): string {
+  return `https://${lang}.wikipedia.org/wiki/${encodeURIComponent(title.replace(/ /g, '_'))}`;
+}
 
 export async function fetchWikipediaExtract(
   lang: string,

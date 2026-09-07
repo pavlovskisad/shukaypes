@@ -5,7 +5,7 @@ import { useMaplibreMap } from './MapContext';
 import { MapLibreMarker } from './MapLibreMarker';
 import { api } from '../../services/api';
 import { fetchWalkingRouteOrLine } from '../../services/directions';
-import { clampExtract, fetchWikipediaExtract } from '../../services/wikipedia';
+import { LoreMore } from './LoreMore';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -25,8 +25,8 @@ import { HandDrawnFrame } from '../ui/HandDrawn';
 // A semi-transparent crayon-blue circle expands from the press point
 // over ~2.5 s. When the hold completes, the dog picks one nearby
 // kyiv_lore entry and surfaces it: a marker at its position, a
-// short story bubble, and a "let's go here" button that fires the
-// normal walking-route flow.
+// short story bubble with a "read more" under it (LoreMore.tsx), and
+// a "let's go here" button that fires the normal walking-route flow.
 //
 // Re-press anywhere → new sniff, new pick. Past finds are added to
 // excludeIds so the dog keeps surfacing new things within the
@@ -76,6 +76,7 @@ interface DiscoveredLore {
   name: string;
   category: string;
   story: string;
+  detail: string | null;
   wikipediaTitle: string | null;
   sourceLang: string | null;
   position: LatLng;
@@ -105,13 +106,8 @@ export function SniffPress() {
 
   const [discovered, setDiscovered] = useState<DiscoveredLore | null>(null);
   const [routing, setRouting] = useState(false);
-  // Read-more state. Fetched lazily from Wikipedia's public summary
-  // endpoint the first time the user expands a given discovery —
-  // most discoveries the user sees once and moves on, so eager
-  // prefetch would burn a Wikipedia request per sniff for no win.
-  const [moreOpen, setMoreOpen] = useState(false);
-  const [moreLoading, setMoreLoading] = useState(false);
-  const [moreText, setMoreText] = useState<string | null>(null);
+  // Read-more state lives in LoreMore, keyed by the discovery's id so a
+  // new find never inherits the last one's expanded article.
   // Mirror of the press position for the React tree. While set, a
   // "sniffing…" bubble sits above the press point so the gesture
   // reads as in-progress rather than as nothing happening. Stays up
@@ -144,7 +140,6 @@ export function SniffPress() {
     }
     setDiscovered(null);
     setSniffingAt(null);
-    setMoreOpen(false);
     pressLatLngRef.current = null;
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
@@ -279,11 +274,6 @@ export function SniffPress() {
         if (lore) {
           excludeRef.current.add(lore.id);
           setDiscovered(lore);
-          // Reset the read-more state for the new discovery so an
-          // expanded previous bubble doesn't leak into the new one.
-          setMoreText(null);
-          setMoreLoading(false);
-          setMoreOpen(false);
           // Place the find a touch BELOW screen centre. Its story
           // bubble stacks ABOVE the marker, so centring the marker (or
           // worse, the old top-biased padding) pushed the bubble up
@@ -305,6 +295,7 @@ export function SniffPress() {
             name: 'тут поки тиша',
             category: 'none',
             story: '*ніс у землю* нічого знайомого. далі від цього кутка є щось — спробуй там.',
+            detail: null,
             wikipediaTitle: null,
             sourceLang: null,
             position: ll,
@@ -430,38 +421,6 @@ export function SniffPress() {
     };
   }, [map, sourceId, fillId, lineId]);
 
-  const expandMore = async () => {
-    if (!discovered || moreLoading) return;
-    if (moreOpen) {
-      setMoreOpen(false);
-      return;
-    }
-    if (moreText) {
-      setMoreOpen(true);
-      return;
-    }
-    // No Wikipedia link → still open with a gentle in-voice fallback
-    // so the affordance doesn't read as broken.
-    if (!discovered.wikipediaTitle || !discovered.sourceLang) {
-      setMoreText('*чухає за вухом* більше не пригадую — тільки те, що сказав.');
-      setMoreOpen(true);
-      return;
-    }
-    setMoreLoading(true);
-    const text = await fetchWikipediaExtract(
-      discovered.sourceLang,
-      discovered.wikipediaTitle,
-    );
-    if (text) {
-      setMoreText(text);
-      setMoreOpen(true);
-    } else {
-      setMoreText('*чухає за вухом* більше не пригадую — тільки те, що сказав.');
-      setMoreOpen(true);
-    }
-    setMoreLoading(false);
-  };
-
   const goHere = async () => {
     if (!discovered || !userPos || routing) return;
     if (discovered.id === '__none__') return;
@@ -516,48 +475,8 @@ export function SniffPress() {
           <HandDrawnFrame radius={R.card} />
           <div style={{ fontWeight: 700, marginBottom: 2 }}>{discovered.name}</div>
           <div>{discovered.story}</div>
-          {moreOpen && moreText ? (
-            <div
-              style={{
-                marginTop: S.s,
-                paddingTop: S.s,
-                borderTop: '1px solid rgba(0,0,0,0.12)',
-                fontSize: TYPE.small,
-                lineHeight: 1.45,
-                opacity: 0.85,
-                textAlign: 'left',
-                maxHeight: 180,
-                overflowY: 'auto',
-                whiteSpace: 'pre-line',
-              }}
-            >
-              {clampExtract(moreText)}
-            </div>
-          ) : null}
           {discovered.id !== '__none__' ? (
-            <div
-              role="button"
-              onClick={(e) => {
-                e.stopPropagation();
-                playPop(e.currentTarget);
-                void expandMore();
-              }}
-              style={{
-                marginTop: S.s,
-                fontSize: TYPE.caption,
-                fontWeight: 700,
-                opacity: 0.7,
-                textTransform: 'lowercase',
-                cursor: 'pointer',
-                userSelect: 'none',
-              }}
-            >
-              {moreLoading
-                ? t.sniff.opening
-                : moreOpen
-                  ? t.sniff.less
-                  : t.sniff.more}
-            </div>
+            <LoreMore key={discovered.id} lore={discovered} tone="paper" />
           ) : null}
         </div>
         {discovered.id !== '__none__' ? (
