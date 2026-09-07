@@ -288,6 +288,13 @@
       "when": 1786530681903,
       "tag": "0040_lore_favourites",
       "breakpoints": true
+    },
+    {
+      "idx": 41,
+      "version": "7",
+      "when": 1786530681904,
+      "tag": "0041_lore_title",
+      "breakpoints": true
     }
   ]
 }

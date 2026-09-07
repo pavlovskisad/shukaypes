@@ -74,6 +74,7 @@ function circlePolygon(center: LatLng, radiusM: number): GeoJSON.Feature {
 interface DiscoveredLore {
   id: string;
   name: string;
+  title: string | null;
   category: string;
   story: string;
   detail: string | null;
@@ -322,6 +323,7 @@ export function SniffPress() {
           setDiscovered({
             id: '__none__',
             name: 'тут поки тиша',
+            title: null,
             category: 'none',
             story: '*ніс у землю* нічого знайомого. далі від цього кутка є щось — спробуй там.',
             detail: null,
@@ -512,7 +514,7 @@ export function SniffPress() {
               padding: discovered.id !== '__none__' ? `0 ${HEART_INSET}px` : 0,
             }}
           >
-            {discovered.name}
+            {discovered.title ?? discovered.name}
           </div>
           <div>{discovered.story}</div>
           {discovered.id !== '__none__' ? (

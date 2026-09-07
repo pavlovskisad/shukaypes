@@ -10,6 +10,8 @@
 // Pure, and kept out of enrich-lore.ts so enrichLore.check.ts can pin it
 // without a DATABASE_URL: importing the script would open the db.
 
+import { nameTokens } from './loreMatch.js';
+
 export interface Written {
   story: string;
   detail: string;
@@ -138,6 +140,69 @@ export function firstNonCaseDiff(before: string, after: string, window = 18): st
 // answer is quoted back so the model can see what it changed.
 export function caseRetryPrompt(name: string, text: string, refused: string): string {
   return `place: ${name}\n\ntext:\n${text}\n\nyour previous answer changed more than letter case (it read: ${refused}). return the text above again, changing ONLY the case of letters — every other character, space and punctuation mark identical.`;
+}
+
+// ---- titles -----------------------------------------------------------
+//
+// Most memorial plaques in OSM are named for the person on them, and
+// as a bubble title "Лесь Курбас" reads as if the man were standing
+// there. The title phase asks a small model what the object IS, with
+// the relation taken from the plaque's inscription where there is one,
+// and refuses any answer that lost the person's name on the way.
+
+export const TITLE_SYSTEM = `you write map titles for landmarks in Kyiv. a landmark comes with its OSM name, what kind of object it is, and what is known about it. write the short title a map label should carry: what the object is and, for a memorial, its relation to the person — so the walker knows they are looking at a house, a plaque or a statue, not at the person.
+
+ukrainian. three to eight words. sentence case: first letter capital, the rest as ukrainian orthography has it. no trailing full stop. the person's name must appear, in whatever case the phrase needs.
+
+patterns:
+- a plaque on a house, relation known from the inscription: "Будинок, де жив Лесь Курбас" / "Будинок, де працював …" / "Будинок, де народився …" / "Будинок, де жив і працював …"
+- a plaque, relation unknown: "Меморіальна дошка Лесю Курбасу"
+- a statue or bust: "Пам'ятник Тарасові Шевченку" / "Погруддя Лесі Українки"
+- a memorial to an event or a group: "Пам'ятний знак жертвам Голодомору"
+
+answer null when the OSM name already says what the object is — a church, a museum, a street, a fort, a park, a building with its own name ("Будинок з химерами") — or when you cannot tell what the object is.
+
+answer JSON only: {"title": string | null}`;
+
+export const TITLE_OUTPUT_FORMAT = {
+  type: 'json_schema' as const,
+  schema: {
+    type: 'object',
+    properties: { title: { type: ['string', 'null'] } },
+    required: ['title'],
+    additionalProperties: false,
+  },
+};
+
+export const TITLE_MAX_CHARS = 72;
+
+// A title is kept only if it still carries the landmark's name — at
+// least one meaningful word of the OSM name, by the same 5-letter stem
+// the matcher uses, so an inflected surname still counts — and is a
+// title rather than a sentence.
+export function titleKeepsName(name: string, title: string): boolean {
+  const t = title.trim();
+  if (!t || t.length > TITLE_MAX_CHARS || /[\n\r]/.test(t)) return false;
+  if (t.toLocaleLowerCase('uk') === name.trim().toLocaleLowerCase('uk')) return false;
+  if (/[.!?]$/.test(t)) return false;
+  const stems = nameTokens(name);
+  if (stems.size === 0) return false;
+  const inTitle = nameTokens(t);
+  for (const s of stems) if (inTitle.has(s)) return true;
+  return false;
+}
+
+export function parseTitle(text: string): string | null | undefined {
+  const start = text.indexOf('{');
+  const end = text.lastIndexOf('}');
+  if (start < 0 || end <= start) return undefined;
+  try {
+    const obj = JSON.parse(text.slice(start, end + 1)) as { title?: unknown };
+    if (obj.title === null) return null;
+    return typeof obj.title === 'string' ? obj.title : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export function parseCased(text: string): string | null {

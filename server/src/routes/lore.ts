@@ -20,7 +20,7 @@
 //     it.
 
 import type { FastifyPluginAsync } from 'fastify';
-import { and, desc, eq, inArray, isNotNull, notInArray, sql } from 'drizzle-orm';
+import { and, desc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { LatLng } from '../utils/geo.js';
 import { db, schema } from '../db/index.js';
 import { limitInteractive, limitRead } from '../lib/rateLimit.js';
@@ -156,6 +156,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       .select({
         id: schema.kyivLore.id,
         name: schema.kyivLore.name,
+        title: schema.kyivLore.title,
         category: schema.kyivLore.category,
         story: schema.kyivLore.story,
         detail: schema.kyivLore.detail,
@@ -178,6 +179,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       lore: {
         id: pick.id,
         name: pick.name,
+        title: pick.title,
         category: pick.category,
         story: pick.story,
         // Behind "read more": the dog's own longer telling, shown at
@@ -321,18 +323,26 @@ const plugin: FastifyPluginAsync = async (app) => {
       };
     });
 
-    // The longer telling for the stops that made the cut — at most
-    // MAX_ROUTES × MAX_STOPS_CEILING rows, one query.
+    // The longer telling and the title for the stops that made the cut
+    // — at most MAX_ROUTES × MAX_STOPS_CEILING rows, one query.
     const wanted = new Set<string>();
     for (const r of results) for (const s of r.stops) wanted.add(s.id);
     if (wanted.size > 0) {
-      const details = await db
-        .select({ id: schema.kyivLore.id, detail: schema.kyivLore.detail })
+      const extras = await db
+        .select({
+          id: schema.kyivLore.id,
+          detail: schema.kyivLore.detail,
+          title: schema.kyivLore.title,
+        })
         .from(schema.kyivLore)
-        .where(and(inArray(schema.kyivLore.id, [...wanted]), isNotNull(schema.kyivLore.detail)));
-      const byId = new Map(details.map((d) => [d.id, d.detail]));
+        .where(inArray(schema.kyivLore.id, [...wanted]));
+      const byId = new Map(extras.map((d) => [d.id, d]));
       for (const r of results) {
-        for (const s of r.stops) s.detail = byId.get(s.id) ?? null;
+        for (const s of r.stops) {
+          const e = byId.get(s.id);
+          s.detail = e?.detail ?? null;
+          s.title = e?.title ?? null;
+        }
       }
     }
 
@@ -349,6 +359,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       .select({
         id: schema.kyivLore.id,
         name: schema.kyivLore.name,
+        title: schema.kyivLore.title,
         category: schema.kyivLore.category,
         story: schema.kyivLore.story,
         detail: schema.kyivLore.detail,

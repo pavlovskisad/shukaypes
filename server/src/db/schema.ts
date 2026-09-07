@@ -325,6 +325,11 @@ export const kyivLore = pgTable(
     id: text('id').primaryKey(), // osm:<type>:<id>
     name: text('name').notNull(),
     nameEn: text('name_en'),
+    // What the landmark IS, when the OSM name only says whom it is for:
+    // "Будинок, де працював Лесь Курбас" over "Лесь Курбас". Written by
+    // enrich-lore's title phase; null where the name already says it.
+    // Readers show title ?? name.
+    title: text('title'),
     category: text('category').notNull(), // historic | memorial | tourism | artwork | religious | park | other
     lat: doublePrecision('lat').notNull(),
     lng: doublePrecision('lng').notNull(),

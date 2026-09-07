@@ -290,6 +290,9 @@ export interface WalkPlan {
 export interface WalkStop {
   id: string;
   name: string;
+  // What the landmark is, when the name only says whom it is for. Show
+  // title ?? name.
+  title: string | null;
   category: string;
   // One in-voice sentence: what the dog says when you get there.
   story: string;

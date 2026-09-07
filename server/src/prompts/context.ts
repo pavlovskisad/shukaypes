@@ -123,6 +123,7 @@ export async function buildContextBlock({ userId, pos, viewport, spots }: Contex
     const lore = await db
       .select({
         name: schema.kyivLore.name,
+        title: schema.kyivLore.title,
         category: schema.kyivLore.category,
         story: schema.kyivLore.story,
         detail: schema.kyivLore.detail,
@@ -133,7 +134,7 @@ export async function buildContextBlock({ userId, pos, viewport, spots }: Contex
       .orderBy(loreDist)
       .limit(3);
     nearbyLore = lore.map((l) => {
-      const line = `  - ${l.name} (${l.category}, ~${Math.round(l.dist)}m): "${l.story}"`;
+      const line = `  - ${l.title ?? l.name} (${l.category}, ~${Math.round(l.dist)}m): "${l.story}"`;
       return l.detail ? `${line}\n    more, if asked: ${l.detail.slice(0, LORE_DETAIL_MAX_CHARS)}` : line;
     });
   }

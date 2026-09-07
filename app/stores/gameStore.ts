@@ -1257,6 +1257,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     const entry: LoreFavourite = {
       id: lore.id,
       name: lore.name,
+      title: lore.title,
       category: lore.category,
       story: lore.story,
       detail: lore.detail,
