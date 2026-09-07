@@ -105,7 +105,14 @@ export default function MapScreen() {
           the bg for it — design thing). HUD itself still respects the
           top safe-area inset via `edges={['top']}` so the logo / pills
           aren't sitting under the OS status bar. */}
-      <SafeAreaView style={styles.hud} pointerEvents="box-none" edges={['top']}>
+      {/* nativeID → DOM id. The lore bubble measures this strip to know
+          how far down the screen it may not grow (LoreMore.tsx). */}
+      <SafeAreaView
+        nativeID="map-hud"
+        style={styles.hud}
+        pointerEvents="box-none"
+        edges={['top']}
+      >
         {/* box-none, not the default auto. This row is a full-width
             strip across the top of the screen with a logo at one end
             and the status pill at the other — the empty middle is

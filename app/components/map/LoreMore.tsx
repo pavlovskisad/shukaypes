@@ -46,20 +46,37 @@ import { useStrings } from '../../i18n/useStrings';
 // straight under the HUD row, with the top of the text clipped behind
 // the mode buttons. When the block opens (and again when the lead
 // arrives and the block gets taller) the map pans just far enough to
-// bring the marker's top edge below the HUD, without pushing the dot at
-// the bottom under the tab bar.
+// bring the bubble's top edge below the HUD, without pushing the
+// bubble's foot — the "ходімо сюди" button on a sniff, the bubble
+// itself on a walk stop — into the tab bar.
 //
-// Screen bands, in CSS px from the map container's edges. The HUD row
-// (logo + mode toggles + paw count) ends ~125 px down on an iPhone in
-// Safari. The bottom band is the tab bar plus its safe-area inset plus
-// the browser's own bar when there is one, and the first cut (120)
-// left the "ходімо сюди" button sitting on the tab bar; 200 leaves it
-// a finger's width of air.
-const SAFE_TOP_PX = 140;
-const SAFE_BOTTOM_PX = 200;
+// Both edges are MEASURED from the DOM: the HUD strip carries
+// id="map-hud", the tab bar is the page's role="tablist". Two earlier
+// cuts guessed them as constants (120 then 200 px from the container's
+// bottom) and got it wrong both ways — first the button sat on the tab
+// bar, then the bubble stopped short of the HUD with air to spare
+// below, because Safari's own bar changes where the container ends and
+// the constant could not know. The constants remain only as fallbacks
+// for a DOM that has neither element.
+//
+// The gap kept on each side is the bubble's own rhythm: the same S.s
+// that separates the bubble from its button.
+const EDGE_GAP_PX = S.s;
+const FALLBACK_TOP_PX = 140;
+const FALLBACK_BOTTOM_PX = 200;
 // Below this the pan is a twitch, not a fix.
 const MIN_PAN_PX = 4;
 const PAN_MS = 320;
+
+// Where the bubble may sit, in CSS px from the top of the map container.
+function screenBand(container: DOMRect): { top: number; bottom: number } {
+  const hud = document.getElementById('map-hud')?.getBoundingClientRect();
+  const tabs = document.querySelector('[role="tablist"]')?.getBoundingClientRect();
+  return {
+    top: (hud ? hud.bottom - container.top : FALLBACK_TOP_PX) + EDGE_GAP_PX,
+    bottom: (tabs ? tabs.top - container.top : container.height - FALLBACK_BOTTOM_PX) - EDGE_GAP_PX,
+  };
+}
 
 // How much of the Wikipedia lead shows under a detail. Three lines is
 // enough to see it agrees with the dog and to want the link.
@@ -96,27 +113,50 @@ export function LoreMore({
   // before it can be measured; re-run when the lead lands, since that
   // is the second time the bubble grows. Only ever pans DOWN the screen
   // and only on open — closing yanks nothing.
+  //
+  // If the camera is still moving — the sniff's own ease onto the find
+  // runs 600 ms, a walk stop's 450 ms, and a quick thumb taps "ще"
+  // inside that — a measurement now is of a frame that will not be
+  // there when it lands, and the pan computed from it is wrong by
+  // however far the camera still had to go. That was the "sometimes it
+  // doesn't snap": wait for moveend, then measure.
   useEffect(() => {
     if (!open || !map) return;
-    const raf = requestAnimationFrame(() => {
+    let raf = 0;
+    let cancelled = false;
+    const measure = () => {
+      if (cancelled) return;
+      const bubbleEl = toggleRef.current?.parentElement;
       const markerEl = toggleRef.current?.closest('.maplibregl-marker');
-      if (!markerEl) return;
+      if (!bubbleEl || !markerEl) return;
       const container = map.getContainer().getBoundingClientRect();
-      const rect = markerEl.getBoundingClientRect();
-      const top = rect.top - container.top;
-      const bottom = rect.bottom - container.top;
-      const need = SAFE_TOP_PX - top;
+      const band = screenBand(container);
+      // The bubble is the top of the marker; the foot is the button
+      // below it on a sniff, or the bubble itself on a walk stop.
+      const footEl = markerEl.querySelector('[data-lore-foot]') ?? bubbleEl;
+      const top = bubbleEl.getBoundingClientRect().top - container.top;
+      const foot = footEl.getBoundingClientRect().bottom - container.top;
+      const need = band.top - top;
       if (need < MIN_PAN_PX) return;
-      // Room below before the dot would slide under the tab bar. A
-      // bubble taller than the band between HUD and tab bar keeps its
-      // bottom on screen; the top is what gives.
-      const room = container.height - SAFE_BOTTOM_PX - bottom;
+      // Room below before the foot would reach the tab bar. A bubble
+      // taller than the band keeps its foot on screen; the top is what
+      // gives.
+      const room = band.bottom - foot;
       const delta = Math.min(need, Math.max(0, room));
       if (delta < MIN_PAN_PX) return;
       // Negative y moves the camera up, which moves the marker down.
       map.panBy([0, -delta], { duration: PAN_MS });
-    });
-    return () => cancelAnimationFrame(raf);
+    };
+    const schedule = () => {
+      raf = requestAnimationFrame(measure);
+    };
+    if (map.isMoving()) map.once('moveend', schedule);
+    else schedule();
+    return () => {
+      cancelled = true;
+      if (raf) cancelAnimationFrame(raf);
+      map.off('moveend', schedule);
+    };
   }, [open, extract, loading, map]);
 
   // `loading` is deliberately NOT a dependency: setting it inside the

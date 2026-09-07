@@ -763,10 +763,22 @@ export const api = {
   // sniff press gets them so a saved place goes back on the map as the
   // dog first showed it.
   loreFavourites: () => req<{ favourites: LoreFavourite[] }>('/lore/favourites'),
+  // An explicit empty body on both. req() sends content-type:
+  // application/json on every call, and Fastify's JSON parser answers a
+  // bodiless PUT or DELETE under that header with a 400 before the
+  // route runs — which is what made the first heart fill and then
+  // empty again. Every other write in the app carries a body, so the
+  // helper never had to know.
   saveLore: (id: string) =>
-    req<{ ok: true }>(`/lore/favourites/${encodeURIComponent(id)}`, { method: 'PUT' }),
+    req<{ ok: true }>(`/lore/favourites/${encodeURIComponent(id)}`, {
+      method: 'PUT',
+      body: '{}',
+    }),
   unsaveLore: (id: string) =>
-    req<{ ok: true }>(`/lore/favourites/${encodeURIComponent(id)}`, { method: 'DELETE' }),
+    req<{ ok: true }>(`/lore/favourites/${encodeURIComponent(id)}`, {
+      method: 'DELETE',
+      body: '{}',
+    }),
 
   // Places to walk to, out of our own tables (gazetteer parks and
   // squares, lore museums and churches and attractions) rather than
