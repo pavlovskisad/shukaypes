@@ -100,6 +100,23 @@ function minCharsFor(category: string): number {
 const MARKERS =
   /(вулиц|проспект|бульвар|площ|провул|мікрорайон|масив|район|селищ|село|смт|метро|станц|парк)\p{L}{0,3}\s*$/u;
 
+// …AND THE MARKER CAN BE INSIDE THE MATCH RATHER THAN IN FRONT OF IT.
+//
+// MARKERS reads the two words BEFORE the matched gram, which assumes the
+// gazetteer entry is the bare name and the marker is the ad's own word in
+// front of it. Half the table is not written that way: OSM holds «Вулиця
+// Літня», «Вул. Ракетна», «просп. Берестейський» with the marker in the
+// name. When one of those matches, the ad's «вул.» is consumed BY the
+// match, `before` holds the words further back — «приватний сектор» — and
+// a properly written address is recorded as a bare name.
+//
+// Found on «Буся», whose ad says «приватний сектор,вул.Літня» and which
+// the ledger recorded as `gazetteer-bare:Вулиця Літня`. The words are the
+// AD's, so a marker at the head of the gram is the poster writing one, not
+// the table talking to itself.
+const MARKER_HEAD =
+  /^(вулиц|проспект|бульвар|площ|провул|мікрорайон|масив|район|селищ|село|смт|метро|станц|парк)\p{L}{0,3}(\s|$)/u;
+
 // A street is a block; a district is four kilometres across. When both
 // match, the narrower one is the more useful answer — and when only a
 // district matches, that is still far better than the wrong side of the
@@ -506,7 +523,7 @@ export function resolvePlace(text: string, places: GazetteerPlace[]): ResolvedPl
       if (!found) continue;
 
       const before = words.slice(Math.max(0, i - 2), i).join(' ');
-      const marked = MARKERS.test(before);
+      const marked = MARKERS.test(before) || MARKER_HEAD.test(gram);
 
       // A SHORT WORD ONLY COUNTS WHEN THE AD SAYS IT IS A PLACE.
       //

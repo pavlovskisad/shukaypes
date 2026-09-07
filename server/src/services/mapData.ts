@@ -6,19 +6,16 @@
 // Each function returns the same shape the existing route returned in
 // its response body, so existing client decoders keep working.
 
-import { and, eq, isNull, not, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import type { LatLng } from '../utils/geo.js';
 import { xpProgress, MAX_LEVEL } from '../lib/xp.js';
 import { buildPhotoUrl } from './photoUrl.js';
 import { balance } from '../config/balance.js';
+import { confidentPlacementSqlFragment } from './placementConfidence.js';
 
 // Mirrors /tokens/nearby's TOKEN_VIEW_RADIUS_M — keep in sync.
 const TOKEN_VIEW_RADIUS_M = 2000;
-// Fallback Kyiv-center coords used by the parser when a post has no
-// geographic signal — those pets shouldn't render on the map.
-const FALLBACK_LAT = 50.4501;
-const FALLBACK_LNG = 30.5234;
 
 type TokenRow = typeof schema.tokens.$inferSelect;
 
@@ -165,12 +162,11 @@ export async function fetchNearbyLostDogs(
         // needs its owner found, and that deserves its own screen — but
         // they do not belong in «загублені».
         eq(schema.lostDogs.isFoundReport, false),
-        not(
-          and(
-            eq(schema.lostDogs.lastSeenLat, FALLBACK_LAT),
-            eq(schema.lostDogs.lastSeenLng, FALLBACK_LNG),
-          )!,
-        ),
+        // Only pets whose coordinate we can defend — see
+        // placementConfidence.ts. This subsumes the fall-through filter
+        // that used to stand here: 'fall-through' is not a confident
+        // source, so those rows no longer reach the map by either route.
+        sql.raw(confidentPlacementSqlFragment('lost_dogs.placement_source')),
         sql`
           2 * 6371000 * ASIN(SQRT(
             POWER(SIN(RADIANS(${pos.lat} - ${schema.lostDogs.lastSeenLat}) / 2), 2)

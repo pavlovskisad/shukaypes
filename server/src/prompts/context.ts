@@ -2,6 +2,7 @@
 
 import { and, eq, isNull, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
+import { confidentPlacementSqlFragment } from '../services/placementConfidence.js';
 
 // How much of a landmark's longer telling goes into the chat prompt.
 // The details are written to 45-90 words, so this is a backstop, not a
@@ -74,7 +75,11 @@ export async function buildContextBlock({ userId, pos, viewport, spots }: Contex
       .where(
         and(
           eq(schema.lostDogs.status, 'active'),
-          sql`NOT (${schema.lostDogs.lastSeenLat} = 50.4501 AND ${schema.lostDogs.lastSeenLng} = 30.5234)`,
+          // The companion should not name a pet as nearby when we can't
+          // defend where we put it — being told «Таруша is 2km away» is
+          // the same wrong invitation as the pin. See
+          // placementConfidence.ts; this subsumes the fall-through check.
+          sql.raw(confidentPlacementSqlFragment('lost_dogs.placement_source')),
           sql`${distExpr} < 5000`,
         ),
       )

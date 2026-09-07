@@ -88,6 +88,14 @@ const ALLOWED = new Map<string, string>([
   // — so no contact can reach the output or the model's reply.
   ['db/resolve-pins.ts', 'dry-run: could the gazetteer place these pets, counts only'],
   ['db/probe-location-text.ts', 'asks the model for the place, prints the phrase only'],
+  // Same read as resolve-pins, for the confidence LABEL rather than the
+  // coordinate: it re-runs the resolver over stored bodies to find where
+  // the ad said the pet was, then corrects placement_source where the
+  // resolver names the same place it named before. What it prints is a
+  // pet name, a gazetteer place name and an arrow — never a line of the
+  // ad, so no contact can reach the output. Operator-run over fly ssh,
+  // no HTTP surface, and dry by default.
+  ['db/relabel-marked.ts', 're-resolves bodies to correct the confidence label, prints place names'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
   // Only asks `raw_body is not null` to PICK a candidate ad to probe —
   // it never selects the column. And it masks every digit it prints, so

@@ -1,9 +1,10 @@
-import { and, eq, isNull, not, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import type { LatLng } from '../utils/geo.js';
 import { distanceMeters, scatter, scatterInRadius } from '../utils/geo.js';
+import { confidentPlacementSqlFragment } from './placementConfidence.js';
 import {
   shouldTopupUserArea,
   noteUserAreaTopup,
@@ -30,12 +31,6 @@ function dedupeParks(parks: LatLng[]): LatLng[] {
   return out;
 }
 
-// Parser landmark fallback used by the OLX pipeline. Pets at the exact
-// Kyiv city-center coord are low-signal (no real geography in the post),
-// so we skip seeding zones for them — otherwise they'd all overlap and
-// the per-pet pool would just dump paws at one landmark.
-const FALLBACK_LAT = 50.4501;
-const FALLBACK_LNG = 30.5234;
 
 function haversineSql(a: LatLng, colLat: unknown, colLng: unknown) {
   return sql<number>`(
@@ -195,12 +190,12 @@ export async function ensureTokensForUser(
     .where(
       and(
         eq(schema.lostDogs.status, 'active'),
-        not(
-          and(
-            eq(schema.lostDogs.lastSeenLat, FALLBACK_LAT),
-            eq(schema.lostDogs.lastSeenLng, FALLBACK_LNG),
-          )!,
-        ),
+        // A search zone is the strongest invitation the app makes — it
+        // asks somebody to walk a specific patch of ground. Only spawn
+        // one where the coordinate is defensible; see
+        // placementConfidence.ts. Replaces the fall-through coordinate
+        // check, which this subsumes.
+        sql.raw(confidentPlacementSqlFragment('lost_dogs.placement_source')),
         sql`${haversineSql(center, schema.lostDogs.lastSeenLat, schema.lostDogs.lastSeenLng)} <= ${balance.dogAreaScanRadiusM}`,
       ),
     );
