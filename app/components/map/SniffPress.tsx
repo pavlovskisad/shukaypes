@@ -522,6 +522,9 @@ export function SniffPress() {
         {discovered.id !== '__none__' ? (
           <div
             role="button"
+            // The lowest thing in the bubble that has to stay clear of
+            // the tab bar — LoreMore measures it when it pans the map.
+            data-lore-foot=""
             onClick={(e) => {
               e.stopPropagation();
               playPop(e.currentTarget);
