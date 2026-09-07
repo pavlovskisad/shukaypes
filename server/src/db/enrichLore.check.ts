@@ -8,7 +8,7 @@
 // prose. Each case below is a shape the lenient cut has to survive, and
 // the last ones are shapes it has to refuse rather than half-parse.
 
-import { parseWriter } from '../services/loreWriter.js';
+import { parseWriter, WRITER_PREFILL } from '../services/loreWriter.js';
 
 let failures = 0;
 let checks = 0;
@@ -64,6 +64,19 @@ function ok(cond: boolean, label: string, detail = ''): void {
 {
   const r = parseWriter('{"story": "«s.»", "detail": "“d.”"}');
   ok(r?.story === 's.' && r?.detail === 'd.', 'decorative outer quotes are stripped');
+}
+
+// A field that OPENS with a quoted word keeps its quote. Production
+// wrote «овод" — це самохідний…» for 9П110 before this case existed.
+{
+  const r = parseWriter('{"story": "s.", "detail": "\\"Овод\\" — це самохідний комплекс."}');
+  ok(r?.detail === '"Овод" — це самохідний комплекс.', 'an opening quoted word is not a decorative quote', r?.detail);
+}
+
+// The prefilled opening, as the script reassembles it before parsing.
+{
+  const r = parseWriter(`${WRITER_PREFILL}s.", "detail": "d."}`);
+  ok(r?.story === 's.' && r?.detail === 'd.', 'a prefilled answer parses once reassembled');
 }
 
 // Refusals: missing field, empty field, no JSON at all.

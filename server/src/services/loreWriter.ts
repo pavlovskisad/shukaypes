@@ -15,7 +15,28 @@ export interface Written {
   detail: string;
 }
 
-const clean = (s: string) => s.trim().replace(/^["“'«]+|["”'»]+$/g, '').trim();
+// The start of the answer, supplied AS the assistant's first tokens so
+// the model continues the JSON rather than deciding what to write. On
+// the second production pass three rows answered with the research
+// blob echoed back under a heading and no JSON at all — the same three
+// on every retry. A prefilled opening brace leaves no room for that.
+// The caller prepends it to what comes back before parsing.
+export const WRITER_PREFILL = '{"story": "';
+
+// Strip DECORATIVE outer quotes — the model wrapping its whole answer in
+// «…» — and only those: a field that opens with a quoted word and ends
+// in a full stop («"Овод" — це машина…») keeps its opening quote, or
+// the first word loses its mark and reads as a typo. Both ends have to
+// be quotes for either to go.
+const OPENS_QUOTED = /^["“'«]/;
+const CLOSES_QUOTED = /["”'»]$/;
+const clean = (s: string): string => {
+  const t = s.trim();
+  if (OPENS_QUOTED.test(t) && CLOSES_QUOTED.test(t)) {
+    return t.replace(/^["“'«]+|["”'»]+$/g, '').trim();
+  }
+  return t;
+};
 
 // One string field out of the near-JSON WITHOUT parsing it as JSON: from
 // the quote after `"key":` to the last quote before the next key (or the
