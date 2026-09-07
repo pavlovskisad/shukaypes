@@ -391,6 +391,24 @@ const SKY_CY = 132;
 const SUN_DISC = blob(SKY_CX, SKY_CY, 11, 11, 77, { points: 18, wobble: 0.07 });
 // Eight rays, each a short bowed dash — the sun a person draws, not a
 // gradient. Angles are offset so no ray points straight at a cloud.
+//
+// EACH RAY IS DRAWN AND RUBBED OUT, not scaled. The first pass animated
+// their length with a transform, which reads as the whole star breathing
+// — floating, not drawing. A dash offset walking along the stroke is a
+// pen instead: the ray grows from the disc outward, holds, then wipes
+// away and the next one starts. `pathLength={1}` normalises every ray to
+// the same 0…1 span, so one keyframe fits all eight regardless of how
+// long each bowed dash actually is.
+//
+// The delays come off the seeded generator rather than a uniform i×step:
+// evenly spaced, eight rays drawing in sequence is a loading spinner
+// going round a clock. Random-but-fixed, they come and go independently,
+// which is the asynchronous flicker of light this is meant to be.
+const RAY_CYCLE_S = 4.2;
+const RAY_DELAYS: number[] = (() => {
+  const r = rng(4242);
+  return Array.from({ length: 8 }, () => Number((r() * RAY_CYCLE_S).toFixed(2)));
+})();
 const SUN_RAYS: string[] = Array.from({ length: 8 }, (_, i) => {
   const a = (i / 8) * Math.PI * 2 + 0.2;
   const c = Math.cos(a);
@@ -568,10 +586,16 @@ export function ProfileSceneBackdrop({
           @keyframes cloud-b { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-16px); } }
           @keyframes cloud-c { 0%,100% { transform: translateX(0); } 50% { transform: translateX(24px); } }
           @keyframes cloud-d { 0%,100% { transform: translateX(0); } 50% { transform: translateX(-22px); } }
-          /* Rays reach out and draw back; the disc rocks. Both are tiny
-             on purpose — this is a drawing catching the light, not a
-             loading spinner. */
-          @keyframes sun-ray { 0%, 100% { transform: scale(1); } 50% { transform: scale(1.14); } }
+          /* A ray gets drawn from the disc outward, held, then wiped —
+             the offset walks the dash the whole way along and off the
+             far end. The disc just rocks. Both tiny on purpose: this is
+             a drawing catching the light, not a loading spinner. */
+          @keyframes sun-ray-draw {
+            0%   { stroke-dashoffset: 1; }
+            30%  { stroke-dashoffset: 0; }
+            62%  { stroke-dashoffset: 0; }
+            88%, 100% { stroke-dashoffset: -1; }
+          }
           @keyframes sun-wobble { 0%, 100% { transform: rotate(-2.5deg); } 50% { transform: rotate(2.5deg); } }
           @media (prefers-reduced-motion: reduce) {
             /* Somebody who has asked the system for less movement gets a
@@ -618,9 +642,10 @@ export function ProfileSceneBackdrop({
                 {...PEN}
                 stroke={p.ink}
                 strokeWidth={W_FAR}
+                pathLength={1}
+                strokeDasharray="1 1"
                 style={{
-                  animation: `sun-ray 3.4s ease-in-out ${(i * 0.21).toFixed(2)}s infinite`,
-                  ...SUN_ORIGIN,
+                  animation: `sun-ray-draw ${RAY_CYCLE_S}s ease-in-out ${RAY_DELAYS[i]}s infinite`,
                 }}
               />
             ))}
