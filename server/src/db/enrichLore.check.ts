@@ -8,7 +8,7 @@
 // prose. Each case below is a shape the lenient cut has to survive, and
 // the last ones are shapes it has to refuse rather than half-parse.
 
-import { parseWriter, WRITER_PREFILL } from '../services/loreWriter.js';
+import { parseWriter, WRITER_OUTPUT_FORMAT } from '../services/loreWriter.js';
 
 let failures = 0;
 let checks = 0;
@@ -73,10 +73,17 @@ function ok(cond: boolean, label: string, detail = ''): void {
   ok(r?.detail === '"Овод" — це самохідний комплекс.', 'an opening quoted word is not a decorative quote', r?.detail);
 }
 
-// The prefilled opening, as the script reassembles it before parsing.
+// The schema the API is asked to constrain the answer to names exactly
+// the two fields the parser reads, both required, nothing else allowed.
 {
-  const r = parseWriter(`${WRITER_PREFILL}s.", "detail": "d."}`);
-  ok(r?.story === 's.' && r?.detail === 'd.', 'a prefilled answer parses once reassembled');
+  const s = WRITER_OUTPUT_FORMAT.schema;
+  ok(WRITER_OUTPUT_FORMAT.type === 'json_schema', 'output format is a json schema');
+  ok(
+    Object.keys(s.properties).sort().join() === 'detail,story' &&
+      [...s.required].sort().join() === 'detail,story' &&
+      s.additionalProperties === false,
+    'the schema and the parser agree on the fields',
+  );
 }
 
 // Refusals: missing field, empty field, no JSON at all.

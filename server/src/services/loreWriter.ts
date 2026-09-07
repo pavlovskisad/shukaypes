@@ -15,13 +15,26 @@ export interface Written {
   detail: string;
 }
 
-// The start of the answer, supplied AS the assistant's first tokens so
-// the model continues the JSON rather than deciding what to write. On
-// the second production pass three rows answered with the research
-// blob echoed back under a heading and no JSON at all — the same three
-// on every retry. A prefilled opening brace leaves no room for that.
-// The caller prepends it to what comes back before parsing.
-export const WRITER_PREFILL = '{"story": "';
+// The shape the API is asked to constrain the answer to (structured
+// outputs, `output_config.format`). On the second production pass three
+// rows answered with the research blob echoed back under a heading and
+// no JSON at all — the same three on every retry — and no parser
+// recovers an answer that was never given. Assistant prefill, the older
+// way to force the opening brace, is rejected with a 400 on the 4.6+
+// models; the schema is the supported way. parseWriter stays as the
+// belt to this braces.
+export const WRITER_OUTPUT_FORMAT = {
+  type: 'json_schema' as const,
+  schema: {
+    type: 'object',
+    properties: {
+      story: { type: 'string' },
+      detail: { type: 'string' },
+    },
+    required: ['story', 'detail'],
+    additionalProperties: false,
+  },
+};
 
 // Strip DECORATIVE outer quotes — the model wrapping its whole answer in
 // «…» — and only those: a field that opens with a quoted word and ends
