@@ -9,21 +9,22 @@
 // inked chrome floating on top of it, it read as clip-art wallpaper
 // behind a drawing.
 //
-// So: same landscape, same parallax, same day/night structure — redrawn.
-// Pale washes instead of blocks, an ink outline on everything, and a
-// horizon that bows the way a hand-ruled line does. The curve machinery
-// is the app's own (`splinePath`), so a tree crown and a card's corner
-// come off the same pen.
+// So: same landscape, same parallax, same day/night structure — redrawn
+// as a drawing. In daylight it is pure line on white paper: no fill
+// carries any colour, the horizon bows the way a hand-ruled line does,
+// and the curve machinery is the app's own (`splinePath`), so a tree
+// crown and a card's corner come off the same pen.
 //
-// LINE WEIGHT IS THE DEPTH CUE. Far things are drawn thinner than near
-// ones, and everything in the scene stays under the 2px the foreground
-// chrome uses, so the cards still lead and the park stays a backdrop.
+// LINE WEIGHT IS THE DEPTH CUE — the only one available once the colour
+// is gone. Far things are drawn thinner than near ones, and everything
+// in the scene stays under the 2px the foreground chrome uses, so the
+// cards still lead and the park stays a backdrop.
 //
 // Three parallax layers + day/night theming:
-//   far  — sky wash, sun-or-moon, clouds (factor ~0.06)
+//   far  — sky, sun-or-moon, clouds (factor ~0.06)
 //   mid  — trees, lamppost, bench, lamp light cone at night (~0.18)
 //   near — ground tufts (factor ~0.32)
-// Plus the sky/ground wash that stays locked as the reference plane.
+// Plus the sky/ground plane that stays locked as the reference.
 //
 // Each layer is its own <svg> with the same 360×700 viewBox so the
 // elements line up vertically.
@@ -70,28 +71,35 @@ const W_MID = 1.6; // trees, lamppost, bench
 const W_HORIZON = 2; // the one line the whole scene hangs off
 // The tufts get their own, finer, nib — see TUFTS.
 
-// Per-mode palettes. Fills are washes — the ink describes the shape,
-// the colour only says which thing it is.
+// Per-mode palettes.
+//
+// DAY IS A LINE DRAWING: every fill below is the paper itself, and the
+// ink does all of the describing. That is not the same as leaving the
+// shapes unfilled — `fill: none` would let the horizon run straight
+// through every tree, let one cloud cross-hatch the next, and let the
+// sun's rays show through its own disc. White fill is not a colour here;
+// it is the paper, doing the job of occlusion. So the keys stay named
+// per element, all pointing at the same white: turning colour back on is
+// then one block of edits rather than a rewrite.
 //
 // `ink` is part of the palette because night inverts the paper: a black
 // line on a midnight sky is a line nobody can see. Day draws in the
-// app's ink; night draws in pale pencil on dark ground. (Night is not
-// currently selected — see ProfileDogScene — but leaving it drawing in
-// invisible ink would be a trap for whoever turns it back on.)
+// app's ink; night draws in pale pencil on dark ground, and keeps its
+// tones. (Night is not currently selected — see ProfileDogScene — but
+// leaving it drawing in invisible ink would be a trap for whoever turns
+// it back on.)
+const PAPER = '#ffffff';
 const PALETTE = {
   day: {
     ink: INK,
-    sky: '#e2eef7',
-    // Pale spring wash for the ground below the horizon. Light enough
-    // that the white dog and the white stat cards both sit clearly on
-    // top of it, green enough to still read as a lawn.
-    ground: '#dcebc0',
-    foliage: '#cbe0ac',
-    trunk: '#dcc8ab',
-    cloud: '#ffffff',
-    sun: '#f7dc9b',
-    moon: '#f2efe2',
-    lampBulb: '#f7dc9b',
+    sky: PAPER,
+    ground: PAPER,
+    foliage: PAPER,
+    trunk: PAPER,
+    cloud: PAPER,
+    sun: PAPER,
+    moon: PAPER,
+    lampBulb: PAPER,
   },
   night: {
     ink: '#dfe7f2',
@@ -114,6 +122,14 @@ const PALETTE = {
 export const SCENE_SKY: Record<SceneMode, string> = {
   day: PALETTE.day.sky,
   night: PALETTE.night.sky,
+};
+
+// …and the ambient creatures that fly over the scene draw in the same
+// ink as the park they fly over — black on white by day, pale on the
+// night sky. Same reason as SCENE_SKY: one source, not two copies.
+export const SCENE_INK: Record<SceneMode, string> = {
+  day: PALETTE.day.ink,
+  night: PALETTE.night.ink,
 };
 
 // ---------------------------------------------------------------------
@@ -284,11 +300,34 @@ interface TreeArt {
   trunk: string;
 }
 
-// x is the trunk's centre; scale keeps the old size ladder.
-function treeArt(cx: number, scale: number, seed: number): TreeArt {
-  const trunkH = 9 * scale;
-  const crownRx = 11.5 * scale;
-  const crownRy = 10 * scale;
+// A TREE LINE, NOT SIX OF THE SAME TREE.
+//
+// The first cut ran scales 0.85 → 1.4 with one silhouette, which is a
+// 1.6× range on a single shape — near enough to identical that the row
+// read as a repeated stamp. Three knobs instead of one:
+//
+//   scale       overall size. 0.78 → 1.7 now, a 2.2× range, so the row
+//               has genuine near and far in it.
+//   aspect      crown proportion, > 1 wide and squat, < 1 tall and
+//               narrow. Applied as sqrt either way so the crown changes
+//               SHAPE without also changing area — otherwise "wide"
+//               silently means "bigger" and the two knobs fight.
+//   trunkRatio  how much of the tree is bare trunk. A low value is a
+//               shrub sitting on the ground; a high one is a tree you
+//               could walk under.
+interface TreeSpec {
+  cx: number;
+  scale: number;
+  aspect: number;
+  trunkRatio: number;
+  seed: number;
+}
+
+function treeArt({ cx, scale, aspect, trunkRatio, seed }: TreeSpec): TreeArt {
+  const k = Math.sqrt(aspect);
+  const trunkH = 9 * scale * trunkRatio;
+  const crownRx = 11.5 * scale * k;
+  const crownRy = (10 * scale) / k;
   const crownCy = GROUND_Y - trunkH - crownRy * 0.72;
   return {
     crown: blob(cx, crownCy, crownRx, crownRy, seed, { wobble: 0.15 }),
@@ -305,13 +344,23 @@ function treeArt(cx: number, scale: number, seed: number): TreeArt {
   };
 }
 
+// Spaced so no two crowns touch, and so the 124…209 stretch stays clear
+// for the lamppost and the bench.
+// The size range does the work; the trunk ratio stays near 1 on the
+// small ones. A wide crown on a stubby trunk is not a small tree, it is
+// a mushroom — which is exactly what scale 0.78 at trunkRatio 0.5 drew.
+// Only the tall narrow one departs, and upwards.
 const TREES: TreeArt[] = [
-  treeArt(19, 1.4, 101),
-  treeArt(79, 1, 202),
-  treeArt(115, 0.85, 303),
-  treeArt(220, 1.15, 404),
-  treeArt(271, 0.95, 505),
-  treeArt(328, 1.3, 606),
+  treeArt({ cx: 16, scale: 1.55, aspect: 1.05, trunkRatio: 0.9, seed: 101 }),
+  // The little one.
+  treeArt({ cx: 74, scale: 0.8, aspect: 1.15, trunkRatio: 1, seed: 202 }),
+  // …and the tall narrow one right beside it, for the contrast.
+  treeArt({ cx: 112, scale: 1.15, aspect: 0.8, trunkRatio: 1.35, seed: 303 }),
+  treeArt({ cx: 222, scale: 0.95, aspect: 1.2, trunkRatio: 0.95, seed: 404 }),
+  treeArt({ cx: 274, scale: 1.35, aspect: 0.88, trunkRatio: 1.15, seed: 505 }),
+  // Pulled in from 332: the biggest crown out at the right margin spent
+  // most of the parallax range sliced in half by the screen edge.
+  treeArt({ cx: 322, scale: 1.5, aspect: 1.1, trunkRatio: 0.95, seed: 606 }),
 ];
 
 interface CloudArt {
@@ -351,14 +400,14 @@ const MOON_SHADE = blob(SKY_CX + 7, SKY_CY - 1.5, 7.5, 8, 99, { points: 14, wobb
 // container), so it spent half its time drawn through a trunk. Parking
 // it on the same layer as the trees costs one depth cue and buys a
 // composition that holds at every position: it sits in the clear stretch
-// between the third tree and the fourth, beside the lamppost.
+// between the third tree and the fourth (124…209), beside the lamppost.
 // A SEAT AND A BACK, not two rails of equal length. Drawn first as one
 // long line with a second the same length above it and a vertical at
 // each end, it came out as a field gate: nothing said which edge you sit
 // on. Three things fix it — the seat runs wider than the back, the back
 // is two close slats rather than one lonely rail, and an apron line
 // under the seat gives the plank some thickness.
-const BENCH_X = 170;
+const BENCH_X = 166;
 const SEAT_Y = GROUND_Y - 9;
 const BACK_Y = GROUND_Y - 19;
 const BENCH: string[] = [
@@ -378,7 +427,7 @@ const BENCH: string[] = [
 ];
 
 // Lamppost — stem, cross-arm, and a small wash-filled lantern.
-const LAMP_X = 159;
+const LAMP_X = 151;
 const LAMP_TOP = GROUND_Y - 58;
 const LAMP_STEM = stroke(LAMP_X, GROUND_Y + 3, LAMP_X + 0.5, LAMP_TOP, 1.1);
 const LAMP_ARM = stroke(LAMP_X - 5, LAMP_TOP, LAMP_X + 6, LAMP_TOP - 0.5, 0.6);
@@ -393,16 +442,31 @@ const LAMP_HEAD = blob(LAMP_X + 0.5, LAMP_TOP + 3.5, 4.5, 3.4, 55, { points: 10,
 // three lines converging on one x still read as a ↓. Longer blades, a
 // finer nib, and three bases spread over a couple of units — so the tuft
 // grows out of a patch of ground rather than out of a single dot.
+// FOUR, NOT SIX, AND NO TWO ALIKE. Six identical three-blade fans at
+// even spacing read as a repeated stamp along the horizon — the same
+// fault the tree line had. Each tuft now picks its own blade count and
+// height, so one is a tall three, one a sparse pair, one a dense four.
 const W_TUFT = 1.5;
-const TUFTS: string[] = [40, 92, 138, 250, 298, 336].flatMap((x, i) => {
-  const r = rng(700 + i);
-  const h = 10 + r() * 4;
-  return [
-    stroke(x - 1.6, GROUND_Y + 2, x - 5 - r() * 1.5, GROUND_Y - h * 0.82, 1.6),
-    stroke(x + 0.4, GROUND_Y + 2.4, x - 0.4, GROUND_Y - h, 0.7),
-    stroke(x + 2.2, GROUND_Y + 2, x + 5.6 + r() * 1.5, GROUND_Y - h * 0.76, -1.6),
-  ];
-});
+function tuft(x: number, blades: number, h: number, seed: number): string[] {
+  const r = rng(seed);
+  return Array.from({ length: blades }, (_, i) => {
+    // -1 at the left of the fan, +1 at the right.
+    const u = blades === 1 ? 0 : (i / (blades - 1)) * 2 - 1;
+    const base = x + u * 1.8 + (r() - 0.5) * 0.9;
+    const lean = u * (4.5 + r() * 2);
+    // Outer blades are shorter, the way a real clump falls away.
+    const len = h * (1 - Math.abs(u) * 0.24) * (0.86 + r() * 0.28);
+    // Each blade arcs away from the centre of its own fan.
+    const bow = u === 0 ? 0.6 : -u * 1.5;
+    return stroke(base, GROUND_Y + 2, base + lean, GROUND_Y - len, bow);
+  });
+}
+const TUFTS: string[] = [
+  ...tuft(46, 3, 13, 701),
+  ...tuft(132, 2, 8, 702),
+  ...tuft(246, 4, 11, 703),
+  ...tuft(306, 2, 12, 704),
+];
 
 // Stars — small ink sparks, night only.
 const STAR_POS: [number, number][] = [
