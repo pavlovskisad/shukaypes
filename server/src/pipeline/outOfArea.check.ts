@@ -47,6 +47,19 @@ const IN_SCOPE = [
   'Загубився кіт Буча вул. інститутська біля УГІ',
   'Загубився пес у Броварах',
   'Пропала кішка, Бориспіль',
+  // THE DISTRICT NAMES DELIBERATELY LEFT OUT, kept here so adding one
+  // fails loudly instead of quietly expiring Kyiv pets.
+  //
+  // Every line below is a Kyiv post that a tempting extra entry would
+  // have flagged. «Соборний» is a district in both Dnipro and
+  // Zaporizhzhia — and Kyiv has Соборна площа. «Північний» and
+  // «Петровський» exist in several cities each. A name that reads two
+  // ways takes real searches off the map, and expiring being reversible
+  // is not a reason to do it.
+  'загубився пес біля Соборної площі',
+  'зник кіт, Північний міст',
+  'пропала собака, Петрівка',
+  'знайшли кота на Петрівській алеї',
 ];
 
 // Must flag. Every one is a real title measured on production.
@@ -61,6 +74,16 @@ const OUT_OF_AREA = [
   'загубився кіт в АНД районі',
   'пропала собака Хортицький район',
   'зник пес у Хортицькому районі',
+  // A neighbourhood, a road or a tram stop standing in for the city —
+  // how people write to their own neighbours. Every line here is the
+  // stored body of a pet that sat on the Kyiv map, some for months.
+  '4 ноября пропала собака Берта на хтз!',
+  'Пропала собака 3 августа утром в районе молдованка',
+  'пропал пес в районе 4, 5 станции Люстдорфской дороги',
+  'Загубився улюбленець, в районі левандівки вул. Папоротна 5',
+  'Пропав котик немає його Інгульский район Провулок Центральний',
+  'кіт зник у Великій Кохнівці',
+  'загубився пес на Чорногорці',
   'Пропав кіт Ужгород',
   'Потерялся кот Харьков Библика 2 В',
   'Загублена собаку, Миколаїв!',
