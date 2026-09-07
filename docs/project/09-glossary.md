@@ -197,9 +197,13 @@ the HUD without the "ходімо сюди" button touching the tab bar.
 
 **Favourite place** — a `kyiv_lore` landmark the walker hearted (♡ in the
 corner of the sniff bubble or a walk-stop bubble; `LoreHeart` in
-`LoreMore.tsx`). Stored per user in `lore_favourites`, listed newest-first at
-the top of the spots tab; tapping one hands it to the map as a one-shot
-`focusedLore` and the sniff bubble shows it as if the dog had just found it.
+`LoreMore.tsx`). Stored per user in `lore_favourites`, shown newest-first as
+a card carousel at the top of the spots tab (`LoreFavouriteCard`), each card
+with a small picture of our own map around the place and a dot on it — a
+hidden MapLibre instance carrying the crayon style renders it and the JPEG
+is cached in localStorage (`mapPreview.ts`); tapping one hands it to the map
+as a one-shot `focusedLore` and the sniff bubble shows it as if the dog had
+just found it.
 Exists because a landmark was gone the moment its bubble closed, and once the
 read-more carried real stories people wanted a way back. Both used
 to be rare: the seed only linked rows whose OSM object carried a `wikipedia=`

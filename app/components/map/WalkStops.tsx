@@ -171,7 +171,7 @@ function StopMarker({
           >
             <LoreHeart lore={stop} tone="voice" />
             <div style={{ fontWeight: 700, marginBottom: 2, padding: `0 ${HEART_INSET}px` }}>
-              {stop.name}
+              {stop.title ?? stop.name}
             </div>
             <div>{stop.story}</div>
             <LoreMore lore={stop} tone="voice" />
@@ -181,7 +181,7 @@ function StopMarker({
             transparent pad that does the catching. */}
         <div
           role="button"
-          aria-label={stop.name}
+          aria-label={stop.title ?? stop.name}
           onClick={(e) => {
             e.stopPropagation();
             playPop(e.currentTarget);

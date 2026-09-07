@@ -1,0 +1,17 @@
+-- A title that says what the landmark IS.
+--
+-- Most memorial plaques in OSM are named for the person on them:
+-- "Лесь Курбас", "Крушельницький Мар'ян Михайлович". As a bubble
+-- title that reads as if the person were standing there. What the
+-- walker is looking at is the house he worked in, and the title should
+-- say so — "Будинок, де працював Лесь Курбас" — with the relation taken
+-- from the plaque's own inscription where the mapper recorded it.
+--
+-- `title` is written by enrich-lore's `title` phase for rows whose name
+-- is a person's name or whose facts say the object is a memorial, and
+-- left null everywhere the name already says what the thing is (a
+-- church, a museum, a fort). Readers show title ?? name; `name` stays
+-- the OSM name for matching and for the seed's idempotency.
+--
+-- Additive and nullable.
+alter table "kyiv_lore" add column if not exists "title" text;

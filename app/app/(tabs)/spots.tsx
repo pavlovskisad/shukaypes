@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
+import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
@@ -16,18 +16,12 @@ import { SwipeHintCallout } from '../../components/ui/SwipeHintCallout';
 import { distanceMeters } from '../../utils/geo';
 import { useHint } from '../../hooks/useHint';
 import type { LoreFavourite } from '../../services/api';
-import { INK } from '../../constants/surface';
+import { CardStack } from '../../components/ui/CardStack';
+import { LoreFavouriteCard } from '../../components/ui/LoreFavouriteCard';
 
-// How many hearted places the favourites card shows before folding the
-// rest behind "усі N". The card is the first thing on the tab, and a
-// list of forty would push every category below the fold.
-const FAVOURITES_FOLD = 5;
-
-// "X m" for sub-1km, "X.X km" beyond — the spot card's formatting.
-function formatDistance(m: number): string {
-  if (m < 1000) return `${Math.round(m / 50) * 50} m`;
-  return `${(m / 1000).toFixed(1)} km`;
-}
+// The favourites cards are a picture of the map plus two lines of
+// text, so they sit a little shorter than the spot cards' 280.
+const FAVOURITE_CARD_H = 262;
 
 // Fixed display order — matches the FILTERS chip order from the
 // previous tab layout so users coming from older sessions land on
@@ -86,13 +80,18 @@ export default function SpotsScreen() {
   const favourites = useGameStore((s) => s.loreFavourites);
   const favouritesLoaded = useGameStore((s) => s.loreFavouritesLoaded);
   const setFocusedLore = useGameStore((s) => s.setFocusedLore);
-  const [favouritesUnfolded, setFavouritesUnfolded] = useState(false);
   const onPickFavourite = useCallback(
     (f: LoreFavourite) => {
       setFocusedLore(f);
       router.push('/');
     },
     [setFocusedLore, router],
+  );
+  // useCallback-stable so CardStack's memoed slot doesn't see a new
+  // renderCard on every render — same reason as SpotCardStack.
+  const renderFavourite = useCallback(
+    (f: LoreFavourite) => <LoreFavouriteCard place={f} userPos={userPos} />,
+    [userPos],
   );
 
   // Fetch on first visit with a GPS position, and refresh when position
@@ -246,45 +245,14 @@ export default function SpotsScreen() {
             <Text style={styles.placeholder}>{t.spots.favouritesEmpty}</Text>
           ) : null}
           {favourites.length > 0 ? (
-            <View style={styles.favList}>
-              {(favouritesUnfolded ? favourites : favourites.slice(0, FAVOURITES_FOLD)).map(
-                (f) => (
-                  <Pressable
-                    key={f.id}
-                    onPress={() => onPickFavourite(f)}
-                    style={({ pressed }) => [styles.favRow, pressed && styles.favRowPressed]}
-                    accessibilityRole="button"
-                    accessibilityLabel={f.name}
-                  >
-                    <View style={styles.favText}>
-                      <Text style={styles.favName} numberOfLines={2}>
-                        {f.name}
-                      </Text>
-                      <Text style={styles.favStory} numberOfLines={2}>
-                        {f.story}
-                      </Text>
-                    </View>
-                    {userPos ? (
-                      <Text style={styles.favDist}>
-                        {formatDistance(distanceMeters(userPos, f.position))}
-                      </Text>
-                    ) : null}
-                  </Pressable>
-                ),
-              )}
-              {favourites.length > FAVOURITES_FOLD ? (
-                <Pressable
-                  onPress={() => setFavouritesUnfolded((v) => !v)}
-                  accessibilityRole="button"
-                  style={styles.favFold}
-                >
-                  <Text style={styles.favFoldText}>
-                    {favouritesUnfolded
-                      ? t.spots.favouritesLess
-                      : t.spots.favouritesAll(favourites.length)}
-                  </Text>
-                </Pressable>
-              ) : null}
+            <View style={styles.deckWrap}>
+              <CardStack
+                items={favourites}
+                getId={(f) => f.id}
+                onTap={onPickFavourite}
+                renderCard={renderFavourite}
+                cardHeight={FAVOURITE_CARD_H}
+              />
             </View>
           ) : null}
         </View>
@@ -389,48 +357,4 @@ const styles = StyleSheet.create({
     letterSpacing: 0.2,
   },
   placeholder: { fontSize: TYPE.small, color: '#777', paddingVertical: S.s },
-  // The hearted places: plain rows with a hairline between, name over
-  // the dog's one-liner, distance on the right. Not a card stack — these
-  // are a list you scan, not a deck you swipe.
-  favList: {
-    borderTopWidth: 1,
-    borderTopColor: 'rgba(0,0,0,0.08)',
-  },
-  favRow: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    gap: S.m,
-    paddingVertical: S.m,
-    borderBottomWidth: 1,
-    borderBottomColor: 'rgba(0,0,0,0.08)',
-  },
-  favRowPressed: { opacity: 0.6 },
-  favText: { flex: 1, gap: 2 },
-  favName: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.body,
-    fontWeight: '700',
-    color: INK,
-  },
-  favStory: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.small,
-    color: '#555',
-    lineHeight: 18,
-  },
-  favDist: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.caption,
-    fontWeight: '700',
-    color: '#777',
-    paddingTop: 2,
-  },
-  favFold: { paddingVertical: S.s, alignSelf: 'flex-start' },
-  favFoldText: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.caption,
-    fontWeight: '700',
-    color: '#777',
-    textTransform: 'lowercase',
-  },
 });

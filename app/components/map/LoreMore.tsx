@@ -68,15 +68,32 @@ const FALLBACK_BOTTOM_PX = 200;
 const MIN_PAN_PX = 4;
 const PAN_MS = 320;
 
+// The tab bar: the widest visible tablist on the page. There is one,
+// but a hidden or zero-size one from another navigator must not win.
+function tabBarRect(): DOMRect | null {
+  let best: DOMRect | null = null;
+  for (const el of Array.from(document.querySelectorAll('[role="tablist"]'))) {
+    const r = el.getBoundingClientRect();
+    if (r.height === 0 || r.width < 100) continue;
+    if (!best || r.width > best.width) best = r;
+  }
+  return best;
+}
+
 // Where the bubble may sit, in CSS px from the top of the map container.
 function screenBand(container: DOMRect): { top: number; bottom: number } {
   const hud = document.getElementById('map-hud')?.getBoundingClientRect();
-  const tabs = document.querySelector('[role="tablist"]')?.getBoundingClientRect();
+  const tabs = tabBarRect();
   return {
     top: (hud ? hud.bottom - container.top : FALLBACK_TOP_PX) + EDGE_GAP_PX,
     bottom: (tabs ? tabs.top - container.top : container.height - FALLBACK_BOTTOM_PX) - EDGE_GAP_PX,
   };
 }
+
+// How many times one open may re-measure and pan again. The second
+// pass catches a first pan that was measured against a bubble which
+// grew afterwards; a third would be chasing sub-pixel noise.
+const MAX_PASSES = 2;
 
 // How much of the Wikipedia lead shows under a detail. Three lines is
 // enough to see it agrees with the dog and to want the link.
@@ -120,10 +137,20 @@ export function LoreMore({
   // there when it lands, and the pan computed from it is wrong by
   // however far the camera still had to go. That was the "sometimes it
   // doesn't snap": wait for moveend, then measure.
+  //
+  // The shift is chosen in BOTH directions, foot first. An earlier cut
+  // only ever panned down, and a pan measured against a shorter bubble
+  // — before the lead arrived and grew it — could leave the button
+  // under the tab bar with nothing to bring it back. Now: the foot
+  // must clear the tab bar; the top clears the HUD if the bubble is
+  // short enough for both; when it is not, the top is what gives. And
+  // after a pan lands, one more measurement, in case the bubble grew
+  // while the camera was moving.
   useEffect(() => {
     if (!open || !map) return;
     let raf = 0;
     let cancelled = false;
+    let passes = 0;
     const measure = () => {
       if (cancelled) return;
       const bubbleEl = toggleRef.current?.parentElement;
@@ -136,16 +163,20 @@ export function LoreMore({
       const footEl = markerEl.querySelector('[data-lore-foot]') ?? bubbleEl;
       const top = bubbleEl.getBoundingClientRect().top - container.top;
       const foot = footEl.getBoundingClientRect().bottom - container.top;
-      const need = band.top - top;
-      if (need < MIN_PAN_PX) return;
-      // Room below before the foot would reach the tab bar. A bubble
-      // taller than the band keeps its foot on screen; the top is what
-      // gives.
-      const room = band.bottom - foot;
-      const delta = Math.min(need, Math.max(0, room));
-      if (delta < MIN_PAN_PX) return;
+      // Shift the marker DOWN the screen by at least dMin (top clear of
+      // the HUD) and at most dMax (foot clear of the tab bar). Negative
+      // values move it up.
+      const dMin = band.top - top;
+      const dMax = band.bottom - foot;
+      let d = 0;
+      if (dMax < dMin) d = dMax; // taller than the band: keep the foot
+      else if (dMin > 0) d = dMin; // top hidden
+      else if (dMax < 0) d = dMax; // foot hidden
+      if (Math.abs(d) < MIN_PAN_PX) return;
+      passes++;
       // Negative y moves the camera up, which moves the marker down.
-      map.panBy([0, -delta], { duration: PAN_MS });
+      map.panBy([0, -d], { duration: PAN_MS });
+      if (passes < MAX_PASSES) map.once('moveend', schedule);
     };
     const schedule = () => {
       raf = requestAnimationFrame(measure);

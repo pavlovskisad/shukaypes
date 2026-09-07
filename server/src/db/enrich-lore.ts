@@ -49,6 +49,13 @@
 //           before they had any research get it rewritten too, and
 //           last_rewrote_at moves.
 //
+//   title   Not run by default; `--only title`. For rows named for a
+//           person, or whose facts say the object is a memorial, a
+//           small model writes what the object IS — "Будинок, де
+//           працював Лесь Курбас" — from the inscription and the
+//           detail; a title that lost the name is refused, and null
+//           means the name already says it. Readers show title ?? name.
+//
 //   case    Not run by default; `--only case`. Proper names in every
 //           story and detail get their capitals back — the first
 //           production run wrote "михайло старицький" — through a small
@@ -90,7 +97,7 @@ import { and, eq, isNull, isNotNull, or, sql } from 'drizzle-orm';
 import { pathToFileURL } from 'url';
 import { db, schema, pg } from './index.js';
 import { AMBIENT_MODEL, anthropic } from '../services/anthropic.js';
-import { looksLikeProperName, pickGeoMatch } from '../services/loreMatch.js';
+import { isMemorialLike, looksLikeProperName, pickGeoMatch } from '../services/loreMatch.js';
 import {
   CASE_OUTPUT_FORMAT,
   CASE_SYSTEM,
@@ -98,7 +105,11 @@ import {
   firstNonCaseDiff,
   onlyCaseDiffers,
   parseCased,
+  parseTitle,
   parseWriter,
+  TITLE_OUTPUT_FORMAT,
+  TITLE_SYSTEM,
+  titleKeepsName,
   WRITER_OUTPUT_FORMAT,
   type Written,
 } from '../services/loreWriter.js';
@@ -160,7 +171,7 @@ answer with JSON only, no prose around it: {"story": "...", "detail": "..."}`;
 
 interface Args {
   apply: boolean;
-  only: 'osm' | 'links' | 'detail' | 'case' | null;
+  only: 'osm' | 'links' | 'detail' | 'case' | 'title' | null;
   limit: number;
   id: string | null;
   model: string;
@@ -172,8 +183,8 @@ function parseArgs(argv: string[]): Args {
     return i >= 0 ? (argv[i + 1] ?? null) : null;
   };
   const only = flag('--only');
-  if (only && only !== 'osm' && only !== 'links' && only !== 'detail' && only !== 'case') {
-    throw new Error(`--only must be osm, links, detail or case, got ${only}`);
+  if (only && !['osm', 'links', 'detail', 'case', 'title'].includes(only)) {
+    throw new Error(`--only must be osm, links, detail, case or title, got ${only}`);
   }
   return {
     apply: argv.includes('--apply'),
@@ -695,6 +706,114 @@ async function phaseCase(args: Args): Promise<void> {
   );
 }
 
+// ---- phase: title --------------------------------------------------------
+
+const EST_USD_PER_TITLE = 0.001;
+
+async function askTitle(userBlock: string): Promise<string | null | undefined> {
+  const res = await anthropic().messages.create({
+    model: AMBIENT_MODEL,
+    max_tokens: 120,
+    system: [{ type: 'text', text: TITLE_SYSTEM, cache_control: { type: 'ephemeral' } }],
+    messages: [{ role: 'user', content: userBlock }],
+    output_config: { format: TITLE_OUTPUT_FORMAT },
+  });
+  const out = res.content.map((b) => (b.type === 'text' ? b.text : '')).join('');
+  return parseTitle(out);
+}
+
+async function phaseTitle(args: Args): Promise<void> {
+  const stored = await db
+    .select({
+      id: schema.kyivLore.id,
+      name: schema.kyivLore.name,
+      category: schema.kyivLore.category,
+      story: schema.kyivLore.story,
+      detail: schema.kyivLore.detail,
+      facts: schema.kyivLore.facts,
+      wikiSource: schema.kyivLore.wikiSource,
+    })
+    .from(schema.kyivLore)
+    .where(
+      and(
+        isNull(schema.kyivLore.title),
+        HAS_A_LETTER,
+        args.id ? eq(schema.kyivLore.id, args.id) : undefined,
+      ),
+    )
+    .orderBy(schema.kyivLore.id);
+  // Rows a title can help: named for a person, or a memorial by its own
+  // facts. A church or a museum is already named for what it is.
+  const rows = stored
+    .filter(
+      (r) =>
+        looksLikeProperName(r.name) ||
+        (!!r.facts?.kind?.startsWith('memorial:') &&
+          isMemorialLike({ name: r.name, nameEn: null, category: r.category })),
+    )
+    .slice(0, args.limit || undefined);
+  console.log(`\n▶ title — ${rows.length} rows named for a person or a memorial, without a title`);
+  if (!args.apply) {
+    console.log(
+      `  (dry) would spend ~$${(rows.length * EST_USD_PER_TITLE).toFixed(2)} on ${AMBIENT_MODEL}; showing the first 25`,
+    );
+  }
+
+  let written = 0;
+  let kept = 0;
+  let refused = 0;
+  let n = 0;
+  for (const row of rows) {
+    n++;
+    if (!args.apply && n > 25) break;
+    const f = row.facts;
+    const userBlock = [
+      `osm name: ${row.name}`,
+      `category: ${row.category}`,
+      f?.kind ? `kind: ${f.kind}` : null,
+      f?.inscription ? `inscription: ${f.inscription.slice(0, 400)}` : null,
+      f?.description ? `description: ${f.description.slice(0, 300)}` : null,
+      row.wikiSource === 'subject' ? 'note: the linked article is about the person, not the object' : null,
+      `the dog's one-liner: ${row.story}`,
+      row.detail ? `the dog's telling: ${row.detail.slice(0, 600)}` : null,
+    ]
+      .filter(Boolean)
+      .join('\n');
+    try {
+      const title = await askTitle(userBlock);
+      if (title === undefined) {
+        refused++;
+        console.log(`  [unparsed ${n}/${rows.length}] ${row.name}`);
+        continue;
+      }
+      if (title === null) {
+        kept++;
+        if (!args.apply) console.log(`  [keep ${n}/${rows.length}] ${row.name}`);
+        await sleep(60);
+        continue;
+      }
+      if (!titleKeepsName(row.name, title)) {
+        refused++;
+        console.log(`  [refused ${n}/${rows.length}] ${row.name} → ${JSON.stringify(title)}`);
+        await sleep(60);
+        continue;
+      }
+      console.log(`  [${args.apply ? 'title' : 'dry'} ${n}/${rows.length}] ${row.name} → ${title}`);
+      if (args.apply) {
+        await db.update(schema.kyivLore).set({ title: title.trim() }).where(eq(schema.kyivLore.id, row.id));
+      }
+      written++;
+      await sleep(60);
+    } catch (err) {
+      console.error(`  [err ${n}/${rows.length}] ${row.name}:`, (err as Error).message);
+      await sleep(1000);
+    }
+  }
+  console.log(
+    `  ${args.apply ? '✓' : '(dry)'} title: ${written} ${args.apply ? 'written' : 'would be written'}, ${kept} kept their name, ${refused} refused or unparsed`,
+  );
+}
+
 async function main() {
   const args = parseArgs(process.argv.slice(2));
   console.log(
@@ -722,6 +841,7 @@ async function main() {
   // Opt-in: it re-reads every text in the corpus, which the default run
   // has no reason to do twice.
   if (args.only === 'case') await phaseCase(args);
+  if (args.only === 'title') await phaseTitle(args);
 
   if (!args.apply) {
     console.log('\n(dry run — nothing written. re-run with --apply once the plan above reads right.)');

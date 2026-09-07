@@ -12,6 +12,8 @@ import {
   firstNonCaseDiff,
   onlyCaseDiffers,
   parseCased,
+  parseTitle,
+  titleKeepsName,
   parseWriter,
   WRITER_OUTPUT_FORMAT,
 } from '../services/loreWriter.js';
@@ -127,6 +129,24 @@ function ok(cond: boolean, label: string, detail = ''): void {
     'the refusal log points at the character that changed',
     firstNonCaseDiff('«малютка» — ракета.', '«Малютка» – ракета.'),
   );
+}
+
+// ---------------------------------------------------------------------
+// A title has to keep the name and be a title.
+// ---------------------------------------------------------------------
+{
+  ok(titleKeepsName('Лесь Курбас', 'Будинок, де працював Лесь Курбас'), 'a house title keeps the name');
+  ok(
+    titleKeepsName('Крушельницький Мар\'ян Михайлович', 'Будинок, де жив Мар\'ян Крушельницький'),
+    'an inflected, reordered name still counts',
+  );
+  ok(titleKeepsName("Тарас Шевченко", "Пам'ятник Тарасові Шевченку"), 'dative keeps the stem');
+  ok(!titleKeepsName('Лесь Курбас', 'Будинок, де працював режисер'), 'a title that lost the name is refused');
+  ok(!titleKeepsName('Лесь Курбас', 'лесь курбас'), 'the name back in another case is not a title');
+  ok(!titleKeepsName('Лесь Курбас', 'Тут працював Лесь Курбас.'), 'a sentence is not a title');
+  ok(parseTitle('{"title": null}') === null, 'null means keep the name');
+  ok(parseTitle('{"title": "Погруддя Лесі Українки"}') === 'Погруддя Лесі Українки', 'a title parses');
+  ok(parseTitle('nope') === undefined, 'no JSON is a miss, not a null');
 }
 
 if (failures > 0) {

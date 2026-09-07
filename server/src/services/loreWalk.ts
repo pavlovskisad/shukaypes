@@ -45,6 +45,9 @@ export interface LorePoint {
 export interface LoreStop {
   id: string;
   name: string;
+  // What the landmark is, when the name only says whom it is for. Like
+  // detail, filled by routes/lore.ts for the chosen stops.
+  title: string | null;
   category: string;
   story: string;
   // The longer telling. The planner leaves it null — it only knows
@@ -236,6 +239,7 @@ function toStop(s: Scored): LoreStop {
   return {
     id: s.point.id,
     name: s.point.name,
+    title: null,
     category: s.point.category,
     story: s.point.story,
     detail: null,

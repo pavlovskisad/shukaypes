@@ -148,8 +148,6 @@ export interface AppStrings {
     // The hearted landmarks, at the top of the tab.
     favourites: string;
     favouritesEmpty: string;
-    favouritesAll: (n: number) => string;
-    favouritesLess: string;
     filters: {
       all: string;
       cafe: string;
@@ -581,8 +579,6 @@ const uk: AppStrings = {
     favourites: 'улюблені місця',
     favouritesEmpty:
       'поки порожньо. натисни ♡ на місці, яке я винюхав, — і воно чекатиме тут.',
-    favouritesAll: (n) => `усі ${n} ▾`,
-    favouritesLess: 'менше ▴',
     filters: {
       all: 'усі',
       cafe: "кав'ярні",
@@ -1025,8 +1021,6 @@ const en: AppStrings = {
     emptyFiltered: (category) => `no ${category} nearby — try another filter`,
     favourites: 'favourite places',
     favouritesEmpty: "empty so far. tap ♡ on a place i've sniffed out and it'll wait for you here.",
-    favouritesAll: (n) => `all ${n} ▾`,
-    favouritesLess: 'less ▴',
     filters: {
       all: 'all',
       cafe: 'cafe',

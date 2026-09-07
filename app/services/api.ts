@@ -60,6 +60,10 @@ export type CompanionAction =
 export interface LoreRef {
   id: string;
   name: string;
+  // What the landmark is, when the name only says whom it is for
+  // ("Будинок, де працював Лесь Курбас"). Null where the name already
+  // says it; show title ?? name.
+  title: string | null;
   category: string;
   story: string;
   detail: string | null;
@@ -746,6 +750,7 @@ export const api = {
       lore: {
         id: string;
         name: string;
+        title: string | null;
         category: string;
         story: string;
         // The dog's longer telling, for "read more". Null until
