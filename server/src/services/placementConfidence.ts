@@ -41,10 +41,26 @@
 // and the predicate are both generated from this list, and all three
 // paths that can send a walker somewhere — the map pins, the search-zone
 // spawner, and what the companion says is nearby — read it.
+// …and a fourth, added once there was something to stand behind it:
+//
+//   gazetteer-judged:  the ad named the place with no «вул.» in front of
+//                      it — «пропав пес на Оболоні» — and a model read
+//                      the ad afterwards and confirmed the pin.
+//
+// Bare matches were hidden wholesale because one of them put «Горобчик»
+// on Соборна площа in the centre when his ad said Софіївська Борщагівка.
+// Reading all 44 of them afterwards, that judgement was unfair to the
+// other 34: «на Оболоні» and «біля Лукʼянівської» are complete addresses
+// in Ukrainian, and refusing them for lacking a marker refused how the
+// language works. The ten that were genuinely wrong are wrong for
+// reasons no matcher can see — «ракетної атаки» is not вул. Ракетна —
+// so pipeline/placementJudge.ts asks a model, and only a confirmed one
+// reaches this list. An unjudged bare placement stays hidden.
 export const CONFIDENT_PLACEMENT_PREFIXES = [
   'owner',
   'sighting',
   'gazetteer-marked:',
+  'gazetteer-judged:',
 ] as const;
 
 /** Whether a placement_source value is one we will show a walker. */

@@ -96,6 +96,16 @@ const ALLOWED = new Map<string, string>([
   // ad, so no contact can reach the output. Operator-run over fly ssh,
   // no HTTP surface, and dry by default.
   ['db/relabel-marked.ts', 're-resolves bodies to correct the confidence label, prints place names'],
+  // Sends stored bodies to the model that judges whether a pin matches
+  // its ad. The body IS the evidence — «ракетної атаки» is only
+  // distinguishable from вул. Ракетна by reading the sentence — so there
+  // is no narrower field that would answer the question.
+  //
+  // No new exposure: pipeline/parser.ts already sends the same text to
+  // the model at ingest, which is how the pet got a coordinate at all.
+  // What this prints is the model's one-line reason, and that goes
+  // through redactContacts first, because the reason quotes the ad back.
+  ['db/judge-pins.ts', 'sends bodies to the placement judge, prints a redacted reason'],
   ['db/expire-no-post.ts', 'tests null-ness to find pets whose ad is gone'],
   // Reads bodies to answer WHICH CITY, because that is where the answer
   // lives: ten pets sat on the Kyiv map from Kharkiv, Odesa and Lviv,

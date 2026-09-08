@@ -21,6 +21,13 @@ import { anthropic } from '../services/anthropic.js';
 import { snapToLandIfInRiver } from '../utils/geo.js';
 import { lookupBestPlace, loadGazetteerPlaces } from '../services/gazetteer.js';
 import { resolvePlace } from './resolvePlace.js';
+import {
+  judgePlacement,
+  isJudgeable,
+  placeNameOf,
+  JUDGED_PREFIX,
+  REJECTED_PREFIX,
+} from './placementJudge.js';
 import { detectOtherCity } from './outOfArea.js';
 import type { ParsedDog, Species, Urgency } from './types.js';
 
@@ -281,6 +288,30 @@ export async function parseDogPost(input: ParseDogPostInput): Promise<ParsedDog>
         placementSource = `gazetteer-fuzzy:${hit.nameUk}`;
         confidence = Math.max(confidence, 0.6);
       }
+    }
+  }
+
+  // A SECOND READER FOR THE MATCHES NOTHING VOUCHES FOR.
+  //
+  // A bare or fuzzy match is a name found in the ad with nothing marking
+  // it as a place, so the matcher cannot tell «на Оболоні» (an address)
+  // from «ракетної атаки» (a rocket attack that happens to contain a
+  // street name). Both were in production. placementJudge asks a model
+  // which it is, and may only reject — see the note there.
+  //
+  // Awaited rather than fired off, because the label it produces is what
+  // decides whether this pet is ever shown, and ingest is a background
+  // tick with no user waiting on it. When the judge cannot answer the
+  // label is left alone, and an unjudged bare match stays hidden.
+  if (isJudgeable(placementSource)) {
+    const verdict = await judgePlacement({
+      adText: input.text,
+      placeName: placeNameOf(placementSource),
+      lat,
+      lng,
+    });
+    if (verdict) {
+      placementSource = `${verdict.keep ? JUDGED_PREFIX : REJECTED_PREFIX}${placeNameOf(placementSource)}`;
     }
   }
 
