@@ -23,7 +23,8 @@
     "expire:pet": "tsx src/db/expire-pet.ts",
     "expire:no-post": "tsx src/db/expire-no-post.ts",
     "check:placement-confidence": "tsx src/services/placementConfidence.check.ts",
-    "check": "pnpm check:placement-confidence && pnpm check:lore-walk && pnpm check:lore-match && pnpm check:enrich-parse && pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:redact && pnpm check:ad-body && pnpm check:ad-extract && pnpm check:found-report && pnpm check:owner-report && pnpm check:resolve-place && pnpm check:route-coverage",
+    "check:placement-judge": "tsx src/pipeline/placementJudge.check.ts",
+    "check": "pnpm check:placement-judge && pnpm check:placement-confidence && pnpm check:lore-walk && pnpm check:lore-match && pnpm check:enrich-parse && pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:redact && pnpm check:ad-body && pnpm check:ad-extract && pnpm check:found-report && pnpm check:owner-report && pnpm check:resolve-place && pnpm check:route-coverage",
     "check:same-pet": "tsx src/pipeline/samePet.check.ts",
     "check:lore-walk": "tsx src/services/loreWalk.check.ts",
     "check:lore-match": "tsx src/services/loreMatch.check.ts",
@@ -52,6 +53,7 @@
     "resolve:pins": "tsx src/db/resolve-pins.ts",
     "label:pins": "tsx src/db/label-pins.ts",
     "relabel:marked": "tsx src/db/relabel-marked.ts",
+    "judge:pins": "tsx src/db/judge-pins.ts",
     "probe:location-text": "tsx src/db/probe-location-text.ts",
     "check:resolve-place": "tsx src/pipeline/resolvePlace.check.ts"
   },

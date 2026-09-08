@@ -26,6 +26,9 @@ for (const src of [
   'sighting',
   'gazetteer-marked:Цирк',
   'gazetteer-marked:Вулиця Літня',
+  // A bare match a model read the ad and confirmed — «пропав пес на
+  // Оболоні» is a complete address, it just carries no «вул.».
+  'gazetteer-judged:Оболонь',
 ]) {
   check(`shown: ${src}`, isConfidentPlacement(src) === true);
 }
@@ -35,8 +38,12 @@ for (const src of [
 // (fuzzy, ad names a village, matched a music school) are the two the
 // owner reported from the map.
 for (const src of [
+  // Unjudged. The judge has not been asked, so nothing vouches for it.
   'gazetteer-bare:Соборна площа',
   'gazetteer-fuzzy:Київська Дитяча Школа Мистецтв #2 ім М.І.Вериківського',
+  // Judged and REFUSED — «Горобчик», whose «Соборна» is a street inside
+  // Софіївська Борщагівка, not the square in the centre.
+  'gazetteer-rejected:Соборна площа',
   'model-landmark:Olimpiiska / Олімпійська',
   'model-geo',
   'fall-through',
@@ -75,8 +82,8 @@ check(
 // have to come here and say why — an unreviewed extra tier is exactly how
 // a walker ends up back at Олімпійська.
 check(
-  'the bar is still the three defensible sources',
-  CONFIDENT_PLACEMENT_PREFIXES.length === 3,
+  'the bar is still the four defensible sources',
+  CONFIDENT_PLACEMENT_PREFIXES.length === 4,
   CONFIDENT_PLACEMENT_PREFIXES.join(', '),
 );
 
