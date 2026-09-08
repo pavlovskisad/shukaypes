@@ -136,6 +136,22 @@ export function Companion({
   const setAppMode = useGameStore((s) => s.setAppMode);
   const setLostFlowOpen = useGameStore((s) => s.setLostFlowOpen);
   const gateOpen = appMode === 'gate';
+  // AT THE GATE, THE DOG CANNOT BE HIDDEN.
+  //
+  // `hidden` is the off-screen rule: when the dog leaves the viewport
+  // MapView hides it and shows an edge chip instead, so a beyond-horizon
+  // position can't float a sprite in the sky. Right for a walk — wrong
+  // for the gate, because the gate's question and its four buttons are
+  // children of the same box, and the gate has ALREADY bubbled out the
+  // HUD and the tab bar. Hiding the dog there does not hide a dog; it
+  // hides the only interface on screen, and leaves a bare map with no
+  // way forward.
+  //
+  // Not hypothetical: GPS spoofing during an air-raid alarm teleports
+  // the fix across Kyiv, the camera follows it, the dog is judged
+  // off-screen, and the app locks out until the spoofing stops. See
+  // scratchpad/jam.mjs.
+  const offscreenHidden = hidden && !gateOpen;
   // Whether the ring is currently showing the four intents rather than
   // the current mode's own verbs. This is a MENU position, not a mode —
   // being here changes nothing outside the ring. The gate is the one
@@ -892,9 +908,11 @@ export function Companion({
           touchAction: 'manipulation',
           zIndex: Z.MARKER_COMPANION,
           // Off-screen (edge chip showing): hide so a beyond-horizon
-          // position can't float the dog in the sky at steep pitch.
-          visibility: hidden ? 'hidden' : 'visible',
-          pointerEvents: hidden ? 'none' : 'auto',
+          // position can't float the dog in the sky at steep pitch —
+          // except at the gate, where the dog is the whole interface.
+          // See offscreenHidden.
+          visibility: offscreenHidden ? 'hidden' : 'visible',
+          pointerEvents: offscreenHidden ? 'none' : 'auto',
         }}
       >
         {/* Pixel-art companion — 64×64 sprite scaled 2× = 128px on

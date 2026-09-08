@@ -35,6 +35,30 @@ const LERP_TAIL = 0.2;
 // out-paces a normal walker, so the dog keeps up without ever sprinting.
 const CATCHUP_M = 28;
 
+// BEYOND THIS, THE DOG DID NOT WALK — IT WAS MOVED, AND SO WERE YOU.
+//
+// Every step below is a lerp capped at HUNT_STEP_M, which is 6.7 m/s: a
+// jog. That is the right way to cross a gap a person could have opened
+// by walking. It is the wrong way to cross one that opened because the
+// GPS fix jumped — and in Kyiv the fix jumps for hours at a time, since
+// air-raid alarms come with spoofing that relocates people clean across
+// the city.
+//
+// What that cost, measured: the camera follows the new fix, the dog is
+// left kilometres behind, and at 6.7 m/s it can never catch up. MapLibre
+// hides a marker that far beyond the horizon, and the gate's question and
+// its four buttons are children of that marker — so the app hid the HUD
+// and the tab bar for a gate that could no longer draw, leaving a bare
+// map with no controls at all and no way back. It does not self-heal:
+// the dog is still walking home when the alarm ends.
+//
+// 300m because the gap has to be bigger than anything a real walk can
+// open between ticks (the walker speed is capped at 30 m/s, so ~9m) and
+// smaller than the viewport, so the dog is always on screen to be tapped.
+// The same snap covers the honest cases too — coming back to a
+// backgrounded tab, a fix reacquired after a tunnel.
+const TELEPORT_M = 300;
+
 // A dog can never be slower than the person it's walking with. Both step
 // caps above are absolute — IDLE is 1.8 m/s and even a full run is 6.7 —
 // so anyone moving faster than that left the dog permanently trailing,
@@ -204,6 +228,16 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
     }
     lastSampleRef.current = { pos: userPos, at: nowSample };
 
+    // SNAP ON THE FIX, NOT ON THE NEXT TICK. The camera moves the moment
+    // a new position arrives; the tick below runs at most every 300ms. A
+    // dog that waits for the tick to catch up spends that gap off-screen,
+    // and under a fix arriving every 40ms it is off-screen more often
+    // than on — measured as the gate flickering in and out rather than
+    // holding. Doing it here as well costs one distance check per fix.
+    setPos((prev) =>
+      !prev || distanceMeters(prev, userPos) > TELEPORT_M ? userPos : prev,
+    );
+
     const id = setInterval(() => {
       const {
         menuOpen,
@@ -224,7 +258,14 @@ export function useCompanion(userPos: LatLng | null, enabled = true): LatLng | n
       // never renders, so the question would have hung over an empty
       // map with no dog and no ring to answer it. Seed the position on
       // the user first, then freeze.
-      setPos((prev) => prev ?? userPos);
+      // …and the same line snaps the dog back when the fix has teleported
+      // (see TELEPORT_M). It sits ABOVE the menuOpen freeze deliberately:
+      // the gate holds the menu open, so a snap below this line would be
+      // skipped in exactly the state where being unable to draw the dog
+      // locks the whole app out.
+      setPos((prev) =>
+        !prev || distanceMeters(prev, userPos) > TELEPORT_M ? userPos : prev,
+      );
       if (menuOpen) return;
 
       const now = Date.now();
