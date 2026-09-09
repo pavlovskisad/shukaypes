@@ -139,7 +139,7 @@ function viewportBand(): { top: number; bottom: number } {
 // the text.
 const MAP_GESTURE_EVENTS = ['touchstart', 'touchmove', 'touchend', 'pointerdown', 'mousedown', 'wheel'];
 
-export type LoreMoreSource = Pick<LoreRef, 'detail' | 'wikipediaTitle' | 'sourceLang'>;
+export type LoreMoreSource = Pick<LoreRef, 'detail' | 'wikipediaTitle' | 'sourceLang' | 'position'>;
 
 type Tone = 'paper' | 'voice';
 
@@ -232,6 +232,16 @@ export function LoreMore({
   // clear the tab bar; the top clears the HUD if the bubble is short
   // enough for both — and with the ceiling above it always is, bar the
   // MORE_MIN_PX floor on a tiny screen, where the top is what gives.
+  //
+  // The shift is applied by PLACING THE LANDMARK, not by panning the
+  // map by pixels. The map is pitched, and on a pitched map a pan of N
+  // screen px moves a point on the ground by more than N near the
+  // bottom of the screen and less near the horizon — so a panBy of the
+  // measured shift overshot, the second pass corrected part of it, and
+  // the bubble was left short by a quarter of the shift, or bouncing
+  // when the passes fought the map's own ease. easeTo with a centre and
+  // an offset solves for the camera that puts that coordinate at that
+  // screen point, perspective and all, in one move.
   useEffect(() => {
     if (!open || !map || maxMore === null) return;
     let raf = 0;
@@ -259,8 +269,17 @@ export function LoreMore({
       else if (dMax < 0) d = dMax; // foot hidden
       if (Math.abs(d) < MIN_PAN_PX) return;
       passes++;
-      // Negative y moves the camera up, which moves the marker down.
-      map.panBy([0, -d], { duration: PAN_MS });
+      // Where the landmark's own point is on screen now, and where it
+      // has to be: the same shift, applied to the anchor the whole
+      // marker hangs from. `offset` is measured from the container's
+      // centre.
+      const anchor = map.project([lore.position.lng, lore.position.lat]);
+      const containerH = map.getContainer().clientHeight;
+      map.easeTo({
+        center: [lore.position.lng, lore.position.lat],
+        offset: [anchor.x - map.getContainer().clientWidth / 2, anchor.y + d - containerH / 2],
+        duration: PAN_MS,
+      });
       if (passes < MAX_PASSES) map.once('moveend', schedule);
     };
     const schedule = () => {
@@ -274,7 +293,7 @@ export function LoreMore({
       if (raf) cancelAnimationFrame(raf);
       map.off('moveend', schedule);
     };
-  }, [open, maxMore, extract, loading, map]);
+  }, [open, maxMore, extract, loading, map, lore.position.lng, lore.position.lat]);
 
   // `loading` is deliberately NOT a dependency: setting it inside the
   // effect would re-run the effect, whose cleanup would then abandon the
