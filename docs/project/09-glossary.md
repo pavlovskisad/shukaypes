@@ -190,13 +190,15 @@ and a "let's go here" button. Alive and unrelated to sniff mode.
 and on a walk stop alike (`LoreMore.tsx`). Opens the dog's longer telling
 (`kyiv_lore.detail`, instant, offline), then the Wikipedia lead under it when
 the row has an article, with a link to the article as attribution and as the
-way to the rest. Opens as a SHEET hanging just above the tab bar, scrolling
-inside itself, with the sniff bubble's "ходімо сюди" pinned at its foot;
-the bubble keeps only what always fits (title, one-liner, heart, the
-toggle) and the map pans so it sits between the HUD and the sheet. It used
-to grow the bubble in place and pan to fit, which cannot work once the
-text is taller than the screen: a long detail put the title under the HUD
-or the button under the tab bar, whichever edge the pan favoured.
+way to the rest. Grows in place under the story — one piece of paper — but
+the grown part is capped at what the strip between the HUD and the tab bar
+has left once the title, story, toggle and "ходімо сюди" have taken theirs,
+and scrolls inside itself past that, with a fade over the last lines while
+there is more below. Its touch and wheel events are stopped with native
+listeners so the map under it does not pan. The map pans once so the whole
+bubble sits in the strip. An uncapped bubble could not be fitted by any pan
+once the text was taller than the screen, and a separate sheet fitted but
+read as two things.
 
 **Favourite place** — a `kyiv_lore` landmark the walker hearted (♡ in the
 corner of the sniff bubble or a walk-stop bubble; `LoreHeart` in

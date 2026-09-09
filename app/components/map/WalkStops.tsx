@@ -21,7 +21,7 @@ import { distanceMeters } from '../../utils/geo';
 // pairing the product reference uses, and the reason a tour reads as a
 // route WITH stops rather than as a line among some pins. Tap one and
 // the dog says its sentence; tap "ще" inside that and the longer telling
-// and the Wikipedia lead open in a sheet above the tab bar (LoreMore.tsx).
+// and the Wikipedia lead open under it (LoreMore.tsx).
 //
 // ONE OPEN AT A TIME, held in the store rather than here: the walk-start
 // list also opens stops (tapping a row flies the camera to it and expands
