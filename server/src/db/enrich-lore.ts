@@ -105,6 +105,7 @@ import {
   firstNonCaseDiff,
   onlyCaseDiffers,
   parseCased,
+  artworkTitle,
   parseTitle,
   parseWriter,
   TITLE_OUTPUT_FORMAT,
@@ -742,14 +743,43 @@ async function phaseTitle(args: Args): Promise<void> {
       ),
     )
     .orderBy(schema.kyivLore.id);
-  // Rows a title can help: named for a person, or a memorial by its own
-  // facts. A church or a museum is already named for what it is.
+  // Artworks first, and without a model: a wall with a name is a mural
+  // or street art, and OSM's artwork_type says which. "BB King" told
+  // the walker nothing about what it was; «Мурал «BB King»» does, and
+  // nothing in it was made up. Names that already say what they are
+  // ("Мурал Караваєву", "Графіті") are kept.
+  const artworks = stored
+    .filter((r) => r.category === 'artwork')
+    .slice(0, args.limit || undefined);
+  let artWritten = 0;
+  let artKept = 0;
+  console.log(`\n▶ title — ${artworks.length} artworks without a title`);
+  for (const row of artworks) {
+    const title = artworkTitle(row.name, row.facts?.kind);
+    if (!title) {
+      artKept++;
+      continue;
+    }
+    if (!args.apply && artWritten < 25) console.log(`  [dry] ${row.name} → ${title}`);
+    if (args.apply) {
+      await db.update(schema.kyivLore).set({ title }).where(eq(schema.kyivLore.id, row.id));
+    }
+    artWritten++;
+  }
+  console.log(
+    `  ${args.apply ? '✓' : '(dry)'} artworks: ${artWritten} ${args.apply ? 'written' : 'would be written'} from their kind, ${artKept} already say what they are`,
+  );
+
+  // Then the rows a model can help: named for a person, or a memorial
+  // by its own facts. A church or a museum is already named for what it
+  // is.
   const rows = stored
     .filter(
       (r) =>
-        looksLikeProperName(r.name) ||
-        (!!r.facts?.kind?.startsWith('memorial:') &&
-          isMemorialLike({ name: r.name, nameEn: null, category: r.category })),
+        r.category !== 'artwork' &&
+        (looksLikeProperName(r.name) ||
+          (!!r.facts?.kind?.startsWith('memorial:') &&
+            isMemorialLike({ name: r.name, nameEn: null, category: r.category }))),
     )
     .slice(0, args.limit || undefined);
   console.log(`\n▶ title — ${rows.length} rows named for a person or a memorial, without a title`);
