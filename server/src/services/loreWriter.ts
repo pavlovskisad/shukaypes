@@ -192,6 +192,43 @@ export function titleKeepsName(name: string, title: string): boolean {
   return false;
 }
 
+// An artwork's title needs no model: the seed knows the row is an
+// artwork (category) and OSM usually says which kind (artwork_type),
+// so "BB King" becomes «Мурал «BB King»» from facts alone — nothing
+// to hallucinate, nothing to refuse. Without a kind the label is
+// "Стріт-арт", which is what the walker is looking at nine times out
+// of ten when a Kyiv wall has a name.
+//
+// Returns null when the name already says what it is ("Мурал
+// Караваєву", "Графіті", "Вуличне мистецтво"), or when the result
+// would run past the title cap.
+const ARTWORK_LABELS: Record<string, string> = {
+  mural: 'Мурал',
+  graffiti: 'Графіті',
+  sculpture: 'Скульптура',
+  statue: 'Статуя',
+  installation: 'Інсталяція',
+  mosaic: 'Мозаїка',
+  relief: 'Барельєф',
+  bust: 'Погруддя',
+  painting: 'Розпис',
+};
+const ARTWORK_DEFAULT_LABEL = 'Стріт-арт';
+// Stems that mean the name is already a label. "арт" alone would match
+// "Карта", hence the letter guard.
+const SAYS_WHAT_IT_IS =
+  /(?<!\p{L})(мурал|графіт|скульптур|статуя|статуї|інсталяц|мозаї|барельєф|погрудд|панно|розпис|живопис|мистецтв|арт-|арт(?!\p{L})|стріт|пам['’]ятник|монумент|фонтан|композиці)/iu;
+
+export function artworkTitle(name: string, kind: string | null | undefined): string | null {
+  const core = name.trim().replace(/^["'«“„]+|["'»”“]+$/g, '').trim();
+  if (!core) return null;
+  if (SAYS_WHAT_IT_IS.test(core)) return null;
+  const type = kind?.startsWith('artwork:') ? kind.slice('artwork:'.length) : null;
+  const label = (type && ARTWORK_LABELS[type]) || ARTWORK_DEFAULT_LABEL;
+  const title = `${label} «${core}»`;
+  return title.length > TITLE_MAX_CHARS ? null : title;
+}
+
 export function parseTitle(text: string): string | null | undefined {
   const start = text.indexOf('{');
   const end = text.lastIndexOf('}');

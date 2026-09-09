@@ -14,6 +14,7 @@ import {
   parseCased,
   parseTitle,
   titleKeepsName,
+  artworkTitle,
   parseWriter,
   WRITER_OUTPUT_FORMAT,
 } from '../services/loreWriter.js';
@@ -147,6 +148,23 @@ function ok(cond: boolean, label: string, detail = ''): void {
   ok(parseTitle('{"title": null}') === null, 'null means keep the name');
   ok(parseTitle('{"title": "Погруддя Лесі Українки"}') === 'Погруддя Лесі Українки', 'a title parses');
   ok(parseTitle('nope') === undefined, 'no JSON is a miss, not a null');
+}
+
+// ---------------------------------------------------------------------
+// An artwork's title comes from its kind, and never from a model.
+// ---------------------------------------------------------------------
+{
+  ok(artworkTitle('BB King', 'artwork:mural') === 'Мурал «BB King»', 'a mural is labelled a mural');
+  ok(artworkTitle('Тризуб з набоїв', null) === 'Стріт-арт «Тризуб з набоїв»', 'no kind is street art');
+  ok(artworkTitle('Тризуб з набоїв', 'artwork:yes') === 'Стріт-арт «Тризуб з набоїв»', 'an unknown kind is street art');
+  ok(artworkTitle('Корова', 'artwork:sculpture') === 'Скульптура «Корова»', 'a sculpture is labelled');
+  ok(artworkTitle('"Квіти"', 'artwork:mural') === 'Мурал «Квіти»', 'the name\'s own quotes are not doubled');
+  ok(artworkTitle('Мурал Караваєву', 'artwork:mural') === null, 'a name that says mural is kept');
+  ok(artworkTitle('Графіті', 'artwork:graffiti') === null, 'a bare label is kept');
+  ok(artworkTitle('Вуличне мистецтво', null) === null, 'a name that says art is kept');
+  ok(artworkTitle('Арт-об\'єкт "Серце"', null) === null, 'арт- is a label');
+  ok(artworkTitle('Карта Києва', 'artwork:mural') === 'Мурал «Карта Києва»', 'арт inside a word is not a label');
+  ok(artworkTitle('Не втрачай свою юність дорослішаючи', 'artwork:mural') === 'Мурал «Не втрачай свою юність дорослішаючи»', 'a sentence-name is quoted whole');
 }
 
 if (failures > 0) {
