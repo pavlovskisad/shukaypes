@@ -25,8 +25,9 @@ import { HandDrawnFrame } from '../ui/HandDrawn';
 // A semi-transparent crayon-blue circle expands from the press point
 // over ~2.5 s. When the hold completes, the dog picks one nearby
 // kyiv_lore entry and surfaces it: a marker at its position, a
-// short story bubble with a "read more" under it (LoreMore.tsx), and
-// a "let's go here" button that fires the normal walking-route flow.
+// short story bubble with a "read more" under it that opens a sheet
+// above the tab bar (LoreMore.tsx), and a "let's go here" button that
+// fires the normal walking-route flow.
 //
 // Re-press anywhere → new sniff, new pick. Past finds are added to
 // excludeIds so the dog keeps surfacing new things within the
@@ -108,7 +109,10 @@ export function SniffPress() {
   const [discovered, setDiscovered] = useState<DiscoveredLore | null>(null);
   const [routing, setRouting] = useState(false);
   // Read-more state lives in LoreMore, keyed by the discovery's id so a
-  // new find never inherits the last one's expanded article.
+  // new find never inherits the last one's expanded article. Only
+  // whether its sheet is open is mirrored here, because the walk
+  // button moves into the sheet's foot while it is.
+  const [moreOpen, setMoreOpen] = useState(false);
   // Mirror of the press position for the React tree. While set, a
   // "sniffing…" bubble sits above the press point so the gesture
   // reads as in-progress rather than as nothing happening. Stays up
@@ -471,6 +475,45 @@ export function SniffPress() {
     return <SniffingBubble position={sniffingAt} />;
   }
   if (!discovered) return null;
+  // The walk button. Under the bubble while the story is folded; pinned
+  // at the foot of the read-more sheet while it is open, so it is never
+  // covered by the sheet and never under the tab bar.
+  const goHereButton =
+    discovered.id !== '__none__' ? (
+      <div
+        role="button"
+        onClick={(e) => {
+          e.stopPropagation();
+          playPop(e.currentTarget);
+          void goHere();
+        }}
+        style={{
+          cursor: 'pointer',
+          // Bigger CTA pill to match the rest of the action
+          // buttons across the app — padding 6/14 → 10/18,
+          // type 12 → 14.
+          padding: '10px 18px',
+          // Ink, not sniff-blue. This one survived the first pass
+          // because it lives on a map marker rather than in a modal,
+          // but it is a button, and blue here means the circle and
+          // the dot below it — the place being pointed at — not the
+          // thing you tap.
+          background: INK,
+          color: '#ffffff',
+          borderRadius: R.button,
+          // Ink on ink — kept for the height, never seen.
+          border: SURFACE.hair,
+          fontFamily: SYSTEM_FONT,
+          fontSize: TYPE.small,
+          fontWeight: 700,
+          boxShadow: SURFACE.shadow,
+          userSelect: 'none',
+          opacity: routing ? 0.6 : 1,
+        }}
+      >
+        {routing ? t.sniff.sniffingRoute : t.sniff.letsGoHere}
+      </div>
+    ) : null;
   return (
     <MapLibreMarker position={discovered.position} anchor="bottom" zIndex={Z.HUD_SNIFF_BUBBLE}>
       <div
@@ -518,47 +561,16 @@ export function SniffPress() {
           </div>
           <div>{discovered.story}</div>
           {discovered.id !== '__none__' ? (
-            <LoreMore key={discovered.id} lore={discovered} tone="paper" />
+            <LoreMore
+              key={discovered.id}
+              lore={discovered}
+              tone="paper"
+              foot={goHereButton}
+              onOpenChange={setMoreOpen}
+            />
           ) : null}
         </div>
-        {discovered.id !== '__none__' ? (
-          <div
-            role="button"
-            // The lowest thing in the bubble that has to stay clear of
-            // the tab bar — LoreMore measures it when it pans the map.
-            data-lore-foot=""
-            onClick={(e) => {
-              e.stopPropagation();
-              playPop(e.currentTarget);
-              void goHere();
-            }}
-            style={{
-              cursor: 'pointer',
-              // Bigger CTA pill to match the rest of the action
-              // buttons across the app — padding 6/14 → 10/18,
-              // type 12 → 14.
-              padding: '10px 18px',
-              // Ink, not sniff-blue. This one survived the first pass
-              // because it lives on a map marker rather than in a modal,
-              // but it is a button, and blue here means the circle and
-              // the dot below it — the place being pointed at — not the
-              // thing you tap.
-              background: INK,
-              color: '#ffffff',
-              borderRadius: R.button,
-              // Ink on ink — kept for the height, never seen.
-              border: SURFACE.hair,
-              fontFamily: SYSTEM_FONT,
-              fontSize: TYPE.small,
-              fontWeight: 700,
-              boxShadow: SURFACE.shadow,
-              userSelect: 'none',
-              opacity: routing ? 0.6 : 1,
-            }}
-          >
-            {routing ? t.sniff.sniffingRoute : t.sniff.letsGoHere}
-          </div>
-        ) : null}
+        {!moreOpen ? goHereButton : null}
         {/* Small dot anchoring the bubble to the lat/lng. Round so it
             reads as a "place marker" without competing with the dog. */}
         <div

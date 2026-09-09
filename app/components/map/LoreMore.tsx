@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { useMaplibreMap } from './MapContext';
 import {
   clampExtract,
@@ -7,8 +8,13 @@ import {
 } from '../../services/wikipedia';
 import type { LoreRef } from '../../services/api';
 import { useGameStore } from '../../stores/gameStore';
+import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
+import { INK, SURFACE } from '../../constants/surface';
 import { TYPE } from '../../constants/type';
+import { VOICE } from '../../constants/voice';
+import { Z } from '../../constants/z';
+import { HandDrawnFrame } from '../ui/HandDrawn';
 import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 
@@ -17,47 +23,56 @@ import { useStrings } from '../../i18n/useStrings';
 // shown — the sniff-press bubble and a walk stop — so the two can't
 // drift on what "more" means.
 //
-// What's behind the button, in the order it appears:
+// "More" opens a SHEET, not a taller bubble. It used to grow the bubble
+// in place and pan the map to fit it, and for a short detail that was
+// fine; for a long one — four sentences, a Wikipedia lead, the walk
+// button under it — the bubble was taller than the strip of screen
+// between the HUD and the tab bar, and no pan can fit a thing taller
+// than the window. The title went under the HUD or the button went
+// under the tab bar, and which one depended on which edge the pan
+// favoured. A map marker anchored to a point cannot hold that much
+// text.
+//
+// So the bubble keeps what always fits — title, one-liner, heart, this
+// toggle — and the sheet slides up from above the tab bar with the rest
+// in it, scrolling inside itself. It is a fixed overlay on the page,
+// not part of the marker, so a finger scrolling it never reaches the
+// map. The old "nothing here scrolls" rule was about scroll boxes
+// inside markers, and this is not one.
+//
+// What is in the sheet, in order:
 //
 //   1. The dog's own longer telling (kyiv_lore.detail), when the row has
-//      one. Already on the phone, so it shows the instant the button is
-//      tapped — no spinner, no network, no Wikipedia dependency.
+//      one. Already on the phone, so it shows the instant the sheet
+//      opens — no spinner, no network, no Wikipedia dependency.
 //   2. The Wikipedia lead, when the row has an article. Fetched LAZILY
-//      on the first expand — most landmarks the walker glances at and
-//      moves on from. Shown in full when it is all there is; clamped to
-//      a few lines under a detail, where it is a second opinion rather
-//      than the story, and the link below it is the way to the rest.
-//      Nothing here scrolls: a scroll box inside a map marker fights
-//      the map for the finger and reads as text cut off for no reason.
+//      on the first open — most landmarks the walker glances at and
+//      moves on from. Shown in full now that there is room to scroll;
+//      the clamp to three lines existed only because the bubble could
+//      not afford more.
 //   3. A link to the article itself. The lead is CC-BY-SA text shown
 //      as-is, and the link is its attribution; it is also where the
 //      walker who wants the whole story goes.
+//   4. The caller's foot, when it passes one: the sniff bubble's
+//      "ходімо сюди", pinned under the text so it never scrolls away
+//      and never sits under the tab bar.
 //
-// A row with neither gets the same in-voice shrug the button always
-// gave, so the affordance never reads as broken. The shrug is meant to
-// be rare now: enrich-lore.ts exists to make it so.
+// A row with neither telling nor article gets the same in-voice shrug
+// the button always gave, so the affordance never reads as broken. The
+// shrug is meant to be rare now: enrich-lore.ts exists to make it so.
 //
 // Owns its own open/fetched state. Callers reset it by remounting —
 // `key={lore.id}` on a bubble that changes landmark, or unmounting the
 // bubble when it closes — rather than by reaching in.
 
-// The bubble is bottom-anchored on its marker, so "more" grows UPWARD —
-// and on a phone the two-to-four sentences plus the Wikipedia lead grow
-// straight under the HUD row, with the top of the text clipped behind
-// the mode buttons. When the block opens (and again when the lead
-// arrives and the block gets taller) the map pans just far enough to
-// bring the bubble's top edge below the HUD, without pushing the
-// bubble's foot — the "ходімо сюди" button on a sniff, the bubble
-// itself on a walk stop — into the tab bar.
-//
-// Both edges are MEASURED from the DOM: the HUD strip carries
-// id="map-hud", the tab bar is the page's role="tablist". Two earlier
-// cuts guessed them as constants (120 then 200 px from the container's
-// bottom) and got it wrong both ways — first the button sat on the tab
-// bar, then the bubble stopped short of the HUD with air to spare
-// below, because Safari's own bar changes where the container ends and
-// the constant could not know. The constants remain only as fallbacks
-// for a DOM that has neither element.
+// The bubble still has to be seen above the sheet: while the sheet is
+// open the map pans just enough to put the bubble between the HUD and
+// the sheet's top edge. Both edges are MEASURED from the DOM: the HUD
+// strip carries id="map-hud", the tab bar is the page's role="tablist".
+// Two earlier cuts guessed them as constants and got it wrong both
+// ways, because Safari's own bar changes where the container ends and
+// a constant cannot know. The constants remain only as fallbacks for a
+// DOM that has neither element.
 //
 // The gap kept on each side is the bubble's own rhythm: the same S.s
 // that separates the bubble from its button.
@@ -67,6 +82,18 @@ const FALLBACK_BOTTOM_PX = 200;
 // Below this the pan is a twitch, not a fix.
 const MIN_PAN_PX = 4;
 const PAN_MS = 320;
+// How many times one trigger may re-measure and pan again: the second
+// pass catches a first pan measured against a frame that moved under
+// it; a third would be chasing sub-pixel noise.
+const MAX_PASSES = 2;
+
+// The sheet never shrinks below this, whatever the bubble above it
+// needs — on a very short viewport the bubble's top may go under the
+// HUD, but the text stays readable and the button stays reachable.
+const SHEET_MIN_PX = 180;
+const SHEET_MAX_WIDTH = 460;
+const SHEET_SIDE_PX = 10;
+const SHEET_ANIM_MS = 260;
 
 // The tab bar: the widest visible tablist on the page. There is one,
 // but a hidden or zero-size one from another navigator must not win.
@@ -80,56 +107,86 @@ function tabBarRect(): DOMRect | null {
   return best;
 }
 
-// Where the bubble may sit, in CSS px from the top of the map container.
-function screenBand(container: DOMRect): { top: number; bottom: number } {
+// The strip of viewport between the HUD and the tab bar, in viewport
+// px (what getBoundingClientRect and position: fixed both speak).
+function viewportBand(): { top: number; bottom: number } {
   const hud = document.getElementById('map-hud')?.getBoundingClientRect();
   const tabs = tabBarRect();
   return {
-    top: (hud ? hud.bottom - container.top : FALLBACK_TOP_PX) + EDGE_GAP_PX,
-    bottom: (tabs ? tabs.top - container.top : container.height - FALLBACK_BOTTOM_PX) - EDGE_GAP_PX,
+    top: (hud ? hud.bottom : FALLBACK_TOP_PX) + EDGE_GAP_PX,
+    bottom: (tabs ? tabs.top : window.innerHeight - FALLBACK_BOTTOM_PX) - EDGE_GAP_PX,
   };
 }
 
-// How many times one open may re-measure and pan again. The second
-// pass catches a first pan that was measured against a bubble which
-// grew afterwards; a third would be chasing sub-pixel noise.
-const MAX_PASSES = 2;
-
-// How much of the Wikipedia lead shows under a detail. Three lines is
-// enough to see it agrees with the dog and to want the link.
-const EXTRACT_LINES_UNDER_DETAIL = 3;
-
-export type LoreMoreSource = Pick<LoreRef, 'detail' | 'wikipediaTitle' | 'sourceLang'>;
+export type LoreMoreSource = Pick<
+  LoreRef,
+  'name' | 'title' | 'detail' | 'wikipediaTitle' | 'sourceLang'
+>;
 
 type Tone = 'paper' | 'voice';
 
 export function LoreMore({
   lore,
   tone,
+  foot,
+  onOpenChange,
 }: {
   lore: LoreMoreSource;
   // The bubble this sits in: the sniff bubble is white paper, a walk
-  // stop is the dog's dark voice. Only the hairline between story and
-  // more changes.
+  // stop is the dog's dark voice. The sheet takes the same tone.
   tone: Tone;
+  // Pinned under the sheet's text — the sniff bubble's walk button.
+  foot?: ReactNode;
+  // So the caller can take its own foot out of the bubble while the
+  // sheet carries it.
+  onOpenChange?: (open: boolean) => void;
 }) {
   const t = useStrings();
   const map = useMaplibreMap();
   // The toggle is always rendered, so it is the stable handle on the
-  // marker this block lives in.
+  // bubble this block lives in.
   const toggleRef = useRef<HTMLDivElement>(null);
+  const sheetRef = useRef<HTMLDivElement>(null);
   const [open, setOpen] = useState(false);
   const [extract, setExtract] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [failed, setFailed] = useState(false);
+  // Where the sheet sits and how tall it may be, from the DOM.
+  const [layout, setLayout] = useState<{ bottom: number; maxHeight: number } | null>(null);
 
   const hasWiki = !!lore.wikipediaTitle && !!lore.sourceLang;
 
-  // Keep the expanded bubble inside the viewport. Measured after paint
-  // (rAF) because the block has to be in the DOM at its final height
-  // before it can be measured; re-run when the lead lands, since that
-  // is the second time the bubble grows. Only ever pans DOWN the screen
-  // and only on open — closing yanks nothing.
+  useEffect(() => {
+    onOpenChange?.(open);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open]);
+
+  // Size the sheet: it hangs EDGE_GAP above the tab bar and may take
+  // the band minus the bubble that has to stay visible above it.
+  // Before paint, so the first frame is already the right shape; again
+  // on resize, since Safari's bar comes and goes.
+  useLayoutEffect(() => {
+    if (!open) {
+      setLayout(null);
+      return;
+    }
+    const compute = () => {
+      const band = viewportBand();
+      const bubbleH = toggleRef.current?.parentElement?.getBoundingClientRect().height ?? 0;
+      const available = band.bottom - band.top;
+      const maxHeight = Math.max(SHEET_MIN_PX, Math.min(available, available - bubbleH - EDGE_GAP_PX));
+      setLayout({ bottom: window.innerHeight - band.bottom, maxHeight });
+    };
+    compute();
+    window.addEventListener('resize', compute);
+    return () => window.removeEventListener('resize', compute);
+  }, [open]);
+
+  // Keep the bubble in view above the sheet. Measured after paint
+  // (rAF) because the sheet has to be in the DOM at its final height
+  // before it can be measured; re-run whenever the sheet or the bubble
+  // changes size — the lead landing is the usual reason — through a
+  // ResizeObserver rather than a fixed list of triggers.
   //
   // If the camera is still moving — the sniff's own ease onto the find
   // runs 600 ms, a walk stop's 450 ms, and a quick thumb taps "ще"
@@ -138,38 +195,29 @@ export function LoreMore({
   // however far the camera still had to go. That was the "sometimes it
   // doesn't snap": wait for moveend, then measure.
   //
-  // The shift is chosen in BOTH directions, foot first. An earlier cut
-  // only ever panned down, and a pan measured against a shorter bubble
-  // — before the lead arrived and grew it — could leave the button
-  // under the tab bar with nothing to bring it back. Now: the foot
-  // must clear the tab bar; the top clears the HUD if the bubble is
-  // short enough for both; when it is not, the top is what gives. And
-  // after a pan lands, one more measurement, in case the bubble grew
-  // while the camera was moving.
+  // The shift is chosen in BOTH directions, foot first: the bubble's
+  // bottom must clear the sheet; its top clears the HUD if the bubble
+  // is short enough for both; when it is not, the top is what gives.
   useEffect(() => {
-    if (!open || !map) return;
+    if (!open || !map || !layout) return;
     let raf = 0;
     let cancelled = false;
     let passes = 0;
     const measure = () => {
       if (cancelled) return;
       const bubbleEl = toggleRef.current?.parentElement;
-      const markerEl = toggleRef.current?.closest('.maplibregl-marker');
-      if (!bubbleEl || !markerEl) return;
-      const container = map.getContainer().getBoundingClientRect();
-      const band = screenBand(container);
-      // The bubble is the top of the marker; the foot is the button
-      // below it on a sniff, or the bubble itself on a walk stop.
-      const footEl = markerEl.querySelector('[data-lore-foot]') ?? bubbleEl;
-      const top = bubbleEl.getBoundingClientRect().top - container.top;
-      const foot = footEl.getBoundingClientRect().bottom - container.top;
-      // Shift the marker DOWN the screen by at least dMin (top clear of
-      // the HUD) and at most dMax (foot clear of the tab bar). Negative
+      const sheetEl = sheetRef.current;
+      if (!bubbleEl || !sheetEl) return;
+      const band = viewportBand();
+      const bubble = bubbleEl.getBoundingClientRect();
+      const sheetTop = sheetEl.getBoundingClientRect().top - EDGE_GAP_PX;
+      // Shift the bubble DOWN the screen by at least dMin (top clear of
+      // the HUD) and at most dMax (bottom clear of the sheet). Negative
       // values move it up.
-      const dMin = band.top - top;
-      const dMax = band.bottom - foot;
+      const dMin = band.top - bubble.top;
+      const dMax = sheetTop - bubble.bottom;
       let d = 0;
-      if (dMax < dMin) d = dMax; // taller than the band: keep the foot
+      if (dMax < dMin) d = dMax; // taller than the room: keep the foot
       else if (dMin > 0) d = dMin; // top hidden
       else if (dMax < 0) d = dMax; // foot hidden
       if (Math.abs(d) < MIN_PAN_PX) return;
@@ -179,20 +227,33 @@ export function LoreMore({
       if (passes < MAX_PASSES) map.once('moveend', schedule);
     };
     const schedule = () => {
+      if (raf) cancelAnimationFrame(raf);
       raf = requestAnimationFrame(measure);
     };
-    if (map.isMoving()) map.once('moveend', schedule);
-    else schedule();
+    const trigger = () => {
+      passes = 0;
+      if (map.isMoving()) map.once('moveend', schedule);
+      else schedule();
+    };
+    trigger();
+    let observer: ResizeObserver | null = null;
+    if (typeof ResizeObserver !== 'undefined') {
+      observer = new ResizeObserver(trigger);
+      if (sheetRef.current) observer.observe(sheetRef.current);
+      const bubbleEl = toggleRef.current?.parentElement;
+      if (bubbleEl) observer.observe(bubbleEl);
+    }
     return () => {
       cancelled = true;
       if (raf) cancelAnimationFrame(raf);
       map.off('moveend', schedule);
+      observer?.disconnect();
     };
-  }, [open, extract, loading, map]);
+  }, [open, layout, map]);
 
   // `loading` is deliberately NOT a dependency: setting it inside the
   // effect would re-run the effect, whose cleanup would then abandon the
-  // very fetch it had just started. Closing the block mid-fetch drops the
+  // very fetch it had just started. Closing the sheet mid-fetch drops the
   // result; reopening asks again, which Wikimedia's cache makes cheap.
   useEffect(() => {
     if (!open || !hasWiki || extract || failed) return;
@@ -210,75 +271,173 @@ export function LoreMore({
     };
   }, [open, hasWiki, extract, failed, lore.sourceLang, lore.wikipediaTitle]);
 
-  const hairline =
-    tone === 'paper' ? '1px solid rgba(0,0,0,0.12)' : '1px solid rgba(255,255,255,0.12)';
   // Nothing to show at all — neither our telling nor an article that
   // answered.
   const empty = !lore.detail && (!hasWiki || failed);
+  const paper = tone === 'paper';
+  const hairline = paper ? '1px solid rgba(0,0,0,0.12)' : '1px solid rgba(255,255,255,0.12)';
+
+  const sheet =
+    open && layout && typeof document !== 'undefined'
+      ? createPortal(
+          <div
+            ref={sheetRef}
+            role="dialog"
+            aria-label={lore.title ?? lore.name}
+            onClick={(e) => e.stopPropagation()}
+            style={{
+              position: 'fixed',
+              left: SHEET_SIDE_PX,
+              right: SHEET_SIDE_PX,
+              bottom: layout.bottom,
+              margin: '0 auto',
+              maxWidth: SHEET_MAX_WIDTH,
+              maxHeight: layout.maxHeight,
+              boxSizing: 'border-box',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              borderRadius: R.card,
+              background: paper ? SURFACE.fill : VOICE.background,
+              color: paper ? INK : VOICE.color,
+              border: paper ? undefined : VOICE.border,
+              boxShadow: SURFACE.lift,
+              fontFamily: VOICE.fontFamily,
+              fontSize: TYPE.small,
+              lineHeight: 1.45,
+              zIndex: Z.MODAL_MAP,
+              animation: `lore-sheet-in ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1)`,
+            }}
+          >
+            {paper ? <HandDrawnFrame radius={R.card} /> : null}
+            {/* Title on the left, the close cross on the right. The
+                bubble above still shows the name, but the sheet can
+                cover it on a short screen, and a sheet with no title
+                is a wall of text with no owner. */}
+            <div
+              style={{
+                display: 'flex',
+                alignItems: 'flex-start',
+                gap: S.s,
+                padding: `${S.m}px ${S.m}px 0 ${S.l}px`,
+                flexShrink: 0,
+              }}
+            >
+              <div
+                style={{
+                  flexGrow: 1,
+                  fontSize: TYPE.body,
+                  fontWeight: 700,
+                  lineHeight: 1.3,
+                  paddingTop: 6,
+                }}
+              >
+                {lore.title ?? lore.name}
+              </div>
+              <div
+                role="button"
+                aria-label={t.modals.common.close}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  playPop(e.currentTarget);
+                  setOpen(false);
+                }}
+                style={{
+                  width: 36,
+                  height: 36,
+                  flexShrink: 0,
+                  borderRadius: R.pill,
+                  position: 'relative',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  userSelect: 'none',
+                  fontSize: TYPE.display,
+                  lineHeight: 1,
+                  background: paper ? SURFACE.fill : 'rgba(255,255,255,0.1)',
+                  boxShadow: paper ? SURFACE.chip : undefined,
+                }}
+              >
+                {paper ? <HandDrawnFrame radius={R.pill} /> : null}
+                ×
+              </div>
+            </div>
+            {/* The text. Scrolls inside the sheet; the page and the map
+                under it never move with it. */}
+            <div
+              style={{
+                flexGrow: 1,
+                minHeight: 0,
+                overflowY: 'auto',
+                WebkitOverflowScrolling: 'touch',
+                overscrollBehavior: 'contain',
+                padding: `${S.s}px ${S.l}px ${S.m}px`,
+                opacity: 0.9,
+                textAlign: 'left',
+                whiteSpace: 'pre-line',
+                display: 'flex',
+                flexDirection: 'column',
+                gap: S.s,
+              }}
+            >
+              {lore.detail ? <div>{lore.detail}</div> : null}
+              {hasWiki && loading ? (
+                <div style={{ opacity: 0.6, fontStyle: 'italic' }}>{t.sniff.opening}</div>
+              ) : null}
+              {extract ? (
+                <div style={lore.detail ? { opacity: 0.8, borderTop: hairline, paddingTop: S.s } : undefined}>
+                  {clampExtract(extract)}
+                </div>
+              ) : null}
+              {empty ? <div>{t.sniff.nothingMore}</div> : null}
+              {hasWiki && !failed ? (
+                <a
+                  href={wikipediaArticleUrl(lore.sourceLang!, lore.wikipediaTitle!)}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => e.stopPropagation()}
+                  style={{
+                    alignSelf: 'flex-start',
+                    color: 'inherit',
+                    fontSize: TYPE.caption,
+                    fontWeight: 700,
+                    textDecoration: 'underline',
+                    textUnderlineOffset: 2,
+                    opacity: 0.8,
+                  }}
+                >
+                  {t.sniff.wikipedia}
+                </a>
+              ) : null}
+            </div>
+            {foot ? (
+              <div
+                style={{
+                  flexShrink: 0,
+                  display: 'flex',
+                  justifyContent: 'center',
+                  padding: `${S.s}px ${S.l}px ${S.m}px`,
+                  borderTop: hairline,
+                }}
+              >
+                {foot}
+              </div>
+            ) : null}
+            <style>{`
+              @keyframes lore-sheet-in {
+                from { transform: translateY(calc(100% + 24px)); }
+                to { transform: translateY(0); }
+              }
+            `}</style>
+          </div>,
+          document.body,
+        )
+      : null;
 
   return (
     <>
-      {open ? (
-        <div
-          style={{
-            marginTop: S.s,
-            paddingTop: S.s,
-            borderTop: hairline,
-            fontSize: TYPE.small,
-            lineHeight: 1.45,
-            opacity: 0.85,
-            textAlign: 'left',
-            whiteSpace: 'pre-line',
-            display: 'flex',
-            flexDirection: 'column',
-            gap: S.xs,
-          }}
-        >
-          {lore.detail ? <div>{lore.detail}</div> : null}
-          {hasWiki && loading ? (
-            <div style={{ opacity: 0.6, fontStyle: 'italic' }}>{t.sniff.opening}</div>
-          ) : null}
-          {extract ? (
-            <div
-              style={
-                lore.detail
-                  ? {
-                      opacity: 0.8,
-                      // Clamped, not scrolled — see the header. The
-                      // link right under it is the rest.
-                      display: '-webkit-box',
-                      WebkitBoxOrient: 'vertical',
-                      WebkitLineClamp: EXTRACT_LINES_UNDER_DETAIL,
-                      overflow: 'hidden',
-                    }
-                  : undefined
-              }
-            >
-              {clampExtract(extract)}
-            </div>
-          ) : null}
-          {empty ? <div>{t.sniff.nothingMore}</div> : null}
-          {hasWiki && !failed ? (
-            <a
-              href={wikipediaArticleUrl(lore.sourceLang!, lore.wikipediaTitle!)}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e) => e.stopPropagation()}
-              style={{
-                alignSelf: 'flex-start',
-                color: 'inherit',
-                fontSize: TYPE.caption,
-                fontWeight: 700,
-                textDecoration: 'underline',
-                textUnderlineOffset: 2,
-                opacity: 0.8,
-              }}
-            >
-              {t.sniff.wikipedia}
-            </a>
-          ) : null}
-        </div>
-      ) : null}
+      {sheet}
       <div
         ref={toggleRef}
         role="button"
