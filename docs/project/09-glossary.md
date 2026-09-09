@@ -189,11 +189,14 @@ and a "let's go here" button. Alive and unrelated to sniff mode.
 **Read more** — the "ще ▾" under a landmark's one-liner, on the sniff press
 and on a walk stop alike (`LoreMore.tsx`). Opens the dog's longer telling
 (`kyiv_lore.detail`, instant, offline), then the Wikipedia lead under it when
-the row has an article — in full when it is all there is, clamped to three
-lines under a detail — with a link to the article as attribution and as the
-way to the rest. Nothing in it scrolls: a scroll box inside a map marker
-fights the map for the finger. Opening it pans the map so the bubble clears
-the HUD without the "ходімо сюди" button touching the tab bar.
+the row has an article, with a link to the article as attribution and as the
+way to the rest. Opens as a SHEET hanging just above the tab bar, scrolling
+inside itself, with the sniff bubble's "ходімо сюди" pinned at its foot;
+the bubble keeps only what always fits (title, one-liner, heart, the
+toggle) and the map pans so it sits between the HUD and the sheet. It used
+to grow the bubble in place and pan to fit, which cannot work once the
+text is taller than the screen: a long detail put the title under the HUD
+or the button under the tab bar, whichever edge the pan favoured.
 
 **Favourite place** — a `kyiv_lore` landmark the walker hearted (♡ in the
 corner of the sniff bubble or a walk-stop bubble; `LoreHeart` in
