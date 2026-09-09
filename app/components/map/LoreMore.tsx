@@ -58,12 +58,18 @@ import { useStrings } from '../../i18n/useStrings';
 // — React's synthetic stopPropagation runs at the React root, which is
 // above the map container, too late.
 //
-// Both edges are MEASURED from the DOM: the HUD strip carries
-// id="map-hud", the tab bar is the page's role="tablist". Two earlier
-// cuts guessed them as constants and got it wrong both ways, because
+// Both edges are MEASURED from the DOM, and measured at the thing the
+// eye sees rather than at its container. The HUD's pill row carries
+// id="map-hud-row" and the quest row under it id="map-hud-quest" — the
+// strip that holds both (id="map-hud") ends under an EMPTY quest row
+// most of the time, and measuring it put the top edge a row too low,
+// so the bubble looked as if it did not fit and lost its title to the
+// HUD. The tab bar is the page's role="tab" buttons, whose top is the
+// pill's top whatever the navigator wraps them in. Earlier cuts
+// guessed both as constants and got it wrong both ways, because
 // Safari's own bar changes where the container ends and a constant
 // cannot know. The constants remain only as fallbacks for a DOM that
-// has neither element.
+// has none of these.
 //
 // The gap kept on each side is the bubble's own rhythm: the same S.s
 // that separates the bubble from its button.
@@ -82,25 +88,49 @@ const PAN_MS = 320;
 // it; a third would be chasing sub-pixel noise.
 const MAX_PASSES = 2;
 
-// The tab bar: the widest visible tablist on the page. There is one,
-// but a hidden or zero-size one from another navigator must not win.
-function tabBarRect(): DOMRect | null {
+// Where the tab bar starts: the highest top among the visible tab
+// buttons. Falls back to the widest visible tablist, then to nothing.
+function tabBarTop(): number | null {
+  let top: number | null = null;
+  for (const el of Array.from(document.querySelectorAll('[role="tab"]'))) {
+    const r = el.getBoundingClientRect();
+    if (r.height === 0) continue;
+    if (top === null || r.top < top) top = r.top;
+  }
+  if (top !== null) return top;
   let best: DOMRect | null = null;
   for (const el of Array.from(document.querySelectorAll('[role="tablist"]'))) {
     const r = el.getBoundingClientRect();
     if (r.height === 0 || r.width < 100) continue;
     if (!best || r.width > best.width) best = r;
   }
-  return best;
+  return best ? best.top : null;
+}
+
+// Where the HUD ends: the pill row's bottom, or the quest row's when
+// it is showing something. The whole strip is the last resort.
+function hudBottom(): number | null {
+  const row = document.getElementById('map-hud-row')?.getBoundingClientRect();
+  const questEl = document.getElementById('map-hud-quest');
+  // The quest row is always laid out; it counts only when something
+  // inside it has height.
+  const questContent = questEl?.firstElementChild?.firstElementChild;
+  const quest =
+    questContent && questContent.getBoundingClientRect().height > 0
+      ? questEl!.getBoundingClientRect()
+      : null;
+  if (row) return quest ? Math.max(row.bottom, quest.bottom) : row.bottom;
+  const strip = document.getElementById('map-hud')?.getBoundingClientRect();
+  return strip ? strip.bottom : null;
 }
 
 // The strip of viewport between the HUD and the tab bar, in viewport px.
 function viewportBand(): { top: number; bottom: number } {
-  const hud = document.getElementById('map-hud')?.getBoundingClientRect();
-  const tabs = tabBarRect();
+  const hud = hudBottom();
+  const tabs = tabBarTop();
   return {
-    top: (hud ? hud.bottom : FALLBACK_TOP_PX) + EDGE_GAP_PX,
-    bottom: (tabs ? tabs.top : window.innerHeight - FALLBACK_BOTTOM_PX) - EDGE_GAP_PX,
+    top: (hud ?? FALLBACK_TOP_PX) + EDGE_GAP_PX,
+    bottom: (tabs ?? window.innerHeight - FALLBACK_BOTTOM_PX) - EDGE_GAP_PX,
   };
 }
 
@@ -143,28 +173,25 @@ export function LoreMore({
   // The ceiling: the strip minus everything in the marker that is not
   // this block — the bubble's fixed part above and below it, and the
   // walk button under the bubble on a sniff. Before paint, so the first
-  // frame is already capped; again on resize, since Safari's bar comes
-  // and goes.
+  // frame is already capped. Measured ONCE per open: a first cut also
+  // re-measured on window resize, and on iOS a drag inside the box can
+  // nudge Safari's bars, which fires resize, which re-sized the bubble
+  // under the finger.
   useLayoutEffect(() => {
     if (!open) {
       setMaxMore(null);
       return;
     }
-    const compute = () => {
-      const bubbleEl = toggleRef.current?.parentElement;
-      const moreEl = moreRef.current;
-      if (!bubbleEl || !moreEl) return;
-      const markerEl = bubbleEl.closest('.maplibregl-marker');
-      const footEl = markerEl?.querySelector('[data-lore-foot]');
-      const band = viewportBand();
-      const fixed = bubbleEl.getBoundingClientRect().height - moreEl.getBoundingClientRect().height;
-      const foot = footEl ? footEl.getBoundingClientRect().height + S.s : 0;
-      const room = band.bottom - band.top - fixed - foot;
-      setMaxMore(Math.max(MORE_MIN_PX, Math.floor(room)));
-    };
-    compute();
-    window.addEventListener('resize', compute);
-    return () => window.removeEventListener('resize', compute);
+    const bubbleEl = toggleRef.current?.parentElement;
+    const moreEl = moreRef.current;
+    if (!bubbleEl || !moreEl) return;
+    const markerEl = bubbleEl.closest('.maplibregl-marker');
+    const footEl = markerEl?.querySelector('[data-lore-foot]');
+    const band = viewportBand();
+    const fixed = bubbleEl.getBoundingClientRect().height - moreEl.getBoundingClientRect().height;
+    const foot = footEl ? footEl.getBoundingClientRect().height + S.s : 0;
+    const room = band.bottom - band.top - fixed - foot;
+    setMaxMore(Math.max(MORE_MIN_PX, Math.floor(room)));
   }, [open]);
 
   // Keep the map's fingers off the text, and know whether there is more
@@ -284,8 +311,14 @@ export function LoreMore({
             ref={moreRef}
             style={{
               paddingTop: S.s,
-              // Room under the last line so it clears the fade.
-              paddingBottom: canScroll ? S.l : 0,
+              // Room under the last line so it clears the fade. Constant,
+              // not toggled with the fade: a padding that came and went
+              // as the fold was reached changed the box's height under
+              // the finger.
+              paddingBottom: S.s,
+              // The ceiling includes the padding, so the box is exactly
+              // the room it was given.
+              boxSizing: 'border-box',
               maxHeight: maxMore ?? undefined,
               overflowY: 'auto',
               WebkitOverflowScrolling: 'touch',

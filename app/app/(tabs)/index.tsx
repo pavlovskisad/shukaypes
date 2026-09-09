@@ -105,8 +105,10 @@ export default function MapScreen() {
           the bg for it — design thing). HUD itself still respects the
           top safe-area inset via `edges={['top']}` so the logo / pills
           aren't sitting under the OS status bar. */}
-      {/* nativeID → DOM id. The lore bubble measures this strip to know
-          how far down the screen it may not grow (LoreMore.tsx). */}
+      {/* nativeID → DOM id. The lore bubble measures the pill row and
+          the quest row below it to know how far down the screen it may
+          not grow (LoreMore.tsx) — not this whole strip, whose bottom
+          edge sits under an empty quest row most of the time. */}
       <SafeAreaView
         nativeID="map-hud"
         style={styles.hud}
@@ -123,7 +125,7 @@ export default function MapScreen() {
             below this container regardless of the number (see the
             portal comment on the off-screen companion chip). Its two
             real children keep their own hit areas. */}
-        <View style={styles.hudRow} pointerEvents="box-none">
+        <View style={styles.hudRow} nativeID="map-hud-row" pointerEvents="box-none">
           {/* The logo is a mode switch, so it leaves with the rest of the
               chrome while the gate is up — otherwise the one control that
               survives the question is one that answers it behind the
@@ -217,6 +219,7 @@ export default function MapScreen() {
         {/* Quest banner bubbles out in immersive (search) mode too. */}
         <View
           style={styles.questRow}
+          nativeID="map-hud-quest"
           pointerEvents={immersive ? 'none' : 'box-none'}
         >
           <div
