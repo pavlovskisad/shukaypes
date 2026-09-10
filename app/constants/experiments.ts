@@ -11,6 +11,18 @@
 // buildings themselves — the one thing the 2D approximation can't do.
 export const GAME_RENDER = true;
 
+// PAPER MAP (experiment): the walking map as a flat pen drawing — see
+// PAPER_PALETTE in map/crayonStyle.ts. Everything that carries tone comes
+// off, and that includes the two WebGL layers this flag switches off: the
+// Three.js extruded city and the ground fog it stands in are shading, and
+// a line drawing has none. Buildings are traced as footprints instead.
+//
+// It does NOT touch GAME_RENDER's other work. The building AVOIDER still
+// runs — it nudges tokens and food out of footprints, which is gameplay,
+// not render, and a token buried under a block is just as lost on a flat
+// map as on a raised one.
+export const PAPER_MAP = true;
+
 // Multiplayer presence: send `mp=1` on the map sync so the server tracks this
 // walker and returns nearby online players (real + bots), and render them as
 // other dogs on the map. Gated so prod clients (flag off) neither appear to

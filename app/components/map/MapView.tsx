@@ -51,7 +51,7 @@ import { PokeToast } from './PokeToast';
 import { LostDogCardStack, LostDogCardView } from '../ui/LostDogCardStack';
 import { DogPrompt } from './DogPrompt';
 import { createBuildingAvoider } from './buildingAvoider';
-import { GAME_RENDER, MULTIPLAYER, DOG_CAM, LOST_DOG_PINS } from '../../constants/experiments';
+import { GAME_RENDER, PAPER_MAP, MULTIPLAYER, DOG_CAM, LOST_DOG_PINS } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { LostDogModal } from '../ui/LostDogModal';
@@ -2417,7 +2417,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // exactly as it does when the layers throw at init.
         const [style, gameRender] = await Promise.all([
           fetchCrayonStyleSpec(),
-          GAME_RENDER ? loadGameRender() : Promise.resolve(null),
+          GAME_RENDER && !PAPER_MAP ? loadGameRender() : Promise.resolve(null),
         ]);
         if (cancelled || !mapContainerRef.current || mapRef.current) return;
         // Clamp center within MAX_BOUNDS — MapLibre rejects construction
@@ -2484,7 +2484,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // with MapLibre's buildings intact, so prod never shows a city with
           // no buildings. Order: ground-fog UNDER buildings UNDER labels.
           let gameOk = false;
-          if (GAME_RENDER && gameRender) {
+          if (GAME_RENDER && !PAPER_MAP && gameRender) {
             try {
               const beforeId = firstSymbolLayerId(map);
               if (!map.getLayer(GROUND_FOG_LAYER_ID)) {
@@ -2518,8 +2518,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             }
           }
           // Classic render (prod default OR game-render fallback): the
-          // screen-space depth fog over MapLibre's own buildings.
-          if (!gameOk && !map.getLayer(DEPTH_FOG_LAYER_ID)) {
+          // screen-space depth fog over MapLibre's own buildings. The paper
+          // map takes neither — a haze is the same shading the extrusions
+          // were, drawn cheaper.
+          if (!gameOk && !PAPER_MAP && !map.getLayer(DEPTH_FOG_LAYER_ID)) {
             try {
               map.addLayer(createDepthFogLayer());
             } catch (e) {
