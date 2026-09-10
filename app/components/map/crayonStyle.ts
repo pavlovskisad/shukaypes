@@ -176,17 +176,12 @@ export const PLAY_PALETTE: Palette = {
 // paper map they take no pattern at all (see the transportation branch).
 export const PAPER_PALETTE: Palette = {
   ...LIGHT_PALETTE,
-  // Parks and water keep their colour and their fill — the page is
-  // white, the ink is the drawing, and these two are the only things on
-  // it that are coloured in. Kept lighter than the walking map's own
-  // green and blue: under a pen outline a fill only has to say "this is
-  // grass, that is river", and the ink is doing the describing.
-  green: '#d9ecc2',
-  greenDark: '#c2dda4',
-  greenLight: '#ecf6de',
-  blue: '#c6e4f4',
-  blueDark: '#a8d2e8',
-  blueLight: '#e2f2fa',
+  // Parks and water keep the walking map's OWN green and blue — this
+  // palette inherits them rather than naming quieter ones. The paler
+  // pair here was reasoned from "a fill under a pen outline only has to
+  // whisper", which stopped being true the moment the outlines came off
+  // them: with no ink on their edge, the colour IS the shape, and a
+  // whisper is a shape you cannot find.
   greyRoad: '#3a3a3a',
   handDrawn: true,
   outline: '#2a2a2a',

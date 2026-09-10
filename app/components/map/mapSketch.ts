@@ -33,16 +33,19 @@
 // so it gets the same displacement and the shape stays shut.
 //
 // ---------------------------------------------------------------------
-// WHAT IS DELIBERATELY NOT BORROWED
+// ROUNDING, AND WHY IT IS SAFE AT THIS SCALE
 //
-// HandDrawn runs its wobbled points through centripetal Catmull-Rom, so
-// a card's corners come out round. This does not, and that is a decision
-// rather than a shortcut: a building's corner is a REAL corner — the
-// wall turns there — and rounding every footprint in the city turns a
-// street of blocks into a street of lozenges. The map wants the bow in
-// the straight run, not the rounding at the turn. Points are resampled
-// close enough together (STEP_PX) that the field itself carries the
-// curve.
+// HandDrawn runs its wobbled points through centripetal Catmull-Rom so a
+// card's corners come out round, and the city gets the same treatment.
+// The worry was that a building's corner is a REAL corner — the wall
+// turns there — and rounding every footprint would turn a street of
+// blocks into a street of lozenges.
+//
+// What makes it safe is WHERE the curve is fitted. Not through the
+// shape's own corner points, which on a rectangle is four knots and a
+// blob; through the RESAMPLED run, whose points sit STEP_PX apart. The
+// curve then turns over one step rather than over the whole facade — a
+// corner softened by a pen nib, not a corner removed.
 
 import type maplibregl from 'maplibre-gl';
 import type {
@@ -141,10 +144,12 @@ function fieldAt(
   return (a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sy;
 }
 
-// How far apart the field's waves are, in world px. At 90 a city block
-// bows once across its face, which is the "drifts off and comes back,
-// once, over the whole run" that HandDrawn's comments argue for.
-const CELL = 90;
+// How far apart the field's waves are, in world px. At this spacing a
+// city block bows about once across its face — the "drifts off and comes
+// back, once, over the whole run" that HandDrawn's comments argue for.
+// Tightened along with the amplitude: a bigger push over the same long
+// wave slides whole facades sideways instead of bending them.
+const CELL = 72;
 
 function displace(
   x: number,
@@ -167,19 +172,40 @@ function displace(
 
 // A 400px straight road with two endpoints cannot bow: displacing two
 // points just moves the line. Long runs get intermediate points so the
-// field has something to push. 14px is the same trade HandDrawn's
-// STEP_PX makes — close enough that the curve is smooth, far enough that
-// the result is not a tremor and the vertex count stays sane.
-const STEP_PX = 14;
+// field has something to push.
+//
+// Raised from 14 when the rounding went in. Every span now emits
+// SAMPLES_PER_SPAN points instead of one, so holding the old step would
+// have tripled the vertex count of the whole city — and the vertex count
+// is what decides whether a pan hitches. Wider steps, each one curved,
+// lands at a similar density and a smoother line.
+const STEP_PX = 20;
+
+// …but a flat step is not a flat amount of rounding. The curve is fitted
+// through the RESAMPLED points, so the corner it turns is one step wide
+// — which is a soft nib on a 300px park and the entire shape on a 40px
+// shed, whose facades are shorter than one step to begin with. That is
+// the "four knots and a blob" case, arriving through the back door: at a
+// fixed step, small buildings came out as pebbles.
+//
+// So the step scales with the shape, exactly as HandDrawn's stepFor()
+// does against its own perimeter, guaranteeing enough points around the
+// smallest footprint that rounding stays proportional to it.
+const MIN_STEP_PX = 5;
+const POINTS_AROUND = 9;
+
+function stepFor(span: number): number {
+  return Math.max(MIN_STEP_PX, Math.min(STEP_PX, span / POINTS_AROUND));
+}
 
 // The wobble, in world px, on a shape big enough to carry it. HandDrawn
-// uses 1.1 on a card; the map takes more, because a card's edge is
-// 300px of one clean run where 1.1px is plainly a hand, and a city is
-// thousands of short edges where the same amount averages out into
-// looking straight.
-const AMP = 1.9;
+// uses 1.1 on a card; the map takes a good deal more, because a card's
+// edge is 300px of one clean run where 1.1px is plainly a hand, and a
+// city is thousands of short edges where the same amount averages out
+// into looking straight.
+const AMP = 2.7;
 
-// …and the same 1.9px is not the same amount on a 300px park and a
+// …and the same 2.7px is not the same amount on a 300px park and a
 // 14px shed — flat, it made HandDrawn's small discs read as potatoes,
 // and it does exactly that to a row of houses. Amplitude scales with the
 // shape down to a floor, so small footprints stay square.
@@ -195,13 +221,13 @@ type Pt = [number, number];
 
 // Resample a ring/line at STEP_PX and push every point off the true
 // line. Returns world-pixel points; the caller unprojects.
-function sketchRun(pts: Pt[], amp: number, seed: number): Pt[] {
+function sketchRun(pts: Pt[], amp: number, seed: number, step: number): Pt[] {
   const out: Pt[] = [];
   for (let i = 0; i < pts.length - 1; i++) {
     const [ax, ay] = pts[i]!;
     const [bx, by] = pts[i + 1]!;
     const len = Math.hypot(bx - ax, by - ay);
-    const steps = Math.max(1, Math.round(len / STEP_PX));
+    const steps = Math.max(1, Math.round(len / step));
     for (let s = 0; s < steps; s++) {
       const t = s / steps;
       out.push(displace(ax + (bx - ax) * t, ay + (by - ay) * t, amp, seed));
@@ -209,6 +235,58 @@ function sketchRun(pts: Pt[], amp: number, seed: number): Pt[] {
   }
   const last = pts[pts.length - 1]!;
   out.push(displace(last[0], last[1], amp, seed));
+  return out;
+}
+
+// CENTRIPETAL Catmull-Rom, evaluated into points.
+//
+// The same curve HandDrawn draws, and the same alpha, for the reason its
+// comments give: uniform handles across unevenly spaced points either
+// overshoot into a little loop or collapse and pinch, and a pinch is
+// what a corner drawn by a program looks like. HandDrawn emits SVG cubic
+// segments because a browser can draw a Bézier; MapLibre draws
+// polylines, so the same cubic is sampled instead.
+const CR_ALPHA = 0.5;
+
+// Points emitted per span. Three is where a turn stops reading as a
+// bevel; more only costs vertices, and the vertex count is the thing
+// that decides whether panning hitches.
+const SAMPLES_PER_SPAN = 3;
+
+function smooth(pts: Pt[], closed: boolean): Pt[] {
+  const n = pts.length;
+  if (n < 3) return pts;
+  const at = (i: number): Pt =>
+    pts[closed ? ((i % n) + n) % n : Math.max(0, Math.min(n - 1, i))]!;
+  const knot = (a: Pt, b: Pt) =>
+    Math.max(1e-4, Math.pow(Math.hypot(b[0] - a[0], b[1] - a[1]), CR_ALPHA));
+  const out: Pt[] = [at(0)];
+  const last = closed ? n : n - 1;
+  for (let i = 0; i < last; i++) {
+    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+    const d1 = knot(p0, p1), d2 = knot(p1, p2), d3 = knot(p2, p3);
+    const c1x =
+      (d1 * d1 * p2[0] - d2 * d2 * p0[0] + (2 * d1 * d1 + 3 * d1 * d2 + d2 * d2) * p1[0]) /
+      (3 * d1 * (d1 + d2));
+    const c1y =
+      (d1 * d1 * p2[1] - d2 * d2 * p0[1] + (2 * d1 * d1 + 3 * d1 * d2 + d2 * d2) * p1[1]) /
+      (3 * d1 * (d1 + d2));
+    const c2x =
+      (d3 * d3 * p1[0] - d2 * d2 * p3[0] + (2 * d3 * d3 + 3 * d3 * d2 + d2 * d2) * p2[0]) /
+      (3 * d3 * (d3 + d2));
+    const c2y =
+      (d3 * d3 * p1[1] - d2 * d2 * p3[1] + (2 * d3 * d3 + 3 * d3 * d2 + d2 * d2) * p2[1]) /
+      (3 * d3 * (d3 + d2));
+    for (let s = 1; s <= SAMPLES_PER_SPAN; s++) {
+      const t = s / SAMPLES_PER_SPAN;
+      const u = 1 - t;
+      const a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+      out.push([
+        a * p1[0] + b * c1x + c * c2x + d * p2[0],
+        a * p1[1] + b * c1y + c * c2y + d * p2[1],
+      ]);
+    }
+  }
   return out;
 }
 
@@ -256,13 +334,28 @@ function toLngLatRing(pts: Pt[], scale: number): number[][] {
   return out;
 }
 
-function sketchRing(coords: number[][], ctx: Ctx): number[][] | null {
+function sketchRing(
+  coords: number[][],
+  ctx: Ctx,
+  closed: boolean,
+): number[][] | null {
   if (coords.length < 2) return null;
-  const world = toWorldRing(coords, ctx.scale);
+  let world = toWorldRing(coords, ctx.scale);
   const span = spanOf(world);
   if (span < ctx.minSpan) return null;
   const amp = ctx.sizeScaled ? ampForSpan(span) : AMP;
-  return toLngLatRing(sketchRun(world, amp, ctx.seed), ctx.scale);
+  // A GeoJSON ring repeats its first point at the end. Smoothing over
+  // that duplicate fits a curve through a zero-length span — the knot
+  // floor keeps it from dividing by zero, but the segment it produces is
+  // a stub at the seam. Drop it, smooth as a genuine loop, close after.
+  if (closed && world.length > 2) {
+    const f = world[0]!;
+    const l = world[world.length - 1]!;
+    if (f[0] === l[0] && f[1] === l[1]) world = world.slice(0, -1);
+  }
+  const run = smooth(sketchRun(world, amp, ctx.seed, stepFor(span)), closed);
+  if (closed && run.length > 1) run.push(run[0]!);
+  return toLngLatRing(run, ctx.scale);
 }
 
 function sketchFeature(
@@ -271,12 +364,12 @@ function sketchFeature(
 ): GeoJSON.Feature | null {
   const g = f.geometry;
   if (g.type === 'LineString') {
-    const r = sketchRing(g.coordinates as number[][], ctx);
+    const r = sketchRing(g.coordinates as number[][], ctx, false);
     return r && { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: r } };
   }
   if (g.type === 'MultiLineString') {
     const lines = (g.coordinates as number[][][])
-      .map((l) => sketchRing(l, ctx))
+      .map((l) => sketchRing(l, ctx, false))
       .filter((l): l is number[][] => l != null);
     return lines.length
       ? { type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } }
@@ -284,7 +377,7 @@ function sketchFeature(
   }
   if (g.type === 'Polygon') {
     const rings = (g.coordinates as number[][][])
-      .map((r) => sketchRing(r, ctx))
+      .map((r) => sketchRing(r, ctx, true))
       .filter((r): r is number[][] => r != null);
     // An outer ring that fell under minSpan takes its holes with it.
     return rings.length
@@ -293,7 +386,7 @@ function sketchFeature(
   }
   if (g.type === 'MultiPolygon') {
     const polys = (g.coordinates as number[][][][])
-      .map((p) => p.map((r) => sketchRing(r, ctx)).filter((r): r is number[][] => r != null))
+      .map((p) => p.map((r) => sketchRing(r, ctx, true)).filter((r): r is number[][] => r != null))
       .filter((p) => p.length > 0);
     return polys.length
       ? { type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: polys } }
@@ -361,17 +454,21 @@ function paintSketch(map: maplibregl.Map, p: Palette) {
   set('sketch-water-fill', 'fill-color', p.blue);
   set('sketch-park-fill', 'fill-color', p.green);
   set('sketch-building-fill', 'fill-color', p.paper);
-  for (const id of ['sketch-water-line', 'sketch-park-line', 'sketch-building-line']) {
-    set(id, 'line-color', ink);
-  }
+  set('sketch-building-line', 'line-color', ink);
   set('sketch-road-line', 'line-color', p.greyRoad);
-  set('sketch-water-line', 'line-opacity', p.outlineOpacity || 0.85);
-  set('sketch-park-line', 'line-opacity', p.outlineOpacity || 0.85);
   set('sketch-building-line', 'line-opacity', p.buildingOutline || 0.55);
 }
 
+// Parks and water are COLOUR ONLY — no pen line round either.
+//
+// They had one, on the argument that on a white page the edge is the
+// shape. It is not, once the shape is filled: the fill already draws the
+// edge, exactly, in the same place, and the ink beside it only says the
+// same thing twice and thickens it. What the wobble does to a park is
+// visible in the fill's own outline. Buildings keep their line because
+// their fill is the same white as the page and has no edge of its own.
 const SKETCH_LAYERS = [
-  'sketch-water-fill', 'sketch-park-fill', 'sketch-water-line', 'sketch-park-line',
+  'sketch-water-fill', 'sketch-park-fill',
   'sketch-building-fill', 'sketch-building-line', 'sketch-road-line',
 ] as const;
 
@@ -434,24 +531,6 @@ export function createMapSketch(
   ensureLayer(map, {
     id: 'sketch-park-fill', type: 'fill', source: SRC.park,
     paint: { 'fill-color': palette.green, 'fill-opacity': 1 },
-  } as LayerSpecification, firstSymbol);
-  ensureLayer(map, {
-    id: 'sketch-water-line', type: 'line', source: SRC.water,
-    paint: {
-      'line-color': ink,
-      'line-opacity': palette.outlineOpacity || 0.85,
-      'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.7, 14, 1.2, 18, 2.1],
-    },
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
-  } as LayerSpecification, firstSymbol);
-  ensureLayer(map, {
-    id: 'sketch-park-line', type: 'line', source: SRC.park,
-    paint: {
-      'line-color': ink,
-      'line-opacity': palette.outlineOpacity || 0.85,
-      'line-width': ['interpolate', ['linear'], ['zoom'], 10, 0.7, 14, 1.2, 18, 2.1],
-    },
-    layout: { 'line-cap': 'round', 'line-join': 'round' },
   } as LayerSpecification, firstSymbol);
   ensureLayer(map, {
     id: 'sketch-building-fill', type: 'fill', source: SRC.building,
