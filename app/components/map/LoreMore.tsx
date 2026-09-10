@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { useMaplibreMap } from './MapContext';
+import { easeCamera } from './camera';
 import {
   clampExtract,
   fetchWikipediaExtract,
@@ -275,7 +276,7 @@ export function LoreMore({
       // centre.
       const anchor = map.project([lore.position.lng, lore.position.lat]);
       const containerH = map.getContainer().clientHeight;
-      map.easeTo({
+      easeCamera(map, 'short', {
         center: [lore.position.lng, lore.position.lat],
         offset: [anchor.x - map.getContainer().clientWidth / 2, anchor.y + d - containerH / 2],
         duration: PAN_MS,

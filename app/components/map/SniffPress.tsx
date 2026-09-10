@@ -1,5 +1,6 @@
 import { useEffect, useId, useMemo, useRef, useState } from 'react';
 import maplibregl from 'maplibre-gl';
+import { easeCamera } from './camera';
 import type { LatLng } from '@shukajpes/shared';
 import { useMaplibreMap } from './MapContext';
 import { MapLibreMarker } from './MapLibreMarker';
@@ -139,7 +140,7 @@ export function SniffPress() {
     excludeRef.current.add(focusedLore.id);
     setSniffingAt(null);
     setDiscovered({ ...focusedLore, distM: 0 });
-    map.easeTo({
+    easeCamera(map, 'short', {
       center: [focusedLore.position.lng, focusedLore.position.lat],
       padding: { top: 0, bottom: 0, left: 0, right: 0 },
       offset: [0, 70],
@@ -311,7 +312,7 @@ export function SniffPress() {
           // lands the whole result in the upper-centre, clear of the
           // HUD. Reset any padding a prior snap left so the offset is
           // measured from the true viewport centre.
-          map.easeTo({
+          easeCamera(map, 'short', {
             center: [lore.position.lng, lore.position.lat],
             padding: { top: 0, bottom: 0, left: 0, right: 0 },
             offset: [0, 70],

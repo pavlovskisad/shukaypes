@@ -39,6 +39,7 @@ import { OWN_COLOR_RGB, ownerColorRgb, pointInRing } from './territoryColor';
 import { DOG_CAM } from '../../constants/experiments';
 import { jitterInRadius } from '../../utils/cluster';
 import { colors } from '../../constants/colors';
+import { prefersReducedMotion } from '../../utils/motion';
 
 // The id lives in layerIds.ts so callers that only ask "is the layer
 // there?" need not import this module (and three.js with it).
@@ -1195,8 +1196,11 @@ export function createThreeBuildingsLayer(
           (typeof performance !== 'undefined' ? performance.now() : 0) / 1000;
         // Keep the shimmer animating while the orb is active (the map otherwise
         // idles between camera moves). Throttled to ~16fps via a guard so we
-        // don't stack timers. Harmless no-op if unsupported.
-        if (dogCamOn && !dogCamRepaintPending) {
+        // don't stack timers. Harmless no-op if unsupported. Under the OS
+        // reduce-motion setting the shimmer holds still, like the sun and the
+        // fog do (repaintGovernor.ts) — the see-through cut itself stays, it
+        // just stops breathing. Camera moves still repaint as usual.
+        if (dogCamOn && !dogCamRepaintPending && !prefersReducedMotion()) {
           dogCamRepaintPending = true;
           setTimeout(() => {
             dogCamRepaintPending = false;

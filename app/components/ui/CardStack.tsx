@@ -26,6 +26,7 @@ import Animated, {
   withSpring,
   withTiming,
   withSequence,
+  ReduceMotion,
   cancelAnimation,
   runOnJS,
   interpolate,
@@ -508,9 +509,18 @@ export function CardStack<T>({
           withTiming(1, { duration: 328, easing: Easing.bezier(0.22, 0.61, 0.36, 1) }),
           withTiming(0, { duration: 492, easing: Easing.bezier(0.33, 1, 0.68, 1) }),
         );
+        // The settle and the two rebounds below CONTINUE THE FINGER'S
+        // MOTION, so they run even under the OS reduce-motion setting.
+        // Reanimated's default there is to complete every animation
+        // instantly, and a card that stops following the hand and
+        // teleports to rest reads as a glitch, not as less motion. The
+        // lift flourish (popPhase) and the confirmation focus keep the
+        // system default — those are the decorative kind the setting is
+        // for. See D-61.
         currentPos.value = withTiming(target, {
           duration: SETTLE_MS,
           easing: SETTLE_EASE,
+          reduceMotion: ReduceMotion.Never,
         });
         return;
       }
@@ -519,11 +529,11 @@ export function CardStack<T>({
       // picked up back to rest.
       if (travel < TAP_TRAVEL_MAX) {
         runOnJS(handleTap)();
-        currentPos.value = withSpring(virtualBaseSV.value);
+        currentPos.value = withSpring(virtualBaseSV.value, { reduceMotion: ReduceMotion.Never });
         return;
       }
       // Real drag but not enough to commit → rebound.
-      currentPos.value = withSpring(virtualBaseSV.value);
+      currentPos.value = withSpring(virtualBaseSV.value, { reduceMotion: ReduceMotion.Never });
     });
 
   // Stable reference so the memoed ItemSlot doesn't see a "new"
