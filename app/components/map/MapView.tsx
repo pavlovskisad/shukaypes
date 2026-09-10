@@ -132,7 +132,7 @@ const STREET_LABEL_HIDE_PITCH = 60;
 // companion's 300ms roam tick so consecutive linear eases chain into a smooth
 // glide). Below DOGCAM_MIN_MOVE_M of dog travel we hold the heading so the
 // camera doesn't swing on GPS/idle micro-jitter.
-const DOGCAM_PITCH = 70;
+const DOGCAM_PITCH = PAPER_MAP ? 0 : 70;
 const DOGCAM_ZOOM = 18.6;
 const DOGCAM_TICK = 350;
 const DOGCAM_MIN_MOVE_M = 0.6;
@@ -143,7 +143,7 @@ const DOGCAM_MIN_MOVE_M = 0.6;
 // lower and the shot feels less cramped. Zoomed in ~20% vs before (16.3 → 16.55)
 // so the tighter framing pushes the beacon farther up the screen, opening a gap
 // above the dog for its speech bubble before the beacon.
-const PREVIEW_PITCH = 68;
+const PREVIEW_PITCH = PAPER_MAP ? 0 : 68;
 const PREVIEW_ZOOM = 16.55;
 // The dog rides at true screen CENTRE in supersniff — same as every other
 // camera framing (hint snaps, radial-menu open). We used to reserve 24% top
@@ -161,7 +161,7 @@ const ROUTE_LOOK_AHEAD_M = 90;
 // supersniff-preview-style blue beacon, and the pin grows to the big photo
 // pin. Pitch sits well under the street-level game pitch (74) so the shot
 // reads as a helicopter establishing view.
-const DOG_VIEW_PITCH = 57;
+const DOG_VIEW_PITCH = PAPER_MAP ? 0 : 57;
 // Fixed district-level zoom — the pet's part of the city with the zone
 // glow spreading around it, without collapsing into a full-city overview.
 const DOG_VIEW_ZOOM = 14.6;
@@ -185,7 +185,14 @@ const DOG_VIEW_PIN_TOP_PX = 405;
 // meant to be looking at have room to be seen.
 //
 // Still a tilt, not a plan view. The point is a world you look ACROSS.
-const GAME_PITCH = 65;
+//
+// …except on the paper map, where the point is the opposite. A drawing
+// on a sheet is looked AT, straight on; tilt it and the far half of the
+// page recedes into a mat of hairlines with no fog to hide behind, since
+// the paper map switched the fog off. So PAPER_MAP flattens every camera
+// in this file — this one, dog-cam, the dog view and the pin preview —
+// and locks maxPitch at 0 so a two-finger drag cannot tilt it back.
+const GAME_PITCH = PAPER_MAP ? 0 : 65;
 
 // Safe-area top inset in CSS px, measured once via an env() probe —
 // SafeAreaView values aren't reachable here and the inset differs
@@ -2450,7 +2457,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // all the way to maxPitch 80 — and MapLibre's own default cap is
           // 60, so it has to be raised for that to be possible.
           pitch: GAME_PITCH,
-          maxPitch: 80,
+          maxPitch: PAPER_MAP ? 0 : 80,
           // Drop both attribution branding + the MapLibre wordmark
           // logo. Tile/data attribution is a legal requirement for
           // upstream sources (OFM, OSM, etc.) — those are surfaced

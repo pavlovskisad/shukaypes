@@ -156,13 +156,14 @@ function displace(
   y: number,
   amp: number,
   seed: number,
+  cell: number,
 ): [number, number] {
   const dx =
-    fieldAt(x, y, CELL, seed, 1) * (1 - HARMONIC) +
-    fieldAt(x, y, CELL / 3.7, seed, 3) * HARMONIC;
+    fieldAt(x, y, cell, seed, 1) * (1 - HARMONIC) +
+    fieldAt(x, y, cell / 3.7, seed, 3) * HARMONIC;
   const dy =
-    fieldAt(x, y, CELL, seed, 2) * (1 - HARMONIC) +
-    fieldAt(x, y, CELL / 3.7, seed, 4) * HARMONIC;
+    fieldAt(x, y, cell, seed, 2) * (1 - HARMONIC) +
+    fieldAt(x, y, cell / 3.7, seed, 4) * HARMONIC;
   return [x + dx * amp, y + dy * amp];
 }
 
@@ -198,6 +199,35 @@ function stepFor(span: number): number {
   return Math.max(MIN_STEP_PX, Math.min(STEP_PX, span / POINTS_AROUND));
 }
 
+// A ROAD HAS NO SIZE, IT HAS A LENGTH.
+//
+// stepFor() asks how big a shape is and spaces points so the wobble is
+// proportional to it. That is right for a footprint and wrong for a
+// street: a road's span is its whole run across the city, so it always
+// took the maximum step, and 2.7px of drift every 20px along a
+// 600px-long line is a line. Measured on the drawn geometry — mean turn
+// per vertex of 1.07 degrees for roads against 14.40 for buildings,
+// which is the difference between a drawn line and a ruled one, and is
+// exactly what "isn't that a subway line?" looks like.
+//
+// So lines are stepped per unit LENGTH, finely, and the wobble is a
+// property of the pen rather than of the thing being drawn.
+const LINE_STEP_PX = 9;
+
+// …and a finer step alone does not do it, which took a second
+// measurement to see. Sampling a smooth field more often does not bend
+// the line more, it only follows the same bend more closely — the first
+// attempt cut the step from 20 to 9 and the drawn road came out
+// STRAIGHTER by mean-turn, because turn-per-vertex falls as the vertices
+// get closer. That metric was measuring the step, not the wobble.
+//
+// What actually separates a drawn street from a ruled one is how far it
+// strays from its own chord, and over what distance. So a line gets a
+// bigger push and a shorter wave than a footprint does: ±2.7px over a
+// 72px wave is a 4% lean nobody reads as a hand on a 600px street.
+const LINE_AMP = 4.6;
+const LINE_CELL = 40;
+
 // The wobble, in world px, on a shape big enough to carry it. HandDrawn
 // uses 1.1 on a card; the map takes a good deal more, because a card's
 // edge is 300px of one clean run where 1.1px is plainly a hand, and a
@@ -221,7 +251,7 @@ type Pt = [number, number];
 
 // Resample a ring/line at STEP_PX and push every point off the true
 // line. Returns world-pixel points; the caller unprojects.
-function sketchRun(pts: Pt[], amp: number, seed: number, step: number): Pt[] {
+function sketchRun(pts: Pt[], amp: number, seed: number, step: number, cell: number): Pt[] {
   const out: Pt[] = [];
   for (let i = 0; i < pts.length - 1; i++) {
     const [ax, ay] = pts[i]!;
@@ -230,11 +260,11 @@ function sketchRun(pts: Pt[], amp: number, seed: number, step: number): Pt[] {
     const steps = Math.max(1, Math.round(len / step));
     for (let s = 0; s < steps; s++) {
       const t = s / steps;
-      out.push(displace(ax + (bx - ax) * t, ay + (by - ay) * t, amp, seed));
+      out.push(displace(ax + (bx - ax) * t, ay + (by - ay) * t, amp, seed, cell));
     }
   }
   const last = pts[pts.length - 1]!;
-  out.push(displace(last[0], last[1], amp, seed));
+  out.push(displace(last[0], last[1], amp, seed, cell));
   return out;
 }
 
@@ -343,7 +373,7 @@ function sketchRing(
   let world = toWorldRing(coords, ctx.scale);
   const span = spanOf(world);
   if (span < ctx.minSpan) return null;
-  const amp = ctx.sizeScaled ? ampForSpan(span) : AMP;
+  const amp = ctx.sizeScaled ? ampForSpan(span) : LINE_AMP;
   // A GeoJSON ring repeats its first point at the end. Smoothing over
   // that duplicate fits a curve through a zero-length span — the knot
   // floor keeps it from dividing by zero, but the segment it produces is
@@ -353,7 +383,11 @@ function sketchRing(
     const l = world[world.length - 1]!;
     if (f[0] === l[0] && f[1] === l[1]) world = world.slice(0, -1);
   }
-  const run = smooth(sketchRun(world, amp, ctx.seed, stepFor(span)), closed);
+  // `sizeScaled` distinguishes the two: polygons have a size to be
+  // proportional to, lines only have length.
+  const step = ctx.sizeScaled ? stepFor(span) : LINE_STEP_PX;
+  const cell = ctx.sizeScaled ? CELL : LINE_CELL;
+  const run = smooth(sketchRun(world, amp, ctx.seed, step, cell), closed);
   if (closed && run.length > 1) run.push(run[0]!);
   return toLngLatRing(run, ctx.scale);
 }
@@ -407,6 +441,13 @@ const ROAD_SKIP =
 
 const GREEN_CLASS =
   /park|grass|wood|forest|cemetery|recreation|pitch|meadow|farm|garden|scrub|playground|nature/;
+
+// First coordinate of any geometry, for the id-less fallback key.
+function firstCoord(f: GeoJSONFeature): number[] | null {
+  let c: unknown = (f.geometry as { coordinates?: unknown }).coordinates;
+  while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
+  return Array.isArray(c) ? (c as number[]) : null;
+}
 
 function classOf(f: GeoJSONFeature): string {
   const p = f.properties ?? {};
@@ -494,7 +535,7 @@ export interface MapSketch {
   restyle(palette: Palette): void;
   // What the last build cost. Read by the render probes so a claim about
   // this being affordable is a measurement rather than a hope.
-  stats(): { features: number; ms: number; zoomBucket: number };
+  stats(): { features: number; ms: number };
   dispose(): void;
 }
 
@@ -573,20 +614,57 @@ export function createMapSketch(
   // feature and every tile. Fixed rather than random: a reload should
   // not redraw Kyiv.
   const seed = 0x5ce7c4;
-  let lastBucket = -1;
   let lastCount = 0;
   let lastMs = 0;
   let disposed = false;
 
   // Redrawing the city is not free and it runs on a user-visible thread.
-  // Anything past this is a hitch somebody can feel while panning, and a
-  // silent one — so it says so. Threshold rather than always-on: a log
-  // line per tile batch is its own kind of noise.
+  // Anything past this is a hitch somebody can feel, and a silent one —
+  // so it says so. Threshold rather than always-on: a log line per tile
+  // batch is its own kind of noise.
   const SLOW_MS = 120;
 
-  const build = (z: number) => {
+  // DRAWN ONCE, AND THEN IT IS DRAWN.
+  //
+  // The first version generated for whatever zoom the camera was at and
+  // rebuilt on every zoom bucket. Two things went wrong with that, and
+  // the second is the one that mattered:
+  //
+  //   The rebuild cost 200ms, and it landed exactly when the user was
+  //   already busy — mid-zoom.
+  //
+  //   Worse, the city CHANGED SHAPE when it did. Amplitude and step are
+  //   in world pixels, so generating at a new zoom re-wobbles every wall
+  //   by a different amount and resamples it at different points. Zoom
+  //   in and out and the buildings breathe. A drawing that redraws
+  //   itself when you look closer is not a drawing.
+  //
+  // So: geometry is generated ONCE per feature, always at REF_Z, and
+  // kept. Zooming re-uses it — a paper map you hold closer, which is the
+  // whole idea and also free. The wobble is then fixed in GROUND
+  // distance rather than pixels, which is what makes it scale with
+  // everything else instead of against it.
+  //
+  // Keyed by feature id, which every basemap feature carries (measured:
+  // 1891/1891 roads, 699/699 buildings). A feature clipped across tiles
+  // arrives as several parts under one id, and more parts appear as more
+  // tiles load — so the part COUNT is cached too, and a feature is
+  // redrawn only when it has grown. Without that, panning to reveal the
+  // far half of a road would leave the road half-drawn forever.
+  const REF_Z = 16;
+  const CACHE_CAP = 12000;
+
+  // Parts kept as an array rather than folded into a GeometryCollection:
+  // one less bet on how geojson-vt handles a type nothing else in this
+  // codebase emits, and mixed geometry types under one id stay legal.
+  interface Cached { parts: number; features: GeoJSON.Feature[] }
+  const caches: Record<keyof typeof SRC, Map<string, Cached>> = {
+    road: new Map(), building: new Map(), park: new Map(), water: new Map(),
+  };
+
+  const build = () => {
     const t0 = performance.now();
-    const scale = worldScale(z);
+    const scale = worldScale(REF_Z);
     const q = (sourceLayer: string) => {
       try {
         return map.querySourceFeatures(vectorSource, { sourceLayer });
@@ -595,57 +673,107 @@ export function createMapSketch(
       }
     };
 
-    const roads: GeoJSON.Feature[] = [];
-    for (const f of q('transportation')) {
-      const cls = classOf(f);
-      if (ROAD_SKIP.test(cls)) continue;
-      const s = sketchFeature(f, { scale, seed, minSpan: MIN_LINE_SPAN, sizeScaled: false });
-      if (!s) continue;
-      // Road weight tier, read once here so the style expression above
-      // stays a lookup rather than a chain of string comparisons.
-      const k = /motorway|trunk/.test(cls) ? 3
-        : /primary/.test(cls) ? 2
-        : /secondary|tertiary/.test(cls) ? 1
-        : 0;
-      s.properties = { k };
-      roads.push(s);
-    }
+    let added = 0;
 
-    const buildings: GeoJSON.Feature[] = [];
-    for (const f of q('building')) {
-      const s = sketchFeature(f, { scale, seed, minSpan: MIN_BUILDING_SPAN, sizeScaled: true });
-      if (s) buildings.push(s);
-    }
-
-    const water: GeoJSON.Feature[] = [];
-    for (const f of q('water')) {
-      const s = sketchFeature(f, { scale, seed, minSpan: MIN_WATER_SPAN, sizeScaled: true });
-      if (s) water.push(s);
-    }
-
-    const parks: GeoJSON.Feature[] = [];
-    const pushGreen = (f: GeoJSONFeature) => {
-      const s = sketchFeature(f, { scale, seed, minSpan: MIN_GREEN_SPAN, sizeScaled: true });
-      if (s) parks.push(s);
-    };
-    for (const f of q('park')) pushGreen(f);
-    for (const sl of ['landuse', 'landcover'] as const) {
-      for (const f of q(sl)) {
-        if (GREEN_CLASS.test(classOf(f))) pushGreen(f);
+    // Group the loaded parts of each feature under its id, so a
+    // tile-split road is sketched as one thing and counted as one.
+    const group = (
+      feats: GeoJSONFeature[],
+      keep: (f: GeoJSONFeature) => boolean,
+    ): Map<string, GeoJSONFeature[]> => {
+      const by = new Map<string, GeoJSONFeature[]>();
+      for (const f of feats) {
+        if (!keep(f)) continue;
+        // Every basemap feature carries an id (measured), but a missing
+        // one must not collide with every OTHER missing one — that would
+        // cache the first and silently drop the rest.
+        const k = f.id != null ? String(f.id) : `@${JSON.stringify(firstCoord(f))}`;
+        const list = by.get(k);
+        if (list) list.push(f);
+        else by.set(k, [f]);
       }
+      return by;
+    };
+
+    const fill = (
+      which: keyof typeof SRC,
+      feats: GeoJSONFeature[],
+      keep: (f: GeoJSONFeature) => boolean,
+      ctx: Omit<Ctx, 'scale' | 'seed'>,
+      decorate?: (f: GeoJSONFeature, s: GeoJSON.Feature) => void,
+    ) => {
+      const cache = caches[which];
+      for (const [k, parts] of group(feats, keep)) {
+        const hit = cache.get(k);
+        if (hit && hit.parts >= parts.length) continue;
+        // One entry per id, so the parts are sketched together and the
+        // cache never holds a half of anything.
+        const out: GeoJSON.Feature[] = [];
+        for (const f of parts) {
+          const s = sketchFeature(f, { ...ctx, scale, seed });
+          if (s) {
+            if (decorate) decorate(f, s);
+            out.push(s);
+          }
+        }
+        cache.set(k, { parts: parts.length, features: out });
+        added++;
+      }
+    };
+
+    fill('road', q('transportation'), (f) => !ROAD_SKIP.test(classOf(f)),
+      { minSpan: MIN_LINE_SPAN, sizeScaled: false },
+      (f, s) => {
+        const cls = classOf(f);
+        // Road weight tier, read once here so the style expression above
+        // stays a lookup rather than a chain of string comparisons.
+        s.properties = {
+          k: /motorway|trunk/.test(cls) ? 3
+            : /primary/.test(cls) ? 2
+            : /secondary|tertiary/.test(cls) ? 1
+            : 0,
+        };
+      });
+    fill('building', q('building'), () => true, { minSpan: MIN_BUILDING_SPAN, sizeScaled: true });
+    fill('water', q('water'), () => true, { minSpan: MIN_WATER_SPAN, sizeScaled: true });
+    const green = (f: GeoJSONFeature) => GREEN_CLASS.test(classOf(f));
+    fill('park', q('park'), () => true, { minSpan: MIN_GREEN_SPAN, sizeScaled: true });
+    fill('park', q('landuse'), green, { minSpan: MIN_GREEN_SPAN, sizeScaled: true });
+    fill('park', q('landcover'), green, { minSpan: MIN_GREEN_SPAN, sizeScaled: true });
+
+    // Nothing new on the page: no re-upload. This is what makes zooming
+    // and panning inside drawn ground cost nothing at all — setData
+    // re-indexes the whole collection, so calling it for an unchanged
+    // city was most of the old cost.
+    if (added === 0) {
+      lastMs = performance.now() - t0;
+      return;
     }
 
-    setData(map, SRC.road, roads);
-    setData(map, SRC.building, buildings);
-    setData(map, SRC.water, water);
-    setData(map, SRC.park, parks);
-    lastCount = roads.length + buildings.length + water.length + parks.length;
+    let total = 0;
+    for (const which of Object.keys(caches) as (keyof typeof SRC)[]) {
+      const cache = caches[which];
+      // A walk far enough to fill this is a walk across the whole city;
+      // dropping the oldest keeps the drawing bounded without ever
+      // redrawing ground the user is standing on.
+      while (cache.size > CACHE_CAP) {
+        const oldest = cache.keys().next().value;
+        if (oldest === undefined) break;
+        cache.delete(oldest);
+      }
+      const features: GeoJSON.Feature[] = [];
+      for (const c of cache.values()) for (const f of c.features) features.push(f);
+      total += features.length;
+      setData(map, SRC[which], features);
+    }
+    lastCount = total;
+
     const ms = performance.now() - t0;
     lastMs = ms;
     if (ms > SLOW_MS) {
       // eslint-disable-next-line no-console
       console.warn(
-        `[sketch] redrew ${lastCount} features in ${ms.toFixed(0)}ms at z${z.toFixed(1)}`,
+        `[sketch] drew ${added} new features (${total} on the page) in ${ms.toFixed(0)}ms`,
       );
     }
   };
@@ -653,24 +781,17 @@ export function createMapSketch(
   return {
     refresh(force = false) {
       if (disposed) return;
-      // Geometry is generated for one zoom, because the wobble is a
-      // pixel amount and a pixel is a different distance at every zoom.
-      // Rebuilding on the integer bucket means the wobble breathes a
-      // little between whole zooms and is never more than ~40% off.
-      const bucket = Math.round(map.getZoom());
-      // An empty city is never a finished build. The first run happens
-      // before any tile has arrived and legitimately produces nothing;
-      // without this it would also SET the bucket and lock the sketch
-      // blank until the user changed zoom.
-      if (!force && bucket === lastBucket && lastCount > 0) return;
-      lastBucket = bucket;
-      build(map.getZoom());
+      // No zoom check any more: geometry does not depend on the camera.
+      // A refresh is only ever "has anything new arrived", and build()
+      // answers that itself by finding nothing to add.
+      void force;
+      build();
     },
     restyle(next: Palette) {
       paintSketch(map, next);
     },
     stats() {
-      return { features: lastCount, ms: lastMs, zoomBucket: lastBucket };
+      return { features: lastCount, ms: lastMs };
     },
     dispose() {
       disposed = true;
