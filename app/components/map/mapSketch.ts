@@ -500,6 +500,43 @@ function setData(map: maplibregl.Map, id: string, features: GeoJSON.Feature[]) {
   src?.setData({ type: 'FeatureCollection', features });
 }
 
+// APPEND, DO NOT RE-SEND.
+//
+// setData replaces the source and re-indexes every feature in it, so the
+// cost of drawing one newly-arrived tile was the cost of the ENTIRE city
+// drawn so far — and the city only grows as you walk. That is why a walk
+// went slower the longer it went, and why ground you had just stepped
+// onto stayed blank: each batch was paying for all the ones before it.
+//
+// updateData applies a diff instead, which needs every feature to carry
+// a unique id (see nextFeatureId). Falls back to a full setData if the
+// source has not been populated yet, or if this MapLibre build has no
+// updateData.
+function appendData(
+  map: maplibregl.Map,
+  id: string,
+  add: GeoJSON.Feature[],
+  remove: (string | number)[],
+): boolean {
+  const src = map.getSource(id) as (GeoJSONSource & {
+    updateData?: (d: unknown) => unknown;
+  }) | undefined;
+  if (!src || typeof src.updateData !== 'function') return false;
+  try {
+    src.updateData({ ...(add.length ? { add } : {}), ...(remove.length ? { remove } : {}) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Unique per feature for the lifetime of the page — updateData refuses a
+// source whose features are not individually addressable.
+let featureIdSeq = 1;
+function nextFeatureId(): number {
+  return featureIdSeq++;
+}
+
 function ensureLayer(map: maplibregl.Map, spec: LayerSpecification, before?: string) {
   if (map.getLayer(spec.id)) return;
   try {
@@ -644,6 +681,10 @@ export function createMapSketch(
   const seed = 0x5ce7c4;
   let lastCount = 0;
   let lastMs = 0;
+  // Has this source had its first full push? Until then there is nothing
+  // to diff against.
+  const seeded: Record<keyof typeof SRC, boolean> =
+    { road: false, building: false, park: false, water: false };
   let disposed = false;
 
   // Redrawing the city is not free and it runs on a user-visible thread.
@@ -702,6 +743,12 @@ export function createMapSketch(
     };
 
     let added = 0;
+    // What changed THIS pass, per source: the new features to append and
+    // the ids of anything they replace.
+    const fresh: Record<keyof typeof SRC, GeoJSON.Feature[]> =
+      { road: [], building: [], park: [], water: [] };
+    const dropped: Record<keyof typeof SRC, (string | number)[]> =
+      { road: [], building: [], park: [], water: [] };
 
     // Group the loaded parts of each feature under its id, so a
     // tile-split road is sketched as one thing and counted as one.
@@ -744,7 +791,12 @@ export function createMapSketch(
             out.push(s);
           }
         }
+        // A feature being REDRAWN (its far half just arrived) has to take
+        // its old ids out of the source, or both versions stack.
+        if (hit) for (const f of hit.features) if (f.id != null) dropped[which].push(f.id);
+        for (const f of out) f.id = nextFeatureId();
         cache.set(k, { parts: parts.length, features: out });
+        fresh[which].push(...out);
         added++;
       }
     };
@@ -787,12 +839,25 @@ export function createMapSketch(
       while (cache.size > CACHE_CAP) {
         const oldest = cache.keys().next().value;
         if (oldest === undefined) break;
+        const evicted = cache.get(oldest);
+        if (evicted) for (const f of evicted.features) if (f.id != null) dropped[which].push(f.id);
         cache.delete(oldest);
       }
-      const features: GeoJSON.Feature[] = [];
-      for (const c of cache.values()) for (const f of c.features) features.push(f);
-      total += features.length;
-      setData(map, SRC[which], features);
+      total += cache.size;
+      if (!seeded[which]) {
+        const features: GeoJSON.Feature[] = [];
+        for (const c of cache.values()) for (const f of c.features) features.push(f);
+        setData(map, SRC[which], features);
+        seeded[which] = true;
+      } else if (fresh[which].length || dropped[which].length) {
+        if (!appendData(map, SRC[which], fresh[which], dropped[which])) {
+          // No diff support — fall back to the old whole-collection push
+          // rather than silently leaving the new ground undrawn.
+          const features: GeoJSON.Feature[] = [];
+          for (const c of cache.values()) for (const f of c.features) features.push(f);
+          setData(map, SRC[which], features);
+        }
+      }
     }
     lastCount = total;
 

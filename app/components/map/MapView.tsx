@@ -390,6 +390,7 @@ export default function MapViewWeb() {
   // since it was last generated.
   const sketchRef = useRef<MapSketch | null>(null);
   const sketchDirtyRef = useRef(false);
+  const sketchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // When the user last dragged the map by hand (0 = never).
   const userPannedAtRef = useRef(0);
   // Stored in state too so React-tree children (markers) can be wired
@@ -2586,7 +2587,29 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // mistake. `sourceDataType === 'content'` is the signal that
         // actually fires.
         map.on('sourcedata', (e) => {
-          if (e.sourceDataType === 'content') sketchDirtyRef.current = true;
+          if (e.sourceDataType !== 'content') return;
+          sketchDirtyRef.current = true;
+          // IDLE IS NOT ENOUGH WHILE SOMEBODY IS WALKING.
+          //
+          // The sketch used to be drawn only on 'idle', which fires when
+          // the camera has settled AND every tile has landed. On a walk
+          // that is rarely: the follow camera moves with the dog, tiles
+          // keep streaming, and idle keeps being pushed back. Ground the
+          // user had already walked onto stayed blank for a long time,
+          // with the edge of the drawn area showing as a hard straight
+          // line where a half-loaded park fill stopped.
+          //
+          // So a short debounce after the last tile of a burst draws it
+          // too, whether or not the map ever goes idle. Cheap now that
+          // appending is proportional to what arrived rather than to the
+          // whole city.
+          if (sketchTimerRef.current) clearTimeout(sketchTimerRef.current);
+          sketchTimerRef.current = setTimeout(() => {
+            sketchTimerRef.current = null;
+            if (!sketchRef.current) return;
+            sketchDirtyRef.current = false;
+            sketchRef.current.refresh(true);
+          }, 250);
         });
         mapRef.current = map;
         map.on('style.load', () => {
@@ -2758,7 +2781,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   useEffect(() => {
     return () => {
       const m = mapRef.current;
-      // Before the map goes: the sketch holds sources and layers on it.
+      // Before the map goes: the sketch holds sources and layers on it,
+      // and may have a debounced draw in flight.
+      if (sketchTimerRef.current) {
+        clearTimeout(sketchTimerRef.current);
+        sketchTimerRef.current = null;
+      }
       try {
         sketchRef.current?.dispose();
       } catch {
