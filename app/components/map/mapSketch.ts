@@ -223,9 +223,10 @@ const LINE_STEP_PX = 9;
 //
 // What actually separates a drawn street from a ruled one is how far it
 // strays from its own chord, and over what distance. So a line gets a
-// bigger push and a shorter wave than a footprint does: ±2.7px over a
-// 72px wave is a 4% lean nobody reads as a hand on a 600px street.
-const LINE_AMP = 4.6;
+// bigger push and a shorter wave than a footprint does: a lean of a few
+// percent over a 72px wave is not something anybody reads as a hand on a
+// 600px street.
+const LINE_AMP = 3.0;
 const LINE_CELL = 40;
 
 // The wobble, in world px, on a shape big enough to carry it. HandDrawn
@@ -233,9 +234,9 @@ const LINE_CELL = 40;
 // edge is 300px of one clean run where 1.1px is plainly a hand, and a
 // city is thousands of short edges where the same amount averages out
 // into looking straight.
-const AMP = 2.7;
+const AMP = 1.8;
 
-// …and the same 2.7px is not the same amount on a 300px park and a
+// …and the same 1.8px is not the same amount on a 300px park and a
 // 14px shed — flat, it made HandDrawn's small discs read as potatoes,
 // and it does exactly that to a row of houses. Amplitude scales with the
 // shape down to a floor, so small footprints stay square.

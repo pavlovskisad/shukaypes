@@ -18,6 +18,7 @@ import { DEV_TOOLS } from '../../constants/devTools';
 import { useGameStore } from '../../stores/gameStore';
 import { MapContext } from './MapContext';
 import {
+  LIGHT_PALETTE,
   PAPER_PALETTE,
   PLAY_PALETTE,
   applyCrayonOverride,
@@ -132,7 +133,7 @@ const STREET_LABEL_HIDE_PITCH = 60;
 // companion's 300ms roam tick so consecutive linear eases chain into a smooth
 // glide). Below DOGCAM_MIN_MOVE_M of dog travel we hold the heading so the
 // camera doesn't swing on GPS/idle micro-jitter.
-const DOGCAM_PITCH = PAPER_MAP ? 0 : 70;
+const DOGCAM_PITCH = 70;
 const DOGCAM_ZOOM = 18.6;
 const DOGCAM_TICK = 350;
 const DOGCAM_MIN_MOVE_M = 0.6;
@@ -186,12 +187,17 @@ const DOG_VIEW_PIN_TOP_PX = 405;
 //
 // Still a tilt, not a plan view. The point is a world you look ACROSS.
 //
-// …except on the paper map, where the point is the opposite. A drawing
-// on a sheet is looked AT, straight on; tilt it and the far half of the
-// page recedes into a mat of hairlines with no fog to hide behind, since
-// the paper map switched the fog off. So PAPER_MAP flattens every camera
-// in this file — this one, dog-cam, the dog view and the pin preview —
-// and locks maxPitch at 0 so a two-finger drag cannot tilt it back.
+// …except on the paper map, where the point is the opposite. A drawing on
+// a sheet is looked AT, straight on; tilt it and the far half of the page
+// recedes into a mat of hairlines with no fog to hide behind, since the
+// paper map switches the fog off. So PAPER_MAP flattens the WALKING
+// cameras — this one, the dog view and the pin preview — and drops
+// maxPitch to 0 so a two-finger drag cannot tilt them back.
+//
+// DOGCAM_PITCH is deliberately NOT in that list. Supersniff keeps the
+// game render exactly as it was: the tilt, the Three.js city, the fog.
+// It is the one mode in the app that is a world rather than a page, and
+// the paper experiment has no business changing it.
 const GAME_PITCH = PAPER_MAP ? 0 : 65;
 
 // Safe-area top inset in CSS px, measured once via an env() probe —
@@ -627,12 +633,25 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // outlive the condition that hid it. Visible → still mounted and
   // sliding away → gone. `deckVisible` is the truth; `deckMounted` is
   // what the DOM holds.
-  // The city goes near-monochrome while territory is drawn over it, so a
-  // dozen owner colours are the only hues on screen. See PLAY_PALETTE.
+  // THREE MAPS, ONE STYLE.
   //
-  // The walking map is the paper drawing (experiment) — one name, changed
-  // in the two places below, reverts it to LIGHT_PALETTE.
-  const mapPalette = territoryVisible ? PLAY_PALETTE : PAPER_PALETTE;
+  // Supersniff is the exception and keeps the map it always had: the
+  // coloured tile geometry under the Three.js city, the fog, the tilt.
+  // It is the one mode that is a WORLD rather than a page — you are down
+  // in the street following a trail — and the paper experiment has no
+  // business changing it.
+  //
+  // The other two are drawn by hand. Explore is the white page; territory
+  // is the same drawing with the ink and the roads pulled back, because
+  // there a dozen owner colours are the subject and the city is the paper
+  // they are painted on. See PLAY_PALETTE for why territory could not
+  // simply stay on the tile geometry.
+  const superSniff = DOG_CAM && dogCam;
+  const mapPalette = superSniff
+    ? LIGHT_PALETTE
+    : territoryVisible
+      ? PLAY_PALETTE
+      : PAPER_PALETTE;
 
   const deckVisible = DOG_CAM && dogCam && onMapScreen && !menuOpen;
   const [deckMounted, setDeckMounted] = useState(deckVisible);
@@ -2429,7 +2448,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // exactly as it does when the layers throw at init.
         const [style, gameRender] = await Promise.all([
           fetchCrayonStyleSpec(),
-          GAME_RENDER && !PAPER_MAP ? loadGameRender() : Promise.resolve(null),
+          GAME_RENDER ? loadGameRender() : Promise.resolve(null),
         ]);
         if (cancelled || !mapContainerRef.current || mapRef.current) return;
         // Clamp center within MAX_BOUNDS — MapLibre rejects construction
@@ -2457,7 +2476,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // all the way to maxPitch 80 — and MapLibre's own default cap is
           // 60, so it has to be raised for that to be possible.
           pitch: GAME_PITCH,
-          maxPitch: PAPER_MAP ? 0 : 80,
+          maxPitch: 80,
           // Drop both attribution branding + the MapLibre wordmark
           // logo. Tile/data attribution is a legal requirement for
           // upstream sources (OFM, OSM, etc.) — those are surfaced
@@ -2535,7 +2554,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // with MapLibre's buildings intact, so prod never shows a city with
           // no buildings. Order: ground-fog UNDER buildings UNDER labels.
           let gameOk = false;
-          if (GAME_RENDER && !PAPER_MAP && gameRender) {
+          if (GAME_RENDER && gameRender) {
             try {
               const beforeId = firstSymbolLayerId(map);
               if (!map.getLayer(GROUND_FOG_LAYER_ID)) {
@@ -2569,15 +2588,34 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             }
           }
           // Classic render (prod default OR game-render fallback): the
-          // screen-space depth fog over MapLibre's own buildings. The paper
-          // map takes neither — a haze is the same shading the extrusions
-          // were, drawn cheaper.
-          if (!gameOk && !PAPER_MAP && !map.getLayer(DEPTH_FOG_LAYER_ID)) {
+          // screen-space depth fog over MapLibre's own buildings.
+          if (!gameOk && !map.getLayer(DEPTH_FOG_LAYER_ID)) {
             try {
               map.addLayer(createDepthFogLayer());
             } catch (e) {
               // eslint-disable-next-line no-console
               console.error('[fog] addLayer failed', e);
+            }
+          }
+          // Built, and off. The world render belongs to supersniff; the
+          // map opens on the page. Doing this HERE rather than leaving it
+          // to the mode effect matters because the effect only runs when
+          // its inputs change — on a cold start into explore they never
+          // do, and the first frame would be a fogged 3D city over the
+          // drawing.
+          if (PAPER_MAP && !useGameStore.getState().dogCam) {
+            for (const id of [THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID, DEPTH_FOG_LAYER_ID]) {
+              if (!map.getLayer(id)) continue;
+              try {
+                map.setLayoutProperty(id, 'visibility', 'none');
+              } catch {
+                /* ignore */
+              }
+            }
+            try {
+              map.setMaxPitch(0);
+            } catch {
+              /* ignore */
             }
           }
         });
@@ -2698,6 +2736,30 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       // palette — only paint — so nothing is rebuilt here.
       sketchRef.current?.restyle(mapPalette);
       setSketchVisible(map, mapPalette.handDrawn);
+      // …and the world render is the other half of the same switch: the
+      // Three.js city and its fog belong to supersniff and nothing else.
+      // They are HIDDEN rather than torn down — rebuilding an extruded
+      // city on every sniff toggle is exactly the cost this whole
+      // experiment just finished removing from the zoom path.
+      if (PAPER_MAP) {
+        for (const id of [THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID, DEPTH_FOG_LAYER_ID]) {
+          if (!map.getLayer(id)) continue;
+          try {
+            map.setLayoutProperty(id, 'visibility', superSniff ? 'visible' : 'none');
+          } catch {
+            /* style mid-update */
+          }
+        }
+        // A page cannot be tilted; a world can. Raising the cap before
+        // the camera eases up matters — MapLibre clamps a requested pitch
+        // to the CURRENT max, so setting these the other way round leaves
+        // supersniff flat.
+        try {
+          map.setMaxPitch(superSniff ? 80 : 0);
+        } catch {
+          /* ignore */
+        }
+      }
       // applyCrayonOverride resets transportation_name visibility to
       // 'visible', so re-apply the pitch-based hide right after.
       syncStreetLabels();
@@ -2725,7 +2787,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     return () => {
       map.off('idle', apply);
     };
-  }, [lang, mapPalette, syncStreetLabels]);
+  }, [lang, mapPalette, superSniff, syncStreetLabels]);
 
   // Nearby players (real + bots) to render as other dogs — only in view, and
   // capped to the nearest N for perf (each walker runs a glide loop + sprite).
