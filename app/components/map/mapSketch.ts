@@ -33,19 +33,23 @@
 // so it gets the same displacement and the shape stays shut.
 //
 // ---------------------------------------------------------------------
-// ROUNDING, AND WHY IT IS SAFE AT THIS SCALE
+// ROUNDING, AND HOW MUCH OF IT
 //
 // HandDrawn runs its wobbled points through centripetal Catmull-Rom so a
-// card's corners come out round, and the city gets the same treatment.
-// The worry was that a building's corner is a REAL corner — the wall
-// turns there — and rounding every footprint would turn a street of
-// blocks into a street of lozenges.
+// card's corners come out round, and the city gets the same curve — but
+// not the same amount of it, and both halves of that took correcting.
 //
-// What makes it safe is WHERE the curve is fitted. Not through the
-// shape's own corner points, which on a rectangle is four knots and a
-// blob; through the RESAMPLED run, whose points sit STEP_PX apart. The
-// curve then turns over one step rather than over the whole facade — a
-// corner softened by a pen nib, not a corner removed.
+// WHERE the curve is fitted keeps it bounded: not through the shape's
+// own corner points, which on a rectangle is four knots and a blob, but
+// through the RESAMPLED run, whose points sit a step apart. The step
+// scales with the shape (stepFor), so a 40px shed does not round itself
+// away while a 300px park is barely nibbed.
+//
+// HOW MUCH is POLYGON_ROUNDNESS, and a footprint takes well under the
+// full curve. At 1 a building reads as bubbly: it has a corner every few
+// steps and each one turns over a whole step, so the block stops being a
+// building with a drawn edge and becomes a bean. Streets keep the full
+// curve — a road that bends really is a smooth bend.
 
 import type maplibregl from 'maplibre-gl';
 import type {
@@ -284,7 +288,21 @@ const CR_ALPHA = 0.5;
 // that decides whether panning hitches.
 const SAMPLES_PER_SPAN = 3;
 
-function smooth(pts: Pt[], closed: boolean): Pt[] {
+// HOW ROUND A CORNER GETS, on HandDrawn's own dial: 1 is the full
+// Catmull-Rom curve, 0 puts every handle on its own knot, which draws a
+// straight line — so one number spans "curve" and "polygon" with no
+// second code path.
+//
+// Footprints take less than the full curve. At 1 a building reads as
+// bubbly: every corner turns over a whole step, and a block has a corner
+// every few steps, so the shape stops being a building with a drawn edge
+// and becomes a bean. Streets keep the full curve — a road that bends
+// really is a smooth bend, and there is nothing to preserve the crispness
+// of.
+const POLYGON_ROUNDNESS = 0.45;
+const LINE_ROUNDNESS = 1;
+
+function smooth(pts: Pt[], closed: boolean, roundness: number): Pt[] {
   const n = pts.length;
   if (n < 3) return pts;
   const at = (i: number): Pt =>
@@ -308,13 +326,18 @@ function smooth(pts: Pt[], closed: boolean): Pt[] {
     const c2y =
       (d3 * d3 * p1[1] - d2 * d2 * p3[1] + (2 * d3 * d3 + 3 * d3 * d2 + d2 * d2) * p2[1]) /
       (3 * d3 * (d3 + d2));
+    // Handles pulled toward their own knot — see POLYGON_ROUNDNESS.
+    const h1x = p1[0] + (c1x - p1[0]) * roundness;
+    const h1y = p1[1] + (c1y - p1[1]) * roundness;
+    const h2x = p2[0] + (c2x - p2[0]) * roundness;
+    const h2y = p2[1] + (c2y - p2[1]) * roundness;
     for (let s = 1; s <= SAMPLES_PER_SPAN; s++) {
       const t = s / SAMPLES_PER_SPAN;
       const u = 1 - t;
       const a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
       out.push([
-        a * p1[0] + b * c1x + c * c2x + d * p2[0],
-        a * p1[1] + b * c1y + c * c2y + d * p2[1],
+        a * p1[0] + b * h1x + c * h2x + d * p2[0],
+        a * p1[1] + b * h1y + c * h2y + d * p2[1],
       ]);
     }
   }
@@ -388,7 +411,11 @@ function sketchRing(
   // proportional to, lines only have length.
   const step = ctx.sizeScaled ? stepFor(span) : LINE_STEP_PX;
   const cell = ctx.sizeScaled ? CELL : LINE_CELL;
-  const run = smooth(sketchRun(world, amp, ctx.seed, step, cell), closed);
+  const run = smooth(
+    sketchRun(world, amp, ctx.seed, step, cell),
+    closed,
+    closed ? POLYGON_ROUNDNESS : LINE_ROUNDNESS,
+  );
   if (closed && run.length > 1) run.push(run[0]!);
   return toLngLatRing(run, ctx.scale);
 }

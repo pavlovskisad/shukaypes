@@ -305,6 +305,40 @@ function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
 // fills surfaced from under it: a city of white cutouts punched through
 // the territory field. (The first fix aimed at the buildings' distance
 // fog — wrong layer; the 3D city wasn't even there.)
+// WHICH RENDER IS ON SCREEN: the Three.js world, or the drawn page.
+//
+// The world's layers are built once per session and toggled here rather
+// than torn down — rebuilding an extruded city on every sniff toggle is
+// exactly the cost the paper map just finished removing from the zoom
+// path. `maxPitch` moves with them, because a page cannot be tilted and
+// a world must be.
+//
+// THIS MUST NOT RIDE ON THE PALETTE PASS. It used to, and the palette
+// pass defers itself to `map.once('idle')` whenever the style is
+// mid-update — which is exactly the state a mode change puts it in. On a
+// cold entry straight into supersniff, with tiles still arriving, idle
+// can be seconds away, and for all of them the 3D city stayed hidden and
+// the pitch stayed capped at 0. Supersniff opened as a flat, empty page
+// and stayed that way until the tiles settled. Layer visibility and the
+// pitch cap do not need a settled style, so they are applied at once and
+// again on the palette pass.
+function syncWorldRender(map: maplibregl.Map, superSniff: boolean): void {
+  if (!PAPER_MAP) return;
+  for (const id of [THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID, DEPTH_FOG_LAYER_ID]) {
+    if (!map.getLayer(id)) continue;
+    try {
+      map.setLayoutProperty(id, 'visibility', superSniff ? 'visible' : 'none');
+    } catch {
+      /* style mid-update — the palette pass repeats this */
+    }
+  }
+  try {
+    map.setMaxPitch(superSniff ? 80 : 0);
+  } catch {
+    /* ignore */
+  }
+}
+
 function hideMapLibreBuildings(map: maplibregl.Map): void {
   for (const l of map.getStyle().layers ?? []) {
     if ((l as { 'source-layer'?: string })['source-layer'] === 'building') {
@@ -1262,6 +1296,41 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (!DOG_CAM || !dogCam) return;
     const map = mapRef.current;
     if (!map) return;
+    // THE CAP IS RAISED BY THE CODE THAT NEEDS IT.
+    //
+    // The paper map holds maxPitch at 0 so its page cannot be tilted, and
+    // supersniff needs 70. Both were being set from the palette effect —
+    // which is declared BELOW this one, so within a single commit this
+    // effect's first ease asked for 70 while the cap was still 0, and
+    // MapLibre silently clamped it. Supersniff opened flat and only got
+    // its tilt back when a later follow tick re-eased, by which time the
+    // cap had caught up.
+    //
+    // Two effects agreeing about one camera through declaration order is
+    // not an arrangement worth keeping even when it happens to work, so
+    // the tilt raises its own ceiling here, before anything moves.
+    try {
+      map.setMaxPitch(80);
+    } catch {
+      /* style not ready */
+    }
+    // …and tilt AT ONCE, rather than waiting for the first follow tick.
+    // Before the paper map this cost nothing to skip: the walking camera
+    // already sat at GAME_PITCH 65, so entry was a 5-degree nudge nobody
+    // saw. From a flat page it is the whole 70, and leaving it to the
+    // interval means supersniff opens flat and then rears up a beat
+    // later. The loop takes over from here.
+    try {
+      const dogNow = companionPosRef.current ?? userPosRef.current;
+      easeCamera(map, 'cinematic', {
+        ...(dogNow ? { center: [dogNow.lng, dogNow.lat] as [number, number] } : {}),
+        pitch: DOGCAM_PITCH,
+        zoom: DOGCAM_ZOOM,
+        duration: 500,
+      });
+    } catch {
+      /* map tearing down */
+    }
     // The dog rides at true centre (see the framing comment on the constants
     // above), so the mode needs NO camera padding of its own — but the
     // pet/spot modal snap eases `padding` onto the transform and MapLibre
@@ -2597,27 +2666,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               console.error('[fog] addLayer failed', e);
             }
           }
-          // Built, and off. The world render belongs to supersniff; the
-          // map opens on the page. Doing this HERE rather than leaving it
-          // to the mode effect matters because the effect only runs when
-          // its inputs change — on a cold start into explore they never
-          // do, and the first frame would be a fogged 3D city over the
-          // drawing.
-          if (PAPER_MAP && !useGameStore.getState().dogCam) {
-            for (const id of [THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID, DEPTH_FOG_LAYER_ID]) {
-              if (!map.getLayer(id)) continue;
-              try {
-                map.setLayoutProperty(id, 'visibility', 'none');
-              } catch {
-                /* ignore */
-              }
-            }
-            try {
-              map.setMaxPitch(0);
-            } catch {
-              /* ignore */
-            }
-          }
+          // Built, and pointed at whichever mode we opened in. Doing this
+          // HERE rather than leaving it to the mode effect matters because
+          // that effect only runs when its inputs change — on a cold start
+          // they never do, and the first frame would be the wrong render.
+          syncWorldRender(map, DOG_CAM && useGameStore.getState().dogCam);
         });
         // Street names hide at the steep game pitch, return when flat.
         map.on('pitchend', syncStreetLabels);
@@ -2726,6 +2779,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    // Right now, before anything below can defer itself: which render is
+    // on screen is not a question that needs a settled style, and making
+    // it wait for one is what left supersniff flat and empty on a cold
+    // entry. See syncWorldRender.
+    syncWorldRender(map, superSniff);
     // Re-apply when sniff palette OR language changes — the override
     // sets both paint colours AND text-field language, so a lang flip
     // from the profile toggle re-localises street/place labels live.
@@ -2736,30 +2794,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       // palette — only paint — so nothing is rebuilt here.
       sketchRef.current?.restyle(mapPalette);
       setSketchVisible(map, mapPalette.handDrawn);
-      // …and the world render is the other half of the same switch: the
-      // Three.js city and its fog belong to supersniff and nothing else.
-      // They are HIDDEN rather than torn down — rebuilding an extruded
-      // city on every sniff toggle is exactly the cost this whole
-      // experiment just finished removing from the zoom path.
-      if (PAPER_MAP) {
-        for (const id of [THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID, DEPTH_FOG_LAYER_ID]) {
-          if (!map.getLayer(id)) continue;
-          try {
-            map.setLayoutProperty(id, 'visibility', superSniff ? 'visible' : 'none');
-          } catch {
-            /* style mid-update */
-          }
-        }
-        // A page cannot be tilted; a world can. Raising the cap before
-        // the camera eases up matters — MapLibre clamps a requested pitch
-        // to the CURRENT max, so setting these the other way round leaves
-        // supersniff flat.
-        try {
-          map.setMaxPitch(superSniff ? 80 : 0);
-        } catch {
-          /* ignore */
-        }
-      }
+      syncWorldRender(map, superSniff);
       // applyCrayonOverride resets transportation_name visibility to
       // 'visible', so re-apply the pitch-based hide right after.
       syncStreetLabels();
