@@ -33,7 +33,10 @@ import {
   eyeFromMainMatrix,
 } from './threeBuildingsLayer';
 
-export const GROUND_FOG_LAYER_ID = 'ground-fog';
+// See layerIds.ts for why the id is defined elsewhere.
+import { GROUND_FOG_LAYER_ID } from './layerIds';
+import { createRepaintGovernor, type RepaintGovernor } from './repaintGovernor';
+export { GROUND_FOG_LAYER_ID };
 
 type GL = WebGLRenderingContext | WebGL2RenderingContext;
 type RGB = [number, number, number];
@@ -189,11 +192,13 @@ export function createGroundFogLayer(): CustomLayerInterface {
   let mapRef: MlMap | null = null;
   const invMat = new THREE.Matrix4();
   const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
-  // Self-driven repaint for the god-ray / sun-pulse animation. Throttled to
-  // ~20fps and only kept alive while the sun is actually in view, so a
-  // camera facing away lets the map go idle (no battery drain, and building
-  // rebuilds still fire on idle in the gaps).
-  let repaintScheduled = false;
+  // Self-driven repaint for the god-ray / sun-pulse animation. Base rate
+  // ~20fps, only kept alive while the sun is actually in view, so a camera
+  // facing away lets the map go idle (building rebuilds still fire on idle
+  // in the gaps). The governor backs the rate off on a device that cannot
+  // keep up, holds still under prefers-reduced-motion, and sleeps while
+  // the tab is hidden — see repaintGovernor.ts.
+  let governor: RepaintGovernor | null = null;
 
   return {
     id: GROUND_FOG_LAYER_ID,
@@ -202,6 +207,7 @@ export function createGroundFogLayer(): CustomLayerInterface {
 
     onAdd(map: MlMap, gl: GL) {
       mapRef = map;
+      governor = createRepaintGovernor(map, 50);
       const vs = compile(gl, gl.VERTEX_SHADER, VERT);
       const fs = compile(gl, gl.FRAGMENT_SHADER, FRAG);
       if (!vs || !fs) return;
@@ -240,10 +246,13 @@ export function createGroundFogLayer(): CustomLayerInterface {
       program = null;
       buffer = null;
       mapRef = null;
+      governor?.dispose();
+      governor = null;
     },
 
     render(gl: GL, args: CustomRenderMethodInput) {
       try {
+        governor?.noteRender();
         if (!program || !buffer || !mapRef) return;
         const map = mapRef;
         const tone = DAY_G;
@@ -305,19 +314,10 @@ export function createGroundFogLayer(): CustomLayerInterface {
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-        // Keep the sun/rays animating only while the sun is in view. Throttled
-        // to ~20fps; idle still fires in the gaps so building rebuilds run.
-        if (vis > 0.02 && !repaintScheduled) {
-          repaintScheduled = true;
-          setTimeout(() => {
-            repaintScheduled = false;
-            try {
-              mapRef?.triggerRepaint();
-            } catch {
-              /* ignore */
-            }
-          }, 50);
-        }
+        // Keep the sun/rays animating only while the sun is in view. The
+        // governor owns the cadence; idle still fires in the gaps so
+        // building rebuilds run.
+        if (vis > 0.02) governor?.request();
       } catch (e) {
         // eslint-disable-next-line no-console
         console.error('[ground-fog] render error', e);

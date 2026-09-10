@@ -3,6 +3,7 @@ import { pathToFileURL } from 'url';
 import Fastify from 'fastify';
 import type { FastifyError } from 'fastify';
 import cors from '@fastify/cors';
+import compress from '@fastify/compress';
 import rateLimit from '@fastify/rate-limit';
 import authPlugin from './auth.js';
 import stateRoute from './routes/state.js';
@@ -98,6 +99,25 @@ export async function buildServer(observe?: RouteObserver) {
   }
 
   await app.register(cors, { origin: true });
+  // Compress JSON on the way out. Nothing in front of this process does
+  // it — Fly's proxy passes bytes through — so until now every response
+  // left uncompressed: /sync/map at ~27KB every 15s and /presence at
+  // ~4KB every 3s, on mobile data, to a browser that had asked for gzip
+  // on every one of them. JSON with repeated keys and coordinates
+  // compresses 4–6×, which is the cheapest data-bill cut available.
+  //
+  // gzip only, and a modest level: brotli's default quality (11) is far
+  // too slow to run per request on one shared vCPU, and level 5 gzip
+  // gets nearly all of the size win at a fraction of the CPU. The
+  // threshold leaves tiny replies (a `{ ok: true }`) alone — below ~1KB
+  // the headers outweigh the saving. Images from /photos are skipped
+  // automatically (the plugin only touches compressible content types).
+  await app.register(compress, {
+    global: true,
+    encodings: ['gzip', 'deflate'],
+    threshold: 1024,
+    zlibOptions: { level: 5 },
+  });
   await app.register(rateLimit, {
     global: false,
     max: balance.collectRateLimitPerMin,

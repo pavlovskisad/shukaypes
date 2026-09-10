@@ -78,7 +78,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type maplibregl from 'maplibre-gl';
 import { useMaplibreMap } from './MapContext';
-import { THREE_BUILDINGS_LAYER_ID } from './threeBuildingsLayer';
+import { THREE_BUILDINGS_LAYER_ID } from './layerIds';
 import type { RivalTerritory, TerritoryMark, TerritoryShape } from '../../services/api';
 import { OWN_COLOR_CSS, OWN_COLOR_RGB, ownerColorCss, ownerColorRgb } from './territoryColor';
 import {

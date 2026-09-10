@@ -28,8 +28,17 @@
          user is already known. Outside Telegram (regular browser /
          PWA), `window.Telegram` is undefined and we fall back to the
          existing device-id flow. Script is cheap (~10 KB) and loads
-         on every page even outside TG, but it's a no-op there. -->
-    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+         on every page even outside TG, but it's a no-op there.
+
+         `defer`, not a blocking tag: a plain script in <head> stops the
+         parser until telegram.org answers, so on a slow or partly-blocked
+         network the page stayed blank for as long as that took — before
+         a byte of our own bundle had run. Deferred scripts execute in
+         document order, and the app bundle below is deferred too, so the
+         SDK still runs first and `window.Telegram` is ready before the
+         app reads it. If telegram.org never answers, a deferred script
+         fails quietly and the bundle runs anyway. -->
+    <script src="https://telegram.org/js/telegram-web-app.js" defer></script>
 
     <!-- Preload the brand font alongside the HTML so the browser
          starts fetching before CSS parses @font-face. crossorigin is
@@ -257,6 +266,61 @@
           transform: scale(1);
         }
       }
+
+      /* SOMETHING ON SCREEN WHILE THE BUNDLE DOWNLOADS.
+         The app is one deferred script of about a megabyte compressed.
+         On a good 4G that is a second; on the 3G a phone drops to in a
+         metro entrance it is fifteen to thirty, and until now every one
+         of those seconds was a blank white page — indistinguishable from
+         a broken link, and the moment people close the tab. Nothing
+         React draws can help, because React is inside that megabyte.
+
+         So the shell paints the wordmark itself, in CSS only, and the
+         root layout removes it on mount (app/_layout.tsx), handing over
+         to the React Splash underneath. No JS here on purpose: if the
+         bundle fails to parse on some old engine this is the last thing
+         the user sees, so after twelve seconds it also admits the wait
+         is long. White ground and the brand font match the React splash
+         so the hand-off is invisible. */
+      #splash {
+        position: fixed;
+        inset: 0;
+        z-index: 1;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        justify-content: center;
+        background: #ffffff;
+        color: #1a1a1a;
+        font-family: 'Annex Regular', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+        pointer-events: none;
+        user-select: none;
+        -webkit-user-select: none;
+      }
+      #splash .wordmark {
+        font-size: 28px;
+        letter-spacing: 0.01em;
+        animation: splash-breathe 1.6s ease-in-out infinite;
+      }
+      #splash .slow {
+        margin-top: 14px;
+        padding: 0 24px;
+        font-size: 14px;
+        text-align: center;
+        color: #8a8a8a;
+        opacity: 0;
+        animation: splash-reveal 0.6s ease-out 12s forwards;
+      }
+      @keyframes splash-breathe {
+        0%, 100% { opacity: 0.55; }
+        50% { opacity: 1; }
+      }
+      @keyframes splash-reveal {
+        to { opacity: 1; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        #splash .wordmark { animation: none; opacity: 1; }
+      }
     </style>
   </head>
 
@@ -265,5 +329,12 @@
       You need to enable JavaScript to run this app.
     </noscript>
     <div id="root"></div>
+    <!-- Removed by the root layout the moment React has mounted; see the
+         #splash note in the stylesheet above. Both languages, because the
+         user's choice lives in localStorage and nothing here can read it. -->
+    <div id="splash" aria-hidden="true">
+      <div class="wordmark">шукайпес</div>
+      <div class="slow">повільна мережа, ще трохи… · slow connection, hang on…</div>
+    </div>
   </body>
 </html>

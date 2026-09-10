@@ -11,6 +11,7 @@
 import { createHash } from 'node:crypto';
 import type { FastifyPluginAsync } from 'fastify';
 import { ensureTokensForUser, ensureFoodForUser } from '../services/spawn.js';
+import { shouldAttemptSpawn } from '../services/spawnCooldown.js';
 import {
   fetchNearbyTokens,
   fetchNearbyFood,
@@ -174,9 +175,15 @@ const plugin: FastifyPluginAsync = async (app) => {
     // ensure* calls have to land before the SELECT or the just-spawned
     // rows would miss this response — same ordering the per-resource
     // endpoints used.
+    //
+    // Gated as a whole, first: one Redis call decides whether a spawn
+    // round is due at all, and a sync that is not due skips every probing
+    // query the ensure* calls would otherwise make. See shouldAttemptSpawn
+    // for the numbers; this is the cheapest half of L-2.
+    const spawnDue = await shouldAttemptSpawn(req.userId);
     await Promise.all([
-      ensureTokensForUser(req.userId, pos, parks, { home }),
-      ensureFoodForUser(req.userId, pos, parks),
+      spawnDue ? ensureTokensForUser(req.userId, pos, parks, { home }) : Promise.resolve(),
+      spawnDue ? ensureFoodForUser(req.userId, pos, parks) : Promise.resolve(),
       // Remember home ground for the decay cron, which can branch on a
       // column but can't compute a hull. Writes only on a change, and
       // never blocks the map on a hiccup.

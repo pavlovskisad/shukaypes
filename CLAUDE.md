@@ -67,8 +67,10 @@ found nothing.
   is finished — restart from `origin/main` for follow-up work rather
   than stacking onto merged history.
 - `pnpm -r typecheck` and `pnpm -r lint` before every PR. Lint carries
-  21 pre-existing `react-hooks/exhaustive-deps` warnings and 0 errors;
-  that is the baseline, not a regression.
+  22 pre-existing `react-hooks/exhaustive-deps` warnings and 0 errors
+  (23 on `main` before the beta perf pass; measure `origin/main` in a
+  scratch worktree rather than trusting this number); that is the
+  baseline, not a regression.
 - Pushing to `main` deploys automatically (typecheck + lint gate, then
   `flyctl deploy`). There is no separate deploy step to run, and no
   reason to run one by hand.

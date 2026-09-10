@@ -15,10 +15,12 @@
 // the top of the fog meets the sky dome seamlessly.
 
 import type {
+  Map as MlMap,
   CustomLayerInterface,
   CustomRenderMethodInput,
 } from 'maplibre-gl';
 import { useGameStore } from '../../stores/gameStore';
+import { createRepaintGovernor, type RepaintGovernor } from './repaintGovernor';
 
 export const DEPTH_FOG_LAYER_ID = 'depth-fog';
 
@@ -193,9 +195,13 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
   let uHorizonY: WebGLUniformLocation | null = null;
   let uBandStrength: WebGLUniformLocation | null = null;
   const t0 = typeof performance !== 'undefined' ? performance.now() : 0;
-  // Throttle the self-driven animation to ~30fps — smooth enough for the
-  // drifting clouds without forcing a full 60fps map repaint (battery).
-  let repaintScheduled = false;
+  // Self-driven animation for the drifting clouds. Base ~20fps (it was a
+  // fixed 30, on the render path that exists for the WEAKEST devices —
+  // the ones the game render fell back from); the governor lowers it
+  // further when frames arrive late, holds still under
+  // prefers-reduced-motion and sleeps while the tab is hidden. See
+  // repaintGovernor.ts.
+  let governor: RepaintGovernor | null = null;
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   let mapRef: any = null;
 
@@ -206,6 +212,7 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
 
     onAdd(map: unknown, gl: GL) {
       mapRef = map;
+      governor = createRepaintGovernor(map as MlMap, 50);
       const vs = compile(gl, gl.VERTEX_SHADER, VERT);
       const fs = compile(gl, gl.FRAGMENT_SHADER, FRAG);
       if (!vs || !fs) return;
@@ -245,9 +252,20 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
       );
     },
 
+    onRemove(_map: unknown, gl: GL) {
+      governor?.dispose();
+      governor = null;
+      if (program) gl.deleteProgram(program);
+      if (buffer) gl.deleteBuffer(buffer);
+      program = null;
+      buffer = null;
+      mapRef = null;
+    },
+
     // eslint-disable-next-line @typescript-eslint/no-unused-vars
     render(gl: GL, _args: CustomRenderMethodInput) {
       try {
+        governor?.noteRender();
         if (!program || !buffer || !mapRef) return;
         const pitch: number = mapRef.getPitch();
         const pitchT = Math.max(0, Math.min(1, (pitch - minPitch) / (fullPitch - minPitch)));
@@ -312,20 +330,9 @@ export function createDepthFogLayer(opts: FogOpts = {}): CustomLayerInterface {
         gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
         gl.drawArrays(gl.TRIANGLES, 0, 6);
 
-        // Keep animating while the fog is visible (pitched), throttled to
-        // ~22fps via setTimeout. setTimeout is itself throttled when the tab
-        // is hidden, so this idles in the background.
-        if (!repaintScheduled) {
-          repaintScheduled = true;
-          setTimeout(() => {
-            repaintScheduled = false;
-            try {
-              mapRef?.triggerRepaint();
-            } catch {
-              /* ignore */
-            }
-          }, 33);
-        }
+        // Keep animating while the fog is visible (pitched). The governor
+        // owns the cadence.
+        governor?.request();
       } catch (e) {
         // Never let a fog hiccup break the map's frame.
         // eslint-disable-next-line no-console

@@ -79,10 +79,12 @@ path.
 
 Order of work, cheapest first:
 
-1. Gate the whole spawn attempt on the Redis cooldown **before** any
+1. ✅ Gate the whole spawn attempt on the Redis cooldown **before** any
    probing query, so a sync that will not spawn costs one read instead of
-   fifteen.
-2. Set `max` on the pool explicitly rather than inheriting 10.
+   fifteen. *Done in the beta perf pass (`shouldAttemptSpawn`, 30s per
+   user, `SPAWN_ATTEMPT_GAP_MS`) — see [`12-beta-perf-compat.md`](12-beta-perf-compat.md).*
+2. ✅ Set `max` on the pool explicitly rather than inheriting 10. *Done:
+   `PG_POOL_MAX`, default 10, plus `connect_timeout`.*
 3. Then the leader lock, for the second machine.
 4. A load rehearsal against the bot fleet, which the memo already lists.
 
@@ -324,6 +326,14 @@ stays available.
 
 ---
 
+## Perf and compatibility flags from the beta pass (10 Sep)
+
+Thirteen items, F-1 … F-13, ranked, live in
+[`12-beta-perf-compat.md`](12-beta-perf-compat.md). The ones that would
+matter in launch week: the auth header as per-request upload (F-1, same
+fix as P1-6), tile data per walk never measured (F-4), pet photos served
+at ad size (F-5), WebGL context loss untested (F-7).
+
 ## P2 — worth doing
 
 | ID | Issue | Where |
@@ -341,7 +351,7 @@ stays available.
 | P2-11 | **Territory decay is undesigned.** Ground only ever ratchets upward. Deferred by the owner; the motive is real — with no decay a city eventually saturates | [`04-territory.md`](04-territory.md) |
 | P2-12 | **The rival dials are now 47% of what a sync costs.** `rivalMarksPerOwner: 24` + `rivalPiecesDrawn: 140`; halving them is another ~23% off the data bill. Left alone deliberately — it changes how dense the map *looks*, which is the art director's call. (The old "~52MB/hour" figure here was ~4× too high; measured reality was ~13MB/h, now ~6.6) | PR #422 |
 | P2-13 | **Render flags are compile-time constants.** `GAME_RENDER` / `MULTIPLAYER` cannot be turned off without a rebuild and redeploy. The server has a `MULTIPLAYER=off` kill switch; the client cannot match it | `AUDIT_FINDINGS` §5.1 |
-| P2-14 | **Perf and battery of the Three.js render on low-end Android is unmeasured.** WebGL2 fallback is handled well; the cost of the continuous fog repaint in the field is not known | `PILOT_ROADMAP` §5.6 |
+| P2-14 | **Perf and battery of the Three.js render on low-end Android is unmeasured.** Narrowed by the beta perf pass: the self-driven fog/sun repaints now back off when frames arrive late, honour reduced-motion and sleep when hidden (`repaintGovernor.ts`), and a device with no WebGL2 gets a message instead of a blank screen. The field cost is still unmeasured — see [`12-beta-perf-compat.md`](12-beta-perf-compat.md) F-7, F-13 | `PILOT_ROADMAP` §5.6 |
 | P2-15 | **CORS reflects any origin** (`origin: true`). Low risk — auth is header-based, so a malicious site has neither the device id nor the initData — but pinning is free | `AUDIT_FINDINGS` §2.7 |
 | P2-16 | **`groundIn` takes 240 pieces with no `ORDER BY`.** Harmless at current fragmentation; will bite eventually | `services/territory.ts` |
 

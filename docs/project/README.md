@@ -21,6 +21,7 @@ an **open** beta rather than a closed one.
 | 09 | [`09-glossary.md`](09-glossary.md) | The vocabulary this project uses for its own parts |
 | 10 | [`10-product-brief.md`](10-product-brief.md) | **Standalone** product outline + running costs — the substrate for business/strategy work; readable without the rest |
 | 11 | `11-strategy.md` | The business decisions that shape the doc set: open beta, team, raise shape, timeline. **Not in this repo** — see the note below |
+| 12 | [`12-beta-perf-compat.md`](12-beta-perf-compat.md) | Performance and compatibility for the open beta: what a phone downloads, what changed (compression, chunking, WebGL2 floor, repaint governor), and thirteen flagged items for other sessions |
 
 ## Precedence
 

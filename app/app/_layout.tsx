@@ -34,6 +34,17 @@ export default function RootLayout() {
     notifyTelegramReady();
   }, []);
 
+  // Take down the shell's CSS-only splash (public/index.html, #splash)
+  // now that React is drawing. It exists for the seconds before this
+  // bundle had downloaded and parsed; from here the React <Splash>
+  // underneath owns the hand-off. Runs on both branches below, so the
+  // invite door is not left under a wordmark. A no-op everywhere but
+  // web, and on a page that never had one.
+  useEffect(() => {
+    if (typeof document === 'undefined') return;
+    document.getElementById('splash')?.remove();
+  }, []);
+
   // Catches what a React boundary structurally cannot: throws outside
   // the render cycle, and promise rejections nobody handled. Installed
   // in an effect rather than at module scope so it runs once the app is
