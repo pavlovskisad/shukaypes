@@ -99,6 +99,11 @@ export const LIGHT_PALETTE = {
   // textured band, which is what a crayon road is; ink needs more (see
   // PAPER_PALETTE).
   roadScale: 0.22,
+  // Is the city redrawn by hand? When true the roads, buildings, parks
+  // and water on THIS style are hidden and map/mapSketch.ts draws
+  // wobbled copies of them instead. See that file for why MapLibre
+  // cannot do it from a stylesheet.
+  handDrawn: false,
   // Sky dome + horizon haze: a blue dome fading to a light neutral-grey
   // horizon that matches the grey depth-fog layer so the join is seamless.
   //
@@ -171,13 +176,19 @@ export const PLAY_PALETTE: Palette = {
 // paper map they take no pattern at all (see the transportation branch).
 export const PAPER_PALETTE: Palette = {
   ...LIGHT_PALETTE,
-  green: '#ffffff',
-  greenDark: '#ffffff',
-  greenLight: '#ffffff',
-  blue: '#ffffff',
-  blueDark: '#ffffff',
-  blueLight: '#ffffff',
+  // Parks and water keep their colour and their fill — the page is
+  // white, the ink is the drawing, and these two are the only things on
+  // it that are coloured in. Kept lighter than the walking map's own
+  // green and blue: under a pen outline a fill only has to say "this is
+  // grass, that is river", and the ink is doing the describing.
+  green: '#d9ecc2',
+  greenDark: '#c2dda4',
+  greenLight: '#ecf6de',
+  blue: '#c6e4f4',
+  blueDark: '#a8d2e8',
+  blueLight: '#e2f2fa',
   greyRoad: '#3a3a3a',
+  handDrawn: true,
   outline: '#2a2a2a',
   outlineOpacity: 0.85,
   buildingOutline: 0.55,
@@ -476,6 +487,19 @@ export function applyCrayonOverride(
   activePalette = palette;
   const ink = palette.outline;
 
+  // THE HAND-DRAWN CITY IS SOMEBODY ELSE'S JOB.
+  //
+  // When this is on, every road, building, park and water layer below
+  // is hidden and mapSketch.ts draws a wobbled copy from the same
+  // features. Note what keeps working because of what: MapLibre only
+  // fetches and keeps a tile while some VISIBLE layer needs it, and
+  // querySourceFeatures reads out of loaded tiles — so the sketch can
+  // only see geometry because the LABEL layers (place, water_name,
+  // transportation_name) are still drawing off this source and holding
+  // the tiles in. Hide those too and the sketch goes blank with no
+  // error, which is the same trap the territory comment above describes.
+  const drawn = palette.handDrawn;
+
   // Flat colour, not the crayon noise pattern. The grain earned its keep
   // when the fills were the richest thing on the map; under the territory
   // field's multiply stain the speckles and blobs showed through every
@@ -579,7 +603,11 @@ export function applyCrayonOverride(
       // right features, sits inside the viewport, and renders none of
       // them — while an identical source under a different id renders
       // fine. Found by exactly that comparison; the id was the variable.
-      id.startsWith('territory-')
+      id.startsWith('territory-') ||
+      // Same argument, different owner: map/mapSketch.ts draws the
+      // hand-drawn city into these, and this loop would hide every one
+      // of them as unrecognised furniture.
+      id.startsWith('sketch-')
     ) {
       // Layers we've injected previously — re-style updates them via
       // setPaintProperty in the appropriate branch below if needed.
@@ -594,6 +622,10 @@ export function applyCrayonOverride(
 
     if (sl === 'water') {
       if (type === 'fill') {
+        if (drawn) {
+          map.setLayoutProperty(id, 'visibility', 'none');
+          continue;
+        }
         paintFill(id, palette.blue);
         const src = (l as { source?: string }).source;
         const filt = (l as { filter?: unknown }).filter;
@@ -612,6 +644,10 @@ export function applyCrayonOverride(
     }
 
     if (sl === 'building') {
+      if (drawn) {
+        map.setLayoutProperty(id, 'visibility', 'none');
+        continue;
+      }
       if (type === 'fill') {
         paintFill(id, palette.paper);
         // Keep the flat footprint VISIBLE on the paper map even though it
@@ -646,6 +682,10 @@ export function applyCrayonOverride(
           lower,
         );
       if (isGreen) {
+        if (drawn) {
+          map.setLayoutProperty(id, 'visibility', 'none');
+          continue;
+        }
         paintFill(id, palette.green);
         const src = (l as { source?: string }).source;
         const filt = (l as { filter?: unknown }).filter;
@@ -702,6 +742,10 @@ export function applyCrayonOverride(
           lower,
         );
       if (isPathish) {
+        map.setLayoutProperty(id, 'visibility', 'none');
+        continue;
+      }
+      if (drawn) {
         map.setLayoutProperty(id, 'visibility', 'none');
         continue;
       }
@@ -930,7 +974,10 @@ export function applyCrayonOverride(
   // The FINEST weight on the page, by design. Footprints outnumber every
   // other shape on a city map by an order of magnitude — at the polygon
   // edges' weight they stop being buildings and become hatching.
-  const outlineOpacity = palette.buildingOutline;
+  // …and none at all when the city is hand-drawn: mapSketch draws its own
+  // wobbled footprint line, and this one would trace the true geometry
+  // right beside it — the exact rectangle next to the drawn one.
+  const outlineOpacity = drawn ? 0 : palette.buildingOutline;
   const outlineColor = palette.outline ?? palette.crayon;
   if (
     outlineOpacity > 0 &&

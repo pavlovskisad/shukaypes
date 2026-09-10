@@ -24,6 +24,7 @@ import {
   setStreetLabelsVisible,
   fetchCrayonStyleSpec,
 } from './crayonStyle';
+import { createMapSketch, setSketchVisible, type MapSketch } from './mapSketch';
 import type { Spot } from '../../services/places';
 import { useLocation, isSimulatedWalk } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
@@ -338,6 +339,10 @@ export default function MapViewWeb() {
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  // The hand-drawn city (mapSketch.ts) and whether a tile has landed
+  // since it was last generated.
+  const sketchRef = useRef<MapSketch | null>(null);
+  const sketchDirtyRef = useRef(false);
   // When the user last dragged the map by hand (0 = never).
   const userPannedAtRef = useRef(0);
   // Stored in state too so React-tree children (markers) can be wired
@@ -2472,10 +2477,49 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // eslint-disable-next-line no-console
           console.error('[maplibre]', e?.error || e);
         });
+        // A new tile is new geometry, and the sketch is generated from
+        // geometry rather than reading it per frame — so a tile that
+        // arrives after the last build has to force the next one, or you
+        // pan into a district that is drawn blank.
+        //
+        // Deliberately NOT gated on `e.tile`. The first cut was, and the
+        // sketch came out completely blank: the only forced build runs at
+        // style.load, when no tile has arrived yet and every query
+        // returns nothing, and from then on refresh() saw the same zoom
+        // bucket and no dirty flag and no-opped forever. Four empty
+        // sources, no error, and a map that looked like a styling
+        // mistake. `sourceDataType === 'content'` is the signal that
+        // actually fires.
+        map.on('sourcedata', (e) => {
+          if (e.sourceDataType === 'content') sketchDirtyRef.current = true;
+        });
         mapRef.current = map;
         map.on('style.load', () => {
           applyCrayonOverride(map, PAPER_PALETTE, lang);
           syncStreetLabels();
+          // The hand-drawn city. Built after the override so it lands on
+          // a style whose own road/building/park/water layers are
+          // already hidden, and before the first idle so the very first
+          // frame of tiles gets sketched rather than showing bare paper.
+          if (PAPER_MAP) {
+            try {
+              const vector = (map.getStyle().layers ?? [])
+                .map((l) => (l as { source?: string }).source)
+                .find((s) => s && map.getSource(s)?.type === 'vector');
+              if (vector) {
+                sketchRef.current = createMapSketch(map, PAPER_PALETTE, vector);
+                sketchRef.current.refresh(true);
+                if (DEV_TOOLS) {
+                  (window as unknown as { __sketch?: unknown }).__sketch =
+                    sketchRef.current;
+                }
+              }
+            } catch (e) {
+              // eslint-disable-next-line no-console
+              console.error('[sketch] init failed — the basemap stays as styled', e);
+              sketchRef.current = null;
+            }
+          }
           // The game render (Three.js buildings + one unified mist) needs
           // WebGL2, so it can fail on old devices. We build it defensively:
           // add both custom layers FIRST and only hide MapLibre's own
@@ -2533,6 +2577,15 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // Street names hide at the steep game pitch, return when flat.
         map.on('pitchend', syncStreetLabels);
         map.on('idle', () => {
+          // Tiles have settled — sketch whatever arrived. refresh()
+          // no-ops unless the zoom bucket moved, so panning within a
+          // zoom costs one comparison; `sketchDirtyRef` is what makes a
+          // genuinely new tile rebuild anyway.
+          if (sketchRef.current) {
+            const dirty = sketchDirtyRef.current;
+            sketchDirtyRef.current = false;
+            sketchRef.current.refresh(dirty);
+          }
           const b = map.getBounds();
           setMapBounds({
             n: b.getNorth(),
@@ -2607,6 +2660,13 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   useEffect(() => {
     return () => {
       const m = mapRef.current;
+      // Before the map goes: the sketch holds sources and layers on it.
+      try {
+        sketchRef.current?.dispose();
+      } catch {
+        /* map already torn down */
+      }
+      sketchRef.current = null;
       if (m) {
         m.remove();
       }
@@ -2626,6 +2686,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // from the profile toggle re-localises street/place labels live.
     const apply = () => {
       applyCrayonOverride(map, mapPalette, lang);
+      // The sketch's own layers are outside the override's whitelist, so
+      // it re-colours them itself. Geometry does not change with the
+      // palette — only paint — so nothing is rebuilt here.
+      sketchRef.current?.restyle(mapPalette);
+      setSketchVisible(map, mapPalette.handDrawn);
       // applyCrayonOverride resets transportation_name visibility to
       // 'visible', so re-apply the pitch-based hide right after.
       syncStreetLabels();
