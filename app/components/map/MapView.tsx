@@ -18,7 +18,7 @@ import { DEV_TOOLS } from '../../constants/devTools';
 import { useGameStore } from '../../stores/gameStore';
 import { MapContext } from './MapContext';
 import {
-  LIGHT_PALETTE,
+  PAPER_PALETTE,
   PLAY_PALETTE,
   applyCrayonOverride,
   setStreetLabelsVisible,
@@ -617,7 +617,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // what the DOM holds.
   // The city goes near-monochrome while territory is drawn over it, so a
   // dozen owner colours are the only hues on screen. See PLAY_PALETTE.
-  const mapPalette = territoryVisible ? PLAY_PALETTE : LIGHT_PALETTE;
+  //
+  // The walking map is the paper drawing (experiment) — one name, changed
+  // in the two places below, reverts it to LIGHT_PALETTE.
+  const mapPalette = territoryVisible ? PLAY_PALETTE : PAPER_PALETTE;
 
   const deckVisible = DOG_CAM && dogCam && onMapScreen && !menuOpen;
   const [deckMounted, setDeckMounted] = useState(deckVisible);
@@ -2471,7 +2474,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         });
         mapRef.current = map;
         map.on('style.load', () => {
-          applyCrayonOverride(map, LIGHT_PALETTE, lang);
+          applyCrayonOverride(map, PAPER_PALETTE, lang);
           syncStreetLabels();
           // The game render (Three.js buildings + one unified mist) needs
           // WebGL2, so it can fail on old devices. We build it defensively:

@@ -79,6 +79,19 @@ export const LIGHT_PALETTE = {
   labelStreet: '#3a3a3a',
   // Multiply overlay opacity (lightens darken effect).
   paperOpacity: 0.48,
+  // INK EDGE. Null here, and that is not an oversight.
+  //
+  // Park and water polygons get a soft halo in their OWN colour, which is
+  // what makes a flat fill sit on the page instead of being stamped onto
+  // it. Put a pen line round the same fill and it stops reading as a
+  // drawn shape and starts reading as a border — the fill is doing the
+  // work, and the edge is arguing with it.
+  //
+  // The paper map is the other way round: the fill is white, so the edge
+  // IS the shape. PAPER_PALETTE sets this; every coloured palette leaves
+  // it null and keeps the halo.
+  outline: null as string | null,
+  outlineOpacity: 0,
   // Sky dome + horizon haze: a blue dome fading to a light neutral-grey
   // horizon that matches the grey depth-fog layer so the join is seamless.
   //
@@ -130,8 +143,96 @@ export const PLAY_PALETTE: Palette = {
   labelWater: '#5b737f',
 };
 
+// THE PAPER MAP — the walking city as a pen drawing (experiment).
+//
+// Same construction as the profile scene: white page, no fills, shapes
+// carried by their outline and by line weight alone. Everything that was
+// a colour here becomes a near-white so the SHAPE survives — a park is
+// still a park-shaped hole in the page, the river is still river-shaped —
+// and the ink does the telling.
+//
+// Two things are deliberately NOT white:
+//
+//   Roads go DARK, not away. Inverting greyRoad is what turns the street
+//   network from a pale grey wash into the drawn line it is on paper. The
+//   road pattern flecks its base with paper-coloured speckles, so a dark
+//   base gives a dry-pen texture for free rather than a flat cable — the
+//   generator already did the right thing, it was only ever handed a
+//   light colour.
+//
+//   Green and blue are white PAGE with a grey stipple over it, because
+//   the fills here are patterns rather than flat colour (see paintFill).
+//   `green`/`blue` are the pattern's ground and stay pure white; the
+//   `*Dark` shade is what the speckle is drawn in, so it is the only one
+//   with any tone. Park stipple is neutral, water stipple is a step
+//   cooler and denser-reading — enough to tell a lawn from a river at a
+//   glance, and nowhere near a colour.
+//
+// Buildings keep their 3D treatment (already near-white, softly lit) and
+// get no footprint outline: hideMapLibreBuildings() hides EVERY layer on
+// the `building` source-layer, ours included, so an ink footprint here
+// would be switched off a frame later on any session running the game
+// render — and under a pitched 3D city it would draw over the roofs
+// anyway. The volumes read as paper already.
+export const PAPER_PALETTE: Palette = {
+  ...LIGHT_PALETTE,
+  green: '#ffffff',
+  greenDark: '#8d8d84',
+  greenLight: '#ffffff',
+  blue: '#ffffff',
+  blueDark: '#7c8f9b',
+  blueLight: '#ffffff',
+  greyRoad: '#6f6f6f',
+  roadWobbleLight: '#c4c4c4',
+  roadWobbleDark: '#9a9a9a',
+  outline: '#2a2a2a',
+  outlineOpacity: 0.82,
+  labelWater: '#4c4c4c',
+  // White page all the way up. The warm off-screen sun glow in the ground
+  // fog shader still washes the top of the frame, which is the same light
+  // the profile scene's sun casts — so the sky is not dead flat, it just
+  // stops being blue.
+  sky: {
+    skyColor: '#fdfdfc',
+    horizonColor: '#ffffff',
+    fogColor: '#fbfbfa',
+  },
+};
+
+// The palette the last applyCrayonOverride() ran with. The WebGL layers
+// (ground fog's sky dome) need the sky colours, and they render on their
+// own clock rather than being called with a palette — this is how they
+// ask. Read via getActivePalette(); never mutate the object it returns.
+let activePalette: Palette = LIGHT_PALETTE;
+
+export function getActivePalette(): Palette {
+  return activePalette;
+}
 
 const ROAD_WIDTH_SCALE = 0.22;
+
+// Polygon edge geometry. The halo is a wide, blurred bloom in the fill's
+// own colour; the ink edge is a narrow, near-crisp pen line. Same layer,
+// two jobs — see `outline` in LIGHT_PALETTE.
+const HALO_WIDTH: unknown = [
+  'interpolate', ['linear'], ['zoom'],
+  10, 0.6,
+  14, 1.6,
+  18, 3.5,
+];
+const HALO_BLUR: unknown = [
+  'interpolate', ['linear'], ['zoom'],
+  10, 1.5,
+  14, 4,
+  18, 9,
+];
+const INK_WIDTH: unknown = [
+  'interpolate', ['linear'], ['zoom'],
+  10, 0.7,
+  14, 1.2,
+  18, 2.1,
+];
+const INK_BLUR: unknown = 0.3;
 
 // ---------------------------------------------------------------------
 // Canvas pattern generators
@@ -216,39 +317,73 @@ function noiseFill(opts: {
   return ctx.getImageData(0, 0, size, size);
 }
 
+// PENCIL TOOTH HAS NO BLOBS.
+//
+// The soft wide discs underneath the speckle are what give a coloured
+// fill its variation — over a green they read as light and shade in the
+// grass. Over the white page they have nothing to vary: they are the
+// only tone in the shape, so the tile stops being a texture and becomes
+// a field of overlapping grey circles, with the 256px repeat plainly
+// visible where the same arrangement lands again. Measured on the river,
+// which is wide enough to show three tiles across.
+//
+// So the paper map gets speckle only, finer and much fainter — the
+// tooth of the paper, not shading on top of it.
+const PENCIL_GRAIN = {
+  blobs: 0,
+  blobAlpha: 0,
+  blobRadius: [0, 0] as [number, number],
+  dotAlpha: [0.05, 0.15] as [number, number],
+  dotSize: [0.5, 1.3] as [number, number],
+  speckleAlpha: [0.04, 0.13] as [number, number],
+};
+
 function parkPattern(p: Palette): ImageData {
+  const pencil = p.outline != null;
   return noiseFill({
     size: 256,
     base: p.green,
     darker: p.greenDark,
     lighter: p.greenLight,
     seed: 7,
-    blobs: 18,
-    blobAlpha: 0.1,
-    blobRadius: [25, 80],
-    dots: 950,
-    dotAlpha: [0.16, 0.45],
-    dotSize: [0.5, 1.9],
-    speckles: 2400,
-    speckleAlpha: [0.06, 0.22],
+    dots: pencil ? 700 : 950,
+    speckles: pencil ? 3000 : 2400,
+    ...(pencil
+      ? PENCIL_GRAIN
+      : {
+          blobs: 18,
+          blobAlpha: 0.1,
+          blobRadius: [25, 80] as [number, number],
+          dotAlpha: [0.16, 0.45] as [number, number],
+          dotSize: [0.5, 1.9] as [number, number],
+          speckleAlpha: [0.06, 0.22] as [number, number],
+        }),
   });
 }
 
 function waterPattern(p: Palette): ImageData {
+  const pencil = p.outline != null;
   return noiseFill({
     size: 256,
     base: p.blue,
     darker: p.blueDark,
     lighter: p.blueLight,
     seed: 13,
-    blobs: 22,
-    blobAlpha: 0.11,
-    blobRadius: [25, 80],
-    dots: 950,
-    dotAlpha: [0.16, 0.42],
-    dotSize: [0.5, 1.9],
-    speckles: 2400,
-    speckleAlpha: [0.06, 0.22],
+    // Denser than the park so the river reads as the heavier surface —
+    // the two stipples are the same grey otherwise, and the only thing
+    // left telling water from lawn would be the outline.
+    dots: pencil ? 1100 : 950,
+    speckles: pencil ? 3600 : 2400,
+    ...(pencil
+      ? PENCIL_GRAIN
+      : {
+          blobs: 22,
+          blobAlpha: 0.11,
+          blobRadius: [25, 80] as [number, number],
+          dotAlpha: [0.16, 0.42] as [number, number],
+          dotSize: [0.5, 1.9] as [number, number],
+          speckleAlpha: [0.06, 0.22] as [number, number],
+        }),
   });
 }
 
@@ -339,6 +474,29 @@ export function applyCrayonOverride(
   palette: Palette,
   lang: 'uk' | 'en' = 'uk',
 ): void {
+  activePalette = palette;
+  const ink = palette.outline;
+
+  // Nature fills: a flat colour, or a pencil stipple on the paper map.
+  //
+  // The grain was dropped from these fills because territory painted a
+  // multiply stain across the whole city and every speckle showed through
+  // every claim as dirt on the colour. That is the PLAY palette's problem
+  // and the paper map never carries it — territory is a lens, it only
+  // paints in play mode, which has its own palette. Here the texture is
+  // the only thing that separates a park from the page: a white lawn
+  // inside a hairline is a shape you have to trace to read, and the
+  // Dnipro at this width becomes an empty band across the screen.
+  const paintFill = (id: string, colour: string, pattern: string) => {
+    if (ink) {
+      map.setPaintProperty(id, 'fill-pattern', pattern);
+    } else {
+      clear(map, id, 'fill-pattern');
+      map.setPaintProperty(id, 'fill-color', colour);
+    }
+    map.setPaintProperty(id, 'fill-opacity', 1);
+  };
+
   addImg(map, 'crayon-park', parkPattern(palette), 1);
   addImg(map, 'crayon-water', waterPattern(palette), 1);
   addImg(map, 'crayon-road', roadPattern(palette), 1);
@@ -437,13 +595,7 @@ export function applyCrayonOverride(
 
     if (sl === 'water') {
       if (type === 'fill') {
-        // Flat colour, not the crayon noise pattern. The grain earned its
-        // keep when the fills were the richest thing on the map; under
-        // the territory field's multiply stain the speckles and blobs
-        // showed through every claim and read as dirt on the colour.
-        clear(map, id, 'fill-pattern');
-        map.setPaintProperty(id, 'fill-color', palette.blue);
-        map.setPaintProperty(id, 'fill-opacity', 1);
+        paintFill(id, palette.blue, 'crayon-water');
         const src = (l as { source?: string }).source;
         const filt = (l as { filter?: unknown }).filter;
         if (src)
@@ -485,10 +637,7 @@ export function applyCrayonOverride(
           lower,
         );
       if (isGreen) {
-        // Flat colour — same reasoning as the water fill above.
-        clear(map, id, 'fill-pattern');
-        map.setPaintProperty(id, 'fill-color', palette.green);
-        map.setPaintProperty(id, 'fill-opacity', 1);
+        paintFill(id, palette.green, 'crayon-park');
         const src = (l as { source?: string }).source;
         const filt = (l as { filter?: unknown }).filter;
         if (src && sl)
@@ -632,11 +781,26 @@ export function applyCrayonOverride(
     map.setLayoutProperty(id, 'visibility', 'none');
   }
 
-  // Soft polygon halos.
+  // Polygon edges — a soft same-colour halo, or a pen line on the paper
+  // map. The layer is the same one either way, so a palette flip restyles
+  // it in place rather than leaving the previous treatment behind.
+  const edgePaint = {
+    'line-width': ink ? INK_WIDTH : HALO_WIDTH,
+    'line-blur': ink ? INK_BLUR : HALO_BLUR,
+    'line-opacity': ink ? palette.outlineOpacity : 0.9,
+  };
+  const setEdge = (layerId: string, prop: string, value: unknown) => {
+    (map.setPaintProperty as (l: string, p: string, v: unknown) => void)(
+      layerId, prop, value,
+    );
+  };
   for (const p of polygonsToSoften) {
     const softId = `soften-${p.baseId}`;
     if (map.getLayer(softId)) {
-      map.setPaintProperty(softId, 'line-color', p.color);
+      setEdge(softId, 'line-color', ink ?? p.color);
+      setEdge(softId, 'line-width', edgePaint['line-width']);
+      setEdge(softId, 'line-blur', edgePaint['line-blur']);
+      setEdge(softId, 'line-opacity', edgePaint['line-opacity']);
       continue;
     }
     try {
@@ -647,20 +811,8 @@ export function applyCrayonOverride(
         'source-layer': p.sourceLayer,
         ...(p.filter !== undefined ? { filter: p.filter } : {}),
         paint: {
-          'line-color': p.color,
-          'line-width': [
-            'interpolate', ['linear'], ['zoom'],
-            10, 0.6,
-            14, 1.6,
-            18, 3.5,
-          ],
-          'line-blur': [
-            'interpolate', ['linear'], ['zoom'],
-            10, 1.5,
-            14, 4,
-            18, 9,
-          ],
-          'line-opacity': 0.9,
+          ...edgePaint,
+          'line-color': ink ?? p.color,
         },
         layout: {
           'line-cap': 'round',

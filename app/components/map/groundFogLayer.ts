@@ -24,7 +24,7 @@ import type {
   Map as MlMap,
 } from 'maplibre-gl';
 import { useGameStore } from '../../stores/gameStore';
-import { LIGHT_PALETTE } from './crayonStyle';
+import { getActivePalette } from './crayonStyle';
 import {
   DAY,
   POOL_STRENGTH,
@@ -52,8 +52,6 @@ interface GroundTone {
   fog: RGB;
   fogNear: number;
   fogDensity: number;
-  skyTop: RGB;
-  skyHorizon: RGB;
   sun: RGB;
   sunStrength: number;
 }
@@ -61,14 +59,35 @@ const DAY_G: GroundTone = {
   fog: rgbNum(DAY.fog),
   fogNear: DAY.fogNear,
   fogDensity: DAY.fogDensity,
-  skyTop: rgbHex(LIGHT_PALETTE.sky.skyColor),
-  skyHorizon: rgbHex(LIGHT_PALETTE.sky.horizonColor),
   // Soft warm sun for the sky glow + god rays (decoupled from the cooler
   // building fill light). Gentle strength — the source is off-screen so this
   // reads as ambient warmth, not a spotlight.
   sun: rgbNum(0xffdaa6),
   sunStrength: 0.5,
 };
+
+// THE SKY IS THE PALETTE'S, AND THE PALETTE CHANGES.
+//
+// The dome and horizon used to be parsed out of LIGHT_PALETTE once, at
+// module load — which was true for exactly as long as there was one
+// walking palette. There is more than one now, and a frozen sky would
+// have left a blue dome standing over a white paper city. So they are
+// read per frame from whichever palette applyCrayonOverride() last ran
+// with, and memoised on the two colour strings: a hex parse per frame is
+// pointless, and this runs on the render clock.
+let skyKey = '';
+let skyTop: RGB = [0, 0, 0];
+let skyHorizon: RGB = [0, 0, 0];
+function skyTones(): { top: RGB; horizon: RGB } {
+  const sky = getActivePalette().sky;
+  const key = `${sky.skyColor}|${sky.horizonColor}`;
+  if (key !== skyKey) {
+    skyKey = key;
+    skyTop = rgbHex(sky.skyColor);
+    skyHorizon = rgbHex(sky.horizonColor);
+  }
+  return { top: skyTop, horizon: skyHorizon };
+}
 
 const VERT = `
 attribute vec2 a_pos;
@@ -290,10 +309,11 @@ export function createGroundFogLayer(): CustomLayerInterface {
         const bubble = clearBubbleForCamera(map.getZoom(), map.getPitch());
         gl.uniform1f(u.u_clearRadius, bubble.radius);
         gl.uniform1f(u.u_clearBand, bubble.band);
-        gl.uniform3f(u.u_skyTop, tone.skyTop[0], tone.skyTop[1], tone.skyTop[2]);
+        const sky = skyTones();
+        gl.uniform3f(u.u_skyTop, sky.top[0], sky.top[1], sky.top[2]);
         gl.uniform3f(
           u.u_skyHorizon,
-          tone.skyHorizon[0], tone.skyHorizon[1], tone.skyHorizon[2],
+          sky.horizon[0], sky.horizon[1], sky.horizon[2],
         );
         gl.uniform3f(u.u_sunColor, tone.sun[0], tone.sun[1], tone.sun[2]);
         gl.uniform1f(u.u_sunStrength, tone.sunStrength * vis);
