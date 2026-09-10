@@ -40,7 +40,10 @@ import { DOG_CAM } from '../../constants/experiments';
 import { jitterInRadius } from '../../utils/cluster';
 import { colors } from '../../constants/colors';
 
-export const THREE_BUILDINGS_LAYER_ID = 'three-buildings';
+// The id lives in layerIds.ts so callers that only ask "is the layer
+// there?" need not import this module (and three.js with it).
+import { THREE_BUILDINGS_LAYER_ID } from './layerIds';
+export { THREE_BUILDINGS_LAYER_ID };
 
 // OpenMapTiles (OpenFreeMap "liberty") schema — buildings live under the
 // `openmaptiles` source, `building` source-layer, with render_height /

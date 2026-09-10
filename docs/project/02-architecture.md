@@ -41,7 +41,9 @@ Map tiles: OpenFreeMap "liberty", heavily overridden. Glyphs self-hosted.
 ```
 
 Everything runs in one process on one machine. All crons are `setInterval`
-in-process. `min_machines_running = 1` exists specifically so the crons keep
+in-process. Responses are gzipped in-process too (`@fastify/compress`,
+level 5, ≥1KB, compressible types only) — nothing in front of the
+process does it. `min_machines_running = 1` exists specifically so the crons keep
 ticking.
 
 ## The two hot paths
@@ -109,8 +111,13 @@ you can farm paws you did not walk to.
 ## Frontend (`app/`)
 
 **Framework.** Expo (SDK ~52) + Expo Router + React Native Web, bundled by
-Metro into a **single** web bundle (`app.json` → `web.output: "single"`).
-This is why `three` cannot be code-split.
+Metro into a **single** web bundle (`app.json` → `web.output: "single"`),
+plus async chunks: Metro splits `import()` on web export, and since the
+beta perf pass (`12-beta-perf-compat.md`) the game render — `three` and
+the two layers built on it, ~824KB raw / 200KB gzip — is one such chunk
+(`components/map/gameRender.ts`), fetched in parallel with the map style
+and skipped on a device without WebGL2. The entry is 3.1MB raw / 800KB
+gzip without it.
 
 **Screens.** `app/app/(tabs)/`:
 
@@ -405,7 +412,10 @@ A missing or unparseable var falls back to the tuned default, never to zero.
 `TELEGRAM_CHANNELS`, `FACEBOOK_GROUP_IDS`, `SCRAPE_PROXY_URL`,
 `ALERT_CHAT_ID`, `INGEST_STALL_HOURS`, `MULTIPLAYER`, `REPORT_TOKEN`,
 `INVITE_REQUIRED`, `DASHBOARD_TOKEN`, `DEV_TOOLS_PASSWORD`,
-`CHAT_DISABLED` and the chat-budget overrides.
+`CHAT_DISABLED` and the chat-budget overrides. Two performance knobs
+since the beta perf pass: `PG_POOL_MAX` (postgres-js pool size, default
+10) and `SPAWN_ATTEMPT_GAP_MS` (minimum gap between spawn rounds per
+user, default 30000; `0` disables the gate).
 `MULTIPLAYER_BOTS` lives in `fly.toml [env]`.
 
 Of those, **four are built-and-waiting**: `INVITE_REQUIRED` (the beta

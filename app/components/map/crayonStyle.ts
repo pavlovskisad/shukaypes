@@ -813,11 +813,46 @@ export function setStreetLabelsVisible(
 // Returns the style ready to pass to `new maplibregl.Map({ style })`.
 // ---------------------------------------------------------------------
 
+//
+// THE ONE FETCH THE MAP CANNOT LIVE WITHOUT, so it retries. A bare fetch
+// here meant one dropped packet on a metro platform — or one slow reply
+// that the browser eventually gave up on — left the app on "locating…"
+// for good, with the map never constructed and no way back but a reload.
+// Three attempts, each bounded (a stalled connection otherwise holds
+// the map hostage for the browser's own two-minute default), with a
+// short back-off between them. Total worst case is about half a minute,
+// after which MapView shows a retry rather than a spinner.
+const STYLE_URL = 'https://tiles.openfreemap.org/styles/liberty';
+const STYLE_ATTEMPTS = 3;
+const STYLE_TIMEOUT_MS = 8_000;
+
+async function fetchStyleOnce(): Promise<Record<string, unknown>> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), STYLE_TIMEOUT_MS);
+  try {
+    const resp = await fetch(STYLE_URL, { signal: controller.signal });
+    if (!resp.ok) throw new Error(`style ${resp.status}`);
+    return (await resp.json()) as Record<string, unknown>;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
 export async function fetchCrayonStyleSpec(): Promise<unknown> {
-  const resp = await fetch('https://tiles.openfreemap.org/styles/liberty');
-  const style = (await resp.json()) as Record<string, unknown>;
-  style.glyphs = `${window.location.origin}/fonts/{fontstack}/{range}.pbf`;
-  return style;
+  let lastErr: unknown = null;
+  for (let attempt = 0; attempt < STYLE_ATTEMPTS; attempt++) {
+    if (attempt > 0) {
+      await new Promise((r) => setTimeout(r, 1000 * attempt));
+    }
+    try {
+      const style = await fetchStyleOnce();
+      style.glyphs = `${window.location.origin}/fonts/{fontstack}/{range}.pbf`;
+      return style;
+    } catch (err) {
+      lastErr = err;
+    }
+  }
+  throw lastErr instanceof Error ? lastErr : new Error('style fetch failed');
 }
 
 // ---------------------------------------------------------------------

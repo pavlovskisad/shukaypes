@@ -130,3 +130,51 @@ export const dogZoneGate = {
   acquire: (userId: string, dogId: string) =>
     acquirePoolTopup(userId, 'dog-zone', dogId),
 };
+
+// THE WHOLE SPAWN ATTEMPT, GATED ONCE, BEFORE ANY PROBING QUERY.
+//
+// The per-pool gates above throttle the INSERTS, but the probing around
+// them — the two expiry UPDATEs, the nearby-pets scan, the per-pool
+// counts, the two cap UPDATEs — still ran on every single sync: about
+// eight to fifteen Postgres round trips per user per tick, on a pool of
+// ten, for a step that spawns nothing on the vast majority of ticks.
+// That is the launch-day wall in 08-open-issues.md (L-2), and the fix
+// it names first is this one: decide with one Redis call whether a
+// spawn round is even due, and only then pay for the probes.
+//
+// Semantics: at most one spawn attempt per user per SPAWN_ATTEMPT_GAP_MS
+// (default 30s; env-overridable so it can be tuned live). A walker at
+// 1.5 m/s covers ~45m in that window — well inside a pet zone or a park
+// ring, both hundreds of metres across — so a pool the walker is
+// approaching seeds at most one tick later than before. The per-pool
+// gates still apply on top; this only says "not yet" more often.
+//
+// SET NX EX makes the check and the claim one atomic call, so two syncs
+// racing from the same phone cannot both pass. Fails OPEN on a Redis
+// outage, like every other gate here: a map with too many spawn probes
+// beats a map with no paws.
+const SPAWN_ATTEMPT_GAP_MS_DEFAULT = 30_000;
+
+export function spawnAttemptGapMs(): number {
+  const n = Number(process.env.SPAWN_ATTEMPT_GAP_MS);
+  return Number.isFinite(n) && n >= 0 ? n : SPAWN_ATTEMPT_GAP_MS_DEFAULT;
+}
+
+export async function shouldAttemptSpawn(userId: string): Promise<boolean> {
+  try {
+    const gap = spawnAttemptGapMs();
+    if (gap <= 0) return true;
+    if (redis.status !== 'ready') return true;
+    const res = await redis.set(
+      `topup:attempt:${userId}`,
+      String(Date.now()),
+      'PX',
+      gap,
+      'NX',
+    );
+    return res === 'OK';
+  } catch {
+    return true;
+  }
+}
+

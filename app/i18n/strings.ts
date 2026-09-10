@@ -41,6 +41,12 @@ export interface AppStrings {
     recenterOnCompanion: string;
     locating: string;
     usingKyivFallback: string;
+    // The map cannot be drawn here (no WebGL2 — an old iOS or Android
+    // browser). Says what to do rather than leaving "locating…" up forever.
+    mapUnsupported: string;
+    // The map's style never arrived (network), or construction threw.
+    mapLoadFailed: string;
+    retry: string;
   };
   // The dog's questions during a search, and the answers under them.
   // Every decision point in supersniff is one of these.
@@ -412,6 +418,10 @@ const uk: AppStrings = {
     recenterOnCompanion: 'повернутись до пса',
     locating: 'шукаю себе…',
     usingKyivFallback: 'опускаюсь на Київ',
+    mapUnsupported:
+      'цей браузер не вміє малювати мапу. онови систему або відкрий шукайпес у свіжому Chrome чи Safari',
+    mapLoadFailed: 'мапа не довантажилась. перевір звʼязок',
+    retry: 'спробувати ще',
   },
   search: {
     confirm: (name) => `йдемо шукати ${name}?`,
@@ -855,6 +865,10 @@ const en: AppStrings = {
     recenterOnCompanion: 'recenter on companion',
     locating: 'locating…',
     usingKyivFallback: 'using kyiv fallback',
+    mapUnsupported:
+      'this browser cannot draw the map. update your system, or open шукайпес in a recent Chrome or Safari',
+    mapLoadFailed: 'the map did not load. check your connection',
+    retry: 'try again',
   },
   search: {
     confirm: (name) => `go looking for ${name}?`,

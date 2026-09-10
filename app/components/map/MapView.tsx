@@ -43,11 +43,8 @@ import { TokenMarker } from './TokenMarker';
 import { FoodMarker } from './FoodMarker';
 import { CollectBurst } from './CollectBurst';
 import { createDepthFogLayer, DEPTH_FOG_LAYER_ID } from './fogLayer';
-import {
-  createThreeBuildingsLayer,
-  THREE_BUILDINGS_LAYER_ID,
-} from './threeBuildingsLayer';
-import { createGroundFogLayer, GROUND_FOG_LAYER_ID } from './groundFogLayer';
+import { THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID } from './layerIds';
+import { webgl2Supported } from '../../utils/webgl';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
 import { LostDogCardStack, LostDogCardView } from '../ui/LostDogCardStack';
@@ -305,6 +302,26 @@ function hideMapLibreBuildings(map: maplibregl.Map): void {
   }
 }
 
+// The game render (three.js buildings + ground fog) is a separate chunk —
+// see gameRender.ts. One promise for the life of the page: the chunk is
+// fetched once, and a failed fetch (a dropped connection mid-download)
+// resolves to null so the map falls back to the classic render instead
+// of never appearing. The promise is cleared on failure so a later map
+// construction (a retry) can try the download again.
+type GameRenderModule = typeof import('./gameRender');
+let gameRenderPromise: Promise<GameRenderModule | null> | null = null;
+function loadGameRender(): Promise<GameRenderModule | null> {
+  if (!gameRenderPromise) {
+    gameRenderPromise = import('./gameRender').catch((err: unknown) => {
+      // eslint-disable-next-line no-console
+      console.error('[game-render] chunk failed to load — classic render', err);
+      gameRenderPromise = null;
+      return null;
+    });
+  }
+  return gameRenderPromise;
+}
+
 export default function MapViewWeb() {
   const location = useLocation();
   // A top-edge chip has to clear the iOS status bar (clock, signal,
@@ -343,6 +360,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // another cluster) collapses it. Lives locally because nothing else in
   // the app cares about this transient view-state.
   const [expandedClusterKey, setExpandedClusterKey] = useState<string | null>(null);
+  // Why the map is not on screen, when it is not. `unsupported` is the
+  // browser (no WebGL2 — MapLibre v5 cannot start); `failed` is the
+  // network (the style never arrived) or a throw in construction, and
+  // gets a retry. Before this both cases looked identical to the user:
+  // "locating…" forever, with the real reason in a console nobody opens.
+  const [mapProblem, setMapProblem] = useState<'unsupported' | 'failed' | null>(null);
+  // Bumped by the retry button; a dep of the construction effect.
+  const [mapAttempt, setMapAttempt] = useState(0);
   const userPos = location.position;
   // Map intervals (companion lerp, auto-collect, /sync/map poll) all
   // gate on this — when the user is on Profile/Chat/Quests we stop
@@ -1071,6 +1096,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   useEffect(() => {
     if (!hasPos || !isFocused || !MULTIPLAYER) return;
     const tick = () => {
+      // `isFocused` is the TAB, not the screen. A phone in a pocket with
+      // the map tab open kept polling this every three seconds — twelve
+      // hundred requests an hour, each carrying the auth header, for
+      // other dogs nobody was looking at. The full sync loop above
+      // already stops when hidden; this one now does too. The map's own
+      // visibilitychange handler syncs on wake, and the next tick here
+      // is at most three seconds away.
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
       const pos = useGameStore.getState().userPosition;
       if (pos) void syncPresence(pos);
     };
@@ -2349,10 +2382,27 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (mapRef.current) return;
     if (!mapContainerRef.current) return;
     if (!userPos) return;
+    // Asked BEFORE the constructor rather than caught after it: MapLibre
+    // v5 needs WebGL2 and throws without it, and the throw used to land
+    // in the catch below as a console line. This is the one map problem
+    // a retry cannot fix, so it gets its own screen and no button.
+    if (!webgl2Supported()) {
+      setMapProblem('unsupported');
+      return;
+    }
     let cancelled = false;
     (async () => {
       try {
-        const style = await fetchCrayonStyleSpec();
+        // The style and the game-render chunk download side by side. The
+        // chunk is three.js and the two layers built on it (~730KB of
+        // the bundle), split out so the map is not waiting on it — and
+        // skipped entirely when the render is off. A null here means the
+        // chunk did not arrive; the classic render takes over below,
+        // exactly as it does when the layers throw at init.
+        const [style, gameRender] = await Promise.all([
+          fetchCrayonStyleSpec(),
+          GAME_RENDER ? loadGameRender() : Promise.resolve(null),
+        ]);
         if (cancelled || !mapContainerRef.current || mapRef.current) return;
         // Clamp center within MAX_BOUNDS — MapLibre rejects construction
         // when center is outside maxBounds.
@@ -2418,15 +2468,15 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // with MapLibre's buildings intact, so prod never shows a city with
           // no buildings. Order: ground-fog UNDER buildings UNDER labels.
           let gameOk = false;
-          if (GAME_RENDER) {
+          if (GAME_RENDER && gameRender) {
             try {
               const beforeId = firstSymbolLayerId(map);
               if (!map.getLayer(GROUND_FOG_LAYER_ID)) {
-                map.addLayer(createGroundFogLayer(), beforeId);
+                map.addLayer(gameRender.createGroundFogLayer(), beforeId);
               }
               if (!map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
                 map.addLayer(
-                  createThreeBuildingsLayer(() => companionPosRef.current),
+                  gameRender.createThreeBuildingsLayer(() => companionPosRef.current),
                   beforeId,
                 );
               }
@@ -2524,12 +2574,16 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       } catch (err) {
         // eslint-disable-next-line no-console
         console.error('[map init failed]', err);
+        // The style never arrived, or the constructor threw. Either way
+        // the user gets told, and gets a button — not "locating…".
+        if (!cancelled) setMapProblem('failed');
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [userPos]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mapAttempt re-arms a failed construction
+  }, [userPos, mapAttempt]);
 
   // Map destruction — runs only on unmount, NOT on every effect re-run.
   useEffect(() => {
@@ -2621,6 +2675,30 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       <View style={styles.msg}>
         <Text style={styles.t}>{t.hud.locating}</Text>
         {location.usingFallback ? <Text style={styles.s}>{t.hud.usingKyivFallback}</Text> : null}
+      </View>
+    );
+  }
+
+  // Same screen the locating message uses, so a map that cannot draw
+  // looks like a state of the app and not a crash. Unsupported gets no
+  // button: reloading an iPhone 6 does not give it WebGL2.
+  if (mapProblem) {
+    return (
+      <View style={styles.msg}>
+        <Text style={[styles.t, styles.problem]}>
+          {mapProblem === 'unsupported' ? t.hud.mapUnsupported : t.hud.mapLoadFailed}
+        </Text>
+        {mapProblem === 'failed' ? (
+          <Pressable
+            onPress={() => {
+              setMapProblem(null);
+              setMapAttempt((n) => n + 1);
+            }}
+            style={styles.retry}
+          >
+            <Text style={styles.t}>{t.hud.retry}</Text>
+          </Pressable>
+        ) : null}
       </View>
     );
   }
@@ -3816,4 +3894,13 @@ const styles = StyleSheet.create({
   },
   t: { fontSize: TYPE.body, color: colors.black },
   s: { fontSize: TYPE.small, color: colors.grey, marginTop: 6, textAlign: 'center' },
+  problem: { textAlign: 'center', maxWidth: 320, lineHeight: 22 },
+  retry: {
+    marginTop: S.xl,
+    paddingVertical: S.m,
+    paddingHorizontal: S.xl,
+    borderRadius: R.pill,
+    borderWidth: 1.5,
+    borderColor: colors.black,
+  },
 });
