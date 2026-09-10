@@ -1,6 +1,7 @@
 import { useEffect, useMemo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { MapLibreMarker } from './MapLibreMarker';
+import { easeCamera } from './camera';
 import { HEART_INSET, LoreHeart, LoreMore } from './LoreMore';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
@@ -106,7 +107,7 @@ export function WalkStops() {
             // Only on the way OPEN. Re-centring as a story closes would
             // yank the map for a tap that asked for nothing.
             if (opening && map) {
-              map.easeTo({
+              easeCamera(map, 'short', {
                 center: [stop.position.lng, stop.position.lat],
                 offset: [0, STOP_OPEN_DROP_PX],
                 duration: 450,

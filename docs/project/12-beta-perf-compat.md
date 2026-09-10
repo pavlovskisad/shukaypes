@@ -153,6 +153,21 @@ Every item below is in this branch. File paths are where to look.
   from a pocket, each carrying the auth header. The 15 s sync loop
   already had this guard.
 
+### Reduce motion (follow-up, 10 Sep)
+
+The first pass made the fog governor honour the OS reduce-motion setting
+and, in testing it, the owner found the rest of the app already did —
+badly. MapLibre zeroes every non-`essential` camera move under that
+setting, so supersniff's tick-chained chase camera hopped instead of
+gliding, and Reanimated snapped the card stack. Fixed under D-61: all
+camera moves go through `components/map/camera.ts`, which keeps follow
+and short moves smooth and turns the cinematic swings into a cut; the
+card stack's settle and rebound opt out; the dog-cam shimmer joins the
+sun and fog in holding still; and `utils/motion.ts` is the one live
+reader of the setting. To test: iOS Settings → Accessibility → Motion →
+Reduce Motion; Android → Accessibility → Remove animations; or the
+Rendering panel in Chrome DevTools.
+
 ## Verified on this branch
 
 ```

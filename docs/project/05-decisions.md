@@ -715,3 +715,36 @@ The consequence to carry: **the invite gate was Phase 1's answer to "safe
 to hand to a stranger."** Removing it from the plan without replacing it
 means the load ceiling and the unreviewed publish path are now load-bearing
 in a way they were not designed to be.
+
+### D-61 · Reduce motion means fewer flourishes, never a hopping camera ✅
+*Decided 10 Sep · `components/map/camera.ts`, `utils/motion.ts`*
+
+With the OS "reduce motion" setting on, three libraries each did their
+own thing: MapLibre zeroed the duration of every camera move that was not
+marked `essential` (none were), Reanimated completed every card-stack
+animation instantly from a snapshot taken at load, and the fog layers'
+repaint governor held the sun still. The net effect was an app that was
+half frozen and half snapping — and supersniff's chase camera, which
+glides by chaining one short `easeTo` per tick, became a camera that
+hopped across the map at the tick rate. That is more motion, not less,
+for the person who asked for less.
+
+The decision, following Apple's guidance and WCAG 2.3.3: the setting
+removes **non-essential, sweeping** movement and nothing else.
+
+- **Follow** (the camera on the dog) and **short** moves (recentres and
+  nudges under about a second) are essential and stay smooth.
+- **Cinematic** moves — entering and leaving supersniff, the dog view
+  pulling up over a pet, the cross-city jump to a territory or a poke —
+  become a clean cut to the same end state.
+- The card stack's settle and rebound continue the finger's motion and
+  stay; its lift flourish and confirmation focus follow the system.
+- The sun's rays, the fog particles, the dog-cam shimmer, the profile
+  sun and clouds, and the splash wordmark hold still.
+
+Every camera move goes through `easeCamera(map, kind, opts)` so the
+policy is one function rather than twenty-one call sites, and every
+consumer reads the setting live through `prefersReducedMotion()` rather
+than snapshotting it. An in-app "less motion" switch that overrides the
+OS is a product option left open, not needed for this.
+

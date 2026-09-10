@@ -45,6 +45,7 @@ import { CollectBurst } from './CollectBurst';
 import { createDepthFogLayer, DEPTH_FOG_LAYER_ID } from './fogLayer';
 import { THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID } from './layerIds';
 import { webgl2Supported } from '../../utils/webgl';
+import { easeCamera } from './camera';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
 import { LostDogCardStack, LostDogCardView } from '../ui/LostDogCardStack';
@@ -535,7 +536,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           dog.lng <= b.getEast() &&
           dog.lng >= b.getWest();
         if (inView) return;
-        map.easeTo({ center: [dog.lng, dog.lat], duration: 600 });
+        easeCamera(map, 'follow', { center: [dog.lng, dog.lat], duration: 600 });
       } catch {
         /* map tearing down */
       }
@@ -1273,7 +1274,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       lastDog = dog;
       if (preview) {
         const toSpot = bearingDeg(dog, preview.spot);
-        map.easeTo({
+        easeCamera(map, 'follow', {
           center: [dog.lng, dog.lat],
           pitch: PREVIEW_PITCH,
           zoom: previewZoomFor(distanceMeters(dog, preview.spot)),
@@ -1298,7 +1299,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             applyBearing = true; // heading already = dog travel direction
           }
         }
-        map.easeTo({
+        easeCamera(map, 'follow', {
           center: [dog.lng, dog.lat],
           pitch: DOGCAM_PITCH,
           zoom: DOGCAM_ZOOM,
@@ -1313,7 +1314,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       map.off('rotatestart', onUserRotate);
       map.off('rotate', onUserRotate);
       try {
-        map.easeTo({
+        easeCamera(map, 'cinematic', {
           bearing: 0,
           pitch: GAME_PITCH,
           zoom: balance.mapZoomDefault,
@@ -1412,7 +1413,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       const map = mapRef.current;
       if (DOG_CAM && useGameStore.getState().dogCam && map) {
         const focus = companionPosRef.current ?? origin;
-        map.easeTo({
+        easeCamera(map, 'cinematic', {
           center: [focus.lng, focus.lat],
           bearing: bearingDeg(origin, spot),
           pitch: DOGCAM_PITCH,
@@ -1550,7 +1551,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // keeps it glued from here.
         const focus = companionPosRef.current ?? from ?? spot;
         try {
-          map.easeTo({
+          easeCamera(map, 'cinematic', {
             center: [focus.lng, focus.lat],
             zoom: previewZoomFor(distanceMeters(focus, spot)),
             pitch: PREVIEW_PITCH,
@@ -1702,7 +1703,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // mid-flight (freezing pitch/zoom partway). It never needs a snap.
     if (activeHint === 'map:supersniff-exit') return;
     if (activeHint && activeHint.startsWith('map:')) {
-      map.easeTo({
+      easeCamera(map, 'short', {
         center: [companionPos.lng, companionPos.lat],
         duration: 400,
       });
@@ -2198,7 +2199,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     const spot = spots.find((s) => s.id === selectedSpotId);
     if (!spot) return;
     const current = map.getZoom() ?? balance.mapZoomDefault;
-    map.easeTo({
+    easeCamera(map, 'short', {
       center: [spot.position.lng, spot.position.lat],
       zoom: Math.max(current, 17),
       padding: { top: 460, bottom: 110, left: 20, right: 20 },
@@ -2245,7 +2246,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       // needed something to point at — now the camera lands on the dog's
       // live position (or its freshest trail), and a dropped dot next to
       // the actual sprite just read as a second, wrong dog.
-      map.easeTo({ center: [target.lng, target.lat], zoom: 16, duration: 900 });
+      easeCamera(map, 'cinematic', { center: [target.lng, target.lat], zoom: 16, duration: 900 });
     }
     setFocusedTerritory(null);
   }, [focusedTerritory, setFocusedTerritory]);
@@ -2285,7 +2286,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         if (dogViewActiveRef.current && !(DOG_CAM && useGameStore.getState().dogCam)) {
           const anchor = companionPosRef.current ?? userPosRef.current;
           try {
-            map.easeTo({
+            easeCamera(map, 'cinematic', {
               ...(anchor ? { center: [anchor.lng, anchor.lat] } : {}),
               zoom: balance.mapZoomDefault,
               pitch: GAME_PITCH,
@@ -2310,7 +2311,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     const pin = displayPositions.get(selectedDogId) ?? dog.lastSeen.position;
     const container = map.getContainer?.();
     const h = container?.clientHeight ?? 700;
-    map.easeTo({
+    easeCamera(map, 'cinematic', {
       center: [pin.lng, pin.lat],
       zoom: DOG_VIEW_ZOOM,
       pitch: DOG_VIEW_PITCH,
@@ -2366,10 +2367,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // values only so the explainer bubble can still be told apart.)
     if (menuCamera) {
       menuWasOpenRef.current = true;
-      map.easeTo({ center: c, offset: [0, 0], duration: 320 });
+      easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
     } else if (menuWasOpenRef.current) {
       menuWasOpenRef.current = false;
-      map.easeTo({ center: c, offset: [0, 0], duration: 320 });
+      easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
     }
   }, [menuCamera, companionPos?.lat, companionPos?.lng]);
 
@@ -3179,9 +3180,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       {MULTIPLAYER && onMapScreen ? (
         <PokeToast
           onGoTo={(p) =>
-            mapRef.current?.easeTo({
+            easeCamera(mapRef.current, 'cinematic', {
               center: [p.lng, p.lat],
-              zoom: Math.max(mapRef.current.getZoom(), 16.5),
+              zoom: Math.max(mapRef.current?.getZoom() ?? 0, 16.5),
               duration: 700,
             })
           }

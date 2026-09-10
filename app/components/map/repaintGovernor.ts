@@ -22,7 +22,8 @@
 //      20fps; a phone that cannot is not asked to.
 //   2. It honours prefers-reduced-motion. The user has said they do not
 //      want things moving; the sun holds still. (Camera moves still
-//      repaint — that is the map, not an animation.)
+//      repaint — that is the map, not an animation. What the setting
+//      does to the camera itself is a separate policy: camera.ts.)
 //   3. It goes quiet when the tab is hidden and wakes the animation when
 //      it comes back. setTimeout is already clamped in a background tab,
 //      but "clamped" is still a redraw a second for a screen nobody sees.
@@ -30,6 +31,7 @@
 // One governor per layer, created in onAdd and disposed in onRemove.
 
 import type { Map as MlMap } from 'maplibre-gl';
+import { prefersReducedMotion } from '../../utils/motion';
 
 export interface RepaintGovernor {
   /** Ask for another frame, subject to the throttle. Safe to call every frame. */
@@ -45,18 +47,6 @@ const LATE_MS = 40;
 const PROMPT_MS = 12;
 const MAX_FACTOR = 6;
 
-function reducedMotion(): boolean {
-  try {
-    return (
-      typeof window !== 'undefined' &&
-      typeof window.matchMedia === 'function' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    );
-  } catch {
-    return false;
-  }
-}
-
 function hidden(): boolean {
   return typeof document !== 'undefined' && document.visibilityState === 'hidden';
 }
@@ -71,7 +61,6 @@ export function createRepaintGovernor(map: MlMap, baseMs: number): RepaintGovern
   // throttle the animation and one quick frame does not un-throttle it.
   let late = 0;
   let disposed = false;
-  const still = reducedMotion();
 
   const now = () => (typeof performance !== 'undefined' ? performance.now() : Date.now());
 
@@ -97,7 +86,9 @@ export function createRepaintGovernor(map: MlMap, baseMs: number): RepaintGovern
 
   return {
     request() {
-      if (disposed || still || timer != null || hidden()) return;
+      // Read live, not snapshotted: toggling the setting with the map
+      // open takes effect on the next frame.
+      if (disposed || prefersReducedMotion() || timer != null || hidden()) return;
       timer = setTimeout(fire, baseMs * factor);
     },
     noteRender() {
