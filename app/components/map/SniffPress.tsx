@@ -15,6 +15,8 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { playPop } from '../../utils/popOnTap';
+import { distanceMeters } from '../../utils/geo';
+import type { WalkStop } from '../../utils/walk';
 import { useStrings } from '../../i18n/useStrings';
 import { VOICE } from '../../constants/voice';
 import { INK, SURFACE } from '../../constants/surface';
@@ -27,7 +29,9 @@ import { HandDrawnFrame } from '../ui/HandDrawn';
 // over ~2.5 s. When the hold completes, the dog picks one nearby
 // kyiv_lore entry and surfaces it: a marker at its position, a
 // short story bubble with a "read more" under it (LoreMore.tsx), and
-// a "let's go here" button that fires the normal walking-route flow.
+// a "let's go here" button that fires the normal walking-route flow
+// with the place as the walk's one stop (WalkStops.tsx), so it stays
+// on the map, at the end of the line, for the whole walk.
 //
 // Re-press anywhere → new sniff, new pick. Past finds are added to
 // excludeIds so the dog keeps surfacing new things within the
@@ -462,7 +466,31 @@ export function SniffPress() {
       // "ходімо сюди" always puts something on the map — the place we
       // are pointing at is ours, only the way there was Google's.
       const line = await fetchWalkingRouteOrLine(userPos, [discovered.position]);
-      if (line) setWalkRoute(line, { shape: 'oneway', spotId: null });
+      if (!line) return;
+      // The place goes on the walk as its one stop, at the end of the
+      // line: the green dot the walk planner uses, which pops when the
+      // route reaches it and opens the same story, heart and read-more
+      // on a tap. This bubble hands over to it — it used to stay up
+      // over the route and vanish on the next drag, leaving a line
+      // with nothing at its end and nowhere to read again where it
+      // was going.
+      let alongM = 0;
+      for (let i = 1; i < line.length; i++) alongM += distanceMeters(line[i - 1]!, line[i]!);
+      const stop: WalkStop = {
+        id: discovered.id,
+        name: discovered.name,
+        title: discovered.title,
+        category: discovered.category,
+        story: discovered.story,
+        detail: discovered.detail,
+        wikipediaTitle: discovered.wikipediaTitle,
+        sourceLang: discovered.sourceLang,
+        position: discovered.position,
+        alongM,
+        offRouteM: 0,
+      };
+      setWalkRoute(line, { shape: 'oneway', spotId: null }, [stop]);
+      setDiscovered(null);
     } finally {
       setRouting(false);
     }

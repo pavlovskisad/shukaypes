@@ -477,9 +477,10 @@ interface GameState {
   setWalkRoute: (
     route: LatLng[] | null,
     meta: WalkRouteMeta | null,
-    // Omitted by the callers that plot a route to one named place (a
-    // sniffed landmark, a spot card) — those walks have no stops of
-    // their own, and passing nothing clears the previous walk's.
+    // A sniffed or saved landmark passes itself as the walk's one stop,
+    // so it stays on the map at the end of the line. A spot card (a
+    // café, a park) passes nothing — it is not a landmark — and passing
+    // nothing clears the previous walk's stops.
     stops?: WalkStop[],
   ) => void;
   setOpenWalkStop: (id: string | null) => void;
