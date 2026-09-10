@@ -24,12 +24,18 @@
 //             to the dog is not the kind of motion the setting is about,
 //             and a snap here reads as a glitch.
 //   cinematic The swings: entering and leaving supersniff (pitch and
-//             zoom together), the dog view pulling up over a pet, the
-//             cross-city jump to a territory or a poke. These are exactly
-//             the sweeping moves the setting exists for, so under reduce
-//             motion they become a clean cut — the same end state, no
-//             journey. A cut for a one-off transition is what a
+//             zoom together), the dog view FIRST pulling up over a pet,
+//             the cross-city jump to a territory or a poke. These are
+//             exactly the sweeping moves the setting exists for, so under
+//             reduce motion they become a clean cut — the same end state,
+//             no journey. A cut for a one-off transition is what a
 //             reduce-motion user expects; a hopping chase is not.
+//
+// A move the FINGER asked for is never cinematic. Swiping the pet carousel
+// to the next pet, or the supersniff fragment carousel to the next spot,
+// re-aims a camera that is already in that view; it continues the gesture
+// and is `short`. The call sites decide by whether the view was already
+// open — the same rule the card stack applies to its own settle.
 //
 // With the setting off, all three are plain easeTo and nothing changes.
 
