@@ -735,8 +735,12 @@ removes **non-essential, sweeping** movement and nothing else.
 - **Follow** (the camera on the dog) and **short** moves (recentres and
   nudges under about a second) are essential and stay smooth.
 - **Cinematic** moves — entering and leaving supersniff, the dog view
-  pulling up over a pet, the cross-city jump to a territory or a poke —
-  become a clean cut to the same end state.
+  first pulling up over a pet, the cross-city jump to a territory or a
+  poke — become a clean cut to the same end state.
+- A move the finger asked for is never cinematic: swiping the pet
+  carousel or the supersniff fragment carousel re-aims a camera already
+  in that view, continues the gesture, and glides. (Found on a device
+  the same day: the swipe "blinked" while the first pull-up rightly cut.)
 - The card stack's settle and rebound continue the finger's motion and
   stay; its lift flourish and confirmation focus follow the system.
 - The sun's rays, the fog particles, the dog-cam shimmer, the profile

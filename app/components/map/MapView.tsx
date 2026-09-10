@@ -1541,6 +1541,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           }
         }
       }
+      // Read before the write below: was a fragment already on screen? If
+      // so this call is a swipe in the preview carousel, and the re-aim
+      // continues the finger's gesture — see the dog-view rule above.
+      const wasPreviewing = useGameStore.getState().searchPreview != null;
       setSearchPreview({ dogId: dog.id, spot, radiusM: PREVIEW_FRAGMENT_RADIUS_M });
       userTookBearingRef.current = false; // re-orient toward the new fragment
       const map = mapRef.current;
@@ -1551,7 +1555,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // keeps it glued from here.
         const focus = companionPosRef.current ?? from ?? spot;
         try {
-          easeCamera(map, 'cinematic', {
+          easeCamera(map, wasPreviewing ? 'short' : 'cinematic', {
             center: [focus.lng, focus.lat],
             zoom: previewZoomFor(distanceMeters(focus, spot)),
             pitch: PREVIEW_PITCH,
@@ -2304,6 +2308,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     const dog = lostDogs.find((d) => d.id === selectedDogId);
     if (!dog) return; // not merged in yet — retry when lostDogs updates
     lastSnappedDogRef.current = selectedDogId;
+    // THE FIRST PULL-UP OVER A PET IS A SWING; THE SWIPE TO THE NEXT ONE
+    // IS NOT. Under the OS reduce-motion setting the swing becomes a cut
+    // (D-61), but a swipe on the card stack is the finger asking the map
+    // to move and a cut there reads as a blink — the camera is already at
+    // dog-view pitch and zoom, so the move is a pan between neighbours.
+    // That one continues the gesture and glides. Same rule as the stack's
+    // own settle.
+    const alreadyInDogView = dogViewActiveRef.current;
     dogViewActiveRef.current = true;
     // Frame the PIN (its zone-jittered display point — where the big
     // photo pin actually renders) directly under the top-anchored story
@@ -2311,7 +2323,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     const pin = displayPositions.get(selectedDogId) ?? dog.lastSeen.position;
     const container = map.getContainer?.();
     const h = container?.clientHeight ?? 700;
-    easeCamera(map, 'cinematic', {
+    easeCamera(map, alreadyInDogView ? 'short' : 'cinematic', {
       center: [pin.lng, pin.lat],
       zoom: DOG_VIEW_ZOOM,
       pitch: DOG_VIEW_PITCH,
