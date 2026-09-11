@@ -354,6 +354,7 @@ at ad size (F-5), WebGL context loss untested (F-7).
 | P2-14 | **Perf and battery of the Three.js render on low-end Android is unmeasured.** Narrowed by the beta perf pass: the self-driven fog/sun repaints now back off when frames arrive late, honour reduced-motion and sleep when hidden (`repaintGovernor.ts`), and a device with no WebGL2 gets a message instead of a blank screen. The field cost is still unmeasured — see [`12-beta-perf-compat.md`](12-beta-perf-compat.md) F-7, F-13 | `PILOT_ROADMAP` §5.6 |
 | P2-15 | **CORS reflects any origin** (`origin: true`). Low risk — auth is header-based, so a malicious site has neither the device id nor the initData — but pinning is free | `AUDIT_FINDINGS` §2.7 |
 | P2-16 | **`groundIn` takes 240 pieces with no `ORDER BY`.** Harmless at current fragmentation; will bite eventually | `services/territory.ts` |
+| P2-19 | **The flat ground camera re-renders MapView once a second while it follows the dog.** PR #574 snapshots the viewport on `moveend`, throttled to 1s, because `idle` rarely fires while eases chain. The same handler made supersniff step (fixed in #577 by skipping it there); on walks and territory it still runs, by design. **Unmeasured** — walk a block on a slow Android with the flat camera on and watch for a hitch once a second. If it shows, the shape of the fix is to snapshot from the follow tick itself, not from `moveend`, and less often | `MapView.tsx` `snapshotViewport` |
 
 ## P3 — cleanup
 

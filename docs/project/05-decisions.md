@@ -743,6 +743,10 @@ removes **non-essential, sweeping** movement and nothing else.
   the same day: the swipe "blinked" while the first pull-up rightly cut.)
 - The card stack's settle and rebound continue the finger's motion and
   stay; its lift flourish and confirmation focus follow the system.
+- Drag-pan inertia stays for the same reason — a flick carrying on is
+  the finger's own motion. MapLibre would drop it under the setting, so
+  the map is constructed with `reduceMotion: false` and the library
+  applies the flag nowhere; this policy is the only one.
 - The sun's rays, the fog particles, the dog-cam shimmer, the profile
   sun and clouds, and the splash wordmark hold still.
 
