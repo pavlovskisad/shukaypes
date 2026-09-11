@@ -38,6 +38,12 @@
 // open — the same rule the card stack applies to its own settle.
 //
 // With the setting off, all three are plain easeTo and nothing changes.
+//
+// MapLibre itself is constructed with `reduceMotion: false` (MapView), so
+// it never second-guesses a move on its own — that also keeps drag-pan
+// inertia, which it would otherwise drop under the setting. The
+// `essential` flag below is therefore belt-and-braces rather than the
+// mechanism; the policy lives in this file and nowhere else.
 
 import type { Map as MlMap, EaseToOptions } from 'maplibre-gl';
 import { prefersReducedMotion } from '../../utils/motion';

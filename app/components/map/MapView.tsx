@@ -2777,6 +2777,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // clean map without "MapLibre" or "© ..." chrome reads as
           // a first-class app, not a map embed.
           attributionControl: false,
+          // MapLibre must NOT apply the OS reduce-motion setting on its
+          // own. Left to itself it zeroes every non-essential camera move
+          // and drops drag-pan inertia, so a flick of the map stopped
+          // dead for those users while everything else in the app
+          // followed D-61. The app has one policy for that setting —
+          // camera.ts decides which moves cut and which glide, and the
+          // decorative layers hold still — and inertia is the finger's
+          // own motion carrying on, the same class as the card stack's
+          // settle, which stays. So the flag is handled here by us, and
+          // MapLibre is told to keep out of it.
+          reduceMotion: false,
           // Drag-pan inertia tuning. The finger-follow phase is always
           // 1:1 — these only shape what happens after the user lifts.
           // Linearity 0.7 (default 0.3) makes a flick carry farther and
