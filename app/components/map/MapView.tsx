@@ -1624,8 +1624,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       try {
         easeCamera(map, 'cinematic', {
           bearing: 0,
-          // Leaving supersniff lands you back in whichever map you left
-          // from — flat if that was explore, tilted if it was territory.
+          // Stands the camera back up at the game tilt, and FLAT_GROUND_CAM
+          // takes it down from there if the mode being returned to is one of
+          // the flat ones — which is what its entry glide is shaped for
+          // (70° → 29 → 12 → 5 → 2 over about five ticks). Handing it a
+          // tilted camera to settle is the case it was written for, so this
+          // does not need to know which mode it is landing in.
           pitch: GAME_PITCH,
           zoom: balance.mapZoomDefault,
           duration: 500,
@@ -2909,24 +2913,26 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // explainer bubble above the ring at the default centre, so we no
     // longer drop the dog lower for it. (menuCamera keeps the two
     // values only so the explainer bubble can still be told apart.)
-    // …and it states its pitch, because it is the move that closes the
-    // gate and it fires 1ms after whatever the mode change asked for —
-    // measured, while chasing a territory tilt that kept vanishing. A
-    // camera move that omits `pitch` does not HOLD the current pitch, it
-    // abandons any ease still in flight, so this ease was cancelling the
-    // one before it. The tilt it was eating is gone (territory is flat
-    // now), but leaving supersniff is the same race: a 500ms ease down
-    // from 70° that this move would cut off mid-way, stranding the
-    // walking camera at some angle nobody chose. Every walking move
-    // states the tilt it wants — the rule supersniff's own follow loop
-    // already follows.
+    // AND IT DELIBERATELY SAYS NOTHING ABOUT PITCH.
+    //
+    // It briefly did. This ease fires ~1ms after whatever a mode change
+    // asked for, and a camera move that omits `pitch` does not HOLD the
+    // current pitch — it abandons any ease still in flight. So while this
+    // branch owned the tilt, stating it here was the fix for a tilt that
+    // kept vanishing.
+    //
+    // FLAT_GROUND_CAM owns the tilt now, and owns it continuously: its
+    // follow tick carries the pitch the whole way into flat rather than
+    // setting it once. There is no in-flight ease left for this move to
+    // cut off — and naming a pitch here would be worse than silent, since
+    // GAME_PITCH is 65 again and these are the modes that are flat.
     const move = { center: c, offset: [0, 0] as [number, number], duration: 320 };
     if (menuCamera) {
       menuWasOpenRef.current = true;
-      easeCamera(map, 'short', { ...move, pitch: GAME_PITCH });
+      easeCamera(map, 'short', move);
     } else if (menuWasOpenRef.current) {
       menuWasOpenRef.current = false;
-      easeCamera(map, 'short', { ...move, pitch: GAME_PITCH });
+      easeCamera(map, 'short', move);
     }
   }, [menuCamera, companionPos?.lat, companionPos?.lng]);
 
