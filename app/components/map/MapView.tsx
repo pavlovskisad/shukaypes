@@ -163,16 +163,35 @@ const ROUTE_LOOK_AHEAD_M = 90;
 // pin. Pitch sits well under the street-level game pitch (74) so the shot
 // reads as a helicopter establishing view.
 const DOG_VIEW_PITCH = PAPER_MAP ? 0 : 57;
-// Fixed district-level zoom — the pet's part of the city with the zone
-// glow spreading around it, without collapsing into a full-city overview.
-const DOG_VIEW_ZOOM = 14.6;
-// Where the pin's FOOT lands on screen, measured from below the safe-area
-// inset: the story-bubble stack top (122, see LostDogModal.STACK_TOP) +
-// the bubble/pills block (~145) + a small gap + the pin's own artwork
-// above its foot (~120 at the 110px disc, no name label). Together with
-// the top-anchored stack this makes HUD → bubble → pills → pin one snug
-// centred column.
-const DOG_VIEW_PIN_TOP_PX = 405;
+// THE ZONE DECIDES THE ZOOM, not a constant.
+//
+// This was a fixed district-level 14.6 while the comment above it claimed
+// the zoom was computed so the zone spanned a fraction of the visible
+// strip. The comment was describing the right behaviour and the code was
+// not doing it: a pet with a 200 m zone and a pet with a 1.5 km zone got
+// the same camera, so one was a dot and the other ran off the screen.
+// Flattening the map made it plain — at a tilt the horizon hid the
+// mismatch, straight down there is nowhere for it to go.
+//
+// So: solve for the zoom that makes the zone's DIAMETER span
+// DOG_VIEW_ZONE_FRAC of the strip the modal leaves free, clamped so a
+// tiny zone does not zoom into somebody's garden and a huge one does not
+// pull back to the oblast.
+const DOG_VIEW_ZONE_FRAC = 0.72;
+// The ingest spec puts a real zone at 500–1500 m (pipeline/parser.ts),
+// and every one of those fits well inside the clamp. It sits lower than
+// that range needs so a mis-parsed radius still gets FRAMED rather than
+// cropped — the floor is a safety rail, not the working range.
+const DOG_VIEW_ZOOM_MIN = 11.5;
+const DOG_VIEW_ZOOM_MAX = 16.8;
+// What the pet card occupies, measured from the top: LostDogModal's
+// STACK_TOP (122) plus the bubble and pills block below it. The map's
+// free strip is what is left between that and the tab bar.
+const DOG_VIEW_STACK_PX = 268;
+const DOG_VIEW_BOTTOM_PX = 112;
+
+// Metres per pixel at zoom 0 for MapLibre's 512px tiles, at the equator.
+const M_PER_PX_Z0 = 78271.516;
 // THE GAME CAMERA'S TILT. One constant, used by the map's opening pitch,
 // the return from a dog view, and the return from supersniff — those were
 // three separate literals until they disagreed.
@@ -2424,21 +2443,37 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // Frame the PIN (its zone-jittered display point — where the big
     // photo pin actually renders) directly under the top-anchored story
     // bubble, horizontally centred.
-    const pin = displayPositions.get(selectedDogId) ?? dog.lastSeen.position;
+    // Frame the ZONE, not the pin. The pin is jittered somewhere inside
+    // the zone by construction (see displayPositions), so a camera that
+    // holds the whole circle always holds the pin — where centring the
+    // pin itself says nothing about whether its zone is on screen.
+    const zone = dog.lastSeen.position;
     const container = map.getContainer?.();
     const h = container?.clientHeight ?? 700;
+    const w = container?.clientWidth ?? 390;
+    const safeTop = safeAreaTopPx();
+    // The strip the modal leaves free, and where its middle sits.
+    const strip = Math.max(180, h - safeTop - DOG_VIEW_STACK_PX - DOG_VIEW_BOTTOM_PX);
+    const stripCentre = safeTop + DOG_VIEW_STACK_PX + strip / 2;
+    const radiusM = Math.max(60, dog.searchZoneRadiusM || 300);
+    // Fit the zone's diameter into the SMALLER of the free strip and the
+    // width, so a wide zone is not cropped left and right either.
+    const spanPx = Math.min(strip, w - 48) * DOG_VIEW_ZONE_FRAC;
+    const mPerPx = M_PER_PX_Z0 * Math.cos((zone.lat * Math.PI) / 180);
+    const zoneZoom = Math.min(
+      DOG_VIEW_ZOOM_MAX,
+      Math.max(DOG_VIEW_ZOOM_MIN, Math.log2((mPerPx * spanPx) / (2 * radiusM))),
+    );
     easeCamera(map, alreadyInDogView ? 'short' : 'cinematic', {
-      center: [pin.lng, pin.lat],
-      zoom: DOG_VIEW_ZOOM,
+      center: [zone.lng, zone.lat],
+      zoom: zoneZoom,
       pitch: DOG_VIEW_PITCH,
       // Zero out any padding a prior spot/modal snap left so the offset
       // below is measured from the true viewport centre.
       padding: { top: 0, bottom: 0, left: 0, right: 0 },
-      // Land the pin's foot DOG_VIEW_PIN_TOP_PX below the safe-area
-      // inset — right under the story-bubble stack (positive y = down
-      // from centre; negative on very tall viewports is fine, the pin
-      // just rides above centre, still glued to the stack).
-      offset: [0, Math.round(safeAreaTopPx() + DOG_VIEW_PIN_TOP_PX - h / 2)],
+      // Put the zone's centre in the middle of that free strip, so the
+      // circle sits under the card rather than behind it.
+      offset: [0, Math.round(stripCentre - h / 2)],
       // Slow enough to read as a camera move, not a snap.
       duration: 950,
     });

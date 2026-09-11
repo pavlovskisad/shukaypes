@@ -514,6 +514,26 @@ export function applyCrayonOverride(
   // error, which is the same trap the territory comment above describes.
   const drawn = palette.handDrawn;
 
+  // PUT BACK WHAT THE OTHER MODE HID.
+  //
+  // The hand-drawn palettes hide the tile style's own roads, water and
+  // green so the sketch can draw them instead. The styling paths below
+  // then set colour and width on those same layers when a coloured
+  // palette comes back — but setting paint on a hidden layer paints
+  // nothing, and nothing here ever turned visibility back on. Supersniff
+  // therefore came back with no roads and no parks: eighteen road layers
+  // correctly patterned, all invisible, because a flat page had hidden
+  // them on the way past. Anything this loop deliberately keeps hidden
+  // (casings, rail, service roads, paths) is hidden AFTER this, so it
+  // stays hidden.
+  const show = (id: string) => {
+    try {
+      map.setLayoutProperty(id, 'visibility', 'visible');
+    } catch {
+      /* layer not ready */
+    }
+  };
+
   // Flat colour, not the crayon noise pattern. The grain earned its keep
   // when the fills were the richest thing on the map; under the territory
   // field's multiply stain the speckles and blobs showed through every
@@ -640,6 +660,7 @@ export function applyCrayonOverride(
           map.setLayoutProperty(id, 'visibility', 'none');
           continue;
         }
+        show(id);
         paintFill(id, palette.blue);
         const src = (l as { source?: string }).source;
         const filt = (l as { filter?: unknown }).filter;
@@ -663,6 +684,7 @@ export function applyCrayonOverride(
         continue;
       }
       if (type === 'fill') {
+        show(id);
         paintFill(id, palette.paper);
         // Keep the flat footprint VISIBLE on the paper map even though it
         // is the same white as the page: it is what the ink outline below
@@ -676,6 +698,7 @@ export function applyCrayonOverride(
           // that can only be shaded, never drawn.
           map.setLayoutProperty(id, 'visibility', 'none');
         } else {
+          show(id);
           clear(map, id, 'fill-extrusion-pattern');
           map.setPaintProperty(id, 'fill-extrusion-color', palette.paper);
           // Fully opaque so nothing shows through to grey them; the built-in
@@ -700,6 +723,7 @@ export function applyCrayonOverride(
           map.setLayoutProperty(id, 'visibility', 'none');
           continue;
         }
+        show(id);
         paintFill(id, palette.green);
         const src = (l as { source?: string }).source;
         const filt = (l as { filter?: unknown }).filter;
@@ -763,6 +787,7 @@ export function applyCrayonOverride(
         map.setLayoutProperty(id, 'visibility', 'none');
         continue;
       }
+      show(id);
       clear(map, id, 'line-dasharray');
       if (ink) {
         // A drawn street has no fill and no texture — it is the stroke.
