@@ -35,6 +35,15 @@ export const MULTIPLAYER = true;
 // with one switch while we feel the dynamics out.
 export const DOG_CAM = true;
 
+// Flat ground camera for walks ('explore') and territory ('play'): the tilt
+// goes to zero and is LOCKED there, and the camera keeps itself on the dog,
+// standing down whenever the walker takes hold of the map. Supersniff keeps
+// its own chase camera — this is the other half of the app, the half that is
+// about ground rather than about a street ahead of you. Flag-gated for the
+// same reason DOG_CAM is: a camera change is felt everywhere, and one switch
+// should put it back.
+export const FLAT_GROUND_CAM = true;
+
 // Lost-pet PINS on the main map. Off for now: the search layer is meant to
 // be the quiet half of the app — you meet a lost dog through the companion
 // and the carousel, not through a map peppered with photo pins competing

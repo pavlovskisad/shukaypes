@@ -95,10 +95,6 @@ export const LIGHT_PALETTE = {
   // Building footprints traced in ink, and the extruded walls dropped.
   // Zero on the coloured maps, where buildings are volumes.
   buildingOutline: 0,
-  // How much of the tile style's own road width to keep. 0.22 suits a
-  // textured band, which is what a crayon road is; ink needs more (see
-  // PAPER_PALETTE).
-  roadScale: 0.22,
   // Is the city redrawn by hand? When true the roads, buildings, parks
   // and water on THIS style are hidden and map/mapSketch.ts draws
   // wobbled copies of them instead. See that file for why MapLibre
@@ -164,10 +160,15 @@ export const PLAY_PALETTE: Palette = {
   // visible in this palette, and flattening the camera took them away.
   // Ink was the fix for a camera problem.
   //
-  // Territory now gets supersniff's render instead — the extruded city,
-  // the mist, the tilt — which restores the walls the palette always
-  // assumed and makes the ink unnecessary. `handDrawn` stays false, so
-  // the sketch hides and the tile layers are shown again (see `show()`).
+  // Territory keeps the extruded city and its mist instead, which
+  // restores the walls this palette always assumed and makes the ink
+  // unnecessary. `handDrawn` stays false, so the sketch hides and the
+  // tile layers are shown again (see `show()`).
+  //
+  // The camera it is read from is FLAT_GROUND_CAM's, not this branch's:
+  // main arrived at the same overhead view for walks and territory by a
+  // better route — a follow camera that glides into flat and caps itself
+  // there — so the walls stand under a plan view either way.
   //
   // The quiet greens and blues above are the point and are untouched: a
   // dozen owner colours are the subject here, and the city underneath is
@@ -206,12 +207,6 @@ export const PAPER_PALETTE: Palette = {
   outline: '#2a2a2a',
   outlineOpacity: 0.85,
   buildingOutline: 0.55,
-  // Streets lead the drawing. At the crayon scale the ink lines came out
-  // finer than the building footprints — and footprints outnumber streets
-  // heavily, so the page read as a field of blocks with the network lost
-  // inside it. The tile style's own class hierarchy is kept; only the
-  // overall weight moves.
-  roadScale: 0.34,
   labelWater: '#4c4c4c',
   // White page all the way up. With the ground fog gone this is MapLibre's
   // own sky dome, so it is flat by construction — which is what a drawing
@@ -231,42 +226,6 @@ let activePalette: Palette = LIGHT_PALETTE;
 
 export function getActivePalette(): Palette {
   return activePalette;
-}
-
-// SCALING A WIDTH THAT IS ITSELF AN EXPRESSION.
-//
-// The obvious wrapper — ['max', 0.4, ['*', SCALE, <current>]] — is
-// invalid the moment <current> is a zoom ramp, and the tile style ramps
-// every road class: MapLibre allows a `zoom` expression only at the top
-// level of a `step`/`interpolate`, so the whole declaration is rejected
-// and the layer keeps the width it had. The old catch below rescued only
-// the plain-number case, so EVERY RAMPED ROAD KEPT ITS FULL WIDTH —
-// four to five times the intended weight. The console has carried one
-// `line-width` validation error per road layer the whole time; under a
-// pale grey wash nobody could see the result, and in ink you can.
-//
-// So scale the ramp's OUTPUTS and leave its structure alone.
-function scaleWidth(cur: unknown, k: number): unknown {
-  const scale = (n: number) => Math.max(0.4, n * k);
-  if (typeof cur === 'number') return scale(cur);
-  if (!Array.isArray(cur)) return scale(1);
-  const op = cur[0];
-  if (op === 'interpolate' || op === 'interpolate-hcl' || op === 'interpolate-lab') {
-    // ['interpolate', <interpolation>, <input>, stop, out, stop, out, …]
-    const out: unknown[] = cur.slice(0, 3);
-    for (let i = 3; i < cur.length; i += 2) out.push(cur[i], scaleWidth(cur[i + 1], k));
-    return out;
-  }
-  if (op === 'step') {
-    // ['step', <input>, out0, stop, out, stop, out, …]
-    const out: unknown[] = [cur[0], cur[1], scaleWidth(cur[2], k)];
-    for (let i = 3; i < cur.length; i += 2) out.push(cur[i], scaleWidth(cur[i + 1], k));
-    return out;
-  }
-  // Any other expression — a `match` on class, a `case`. It cannot hold a
-  // zoom ramp of its own (that would already be invalid), so the wrapper
-  // is safe here.
-  return ['max', 0.4, ['*', k, cur]];
 }
 
 // Polygon edge geometry. The halo is a wide, blurred bloom in the fill's
@@ -292,6 +251,94 @@ const INK_WIDTH: unknown = [
 ];
 const INK_BLUR: unknown = 0.3;
 
+// How much of the upstream style's road width we keep. Liberty draws for a
+// road map, where the street network is the subject; here the subject is
+// the dog and the ground it holds, and roads are the grain the city is
+// drawn on.
+//
+// EVERY EARLIER VALUE OF THIS CONSTANT WAS DEAD. 0.22, then 0.15, then
+// 0.07 — all three rendered at full Liberty width, because the code that
+// applied them produced an expression the style spec rejects. See
+// scaledLineWidth below. So this number has no history to compare against:
+// it is the first one that has ever reached the map.
+//
+// Picked by rendering the same Maidan view at 0.5, 0.3, 0.18, 0.14, 0.11
+// and 0.08 with the scaling actually working, and looking. 0.5 is still
+// bands; 0.18 reads as fine lines; 0.08 is where Хрещатик starts to
+// disappear altogether. 0.11 is the last value where the arterials are
+// still legible as streets and everything below them is a pencil line —
+// the blocks are the shape you see, and the streets are what separates
+// them.
+const ROAD_WIDTH_SCALE = 0.11;
+// Floor, so a road never thins to nothing at the far end of the zoom
+// range. DERIVED from the scale rather than written out, because the last
+// two times the scale came down this was left stranded above it — and a
+// floor above the widths it is flooring is not a floor, it is every minor
+// street pinned to one thickness. Which is exactly what you would see at
+// the distance territory now opens at.
+const ROAD_MIN_WIDTH_PX = ROAD_WIDTH_SCALE * 2;
+
+// NARROW A LINE-WIDTH BY REWRITING ITS OUTPUT STOPS, not by wrapping it.
+//
+// The obvious way to thin every road is to multiply whatever the upstream
+// style has: ['max', floor, ['*', scale, <their expression>]]. It does not
+// work, and it does not fail loudly either. The style spec says a `zoom`
+// expression may only be the input to a TOP-LEVEL `step` or `interpolate`,
+// so burying Liberty's ['interpolate', …, ['zoom'], …] inside a `*` makes
+// the whole property invalid. setPaintProperty validates, fires an `error`
+// event, and leaves the old value in place.
+//
+// That is what happened here, for the entire life of ROAD_WIDTH_SCALE: the
+// roads were drawn at full Liberty width the whole time, and every change
+// to the constant rendered identically. Measured in a browser against the
+// live map — the layer still read back as the untouched upstream
+// expression, with a console full of
+//   layers.road_trunk_primary.paint.line-width: "zoom" expression may only
+//   be used as input to a top-level "step" or "interpolate" expression.
+//
+// So scale the STOPS instead. `zoom` stays exactly where the spec wants
+// it, and the result is the same curve a scaled line would have had.
+// Returns null for a shape we do not recognise, which means "leave this
+// layer alone" rather than "write something that might not apply".
+function scaledLineWidth(
+  cur: unknown,
+  scale: number,
+  minPx: number,
+): unknown | null {
+  // A stop of 0 is not a thin road, it is NO road: upstream uses a zero
+  // width below a class's minzoom to fade it in. Flooring that would draw
+  // every motorway link across the whole country at the floor width, so
+  // zero stays zero and the floor only catches roads that are meant to be
+  // there. (Only visible once the scaling actually applied — with the old
+  // no-op wrap, nothing was floored either.)
+  const px = (n: number) => (n <= 0 ? 0 : Math.max(minPx, n * scale));
+  if (typeof cur === 'number') return px(cur);
+  if (!Array.isArray(cur) || cur.length < 3) return null;
+  const op = cur[0];
+  // ['interpolate', interpolation, input, stop, out, stop, out, …]
+  if (op === 'interpolate' || op === 'interpolate-hcl') {
+    const out: unknown[] = [cur[0], cur[1], cur[2]];
+    for (let i = 3; i < cur.length; i += 2) {
+      const v = cur[i + 1];
+      out.push(cur[i], typeof v === 'number' ? px(v) : v);
+    }
+    return out;
+  }
+  // ['step', input, default, stop, out, stop, out, …]
+  if (op === 'step') {
+    const out: unknown[] = [
+      cur[0],
+      cur[1],
+      typeof cur[2] === 'number' ? px(cur[2]) : cur[2],
+    ];
+    for (let i = 3; i < cur.length; i += 2) {
+      const v = cur[i + 1];
+      out.push(cur[i], typeof v === 'number' ? px(v) : v);
+    }
+    return out;
+  }
+  return null;
+}
 // ---------------------------------------------------------------------
 // Canvas pattern generators
 // ---------------------------------------------------------------------
@@ -799,14 +846,15 @@ export function applyCrayonOverride(
       }
       map.setPaintProperty(id, 'line-opacity', 1);
       const curW = map.getPaintProperty(id, 'line-width');
-      try {
+      // main's scaledLineWidth, not this branch's scaleWidth: the same
+      // bug (a zoom ramp wrapped in an arithmetic expression is rejected
+      // whole) was found and fixed on both sides, and main's landed first
+      // and carries its own width tuning with it.
+      const newW = scaledLineWidth(curW, ROAD_WIDTH_SCALE, ROAD_MIN_WIDTH_PX);
+      if (newW !== null) {
         (
           map.setPaintProperty as (l: string, p: string, v: unknown) => void
-        )(id, 'line-width', scaleWidth(curW, palette.roadScale));
-      } catch {
-        if (typeof curW === 'number') {
-          map.setPaintProperty(id, 'line-width', curW * palette.roadScale);
-        }
+        )(id, 'line-width', newW);
       }
       try {
         map.setLayoutProperty(id, 'line-cap', 'round');
