@@ -137,12 +137,21 @@ export const PLAY_PALETTE: Palette = {
 // drawn on. Taken down from 0.22 — the streets read as pale bands wide
 // enough to compete with the territory colours over them, and a narrower
 // line lets the blocks between them be the shape you see.
-const ROAD_WIDTH_SCALE = 0.15;
+// Picked by rendering the same Maidan view at 0.15, 0.10, 0.07 and 0.05
+// and looking, rather than by argument. 0.05 is too far — the street grid
+// stops reading as a network and the city becomes a field of blocks with
+// nothing joining them. At 0.07 the arterials still carry (Хрещатик,
+// Володимирський узвіз) and everything below them goes to a hairline,
+// which is the grain we were after: the blocks are the shape you see and
+// the streets are what separates them.
+const ROAD_WIDTH_SCALE = 0.07;
 // Floor, so a road never thins to nothing at the far end of the zoom
-// range. It has to come down with the scale above or every minor street is
-// pinned at the floor once you are zoomed out — which is exactly where
-// territory now opens.
-const ROAD_MIN_WIDTH_PX = 0.3;
+// range. DERIVED from the scale rather than written out, because the last
+// two times the scale came down this was left stranded above it — and a
+// floor above the widths it is flooring is not a floor, it is every minor
+// street pinned to one thickness. Which is exactly what you would see at
+// the distance territory now opens at.
+const ROAD_MIN_WIDTH_PX = ROAD_WIDTH_SCALE * 2;
 
 // ---------------------------------------------------------------------
 // Canvas pattern generators
