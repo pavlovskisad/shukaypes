@@ -134,17 +134,22 @@ export const PLAY_PALETTE: Palette = {
 // How much of the upstream style's road width we keep. Liberty draws for a
 // road map, where the street network is the subject; here the subject is
 // the dog and the ground it holds, and roads are the grain the city is
-// drawn on. Taken down from 0.22 — the streets read as pale bands wide
-// enough to compete with the territory colours over them, and a narrower
-// line lets the blocks between them be the shape you see.
-// Picked by rendering the same Maidan view at 0.15, 0.10, 0.07 and 0.05
-// and looking, rather than by argument. 0.05 is too far — the street grid
-// stops reading as a network and the city becomes a field of blocks with
-// nothing joining them. At 0.07 the arterials still carry (Хрещатик,
-// Володимирський узвіз) and everything below them goes to a hairline,
-// which is the grain we were after: the blocks are the shape you see and
-// the streets are what separates them.
-const ROAD_WIDTH_SCALE = 0.07;
+// drawn on.
+//
+// EVERY EARLIER VALUE OF THIS CONSTANT WAS DEAD. 0.22, then 0.15, then
+// 0.07 — all three rendered at full Liberty width, because the code that
+// applied them produced an expression the style spec rejects. See
+// scaledLineWidth below. So this number has no history to compare against:
+// it is the first one that has ever reached the map.
+//
+// Picked by rendering the same Maidan view at 0.5, 0.3, 0.18, 0.14, 0.11
+// and 0.08 with the scaling actually working, and looking. 0.5 is still
+// bands; 0.18 reads as fine lines; 0.08 is where Хрещатик starts to
+// disappear altogether. 0.11 is the last value where the arterials are
+// still legible as streets and everything below them is a pencil line —
+// the blocks are the shape you see, and the streets are what separates
+// them.
+const ROAD_WIDTH_SCALE = 0.11;
 // Floor, so a road never thins to nothing at the far end of the zoom
 // range. DERIVED from the scale rather than written out, because the last
 // two times the scale came down this was left stranded above it — and a
@@ -152,6 +157,68 @@ const ROAD_WIDTH_SCALE = 0.07;
 // street pinned to one thickness. Which is exactly what you would see at
 // the distance territory now opens at.
 const ROAD_MIN_WIDTH_PX = ROAD_WIDTH_SCALE * 2;
+
+// NARROW A LINE-WIDTH BY REWRITING ITS OUTPUT STOPS, not by wrapping it.
+//
+// The obvious way to thin every road is to multiply whatever the upstream
+// style has: ['max', floor, ['*', scale, <their expression>]]. It does not
+// work, and it does not fail loudly either. The style spec says a `zoom`
+// expression may only be the input to a TOP-LEVEL `step` or `interpolate`,
+// so burying Liberty's ['interpolate', …, ['zoom'], …] inside a `*` makes
+// the whole property invalid. setPaintProperty validates, fires an `error`
+// event, and leaves the old value in place.
+//
+// That is what happened here, for the entire life of ROAD_WIDTH_SCALE: the
+// roads were drawn at full Liberty width the whole time, and every change
+// to the constant rendered identically. Measured in a browser against the
+// live map — the layer still read back as the untouched upstream
+// expression, with a console full of
+//   layers.road_trunk_primary.paint.line-width: "zoom" expression may only
+//   be used as input to a top-level "step" or "interpolate" expression.
+//
+// So scale the STOPS instead. `zoom` stays exactly where the spec wants
+// it, and the result is the same curve a scaled line would have had.
+// Returns null for a shape we do not recognise, which means "leave this
+// layer alone" rather than "write something that might not apply".
+function scaledLineWidth(
+  cur: unknown,
+  scale: number,
+  minPx: number,
+): unknown | null {
+  // A stop of 0 is not a thin road, it is NO road: upstream uses a zero
+  // width below a class's minzoom to fade it in. Flooring that would draw
+  // every motorway link across the whole country at the floor width, so
+  // zero stays zero and the floor only catches roads that are meant to be
+  // there. (Only visible once the scaling actually applied — with the old
+  // no-op wrap, nothing was floored either.)
+  const px = (n: number) => (n <= 0 ? 0 : Math.max(minPx, n * scale));
+  if (typeof cur === 'number') return px(cur);
+  if (!Array.isArray(cur) || cur.length < 3) return null;
+  const op = cur[0];
+  // ['interpolate', interpolation, input, stop, out, stop, out, …]
+  if (op === 'interpolate' || op === 'interpolate-hcl') {
+    const out: unknown[] = [cur[0], cur[1], cur[2]];
+    for (let i = 3; i < cur.length; i += 2) {
+      const v = cur[i + 1];
+      out.push(cur[i], typeof v === 'number' ? px(v) : v);
+    }
+    return out;
+  }
+  // ['step', input, default, stop, out, stop, out, …]
+  if (op === 'step') {
+    const out: unknown[] = [
+      cur[0],
+      cur[1],
+      typeof cur[2] === 'number' ? px(cur[2]) : cur[2],
+    ];
+    for (let i = 3; i < cur.length; i += 2) {
+      const v = cur[i + 1];
+      out.push(cur[i], typeof v === 'number' ? px(v) : v);
+    }
+    return out;
+  }
+  return null;
+}
 
 // ---------------------------------------------------------------------
 // Canvas pattern generators
@@ -572,19 +639,11 @@ export function applyCrayonOverride(
       map.setPaintProperty(id, 'line-pattern', 'crayon-road');
       map.setPaintProperty(id, 'line-opacity', 1);
       const curW = map.getPaintProperty(id, 'line-width');
-      const newW: unknown = [
-        'max',
-        ROAD_MIN_WIDTH_PX,
-        ['*', ROAD_WIDTH_SCALE, curW ?? 1],
-      ];
-      try {
+      const newW = scaledLineWidth(curW, ROAD_WIDTH_SCALE, ROAD_MIN_WIDTH_PX);
+      if (newW !== null) {
         (
           map.setPaintProperty as (l: string, p: string, v: unknown) => void
         )(id, 'line-width', newW);
-      } catch {
-        if (typeof curW === 'number') {
-          map.setPaintProperty(id, 'line-width', curW * ROAD_WIDTH_SCALE);
-        }
       }
       try {
         map.setLayoutProperty(id, 'line-cap', 'round');
