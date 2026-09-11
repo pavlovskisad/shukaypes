@@ -217,6 +217,17 @@ const M_PER_PX_Z0 = 78271.516;
 // game render exactly as it was: the tilt, the Three.js city, the fog.
 // It is the one mode in the app that is a world rather than a page, and
 // the paper experiment has no business changing it.
+//
+// THAT EXEMPTION IS HALF DEFEATED, ON PURPOSE, FOR NOW. PREVIEW_PITCH is
+// not a walking camera at all — it is supersniff's own, the branch the
+// follow loop takes while a fragment is being eyed (search "preview" in
+// the dogcam effect). So flattening it flattens supersniff: measured,
+// entry eases to 70 and 2ms later the preview tick asks for 0, then
+// keeps asking every DOGCAM_TICK. Supersniff opens flat and only rears
+// up once you commit to a fragment and the loop switches to
+// DOGCAM_PITCH — which is exactly the "flat until you tap the dog" the
+// owner saw, and then asked to keep for the experiment. Un-flattening is
+// one word: PREVIEW_PITCH back to 68.
 const GAME_PITCH = PAPER_MAP ? 0 : 65;
 
 // Safe-area top inset in CSS px, measured once via an env() probe —
@@ -1340,6 +1351,13 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // saw. From a flat page it is the whole 70, and leaving it to the
     // interval means supersniff opens flat and then rears up a beat
     // later. The loop takes over from here.
+    //
+    // AND WHILE PREVIEW_PITCH IS 0 THE LOOP UNDOES THIS IMMEDIATELY —
+    // measured at 2ms, entering with a fragment preview active. Kept
+    // rather than deleted because it is correct for the committed case
+    // and becomes correct everywhere the moment PREVIEW_PITCH goes back
+    // to 68; see the note on the pitch constants. Do not read the tilt
+    // here as evidence that supersniff opens tilted: it does not.
     try {
       const dogNow = companionPosRef.current ?? userPosRef.current;
       easeCamera(map, 'cinematic', {
