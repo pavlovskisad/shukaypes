@@ -1460,6 +1460,18 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // each new preview/commit can RESET it, re-orienting toward the new target
   // instead of staying stuck at the old hand-set angle.
   const userTookBearingRef = useRef(false);
+  // THE FOLLOW LOOP STANDS DOWN WHILE A ONE-SHOT CAMERA MOVE IS IN FLIGHT.
+  // A carousel swipe (and the swing into supersniff) starts a 500–700ms
+  // eased move to a new zoom and bearing; the follow loop below re-targets
+  // every DOGCAM_TICK with a LINEAR ease one tick long, to the same
+  // targets. Left to run, its next tick — up to 350ms into the swipe —
+  // replaced the eased curve with a constant-speed segment from wherever
+  // the camera had got to, and the tick after that finished it: gentle
+  // start, a kink into a faster straight run, stop. It read as one or two
+  // steps. So a one-shot move records when it ends, and ticks before then
+  // do nothing; the loop resumes gluing the camera to the dog after. The
+  // dog moves under a metre in that window.
+  const cameraHoldUntilRef = useRef(0);
 
   // Dog-cam: while enabled, chase the companion with a low, close camera whose
   // bearing tracks the dog's direction of travel (forward = up), like a
@@ -1556,10 +1568,13 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       if (!dog) return;
       // Rotate gesture still in flight (events arriving) → hands off entirely.
       if (Date.now() - lastUserRotateAt < DOGCAM_TICK) return;
-      // Preview → stay TIED to the dog but zoomed out, facing the fragment we're
-      // eyeing (so the blue beacon sits up-screen). Committed → tight chase cam
-      // with heading-up. Either way the camera is glued to the dog, so it never
-      // drifts down into the carousel.
+      // A swipe's or the entry swing's own move is still easing → let it land.
+      if (Date.now() < cameraHoldUntilRef.current) return;
+      // Preview → frame the dog AND what is being eyed, facing down the line
+      // between them, so the beacon sits up-screen and the dog low. Committed
+      // → tight chase cam with heading-up, glued to the dog. Both keep the
+      // dog inside the strip the carousel leaves free rather than letting it
+      // drift down behind the cards.
       const preview = useGameStore.getState().searchPreview;
       let moved = false;
       if (lastDog && distanceMeters(lastDog, dog) > DOGCAM_MIN_MOVE_M) {
@@ -1929,6 +1944,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       const map = mapRef.current;
       if (DOG_CAM && useGameStore.getState().dogCam && map) {
         const focus = companionPosRef.current ?? origin;
+        cameraHoldUntilRef.current = Date.now() + 500;
         easeCamera(map, 'cinematic', {
           center: [focus.lng, focus.lat],
           bearing: bearingDeg(origin, spot),
@@ -2072,6 +2088,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // distance the deck offers; see previewCamera.
         const focus = companionPosRef.current ?? from ?? spot;
         try {
+          // Both, and they are complementary: main's hold keeps the follow
+          // loop off the camera while this move lands, and the frame is
+          // what the move is aiming at. The loop re-derives the same frame
+          // when the hold expires, so the swipe settles where it landed
+          // rather than being re-aimed a tick later.
+          cameraHoldUntilRef.current = Date.now() + 700;
           const frame = previewCamera(map, focus, spot, dog.lastSeen.position);
           easeCamera(map, wasPreviewing ? 'short' : 'cinematic', {
             center: frame.center,
@@ -3198,6 +3220,18 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // snapshot sets four pieces of React state.
         let lastSnapshotAt = 0;
         map.on('moveend', () => {
+          // NOT IN SUPERSNIFF. Its chase camera chains a 350ms ease into
+          // the next one too, so this fired at every handover there as
+          // well, and the throttle let a snapshot through once a second
+          // — four state sets and a re-render of this whole component —
+          // while the camera was in motion. A carousel swipe interrupts
+          // a follow tick, which is a moveend, so the re-render landed
+          // on the first frames of the swipe's glide. Measured on a phone
+          // as "one or two steps" in a glide that was smooth on the build
+          // before this handler existed. Supersniff ran on idle-only
+          // snapshots for its whole life and was fine; the flat ground
+          // camera, which this handler was written for, keeps it.
+          if (DOG_CAM && useGameStore.getState().dogCam) return;
           const now = Date.now();
           if (now - lastSnapshotAt < VIEWPORT_SNAPSHOT_MIN_MS) return;
           lastSnapshotAt = now;

@@ -168,6 +168,19 @@ reader of the setting. To test: iOS Settings → Accessibility → Motion →
 Reduce Motion; Android → Accessibility → Remove animations; or the
 Rendering panel in Chrome DevTools.
 
+### The supersniff glide (follow-up, 11 Sep)
+
+The owner A/B'd three production builds on one phone with reduce motion
+off: the build before the perf pass and the perf pass alone were both
+smooth; current was not. That cleared the perf pass and pointed at what
+landed between: PR #574's viewport snapshot on `moveend`, written for the
+flat ground camera. Supersniff's chase camera chains eases too, so the
+snapshot — four state sets and a MapView re-render — fired once a second
+during following and on the first frames of a swipe's glide. It is now
+skipped while supersniff is on; supersniff ran on idle-only snapshots
+before and was fine. Lesson for the file: a handler on `moveend` runs on
+every ease handover, not only when a gesture ends.
+
 ## Verified on this branch
 
 ```
