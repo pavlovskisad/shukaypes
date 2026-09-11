@@ -213,29 +213,52 @@ const MAX_PITCH = 80;
 // the city still reads as a place. This is the mode itself, and a couple of
 // degrees of lean buys nothing once you are looking down on the roofs.
 const FLAT_PITCH = 0;
-// The flat camera follows the dog, and unlike the supersniff chase it
-// follows the CENTRE ONLY. Supersniff re-asserts pitch, zoom and bearing
-// every tick, which is what makes it a ride; these two modes are maps you
-// play on, so zoom, rotation and pan stay the walker's for as long as they
-// want them and the camera only ever slides the dog back to the middle.
-const FLAT_FOLLOW_TICK = 700;
-// Hands off for this long after the last hand-driven camera move. The clock
-// is set from MapLibre's gesture events, and the inertia glide after a flick
-// is issued as an easeTo that still carries the originalEvent — so it starts
-// when the map actually comes to rest, not when the finger lifted.
+// THE CAMERA IS MOUNTED ON THE DOG. Same trick as the supersniff chase:
+// one easeTo per tick, each lasting exactly one tick with a linear curve,
+// so consecutive calls chain into continuous motion instead of a series of
+// arrivals. Same cadence, too, and for the same reason — a touch above the
+// companion's 300 ms roam tick, so the camera is never sitting still
+// waiting for the next position.
 //
-// Long enough to look a couple of blocks away and read what is there; short
-// enough that the camera comes home without being asked. (The simulated-walk
-// nudge below uses 12s, but it only fires once the dog has left the frame
-// entirely — far rarer than crossing the deadzone.)
+// This started life as a deadzone: hold still until the dog drifts 18% of
+// the viewport off centre, then slide. It read as not following at all —
+// at walking pace the dog just wanders around inside the box, and the
+// camera's only visible behaviour is an occasional lurch.
+const FLAT_FOLLOW_TICK = DOGCAM_TICK;
+// What it does NOT re-assert is zoom and bearing. That is the whole
+// difference from supersniff, which pins all four and makes you a
+// passenger: these are maps you play on, so how far in you are and which
+// way is up stay the walker's.
+//
+// Hands off entirely for this long after the last hand-driven camera move.
+// The clock is set from MapLibre's gesture events, and the inertia glide
+// after a flick is issued as an easeTo that still carries the
+// originalEvent — so it starts when the map comes to rest, not when the
+// finger lifted. Long enough to look a couple of blocks away and read what
+// is there; short enough that the camera comes home unasked.
 const FLAT_FOLLOW_RESUME_MS = 8000;
-// The dog may wander this fraction of the SHORTER viewport side from centre
-// before the camera moves at all. A deadzone rather than a hard lock, for
-// two reasons. A camera that re-centres on every step reads as the map
-// sliding about under a stationary dog. And a map that is always mid-ease
-// never fires `idle` — which is what refreshes mapBounds, which is what
-// decides which markers are drawn at all.
-const FLAT_FOLLOW_DEADZONE_FRAC = 0.18;
+// Flattening is part of the glide, not a step before it: while the camera
+// is still tilted the follow ease carries the pitch too, over this longer
+// duration, so arriving from supersniff is one continuous move.
+//
+// Being re-issued every tick, each pass covers TICK/ENTRY of what is left,
+// so the tilt decays rather than ramping linearly: 70° → 29 → 12 → 5 → 2
+// in about five ticks. That decelerating settle is the shape we want; the
+// tolerance below is what stops it from chasing the last fraction of a
+// degree forever.
+const FLAT_ENTRY_MS = 600;
+// Close enough to overhead to call it arrived, and to CAP it there.
+// setMaxPitch clamps the live pitch with a bare setPitch and no animation,
+// so the cap has to wait for the glide rather than run on a timer beside
+// it — a timer is what turned an interrupted glide into a visible snap.
+const FLAT_PITCH_SETTLED_DEG = 2;
+// Floor on how often the viewport snapshot (mapBounds / zoom / centre) is
+// refreshed while the camera is in continuous motion. A following camera
+// hands one ease to the next every FLAT_FOLLOW_TICK, and snapshotting on
+// each handover would put four React state writes per tick through a very
+// large component. Once a second keeps marker culling honest against a
+// camera moving at walking pace, which is the only thing it has to.
+const VIEWPORT_SNAPSHOT_MIN_MS = 1000;
 
 // Safe-area top inset in CSS px, measured once via an env() probe —
 // SafeAreaView values aren't reachable here and the inset differs
@@ -716,6 +739,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   const openWalkStopId = useGameStore((s) => s.openWalkStopId);
   const aboutOpen = useGameStore((s) => s.aboutOpen);
   const lostFlowOpen = useGameStore((s) => s.lostFlowOpen);
+  // One-shot camera commands from other tabs, read here so the flat ground
+  // camera can stand down while one is in flight. Each is consumed and
+  // cleared by the effect that acts on it, further down.
+  const focusedTerritory = useGameStore((s) => s.focusedTerritory);
+  const focusedLore = useGameStore((s) => s.focusedLore);
   const collectToken = useGameStore((s) => s.collectToken);
   const eatFood = useGameStore((s) => s.eatFood);
   const lastCollect = useGameStore((s) => s.lastCollect);
@@ -1420,9 +1448,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   //   screen sheet over the map.
   //   The map is not on screen at all.
   //
-  // The ring is in the list too, though it is the gentlest case: it
-  // centres the dog itself on open and on close, so all this does is keep
-  // two effects from easing at once.
+  // THE RADIAL RING IS DELIBERATELY NOT IN THIS LIST. It was, on the
+  // grounds that two effects easing at once is a fight — but the ring's
+  // camera centres the DOG, which is where this one is going anyway, so
+  // there is nothing to fight over. Holding on it was actively wrong:
+  // explore opens with the ring up, so the camera stood still for the
+  // whole first stretch of every walk.
   const flatCamHeld =
     !onMapScreen ||
     !!selectedDogId ||
@@ -1430,7 +1461,6 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     !!openWalkStopId ||
     lostPinning ||
     sniffActive ||
-    menuOpen ||
     aboutOpen ||
     lostFlowOpen;
   const flatCamHeldRef = useRef(flatCamHeld);
@@ -1440,31 +1470,27 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // true, so the countdown effectively starts when you close what you were
   // reading rather than when you opened it.
   const flatCamReleaseAtRef = useRef(0);
-  // A freshly planned walk gets its own moment: CrayonRoute fits the whole
-  // route, which deliberately frames the LINE rather than the dog. Treat
-  // that like a gesture so the overview survives long enough to be read
-  // before the camera returns to the dog and you walk it.
+  // One-shot camera COMMANDS from elsewhere in the app, each of which
+  // deliberately frames something that is not the dog: a freshly planned
+  // walk (CrayonRoute fits the whole route), a territory tapped on the
+  // standing, a saved place put back on the map from the spots tab. None
+  // of them is a state this can read while it lasts — they are consumed
+  // and cleared — so each one buys the same grace a gesture does, and the
+  // camera returns to the dog afterwards rather than snatching the frame
+  // away mid-flight.
   useEffect(() => {
     if (walkRoute && walkRoute.length > 1) {
       flatCamReleaseAtRef.current = Date.now() + FLAT_FOLLOW_RESUME_MS;
     }
   }, [walkRoute]);
   useEffect(() => {
+    if (focusedTerritory || focusedLore) {
+      flatCamReleaseAtRef.current = Date.now() + FLAT_FOLLOW_RESUME_MS;
+    }
+  }, [focusedTerritory, focusedLore]);
+  useEffect(() => {
     const map = mapRef.current;
     if (!map || !flatCam) return;
-    // FLATTEN FIRST, THEN CAP. setMaxPitch clamps the live pitch with a
-    // bare setPitch — no animation — so capping a tilted camera drops it
-    // to plan view in one frame. Ease it down and cap a beat after it has
-    // arrived, and the lock is invisible.
-    easeCamera(map, 'cinematic', { pitch: FLAT_PITCH, duration: 600 });
-    const lockTimer = setTimeout(() => {
-      try {
-        map.setMaxPitch(FLAT_PITCH);
-      } catch {
-        /* map tearing down */
-      }
-    }, 650);
-
     // Hand-driven camera moves. `originalEvent` is present only on moves a
     // gesture caused — MapLibre's handler manager attaches it to movestart
     // / move / moveend, and to the inertia easeTo it issues on release, so
@@ -1479,37 +1505,51 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     map.on('moveend', onUserMove);
 
     const id = setInterval(() => {
-      const dog = companionPosRef.current;
-      if (!dog) return;
-      const now = Date.now();
-      // Held: keep pushing the release out, so closing the card starts a
-      // fresh window instead of snapping the instant it disappears.
-      if (flatCamHeldRef.current) {
-        flatCamReleaseAtRef.current = now + FLAT_FOLLOW_RESUME_MS;
-        return;
-      }
-      if (now < flatCamReleaseAtRef.current) return;
-      // Some other camera ANIMATION is in flight (a territory fly, a spot
-      // snap, the route fit). Let it land rather than easing over the top
-      // of it. isEasing, not isMoving: the radial menu re-issues a 320 ms
-      // recentre on every companion tick while the ring is open, which
-      // leaves isMoving() true more or less permanently — measured, and it
-      // blocked the follow camera outright.
-      if (map.isEasing()) return;
       try {
-        // Measure against the camera's own focal point, not the geometric
-        // middle: MapLibre's `padding` moves where `center` lands, and
-        // easing to the dog would put it exactly there.
-        const focus = map.project(map.getCenter());
-        const here = map.project([dog.lng, dog.lat]);
-        const container = map.getContainer();
-        const deadzone =
-          Math.min(container.clientWidth, container.clientHeight) *
-          FLAT_FOLLOW_DEADZONE_FRAC;
-        if (Math.hypot(here.x - focus.x, here.y - focus.y) <= deadzone) return;
-        easeCamera(map, 'short', {
+        // ARRIVED, AND ONLY NOW LOCKED. setMaxPitch clamps with a bare
+        // setPitch, so it has to wait until the glide below has actually
+        // got there. This used to run on a 650 ms timer next to a 600 ms
+        // ease, which held right up until something interrupted the ease —
+        // the ring's own recentre re-fires on every companion tick — and
+        // then the cap snapped whatever tilt was left. That was the blink
+        // coming out of supersniff.
+        const flat = map.getPitch() <= FLAT_PITCH_SETTLED_DEG;
+        if (flat && map.getMaxPitch() !== FLAT_PITCH) {
+          map.setMaxPitch(FLAT_PITCH);
+        }
+
+        const dog = companionPosRef.current;
+        if (!dog) return;
+        const now = Date.now();
+        // Held: keep pushing the release out, so closing the card starts a
+        // fresh window instead of snatching the frame the instant it goes.
+        if (flatCamHeldRef.current) {
+          flatCamReleaseAtRef.current = now + FLAT_FOLLOW_RESUME_MS;
+          return;
+        }
+        if (now < flatCamReleaseAtRef.current) return;
+
+        // The mount. One linear ease per tick, each lasting exactly one
+        // tick, so consecutive calls chain into a continuous glide rather
+        // than a series of arrivals — the supersniff trick, flat.
+        //
+        // Deliberately no isEasing() guard: our OWN ease is in flight
+        // almost always here, so one would stop the camera dead. The
+        // animations worth not fighting are the ones somebody else
+        // started, and every one of those either holds the camera
+        // (flatCamHeld) or buys itself a window (the one-shot commands
+        // above).
+        easeCamera(map, 'follow', {
           center: [dog.lng, dog.lat],
-          duration: 600,
+          // Still tilted: the tilt comes down as part of the same move, so
+          // arriving from supersniff is one glide and not a cut followed
+          // by a pan. Once flat, stop re-asserting it — the cap holds it.
+          ...(flat ? {} : { pitch: FLAT_PITCH }),
+          duration: flat ? FLAT_FOLLOW_TICK : FLAT_ENTRY_MS,
+          // Linear only for the steady follow, where the chaining depends
+          // on it. The entry keeps MapLibre's default curve so the tilt
+          // eases out instead of stopping dead.
+          ...(flat ? { easing: (t: number) => t } : {}),
         });
       } catch {
         /* map tearing down */
@@ -1517,7 +1557,6 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     }, FLAT_FOLLOW_TICK);
 
     return () => {
-      clearTimeout(lockTimer);
       clearInterval(id);
       map.off('movestart', onUserMove);
       map.off('move', onUserMove);
@@ -2436,7 +2475,8 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // A selection has to be defended from every clear-list and sync in
   // the app; a command is executed and gone, and tapping the same row
   // again later simply issues a new one.
-  const focusedTerritory = useGameStore((s) => s.focusedTerritory);
+  // (focusedTerritory itself is read up with the other camera commands,
+  // where the flat ground camera needs it too.)
   const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
   useEffect(() => {
     const map = mapRef.current;
@@ -2752,7 +2792,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         });
         // Street names hide at the steep game pitch, return when flat.
         map.on('pitchend', syncStreetLabels);
-        map.on('idle', () => {
+        // What the map is currently looking at. mapBounds is not a
+        // curiosity — it is what culls markers (see visibleOnMap) and what
+        // feeds viewportCenter, so it going stale means pins drawn against
+        // a viewport that has moved on.
+        const snapshotViewport = () => {
           const b = map.getBounds();
           setMapBounds({
             n: b.getNorth(),
@@ -2766,6 +2810,23 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // steep default pitch even if a load-time re-style briefly
           // re-showed them.
           syncStreetLabels();
+        };
+        map.on('idle', snapshotViewport);
+        // AND ON moveend, THROTTLED. `idle` means the map has stopped and
+        // finished drawing, which a map that is following the dog never
+        // does: the flat ground camera chains one ease into the next, and
+        // MapLibre only fires idle between them if it gets a clear frame.
+        // moveend does fire on every one of those handovers (a new ease
+        // with a different id ends the old one properly), so this is the
+        // snapshot that keeps culling honest while the camera is moving.
+        // Throttled because that handover is every FLAT_FOLLOW_TICK and the
+        // snapshot sets four pieces of React state.
+        let lastSnapshotAt = 0;
+        map.on('moveend', () => {
+          const now = Date.now();
+          if (now - lastSnapshotAt < VIEWPORT_SNAPSHOT_MIN_MS) return;
+          lastSnapshotAt = now;
+          snapshotViewport();
         });
         // Hand-driven pans. Only used by the simulated-walk follow camera,
         // which stands down for a while after you touch the map so you can
