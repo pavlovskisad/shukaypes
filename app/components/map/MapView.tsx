@@ -290,10 +290,18 @@ const PREVIEW_DECK_PX = 300;
 const PREVIEW_SPAN_FRAC = 0.76;
 const PREVIEW_ZOOM_MIN = 12.2;
 
+// `target` is the pet's own last-seen point, when it is known. The beacon
+// fragment sits INSIDE the pet's zone — nearer than the pet, by
+// construction — so framing only the fragment still left the pet itself
+// off the top for anything far: at 430m of fragment the card's own "2.1
+// km" pet lands at y=-821. The card names a distance; the map should be
+// able to show it. So fit whichever of the two is further and the nearer
+// comes along for free.
 function previewCamera(
   map: maplibregl.Map,
   dog: LatLng,
   spot: LatLng,
+  target?: LatLng | null,
 ): { center: [number, number]; zoom: number; offset: [number, number] } {
   const container = map.getContainer?.();
   const h = container?.clientHeight ?? 844;
@@ -305,10 +313,12 @@ function previewCamera(
   // the wheel the pair can lie across the screen rather than up it, and a
   // fit that only considers height crops it sideways instead.
   const spanPx = Math.min(strip, w - 48) * PREVIEW_SPAN_FRAC;
-  const d = Math.max(40, distanceMeters(dog, spot));
+  const far =
+    target && distanceMeters(dog, target) > distanceMeters(dog, spot) ? target : spot;
+  const d = Math.max(40, distanceMeters(dog, far));
   const mPerPx = M_PER_PX_Z0 * Math.cos((dog.lat * Math.PI) / 180);
   return {
-    center: [(dog.lng + spot.lng) / 2, (dog.lat + spot.lat) / 2],
+    center: [(dog.lng + far.lng) / 2, (dog.lat + far.lat) / 2],
     zoom: Math.max(PREVIEW_ZOOM_MIN, Math.min(PREVIEW_ZOOM, Math.log2((mPerPx * spanPx) / d))),
     offset: [0, Math.round(stripCentre - h / 2)],
   };
@@ -1487,8 +1497,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       lastDog = dog;
       if (preview) {
         const toSpot = bearingDeg(dog, preview.spot);
-        // Both of you in frame, not just you. See previewCamera.
-        const frame = previewCamera(map, dog, preview.spot);
+        // Both of you in frame, not just you — and the pet the deck is
+        // showing, not only the beacon inside its zone. See previewCamera.
+        const previewPet = useGameStore
+          .getState()
+          .lostDogs.find((d) => d.id === preview.dogId);
+        const frame = previewCamera(
+          map,
+          dog,
+          preview.spot,
+          previewPet?.lastSeen.position ?? null,
+        );
         easeCamera(map, 'follow', {
           center: frame.center,
           offset: frame.offset,
@@ -1774,7 +1793,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // distance the deck offers; see previewCamera.
         const focus = companionPosRef.current ?? from ?? spot;
         try {
-          const frame = previewCamera(map, focus, spot);
+          const frame = previewCamera(map, focus, spot, dog.lastSeen.position);
           easeCamera(map, wasPreviewing ? 'short' : 'cinematic', {
             center: frame.center,
             offset: frame.offset,
