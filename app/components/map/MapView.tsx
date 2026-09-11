@@ -1308,6 +1308,18 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // each new preview/commit can RESET it, re-orienting toward the new target
   // instead of staying stuck at the old hand-set angle.
   const userTookBearingRef = useRef(false);
+  // THE FOLLOW LOOP STANDS DOWN WHILE A ONE-SHOT CAMERA MOVE IS IN FLIGHT.
+  // A carousel swipe (and the swing into supersniff) starts a 500–700ms
+  // eased move to a new zoom and bearing; the follow loop below re-targets
+  // every DOGCAM_TICK with a LINEAR ease one tick long, to the same
+  // targets. Left to run, its next tick — up to 350ms into the swipe —
+  // replaced the eased curve with a constant-speed segment from wherever
+  // the camera had got to, and the tick after that finished it: gentle
+  // start, a kink into a faster straight run, stop. It read as one or two
+  // steps. So a one-shot move records when it ends, and ticks before then
+  // do nothing; the loop resumes gluing the camera to the dog after. The
+  // dog moves under a metre in that window.
+  const cameraHoldUntilRef = useRef(0);
 
   // Dog-cam: while enabled, chase the companion with a low, close camera whose
   // bearing tracks the dog's direction of travel (forward = up), like a
@@ -1362,6 +1374,8 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       if (!dog) return;
       // Rotate gesture still in flight (events arriving) → hands off entirely.
       if (Date.now() - lastUserRotateAt < DOGCAM_TICK) return;
+      // A swipe's or the entry swing's own move is still easing → let it land.
+      if (Date.now() < cameraHoldUntilRef.current) return;
       // Preview → stay TIED to the dog but zoomed out, facing the fragment we're
       // eyeing (so the blue beacon sits up-screen). Committed → tight chase cam
       // with heading-up. Either way the camera is glued to the dog, so it never
@@ -1717,6 +1731,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       const map = mapRef.current;
       if (DOG_CAM && useGameStore.getState().dogCam && map) {
         const focus = companionPosRef.current ?? origin;
+        cameraHoldUntilRef.current = Date.now() + 500;
         easeCamera(map, 'cinematic', {
           center: [focus.lng, focus.lat],
           bearing: bearingDeg(origin, spot),
@@ -1859,6 +1874,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // keeps it glued from here.
         const focus = companionPosRef.current ?? from ?? spot;
         try {
+          cameraHoldUntilRef.current = Date.now() + 700;
           easeCamera(map, wasPreviewing ? 'short' : 'cinematic', {
             center: [focus.lng, focus.lat],
             zoom: previewZoomFor(distanceMeters(focus, spot)),
