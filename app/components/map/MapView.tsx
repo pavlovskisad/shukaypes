@@ -261,12 +261,57 @@ function safeAreaTopPx(): number {
 const PREVIEW_FRAGMENT_RADIUS_M = 320;
 const PREVIEW_TARGET_DIST_M = 430;
 
-// Preview zoom adapts to how far the fragment is from the dog, so a distant
-// beacon still lands on-screen instead of falling off the horizon. Near spots
-// keep the close PREVIEW_ZOOM; far ones ease out.
-function previewZoomFor(distM: number): number {
-  const z = PREVIEW_ZOOM - Math.log2(Math.max(distM, 300) / 300) * 0.9;
-  return Math.max(14.0, Math.min(PREVIEW_ZOOM, z));
+// FRAME THE DOG AND THE PET IT IS POINTING AT — both of them, on screen.
+//
+// This replaces a previewZoomFor(distance) that answered "how far out for
+// a beacon this far away" — the wrong question, because the camera it fed
+// was pinned to the dog at the CENTRE of the viewport. That halves the
+// reach: the pet has to fit in the top half of the screen, minus the card
+// deck covering the bottom third of it. Worked through at Kyiv's latitude
+// for the distances the deck actually shows, half-screen reach against
+// the distance it has to cover:
+//
+//     650m  -> zoom 15.80, reaches 370m    pet off screen
+//     750m  -> zoom 15.61, reaches 420m    pet off screen
+//    2100m  -> zoom 14.27, reaches 1062m   pet off screen
+//
+// Not "a bit tight" — arithmetically unable to show the pet at any
+// distance the deck offers, which is what "the area of the selected dog
+// is not in sight" was.
+//
+// So frame the PAIR. Centre the midpoint, put that midpoint in the middle
+// of the strip the HUD and the deck leave free, and solve the zoom so the
+// separation spans PREVIEW_SPAN_FRAC of it. The bearing already points
+// down the dog->pet line, so the dog sits low in the strip and the pet
+// high — which is the shape the mode wants anyway: you, and the thing you
+// are being pointed at, with the ground between you.
+const PREVIEW_TOP_PX = 96;
+const PREVIEW_DECK_PX = 300;
+const PREVIEW_SPAN_FRAC = 0.76;
+const PREVIEW_ZOOM_MIN = 12.2;
+
+function previewCamera(
+  map: maplibregl.Map,
+  dog: LatLng,
+  spot: LatLng,
+): { center: [number, number]; zoom: number; offset: [number, number] } {
+  const container = map.getContainer?.();
+  const h = container?.clientHeight ?? 844;
+  const w = container?.clientWidth ?? 390;
+  const top = safeAreaTopPx() + PREVIEW_TOP_PX;
+  const strip = Math.max(160, h - top - PREVIEW_DECK_PX);
+  const stripCentre = top + strip / 2;
+  // The narrower of the free strip and the width: if the user has taken
+  // the wheel the pair can lie across the screen rather than up it, and a
+  // fit that only considers height crops it sideways instead.
+  const spanPx = Math.min(strip, w - 48) * PREVIEW_SPAN_FRAC;
+  const d = Math.max(40, distanceMeters(dog, spot));
+  const mPerPx = M_PER_PX_Z0 * Math.cos((dog.lat * Math.PI) / 180);
+  return {
+    center: [(dog.lng + spot.lng) / 2, (dog.lat + spot.lat) / 2],
+    zoom: Math.max(PREVIEW_ZOOM_MIN, Math.min(PREVIEW_ZOOM, Math.log2((mPerPx * spanPx) / d))),
+    offset: [0, Math.round(stripCentre - h / 2)],
+  };
 }
 
 // Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
@@ -1442,10 +1487,13 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       lastDog = dog;
       if (preview) {
         const toSpot = bearingDeg(dog, preview.spot);
+        // Both of you in frame, not just you. See previewCamera.
+        const frame = previewCamera(map, dog, preview.spot);
         easeCamera(map, 'follow', {
-          center: [dog.lng, dog.lat],
+          center: frame.center,
+          offset: frame.offset,
           pitch: PREVIEW_PITCH,
-          zoom: previewZoomFor(distanceMeters(dog, preview.spot)),
+          zoom: frame.zoom,
           ...(userTookBearingRef.current ? {} : { bearing: toSpot }),
           duration: DOGCAM_TICK,
           easing: (t) => t,
@@ -1719,15 +1767,18 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       userTookBearingRef.current = false; // re-orient toward the new fragment
       const map = mapRef.current;
       if (DOG_CAM && dogCam && map) {
-        // Tied to the dog (never flies off to the zone, so the dog can't drift
-        // into the carousel), just zoomed out and facing the fragment. Zoom eases
-        // out for far fragments so the beacon stays on-screen. The follow loop
-        // keeps it glued from here.
+        // Frames the dog AND the fragment, facing down the line between
+        // them — the same framing the follow loop then holds, so the swipe
+        // settles where it lands instead of being re-aimed a tick later.
+        // Centring on the dog alone could not show the fragment at any
+        // distance the deck offers; see previewCamera.
         const focus = companionPosRef.current ?? from ?? spot;
         try {
+          const frame = previewCamera(map, focus, spot);
           easeCamera(map, wasPreviewing ? 'short' : 'cinematic', {
-            center: [focus.lng, focus.lat],
-            zoom: previewZoomFor(distanceMeters(focus, spot)),
+            center: frame.center,
+            offset: frame.offset,
+            zoom: frame.zoom,
             pitch: PREVIEW_PITCH,
             bearing: bearingDeg(focus, spot),
             duration: 700,
@@ -2946,6 +2997,29 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (map.isStyleLoaded()) {
       apply();
       return;
+    }
+    // NOT LOADED IS NOT THE SAME AS NOT READY, and waiting as if it were
+    // is what made a mode change blink.
+    //
+    // Everything this pass touches is a property of layers that ALREADY
+    // EXIST — no setStyle, no layer added or removed, just paint and
+    // visibility written onto the style that has been there all along.
+    // isStyleLoaded() goes false merely because tiles are in flight, which
+    // a mode change guarantees by revealing layers that then fetch. So the
+    // pass sat waiting for the very tiles its own change had asked for,
+    // while the ownership colours — their own GeoJSON layer, beholden to
+    // none of this — were already painted. Colours instantly, roads a
+    // beat later: measured at 837ms on a cold flip, against 0ms once the
+    // pass stopped waiting.
+    //
+    // So apply NOW, best effort — every write in there is individually
+    // guarded and the function is idempotent by design — and keep the idle
+    // pass as a top-up for anything that genuinely was not ready. Twice is
+    // free; late is visible.
+    try {
+      apply();
+    } catch {
+      /* style too early to touch — the idle pass below is the fallback */
     }
     map.once('idle', apply);
     return () => {
