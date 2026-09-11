@@ -19,11 +19,13 @@ import { useGameStore } from '../../stores/gameStore';
 import { MapContext } from './MapContext';
 import {
   LIGHT_PALETTE,
+  PAPER_PALETTE,
   PLAY_PALETTE,
   applyCrayonOverride,
   setStreetLabelsVisible,
   fetchCrayonStyleSpec,
 } from './crayonStyle';
+import { createMapSketch, setSketchVisible, type MapSketch } from './mapSketch';
 import type { Spot } from '../../services/places';
 import { useLocation, isSimulatedWalk } from '../../hooks/useLocation';
 import { useCompanion } from '../../hooks/useCompanion';
@@ -53,6 +55,7 @@ import { DogPrompt } from './DogPrompt';
 import { createBuildingAvoider } from './buildingAvoider';
 import {
   GAME_RENDER,
+  PAPER_MAP,
   MULTIPLAYER,
   DOG_CAM,
   LOST_DOG_PINS,
@@ -148,7 +151,7 @@ const DOGCAM_MIN_MOVE_M = 0.6;
 // lower and the shot feels less cramped. Zoomed in ~20% vs before (16.3 → 16.55)
 // so the tighter framing pushes the beacon farther up the screen, opening a gap
 // above the dog for its speech bubble before the beacon.
-const PREVIEW_PITCH = 68;
+const PREVIEW_PITCH = PAPER_MAP ? 0 : 68;
 const PREVIEW_ZOOM = 16.55;
 // The dog rides at true screen CENTRE in supersniff — same as every other
 // camera framing (hint snaps, radial-menu open). We used to reserve 24% top
@@ -166,17 +169,36 @@ const ROUTE_LOOK_AHEAD_M = 90;
 // supersniff-preview-style blue beacon, and the pin grows to the big photo
 // pin. Pitch sits well under the street-level game pitch (74) so the shot
 // reads as a helicopter establishing view.
-const DOG_VIEW_PITCH = 57;
-// Fixed district-level zoom — the pet's part of the city with the zone
-// glow spreading around it, without collapsing into a full-city overview.
-const DOG_VIEW_ZOOM = 14.6;
-// Where the pin's FOOT lands on screen, measured from below the safe-area
-// inset: the story-bubble stack top (122, see LostDogModal.STACK_TOP) +
-// the bubble/pills block (~145) + a small gap + the pin's own artwork
-// above its foot (~120 at the 110px disc, no name label). Together with
-// the top-anchored stack this makes HUD → bubble → pills → pin one snug
-// centred column.
-const DOG_VIEW_PIN_TOP_PX = 405;
+const DOG_VIEW_PITCH = PAPER_MAP ? 0 : 57;
+// THE ZONE DECIDES THE ZOOM, not a constant.
+//
+// This was a fixed district-level 14.6 while the comment above it claimed
+// the zoom was computed so the zone spanned a fraction of the visible
+// strip. The comment was describing the right behaviour and the code was
+// not doing it: a pet with a 200 m zone and a pet with a 1.5 km zone got
+// the same camera, so one was a dot and the other ran off the screen.
+// Flattening the map made it plain — at a tilt the horizon hid the
+// mismatch, straight down there is nowhere for it to go.
+//
+// So: solve for the zoom that makes the zone's DIAMETER span
+// DOG_VIEW_ZONE_FRAC of the strip the modal leaves free, clamped so a
+// tiny zone does not zoom into somebody's garden and a huge one does not
+// pull back to the oblast.
+const DOG_VIEW_ZONE_FRAC = 0.72;
+// The ingest spec puts a real zone at 500–1500 m (pipeline/parser.ts),
+// and every one of those fits well inside the clamp. It sits lower than
+// that range needs so a mis-parsed radius still gets FRAMED rather than
+// cropped — the floor is a safety rail, not the working range.
+const DOG_VIEW_ZOOM_MIN = 11.5;
+const DOG_VIEW_ZOOM_MAX = 16.8;
+// What the pet card occupies, measured from the top: LostDogModal's
+// STACK_TOP (122) plus the bubble and pills block below it. The map's
+// free strip is what is left between that and the tab bar.
+const DOG_VIEW_STACK_PX = 268;
+const DOG_VIEW_BOTTOM_PX = 112;
+
+// Metres per pixel at zoom 0 for MapLibre's 512px tiles, at the equator.
+const M_PER_PX_Z0 = 78271.516;
 // THE GAME CAMERA'S TILT. One constant, used by the map's opening pitch,
 // the return from a dog view, and the return from supersniff — those were
 // three separate literals until they disagreed.
@@ -302,12 +324,67 @@ function safeAreaTopPx(): number {
 const PREVIEW_FRAGMENT_RADIUS_M = 320;
 const PREVIEW_TARGET_DIST_M = 430;
 
-// Preview zoom adapts to how far the fragment is from the dog, so a distant
-// beacon still lands on-screen instead of falling off the horizon. Near spots
-// keep the close PREVIEW_ZOOM; far ones ease out.
-function previewZoomFor(distM: number): number {
-  const z = PREVIEW_ZOOM - Math.log2(Math.max(distM, 300) / 300) * 0.9;
-  return Math.max(14.0, Math.min(PREVIEW_ZOOM, z));
+// FRAME THE DOG AND THE PET IT IS POINTING AT — both of them, on screen.
+//
+// This replaces a previewZoomFor(distance) that answered "how far out for
+// a beacon this far away" — the wrong question, because the camera it fed
+// was pinned to the dog at the CENTRE of the viewport. That halves the
+// reach: the pet has to fit in the top half of the screen, minus the card
+// deck covering the bottom third of it. Worked through at Kyiv's latitude
+// for the distances the deck actually shows, half-screen reach against
+// the distance it has to cover:
+//
+//     650m  -> zoom 15.80, reaches 370m    pet off screen
+//     750m  -> zoom 15.61, reaches 420m    pet off screen
+//    2100m  -> zoom 14.27, reaches 1062m   pet off screen
+//
+// Not "a bit tight" — arithmetically unable to show the pet at any
+// distance the deck offers, which is what "the area of the selected dog
+// is not in sight" was.
+//
+// So frame the PAIR. Centre the midpoint, put that midpoint in the middle
+// of the strip the HUD and the deck leave free, and solve the zoom so the
+// separation spans PREVIEW_SPAN_FRAC of it. The bearing already points
+// down the dog->pet line, so the dog sits low in the strip and the pet
+// high — which is the shape the mode wants anyway: you, and the thing you
+// are being pointed at, with the ground between you.
+const PREVIEW_TOP_PX = 96;
+const PREVIEW_DECK_PX = 300;
+const PREVIEW_SPAN_FRAC = 0.76;
+const PREVIEW_ZOOM_MIN = 12.2;
+
+// `target` is the pet's own last-seen point, when it is known. The beacon
+// fragment sits INSIDE the pet's zone — nearer than the pet, by
+// construction — so framing only the fragment still left the pet itself
+// off the top for anything far: at 430m of fragment the card's own "2.1
+// km" pet lands at y=-821. The card names a distance; the map should be
+// able to show it. So fit whichever of the two is further and the nearer
+// comes along for free.
+function previewCamera(
+  map: maplibregl.Map,
+  dog: LatLng,
+  spot: LatLng,
+  target?: LatLng | null,
+): { center: [number, number]; zoom: number; offset: [number, number] } {
+  const container = map.getContainer?.();
+  const h = container?.clientHeight ?? 844;
+  const w = container?.clientWidth ?? 390;
+  const top = safeAreaTopPx() + PREVIEW_TOP_PX;
+  const strip = Math.max(160, h - top - PREVIEW_DECK_PX);
+  const stripCentre = top + strip / 2;
+  // The narrower of the free strip and the width: if the user has taken
+  // the wheel the pair can lie across the screen rather than up it, and a
+  // fit that only considers height crops it sideways instead.
+  const spanPx = Math.min(strip, w - 48) * PREVIEW_SPAN_FRAC;
+  const far =
+    target && distanceMeters(dog, target) > distanceMeters(dog, spot) ? target : spot;
+  const d = Math.max(40, distanceMeters(dog, far));
+  const mPerPx = M_PER_PX_Z0 * Math.cos((dog.lat * Math.PI) / 180);
+  return {
+    center: [(dog.lng + far.lng) / 2, (dog.lat + far.lat) / 2],
+    zoom: Math.max(PREVIEW_ZOOM_MIN, Math.min(PREVIEW_ZOOM, Math.log2((mPerPx * spanPx) / d))),
+    offset: [0, Math.round(stripCentre - h / 2)],
+  };
 }
 
 // Compass bearing (deg, 0=N, clockwise) from point a to point b. Used to point
@@ -381,6 +458,57 @@ function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
 // fills surfaced from under it: a city of white cutouts punched through
 // the territory field. (The first fix aimed at the buildings' distance
 // fog — wrong layer; the 3D city wasn't even there.)
+// WHICH RENDER IS ON SCREEN: the Three.js world, or the drawn page.
+//
+// The world's layers are built once per session and toggled here rather
+// than torn down — rebuilding an extruded city on every sniff toggle is
+// exactly the cost the paper map just finished removing from the zoom
+// path.
+//
+// THIS MUST NOT RIDE ON THE PALETTE PASS. It used to, and the palette
+// pass defers itself to `map.once('idle')` whenever the style is
+// mid-update — which is exactly the state a mode change puts it in. On a
+// cold entry straight into supersniff, with tiles still arriving, idle
+// can be seconds away, and for all of them the 3D city stayed hidden and
+// the pitch stayed capped at 0. Supersniff opened as a flat, empty page
+// and stayed that way until the tiles settled. Layer visibility and the
+// pitch cap do not need a settled style, so they are applied at once and
+// again on the palette pass.
+//
+// THE CITY AND THE TILT ARE NOT THE SAME QUESTION, and after the merge
+// with main they are not even answered by the same code.
+//
+// This used to set `maxPitch` too, on a `tiltable` flag of its own. It no
+// longer does: FLAT_GROUND_CAM owns the cap now, and owns it better —
+// it lowers it only once the glide into flat has actually SETTLED, where
+// this would clamp mid-animation and turn a glide into a snap. Two owners
+// for one camera property is the bug this file has already been bitten by
+// twice (the dog-cam ceiling, the radial-menu ease); one owner, and it is
+// not this function.
+//
+// What is left is the question only PAPER_MAP asks: which render is on
+// screen, the extruded world or the drawn page.
+//
+//   explore      page    — the drawing
+//   territory    world   — the city, read from above
+//   supersniff   world   — the city, down in the street
+//
+// Territory is a world because its owner colours climb the walls, and
+// that is most of what makes a claim read as a district rather than a
+// wash. Being looked at from overhead is FLAT_GROUND_CAM's doing, and the
+// two compose: a world seen in plan.
+function syncWorldRender(map: maplibregl.Map, world: boolean): void {
+  if (!PAPER_MAP) return;
+  for (const id of [THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID, DEPTH_FOG_LAYER_ID]) {
+    if (!map.getLayer(id)) continue;
+    try {
+      map.setLayoutProperty(id, 'visibility', world ? 'visible' : 'none');
+    } catch {
+      /* style mid-update — the palette pass repeats this */
+    }
+  }
+}
+
 function hideMapLibreBuildings(map: maplibregl.Map): void {
   for (const l of map.getStyle().layers ?? []) {
     if ((l as { 'source-layer'?: string })['source-layer'] === 'building') {
@@ -428,6 +556,11 @@ export default function MapViewWeb() {
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const mapContainerRef = useRef<HTMLDivElement | null>(null);
   const mapRef = useRef<maplibregl.Map | null>(null);
+  // The hand-drawn city (mapSketch.ts) and whether a tile has landed
+  // since it was last generated.
+  const sketchRef = useRef<MapSketch | null>(null);
+  const sketchDirtyRef = useRef(false);
+  const sketchTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   // When the user last dragged the map by hand (0 = never).
   const userPannedAtRef = useRef(0);
   // Stored in state too so React-tree children (markers) can be wired
@@ -705,9 +838,28 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // outlive the condition that hid it. Visible → still mounted and
   // sliding away → gone. `deckVisible` is the truth; `deckMounted` is
   // what the DOM holds.
-  // The city goes near-monochrome while territory is drawn over it, so a
-  // dozen owner colours are the only hues on screen. See PLAY_PALETTE.
-  const mapPalette = territoryVisible ? PLAY_PALETTE : LIGHT_PALETTE;
+  // THREE MAPS, ONE STYLE.
+  //
+  // ONE page and TWO worlds, as of the territory experiment.
+  //
+  // Explore is the drawing: white, flat, ink. Supersniff always was a
+  // world — the coloured tile geometry under the Three.js city, the fog,
+  // the tilt — because you are down in the street following a trail.
+  // Territory joined the worlds but NOT the tilt: its ownership colours
+  // want a city with volume beneath them (they climb the walls, which is
+  // most of what makes a claim read as a district), and it is read from
+  // straight above like the map it is. A world seen in plan.
+  //
+  // `world` drives the render, `superSniff` alone drives the tilt, and
+  // the palette drives the paint and — through `handDrawn` — whether the
+  // sketch or the tile layers are the ones on screen.
+  const superSniff = DOG_CAM && dogCam;
+  const world = superSniff || territoryVisible;
+  const mapPalette = superSniff
+    ? LIGHT_PALETTE
+    : territoryVisible
+      ? PLAY_PALETTE
+      : PAPER_PALETTE;
 
   const deckVisible = DOG_CAM && dogCam && onMapScreen && !menuOpen;
   const [deckMounted, setDeckMounted] = useState(deckVisible);
@@ -1342,6 +1494,48 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (!DOG_CAM || !dogCam) return;
     const map = mapRef.current;
     if (!map) return;
+    // THE CAP IS RAISED BY THE CODE THAT NEEDS IT.
+    //
+    // The paper map holds maxPitch at 0 so its page cannot be tilted, and
+    // supersniff needs 70. Both were being set from the palette effect —
+    // which is declared BELOW this one, so within a single commit this
+    // effect's first ease asked for 70 while the cap was still 0, and
+    // MapLibre silently clamped it. Supersniff opened flat and only got
+    // its tilt back when a later follow tick re-eased, by which time the
+    // cap had caught up.
+    //
+    // Two effects agreeing about one camera through declaration order is
+    // not an arrangement worth keeping even when it happens to work, so
+    // the tilt raises its own ceiling here, before anything moves.
+    try {
+      map.setMaxPitch(80);
+    } catch {
+      /* style not ready */
+    }
+    // …and tilt AT ONCE, rather than waiting for the first follow tick.
+    // Before the paper map this cost nothing to skip: the walking camera
+    // already sat at GAME_PITCH 65, so entry was a 5-degree nudge nobody
+    // saw. From a flat page it is the whole 70, and leaving it to the
+    // interval means supersniff opens flat and then rears up a beat
+    // later. The loop takes over from here.
+    //
+    // AND WHILE PREVIEW_PITCH IS 0 THE LOOP UNDOES THIS IMMEDIATELY —
+    // measured at 2ms, entering with a fragment preview active. Kept
+    // rather than deleted because it is correct for the committed case
+    // and becomes correct everywhere the moment PREVIEW_PITCH goes back
+    // to 68; see the note on the pitch constants. Do not read the tilt
+    // here as evidence that supersniff opens tilted: it does not.
+    try {
+      const dogNow = companionPosRef.current ?? userPosRef.current;
+      easeCamera(map, 'cinematic', {
+        ...(dogNow ? { center: [dogNow.lng, dogNow.lat] as [number, number] } : {}),
+        pitch: DOGCAM_PITCH,
+        zoom: DOGCAM_ZOOM,
+        duration: 500,
+      });
+    } catch {
+      /* map tearing down */
+    }
     // The dog rides at true centre (see the framing comment on the constants
     // above), so the mode needs NO camera padding of its own — but the
     // pet/spot modal snap eases `padding` onto the transform and MapLibre
@@ -1376,10 +1570,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       if (Date.now() - lastUserRotateAt < DOGCAM_TICK) return;
       // A swipe's or the entry swing's own move is still easing → let it land.
       if (Date.now() < cameraHoldUntilRef.current) return;
-      // Preview → stay TIED to the dog but zoomed out, facing the fragment we're
-      // eyeing (so the blue beacon sits up-screen). Committed → tight chase cam
-      // with heading-up. Either way the camera is glued to the dog, so it never
-      // drifts down into the carousel.
+      // Preview → frame the dog AND what is being eyed, facing down the line
+      // between them, so the beacon sits up-screen and the dog low. Committed
+      // → tight chase cam with heading-up, glued to the dog. Both keep the
+      // dog inside the strip the carousel leaves free rather than letting it
+      // drift down behind the cards.
       const preview = useGameStore.getState().searchPreview;
       let moved = false;
       if (lastDog && distanceMeters(lastDog, dog) > DOGCAM_MIN_MOVE_M) {
@@ -1390,10 +1585,22 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       lastDog = dog;
       if (preview) {
         const toSpot = bearingDeg(dog, preview.spot);
+        // Both of you in frame, not just you — and the pet the deck is
+        // showing, not only the beacon inside its zone. See previewCamera.
+        const previewPet = useGameStore
+          .getState()
+          .lostDogs.find((d) => d.id === preview.dogId);
+        const frame = previewCamera(
+          map,
+          dog,
+          preview.spot,
+          previewPet?.lastSeen.position ?? null,
+        );
         easeCamera(map, 'follow', {
-          center: [dog.lng, dog.lat],
+          center: frame.center,
+          offset: frame.offset,
           pitch: PREVIEW_PITCH,
-          zoom: previewZoomFor(distanceMeters(dog, preview.spot)),
+          zoom: frame.zoom,
           ...(userTookBearingRef.current ? {} : { bearing: toSpot }),
           duration: DOGCAM_TICK,
           easing: (t) => t,
@@ -1432,6 +1639,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       try {
         easeCamera(map, 'cinematic', {
           bearing: 0,
+          // Stands the camera back up at the game tilt, and FLAT_GROUND_CAM
+          // takes it down from there if the mode being returned to is one of
+          // the flat ones — which is what its entry glide is shaped for
+          // (70° → 29 → 12 → 5 → 2 over about five ticks). Handing it a
+          // tilted camera to settle is the case it was written for, so this
+          // does not need to know which mode it is landing in.
           pitch: GAME_PITCH,
           zoom: balance.mapZoomDefault,
           duration: 500,
@@ -1868,16 +2081,24 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       userTookBearingRef.current = false; // re-orient toward the new fragment
       const map = mapRef.current;
       if (DOG_CAM && dogCam && map) {
-        // Tied to the dog (never flies off to the zone, so the dog can't drift
-        // into the carousel), just zoomed out and facing the fragment. Zoom eases
-        // out for far fragments so the beacon stays on-screen. The follow loop
-        // keeps it glued from here.
+        // Frames the dog AND the fragment, facing down the line between
+        // them — the same framing the follow loop then holds, so the swipe
+        // settles where it lands instead of being re-aimed a tick later.
+        // Centring on the dog alone could not show the fragment at any
+        // distance the deck offers; see previewCamera.
         const focus = companionPosRef.current ?? from ?? spot;
         try {
+          // Both, and they are complementary: main's hold keeps the follow
+          // loop off the camera while this move lands, and the frame is
+          // what the move is aiming at. The loop re-derives the same frame
+          // when the hold expires, so the swipe settles where it landed
+          // rather than being re-aimed a tick later.
           cameraHoldUntilRef.current = Date.now() + 700;
+          const frame = previewCamera(map, focus, spot, dog.lastSeen.position);
           easeCamera(map, wasPreviewing ? 'short' : 'cinematic', {
-            center: [focus.lng, focus.lat],
-            zoom: previewZoomFor(distanceMeters(focus, spot)),
+            center: frame.center,
+            offset: frame.offset,
+            zoom: frame.zoom,
             pitch: PREVIEW_PITCH,
             bearing: bearingDeg(focus, spot),
             duration: 700,
@@ -2641,21 +2862,37 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // Frame the PIN (its zone-jittered display point — where the big
     // photo pin actually renders) directly under the top-anchored story
     // bubble, horizontally centred.
-    const pin = displayPositions.get(selectedDogId) ?? dog.lastSeen.position;
+    // Frame the ZONE, not the pin. The pin is jittered somewhere inside
+    // the zone by construction (see displayPositions), so a camera that
+    // holds the whole circle always holds the pin — where centring the
+    // pin itself says nothing about whether its zone is on screen.
+    const zone = dog.lastSeen.position;
     const container = map.getContainer?.();
     const h = container?.clientHeight ?? 700;
+    const w = container?.clientWidth ?? 390;
+    const safeTop = safeAreaTopPx();
+    // The strip the modal leaves free, and where its middle sits.
+    const strip = Math.max(180, h - safeTop - DOG_VIEW_STACK_PX - DOG_VIEW_BOTTOM_PX);
+    const stripCentre = safeTop + DOG_VIEW_STACK_PX + strip / 2;
+    const radiusM = Math.max(60, dog.searchZoneRadiusM || 300);
+    // Fit the zone's diameter into the SMALLER of the free strip and the
+    // width, so a wide zone is not cropped left and right either.
+    const spanPx = Math.min(strip, w - 48) * DOG_VIEW_ZONE_FRAC;
+    const mPerPx = M_PER_PX_Z0 * Math.cos((zone.lat * Math.PI) / 180);
+    const zoneZoom = Math.min(
+      DOG_VIEW_ZOOM_MAX,
+      Math.max(DOG_VIEW_ZOOM_MIN, Math.log2((mPerPx * spanPx) / (2 * radiusM))),
+    );
     easeCamera(map, alreadyInDogView ? 'short' : 'cinematic', {
-      center: [pin.lng, pin.lat],
-      zoom: DOG_VIEW_ZOOM,
+      center: [zone.lng, zone.lat],
+      zoom: zoneZoom,
       pitch: DOG_VIEW_PITCH,
       // Zero out any padding a prior spot/modal snap left so the offset
       // below is measured from the true viewport centre.
       padding: { top: 0, bottom: 0, left: 0, right: 0 },
-      // Land the pin's foot DOG_VIEW_PIN_TOP_PX below the safe-area
-      // inset — right under the story-bubble stack (positive y = down
-      // from centre; negative on very tall viewports is fine, the pin
-      // just rides above centre, still glued to the stack).
-      offset: [0, Math.round(safeAreaTopPx() + DOG_VIEW_PIN_TOP_PX - h / 2)],
+      // Put the zone's centre in the middle of that free strip, so the
+      // circle sits under the card rather than behind it.
+      offset: [0, Math.round(stripCentre - h / 2)],
       // Slow enough to read as a camera move, not a snap.
       duration: 950,
     });
@@ -2698,12 +2935,26 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // explainer bubble above the ring at the default centre, so we no
     // longer drop the dog lower for it. (menuCamera keeps the two
     // values only so the explainer bubble can still be told apart.)
+    // AND IT DELIBERATELY SAYS NOTHING ABOUT PITCH.
+    //
+    // It briefly did. This ease fires ~1ms after whatever a mode change
+    // asked for, and a camera move that omits `pitch` does not HOLD the
+    // current pitch — it abandons any ease still in flight. So while this
+    // branch owned the tilt, stating it here was the fix for a tilt that
+    // kept vanishing.
+    //
+    // FLAT_GROUND_CAM owns the tilt now, and owns it continuously: its
+    // follow tick carries the pitch the whole way into flat rather than
+    // setting it once. There is no in-flight ease left for this move to
+    // cut off — and naming a pitch here would be worse than silent, since
+    // GAME_PITCH is 65 again and these are the modes that are flat.
+    const move = { center: c, offset: [0, 0] as [number, number], duration: 320 };
     if (menuCamera) {
       menuWasOpenRef.current = true;
-      easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
+      easeCamera(map, 'short', move);
     } else if (menuWasOpenRef.current) {
       menuWasOpenRef.current = false;
-      easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
+      easeCamera(map, 'short', move);
     }
   }, [menuCamera, companionPos?.lat, companionPos?.lng]);
 
@@ -2796,10 +3047,71 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // eslint-disable-next-line no-console
           console.error('[maplibre]', e?.error || e);
         });
+        // A new tile is new geometry, and the sketch is generated from
+        // geometry rather than reading it per frame — so a tile that
+        // arrives after the last build has to force the next one, or you
+        // pan into a district that is drawn blank.
+        //
+        // Deliberately NOT gated on `e.tile`. The first cut was, and the
+        // sketch came out completely blank: the only forced build runs at
+        // style.load, when no tile has arrived yet and every query
+        // returns nothing, and from then on refresh() saw the same zoom
+        // bucket and no dirty flag and no-opped forever. Four empty
+        // sources, no error, and a map that looked like a styling
+        // mistake. `sourceDataType === 'content'` is the signal that
+        // actually fires.
+        map.on('sourcedata', (e) => {
+          if (e.sourceDataType !== 'content') return;
+          sketchDirtyRef.current = true;
+          // IDLE IS NOT ENOUGH WHILE SOMEBODY IS WALKING.
+          //
+          // The sketch used to be drawn only on 'idle', which fires when
+          // the camera has settled AND every tile has landed. On a walk
+          // that is rarely: the follow camera moves with the dog, tiles
+          // keep streaming, and idle keeps being pushed back. Ground the
+          // user had already walked onto stayed blank for a long time,
+          // with the edge of the drawn area showing as a hard straight
+          // line where a half-loaded park fill stopped.
+          //
+          // So a short debounce after the last tile of a burst draws it
+          // too, whether or not the map ever goes idle. Cheap now that
+          // appending is proportional to what arrived rather than to the
+          // whole city.
+          if (sketchTimerRef.current) clearTimeout(sketchTimerRef.current);
+          sketchTimerRef.current = setTimeout(() => {
+            sketchTimerRef.current = null;
+            if (!sketchRef.current) return;
+            sketchDirtyRef.current = false;
+            sketchRef.current.refresh(true);
+          }, 250);
+        });
         mapRef.current = map;
         map.on('style.load', () => {
-          applyCrayonOverride(map, LIGHT_PALETTE, lang);
+          applyCrayonOverride(map, PAPER_PALETTE, lang);
           syncStreetLabels();
+          // The hand-drawn city. Built after the override so it lands on
+          // a style whose own road/building/park/water layers are
+          // already hidden, and before the first idle so the very first
+          // frame of tiles gets sketched rather than showing bare paper.
+          if (PAPER_MAP) {
+            try {
+              const vector = (map.getStyle().layers ?? [])
+                .map((l) => (l as { source?: string }).source)
+                .find((s) => s && map.getSource(s)?.type === 'vector');
+              if (vector) {
+                sketchRef.current = createMapSketch(map, PAPER_PALETTE, vector);
+                sketchRef.current.refresh(true);
+                if (DEV_TOOLS) {
+                  (window as unknown as { __sketch?: unknown }).__sketch =
+                    sketchRef.current;
+                }
+              }
+            } catch (e) {
+              // eslint-disable-next-line no-console
+              console.error('[sketch] init failed — the basemap stays as styled', e);
+              sketchRef.current = null;
+            }
+          }
           // The game render (Three.js buildings + one unified mist) needs
           // WebGL2, so it can fail on old devices. We build it defensively:
           // add both custom layers FIRST and only hide MapLibre's own
@@ -2851,6 +3163,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               console.error('[fog] addLayer failed', e);
             }
           }
+          // Built, and pointed at whichever mode we opened in. Doing this
+          // HERE rather than leaving it to the mode effect matters because
+          // that effect only runs when its inputs change — on a cold start
+          // they never do, and the first frame would be the wrong render.
+          {
+            const s = useGameStore.getState();
+            syncWorldRender(map, (DOG_CAM && s.dogCam) || s.territoryVisible);
+          }
         });
         // Street names hide at the steep game pitch, return when flat.
         map.on('pitchend', syncStreetLabels);
@@ -2874,6 +3194,21 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           syncStreetLabels();
         };
         map.on('idle', snapshotViewport);
+        // Tiles have settled — sketch whatever arrived. Kept as its own
+        // handler rather than folded into the snapshot, because the
+        // snapshot also runs on the throttled moveend below and the sketch
+        // has no business rebuilding on every camera handover.
+        //
+        // Note the comment on that moveend: a following camera rarely goes
+        // idle at all. That is the same fact the sketch's own 250ms
+        // debounce on `sourcedata` exists for, so drawing while walking
+        // does not depend on this handler ever firing.
+        map.on('idle', () => {
+          if (!sketchRef.current) return;
+          const dirty = sketchDirtyRef.current;
+          sketchDirtyRef.current = false;
+          sketchRef.current.refresh(dirty);
+        });
         // AND ON moveend, THROTTLED. `idle` means the map has stopped and
         // finished drawing, which a map that is following the dog never
         // does: the flat ground camera chains one ease into the next, and
@@ -2962,6 +3297,18 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   useEffect(() => {
     return () => {
       const m = mapRef.current;
+      // Before the map goes: the sketch holds sources and layers on it,
+      // and may have a debounced draw in flight.
+      if (sketchTimerRef.current) {
+        clearTimeout(sketchTimerRef.current);
+        sketchTimerRef.current = null;
+      }
+      try {
+        sketchRef.current?.dispose();
+      } catch {
+        /* map already torn down */
+      }
+      sketchRef.current = null;
       if (m) {
         m.remove();
       }
@@ -2976,11 +3323,22 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   useEffect(() => {
     const map = mapRef.current;
     if (!map) return;
+    // Right now, before anything below can defer itself: which render is
+    // on screen is not a question that needs a settled style, and making
+    // it wait for one is what left supersniff flat and empty on a cold
+    // entry. See syncWorldRender.
+    syncWorldRender(map, world);
     // Re-apply when sniff palette OR language changes — the override
     // sets both paint colours AND text-field language, so a lang flip
     // from the profile toggle re-localises street/place labels live.
     const apply = () => {
       applyCrayonOverride(map, mapPalette, lang);
+      // The sketch's own layers are outside the override's whitelist, so
+      // it re-colours them itself. Geometry does not change with the
+      // palette — only paint — so nothing is rebuilt here.
+      sketchRef.current?.restyle(mapPalette);
+      setSketchVisible(map, mapPalette.handDrawn);
+      syncWorldRender(map, world);
       // applyCrayonOverride resets transportation_name visibility to
       // 'visible', so re-apply the pitch-based hide right after.
       syncStreetLabels();
@@ -3004,11 +3362,34 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       apply();
       return;
     }
+    // NOT LOADED IS NOT THE SAME AS NOT READY, and waiting as if it were
+    // is what made a mode change blink.
+    //
+    // Everything this pass touches is a property of layers that ALREADY
+    // EXIST — no setStyle, no layer added or removed, just paint and
+    // visibility written onto the style that has been there all along.
+    // isStyleLoaded() goes false merely because tiles are in flight, which
+    // a mode change guarantees by revealing layers that then fetch. So the
+    // pass sat waiting for the very tiles its own change had asked for,
+    // while the ownership colours — their own GeoJSON layer, beholden to
+    // none of this — were already painted. Colours instantly, roads a
+    // beat later: measured at 837ms on a cold flip, against 0ms once the
+    // pass stopped waiting.
+    //
+    // So apply NOW, best effort — every write in there is individually
+    // guarded and the function is idempotent by design — and keep the idle
+    // pass as a top-up for anything that genuinely was not ready. Twice is
+    // free; late is visible.
+    try {
+      apply();
+    } catch {
+      /* style too early to touch — the idle pass below is the fallback */
+    }
     map.once('idle', apply);
     return () => {
       map.off('idle', apply);
     };
-  }, [lang, mapPalette, syncStreetLabels]);
+  }, [lang, mapPalette, world, superSniff, syncStreetLabels]);
 
   // Nearby players (real + bots) to render as other dogs — only in view, and
   // capped to the nearest N for perf (each walker runs a glide loop + sprite).
