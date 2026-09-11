@@ -2885,6 +2885,18 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // snapshot sets four pieces of React state.
         let lastSnapshotAt = 0;
         map.on('moveend', () => {
+          // NOT IN SUPERSNIFF. Its chase camera chains a 350ms ease into
+          // the next one too, so this fired at every handover there as
+          // well, and the throttle let a snapshot through once a second
+          // — four state sets and a re-render of this whole component —
+          // while the camera was in motion. A carousel swipe interrupts
+          // a follow tick, which is a moveend, so the re-render landed
+          // on the first frames of the swipe's glide. Measured on a phone
+          // as "one or two steps" in a glide that was smooth on the build
+          // before this handler existed. Supersniff ran on idle-only
+          // snapshots for its whole life and was fine; the flat ground
+          // camera, which this handler was written for, keeps it.
+          if (DOG_CAM && useGameStore.getState().dogCam) return;
           const now = Date.now();
           if (now - lastSnapshotAt < VIEWPORT_SNAPSHOT_MIN_MS) return;
           lastSnapshotAt = now;
