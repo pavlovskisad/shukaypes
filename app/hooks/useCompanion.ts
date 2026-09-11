@@ -81,16 +81,8 @@ const LEAD_AHEAD_M = 35;
 // nudge, not a jump to the far side), then RESTS until the next hop. Short hop
 // + long rest = the dog mostly stands/sits near you and only walks a few steps
 // now and then, and because the hop is small it's a walk, never a sprint.
-//
-// Rest was 12-26 s (mean ~19), which on a map you are watching rather than
-// walking reads as a dog that mostly sits: minutes can pass between the few
-// steps it takes. 8-18 s (mean ~13) is about a third more often — enough
-// that the sprite is visibly alive while you are looking at it, and still
-// long enough that it is resting between hops rather than pacing. The HOP
-// itself is unchanged: the arc is what decides whether it ambles or paces,
-// and that was never the complaint.
-const ROAM_MIN_MS = 8000;
-const ROAM_JITTER_MS = 10000;
+const ROAM_MIN_MS = 12000;
+const ROAM_JITTER_MS = 14000;
 const ROAM_ARC_MAX = 0.35; // radians of arc per hop (~12 m on the ring)
 
 // GOING TO MARK. The idle ring is only ~21-33 m out, which on screen puts
