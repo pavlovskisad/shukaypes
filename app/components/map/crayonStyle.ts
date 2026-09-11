@@ -131,7 +131,18 @@ export const PLAY_PALETTE: Palette = {
 };
 
 
-const ROAD_WIDTH_SCALE = 0.22;
+// How much of the upstream style's road width we keep. Liberty draws for a
+// road map, where the street network is the subject; here the subject is
+// the dog and the ground it holds, and roads are the grain the city is
+// drawn on. Taken down from 0.22 — the streets read as pale bands wide
+// enough to compete with the territory colours over them, and a narrower
+// line lets the blocks between them be the shape you see.
+const ROAD_WIDTH_SCALE = 0.15;
+// Floor, so a road never thins to nothing at the far end of the zoom
+// range. It has to come down with the scale above or every minor street is
+// pinned at the floor once you are zoomed out — which is exactly where
+// territory now opens.
+const ROAD_MIN_WIDTH_PX = 0.3;
 
 // ---------------------------------------------------------------------
 // Canvas pattern generators
@@ -552,7 +563,11 @@ export function applyCrayonOverride(
       map.setPaintProperty(id, 'line-pattern', 'crayon-road');
       map.setPaintProperty(id, 'line-opacity', 1);
       const curW = map.getPaintProperty(id, 'line-width');
-      const newW: unknown = ['max', 0.4, ['*', ROAD_WIDTH_SCALE, curW ?? 1]];
+      const newW: unknown = [
+        'max',
+        ROAD_MIN_WIDTH_PX,
+        ['*', ROAD_WIDTH_SCALE, curW ?? 1],
+      ];
       try {
         (
           map.setPaintProperty as (l: string, p: string, v: unknown) => void
