@@ -309,7 +309,12 @@ export function CrayonRoute({
         // Flattening toward overhead for the duration of the route puts
         // the whole shape on screen and gives every dot its full
         // diameter as a tap target.
-        pitch: ROUTE_VIEW_PITCH,
+        //
+        // Capped by whatever tilt the map currently allows. In walks and
+        // territory that cap is zero (MapView's flat ground camera), and
+        // MapLibre would clamp this to 0 anyway — asking for it outright
+        // means the number here describes the shot we actually get.
+        pitch: Math.min(ROUTE_VIEW_PITCH, map.getMaxPitch()),
       });
     };
 
