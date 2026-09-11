@@ -153,25 +153,25 @@ export const PLAY_PALETTE: Palette = {
   blueDark: '#afb8bd',
   blueLight: '#e4e8e9',
   labelWater: '#5b737f',
-  // TERRITORY IS DRAWN BY HAND TOO, and it has to be, not just to match.
+  // TERRITORY IS A WORLD, NOT A PAGE — so this palette stays on the tile
+  // geometry and keeps every default above.
   //
-  // Left on the tile geometry with the paper map's flat camera, this view
-  // went nearly blank: buildings are painted `paper` here, their footprint
-  // outline is off, and looked at straight down a white fill on a white
-  // page is nothing at all. The 3D walls were the only thing that had
-  // ever made a building visible in this palette, and the flat camera
-  // took them away.
+  // It was briefly hand-drawn, for a real reason worth remembering: with
+  // the paper map's FLAT camera this view went nearly blank. Buildings
+  // are painted `paper` here and their footprint outline is off, so
+  // looked at straight down a white fill on a white page is nothing at
+  // all. The 3D walls were the only thing that had ever made a building
+  // visible in this palette, and flattening the camera took them away.
+  // Ink was the fix for a camera problem.
   //
-  // So the sketch draws it, and the ink is what brings the city back. Ink
-  // and roads are lighter than the paper map's: a dozen owner colours are
-  // the subject here and the city underneath is the paper they are
-  // painted on. The greens and blues above stay exactly as they were.
-  handDrawn: true,
-  outline: '#4a4a4a',
-  outlineOpacity: 0.55,
-  buildingOutline: 0.4,
-  greyRoad: '#8d8d8d',
-  roadScale: 0.34,
+  // Territory now gets supersniff's render instead — the extruded city,
+  // the mist, the tilt — which restores the walls the palette always
+  // assumed and makes the ink unnecessary. `handDrawn` stays false, so
+  // the sketch hides and the tile layers are shown again (see `show()`).
+  //
+  // The quiet greens and blues above are the point and are untouched: a
+  // dozen owner colours are the subject here, and the city underneath is
+  // the ground they are painted on.
 };
 
 // THE PAPER MAP — the walking city as a pen drawing (experiment).

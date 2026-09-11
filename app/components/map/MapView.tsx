@@ -228,7 +228,21 @@ const M_PER_PX_Z0 = 78271.516;
 // DOGCAM_PITCH — which is exactly the "flat until you tap the dog" the
 // owner saw, and then asked to keep for the experiment. Un-flattening is
 // one word: PREVIEW_PITCH back to 68.
-const GAME_PITCH = PAPER_MAP ? 0 : 65;
+const WORLD_PITCH = 65;
+const GAME_PITCH = PAPER_MAP ? 0 : WORLD_PITCH;
+
+// THE WALKING CAMERA'S TILT IS A PROPERTY OF THE MODE, NOT OF THE BUILD.
+//
+// Explore and territory share one camera — the same follow-the-dog view,
+// with territory's ownership colours laid over it — so a single constant
+// used to answer for both. It cannot any more: explore is a page and is
+// looked AT, territory is a world and is looked ACROSS. Same camera, two
+// tilts, chosen per mode.
+//
+// Supersniff is not in here; it owns its camera outright (DOGCAM_PITCH).
+function walkPitch(territory: boolean): number {
+  return PAPER_MAP && territory ? WORLD_PITCH : GAME_PITCH;
+}
 
 // Safe-area top inset in CSS px, measured once via an env() probe —
 // SafeAreaView values aren't reachable here and the inset differs
@@ -352,18 +366,24 @@ function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
 // and stayed that way until the tiles settled. Layer visibility and the
 // pitch cap do not need a settled style, so they are applied at once and
 // again on the palette pass.
-function syncWorldRender(map: maplibregl.Map, superSniff: boolean): void {
+//
+// `world` is not "is this supersniff" — it is "is this mode a world".
+// Supersniff and territory both are; explore is the page. Territory came
+// back to the world render when the flat drawing turned out to cost it
+// more than it gave: the owner colours needed a city with volume under
+// them, which is the same thing PLAY_PALETTE had always assumed.
+function syncWorldRender(map: maplibregl.Map, world: boolean): void {
   if (!PAPER_MAP) return;
   for (const id of [THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID, DEPTH_FOG_LAYER_ID]) {
     if (!map.getLayer(id)) continue;
     try {
-      map.setLayoutProperty(id, 'visibility', superSniff ? 'visible' : 'none');
+      map.setLayoutProperty(id, 'visibility', world ? 'visible' : 'none');
     } catch {
       /* style mid-update — the palette pass repeats this */
     }
   }
   try {
-    map.setMaxPitch(superSniff ? 80 : 0);
+    map.setMaxPitch(world ? 80 : 0);
   } catch {
     /* ignore */
   }
@@ -700,18 +720,18 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // what the DOM holds.
   // THREE MAPS, ONE STYLE.
   //
-  // Supersniff is the exception and keeps the map it always had: the
-  // coloured tile geometry under the Three.js city, the fog, the tilt.
-  // It is the one mode that is a WORLD rather than a page — you are down
-  // in the street following a trail — and the paper experiment has no
-  // business changing it.
+  // ONE page and TWO worlds, as of the territory experiment.
   //
-  // The other two are drawn by hand. Explore is the white page; territory
-  // is the same drawing with the ink and the roads pulled back, because
-  // there a dozen owner colours are the subject and the city is the paper
-  // they are painted on. See PLAY_PALETTE for why territory could not
-  // simply stay on the tile geometry.
+  // Explore is the drawing: white, flat, ink. Supersniff always was a
+  // world — the coloured tile geometry under the Three.js city, the fog,
+  // the tilt — because you are down in the street following a trail.
+  // Territory joined it: its ownership colours want a city with volume
+  // beneath them, which is what PLAY_PALETTE had always been written for.
+  //
+  // `world` drives the render and the tilt; the palette drives the paint
+  // and, through `handDrawn`, whether the sketch or the tiles are shown.
   const superSniff = DOG_CAM && dogCam;
+  const world = superSniff || territoryVisible;
   const mapPalette = superSniff
     ? LIGHT_PALETTE
     : territoryVisible
@@ -1457,7 +1477,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       try {
         easeCamera(map, 'cinematic', {
           bearing: 0,
-          pitch: GAME_PITCH,
+          // Leaving supersniff lands you back in whichever map you left
+          // from — flat if that was explore, tilted if it was territory.
+          pitch: walkPitch(useGameStore.getState().territoryVisible),
           zoom: balance.mapZoomDefault,
           duration: 500,
         });
@@ -2434,7 +2456,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             easeCamera(map, 'cinematic', {
               ...(anchor ? { center: [anchor.lng, anchor.lat] } : {}),
               zoom: balance.mapZoomDefault,
-              pitch: GAME_PITCH,
+              pitch: walkPitch(useGameStore.getState().territoryVisible),
               duration: 800,
             });
           } catch {
@@ -2534,14 +2556,24 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // explainer bubble above the ring at the default centre, so we no
     // longer drop the dog lower for it. (menuCamera keeps the two
     // values only so the explainer bubble can still be told apart.)
+    // …and it carries the mode's tilt, because it is the move that closes
+    // the gate. Picking "хто тримає цей район?" turns territory into a
+    // world and this ease fires 1ms later to settle the dog — measured —
+    // cancelling the tilt the mode effect had just asked for and leaving
+    // the 3D city standing under a camera looking straight down at it. A
+    // camera move that omits `pitch` does not hold the current pitch, it
+    // abandons whatever ease was mid-flight, so every walking move states
+    // the tilt it wants. Same rule supersniff's follow loop already
+    // follows, for the same reason.
+    const move = { center: c, offset: [0, 0] as [number, number], duration: 320 };
     if (menuCamera) {
       menuWasOpenRef.current = true;
-      easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
+      easeCamera(map, 'short', { ...move, pitch: walkPitch(territoryVisible) });
     } else if (menuWasOpenRef.current) {
       menuWasOpenRef.current = false;
-      easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
+      easeCamera(map, 'short', { ...move, pitch: walkPitch(territoryVisible) });
     }
-  }, [menuCamera, companionPos?.lat, companionPos?.lng]);
+  }, [menuCamera, companionPos?.lat, companionPos?.lng, territoryVisible]);
 
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null
@@ -2598,7 +2630,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // See GAME_PITCH for why it is what it is. Users can still tilt
           // all the way to maxPitch 80 — and MapLibre's own default cap is
           // 60, so it has to be raised for that to be possible.
-          pitch: GAME_PITCH,
+          pitch: walkPitch(useGameStore.getState().territoryVisible),
           maxPitch: 80,
           // Drop both attribution branding + the MapLibre wordmark
           // logo. Tile/data attribution is a legal requirement for
@@ -2746,7 +2778,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // HERE rather than leaving it to the mode effect matters because
           // that effect only runs when its inputs change — on a cold start
           // they never do, and the first frame would be the wrong render.
-          syncWorldRender(map, DOG_CAM && useGameStore.getState().dogCam);
+          {
+            const s = useGameStore.getState();
+            syncWorldRender(map, (DOG_CAM && s.dogCam) || s.territoryVisible);
+          }
         });
         // Street names hide at the steep game pitch, return when flat.
         map.on('pitchend', syncStreetLabels);
@@ -2864,7 +2899,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // on screen is not a question that needs a settled style, and making
     // it wait for one is what left supersniff flat and empty on a cold
     // entry. See syncWorldRender.
-    syncWorldRender(map, superSniff);
+    syncWorldRender(map, world);
     // Re-apply when sniff palette OR language changes — the override
     // sets both paint colours AND text-field language, so a lang flip
     // from the profile toggle re-localises street/place labels live.
@@ -2875,7 +2910,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       // palette — only paint — so nothing is rebuilt here.
       sketchRef.current?.restyle(mapPalette);
       setSketchVisible(map, mapPalette.handDrawn);
-      syncWorldRender(map, superSniff);
+      syncWorldRender(map, world);
       // applyCrayonOverride resets transportation_name visibility to
       // 'visible', so re-apply the pitch-based hide right after.
       syncStreetLabels();
@@ -2903,7 +2938,43 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     return () => {
       map.off('idle', apply);
     };
-  }, [lang, mapPalette, superSniff, syncStreetLabels]);
+  }, [lang, mapPalette, world, syncStreetLabels]);
+
+  // THE TILT FOLLOWS THE MODE, and it has to be eased by the code that
+  // knows the cap is up.
+  //
+  // Turning territory on makes the map a world: syncWorldRender raises
+  // maxPitch from 0 to 80 in the effect above, but nothing was actually
+  // ASKING for a tilt — the walking camera only re-pitches when it is
+  // re-framed (supersniff exit, dog-view exit, map creation), none of
+  // which a territory toggle does. Without this the mode would switch the
+  // 3D city on underneath a camera still looking straight down at it.
+  //
+  // The cap is raised here too rather than trusted from the other effect:
+  // that is the same lesson supersniff taught — an ease that arrives
+  // while the cap is still 0 is silently clamped, and declaration order
+  // is not a thing to make two effects agree about.
+  useEffect(() => {
+    if (!PAPER_MAP) return;
+    const map = mapRef.current;
+    if (!map) return;
+    // Supersniff owns the camera outright while it is on; its own exit
+    // ease puts the right walking tilt back.
+    if (superSniff) return;
+    try {
+      map.setMaxPitch(territoryVisible ? 80 : 0);
+    } catch {
+      /* style not ready */
+    }
+    try {
+      easeCamera(map, 'cinematic', {
+        pitch: walkPitch(territoryVisible),
+        duration: 700,
+      });
+    } catch {
+      /* map tearing down */
+    }
+  }, [territoryVisible, superSniff]);
 
   // Nearby players (real + bots) to render as other dogs — only in view, and
   // capped to the nearest N for perf (each walker runs a glide loop + sprite).
