@@ -252,6 +252,22 @@ const FLAT_ENTRY_MS = 600;
 // so the cap has to wait for the glide rather than run on a timer beside
 // it — a timer is what turned an interrupted glide into a visible snap.
 const FLAT_PITCH_SETTLED_DEG = 2;
+// HOW FAR OUT EACH MODE OPENS. balance.mapZoomDefault (15.6) is the map's
+// resting distance and what the gate asks its question from; these two are
+// the modes that want something else from the same city.
+//
+// Territory is about the SHAPE of who holds what, and a shape you can only
+// see two blocks of is not a shape. Pulling back a step and a half shows
+// roughly two and a half kilometres across — enough neighbours for the
+// borders between them to read as a map of a fight rather than as coloured
+// patches around the dog.
+const TERRITORY_ZOOM = 14.3;
+// A walk is about the street you are on and the next one, so it sits a
+// little closer in than the resting distance rather than further out.
+const WALK_ZOOM = 16.2;
+// Zoom is a smooth scale, so "arrived" needs a tolerance; a twentieth of a
+// zoom level is far below what an eye can see as a step.
+const FLAT_ZOOM_SETTLED = 0.05;
 // Floor on how often the viewport snapshot (mapBounds / zoom / centre) is
 // refreshed while the camera is in continuous motion. A following camera
 // hands one ease to the next every FLAT_FOLLOW_TICK, and snapshotting on
@@ -1488,6 +1504,19 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       flatCamReleaseAtRef.current = Date.now() + FLAT_FOLLOW_RESUME_MS;
     }
   }, [focusedTerritory, focusedLore]);
+  // The distance each mode opens at — see TERRITORY_ZOOM / WALK_ZOOM. Held
+  // as a TARGET rather than issued as an ease of its own, because an ease
+  // of its own is exactly what the follow loop would cut short a tick
+  // later: the follow carries whatever has not arrived yet, and clears
+  // this once it has. A pinch cancels it (see onUserMove) — asking for a
+  // distance is not the same as insisting on it.
+  const flatCamZoomTargetRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!flatCam) return;
+    const target =
+      appMode === 'play' ? TERRITORY_ZOOM : appMode === 'explore' ? WALK_ZOOM : null;
+    flatCamZoomTargetRef.current = target;
+  }, [appMode, flatCam]);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !flatCam) return;
@@ -1499,6 +1528,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     const onUserMove = (e: { originalEvent?: unknown }) => {
       if (!e || !e.originalEvent) return;
       flatCamReleaseAtRef.current = Date.now() + FLAT_FOLLOW_RESUME_MS;
+      // A hand on the map outranks the distance the mode wanted to open
+      // at. Dropping the target here rather than letting it finish is what
+      // keeps a pinch from being undone a tick later.
+      flatCamZoomTargetRef.current = null;
     };
     map.on('movestart', onUserMove);
     map.on('move', onUserMove);
@@ -1529,6 +1562,19 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         }
         if (now < flatCamReleaseAtRef.current) return;
 
+        // ARRIVING vs FOLLOWING. The follow ease carries whatever the
+        // camera has not got to yet — the tilt coming down out of
+        // supersniff, the distance the mode opens at — so entering a mode
+        // is ONE continuous move rather than a cut followed by a pan.
+        // Anything issued as a separate ease is simply cut short by the
+        // next follow tick, which is the bug this shape exists to avoid.
+        const zoomTarget = flatCamZoomTargetRef.current;
+        const zoomed =
+          zoomTarget == null ||
+          Math.abs(map.getZoom() - zoomTarget) <= FLAT_ZOOM_SETTLED;
+        if (zoomed) flatCamZoomTargetRef.current = null;
+        const arriving = !flat || !zoomed;
+
         // The mount. One linear ease per tick, each lasting exactly one
         // tick, so consecutive calls chain into a continuous glide rather
         // than a series of arrivals — the supersniff trick, flat.
@@ -1541,15 +1587,15 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // above).
         easeCamera(map, 'follow', {
           center: [dog.lng, dog.lat],
-          // Still tilted: the tilt comes down as part of the same move, so
-          // arriving from supersniff is one glide and not a cut followed
-          // by a pan. Once flat, stop re-asserting it — the cap holds it.
+          // Once arrived, stop re-asserting either: the cap holds the tilt,
+          // and the distance is the walker's again the moment they pinch.
           ...(flat ? {} : { pitch: FLAT_PITCH }),
-          duration: flat ? FLAT_FOLLOW_TICK : FLAT_ENTRY_MS,
+          ...(zoomed ? {} : { zoom: zoomTarget }),
+          duration: arriving ? FLAT_ENTRY_MS : FLAT_FOLLOW_TICK,
           // Linear only for the steady follow, where the chaining depends
-          // on it. The entry keeps MapLibre's default curve so the tilt
+          // on it. Arriving keeps MapLibre's default curve so the move
           // eases out instead of stopping dead.
-          ...(flat ? { easing: (t: number) => t } : {}),
+          ...(arriving ? {} : { easing: (t: number) => t }),
         });
       } catch {
         /* map tearing down */
