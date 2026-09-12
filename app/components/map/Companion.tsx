@@ -726,7 +726,12 @@ export function Companion({
   // again — so a hint never fires mid-transition or off-screen.
   const hintsAllowed = useGameStore((s) => s.hintsAllowed);
   const noRealBubble = !menuOpen && !hideBubble && !bubble && !localBubble;
-  const hintsReady = hintsAllowed && noRealBubble;
+  // Not at the door either: the dog is asking who you are, or saying
+  // the line for the account sheet, and a tour of the logo has no place
+  // in that — and the snap a hint fires would re-centre the dog under
+  // the paper (MapView keeps the offset, but the hint has no business
+  // moving the camera here at all).
+  const hintsReady = hintsAllowed && noRealBubble && !authGate && !sheetUp;
   // FIRST, because the logo is the one control that changes what the
   // whole screen IS, and a brand mark in a corner gives no clue that it
   // does anything at all. It used to be last, on the reasoning that

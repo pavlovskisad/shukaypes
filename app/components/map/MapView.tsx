@@ -1517,6 +1517,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // effect below), and a follow tick would put the dog straight back in
   // the centre, under the paper.
   const doorSheetUp = useAccessStore((s) => s.doorSheet != null);
+  // How far above the viewport centre the dog sits while the account
+  // sheet is up, as a share of the visible height: 0.22 puts it at 28%
+  // from the top, above a paper that takes the lower half.
+  const DOG_LIFT = 0.22;
   const flatCamHeld =
     !onMapScreen ||
     !!selectedDogId ||
@@ -2061,8 +2065,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // mid-flight (freezing pitch/zoom partway). It never needs a snap.
     if (activeHint === 'map:supersniff-exit') return;
     if (activeHint && activeHint.startsWith('map:')) {
+      // Keep the account sheet's framing if it is up: a plain centre
+      // would drop the dog straight back under the paper.
+      const h = typeof window !== 'undefined' ? window.innerHeight : 800;
       easeCamera(map, 'short', {
         center: [companionPos.lng, companionPos.lat],
+        offset: doorSheetUp ? [0, -Math.round(h * DOG_LIFT)] : [0, 0],
         duration: 400,
       });
     }
@@ -2551,7 +2559,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       // modal-padded region we set below. MapLibre persists
       // `padding` across calls, so leaving 460/110 in place
       // would visibly bias every later recenter low and right.
-      map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      //
+      // Only when there IS padding to clear. setPadding is a jumpTo,
+      // and a jumpTo stops whatever ease is in flight — and this effect
+      // re-runs on every `spots` update, several times a second while
+      // the dog walks. With no guard it cut the follow eases short and
+      // killed the account sheet's framing ease a few ms in, leaving
+      // the dog under the paper on about one open in three.
+      const pad = map.getPadding();
+      if (pad.top || pad.bottom || pad.left || pad.right) {
+        map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      }
       return;
     }
     const spot = spots.find((s) => s.id === selectedSpotId);
@@ -2738,7 +2756,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (!map || !companionPos) return;
     const c: [number, number] = [companionPos.lng, companionPos.lat];
     const h = typeof window !== 'undefined' ? window.innerHeight : 800;
-    const offset: [number, number] = doorSheetUp ? [0, -Math.round(h * 0.2)] : [0, 0];
+    // The paper takes the lower PAPER_SHARE of the same height; the
+    // dog's centre lands at (0.5 - DOG_LIFT), its 140px box and its
+    // bubble above the paper's edge with room to spare.
+    const offset: [number, number] = doorSheetUp ? [0, -Math.round(h * DOG_LIFT)] : [0, 0];
     // Both modes just centre the dog now — there's room for the
     // explainer bubble above the ring at the default centre, so we no
     // longer drop the dog lower for it. (menuCamera keeps the two
