@@ -41,6 +41,7 @@ Deploying is a mutating action. Ask first.
 | `SCRAPE_PROXY_URL` | **Not set, and should stay that way.** Measured 17 Aug: residential exits are refused *more* than the Fly datacentre, not less. The seam is for the day the edge really hardens. |
 | `DASHBOARD_TOKEN` | **Not set.** Read-only key for `/admin/console` + `/admin/metrics` — the only one of the three keys safe to keep in a browser. Until it is set the console 401s for everyone. |
 | `DEV_TOOLS_PASSWORD` | **Not set.** Unlocks `/dev` (walk simulator + destructive territory test routes) per browser. Until it is set the dev affordances are off everywhere. |
+| `SESSION_SECRET` | **Optional.** Key for session tokens (`lib/session.ts`, D-62). Unset, the key is derived from `TELEGRAM_BOT_TOKEN`, which is already the key Telegram's own signatures rest on, so tokens work with no action. Set it (≥16 chars) to rotate sessions independently of the bot token; changing it logs every phone out once, transparently — the next request re-identifies the old way. |
 | `INVITE_REQUIRED` | **Not set — the door is open.** With it set, new device ids must redeem an invite code; existing accounts are never gated. Mint codes with `pnpm --filter @shukajpes/server invite --new --uses=N --note=...` before flipping it. |
 | `CHAT_DISABLED` | Not set (chat on). The no-deploy kill switch for all model calls. |
 | Database | Supabase (Postgres). No direct credentials held in the repo. Reachable from the app host and from anywhere with the connection string. |

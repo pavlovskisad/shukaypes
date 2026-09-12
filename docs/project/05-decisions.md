@@ -756,3 +756,30 @@ consumer reads the setting live through `prefersReducedMotion()` rather
 than snapshotting it. An in-app "less motion" switch that overrides the
 OS is a product option left open, not needed for this.
 
+### D-62 · Identity once, a session token thereafter ✅
+*Decided 12 Sep · `server/src/lib/session.ts`, `app/services/session.ts`*
+
+The Mini App sent the whole Telegram initData on every request — about
+half a kilobyte to a kilobyte, twenty times a minute on the presence
+poll, a megabyte an hour of upload on a walk (F-1). Behind it the server
+re-validated the signature and ran a profile-refresh UPDATE every time;
+device-id users cost a SELECT every time. None of it bought anything
+after the first request.
+
+Now the first request identifies the old way and the server hands back
+a signed token (HMAC-SHA256 over user, device, how identified, issued,
+expires; valid a day; renewed in its last six hours). The client sends
+that instead and the server resolves it with no database work. A
+refused token is dropped and the request retried once the old way.
+
+What it deliberately is not: a change to who can do what. The token
+asserts what the header it replaces asserted, for the same person, for
+less time than a device id lives. `via` is recorded so P1-6 can gate
+value on the Telegram-signed identity later without another handshake.
+
+The key derives from the bot token when `SESSION_SECRET` is unset —
+Telegram's own signature already rests on it, so no new trust is
+introduced — and with neither set the feature is off and the app is
+exactly as it was. `check:session` pins mint, verify, expiry, renewal,
+tamper, rotation and off-when-unconfigured.
+

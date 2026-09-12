@@ -5,6 +5,14 @@ import { eq } from 'drizzle-orm';
 import { db, schema } from './db/index.js';
 import { validateInitData, type TelegramUser } from './services/telegramAuth.js';
 import { claimInvite, mustPresentInvite, normaliseCode, recordRedemption } from './services/invites.js';
+import {
+  SESSION_HEADER,
+  SESSION_ISSUE_HEADER,
+  mintSession,
+  sessionNeedsRenewal,
+  verifySession,
+  type SessionVia,
+} from './lib/session.js';
 
 type Log = Pick<FastifyRequest['log'], 'info' | 'warn'>;
 
@@ -165,6 +173,19 @@ async function resolveByTelegram(
   return userId;
 }
 
+// Hand the client a session token for the identity just resolved. See
+// lib/session.ts. A null (no secret configured) sets no header, and the
+// client keeps identifying itself the old way on every request.
+function issueSession(
+  reply: { header: (name: string, value: string) => unknown },
+  userId: string,
+  deviceId: string,
+  via: SessionVia,
+): void {
+  const token = mintSession({ userId, deviceId, via });
+  if (token) reply.header(SESSION_ISSUE_HEADER, token);
+}
+
 const plugin: FastifyPluginAsync = async (app) => {
   app.decorateRequest('userId', '');
   app.decorateRequest('deviceId', '');
@@ -202,6 +223,26 @@ const plugin: FastifyPluginAsync = async (app) => {
     const inviteHeader = req.headers[INVITE_CODE_HEADER];
     const invite = (Array.isArray(inviteHeader) ? inviteHeader[0] : inviteHeader) ?? null;
 
+    // A SESSION TOKEN FIRST: no database, no HMAC over a kilobyte of
+    // initData, no profile-refresh UPDATE. A token in its last hours is
+    // re-issued on the way out. An invalid or expired one is ignored
+    // rather than refused — the client sends nothing else alongside a
+    // token, so it lands on the 401 below, drops the token, and
+    // re-identifies the old way on its retry. See lib/session.ts.
+    const sessionHeader = req.headers[SESSION_HEADER];
+    const sessionRaw = Array.isArray(sessionHeader) ? sessionHeader[0] : sessionHeader;
+    if (sessionRaw && sessionRaw.length > 0) {
+      const claims = verifySession(sessionRaw);
+      if (claims) {
+        req.userId = claims.userId;
+        req.deviceId = claims.deviceId;
+        if (sessionNeedsRenewal(claims)) {
+          issueSession(reply, claims.userId, claims.deviceId, claims.via);
+        }
+        return;
+      }
+    }
+
     const tgHeader = req.headers[TELEGRAM_INIT_HEADER];
     const tgRaw = Array.isArray(tgHeader) ? tgHeader[0] : tgHeader;
     if (tgRaw && tgRaw.length > 0) {
@@ -210,6 +251,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         req.deviceId = `tg:${validated.user.id}`;
         try {
           req.userId = await resolveByTelegram(validated.user, invite, req.log);
+          issueSession(reply, req.userId, req.deviceId, 'telegram');
         } catch (err) {
           if (err instanceof InviteRequiredError) {
             reply.code(403);
@@ -233,6 +275,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     req.deviceId = deviceId;
     try {
       req.userId = await resolveByDeviceId(deviceId, invite, req.log);
+      issueSession(reply, req.userId, deviceId, 'device');
     } catch (err) {
       if (err instanceof InviteRequiredError) {
         // 403, not 401: the credentials are fine, the door is shut. A

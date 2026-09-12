@@ -182,8 +182,17 @@ Redis, registers the Telegram webhook, listens.
 **Auth** `auth.ts` (Fastify `preHandler` plugin). Resolves `req.userId`
 from, in order of preference:
 
+0. `x-session` — a **session token** (`lib/session.ts`, D-62): about 200
+   bytes, HMAC-SHA256 over `{user, device, via, iat, exp}`, valid a day,
+   re-issued on the `x-session-token` response header when it has under
+   six hours left. Resolves the user with **no database round trip**.
+   Minted after either path below succeeds. A refused token is ignored,
+   not rejected: the client drops it and retries once the old way. Key:
+   `SESSION_SECRET`, else derived from `TELEGRAM_BOT_TOKEN`, else tokens
+   are off and every request identifies as before.
 1. `x-telegram-init-data` — validated against the bot token. Strong,
-   cross-device, keyed on `telegram_id`.
+   cross-device, keyed on `telegram_id`. The profile-refresh UPDATE
+   that used to run on every request now runs only here, at mint time.
 2. `x-device-id` — any client-supplied string 8–128 chars. Weak,
    browser-scoped, **unverified**.
 

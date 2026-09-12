@@ -98,7 +98,9 @@ export async function buildServer(observe?: RouteObserver) {
     });
   }
 
-  await app.register(cors, { origin: true });
+  // The session token rides back on a response header (lib/session.ts);
+  // a browser can only read a custom header the server has listed.
+  await app.register(cors, { origin: true, exposedHeaders: ['x-session-token'] });
   // Compress JSON on the way out. Nothing in front of this process does
   // it — Fly's proxy passes bytes through — so until now every response
   // left uncompressed: /sync/map at ~27KB every 15s and /presence at

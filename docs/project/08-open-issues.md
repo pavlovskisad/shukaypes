@@ -299,6 +299,12 @@ to leak (shared device, XSS, logs), and there is no cross-user IDOR — every
 mutating route re-checks `ownerId === req.userId`. The Telegram path is
 properly signed and fine.
 
+**Half the plumbing exists since D-62 (12 Sep):** every request now
+carries a signed session token that records *how* the person was
+identified (`via: 'telegram' | 'device'`), so a route can require the
+Telegram-signed identity without a second handshake. The trust model is
+unchanged until a route actually does.
+
 **Fix:** treat device-id accounts as throwaway (they already cannot merge),
 and require the Telegram-signed identity for anything with real value. If
 device-id must stay first-class, issue an HMAC token on first contact.
