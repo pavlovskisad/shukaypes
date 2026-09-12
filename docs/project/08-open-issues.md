@@ -121,6 +121,21 @@ is a content problem, not just a data-quality one. `skip_reason`
 distinguishes `title-filter` from `rehoming` and settles it in an
 afternoon.
 
+**Re-measured 12 Sep 08:11 UTC**, eighteen days later:
+
+```
+[olx] discovered 468, skipped 468, parsed 0, inserted 0, errors 0, fresh 6
+```
+
+Same shape. Whether the stall alert has fired in between cannot be read
+from Fly logs (the window is hours); the alert chat can answer it in one
+scroll. Two things make the picture worse than in August: the confidence
+bar (P0-1) now hides most of what *is* in the table, so a thin ingest
+lands on a map already showing ~28 → ~57 of ~193 active pets; and the
+judge's own header estimates "roughly one new pet every other day", which
+nobody has yet counted from `scrape_log`. Count inserts per week before
+believing either the alert or the estimate.
+
 ---
 
 ## P0 — do before anyone outside the team touches it
@@ -142,6 +157,16 @@ Fixed: the gazetteer is wired into placement (`pipeline/resolvePlace.ts`),
 inflected names and abbreviations resolve, `placement_source` records how
 every active row got its coordinates, and `resolve-pins` re-placed pets
 dry-run-first with per-pet reversal SQL. Fall-through went **81 → 71**.
+
+**Then, in September, the question was inverted.** Instead of asking how
+many pins are wrong, the confidence bar (#551, #557) asks which pins can
+be defended and shows only those: 127 visible → ~28. The judge (#562) let
+a model read the ad and *only reject*, restoring 33 of 44 bare matches.
+The resolver learned landmarks, Russian spelling, specificity-over-
+exactness and the station/district rule (#537–#553). Placement is now
+measured, gated and reviewable; what is hidden is listed by reason in
+`GROUP BY placement_source`. The remaining placement work is **rescuing
+the hidden majority** — see P2-1, reframed.
 
 **Classification has not been measured.** Whether the parser reads species,
 name and urgency correctly from a real post still has no number, and
@@ -272,7 +297,8 @@ every survivor, on every `/sync/map`, per user, every 15s. Cost grows with
 
 Note that territory solved the same problem differently and well — bbox
 columns plus a composite B-tree, no extension needed. The same shape would
-work here.
+work here. (PR #545's partial indexes are on `tokens` and `food_items`,
+not on `lost_dogs` — do not read that PR as closing this.)
 
 ### P1-5 · The spawn pipeline runs on the 15s hot path
 *`AUDIT_FINDINGS` §3.2 · `syncMap.ts` awaits `ensureTokensForUser` +
@@ -344,7 +370,7 @@ at ad size (F-5), WebGL context loss untested (F-7).
 
 | ID | Issue | Where |
 | --- | --- | --- |
-| P2-1 | **Pets on the fallback pin cannot be drawn.** The geocoding-failure population — 81 of 244 before the base refresh; **not re-measured against the current 78 active.** Rescuing them needs precision work on the gazetteer *measured before anything is written* — see the trap in [`03-lost-pet-engine.md`](03-lost-pet-engine.md) | `pipeline/parser.ts` |
+| P2-1 | **Most of the active table is hidden by the confidence bar, by choice.** Reframed 12 Sep: it used to be "pets on the fallback pin cannot be drawn" (81 → 71). Since #551 the hidden set is everything not placed by a person, a marked address or a judged bare match — model-landmark, model-geo, fuzzy, fall-through, null — roughly 193 − ~57. Each group is one `GROUP BY placement_source` away. Rescue is per group, dry-run-first, and the judge pattern (a model may only reject) is the template; **relaxing the bar is one line and is the owner's call**, not a fix | `services/placementConfidence.ts` |
 | P2-17 | **One pet has `last_seen_at` 94 days in the future**, printed as `-94d ago`. It would dodge the staleness sweep for six months. A parser date bug, not traced | `pipeline/parser.ts` |
 | P2-18 | **`--sample=N` draws from an unshuffled list**, so it reported "4 of 5 ads are live" when the true rate was nearer 1 in 3. A biased estimate presented as a measurement | `db/*.ts` |
 | P2-2 | **No uptime monitor on `/health/deep`.** It exists and returns 503 correctly; nothing watches it | ops |
@@ -353,13 +379,15 @@ at ad size (F-5), WebGL context loss untested (F-7).
 | P2-6 | **Telegram photo proxy is rate-limited but still an open egress path.** Any `file_id` the bot can resolve is fetchable, not just ingested ones. Bounded (ids are opaque and bot-scoped) | `AUDIT_FINDINGS` §2.6 |
 | P2-7 | **Untrusted scraped text reaches the companion's LLM context.** Rendered in RN `Text` so no XSS, but indirect prompt injection is possible. Worst case is the companion saying something off-script | `AUDIT_FINDINGS` §6.1 |
 | P2-9 | **Single machine, in-process crons, no leader election.** A second replica would double every cron and run 2×30 bots. A Redis leader lock is the one change that unblocks it | `AUDIT_FINDINGS` §3.3 |
-| P2-10 | **`MapView.tsx` is ~3,400 lines** — the highest-risk file in the repo, mixing map init, marker layout, territory render, multiplayer culling, supersniff and camera control | `AUDIT_FINDINGS` §5.3 |
+| P2-10 | **`MapView.tsx` is ~4,350 lines** (3,400 in July) — the highest-risk file in the repo, mixing map init, marker layout, territory render, multiplayer culling, supersniff and camera control | `AUDIT_FINDINGS` §5.3 |
 | P2-11 | **Territory decay is undesigned.** Ground only ever ratchets upward. Deferred by the owner; the motive is real — with no decay a city eventually saturates | [`04-territory.md`](04-territory.md) |
 | P2-12 | **The rival dials are now 47% of what a sync costs.** `rivalMarksPerOwner: 24` + `rivalPiecesDrawn: 140`; halving them is another ~23% off the data bill. Left alone deliberately — it changes how dense the map *looks*, which is the art director's call. (The old "~52MB/hour" figure here was ~4× too high; measured reality was ~13MB/h, now ~6.6) | PR #422 |
 | P2-13 | **Render flags are compile-time constants.** `GAME_RENDER` / `MULTIPLAYER` cannot be turned off without a rebuild and redeploy. The server has a `MULTIPLAYER=off` kill switch; the client cannot match it | `AUDIT_FINDINGS` §5.1 |
 | P2-14 | **Perf and battery of the Three.js render on low-end Android is unmeasured.** Narrowed by the beta perf pass: the self-driven fog/sun repaints now back off when frames arrive late, honour reduced-motion and sleep when hidden (`repaintGovernor.ts`), and a device with no WebGL2 gets a message instead of a blank screen. The field cost is still unmeasured — see [`12-beta-perf-compat.md`](12-beta-perf-compat.md) F-7, F-13 | `PILOT_ROADMAP` §5.6 |
 | P2-15 | **CORS reflects any origin** (`origin: true`). Low risk — auth is header-based, so a malicious site has neither the device id nor the initData — but pinning is free | `AUDIT_FINDINGS` §2.7 |
 | P2-16 | **`groundIn` takes 240 pieces with no `ORDER BY`.** Harmless at current fragmentation; will bite eventually | `services/territory.ts` |
+| P2-20 | **The database file is 270 of 500 MB and will not shrink on its own.** The janitor (#545) stopped the growth; Postgres reuses the dead space but the reported size only drops after a `VACUUM FULL`, which takes an exclusive lock and needs a chosen quiet window. `collect_events` (the «bones eaten» source) is deliberately not pruned and still grows. Measure `pg_total_relation_size` per table before deciding anything | Supabase, `services/spentItemCleanup.ts` |
+| P2-21 | **The active-pet count is quoted two ways.** Docs from 20–25 Aug say 78 active; `placementConfidence.ts` measured 193 on 7 Sep. Nobody has written down why. One admin report answers it | `GET /admin/lost-dogs/report?format=text` |
 | P2-19 | **The flat ground camera re-renders MapView once a second while it follows the dog.** PR #574 snapshots the viewport on `moveend`, throttled to 1s, because `idle` rarely fires while eases chain. The same handler made supersniff step (fixed in #577 by skipping it there); on walks and territory it still runs, by design. **Unmeasured** — walk a block on a slow Android with the flat camera on and watch for a hitch once a second. If it shows, the shape of the fix is to snapshot from the follow tick itself, not from `moveend`, and less often | `MapView.tsx` `snapshotViewport` |
 
 ## P3 — cleanup
@@ -378,6 +406,24 @@ at ad size (F-5), WebGL context loss untested (F-7).
 ## Closed since the July audits
 
 Kept so nobody re-files them.
+
+### Closed in the open beta's first weeks (25 Aug–12 Sep, PRs #534–#581)
+
+| Was | Now |
+| --- | --- |
+| Pets drawn where nothing in the ad put them — a Kharkiv dog at a Kyiv stadium | ✅ **Confidence bar** (#551, #557): one rule on all four paths that can send a walker to a pet. 127 → ~28 visible, by measured choice (D-63). |
+| Bare gazetteer matches hidden wholesale, most of them right | ✅ **Judge** (#562, #563): a model reads the ad and may only reject. 33 of 44 restored; the dry run writes the plan the apply replays (D-64). |
+| «район цирку», «біля вокзалу» resolved to nothing | ✅ Landmarks and transit stops in the gazetteer; the vernacular stop name is what matches, not the venue's OSM name (#537–#539). |
+| Landmark matches on «Фонтан», «Проспект», a stop named «hospital» | ✅ One side must announce a place; generic names refused (#542, D-68). |
+| «Оболонь», «Позняки», «Лісова» refused as namesakes | ✅ A station and its district are one place at two scales; «метро X» is a station only (#553). |
+| A sighting could take a pet off the map | ✅ Invented position refused on both sides; walk still pays paws (#544, D-65). |
+| Database at 270/500 MB, 175 MB of it spent tokens and bones | ✅ Daily janitor, 7-day retention; partial indexes for the map's real query (#545, D-66). File size itself: P2-20. |
+| GPS spoof during an alarm left a dead map with nothing to tap | ✅ 300m teleport snap on fix and tick; off-screen rule stops at the gate (#561, D-67). |
+| Odesa/Lviv/Kharkiv pets on the Kyiv map | 🟡 Measured as pre-gate debris, not a live leak; seven district names added and the body read report-only (#558, #559). The rows themselves still need the expire sweep applied. |
+| `resolve-pins` silently skipping pets on the parser's own hint table | ✅ Groups come from the column now (#541). |
+| Labels wrong where the gazetteer name swallowed the ad's «вул.» | ✅ `relabel:marked` (#551). |
+| The about sheet described a product that no longer existed | ✅ Rewritten around the gate, the report form, supersniff, sightings (#543). |
+| 6.6 MB/h on a walk, 1 MB of script before anything draws, initData on every request | ✅ Beta perf pass — see [`12`](12-beta-perf-compat.md) (#569–#581, D-61, D-62). |
 
 ### Closed by the engine rescue (15–20 Aug, PRs #433–#494)
 

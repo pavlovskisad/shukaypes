@@ -1,6 +1,6 @@
 # 10 — Product brief & running costs
 
-Written 15 Aug 2026, updated 25 Aug 2026, for business and strategy work. **Self-contained on
+Written 15 Aug 2026, updated 25 Aug and 12 Sep 2026, for business and strategy work. **Self-contained on
 purpose** — it repeats things the other docs say so it can be handed to
 someone (or a planning session) that reads nothing else. Where a number is
 measured it says so and carries its date; where it is an estimate it says
@@ -51,7 +51,7 @@ is city-specific and compounding, and it is the part a copycat cannot lift
 from screenshots. It is also what makes the walking half work without
 paying Google: the destinations, the stops and the stories are all ours.
 
-## 2. Where it stands (25 Aug 2026)
+## 2. Where it stands (12 Sep 2026)
 
 **Built and live:** the full game (map, companion, chat, quests,
 territory, multiplayer presence with 30 labelled bots), the full search
@@ -60,9 +60,21 @@ gated behind a reported sighting — landmark walks that route you through
 Kyiv's history, the ingestion pipeline, an admin metrics console, crash
 reporting, per-user rate limiting, LLM spend ceilings, an invite gate. The
 engineering posture is unusually disciplined for the stage: CI gates both
-deploys on typecheck + lint + fourteen fixture checks, data mutations are
+deploys on typecheck + lint + nineteen fixture checks, data mutations are
 dry-run-first, and production numbers separate bots from humans
 structurally "because these numbers are going into a fundraise".
+
+**Since 7 Sep the map shows only pins it can defend.** Five pets reported
+from the map in the wrong place — one from another city — led to a single
+rule: a pet is offered to a walker only when a person placed it or the ad
+named the place. That took the visible map from 127 pets to about 28 by
+measured choice, and a second model pass that may only *reject* a pin
+(never place one) restored 33 of 44 borderline cases. Fewer pins, each
+one defensible; the hidden majority is listed by reason and can be
+rescued group by group. The beta's first weeks also fixed a sighting that
+could delete a pet, an app that locked up under GPS spoofing during an
+air-raid alarm, a database 175 MB heavier with spent game items, and cut
+what a phone downloads on a walk by roughly three quarters.
 
 **Since 20 Aug the app also explains itself.** It used to open on a map
 with a six-verb icon menu and no statement of purpose; now the dog asks
@@ -102,7 +114,9 @@ crosspost, parse-accuracy measurement, and the presence-privacy posture.
   against where it was pinned, found the parser guessing from ~41 hardcoded
   landmarks while a 16k-street gazetteer sat unused, wired the gazetteer in,
   and re-placed pets under dry-run-first review. Invisible pins fell
-  **81 → 71**. What is still unmeasured is *classification* — species,
+  **81 → 71**; then the September bar and judge turned the question round
+  (which pins can be defended: ~57 of ~193). What is still unmeasured is
+  *classification* — species,
   name, urgency — which matters because the parser spent months reading
   CSS-polluted text, so no historical verdict can be assumed good. An
   afternoon of work; also the strongest slide a deck could carry.
@@ -146,10 +160,10 @@ discrete step-ups.** Three deliberate engineering choices produced that:
 | Item | Monthly | Basis |
 | --- | ---: | --- |
 | Fly.io — 1× shared-cpu-1x / 512MB VM, always on (`fra`) | ~$3–6 | List price + trivial egress |
-| Supabase Postgres | $0 | Free tier; DB well under limits |
+| Supabase Postgres | $0 | Free tier. **270 of 500 MB on 5 Sep**, 175 MB of it spent game items now pruned daily; the file only shrinks after a `VACUUM FULL` in a quiet window |
 | Upstash Redis | $0 | Free tier (noted as flaky; app degrades gracefully without it) |
 | Vercel (web hosting + CDN) | $0 | Hobby tier |
-| Anthropic API | ~$1–5 | **Measured:** 3 Opus chat turns in 7 days across the whole service; Haiku parsing ≈ $0.001/call at ~4 ad fetches/day; Haiku ambient bubbles |
+| Anthropic API | ~$1–5 | **Measured:** 3 Opus chat turns in 7 days across the whole service; Haiku parsing ≈ $0.001/call at ~4 ad fetches/day; Haiku ambient bubbles; placement judge ≈ $0.004/pet on Opus ($0.19 for 44) at ~one new pet every other day |
 | Google Maps (Places server-side + Routes client-side) | ~$0 | Within Google's monthly free credit at current volume |
 | Telegram Bot API, GitHub Actions CI | $0 | Free |
 | **Total today** | **≈ $5–10** | Effectively one small VM plus pennies of LLM |
@@ -180,7 +194,7 @@ pending purchase.
 
 | Item | Monthly | Notes |
 | --- | ---: | --- |
-| Fly.io | $5–10 | Same VM; egress grows but a walk costs the server ~6.6MB/h/user (measured, after the Aug data-diet halved it) — 150 daily walkers ≈ 30GB/mo ≈ $0.60 |
+| Fly.io | $5–10 | Same VM; egress grows but a walk costs the server ~1.5MB/h/user after gzip (10 Sep; 6.6 before, measured after the Aug data-diet) — 150 daily walkers ≈ 7GB/mo, cents |
 | Scrape proxy | **$0** | Was $10–50 in the previous version of this table. Not needed — see 3.3 |
 | Anthropic API | $10–60 | **The swing factor** — scales with chat engagement, which is unknown until real users exist. Bounded hard: 50 Opus turns/user/day, 1,000/day global, ambient capped, kill switch. The global ceiling caps worst-case spend at roughly $30–80/day; typical engagement lands orders of magnitude below it |
 | Upstash Redis | $0–10 | Presence + counters may outgrow the free tier; pay-as-you-go |
@@ -228,7 +242,8 @@ mapped fixes.
 
 **Exist, measured:** ingest volume (2–9 pets/day from one source in early
 Aug); the pet table (**78 active**, 67 with full ad text, after the first
-check against source reality); wire cost of a walk (6.6MB/h);
+check against source reality; ~193 active measured 7 Sep, ~57 shown);
+wire cost of a walk (~1.5MB/h after gzip, 6.6 before);
 sync latency (<20ms steady state); the fact that every user-facing metric
 excludes bots structurally. From 14 Aug, the search funnel (every
 completed search, found or not) accumulates in `search_results`, and

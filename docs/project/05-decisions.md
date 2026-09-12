@@ -783,3 +783,108 @@ introduced — and with neither set the feature is off and the app is
 exactly as it was. `check:session` pins mint, verify, expiry, renewal,
 tamper, rotation and off-when-unconfigured.
 
+*D-63 to D-68 were decided between 3 and 8 Sep, before D-61/D-62, and are
+numbered in the order they were written up, not in date order.*
+
+### D-63 · Show only the pins we can defend ✅
+*Decided 7 Sep · PRs #551, #557 · `server/src/services/placementConfidence.ts`*
+
+Every pin is an invitation to walk somewhere and look. Five misplaced pets
+came back from the map as screenshots — a dog in Kharkiv drawn at a Kyiv
+stadium, another at Печерськ, a cat on a music school — and what they had
+in common was not the city. It was that nothing in the ad put the animal
+where we drew it, and `placement_source` already recorded that.
+
+So a pet is offered to a walker only when its coordinate came from a person
+(`owner`, `sighting`) or from a place the ad explicitly named
+(`gazetteer-marked:`, and since D-64 `gazetteer-judged:`). Bare name
+matches, fuzzy matches, model guesses and the fall-through are hidden. All
+four paths that can send somebody to a pet — map pins, the search-zone
+spawner, the companion's "nearby", `/dogs/nearby` — read one bar, so
+relaxing it is one line.
+
+**The cost was measured before it was chosen: 127 visible pets → ~28.** A
+hidden pet is one nobody walks for, a real loss to its owner. A pet drawn
+in the wrong district is worse: it spends somebody's afternoon and teaches
+them the map lies. The owner's call, made on those numbers.
+
+### D-64 · The judge may only reject ✅
+*Decided 8 Sep · PRs #562, #563 · `server/src/pipeline/placementJudge.ts`*
+
+A string matcher cannot know that a village street shares a name with a
+square in the centre; that is world knowledge, so a model reads the ad
+afterwards. But it answers one question — does this ad support this
+pin? — and **it never returns a coordinate, never names a place, never
+promotes anything the resolver did not find.** Asking a model *where* a pet
+is produced «Таруша»; asking whether an ad supports a pin somebody else
+chose has a worst case of hiding a pet, which is quiet and reversible.
+
+When it cannot run — no key, no budget, an error, an unreadable answer —
+nothing changes: the row keeps its unjudged label and the bar hides it.
+Opus rather than Haiku because the distinctions are the hard half and
+the volume is ~one pet every other day ($0.19 for 44). And the CLI's dry
+run writes a plan that `--apply` replays without asking the model again,
+because a model asked twice may answer differently and "a human reads the
+dry run" means nothing if the apply writes something else.
+
+### D-65 · A sighting with an invented position is refused ✅
+*Decided 5 Sep · PR #544 · `server/src/routes/sightings.ts`, `app/hooks/useLocation.ts`*
+
+The client's Kyiv-centre fallback is fine for opening a map and wrong for
+a sighting, where the coordinate *is* the evidence — one such report moved
+«Коля» onto the parser's fall-through pair and off the map the evening he
+was placed. `POST /sightings` now answers 400 to that pair; the walk flow
+drops only the coordinate and still pays the paws, because the person did
+walk; and the app says "I can't see where you are" rather than "try
+again". Refused on both sides because an old client keeps sending what it
+was built to send. An invented report is not a weak report; it is not a
+report.
+
+### D-66 · Spent game items are pruned; scores live on `users` ✅
+*Decided 6 Sep · PR #545 · `server/src/services/spentItemCleanup.ts`, migration `0038`*
+
+175 MB of a 500 MB database was collected tokens and eaten bones that
+nothing reads — all sixteen queries filter to unspent rows, and lifetime
+totals are counters on `users` incremented inside the collect transaction,
+so deleting every spent row leaves every profile reading the same number.
+A daily janitor keeps seven days (long enough for the double-collect guard
+to still answer 409), deleting 5,000 rows a batch so the backlog drains
+over days rather than as one long transaction on a shared vCPU.
+`collect_events` is deliberately untouched — «bones eaten» counts from it.
+
+Separately, a partial index on `owner_id` over unspent rows gives the
+planner a way to reach one player's tokens without walking every
+uncollected token in the city, which is the cost that scales with how many
+people are playing. What this is *not*: a smaller database file. Postgres
+reuses the space; the reported size drops only after a `VACUUM FULL`, which
+takes an exclusive lock and belongs in a chosen window, not a cron.
+
+### D-67 · A teleport snaps the dog; a walk is lerped ✅
+*Decided 8 Sep · PR #561 · `app/hooks/useCompanion.ts` `TELEPORT_M`*
+
+Air-raid alarms come with GPS spoofing that relocates people across the
+city, so a fix jumping kilometres is a recurring condition for these users.
+Every companion step was a lerp capped at a jog, so after a jump the dog
+was left kilometres behind and could never close the gap — and because
+the gate's question and buttons are children of the companion, which
+`MapView` hides when off-screen, the app was a dead map with nothing to
+tap. A gap larger than 300m (bigger than any real walk between ticks,
+smaller than the viewport) now snaps the dog to the user, on the fix as
+well as on the tick, above the `menuOpen` freeze; and the off-screen rule
+stops at the gate. Reproduced by driving the real bundle with spoofed
+fixes before and after.
+
+### D-68 · Specificity outranks exactness, and one side must announce a place ✅
+*Decided 3–7 Sep · PRs #537, #542, #553 · `server/src/pipeline/resolvePlace.ts`*
+
+Three ordering rules in the resolver, each with a measured cost written
+into the fixtures. A narrower reading beats a dictionary-exact broader
+one, so an inflected hospital beats a letter-perfect district (one
+resolution changed across 192 pets, from a district to a neighbourhood
+inside it). Marked still wins over everything. A landmark match needs
+either the ad or the gazetteer name to announce a place — «район цирка»,
+or a stop named «Вул. Празька» — and a name made only of generic words is
+refused (78 resolutions → 72, all ten bad ones gone). And a name shared by
+a station and its district is one place at two scales, not a namesake
+pair, while «метро X» names a station and only a station: a station we
+do not have is a refusal, not a square of the same name.

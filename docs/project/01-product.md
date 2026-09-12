@@ -115,6 +115,9 @@ whether they saw the pet → the answer is recorded and paid in paws.
 
 Both answers count. "I walked the zone and it was empty" is worth 10 paws;
 "I saw them" is worth 20 and writes a sighting that can move the pet's pin.
+A sighting whose position the device invented (geolocation refused, the
+client's Kyiv-centre fallback) is **refused** rather than trusted — one
+such report took a correctly placed pet off the map on 3 Sep (PR #544).
 Negative information is information — a zone confirmed empty is a zone the
 next walker does not need to cover.
 
@@ -184,6 +187,7 @@ behind an always-on flag** · **⛔ not real yet**
 | Game render (Three.js city, fog, sun, shadows) | 🧪 | `GAME_RENDER = true`. WebGL2-gated with a clean MapLibre fallback. Perf and battery on low-end Android still unmeasured. |
 | Multiplayer presence + poke | 🧪 | `MULTIPLAYER = true`. 30 bots populate the map (`MULTIPLAYER_BOTS=30` in `fly.toml`). |
 | Lost-pet pins on the main map | ⛔ | `LOST_DOG_PINS = false` — deliberately off. Pets are still fetched and still drive supersniff, the carousel and the cinematic pet view. |
+| Placement confidence bar | ✅ | Since 7 Sep (PRs #551, #557) a pet is offered to a walker — pins, spawner, companion, carousel — only when its coordinate came from a person or from a place the ad explicitly named. Measured cost: 127 visible pets → ~28, then partly restored by the judge (#562). See [`03`](03-lost-pet-engine.md). |
 
 ### Backend / data
 
