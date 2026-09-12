@@ -940,11 +940,16 @@ load as always; at the gate, before the four intents, the dog asks
 a dimmed modal over it: the map stays as it is, the camera eases so the
 dog sits in the upper part of the screen (the follow loop holds while
 the sheet is up, or it would pull the dog straight back to centre; the
-onboarding hints wait too), the paper takes at most the lower half of
-the VISIBLE height — measured, not `vh`, which on iOS Safari counts the
-space under the toolbars — a long form scrolls inside the paper under
-its drawn edge, and the dog — the same dog, on the map — says the line
-for whichever screen is showing. The framing ease was being killed a few
+onboarding hints wait too), the paper is as tall as its form — up to
+what the dog needs above it (its centre no higher than 150 px from the
+top of the VISIBLE height, measured, not `vh`, which on iOS Safari
+counts the space under the toolbars), the register form tightened so
+it fits without scrolling even with a pet named (name and breed share
+a row); only a form taller than that room scrolls, inside the paper
+under its drawn edge. The paper reports where its top edge is and the
+camera puts the dog in the middle of the strip above it, so the dog
+follows when the paper grows. The dog — the same dog, on the map —
+says the line for whichever screen is showing. The framing ease was being killed a few
 ms in by a padding reset on every spots update (MapLibre's `setPadding`
 is a `jumpTo`, and a `jumpTo` stops any ease); it now resets only
 padding that is there. When the account is

@@ -48,6 +48,7 @@ import { THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID } from './layerIds';
 import { webgl2Supported } from '../../utils/webgl';
 import { petPhotoAt } from '../../utils/petPhoto';
 import { CARD_W } from '../ui/CardStack';
+import { DOG_MIN_Y } from '../ui/AccountDoor';
 import { easeCamera } from './camera';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
@@ -1517,10 +1518,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // effect below), and a follow tick would put the dog straight back in
   // the centre, under the paper.
   const doorSheetUp = useAccessStore((s) => s.doorSheet != null);
-  // How far above the viewport centre the dog sits while the account
-  // sheet is up, as a share of the visible height: 0.22 puts it at 28%
-  // from the top, above a paper that takes the lower half.
-  const DOG_LIFT = 0.22;
+  // Where the sheet's paper begins (AccountDoor reports it; null until
+  // it has). The dog goes to the middle of the strip above the paper,
+  // but no higher than DOG_MIN_Y, so its bubble stays on screen. As an
+  // easeTo offset: how far from the viewport's centre.
+  const doorSheetTop = useAccessStore((s) => s.doorSheetTop);
+  const doorOffset = (): [number, number] => {
+    const h = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const strip = doorSheetTop ?? h / 2;
+    const y = Math.max(DOG_MIN_Y, Math.round(strip / 2));
+    return [0, y - Math.round(h / 2)];
+  };
   const flatCamHeld =
     !onMapScreen ||
     !!selectedDogId ||
@@ -2067,10 +2075,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (activeHint && activeHint.startsWith('map:')) {
       // Keep the account sheet's framing if it is up: a plain centre
       // would drop the dog straight back under the paper.
-      const h = typeof window !== 'undefined' ? window.innerHeight : 800;
       easeCamera(map, 'short', {
         center: [companionPos.lng, companionPos.lat],
-        offset: doorSheetUp ? [0, -Math.round(h * DOG_LIFT)] : [0, 0],
+        offset: doorSheetUp ? doorOffset() : [0, 0],
         duration: 400,
       });
     }
@@ -2747,19 +2754,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // same map, not a copy in the paper — so the sheet has the lower part
   // and the dog's bubble still has headroom. `offset` is what moves it:
   // a negative y lands the dog that many pixels ABOVE the viewport
-  // centre. Sized from the viewport so it holds on a short phone and a
-  // tall one alike; a fixed 200 was a third of one screen and a sixth
-  // of another.
+  // centre. Taken from where the paper's top edge actually is
+  // (doorOffset above), so a short login paper leaves the dog lower
+  // and a tall register paper lifts it, on any phone.
   const menuWasOpenRef = useRef(false);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !companionPos) return;
     const c: [number, number] = [companionPos.lng, companionPos.lat];
-    const h = typeof window !== 'undefined' ? window.innerHeight : 800;
-    // The paper takes the lower PAPER_SHARE of the same height; the
-    // dog's centre lands at (0.5 - DOG_LIFT), its 140px box and its
-    // bubble above the paper's edge with room to spare.
-    const offset: [number, number] = doorSheetUp ? [0, -Math.round(h * DOG_LIFT)] : [0, 0];
+    // The paper is as tall as its form; the dog sits in the strip above
+    // it, and follows when the paper grows (a pet named adds a row).
+    const offset: [number, number] = doorSheetUp ? doorOffset() : [0, 0];
     // Both modes just centre the dog now — there's room for the
     // explainer bubble above the ring at the default centre, so we no
     // longer drop the dog lower for it. (menuCamera keeps the two
@@ -2771,7 +2776,8 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       menuWasOpenRef.current = false;
       easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
     }
-  }, [menuCamera, doorSheetUp, companionPos?.lat, companionPos?.lng]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuCamera, doorSheetUp, doorSheetTop, companionPos?.lat, companionPos?.lng]);
 
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null

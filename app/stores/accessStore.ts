@@ -48,6 +48,9 @@ interface AccessState {
   // Which of the sheet's screens is showing, so the map's dog can say
   // the line for it — the words come out of the dog, not the paper.
   doorScreen: DoorScreen | null;
+  // Where the sheet's paper begins, in px from the top of the visible
+  // screen, while it is up; MapView frames the dog in the strip above.
+  doorSheetTop: number | null;
   setMe: (me: Me | null) => void;
   // The server could not be asked (offline, a deploy). The app behaves
   // as before the door existed; a 403 later nudges a re-read.
@@ -56,6 +59,7 @@ interface AccessState {
   openDoorSheet: (s: 'register' | 'login' | 'verify' | 'reset') => void;
   closeDoorSheet: () => void;
   setDoorScreen: (s: DoorScreen | null) => void;
+  setDoorSheetTop: (top: number | null) => void;
   setResetToken: (t: string | null) => void;
   setDoorPrefer: (p: 'login' | null) => void;
   setDoorNotice: (n: string | null) => void;
@@ -74,6 +78,7 @@ export const useAccessStore = create<AccessState>((set) => ({
   doorNotice: null,
   doorSheet: null,
   doorScreen: null,
+  doorSheetTop: null,
   setMe: (me) =>
     set((s) => ({
       me,
@@ -86,8 +91,9 @@ export const useAccessStore = create<AccessState>((set) => ({
   assumeOpen: () => set((s) => (s.door === null ? { door: 'open' } : {})),
   nudgeDoor: () => set((s) => ({ doorNudge: s.doorNudge + 1 })),
   openDoorSheet: (doorSheet) => set({ doorSheet }),
-  closeDoorSheet: () => set({ doorSheet: null, doorScreen: null }),
+  closeDoorSheet: () => set({ doorSheet: null, doorScreen: null, doorSheetTop: null }),
   setDoorScreen: (doorScreen) => set({ doorScreen }),
+  setDoorSheetTop: (doorSheetTop) => set((s) => (s.doorSheetTop === doorSheetTop ? {} : { doorSheetTop })),
   setResetToken: (resetToken) => set({ resetToken }),
   setDoorPrefer: (doorPrefer) => set({ doorPrefer }),
   setDoorNotice: (doorNotice) => set({ doorNotice }),
