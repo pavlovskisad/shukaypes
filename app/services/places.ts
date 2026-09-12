@@ -1,7 +1,6 @@
 import type { LatLng } from '@shukajpes/shared';
 import { env } from '../constants/env';
-import { getDeviceId } from './deviceId';
-import { getTelegramInitData } from './telegram';
+import { absorbIssuedSession, authHeaders } from './session';
 
 // Nearby places — all queries now go through our backend's
 // /places/* endpoints, which proxy + cache Google Places (see
@@ -59,16 +58,13 @@ interface CachedPlace {
 // helper missing the new header.
 async function getJSON<T>(path: string): Promise<T | null> {
   try {
-    const tgInitData = getTelegramInitData();
-    const authHeaders: Record<string, string> = tgInitData
-      ? { 'x-telegram-init-data': tgInitData }
-      : { 'x-device-id': getDeviceId() };
     const resp = await fetch(`${env.apiUrl}${path}`, {
       headers: {
         'content-type': 'application/json',
-        ...authHeaders,
+        ...authHeaders(),
       },
     });
+    absorbIssuedSession(resp);
     if (!resp.ok) return null;
     return (await resp.json()) as T;
   } catch {

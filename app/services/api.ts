@@ -11,8 +11,7 @@ import type {
 import type { WalkStop } from '../utils/walk';
 import { env } from '../constants/env';
 import { MULTIPLAYER } from '../constants/experiments';
-import { getDeviceId } from './deviceId';
-import { getTelegramInitData } from './telegram';
+import { absorbIssuedSession, authHeaders, clearSession, getSessionToken } from './session';
 import { getInviteCode, clearInviteCode } from './invite';
 import { getDevKey } from './devUnlock';
 import { markInviteRequired } from '../stores/accessStore';
@@ -194,28 +193,30 @@ export class TimeoutError extends Error {
 const noteSuccess = () => useConnectionStore.getState().noteSuccess();
 const noteFailure = (timedOut: boolean) => useConnectionStore.getState().noteFailure(timedOut);
 
-async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
-  // Prefer Telegram Mini App auth when running inside Telegram —
-  // server validates the signature with our bot token and resolves
-  // (or creates) the user keyed on telegram_id. Outside Telegram
-  // (regular browser / PWA) we send the existing device-id header
-  // and the user stays anonymous + browser-scoped.
-  const tgInitData = getTelegramInitData();
-  const authHeaders: Record<string, string> = tgInitData
-    ? { 'x-telegram-init-data': tgInitData }
-    : { 'x-device-id': getDeviceId() };
+async function req<T>(
+  path: string,
+  init?: RequestInit & { timeoutMs?: number },
+  // Set on the one retry a refused session token earns. Never chains.
+  retriedAfterStaleSession = false,
+): Promise<T> {
+  // Who we are: a session token while we hold a fresh one (about 200
+  // bytes, no database work server-side), else Telegram initData inside
+  // the Mini App (server-validated, keyed on telegram_id), else the
+  // device id (anonymous, browser-scoped). See services/session.ts.
+  const usingSession = getSessionToken() != null;
+  const identity = authHeaders();
   // Only consulted by the server when CREATING an account, so sending it
   // on every request is harmless and saves having to know which call
   // will be the one that signs us up. Absent for everybody who already
   // has an account, and for everybody at all while the gate is off.
   const invite = getInviteCode();
-  if (invite) authHeaders['x-invite-code'] = invite;
+  if (invite) identity['x-invite-code'] = invite;
   // Only the two destructive dev routes look at this, and only when
   // somebody has unlocked at /dev. Sent on every request for the same
   // reason as the invite code — knowing which call needs it is the
   // caller's problem otherwise — and absent entirely for everybody else.
   const devKey = getDevKey();
-  if (devKey) authHeaders['x-dev-key'] = devKey;
+  if (devKey) identity['x-dev-key'] = devKey;
   // AbortController rather than Promise.race: racing leaves the request
   // running, so a stalled call keeps its socket and its memory and still
   // resolves into nothing later. Aborting actually cancels it.
@@ -229,7 +230,7 @@ async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number })
       signal: controller.signal,
       headers: {
         'content-type': 'application/json',
-        ...authHeaders,
+        ...identity,
         ...(init?.headers ?? {}),
       },
     });
@@ -252,6 +253,18 @@ async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number })
   // somebody they are offline when they are not would send them hunting
   // for signal over a bug at our end.
   noteSuccess();
+  // Any token the server handed back — first contact, or a renewal of
+  // the one we sent — replaces what we hold.
+  absorbIssuedSession(res);
+  // The server refused our session token (expired between our check
+  // and its; the key rotated; a deploy without the secret). It is not
+  // a fault in our identity, only in the slip: drop it and go once the
+  // old way, which mints a fresh one on the way back. One retry, never
+  // a loop — a 401 on the retry is a real 401.
+  if (res.status === 401 && usingSession && !retriedAfterStaleSession) {
+    clearSession();
+    return req<T>(path, init, true);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     // 403 from the auth hook means the door is shut, not that anything
