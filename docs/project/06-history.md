@@ -351,6 +351,61 @@ plan.** The intent was to fix the parser's prompt; the audit said the
 prompt was asking the wrong system entirely, and the fix was to consult a
 table that had been sitting there since April.
 
+## Era 12 — Pins you can defend, and a phone that can carry the app
+**#534–#581 · 25 Aug–12 Sep · 19 days · 46 PRs merged**
+
+The beta was declared open on 25 Aug and the era is what came back from
+it: screenshots of pets in the wrong place, a report that the app locked
+up during an air-raid alarm, a database creeping toward its tier, and a
+first look at what a phone actually downloads.
+
+**The resolver's second campaign (#537–#542, #553, #558–#559).** Landmarks
+people navigate by («район цирку», «біля вокзалу») went into the
+gazetteer — and the lesson was that the venue's OSM name is never what
+people write; the bus stop outside it is. That brought thousands of stops
+named after ordinary nouns, two in five landmark moves went wrong, and the
+rule became: one side or the other must announce a place. Specificity
+started outranking exactness. A station and its district stopped counting
+as namesakes, which readmitted most of how Kyiv describes itself. Ten pets
+from Odesa, Lviv and Kharkiv that never name their city turned out to be
+historical debris from before the ingest gate, not a leak.
+
+**The bar (#551, #557), then the judge (#562–#563).** Five misplaced pets,
+one screenshot each, were not one bug; what they shared was that nothing
+in the ad put the animal where the pin was. So a single rule now decides
+what every path is allowed to offer a walker, and it cost the map
+**127 → ~28 visible pets** by measured choice. Then a model was allowed to
+read the ad afterwards and *only reject* — never place — which restored
+33 of 44 bare matches and refused ten that no matcher could have seen
+(«Вул. Ракетна» was a rocket attack; «Забір'я» was a verb).
+
+**Three failures found by using the product.** A sighting from a device
+that did not know where it was took a correctly placed pet off the map the
+evening he was placed (#544). A spoofed GPS fix left the dog kilometres
+behind and the gate — a child of the dog — off-screen, permanently (#561).
+And 175 MB of the 500 MB database was collected tokens and eaten bones
+nothing had ever deleted (#545).
+
+**Lore grew a "read more" (#546–#568)** — OSM facts, Wikipedia leads,
+hearts and a favourites list, titles that say what the object is — and
+sniff's «ходімо сюди» started putting the place on the walk as its stop
+(#572). Walks and territory look straight down with the camera mounted on
+the dog; each mode opens at its own distance; roads got thinner once a
+long-broken width transform was actually applied (#574–#575).
+
+**The beta perf pass (#569–#571, #578–#581)** measured what a phone
+downloads and cut it: gzip on the API (≈6.6 → ~1.5 MB/h on a walk),
+three.js split into an async chunk, a WebGL2 floor named instead of a
+blank screen, a repaint governor, pet photos at the size they are drawn,
+reduce-motion honoured, and a session token replacing the whole Telegram
+initData on every request (D-61, D-62). Documented as it went in
+[`12-beta-perf-compat.md`](12-beta-perf-compat.md), with thirteen flagged
+items for other sessions.
+
+The era's shape: **every fix arrived with the number it was chosen on**,
+and two of the numbers were costs the owner accepted rather than wins —
+fewer pins, and a database that stops growing but does not shrink.
+
 ---
 
 ## The pivots, in one list
@@ -374,6 +429,8 @@ table that had been sitting there since April.
 | 15 | **Landmark guessing → gazetteer placement** | #506–#530, Aug | Coordinates inferred from ~41 hardcoded landmarks → resolved against 16k real Kyiv streets, with a ledger recording how each pin happened. |
 | 16 | **Republisher → reporting network** | #531, 24 Aug | Every pet scraped from somebody else's post → owners post their own, and the app carries it outward. |
 | 17 | **Closed beta → open launch** | 25 Aug | 50–150 invite-gated testers → a founder announcement to ~130K, invite gate held in reserve. |
+| 18 | **Show every pin → show only defensible pins** | #551, #557, 7 Sep | Every active pet with a coordinate offered to walkers → only pets placed by a person or by a place the ad named. 127 → ~28 visible, by measured choice. |
+| 19 | **Model places pets → model may only reject** | #562, 8 Sep | The parser guessing coordinates from prose → a judge that reads the ad afterwards and can hide a pin but never move one. |
 
 ## What the history is trying to tell you
 

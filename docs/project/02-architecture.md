@@ -8,8 +8,8 @@ the code is right.
 pnpm monorepo, three workspaces (`pnpm-workspace.yaml`).
 
 ```
-app/          Expo RN app (web-first). Expo Router. ~28,700 lines TS/TSX.
-server/       Fastify API. ~23,100 lines TS.
+app/          Expo RN app (web-first). Expo Router. ~33,700 lines TS/TSX.
+server/       Fastify API. ~30,900 lines TS.
 shared/       TypeScript types only (145 lines). No build step.
 docs/         Documentation. docs/project/ is this set.
 reference/    The original single-file HTML prototype. Read-only history.
@@ -135,7 +135,7 @@ Floating tab bar in `_layout.tsx`.
 companion stats, quests, spots, territory, multiplayer, dog-cam, walk
 stops, the menu/mode state, daylight. `stores/langStore.ts` for language (uk / en, `i18n/strings.ts`).
 
-**Map.** `components/map/MapView.tsx` (~3,900 lines) is the nerve centre.
+**Map.** `components/map/MapView.tsx` (~4,350 lines) is the nerve centre.
 MapLibre GL JS v5 with a heavily-overridden "crayon" style
 (`crayonStyle.ts`, 780 lines, based on OpenFreeMap liberty). Markers are DOM
 overlays via `MapLibreMarker.tsx` — companion, user dot, paws, bones, spots,
@@ -167,7 +167,10 @@ down partial state and reverts to MapLibre buildings + screen fog
 
 **Companion.** `Companion.tsx` (756 lines) + `DogSprite.tsx`, pixel-art
 sprite sheets in `app/public/dog/`. Lerps toward GPS; runs when hunting an
-item; sniffs on collect.
+item; sniffs on collect. A gap larger than `TELEPORT_M` (300m, `useCompanion.ts`)
+snaps instead of lerping, on the fix as well as the tick — a spoofed GPS
+jump used to leave the dog, and the gate that is its child, off-screen for
+good (PR #561).
 
 **Build note.** `app/babel.config.js` enables
 `@babel/plugin-transform-class-static-block` so Metro can bundle `three`
@@ -296,6 +299,15 @@ new route ships unlimited.
 - `pipeline/sources/adHtml.ts` — pure HTML in, ad text out. Pure and
   db-free *on purpose*: it used to live in `olx.ts`, which imports the db
   module, so a check for it could not run without a `DATABASE_URL`.
+- `services/placementConfidence.ts` — **the one bar** every path that can
+  send a walker to a pet reads (map pins, search-zone spawner, companion
+  "nearby", `/dogs/nearby`). Both the SQL predicate and the in-memory
+  predicate are generated from one prefix list, so relaxing it is one
+  line. `pipeline/placementJudge.ts` is its second reader: Opus reads the
+  ad and may only reject a bare placement, never place one.
+- `services/spentItemCleanup.ts` — daily janitor for collected tokens
+  and eaten bones (migration `0038` adds the partial indexes the map
+  actually asks for).
 - `anthropic.ts`, `memory*.ts`, `quest*.ts`, `gazetteer.ts`, `lostDogsReport.ts`,
   `placesCache.ts`, `decay.ts`, `lostDogCleanup.ts`, `searchZoneExpansion.ts`.
 
@@ -309,6 +321,7 @@ new route ships unlimited.
 | zone expansion | — | Grow a lost pet's search radius as time passes. |
 | lost-dog cleanup | 24h, **and at boot** | Expire stale reports. The boot run matters: as a bare interval it needed a machine to live a full uninterrupted day to fire once, and with several deploys a day it had probably never run in production (fixed in PR #425). |
 | multiplayer | 3.5s | Step + publish bot walkers, purge stale presence. |
+| spent-item janitor | 24h | Delete `tokens` collected and `food_items` consumed more than 7 days ago, 5,000 rows a batch, 20 batches a tick (PR #545). Scores are counters on `users`, so this cannot cost anybody a point; `collect_events` is deliberately untouched. Does **not** shrink the database file — only `VACUUM FULL` does. |
 
 There is **no leader election**. A second machine would double every cron
 and run 2×30 bots. `services/scrape.ts` says so in a comment. This is the
@@ -317,7 +330,8 @@ single change that blocks horizontal scaling.
 **DB** (`db/`): `schema.ts` (Drizzle), `index.ts`
 (`postgres(url, { prepare: false })`, default pool ~10), `redis.ts`
 (`ioredis`, `lazyConnect`, throttled error log), `migrate.ts` run at
-container start. 38 migrations, latest `0037_placement_source.sql`.
+container start. 42 migrations, latest `0041_lore_title.sql` (`0038` partial
+indexes over unspent tokens/food, `0039`–`0041` lore detail/facts/favourites/title).
 
 **Migrations `0032`+ are hand-written, and that is a rule now:**
 `migrations/meta` holds snapshots for 0000–0002 and nothing for 0003–0031,
@@ -449,10 +463,11 @@ server:  needs: checks → flyctl deploy --remote-only
 
 The gate is real (PR #274). `react-hooks/rules-of-hooks` is an **error** —
 that is the class of bug that white-screened prod once. `pnpm check` (added
-PR #416) runs the **fourteen** fixture checks: out-of-area, ingest alert, pet identity, per-user rate limiting,
-invite gate, dev auth, contact redaction, ad-body containment, ad
-extraction, found reports, walk stops, landmark name match, lore writer
-parse, route coverage.
+PR #416) runs the **nineteen** fixture checks: placement judge, placement
+confidence, lore walk, lore match, enrich parse, out-of-area, ingest alert,
+pet identity, per-user rate limiting, invite gate, dev auth, session token,
+contact redaction, ad-body containment, ad extraction, found reports, owner
+reports, place resolution, route coverage.
 They existed before and **nothing ran them** — a broken rule deciding which
 pets get expired or merged would have shipped on the strength of having
 compiled.

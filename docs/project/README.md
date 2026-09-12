@@ -1,9 +1,12 @@
 # шукайпес — project documentation
 
 The map and the source of truth. Written 11 Aug 2026 against `f421b7e`;
-last updated **25 Aug 2026** against `4c7459a` (PR #533 merged), folding in
-the placement campaign, the in-app lost-pet report, and the decision to run
-an **open** beta rather than a closed one.
+last updated **12 Sep 2026** against `97245bf` (PR #581 merged), folding in
+the placement confidence bar and the judge that may only reject, the
+sighting refusal, the spent-item janitor, the GPS-spoof lockout fix, the
+beta perf pass and session tokens. The 25 Aug update added the placement
+campaign, the in-app lost-pet report, and the decision to run an **open**
+beta rather than a closed one.
 
 ## Read in this order
 
@@ -85,24 +88,24 @@ this tree. If the repo ever goes private, move it in.
 
 ## Facts verified at the time of writing
 
-Run against `4c7459a` on 25 Aug 2026, with `pnpm install --frozen-lockfile`:
+Run against `97245bf` on 12 Sep 2026, with `pnpm install --frozen-lockfile`:
 
 ```
 pnpm -r typecheck     shared / server / app — all clean
-pnpm lint             23 problems (0 errors, 23 warnings)
-pnpm check            14 fixture checks — all pass
-                      (49 routes: 46 limited, 3 knowingly exempt)
+pnpm lint             22 problems (0 errors, 22 warnings)
+pnpm check            19 fixture checks — all pass
+                      (52 routes: 49 limited, 3 knowingly exempt)
 ```
 
-The 23 warnings are all `react-hooks/exhaustive-deps` and that is the
-current baseline. **Note it has drifted**: `CLAUDE.md` still says 21, which
-was true on 11 Aug. PR #490 measured `origin/main` in a scratch worktree at
-22, and PR #494 added one more from `LostFlowModal`'s effect, matching six
-sibling modals. Anyone treating 21 as the bar will read two ordinary
-warnings as a regression.
+The 22 warnings are all `react-hooks/exhaustive-deps` and that is the
+current baseline; `CLAUDE.md` agrees since the beta perf pass (it was 23
+from 20 Aug to 10 Sep, 21 before that). The number has drifted three
+times in a month, so measure `origin/main` in a scratch worktree rather
+than trusting any doc, this one included.
 
-`pnpm check` has run in CI since PR #416 and now carries fourteen checks:
-out-of-area, ingest alert, pet identity, per-user rate limiting, invite
-gate, dev auth, contact redaction, ad-body containment, ad extraction,
-found reports, walk stops, owner reports, place resolution, route
-coverage.
+`pnpm check` has run in CI since PR #416 and now carries nineteen checks:
+placement judge, placement confidence, lore walk, lore match, enrich
+parse, out-of-area, ingest alert, pet identity, per-user rate limiting,
+invite gate, dev auth, session token, contact redaction, ad-body
+containment, ad extraction, found reports, owner reports, place
+resolution, route coverage.
