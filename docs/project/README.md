@@ -103,9 +103,9 @@ from 20 Aug to 10 Sep, 21 before that). The number has drifted three
 times in a month, so measure `origin/main` in a scratch worktree rather
 than trusting any doc, this one included.
 
-`pnpm check` has run in CI since PR #416 and now carries nineteen checks:
+`pnpm check` has run in CI since PR #416 and now carries twenty checks:
 placement judge, placement confidence, lore walk, lore match, enrich
 parse, out-of-area, ingest alert, pet identity, per-user rate limiting,
 invite gate, dev auth, session token, contact redaction, ad-body
 containment, ad extraction, found reports, owner reports, place
-resolution, route coverage.
+resolution, route coverage, accounts (the door, passwords, tokens).

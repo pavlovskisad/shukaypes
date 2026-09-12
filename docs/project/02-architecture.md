@@ -198,6 +198,20 @@ from, in order of preference:
    that used to run on every request now runs only here, at mint time.
 2. `x-device-id` — any client-supplied string 8–128 chars. Weak,
    browser-scoped, **unverified**.
+3. `via: 'email'` — a slip minted by `routes/auth.ts` after a password
+   login, a verified link or a password reset, and re-minted from a
+   90-day refresh token (`auth_sessions`, hashed) when it expires.
+
+**The door** (D-69, `lib/accountPolicy.ts`): once identified, every route
+but `/auth/*` answers 403 «registration required» until the account
+carries `registered_at` — and `email_verified_at` too when a mail sender
+is configured. The answer rides in the slip as a `registered` claim, so
+it costs no database read. Six credential routes (`/auth/login`,
+`/verify`, `/refresh`, `/logout`, `/forgot`, `/reset`) are bypassed by
+the hook entirely — a fresh browser logs in without first being minted
+an anonymous row — and rate-limited by address (`limitAuth`).
+`REGISTRATION_REQUIRED=0` takes the door down; `EMAIL_VERIFY_REQUIRED=0`
+keeps it up without the link.
 
 An **invite gate** sits in front of account creation (`lib/inviteGate.ts`,
 PR #417): with `INVITE_REQUIRED` set, a *new* device id must redeem an
@@ -369,6 +383,9 @@ territory, a bbox range scan on plain B-trees.
 | `territory_ground` | **The ownership record.** One row per piece: ring + holes + bbox + area |
 | `territory_raids` | "Somebody took your ground" — queued in Postgres so an overnight raid still lands |
 | `invite_codes` | Beta invite codes, minted by the `invite` CLI (migration `0032`) |
+| `users.email` … `consent_at` | The account on top of the identity (migration `0042`, D-69): e-mail, verification time, scrypt password hash, the person's pet, the application-folded `nickname_key` the uniqueness index is on, registration and consent times, `avatar_file_id`. All nullable; legacy rows have none |
+| `auth_tokens` | One-time e-mail verification and password-reset tokens, stored as SHA-256 only, single use, cascade with the account |
+| `auth_sessions` | 90-day refresh tokens behind e-mail logins, hashed, revocable; a password reset revokes them all |
 | `search_results` | **Every** completed search — found or not — with the paws paid. Separate from `sightings` on purpose: a sighting asserts *the pet was here* and drives pin-moving; a search result may assert nothing. History starts 14 Aug 2026 (migration `0033`) |
 | `scrape_log.raw_body` | The ad text the parser actually read (migration `0034`). Served only by `/dogs/:id/post`, never in a bulk payload — enforced by a source-level fixture check |
 | `lost_dogs.is_found_report` | Somebody *has* this animal and is looking for its owner (migration `0035`). Kept in the table rather than filtered at ingest so these can get their own screen later; the map query simply does not return them |
@@ -435,7 +452,11 @@ A missing or unparseable var falls back to the tuned default, never to zero.
 `TELEGRAM_CHANNELS`, `FACEBOOK_GROUP_IDS`, `SCRAPE_PROXY_URL`,
 `ALERT_CHAT_ID`, `INGEST_STALL_HOURS`, `MULTIPLAYER`, `REPORT_TOKEN`,
 `INVITE_REQUIRED`, `DASHBOARD_TOKEN`, `DEV_TOOLS_PASSWORD`,
-`CHAT_DISABLED` and the chat-budget overrides. Two performance knobs
+`CHAT_DISABLED` and the chat-budget overrides. Accounts (D-69):
+`RESEND_API_KEY` and `EMAIL_FROM` (the mail sender; without both,
+verification is not required), `APP_URL` (where mail links point — the
+domain), `SESSION_SECRET` (set it explicitly now that slips carry logins),
+and the two switches `REGISTRATION_REQUIRED` / `EMAIL_VERIFY_REQUIRED`. Two performance knobs
 since the beta perf pass: `PG_POOL_MAX` (postgres-js pool size, default
 10) and `SPAWN_ATTEMPT_GAP_MS` (minimum gap between spawn rounds per
 user, default 30000; `0` disables the gate).

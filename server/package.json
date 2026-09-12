@@ -24,7 +24,7 @@
     "expire:no-post": "tsx src/db/expire-no-post.ts",
     "check:placement-confidence": "tsx src/services/placementConfidence.check.ts",
     "check:placement-judge": "tsx src/pipeline/placementJudge.check.ts",
-    "check": "pnpm check:placement-judge && pnpm check:placement-confidence && pnpm check:lore-walk && pnpm check:lore-match && pnpm check:enrich-parse && pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:session && pnpm check:redact && pnpm check:ad-body && pnpm check:ad-extract && pnpm check:found-report && pnpm check:owner-report && pnpm check:resolve-place && pnpm check:route-coverage",
+    "check": "pnpm check:placement-judge && pnpm check:placement-confidence && pnpm check:lore-walk && pnpm check:lore-match && pnpm check:enrich-parse && pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:session && pnpm check:redact && pnpm check:ad-body && pnpm check:ad-extract && pnpm check:found-report && pnpm check:owner-report && pnpm check:resolve-place && pnpm check:route-coverage && pnpm check:accounts",
     "check:same-pet": "tsx src/pipeline/samePet.check.ts",
     "check:lore-walk": "tsx src/services/loreWalk.check.ts",
     "check:lore-match": "tsx src/services/loreMatch.check.ts",
@@ -56,7 +56,8 @@
     "relabel:marked": "tsx src/db/relabel-marked.ts",
     "judge:pins": "tsx src/db/judge-pins.ts",
     "probe:location-text": "tsx src/db/probe-location-text.ts",
-    "check:resolve-place": "tsx src/pipeline/resolvePlace.check.ts"
+    "check:resolve-place": "tsx src/pipeline/resolvePlace.check.ts",
+    "check:accounts": "tsx src/lib/accounts.check.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

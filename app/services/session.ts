@@ -17,6 +17,7 @@
 
 import { getDeviceId } from './deviceId';
 import { getTelegramInitData, getTelegramWebApp } from './telegram';
+import { getAccount } from './account';
 
 export const SESSION_HEADER = 'x-session';
 export const SESSION_ISSUE_HEADER = 'x-session-token';
@@ -58,10 +59,15 @@ function read(): Stored | null {
   }
 }
 
-// Who this page is, as the server would record it: `tg:<id>` inside
-// Telegram, the device id otherwise. Matches the `d` claim the server
-// signs, so a token's identity can be checked without decoding it.
-function identityKey(): string {
+// Who this page is: the logged-in account when there is one (its slip
+// was minted from a refresh token, not from a header this device
+// holds), else `tg:<id>` inside Telegram, else the device id. The two
+// header cases match the `d` claim the server signs, so a token's
+// identity can be checked without decoding it; the account case is
+// keyed on the user id, which is what a login is a claim about.
+export function identityKey(): string {
+  const account = getAccount();
+  if (account) return `acct:${account.userId}`;
   const tgUser = getTelegramInitData() ? getTelegramWebApp()?.initDataUnsafe?.user?.id : undefined;
   return typeof tgUser === 'number' ? `tg:${tgUser}` : getDeviceId();
 }
@@ -113,6 +119,11 @@ export function clearSession(): void {
  * fresh one, else Telegram initData inside the Mini App, else the device
  * id. One recipe for every caller, so a 401 anywhere means real auth
  * failure and not a helper that missed the newest header.
+ *
+ * With an ACCOUNT on this page and no fresh slip, this must not be
+ * called: the fallback headers would identify the anonymous device
+ * row, not the account. services/api.ts refreshes the slip first
+ * (ensureAccountSession) and only then asks for headers.
  */
 export function authHeaders(): Record<string, string> {
   const session = getSessionToken();

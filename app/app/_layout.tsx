@@ -5,6 +5,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Splash } from '../components/ui/Splash';
 import { InviteGate } from '../components/ui/InviteGate';
+import { AccountDoor } from '../components/ui/AccountDoor';
 import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { ConnectionBanner } from '../components/ui/ConnectionBanner';
 import { AboutModal } from '../components/ui/AboutModal';
@@ -12,6 +13,50 @@ import { useGameStore } from '../stores/gameStore';
 import { useAccessStore } from '../stores/accessStore';
 import { notifyTelegramReady } from '../services/telegram';
 import { installGlobalCrashHandlers } from '../services/crashReport';
+import { auth } from '../services/api';
+import { scrubLinkFromUrl, takeResetToken, takeVerifyToken } from '../services/account';
+
+// THE DOOR'S KEEPER (D-69). Asks the server who this account is and
+// whether it is through — once at boot, again whenever a refused
+// request nudges — and consumes the tokens a mail link brought:
+// ?verify= confirms the address (and logs this device in), ?reset=
+// opens the new-password screen. Lives in a hook rather than in the
+// door component because the door is not mounted while the answer is
+// 'open', and the question still has to be asked.
+function useDoorKeeper(): void {
+  const nudge = useAccessStore((s) => s.doorNudge);
+  const setMe = useAccessStore((s) => s.setMe);
+  const setResetToken = useAccessStore((s) => s.setResetToken);
+  const setDoorNotice = useAccessStore((s) => s.setDoorNotice);
+
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const verify = takeVerifyToken();
+      const reset = takeResetToken();
+      if (reset) setResetToken(reset);
+      scrubLinkFromUrl();
+      if (verify) {
+        try {
+          const me = await auth.verify(verify);
+          if (!cancelled) setMe(me);
+          return;
+        } catch {
+          // Spent or expired: fall through to the ordinary read, and
+          // tell the person why they are looking at the door.
+          if (!cancelled) setDoorNotice('linkExpired');
+        }
+      }
+      const me = await auth.me().catch(() => null);
+      if (!cancelled && me) setMe(me);
+    })();
+    return () => {
+      cancelled = true;
+    };
+    // `nudge` is the trigger: a 403 from any route re-reads /auth/me.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [nudge]);
+}
 // Reads the one flag and renders the one sheet. Split out so the root
 // layout itself does not subscribe to the game store and re-render the
 // whole app every time something in it moves.
@@ -60,11 +105,25 @@ export default function RootLayout() {
   // server-side, and false forever for anyone who already has an
   // account.
   const inviteRequired = useAccessStore((s) => s.inviteRequired);
+  const door = useAccessStore((s) => s.door);
+  useDoorKeeper();
   if (inviteRequired) {
     return (
       <SafeAreaProvider>
         <StatusBar style="dark" />
         <InviteGate />
+      </SafeAreaProvider>
+    );
+  }
+  // Same replacement, same reasoning: an account that has not passed
+  // the door has no map to stand behind a form. Null (not yet asked)
+  // renders the app — the splash covers the first second, and a shut
+  // door arrives as soon as /auth/me answers.
+  if (door === 'register' || door === 'verify') {
+    return (
+      <SafeAreaProvider>
+        <StatusBar style="dark" />
+        <AccountDoor />
       </SafeAreaProvider>
     );
   }

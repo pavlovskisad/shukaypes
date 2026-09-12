@@ -7,6 +7,7 @@ import compress from '@fastify/compress';
 import rateLimit from '@fastify/rate-limit';
 import authPlugin from './auth.js';
 import stateRoute from './routes/state.js';
+import authRoute from './routes/auth.js';
 import tokensRoute from './routes/tokens.js';
 import foodRoute from './routes/food.js';
 import dogsRoute from './routes/dogs.js';
@@ -202,6 +203,7 @@ export async function buildServer(observe?: RouteObserver) {
   });
 
   await app.register(authPlugin);
+  await app.register(authRoute);
   await app.register(stateRoute);
   await app.register(tokensRoute);
   await app.register(foodRoute);

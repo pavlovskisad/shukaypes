@@ -10,7 +10,8 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
-import { api, type TerritoryRanking } from '../../services/api';
+import { api, auth, type TerritoryRanking } from '../../services/api';
+import { useAccessStore } from '../../stores/accessStore';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import { SCENE_SKY, type SceneMode } from '../../components/profile/ProfileSceneBackdrop';
 import { HERO, CHIP } from '../../constants/sizing';
@@ -111,6 +112,16 @@ export default function ProfileScreen() {
   const setLang = useLangStore((s) => s.setLang);
   const companionName = useGameStore((s) => s.companionName);
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
+  const setDoorPrefer = useAccessStore((s) => s.setDoorPrefer);
+  const nudgeDoor = useAccessStore((s) => s.nudgeDoor);
+  // Forget the login on this device and go back to the door, on its
+  // login screen. The device identity underneath comes back; with the
+  // door up it is asked to log in (or register) before the map.
+  const logout = useCallback(async () => {
+    await auth.logout();
+    setDoorPrefer('login');
+    nudgeDoor();
+  }, [setDoorPrefer, nudgeDoor]);
   const [data, setData] = useState<ProfileData | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Territory standing. Its own fetch rather than a field on /profile/me
@@ -386,6 +397,16 @@ export default function ProfileScreen() {
               Back on the top row now that the language toggle is one
               pill and there is room. It borrows that pill's styling, but
               it is a button rather than a switch. */}
+          <Pressable
+            onPress={logout}
+            onPressIn={popPressableEvent}
+            accessibilityRole="button"
+            accessibilityLabel={t.auth.logout}
+            style={({ pressed }) => [styles.langPill, pressed && { opacity: 0.7 }]}
+          >
+            <HandDrawnFrame radius={CHIP.height / 2} />
+            <Text style={styles.langPillText}>{t.auth.logout}</Text>
+          </Pressable>
           <Pressable
             onPress={() => setAboutOpen(true)}
             onPressIn={popPressableEvent}

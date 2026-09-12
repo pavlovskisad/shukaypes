@@ -43,12 +43,20 @@ export const SESSION_RENEW_WINDOW_S = 6 * 60 * 60;
 const MAX_TOKEN_LENGTH = 2048;
 const CLOCK_SKEW_S = 60;
 
-export type SessionVia = 'telegram' | 'device';
+// 'email' is an account login (routes/auth.ts): the person proved a
+// password, and the slip may be re-minted from a refresh token rather
+// than from a header the device holds.
+export type SessionVia = 'telegram' | 'device' | 'email';
 
 export interface SessionClaims {
   userId: string;
   deviceId: string;
   via: SessionVia;
+  // The account has passed the door (lib/accountPolicy.ts) as of
+  // minting. Carried in the slip so the door costs no database read on
+  // the hot path; a slip minted before registration is replaced by the
+  // one /auth/register and /auth/verify hand back.
+  registered: boolean;
   issuedAt: number;
   expiresAt: number;
 }
@@ -72,7 +80,7 @@ function nowSeconds(): number {
 }
 
 export function mintSession(
-  input: { userId: string; deviceId: string; via: SessionVia },
+  input: { userId: string; deviceId: string; via: SessionVia; registered?: boolean },
   nowS: number = nowSeconds(),
 ): string | null {
   const secret = sessionSecret();
@@ -81,6 +89,7 @@ export function mintSession(
     u: input.userId,
     d: input.deviceId,
     v: input.via,
+    r: input.registered ? 1 : 0,
     iat: nowS,
     exp: nowS + SESSION_TTL_S,
   };
@@ -113,13 +122,17 @@ export function verifySession(
   const o = body as Record<string, unknown>;
   if (typeof o.u !== 'string' || o.u.length === 0) return null;
   if (typeof o.d !== 'string' || o.d.length === 0) return null;
-  if (o.v !== 'telegram' && o.v !== 'device') return null;
+  if (o.v !== 'telegram' && o.v !== 'device' && o.v !== 'email') return null;
+  // Slips minted before the door existed carry no `r`; they read as
+  // unregistered, which sends the person to the door once and hands
+  // them a slip that says otherwise on the way back.
+  const registered = o.r === 1;
   if (typeof o.iat !== 'number' || typeof o.exp !== 'number') return null;
   if (!Number.isFinite(o.iat) || !Number.isFinite(o.exp)) return null;
   if (o.exp <= nowS) return null;
   if (o.iat > nowS + CLOCK_SKEW_S) return null;
   if (o.exp - o.iat > SESSION_TTL_S) return null;
-  return { userId: o.u, deviceId: o.d, via: o.v, issuedAt: o.iat, expiresAt: o.exp };
+  return { userId: o.u, deviceId: o.d, via: o.v, registered, issuedAt: o.iat, expiresAt: o.exp };
 }
 
 export function sessionNeedsRenewal(claims: SessionClaims, nowS: number = nowSeconds()): boolean {

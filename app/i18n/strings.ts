@@ -28,6 +28,55 @@ export interface AppStrings {
     spots: string;
     home: string;
   };
+  // The door (D-69): registration before the map, for everybody.
+  auth: {
+    // The dog's line over the form.
+    registerAsk: string;
+    verifyAsk: string;
+    loginAsk: string;
+    forgotAsk: string;
+    resetAsk: string;
+    nicknameLabel: string;
+    nicknamePlaceholder: string;
+    petSection: string;
+    speciesDog: string;
+    speciesCat: string;
+    petNameLabel: string;
+    petNamePlaceholder: string;
+    breedLabel: string;
+    breedPlaceholder: string;
+    emailLabel: string;
+    emailPlaceholder: string;
+    passwordLabel: string;
+    passwordPlaceholder: string;
+    newPasswordLabel: string;
+    consent: string;
+    registerCta: string;
+    haveAccount: string;
+    loginCta: string;
+    noAccount: string;
+    forgotLink: string;
+    forgotCta: string;
+    forgotSent: string;
+    resetCta: string;
+    backToLogin: string;
+    // Verify screen.
+    verifySent: (email: string) => string;
+    verifyNotSent: string;
+    verifyCheck: string;
+    verifyResend: string;
+    verifyResent: string;
+    verifyFixEmail: string;
+    verifyStillNot: string;
+    otherAccount: string;
+    verified: string;
+    linkExpired: string;
+    working: string;
+    // Profile.
+    logout: string;
+    // Server error codes → sentences.
+    errors: Record<string, string> & { generic: string };
+  };
   hud: {
     happiness: string;
     hunger: string;
@@ -404,6 +453,71 @@ const uk: AppStrings = {
     chat: 'чат',
     spots: 'місця',
     home: 'дім',
+  },
+  auth: {
+    registerAsk: 'нюх-нюх! спершу познайомимось — хто ти, і чи є в тебе хтось хвостатий?',
+    verifyAsk: 'я надіслав листа. знайди його і натисни посилання — тоді гуляємо.',
+    loginAsk: 'з поверненням. нагадай, хто ти?',
+    forgotAsk: 'забув пароль? буває. кажи пошту — надішлю новий.',
+    resetAsk: "придумай новий пароль. цього разу запам'ятай.",
+    nicknameLabel: 'твій нік',
+    nicknamePlaceholder: 'як тебе звати на мапі',
+    petSection: 'твій улюбленець (якщо є)',
+    speciesDog: 'пес',
+    speciesCat: 'кіт',
+    petNameLabel: 'як звати',
+    petNamePlaceholder: 'Мухтар',
+    breedLabel: 'порода',
+    breedPlaceholder: 'дворняга теж порода',
+    emailLabel: 'пошта',
+    emailPlaceholder: 'ти@пошта.com',
+    passwordLabel: 'пароль',
+    passwordPlaceholder: 'не менше 8 символів',
+    newPasswordLabel: 'новий пароль',
+    consent:
+      'я згоден, що шукайпес зберігає мій нік, пошту та маршрути прогулянок, бо інакше він не працює',
+    registerCta: 'зареєструватися',
+    haveAccount: 'вже є акаунт?',
+    loginCta: 'увійти',
+    noAccount: 'ще немає акаунта?',
+    forgotLink: 'забув пароль',
+    forgotCta: 'надіслати',
+    forgotSent: 'якщо така пошта в нас є — лист уже летить. посилання живе годину.',
+    resetCta: 'зберегти пароль',
+    backToLogin: 'назад до входу',
+    verifySent: (email) => `лист пішов на ${email}. посилання живе добу.`,
+    verifyNotSent: 'лист не надіслався. спробуй ще раз за хвилину.',
+    verifyCheck: 'я підтвердив',
+    verifyResend: 'надіслати ще раз',
+    verifyResent: 'надіслав ще раз. перевір спам також.',
+    verifyFixEmail: 'не та пошта? виправити',
+    verifyStillNot: 'поки що не бачу підтвердження. перевір спам або натисни «надіслати ще раз».',
+    otherAccount: 'увійти в інший акаунт',
+    verified: 'пошта підтверджена. гуляємо!',
+    linkExpired: 'це посилання вже не діє. попроси нове.',
+    working: 'секунду…',
+    logout: 'вийти з акаунта',
+    errors: {
+      generic: 'щось пішло не так. спробуй ще раз.',
+      nickname_invalid: 'нік: від 2 до 24 символів, літери й цифри.',
+      nickname_taken: 'такий нік уже є на мапі. вибери інший.',
+      email_invalid: 'це не схоже на пошту.',
+      email_taken: 'ця пошта вже зареєстрована — увійди.',
+      password_missing: 'потрібен пароль.',
+      password_short: 'пароль закороткий: не менше 8 символів.',
+      password_long: 'пароль задовгий.',
+      consent_required: 'без згоди не вийде.',
+      species_invalid: 'пес чи кіт?',
+      pet_name_invalid: "ім'я улюбленця: до 40 символів.",
+      breed_invalid: 'порода: до 60 символів.',
+      bad_credentials: 'пошта або пароль не підходять.',
+      token_invalid: 'посилання пошкоджене.',
+      token_expired: 'це посилання вже не діє. попроси нове.',
+      resend_cooldown: 'зачекай хвилину перед наступним листом.',
+      already_registered: 'цей акаунт уже зареєстровано.',
+      sessions_unconfigured: 'вхід тимчасово недоступний.',
+      network: "немає зв'язку. перевір інтернет.",
+    },
   },
   hud: {
     happiness: 'радість',
@@ -851,6 +965,71 @@ const en: AppStrings = {
     chat: 'chat',
     spots: 'spots',
     home: 'home',
+  },
+  auth: {
+    registerAsk: 'sniff sniff! introductions first — who are you, and is there somebody with a tail?',
+    verifyAsk: 'i sent a letter. find it and tap the link — then we walk.',
+    loginAsk: 'welcome back. remind me who you are?',
+    forgotAsk: 'forgot the password? happens. tell me the e-mail — i will send a new one.',
+    resetAsk: 'pick a new password. remember it this time.',
+    nicknameLabel: 'your nickname',
+    nicknamePlaceholder: 'what to call you on the map',
+    petSection: 'your pet (if any)',
+    speciesDog: 'dog',
+    speciesCat: 'cat',
+    petNameLabel: 'name',
+    petNamePlaceholder: 'Mukhtar',
+    breedLabel: 'breed',
+    breedPlaceholder: 'mutt is a breed too',
+    emailLabel: 'e-mail',
+    emailPlaceholder: 'you@mail.com',
+    passwordLabel: 'password',
+    passwordPlaceholder: 'at least 8 characters',
+    newPasswordLabel: 'new password',
+    consent:
+      'i agree that шукайпес keeps my nickname, e-mail and walking routes, because it does not work otherwise',
+    registerCta: 'sign up',
+    haveAccount: 'already have an account?',
+    loginCta: 'log in',
+    noAccount: 'no account yet?',
+    forgotLink: 'forgot password',
+    forgotCta: 'send',
+    forgotSent: 'if we know that e-mail, the letter is on its way. the link lives for an hour.',
+    resetCta: 'save password',
+    backToLogin: 'back to login',
+    verifySent: (email) => `the letter went to ${email}. the link lives for a day.`,
+    verifyNotSent: 'the letter did not send. try again in a minute.',
+    verifyCheck: 'i confirmed it',
+    verifyResend: 'send again',
+    verifyResent: 'sent again. check spam too.',
+    verifyFixEmail: 'wrong e-mail? fix it',
+    verifyStillNot: 'no confirmation yet. check spam, or tap "send again".',
+    otherAccount: 'log into another account',
+    verified: 'e-mail confirmed. let us walk!',
+    linkExpired: 'this link no longer works. ask for a new one.',
+    working: 'one second…',
+    logout: 'log out',
+    errors: {
+      generic: 'something went wrong. try again.',
+      nickname_invalid: 'nickname: 2 to 24 characters, letters and digits.',
+      nickname_taken: 'that nickname is already on the map. pick another.',
+      email_invalid: 'that does not look like an e-mail.',
+      email_taken: 'that e-mail is already registered — log in.',
+      password_missing: 'a password is needed.',
+      password_short: 'password too short: at least 8 characters.',
+      password_long: 'password too long.',
+      consent_required: 'it does not work without consent.',
+      species_invalid: 'dog or cat?',
+      pet_name_invalid: 'pet name: up to 40 characters.',
+      breed_invalid: 'breed: up to 60 characters.',
+      bad_credentials: 'e-mail or password do not match.',
+      token_invalid: 'the link is damaged.',
+      token_expired: 'this link no longer works. ask for a new one.',
+      resend_cooldown: 'wait a minute before the next letter.',
+      already_registered: 'this account is already registered.',
+      sessions_unconfigured: 'login is temporarily unavailable.',
+      network: 'no connection. check the internet.',
+    },
   },
   hud: {
     happiness: 'happiness',

@@ -888,3 +888,57 @@ refused (78 resolutions → 72, all ten bad ones gone). And a name shared by
 a station and its district is one place at two scales, not a namesake
 pair, while «метро X» names a station and only a station: a station we
 do not have is a refusal, not a square of the same name.
+
+### D-69 · Registration at the door, for everybody ✅
+*Decided 12 Sep · `server/src/lib/accountPolicy.ts`, `server/src/routes/auth.ts`, `app/components/ui/AccountDoor.tsx`*
+
+Every account gets a nickname, an e-mail and a password before the map
+opens — PWA and Mini App alike, and the ~543 legacy rows too. The owner
+chose the strict shape over the two softer ones on the table (progressive
+registration after the first walk; Telegram users exempt because Telegram
+already signs who they are), and chose it knowing the cost at an open
+launch: a form in front of the dog.
+
+What the decision does NOT change is the account itself. Identity still
+arrives as a device id or a Telegram signature and still resolves a
+`users` row on first contact; registration writes onto that row.
+Nobody's dog, ground or memory is behind the door — the door is a screen
+they must fill, and D-35 (an existing account is never lost to a gate)
+holds. The three consequences worth carrying:
+
+- **The API enforces it, not only the UI.** Once identified, every
+  route but `/auth/*` answers 403 «registration required» until the
+  account is through — stamped into the session slip as a `registered`
+  claim so the hot path still costs no database read. A slip minted
+  before registration is replaced by the one `/auth/register`,
+  `/auth/verify` and `/auth/me` hand back.
+- **A login outlives the day.** An e-mail login leaves a 90-day refresh
+  token (hashed, revocable, `auth_sessions`) behind; the client trades
+  it for a fresh slip instead of falling back to the device id, which
+  would have quietly logged the person into an anonymous account. A
+  password reset revokes every one of them.
+- **Verification is required only when it is possible.** With no mail
+  sender configured (`RESEND_API_KEY`, `EMAIL_FROM`) nobody could ever
+  satisfy it, so `doorFor` stops asking, loudly, at boot. Two switches
+  exist for launch day: `REGISTRATION_REQUIRED=0` takes the door down
+  entirely; `EMAIL_VERIFY_REQUIRED=0` keeps it up without the link.
+
+The pet is optional (helpers without a pet skip it) and, when given,
+names the companion. Passwords are scrypt from Node's own crypto — no
+native module in the Fly image. Nickname uniqueness is on a key the
+application folds (NFKC + lowercase), because whether «Оля» and «оля»
+are one person must not depend on the database's locale, and the local
+Postgres this was tested on folds nothing outside ASCII.
+
+Social logins were considered and parked: the Telegram Login Widget is
+the one worth adding (same bot, same HMAC, merges the PWA and Mini App
+rows for free); Google refuses OAuth inside Telegram's webview
+(`disallowed_useragent`); Facebook needs Meta review and Instagram no
+longer offers a consumer sign-in at all.
+
+Checked end to end against a local Postgres — the door, both
+registration errors and the happy path, verification by link from a
+different device, login on a second device, refresh, logout, forgot and
+reset, the spent-link and wrong-password cases, and a legacy row keeping
+its id and points — and by `check:accounts` for the pure half.
+
