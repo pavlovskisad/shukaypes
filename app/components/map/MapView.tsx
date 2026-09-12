@@ -45,6 +45,8 @@ import { CollectBurst } from './CollectBurst';
 import { createDepthFogLayer, DEPTH_FOG_LAYER_ID } from './fogLayer';
 import { THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID } from './layerIds';
 import { webgl2Supported } from '../../utils/webgl';
+import { petPhotoAt } from '../../utils/petPhoto';
+import { CARD_W } from '../ui/CardStack';
 import { easeCamera } from './camera';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
@@ -1097,12 +1099,30 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // dedupes by URL across re-renders. window.Image (not the RN
   // <Image> component imported up top) is the browser's HTMLImageElement
   // constructor which kicks off a network fetch when src is set.
+  //
+  // ONLY THE TWO NEIGHBOURS, AT CARD SIZE. This used to preload EVERY
+  // pet's photo at the ad's full 1200px render the moment any card
+  // opened — 184 photographed pets × 65–122 KB, up to 20 MB on mobile
+  // data, for swipes that reach two of them. The order is the one
+  // cycleSelectedDog walks (nearest first when we know where we are),
+  // so the photos that land in cache are the ones the next swipe shows.
   useEffect(() => {
     if (!selectedDogId || typeof window === 'undefined') return;
-    for (const d of lostDogs) {
-      if (d.photoUrl) {
+    const up = userPosRef.current;
+    const list = up
+      ? [...lostDogs].sort(
+          (a, b) =>
+            distanceMeters(up, a.lastSeen.position) - distanceMeters(up, b.lastSeen.position),
+        )
+      : lostDogs;
+    const idx = list.findIndex((d) => d.id === selectedDogId);
+    if (idx < 0 || list.length < 2) return;
+    const n = list.length;
+    for (const d of [list[(idx + 1) % n], list[(idx - 1 + n) % n]]) {
+      const src = petPhotoAt(d?.photoUrl, CARD_W);
+      if (src) {
         const img = new window.Image();
-        img.src = d.photoUrl;
+        img.src = src;
       }
     }
   }, [selectedDogId, lostDogs]);

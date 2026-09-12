@@ -1,4 +1,5 @@
 import { memo, useEffect, useRef, useState } from 'react';
+import { petPhotoAt } from '../../utils/petPhoto';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
@@ -209,7 +210,10 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
           <span style={{ position: 'absolute' }}>{emoji}</span>
           {photoUrl ? (
             <img
-              src={photoUrl}
+              // The disc's own size, not the ad's 1200px render — see
+              // utils/petPhoto.ts for the bytes. The selected pin grows
+              // and re-asks at its bigger size.
+              src={petPhotoAt(photoUrl, disc) ?? photoUrl}
               alt={name}
               draggable={false}
               referrerPolicy="no-referrer"
