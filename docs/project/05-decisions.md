@@ -955,7 +955,17 @@ is a `jumpTo`, and a `jumpTo` stops any ease); it now resets only
 padding that is there. When the account is
 through, the sheet closes, the camera settles back, and the same gate
 shows the four intents. A mail link opens the app already through.
-Logging out returns to the gate and the same question.
+Logging out returns to the gate and the same question — and, outside
+Telegram, ROTATES THE DEVICE ID: the device that registered *is* the
+account (its `x-device-id` maps to the registered row), so dropping the
+login alone put the person straight back in. The account is edited from
+the profile: a small «змінити» chip on the dog card opens the same paper
+with the door's fields (nickname, the pet — renaming the pet renames the
+companion), a password change that needs the current one and revokes
+every other login, and «вийти з акаунта» as a line at the bottom. The
+e-mail is not editable there: a new address would have to be verified
+again and the door would close behind the person, so that is its own
+flow, not yet built.
 
 The pet is optional (helpers without a pet skip it) and, when given,
 names the companion. Passwords are scrypt from Node's own crypto — no

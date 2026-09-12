@@ -19,7 +19,8 @@ import {
   storeSession,
 } from './session';
 import { clearAccount, getAccount, storeAccount } from './account';
-import { getDeviceId } from './deviceId';
+import { getDeviceId, rotateDeviceId } from './deviceId';
+import { isInTelegram } from './telegram';
 import { getInviteCode, clearInviteCode } from './invite';
 import { getDevKey } from './devUnlock';
 import { markInviteRequired, markRegistrationRequired } from '../stores/accessStore';
@@ -456,6 +457,8 @@ export interface RegisterInput {
   consent: true;
 }
 
+export type ProfileInput = Pick<RegisterInput, 'nickname' | 'petName' | 'petSpecies' | 'petBreed'>;
+
 interface LoginResponse {
   ok: true;
   session: string | null;
@@ -479,6 +482,14 @@ export const auth = {
     req<{ ok: true; emailSent: boolean; me: Me }>('/auth/register', {
       method: 'POST',
       body: JSON.stringify(input),
+    }),
+  // From the profile: the door's fields, changed later.
+  updateProfile: (input: ProfileInput) =>
+    req<{ ok: true; me: Me }>('/auth/profile', { method: 'POST', body: JSON.stringify(input) }),
+  changePassword: (current: string, next: string) =>
+    req<{ ok: true }>('/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({ current, next, refresh: getAccount()?.refresh }),
     }),
   // `{}` rather than no body: the wrapper sets a JSON content type on
   // every request, and Fastify refuses an empty body under it.
@@ -506,8 +517,13 @@ export const auth = {
         body: JSON.stringify({ token, password, deviceId: getDeviceId() }),
       }),
     ),
-  // Forget the login on this page. The device identity underneath
-  // comes back, and with the door up it is asked to register or log in.
+  // Forget the login on this page — AND who the device was. The device
+  // that registered IS the account (its x-device-id maps to the
+  // registered row), so dropping the login alone put the person
+  // straight back in; a new device id makes the page a stranger, and
+  // with the door up it is asked to log in. Inside Telegram the
+  // identity is Telegram's and cannot be rotated; there the item is
+  // not shown at all.
   logout: async () => {
     const account = getAccount();
     clearAccount();
@@ -518,6 +534,7 @@ export const auth = {
         body: JSON.stringify({ refresh: account.refresh }),
       }).catch(() => undefined);
     }
+    if (!isInTelegram()) rotateDeviceId();
   },
 };
 
