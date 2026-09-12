@@ -67,6 +67,7 @@ import {
 } from '../lib/authTokens.js';
 import { SESSION_ISSUE_HEADER, mintSession, type SessionVia } from '../lib/session.js';
 import { sendEmail } from '../services/email.js';
+import { fromProblem } from '../lib/mailFrom.js';
 import { resetMail, verifyMail } from '../services/authMail.js';
 
 type Log = Pick<FastifyBaseLogger, 'info' | 'warn'>;
@@ -232,6 +233,16 @@ const plugin: FastifyPluginAsync = async (app) => {
       { kind: 'auth_config' },
       '[auth] the door is up but no mail sender is configured (RESEND_API_KEY / EMAIL_FROM): ' +
         'registration will not require e-mail verification until it is',
+    );
+  }
+  // A sender Resend would refuse is found here, at boot, not by the
+  // first person to register. The value is an address, not a secret,
+  // and the one thing the operator needs to see to fix it.
+  const senderProblem = process.env.EMAIL_FROM ? fromProblem(process.env.EMAIL_FROM) : null;
+  if (senderProblem) {
+    app.log.error(
+      { kind: 'auth_config', emailFrom: process.env.EMAIL_FROM, problem: senderProblem },
+      '[auth] EMAIL_FROM cannot be sent from: every verification mail will fail',
     );
   }
 

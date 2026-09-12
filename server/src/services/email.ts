@@ -10,12 +10,17 @@
 //   EMAIL_FROM       "шукайпес <dog@your-domain>" — the sending
 //                    domain must be verified in Resend (SPF + DKIM),
 //                    which is why registration needs the real domain
-//                    and cannot go out from vercel.app.
+//                    and cannot go out from vercel.app. Parsed and
+//                    re-formatted by lib/mailFrom.ts on the way out:
+//                    a non-ASCII name is RFC 2047-encoded, stray
+//                    quotes are dropped, and a value that cannot be
+//                    parsed is named in the boot log (routes/auth.ts).
 //
 // EVERY failure is a return value, never a throw. Registration must
 // complete even when the mail bounces; the person can ask for a resend.
 
 import type { FastifyBaseLogger } from 'fastify';
+import { formatFrom, parseFrom } from '../lib/mailFrom.js';
 
 // Overridable so an end-to-end check can point it at a local capture
 // and read the links out of the mails it would have sent.
@@ -39,8 +44,9 @@ export function emailConfigured(): boolean {
 
 export async function sendEmail(mail: Mail, log: Log): Promise<SendResult> {
   const key = process.env.RESEND_API_KEY;
-  const from = process.env.EMAIL_FROM;
-  if (!key || !from) return { sent: false, reason: 'unconfigured' };
+  const parsed = parseFrom(process.env.EMAIL_FROM);
+  if (!key || !parsed) return { sent: false, reason: 'unconfigured' };
+  const from = formatFrom(parsed);
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), SEND_TIMEOUT_MS);
   try {

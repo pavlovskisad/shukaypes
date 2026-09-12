@@ -44,7 +44,7 @@ Deploying is a mutating action. Ask first.
 | `SESSION_SECRET` | **Set it now** (≥16 chars): since D-69 a slip can carry an e-mail login, and the key should not be the bot token's shadow. Was optional: key for session tokens (`lib/session.ts`, D-62). Unset, the key is derived from `TELEGRAM_BOT_TOKEN`, which is already the key Telegram's own signatures rest on, so tokens work with no action. Set it (≥16 chars) to rotate sessions independently of the bot token; changing it logs every phone out once, transparently — the next request re-identifies the old way. |
 | `INVITE_REQUIRED` | **Not set — the door is open.** With it set, new device ids must redeem an invite code; existing accounts are never gated. Mint codes with `pnpm --filter @shukajpes/server invite --new --uses=N --note=...` before flipping it. |
 | `CHAT_DISABLED` | Not set (chat on). The no-deploy kill switch for all model calls. |
-| `RESEND_API_KEY` + `EMAIL_FROM` | **Must be set before the door ships** (D-69). The verification and reset mails. `EMAIL_FROM` is `шукайпес <dog@<the domain>>` and the domain must be verified in Resend (SPF + DKIM records at the DNS host) — mail cannot go out from `vercel.app`. Without both the door still asks for registration but cannot require verification, and says so in the boot log. Resend's free tier caps at 100 mails a day, which launch day will exceed: budget the $20 plan. |
+| `RESEND_API_KEY` + `EMAIL_FROM` | **Must be set before the door ships** (D-69). The verification and reset mails. `EMAIL_FROM` is `шукайпес <dog@<the domain>>` (a non-ASCII name is RFC 2047-encoded on the way out, stray quotes dropped; a value that cannot be parsed is named in the boot log as `[auth] EMAIL_FROM cannot be sent from` and does not switch verification on) and the domain must be verified in Resend (SPF + DKIM records at the DNS host) — mail cannot go out from `vercel.app`. Without both the door still asks for registration but cannot require verification, and says so in the boot log. Resend's free tier caps at 100 mails a day, which launch day will exceed: budget the $20 plan. |
 | `APP_URL` | The public web app, where mail links point (`?verify=` / `?reset=`). Defaults to `https://shukaypes.vercel.app`; set it to the domain. |
 | `REGISTRATION_REQUIRED` / `EMAIL_VERIFY_REQUIRED` | Unset = strict (the door is up, the link is required when mail is configured). `0` on either is the launch-day switch: the first takes the door down, the second keeps it up without the link. |
 | Database | Supabase (Postgres). No direct credentials held in the repo. Reachable from the app host and from anywhere with the connection string. |
@@ -364,6 +364,24 @@ Found by a browser test noticing a stray 500 on `/favicon.ico` while
 checking something else. A regression shipped and fixed within the same
 session, recorded because the *shape* — a safety net masking the signal it
 sits in front of — is worth remembering.
+
+### 12 Sep 2026 — no verification mail came
+
+The door's first real registration: the verify screen said the letter
+went, no letter came. `fly logs` had the answer in one line —
+`kind:"email_send", status:422, "Invalid \`from\` field"`: Resend
+refused `EMAIL_FROM`, set as the docs said (`шукайпес <dog@…>`), and
+the value could not be read back to see why. Registration completed
+regardless (mail failure is a return value, by design), so the person
+was stuck on a verify screen that could never be passed.
+
+Two things fixed: the sender is now parsed and re-formatted before the
+call (`lib/mailFrom.ts` — non-ASCII name encoded, quotes dropped), and
+a value that cannot be parsed is named in the boot log and does NOT
+switch verification on. The lesson is older than this incident: a
+config value that a vendor validates must be validated at boot, where
+the operator is looking, not at the first request, where a stranger
+is.
 
 ## Standing rules
 

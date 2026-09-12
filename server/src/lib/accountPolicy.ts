@@ -29,6 +29,8 @@
 // because nobody could ever satisfy it. That case is logged loudly at
 // boot (routes/auth.ts) and the door falls back to registration only.
 
+import { parseFrom } from './mailFrom.js';
+
 export type PetSpecies = 'dog' | 'cat';
 
 export interface DoorFacts {
@@ -48,8 +50,12 @@ export function registrationRequired(): boolean {
   return flag('REGISTRATION_REQUIRED', true);
 }
 
+// Configured means SENDABLE: a key, and a sender Resend would take.
+// A sender it would refuse (see lib/mailFrom.ts) must not switch
+// verification on, or nobody could ever verify — the boot log names
+// the bad value instead.
 export function mailConfigured(): boolean {
-  return Boolean(process.env.RESEND_API_KEY && process.env.EMAIL_FROM);
+  return Boolean(process.env.RESEND_API_KEY) && parseFrom(process.env.EMAIL_FROM) !== null;
 }
 
 /** Verification is required only when it is both wanted and possible. */
