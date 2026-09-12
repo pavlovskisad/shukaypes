@@ -9,9 +9,11 @@
 // THE DOOR. Registration is required for everybody (D-69, decided by
 // the owner on 12 Sep): the app opens on the registration screen until
 // the account carries a nickname, an e-mail and a password, and the
-// API refuses everything but /auth/* until then. That applies to the
-// ~543 legacy accounts too — but as a screen they must fill, never as
-// a lost account. Their row is the one that gets registered.
+// API refuses everything but /auth/* until then. A row created before
+// registration (first contact happens before the form) is the row that
+// gets registered, never replaced. The pre-door accounts themselves are
+// wiped at rollout (db/wipe-users.ts) — the owner's call, no real users
+// yet — so every account in the table has been through this policy.
 //
 // TWO SWITCHES, both defaulting to the strict side, both there so a
 // launch-day mail outage is a config change and not a redeploy:

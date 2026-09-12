@@ -893,18 +893,27 @@ do not have is a refusal, not a square of the same name.
 *Decided 12 Sep · `server/src/lib/accountPolicy.ts`, `server/src/routes/auth.ts`, `app/components/ui/AccountDoor.tsx`*
 
 Every account gets a nickname, an e-mail and a password before the map
-opens — PWA and Mini App alike, and the ~543 legacy rows too. The owner
-chose the strict shape over the two softer ones on the table (progressive
-registration after the first walk; Telegram users exempt because Telegram
-already signs who they are), and chose it knowing the cost at an open
-launch: a form in front of the dog.
+opens — PWA and Mini App alike. The owner chose the strict shape over
+the two softer ones on the table (progressive registration after the
+first walk; Telegram users exempt because Telegram already signs who
+they are), and chose it knowing the cost at an open launch: a form in
+front of the dog.
 
-What the decision does NOT change is the account itself. Identity still
+**And the table starts empty.** The ~543 rows that existed before the
+door were drive-by device ids with nothing real behind them, so rather
+than carry them across, they are wiped when the door ships
+(`wipe:users`, dry by default, `--apply` explicit) and everybody
+registers fresh. Pets and sightings are not the users' and stay; only
+their `reported_by` / `reporter_id` link goes (ON DELETE SET NULL). The
+multiplayer bots are kept so day one has a populated map.
+
+What the decision does NOT change is the mechanism. Identity still
 arrives as a device id or a Telegram signature and still resolves a
-`users` row on first contact; registration writes onto that row.
-Nobody's dog, ground or memory is behind the door — the door is a screen
-they must fill, and D-35 (an existing account is never lost to a gate)
-holds. The three consequences worth carrying:
+`users` row on first contact — minutes before the form is filled — and
+registration writes onto that row, so nothing collected before the door
+is lost. D-35 (an existing account is never lost to a gate) still holds
+for every row created from here on. The three consequences worth
+carrying:
 
 - **The API enforces it, not only the UI.** Once identified, every
   route but `/auth/*` answers 403 «registration required» until the
@@ -939,6 +948,9 @@ longer offers a consumer sign-in at all.
 Checked end to end against a local Postgres — the door, both
 registration errors and the happy path, verification by link from a
 different device, login on a second device, refresh, logout, forgot and
-reset, the spent-link and wrong-password cases, and a legacy row keeping
-its id and points — and by `check:accounts` for the pure half.
+reset, the spent-link and wrong-password cases, and an unregistered row
+keeping its id and points through registration — and by
+`check:accounts` for the pure half. The wipe was run on the same local
+database: pets and sightings survived with their reporter nulled, the
+bot row survived, everything owned by the users went with them.
 

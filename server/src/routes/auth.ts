@@ -5,9 +5,12 @@
 // signature resolves a `users` row on first contact (auth.ts). What
 // this file adds is the ACCOUNT on top of that row: a nickname, a pet,
 // an e-mail and a password. Registering never creates a second row;
-// it writes onto the one the person already walks with, so the ~543
-// legacy accounts keep their dog, their ground and their companion's
-// memory when they meet the door.
+// it writes onto the one the person already walks with — the row a
+// device was given on first contact, minutes or days before it
+// registers — so nothing collected before the door is lost. (The
+// accounts that predate the door itself are wiped at rollout by
+// db/wipe-users.ts, by the owner's decision: there were no real users
+// to carry.)
 //
 // TWO KINDS OF ROUTE, and the auth hook treats them differently:
 //

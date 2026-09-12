@@ -78,8 +78,9 @@ async function resolveByDeviceId(
   // EVERY EXISTING ACCOUNT RETURNS HERE, unconditionally. No invite
   // check, no flag, nothing added to this branch — see services/invites.ts
   // for why. Whatever changes below, this line must keep meaning "you
-  // already have an account, come in". (The DOOR is not this: a legacy
-  // row keeps its account and is asked to register it — see D-69.)
+  // already have an account, come in". (The DOOR is not this: a row
+  // that has not registered keeps its account and is asked to register
+  // it — see D-69.)
   if (existing) return resolved(existing);
 
   // Past this point we are creating an account, which is the only thing
@@ -225,11 +226,11 @@ function issueSession(
 // is configured) — D-69. A 403 with this text, like the invite gate's,
 // is a state for the client to draw, not a fault.
 //
-// The account itself is never touched here: a legacy row that meets
-// the door keeps its id, its dog and its ground, and /auth/register
-// writes onto that same row. The invariant that an existing account is
-// never LOST to a gate (D-35) holds; what changed is that it must be
-// finished before the map opens.
+// The account itself is never touched here: a row that meets the door
+// keeps its id, its dog and its ground, and /auth/register writes onto
+// that same row. The invariant that an existing account is never LOST
+// to a gate (D-35) holds; what changed is that it must be finished
+// before the map opens.
 function passDoor(path: string | undefined, registered: boolean): void {
   if (registered) return;
   if (!registrationRequired()) return;

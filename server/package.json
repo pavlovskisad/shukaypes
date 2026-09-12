@@ -57,7 +57,8 @@
     "judge:pins": "tsx src/db/judge-pins.ts",
     "probe:location-text": "tsx src/db/probe-location-text.ts",
     "check:resolve-place": "tsx src/pipeline/resolvePlace.check.ts",
-    "check:accounts": "tsx src/lib/accounts.check.ts"
+    "check:accounts": "tsx src/lib/accounts.check.ts",
+    "wipe:users": "tsx src/db/wipe-users.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",

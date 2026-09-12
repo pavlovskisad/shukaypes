@@ -190,7 +190,7 @@ function pickScreen(me: Me | null, resetToken: string | null, prefer: 'login' | 
   return 'register';
 }
 
-// A legacy account's placeholder name is not a nickname anybody chose.
+// The placeholder a row gets on first contact is not a nickname anybody chose.
 function suggestedNickname(me: Me | null): string {
   const n = me?.nickname ?? '';
   return /^walker-/.test(n) ? '' : n;

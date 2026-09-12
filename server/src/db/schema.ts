@@ -37,7 +37,7 @@ export const users = pgTable('users', {
   telegramFirstName: text('telegram_first_name'),
   telegramPhotoUrl: text('telegram_photo_url'),
   // The account on top of the identity (migration 0042). All nullable:
-  // legacy rows have none of it and keep their row. `registered_at`
+  // a row exists before it registers. `registered_at`
   // is what opens the door (lib/accountPolicy.ts); `email_verified_at`
   // is required too when a mail sender is configured. Uniqueness on
   // lower(email), and on lower(username) among registered rows only,
@@ -52,7 +52,7 @@ export const users = pgTable('users', {
   petSpecies: text('pet_species'), // dog | cat
   petBreed: text('pet_breed'),
   // `username`, folded by foldNickname() in lib/accountPolicy.ts, for
-  // the uniqueness index — set at registration, null on legacy rows.
+  // the uniqueness index — set at registration, null before it.
   nicknameKey: text('nickname_key'),
   registeredAt: timestamp('registered_at', { withTimezone: true }),
   consentAt: timestamp('consent_at', { withTimezone: true }),

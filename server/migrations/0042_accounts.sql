@@ -5,21 +5,21 @@
 -- against a stale baseline and would emit ADD COLUMNs for columns that
 -- already exist in production.
 --
--- ADDITIVE AND NULLABLE, every column. The ~543 rows that exist today
--- authenticate by a device id or a Telegram signature and have none of
--- these; they keep working exactly as before at the database layer.
--- What changes for them is the DOOR (auth.ts): until a row carries
--- registered_at (and, when a mail sender is configured,
--- email_verified_at) the app shows the registration screen and the
--- API refuses everything but /auth/*. The row itself is never
--- replaced — registering ATTACHES an email to the account the person
--- already walks with, so their dog, ground and memory come along.
+-- ADDITIVE AND NULLABLE, every column. A row is still created on first
+-- contact by a device id or a Telegram signature, before any of these
+-- are known; the DOOR (auth.ts) then shows the registration screen and
+-- refuses everything but /auth/* until the row carries registered_at
+-- (and, when a mail sender is configured, email_verified_at). The row
+-- itself is never replaced — registering ATTACHES an email to the
+-- account the device already has. The accounts that predate the door
+-- are wiped at rollout (db/wipe-users.ts): the owner's decision, there
+-- being no real users to carry.
 --
--- Uniqueness on lower(email) is partial so the legacy rows, all NULL,
+-- Uniqueness on lower(email) is partial so unregistered rows, all NULL,
 -- do not collide. A nickname stays in `username` (it already feeds the
 -- leaderboard and rival territory); it becomes unique among registered
--- accounts only, because hundreds of legacy rows share `walker-xxxxxx`
--- shapes and were never asked to be distinct. The uniqueness key is
+-- accounts only, because unregistered rows carry a generated
+-- `walker-xxxxxx` placeholder nobody chose. The uniqueness key is
 -- `nickname_key`, folded by the APPLICATION (NFKC + lowercase): a
 -- lower() index would fold «Оля» and «оля» together on one database
 -- locale and not on another, and this must not depend on which.
