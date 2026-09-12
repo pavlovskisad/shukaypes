@@ -151,10 +151,24 @@ export function Companion({
   const door = useAccessStore((s) => s.door);
   const openDoorSheet = useAccessStore((s) => s.openDoorSheet);
   const authGate = gateOpen && door !== 'open';
-  // While the account sheet is up the dog is IN it, sitting in the
-  // paper's corner. One dog: the marker goes quiet and invisible until
-  // the sheet closes and the dog is back here.
+  // While the account sheet is up the dog stays exactly where it is —
+  // the CAMERA moves so it sits high on screen with the paper below
+  // (MapView's framing effect) — and it says the line for whichever
+  // screen the sheet is on. One dog, one bubble, no second copy in the
+  // paper. The answers under it are put away until the sheet closes.
   const sheetUp = useAccessStore((s) => s.doorSheet != null);
+  const doorScreen = useAccessStore((s) => s.doorScreen);
+  const sheetLine = !sheetUp
+    ? null
+    : doorScreen === 'login'
+      ? t.auth.loginAsk
+      : doorScreen === 'verify'
+        ? t.auth.verifyAsk
+        : doorScreen === 'forgot' || doorScreen === 'forgotSent'
+          ? t.auth.forgotAsk
+          : doorScreen === 'reset'
+            ? t.auth.resetAsk
+            : t.auth.registerAsk;
   // AT THE GATE, THE DOG CANNOT BE HIDDEN.
   //
   // `hidden` is the off-screen rule: when the dog leaves the viewport
@@ -872,7 +886,7 @@ export function Companion({
   // bark above them would read as nonsense. At the gate it also outranks
   // `hideBubble`, because there the question is the screen.
   const activeBubble = sheetUp
-    ? null
+    ? sheetLine
     : authGate
       ? door === null
         ? null
@@ -955,8 +969,8 @@ export function Companion({
           // position can't float the dog in the sky at steep pitch —
           // except at the gate, where the dog is the whole interface.
           // See offscreenHidden.
-          visibility: offscreenHidden || sheetUp ? 'hidden' : 'visible',
-          pointerEvents: offscreenHidden || sheetUp ? 'none' : 'auto',
+          visibility: offscreenHidden ? 'hidden' : 'visible',
+          pointerEvents: offscreenHidden ? 'none' : 'auto',
         }}
       >
         {/* Pixel-art companion — 64×64 sprite scaled 2× = 128px on

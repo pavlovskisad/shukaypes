@@ -16,6 +16,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { DEV_TOOLS } from '../../constants/devTools';
 import { useGameStore } from '../../stores/gameStore';
+import { useAccessStore } from '../../stores/accessStore';
 import { MapContext } from './MapContext';
 import {
   LIGHT_PALETTE,
@@ -1510,6 +1511,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // there is nothing to fight over. Holding on it was actively wrong:
   // explore opens with the ring up, so the camera stood still for the
   // whole first stretch of every walk.
+  //
+  // THE ACCOUNT SHEET (D-69) IS in the list: its framing eases the dog
+  // to the upper part of the screen with an offset (see the menu-camera
+  // effect below), and a follow tick would put the dog straight back in
+  // the centre, under the paper.
+  const doorSheetUp = useAccessStore((s) => s.doorSheet != null);
   const flatCamHeld =
     !onMapScreen ||
     !!selectedDogId ||
@@ -1518,7 +1525,8 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     lostPinning ||
     sniffActive ||
     aboutOpen ||
-    lostFlowOpen;
+    lostFlowOpen ||
+    doorSheetUp;
   const flatCamHeldRef = useRef(flatCamHeld);
   flatCamHeldRef.current = flatCamHeld;
   // When the camera is next allowed to move itself. Pushed forward by every
@@ -2715,23 +2723,34 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // clears the ring + HUD; 'center' (later taps) just centres it. On
   // close, settle the dog back to centre. easeTo(center=companion,
   // offset:[0,N]) lands the dog N px below the viewport centre.
+  //
+  // THE ACCOUNT SHEET (D-69) borrows this framing: while it is up the
+  // dog is eased to the upper part of the screen — the same dog, on the
+  // same map, not a copy in the paper — so the sheet has the lower part
+  // and the dog's bubble still has headroom. `offset` is what moves it:
+  // a negative y lands the dog that many pixels ABOVE the viewport
+  // centre. Sized from the viewport so it holds on a short phone and a
+  // tall one alike; a fixed 200 was a third of one screen and a sixth
+  // of another.
   const menuWasOpenRef = useRef(false);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !companionPos) return;
     const c: [number, number] = [companionPos.lng, companionPos.lat];
+    const h = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const offset: [number, number] = doorSheetUp ? [0, -Math.round(h * 0.2)] : [0, 0];
     // Both modes just centre the dog now — there's room for the
     // explainer bubble above the ring at the default centre, so we no
     // longer drop the dog lower for it. (menuCamera keeps the two
     // values only so the explainer bubble can still be told apart.)
-    if (menuCamera) {
+    if (menuCamera || doorSheetUp) {
       menuWasOpenRef.current = true;
-      easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
+      easeCamera(map, 'short', { center: c, offset, duration: 320 });
     } else if (menuWasOpenRef.current) {
       menuWasOpenRef.current = false;
       easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
     }
-  }, [menuCamera, companionPos?.lat, companionPos?.lng]);
+  }, [menuCamera, doorSheetUp, companionPos?.lat, companionPos?.lng]);
 
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null

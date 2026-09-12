@@ -1,12 +1,15 @@
 // THE DOOR. Registration before the map, for everybody — D-69.
 //
-// A sheet over the map, not a page instead of it. The dog asks «ми
-// знайомі?» at the gate (Companion.tsx) and the answer opens this on
-// login or registration; the dog pops into the corner of the paper and
-// keeps talking from there. When the account is through the sheet
-// closes on its own and the dog is back at the gate with the four
-// intents. Five screens on one sheet of paper, because they are one
-// conversation with the dog and not five pages:
+// A popup in the scene, not a page instead of it and not a dimmed
+// modal over it. The dog asks «ми знайомі?» at the gate (Companion.tsx)
+// and the answer opens this on login or registration; the map eases so
+// the dog sits high on screen (MapView) and the paper takes the lower
+// part, while the dog — the same dog, on the map — says the line for
+// whichever screen is showing (doorScreen in the access store). When
+// the account is through the sheet closes on its own and the dog is
+// back at the gate with the four intents. Five screens on one sheet of
+// paper, because they are one conversation with the dog and not five
+// pages:
 //
 //   register   nickname, the pet (optional), e-mail, password, consent
 //   verify     "the letter went to ol***@…" — check again, resend, fix
@@ -37,32 +40,34 @@ import { SURFACE } from '../../constants/surface';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { HandDrawnFrame } from './HandDrawn';
-import { DogSprite } from '../map/DogSprite';
 
 type Screen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset';
 
-// The dimmed map behind, the paper in front. Same backdrop as the
-// lost-pet sheet, so the two read as one kind of thing.
+// The map stays as it is — no backdrop, no dimming, touches outside
+// the paper reach the map. The paper hangs from the bottom edge and
+// takes at most the lower ~58% of the screen, which is what the dog's
+// framing leaves it (MapView eases the dog to ~30% from the top); a
+// taller form scrolls inside its own paper.
 const OVERLAY: CSSProperties = {
   position: 'fixed',
   inset: 0,
-  overflowY: 'auto',
-  background: 'rgba(20,20,15,0.45)',
+  pointerEvents: 'none',
   fontFamily: SYSTEM_FONT,
   color: colors.black,
-  WebkitOverflowScrolling: 'touch',
   zIndex: Z.MODAL_GLOBAL,
 };
 
 const COLUMN: CSSProperties = {
+  position: 'absolute',
+  left: S.m,
+  right: S.m,
+  bottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.m}px)`,
   maxWidth: 440,
   margin: '0 auto',
-  padding: `calc(env(safe-area-inset-top, 0px) + ${S.xl}px) ${S.m}px calc(env(safe-area-inset-bottom, 0px) + ${S.xxl}px)`,
-  boxSizing: 'border-box',
-  minHeight: '100%',
+  maxHeight: '58vh',
   display: 'flex',
   flexDirection: 'column',
-  justifyContent: 'center',
+  pointerEvents: 'auto',
 };
 
 const PAPER: CSSProperties = {
@@ -72,6 +77,9 @@ const PAPER: CSSProperties = {
   border: '2px solid transparent',
   boxShadow: SURFACE.lift,
   padding: S.l,
+  overflowY: 'auto',
+  WebkitOverflowScrolling: 'touch',
+  minHeight: 0,
 };
 
 const FIELD_PAPER: CSSProperties = {
@@ -166,41 +174,6 @@ function Secondary({ label, seed, onClick }: { label: string; seed: string; onCl
       <HandDrawnFrame seed={seed} radius={R.button} />
       {label}
     </button>
-  );
-}
-
-// The dog and its line, above the paper. The dog POPS into its corner
-// — the same overshoot the gate's answers arrive with — because it has
-// just left the map to sit here, and a sprite that simply appears reads
-// as a second dog.
-function Ask({ line }: { line: string }) {
-  return (
-    <div style={{ display: 'flex', alignItems: 'flex-end', gap: S.m, marginBottom: S.l }}>
-      <style>{`
-        @keyframes door-dog-pop {
-          0%   { transform: scale(0.4) translateY(24px); opacity: 0; }
-          100% { transform: scale(1) translateY(0); opacity: 1; }
-        }
-      `}</style>
-      <div style={{ flexShrink: 0, animation: 'door-dog-pop 420ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
-        <DogSprite anim="sitting" facingLeft={false} scale={2} />
-      </div>
-      <div
-        style={{
-          position: 'relative',
-          background: SURFACE.fill,
-          borderRadius: R.card,
-          border: '2px solid transparent',
-          padding: `${S.m}px ${S.l}px`,
-          fontSize: TYPE.body,
-          lineHeight: 1.35,
-          boxShadow: SURFACE.shadow,
-        }}
-      >
-        <HandDrawnFrame seed="door-bubble" radius={R.card} />
-        {line}
-      </div>
-    </div>
   );
 }
 
@@ -364,21 +337,15 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
   const consentOk = consent;
   const canRegister = nickname.trim().length >= 2 && email.includes('@') && password.length >= 8 && consentOk;
 
-  const ask =
-    screen === 'register'
-      ? t.registerAsk
-      : screen === 'verify'
-        ? t.verifyAsk
-        : screen === 'login'
-          ? t.loginAsk
-          : screen === 'reset'
-            ? t.resetAsk
-            : t.forgotAsk;
+  // The dog on the map says the line for this screen (Companion.tsx).
+  const setDoorScreen = useAccessStore((s) => s.setDoorScreen);
+  useEffect(() => {
+    setDoorScreen(screen);
+  }, [screen, setDoorScreen]);
 
   return createPortal(
     <div style={OVERLAY}>
       <div style={COLUMN}>
-        <Ask line={ask} />
         <form style={PAPER} onSubmit={(e) => e.preventDefault()} autoComplete="on">
           <HandDrawnFrame seed={`door-${screen}`} radius={R.card} />
 

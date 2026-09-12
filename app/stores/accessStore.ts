@@ -45,6 +45,9 @@ interface AccessState {
   // while it is closed. The dog's two answers at the gate set it; the
   // door opening clears it.
   doorSheet: 'register' | 'login' | 'verify' | 'reset' | null;
+  // Which of the sheet's screens is showing, so the map's dog can say
+  // the line for it — the words come out of the dog, not the paper.
+  doorScreen: DoorScreen | null;
   setMe: (me: Me | null) => void;
   // The server could not be asked (offline, a deploy). The app behaves
   // as before the door existed; a 403 later nudges a re-read.
@@ -52,10 +55,13 @@ interface AccessState {
   nudgeDoor: () => void;
   openDoorSheet: (s: 'register' | 'login' | 'verify' | 'reset') => void;
   closeDoorSheet: () => void;
+  setDoorScreen: (s: DoorScreen | null) => void;
   setResetToken: (t: string | null) => void;
   setDoorPrefer: (p: 'login' | null) => void;
   setDoorNotice: (n: string | null) => void;
 }
+
+export type DoorScreen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset';
 
 export const useAccessStore = create<AccessState>((set) => ({
   inviteRequired: false,
@@ -67,6 +73,7 @@ export const useAccessStore = create<AccessState>((set) => ({
   doorPrefer: null,
   doorNotice: null,
   doorSheet: null,
+  doorScreen: null,
   setMe: (me) =>
     set((s) => ({
       me,
@@ -79,7 +86,8 @@ export const useAccessStore = create<AccessState>((set) => ({
   assumeOpen: () => set((s) => (s.door === null ? { door: 'open' } : {})),
   nudgeDoor: () => set((s) => ({ doorNudge: s.doorNudge + 1 })),
   openDoorSheet: (doorSheet) => set({ doorSheet }),
-  closeDoorSheet: () => set({ doorSheet: null }),
+  closeDoorSheet: () => set({ doorSheet: null, doorScreen: null }),
+  setDoorScreen: (doorScreen) => set({ doorScreen }),
   setResetToken: (resetToken) => set({ resetToken }),
   setDoorPrefer: (doorPrefer) => set({ doorPrefer }),
   setDoorNotice: (doorNotice) => set({ doorNotice }),
