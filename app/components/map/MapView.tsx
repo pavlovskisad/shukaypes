@@ -196,6 +196,11 @@ const GAME_PITCH = 65;
 // are reachable at all. Named because the flat-camera modes below drop the
 // cap to zero and have to be able to put it back.
 const MAX_PITCH = 80;
+// After a WebGL context loss, how long to wait for the browser to restore
+// it before rebuilding the map anyway. iOS usually restores within a frame
+// of the page coming back to the foreground; a loss with no restore is a
+// dead canvas, and the user would otherwise stare at it for good.
+const CONTEXT_RESTORE_WAIT_MS = 4000;
 
 // ── THE FLAT GROUND CAMERA: walks ('explore') and territory ('play') ──────
 //
@@ -414,7 +419,8 @@ function loadGameRender(): Promise<GameRenderModule | null> {
 }
 
 export default function MapViewWeb() {
-  const location = useLocation();
+  // GPS runs only while the map is the screen — see useLocation.
+  const location = useLocation(useGameStore((s) => s.currentScreen === 'map'));
   // A top-edge chip has to clear the iOS status bar (clock, signal,
   // battery) — taps inside that strip are intercepted by the system
   // (scroll-to-top), so a chip overlapping it feels dead. The HUD
@@ -2807,6 +2813,43 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // eslint-disable-next-line no-console
           console.error('[maplibre]', e?.error || e);
         });
+        // WEBGL CONTEXT LOSS. iOS drops a page's WebGL contexts under
+        // memory pressure and after a long spell in the background. On
+        // restore MapLibre re-applies its own style, but it destroys the
+        // custom layers and says so in a console warning: the buildings,
+        // both fogs and the territory heat would simply be missing from
+        // then on, with the map otherwise looking alive. Rather than
+        // re-adding each layer by hand in the middle of a half-restored
+        // map, the whole map is rebuilt through the same path a retry
+        // takes — construction, style, layers, markers — which is one
+        // code path already exercised. Deferred a tick so the rebuild
+        // never runs inside MapLibre's own event dispatch, and skipped
+        // if the map has already been replaced or unmounted. (F-7.)
+        let lostTimer: ReturnType<typeof setTimeout> | null = null;
+        const rebuild = () => {
+          if (lostTimer) {
+            clearTimeout(lostTimer);
+            lostTimer = null;
+          }
+          setTimeout(() => {
+            if (mapRef.current !== map) return;
+            try {
+              map.remove();
+            } catch {
+              /* the context is already gone; nothing to release */
+            }
+            mapRef.current = null;
+            setMapInstance(null);
+            setMapAttempt((n) => n + 1);
+          }, 0);
+        };
+        map.on('webglcontextlost', () => {
+          // eslint-disable-next-line no-console
+          console.warn('[maplibre] webgl context lost — waiting for restore');
+          if (lostTimer) clearTimeout(lostTimer);
+          lostTimer = setTimeout(rebuild, CONTEXT_RESTORE_WAIT_MS);
+        });
+        map.on('webglcontextrestored', rebuild);
         mapRef.current = map;
         map.on('style.load', () => {
           applyCrayonOverride(map, LIGHT_PALETTE, lang);
