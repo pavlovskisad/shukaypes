@@ -69,11 +69,13 @@ export const OVERLAY: CSSProperties = {
   zIndex: Z.MODAL_GLOBAL,
 };
 
+// The column the paper sits in. Where it hangs is the caller's: the
+// door puts it UNDER THE DOG (DOOR_COLUMN), the profile's edit sheet at
+// the bottom of the screen.
 export const COLUMN: CSSProperties = {
   position: 'absolute',
   left: S.m,
   right: S.m,
-  bottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.m}px)`,
   maxWidth: 440,
   margin: '0 auto',
   display: 'flex',
@@ -89,6 +91,18 @@ export const COLUMN: CSSProperties = {
 export const DOG_MIN_Y = 150;
 export const DOG_ROOM = DOG_MIN_Y + 40;
 
+// The door's paper hangs from just under the dog, not from the bottom
+// of the screen: a short form (login) at the bottom left a band of
+// empty map between the dog and the paper and sat on the browser's
+// toolbar, and the keyboard covers the lower half anyway. The dog is
+// framed at DOG_MIN_Y below the safe area; the paper starts DOG_ROOM
+// below it (MapView reads the paper's real top edge and puts the dog
+// 40 px above it, safe area included).
+export const DOOR_COLUMN: CSSProperties = {
+  ...COLUMN,
+  top: `calc(env(safe-area-inset-top, 0px) + ${DOG_ROOM}px)`,
+};
+
 export function useVisibleHeight(): number {
   const [h, setH] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800));
   useEffect(() => {
@@ -100,6 +114,10 @@ export function useVisibleHeight(): number {
   return h;
 }
 
+// NO overflow:hidden on the paper. It clips at the padding box, 2 px
+// inside the drawn line's own wobble, and cut the ink flat at every
+// corner — the «not nice borders» on the owner's phone. The scroll
+// container below clips its own content, rounded, and that is enough.
 export const PAPER: CSSProperties = {
   position: 'relative',
   background: SURFACE.fill,
@@ -109,7 +127,6 @@ export const PAPER: CSSProperties = {
   display: 'flex',
   flexDirection: 'column',
   minHeight: 0,
-  overflow: 'hidden',
 };
 
 // What scrolls (only when it must): the form, inside the paper, under
@@ -120,6 +137,7 @@ export const SCROLL: CSSProperties = {
   overflowY: 'auto',
   WebkitOverflowScrolling: 'touch',
   minHeight: 0,
+  borderRadius: R.card - 2,
   padding: `${S.s}px ${S.l}px ${S.m}px`,
 };
 
@@ -405,7 +423,12 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
 
   return createPortal(
     <div style={OVERLAY}>
-      <div style={{ ...COLUMN, maxHeight: visibleH - DOG_ROOM - S.m }}>
+      <div
+        style={{
+          ...DOOR_COLUMN,
+          maxHeight: `calc(${visibleH - DOG_ROOM - S.m}px - env(safe-area-inset-top, 0px))`,
+        }}
+      >
         <div style={PAPER} ref={paperRef}>
           <HandDrawnFrame seed={`door-${screen}`} radius={R.card} />
           <form style={SCROLL} onSubmit={(e) => e.preventDefault()} autoComplete="on">

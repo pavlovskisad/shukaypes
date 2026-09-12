@@ -157,7 +157,11 @@ function sampleRoundRect(
 
   const arc = (cx: number, cy: number, a0: number, a1: number) => {
     const len = Math.abs(a1 - a0) * rr;
-    const n = Math.max(2, Math.round(len / step));
+    // Never fewer than four points on a corner. The step is sized for
+    // the straight runs; on a pill-shaped field the whole quarter-arc
+    // is one step long, and two points through a spline is a bevel —
+    // the fields on the account sheet came out with pointed ends.
+    const n = Math.max(4, Math.round(len / step));
     for (let i = 0; i < n; i++) {
       const a = a0 + (a1 - a0) * (i / n);
       pts.push({

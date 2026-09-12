@@ -946,9 +946,14 @@ top of the VISIBLE height, measured, not `vh`, which on iOS Safari
 counts the space under the toolbars), the register form tightened so
 it fits without scrolling even with a pet named (name and breed share
 a row); only a form taller than that room scrolls, inside the paper
-under its drawn edge. The paper reports where its top edge is and the
-camera puts the dog in the middle of the strip above it, so the dog
-follows when the paper grows. The dog — the same dog, on the map —
+under its drawn edge. The paper hangs from just under the dog — 190 px
+below the safe area — not from the bottom of the screen, where a short
+login form left a band of empty map and sat on Safari's toolbar; the
+paper reports where its top edge is and the camera puts the dog 40 px
+above it. Its ink is not clipped by the paper (no `overflow: hidden`;
+the scroll container clips its own content, rounded), and a corner
+arc always gets at least four points, or a pill-shaped field comes out
+with pointed ends. The dog — the same dog, on the map —
 says the line for whichever screen is showing. The framing ease was being killed a few
 ms in by a padding reset on every spots update (MapLibre's `setPadding`
 is a `jumpTo`, and a `jumpTo` stops any ease); it now resets only

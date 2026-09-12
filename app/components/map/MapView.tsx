@@ -48,7 +48,7 @@ import { THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID } from './layerIds';
 import { webgl2Supported } from '../../utils/webgl';
 import { petPhotoAt } from '../../utils/petPhoto';
 import { CARD_W } from '../ui/CardStack';
-import { DOG_MIN_Y } from '../ui/AccountDoor';
+import { DOG_MIN_Y, DOG_ROOM } from '../ui/AccountDoor';
 import { easeCamera } from './camera';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
@@ -1519,14 +1519,15 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // the centre, under the paper.
   const doorSheetUp = useAccessStore((s) => s.doorSheet != null);
   // Where the sheet's paper begins (AccountDoor reports it; null until
-  // it has). The dog goes to the middle of the strip above the paper,
-  // but no higher than DOG_MIN_Y, so its bubble stays on screen. As an
-  // easeTo offset: how far from the viewport's centre.
+  // it has). The paper hangs DOG_ROOM below the safe area and the dog
+  // sits DOG_ROOM - DOG_MIN_Y above its edge — measured from the
+  // paper's real position, so the safe area is in the number without
+  // this code knowing it. As an easeTo offset: how far from the
+  // viewport's centre.
   const doorSheetTop = useAccessStore((s) => s.doorSheetTop);
   const doorOffset = (): [number, number] => {
     const h = typeof window !== 'undefined' ? window.innerHeight : 800;
-    const strip = doorSheetTop ?? h / 2;
-    const y = Math.max(DOG_MIN_Y, Math.round(strip / 2));
+    const y = doorSheetTop != null ? doorSheetTop - (DOG_ROOM - DOG_MIN_Y) : DOG_MIN_Y;
     return [0, y - Math.round(h / 2)];
   };
   const flatCamHeld =
