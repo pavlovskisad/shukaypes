@@ -339,6 +339,90 @@ const plugin: FastifyPluginAsync = async (app) => {
     return { ok: true, emailSent, me: buildMe(updated, viaOf(req)) };
   });
 
+  // ---- Editing, from the profile ----
+  //
+  // The same fields the door asked for, changeable later: the pet's
+  // name renames the companion, the nickname keeps its uniqueness. The
+  // e-mail is NOT changed here — a new address would have to be
+  // verified again and the door would close behind the person; that
+  // is its own flow, not a field on this form.
+  app.post<{ Body: { nickname?: unknown; petName?: unknown; petSpecies?: unknown; petBreed?: unknown } }>(
+    '/auth/profile',
+    limitAuth,
+    async (req, reply) => {
+      const user = await loadUser(req.userId);
+      if (!user) return fail(reply, 404, 'not_found');
+      if (!user.registeredAt) return fail(reply, 400, 'not_registered');
+      const body = req.body ?? {};
+      const nickname = normaliseNickname(body.nickname);
+      if (!nickname) return fail(reply, 400, 'nickname_invalid');
+      const petSpecies = body.petSpecies == null || body.petSpecies === '' ? null : normaliseSpecies(body.petSpecies);
+      if (body.petSpecies && !petSpecies) return fail(reply, 400, 'species_invalid');
+      const petName = body.petName ? normaliseShortText(body.petName, PET_NAME_MAX) : null;
+      if (body.petName && !petName) return fail(reply, 400, 'pet_name_invalid');
+      const petBreed = body.petBreed ? normaliseShortText(body.petBreed, BREED_MAX) : null;
+      if (body.petBreed && !petBreed) return fail(reply, 400, 'breed_invalid');
+
+      const nicknameKey = foldNickname(nickname);
+      const [nick] = await db
+        .select({ id: schema.users.id })
+        .from(schema.users)
+        .where(and(eq(schema.users.nicknameKey, nicknameKey), ne(schema.users.id, user.id)))
+        .limit(1);
+      if (nick) return fail(reply, 409, 'nickname_taken');
+
+      const [updated] = await db
+        .update(schema.users)
+        .set({ username: nickname, nicknameKey, petName, petSpecies, petBreed })
+        .where(eq(schema.users.id, user.id))
+        .returning();
+      if (!updated) return fail(reply, 500, 'update_failed');
+      if (petName) {
+        await db
+          .update(schema.companionState)
+          .set({ name: petName })
+          .where(eq(schema.companionState.userId, user.id));
+      }
+      req.log.info({ kind: 'auth_profile', user: user.id, hasPet: !!petName }, '[auth] profile edited');
+      return { ok: true, me: buildMe(updated, viaOf(req)) };
+    },
+  );
+
+  // A new password needs the current one. Every other login of the
+  // account is revoked; the one that asked (its refresh token in the
+  // body) stays in.
+  app.post<{ Body: { current?: unknown; next?: unknown; refresh?: unknown } }>(
+    '/auth/password',
+    limitAuth,
+    async (req, reply) => {
+      const user = await loadUser(req.userId);
+      if (!user) return fail(reply, 404, 'not_found');
+      if (!user.registeredAt || !user.passwordHash) return fail(reply, 400, 'not_registered');
+      const current = typeof req.body?.current === 'string' ? req.body.current : '';
+      const ok = await verifyPassword(current.slice(0, 200), user.passwordHash);
+      if (!ok) return fail(reply, 400, 'password_wrong');
+      const pwProblem = passwordProblem(req.body?.next);
+      if (pwProblem) return fail(reply, 400, `password_${pwProblem}`);
+      await db
+        .update(schema.users)
+        .set({ passwordHash: await hashPassword(req.body?.next as string) })
+        .where(eq(schema.users.id, user.id));
+      const keep = normaliseToken(req.body?.refresh);
+      await db
+        .update(schema.authSessions)
+        .set({ revokedAt: new Date() })
+        .where(
+          and(
+            eq(schema.authSessions.userId, user.id),
+            isNull(schema.authSessions.revokedAt),
+            ...(keep ? [ne(schema.authSessions.tokenHash, hashToken(keep))] : []),
+          ),
+        );
+      req.log.info({ kind: 'auth_password', user: user.id }, '[auth] password changed');
+      return { ok: true };
+    },
+  );
+
   app.post('/auth/resend', limitExpensive, async (req, reply) => {
     const user = await loadUser(req.userId);
     if (!user) return fail(reply, 404, 'not_found');

@@ -60,7 +60,7 @@ type Screen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset
 // `window.innerHeight` is the visible height. Read at mount and on
 // orientation change — not on every resize, or the keyboard opening
 // would shrink the paper under the person's thumb.
-const OVERLAY: CSSProperties = {
+export const OVERLAY: CSSProperties = {
   position: 'fixed',
   inset: 0,
   pointerEvents: 'none',
@@ -69,7 +69,7 @@ const OVERLAY: CSSProperties = {
   zIndex: Z.MODAL_GLOBAL,
 };
 
-const COLUMN: CSSProperties = {
+export const COLUMN: CSSProperties = {
   position: 'absolute',
   left: S.m,
   right: S.m,
@@ -89,7 +89,7 @@ const COLUMN: CSSProperties = {
 export const DOG_MIN_Y = 150;
 export const DOG_ROOM = DOG_MIN_Y + 40;
 
-function useVisibleHeight(): number {
+export function useVisibleHeight(): number {
   const [h, setH] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800));
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -100,7 +100,7 @@ function useVisibleHeight(): number {
   return h;
 }
 
-const PAPER: CSSProperties = {
+export const PAPER: CSSProperties = {
   position: 'relative',
   background: SURFACE.fill,
   borderRadius: R.card,
@@ -116,7 +116,7 @@ const PAPER: CSSProperties = {
 // the drawn edge. Tight rhythm on purpose — every 4 px here is 4 px of
 // map above the paper, and the register form with a pet named has six
 // fields to fit.
-const SCROLL: CSSProperties = {
+export const SCROLL: CSSProperties = {
   overflowY: 'auto',
   WebkitOverflowScrolling: 'touch',
   minHeight: 0,
@@ -131,7 +131,7 @@ const FIELD_PAPER: CSSProperties = {
   marginTop: 4,
 };
 
-const FIELD_INPUT: CSSProperties = {
+export const FIELD_INPUT: CSSProperties = {
   width: '100%',
   boxSizing: 'border-box',
   fontFamily: SYSTEM_FONT,
@@ -145,7 +145,7 @@ const FIELD_INPUT: CSSProperties = {
   display: 'block',
 };
 
-const LABEL: CSSProperties = {
+export const LABEL: CSSProperties = {
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.small,
   fontWeight: 700,
@@ -153,7 +153,7 @@ const LABEL: CSSProperties = {
   margin: `${S.s}px 0 0`,
 };
 
-const LINK: CSSProperties = {
+export const LINK: CSSProperties = {
   appearance: 'none',
   background: 'none',
   border: 'none',
@@ -166,21 +166,21 @@ const LINK: CSSProperties = {
   cursor: 'pointer',
 };
 
-const ERROR: CSSProperties = {
+export const ERROR: CSSProperties = {
   marginTop: S.m,
   fontSize: TYPE.small,
   fontWeight: 700,
   color: colors.red,
 };
 
-const NOTE: CSSProperties = {
+export const NOTE: CSSProperties = {
   marginTop: S.s,
   fontSize: TYPE.small,
   color: colors.grey,
   lineHeight: 1.4,
 };
 
-function Field({ seed, children }: { seed: string; children: ReactNode }) {
+export function Field({ seed, children }: { seed: string; children: ReactNode }) {
   return (
     <div style={FIELD_PAPER}>
       <HandDrawnFrame seed={seed} radius={R.chip} />
@@ -189,7 +189,7 @@ function Field({ seed, children }: { seed: string; children: ReactNode }) {
   );
 }
 
-function Primary({ label, disabled, onClick }: { label: string; disabled?: boolean; onClick: () => void }) {
+export function Primary({ label, disabled, onClick }: { label: string; disabled?: boolean; onClick: () => void }) {
   return (
     <button
       type="submit"
@@ -205,7 +205,7 @@ function Primary({ label, disabled, onClick }: { label: string; disabled?: boole
   );
 }
 
-function Secondary({ label, seed, onClick }: { label: string; seed: string; onClick: () => void }) {
+export function Secondary({ label, seed, onClick }: { label: string; seed: string; onClick: () => void }) {
   return (
     <button
       type="button"

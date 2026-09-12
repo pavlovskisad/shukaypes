@@ -14,6 +14,24 @@ function randomId(): string {
 
 let cached: string | null = null;
 
+/**
+ * Forget who this device was. A logout on the device that REGISTERED
+ * needs this: its x-device-id maps to the registered row, so clearing
+ * the login alone changes nothing and the person is straight back in.
+ * With a new id the page is a stranger to the server again — a fresh
+ * anonymous row at the door, where they log in by e-mail.
+ */
+export function rotateDeviceId(): string {
+  const id = randomId();
+  cached = id;
+  try {
+    if (typeof window !== 'undefined' && window.localStorage) window.localStorage.setItem(KEY, id);
+  } catch {
+    /* private mode: this page only */
+  }
+  return id;
+}
+
 export function getDeviceId(): string {
   if (cached) return cached;
   if (typeof window !== 'undefined' && window.localStorage) {

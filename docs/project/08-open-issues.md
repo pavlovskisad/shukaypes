@@ -343,7 +343,9 @@ exists. What remains of the finding is narrower — a device id that leaks
 still resolves *that* row until its owner logs in from elsewhere; and a
 Telegram user who opens the PWA gets a second row until they log in by
 e-mail there (auto-linking `telegram_id` to the e-mail account is the
-follow-up, along with the Telegram Login Widget).
+follow-up, along with the Telegram Login Widget). Nickname, pet and
+password are editable from the profile (12 Sep); changing the e-mail
+address — re-verification, the door closing meanwhile — is not built.
 
 *(P1-7 — client error tracking — and P1-8 — the ungated frontend deploy —
 are both closed; see the bottom.)*

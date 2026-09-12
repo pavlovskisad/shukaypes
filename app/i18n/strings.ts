@@ -78,6 +78,14 @@ export interface AppStrings {
     working: string;
     // Profile.
     logout: string;
+    // The account sheet on the profile.
+    editChip: string;
+    editTitle: string;
+    saveCta: string;
+    saved: string;
+    changePasswordLink: string;
+    currentPasswordLabel: string;
+    done: string;
     // Server error codes → sentences.
     errors: Record<string, string> & { generic: string };
   };
@@ -504,6 +512,13 @@ const uk: AppStrings = {
     linkExpired: 'це посилання вже не діє. попроси нове.',
     working: 'секунду…',
     logout: 'вийти з акаунта',
+    editChip: 'змінити',
+    editTitle: 'про тебе і твого улюбленця',
+    saveCta: 'зберегти',
+    saved: 'збережено.',
+    changePasswordLink: 'змінити пароль',
+    currentPasswordLabel: 'поточний пароль',
+    done: 'готово',
     errors: {
       generic: 'щось пішло не так. спробуй ще раз.',
       nickname_invalid: 'нік: від 2 до 24 символів, літери й цифри.',
@@ -523,6 +538,8 @@ const uk: AppStrings = {
       resend_cooldown: 'зачекай хвилину перед наступним листом.',
       already_registered: 'цей акаунт уже зареєстровано.',
       sessions_unconfigured: 'вхід тимчасово недоступний.',
+      password_wrong: 'поточний пароль не підходить.',
+      not_registered: 'спершу зареєструйся.',
       network: "немає зв'язку. перевір інтернет.",
     },
   },
@@ -1019,6 +1036,13 @@ const en: AppStrings = {
     linkExpired: 'this link no longer works. ask for a new one.',
     working: 'one second…',
     logout: 'log out',
+    editChip: 'edit',
+    editTitle: 'about you and your pet',
+    saveCta: 'save',
+    saved: 'saved.',
+    changePasswordLink: 'change password',
+    currentPasswordLabel: 'current password',
+    done: 'done',
     errors: {
       generic: 'something went wrong. try again.',
       nickname_invalid: 'nickname: 2 to 24 characters, letters and digits.',
@@ -1038,6 +1062,8 @@ const en: AppStrings = {
       resend_cooldown: 'wait a minute before the next letter.',
       already_registered: 'this account is already registered.',
       sessions_unconfigured: 'login is temporarily unavailable.',
+      password_wrong: 'the current password does not match.',
+      not_registered: 'register first.',
       network: 'no connection. check the internet.',
     },
   },

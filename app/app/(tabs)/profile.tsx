@@ -10,7 +10,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
-import { api, auth, type TerritoryRanking } from '../../services/api';
+import { api, type TerritoryRanking } from '../../services/api';
 import { useAccessStore } from '../../stores/accessStore';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import { SCENE_SKY, type SceneMode } from '../../components/profile/ProfileSceneBackdrop';
@@ -21,6 +21,7 @@ import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useLangStore } from '../../stores/langStore';
 import { CardStack, CARD_W } from '../../components/ui/CardStack';
 import { HandDrawnBar, HandDrawnFrame } from '../../components/ui/HandDrawn';
+import { AccountEditSheet } from '../../components/ui/AccountEditSheet';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
 // aggregate counts from /profile/me on focus, with the live game
@@ -106,6 +107,10 @@ function StatRow({ label, value }: { label: string; value: string | number | und
   );
 }
 
+// The «змінити» chip on the dog card: smaller than the HUD pills, it
+// is a corner affordance and not a control row.
+const EDIT_CHIP_H = 28;
+
 export default function ProfileScreen() {
   const t = useStrings();
   const lang = useLangStore((s) => s.lang);
@@ -116,12 +121,14 @@ export default function ProfileScreen() {
   const nudgeDoor = useAccessStore((s) => s.nudgeDoor);
   const setAppMode = useGameStore((s) => s.setAppMode);
   const router = useRouter();
-  // Forget the login on this device and go back to the gate, where the
-  // dog asks «ми знайомі?» again. The device identity underneath comes
-  // back; with the door up it is asked to log in (or register) before
-  // the map.
-  const logout = useCallback(async () => {
-    await auth.logout();
+  // The account sheet — nickname, the pet, a new password, and the way
+  // out — opens from the small «змінити» chip on the dog card.
+  const [editOpen, setEditOpen] = useState(false);
+  // After «вийти з акаунта» in that sheet: back to the gate, where the
+  // dog asks «ми знайомі?» again and, with the door up, asks the person
+  // to log in (or register) before the map.
+  const afterLogout = useCallback(() => {
+    setEditOpen(false);
     setDoorPrefer('login');
     nudgeDoor();
     setAppMode('gate');
@@ -209,6 +216,19 @@ export default function ProfileScreen() {
         content: (
           <View style={styles.sectionCard}>
             <HandDrawnFrame radius={R.card} />
+            {/* «змінити» — the one way into the account sheet. A chip in
+                the card's corner rather than a pill on the sky: it is
+                about this card's dog and this card's person. */}
+            <Pressable
+              onPress={() => setEditOpen(true)}
+              onPressIn={popPressableEvent}
+              accessibilityRole="button"
+              accessibilityLabel={t.auth.editChip}
+              style={({ pressed }) => [styles.editChip, pressed && { opacity: 0.7 }]}
+            >
+              <HandDrawnFrame radius={EDIT_CHIP_H / 2} />
+              <Text style={styles.editChipText}>{t.auth.editChip}</Text>
+            </Pressable>
             <Text style={styles.sectionTitle}>{t.profile.stats.companionStats}</Text>
             <Text style={styles.companionNameBig}>
               {data?.companion.name ?? companionName}
@@ -403,16 +423,6 @@ export default function ProfileScreen() {
               pill and there is room. It borrows that pill's styling, but
               it is a button rather than a switch. */}
           <Pressable
-            onPress={logout}
-            onPressIn={popPressableEvent}
-            accessibilityRole="button"
-            accessibilityLabel={t.auth.logout}
-            style={({ pressed }) => [styles.langPill, pressed && { opacity: 0.7 }]}
-          >
-            <HandDrawnFrame radius={CHIP.height / 2} />
-            <Text style={styles.langPillText}>{t.auth.logout}</Text>
-          </Pressable>
-          <Pressable
             onPress={() => setAboutOpen(true)}
             onPressIn={popPressableEvent}
             accessibilityRole="button"
@@ -441,6 +451,9 @@ export default function ProfileScreen() {
       </View>
 
       {error ? <Text style={styles.error}>{error}</Text> : null}
+      {editOpen ? (
+        <AccountEditSheet onClose={() => setEditOpen(false)} onSaved={() => void refetch()} onLoggedOut={afterLogout} />
+      ) : null}
     </SafeAreaView>
   );
 }
@@ -503,6 +516,24 @@ const styles = StyleSheet.create({
     elevation: 6,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  editChip: {
+    position: 'absolute',
+    top: S.m,
+    right: S.m,
+    height: EDIT_CHIP_H,
+    paddingHorizontal: S.m,
+    borderRadius: EDIT_CHIP_H / 2,
+    backgroundColor: '#ffffff',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1,
+  },
+  editChipText: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: TYPE.small,
+    fontWeight: '700',
+    color: colors.black,
   },
   langPillText: {
     fontFamily: SYSTEM_FONT,
