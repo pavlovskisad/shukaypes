@@ -26,7 +26,7 @@
 // and DogPrompt, because it is a form and RN-Web's TextInput has fought
 // every form in this app. Web is the only shipped target.
 
-import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError, auth, type Me } from '../../services/api';
 import { useAccessStore } from '../../stores/accessStore';
@@ -44,19 +44,22 @@ import { HandDrawnFrame } from './HandDrawn';
 type Screen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset';
 
 // The map stays as it is — no backdrop, no dimming, touches outside
-// the paper reach the map. The paper hangs from the bottom edge and
-// takes at most the lower HALF of the visible screen; the dog is framed
-// above that (MapView eases it to ~28% from the top, same measure). A
-// taller form scrolls INSIDE the paper — the paper itself is not the
-// scroll container, or its drawn edge scrolls away with the fields.
+// the paper reach the map. The paper hangs from the bottom edge and is
+// AS TALL AS ITS FORM, up to what the dog needs above it (DOG_ROOM);
+// it does not take a fixed share of the screen. A fixed half was the
+// wrong shape both ways: the register form did not fit and scrolled,
+// while the login form left a band of empty paper. Only a form taller
+// than the room left scrolls, INSIDE the paper — the paper itself is
+// not the scroll container, or its drawn edge scrolls away with the
+// fields. The paper reports where its top edge is (doorSheetTop) and
+// MapView frames the dog in the strip above it.
 //
 // MEASURED, NOT `vh`. On iOS Safari `vh` is the height with the
-// toolbars hidden, so 58vh of it was more than half of what is actually
-// visible and the paper's top landed on the dog. `window.innerHeight`
-// is the visible height, and MapView frames the dog from the same
-// number, so the two agree. Read at mount and on orientation change —
-// not on every resize, or the keyboard opening would shrink the paper
-// under the person's thumb.
+// toolbars hidden, so a share of it was more than the same share of
+// what is actually visible and the paper's top landed on the dog.
+// `window.innerHeight` is the visible height. Read at mount and on
+// orientation change — not on every resize, or the keyboard opening
+// would shrink the paper under the person's thumb.
 const OVERLAY: CSSProperties = {
   position: 'fixed',
   inset: 0,
@@ -78,11 +81,13 @@ const COLUMN: CSSProperties = {
   pointerEvents: 'auto',
 };
 
-// The share of the visible height the paper may take. MapView's
-// framing puts the dog's centre at (0.5 - DOG_LIFT) of the same height;
-// with the dog's 140px box that leaves a clear gap above this edge on
-// anything taller than ~560px.
-export const PAPER_SHARE = 0.5;
+// What the dog needs above the paper, in px of the visible height: its
+// centre no higher than DOG_MIN_Y (the three-line bubble above it has
+// to stay on screen — measured on an iPhone: bubble top is ~130 px
+// above the dog's centre), the drawn dog's lower half (~30 px) and a
+// gap to the paper's edge. MapView uses DOG_MIN_Y for the same framing.
+export const DOG_MIN_Y = 150;
+export const DOG_ROOM = DOG_MIN_Y + 40;
 
 function useVisibleHeight(): number {
   const [h, setH] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800));
@@ -107,12 +112,15 @@ const PAPER: CSSProperties = {
   overflow: 'hidden',
 };
 
-// What scrolls: the form, inside the paper, under the drawn edge.
+// What scrolls (only when it must): the form, inside the paper, under
+// the drawn edge. Tight rhythm on purpose — every 4 px here is 4 px of
+// map above the paper, and the register form with a pet named has six
+// fields to fit.
 const SCROLL: CSSProperties = {
   overflowY: 'auto',
   WebkitOverflowScrolling: 'touch',
   minHeight: 0,
-  padding: S.l,
+  padding: `${S.s}px ${S.l}px ${S.m}px`,
 };
 
 const FIELD_PAPER: CSSProperties = {
@@ -133,7 +141,7 @@ const FIELD_INPUT: CSSProperties = {
   background: 'transparent',
   border: 'none',
   outline: 'none',
-  padding: `${S.s}px ${S.m}px`,
+  padding: `6px ${S.m}px`,
   display: 'block',
 };
 
@@ -142,7 +150,7 @@ const LABEL: CSSProperties = {
   fontSize: TYPE.small,
   fontWeight: 700,
   color: colors.grey,
-  margin: `${S.m}px 0 0`,
+  margin: `${S.s}px 0 0`,
 };
 
 const LINK: CSSProperties = {
@@ -166,7 +174,7 @@ const ERROR: CSSProperties = {
 };
 
 const NOTE: CSSProperties = {
-  marginTop: S.m,
+  marginTop: S.s,
   fontSize: TYPE.small,
   color: colors.grey,
   lineHeight: 1.4,
@@ -190,7 +198,7 @@ function Primary({ label, disabled, onClick }: { label: string; disabled?: boole
         e.preventDefault();
         if (!disabled) onClick();
       }}
-      style={{ ...MODAL_PILL_DARK, width: '100%', marginTop: S.l, opacity: disabled ? 0.5 : 1, fontSize: TYPE.body }}
+      style={{ ...MODAL_PILL_DARK, width: '100%', marginTop: S.m, opacity: disabled ? 0.5 : 1, fontSize: TYPE.body }}
     >
       {label}
     </button>
@@ -377,10 +385,28 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
     setDoorScreen(screen);
   }, [screen, setDoorScreen]);
 
+  // Where the paper's top edge is, for the camera. Observed rather than
+  // computed: the paper is as tall as its form, and the form changes
+  // height on its own (a pet named adds a row, an error adds a line).
+  const paperRef = useRef<HTMLDivElement>(null);
+  const setDoorSheetTop = useAccessStore((s) => s.setDoorSheetTop);
+  useEffect(() => {
+    const el = paperRef.current;
+    if (!el || typeof ResizeObserver === 'undefined') return;
+    const report = () => setDoorSheetTop(Math.round(el.getBoundingClientRect().top));
+    report();
+    const ro = new ResizeObserver(report);
+    ro.observe(el);
+    return () => {
+      ro.disconnect();
+      setDoorSheetTop(null);
+    };
+  }, [setDoorSheetTop]);
+
   return createPortal(
     <div style={OVERLAY}>
-      <div style={{ ...COLUMN, maxHeight: Math.round(visibleH * PAPER_SHARE) }}>
-        <div style={PAPER}>
+      <div style={{ ...COLUMN, maxHeight: visibleH - DOG_ROOM - S.m }}>
+        <div style={PAPER} ref={paperRef}>
           <HandDrawnFrame seed={`door-${screen}`} radius={R.card} />
           <form style={SCROLL} onSubmit={(e) => e.preventDefault()} autoComplete="on">
 
@@ -413,28 +439,34 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
                 ))}
               </div>
               {species ? (
-                <>
-                  <div style={LABEL}>{t.petNameLabel}</div>
-                  <Field seed="petname">
-                    <input
-                      value={petName}
-                      onChange={(e) => setPetName(e.target.value)}
-                      placeholder={t.petNamePlaceholder}
-                      maxLength={40}
-                      style={FIELD_INPUT}
-                    />
-                  </Field>
-                  <div style={LABEL}>{t.breedLabel}</div>
-                  <Field seed="breed">
-                    <input
-                      value={breed}
-                      onChange={(e) => setBreed(e.target.value)}
-                      placeholder={t.breedPlaceholder}
-                      maxLength={60}
-                      style={FIELD_INPUT}
-                    />
-                  </Field>
-                </>
+                // Name and breed side by side: one row, not two, so the
+                // form still fits above the dog once a pet is named.
+                <div style={{ display: 'flex', gap: S.s }}>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={LABEL}>{t.petNameLabel}</div>
+                    <Field seed="petname">
+                      <input
+                        value={petName}
+                        onChange={(e) => setPetName(e.target.value)}
+                        placeholder={t.petNamePlaceholder}
+                        maxLength={40}
+                        style={FIELD_INPUT}
+                      />
+                    </Field>
+                  </div>
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={LABEL}>{t.breedLabel}</div>
+                    <Field seed="breed">
+                      <input
+                        value={breed}
+                        onChange={(e) => setBreed(e.target.value)}
+                        placeholder={t.breedPlaceholder}
+                        maxLength={60}
+                        style={FIELD_INPUT}
+                      />
+                    </Field>
+                  </div>
+                </div>
               ) : null}
 
               <div style={LABEL}>{t.emailLabel}</div>
@@ -465,7 +497,7 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
                 />
               </Field>
 
-              <label style={{ display: 'flex', gap: S.s, alignItems: 'flex-start', marginTop: S.l, cursor: 'pointer' }}>
+              <label style={{ display: 'flex', gap: S.s, alignItems: 'flex-start', marginTop: S.m, cursor: 'pointer' }}>
                 <input
                   type="checkbox"
                   checked={consent}
