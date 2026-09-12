@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { MapLibreMarker } from './MapLibreMarker';
 import { useMaplibreMap } from './MapContext';
 import { useGameStore } from '../../stores/gameStore';
+import { useAccessStore } from '../../stores/accessStore';
 import { Z } from '../../constants/z';
 import { iconForCategory } from '../ui/Icon';
 import { SpeechBubble } from '../ui/SpeechBubble';
@@ -136,6 +137,24 @@ export function Companion({
   const setAppMode = useGameStore((s) => s.setAppMode);
   const setLostFlowOpen = useGameStore((s) => s.setLostFlowOpen);
   const gateOpen = appMode === 'gate';
+  // THE DOOR, ASKED BY THE DOG (D-69). Before the four intents there is
+  // an earlier question — «нюх-нюх! ми знайомі?» — and it is asked the
+  // same way, in the same bubble, with its answers in the same pill
+  // grid under the dog: two words instead of four. Each answer opens
+  // the account sheet over the map (login or registration); the sheet
+  // closes itself when the account is through, and the dog is back
+  // here with the four intents, exactly where it was.
+  //
+  // `door` is what /auth/me last said. Null is "not yet asked" — the
+  // splash covers that second — and the dog holds its tongue rather
+  // than ask a question it may have to take back.
+  const door = useAccessStore((s) => s.door);
+  const openDoorSheet = useAccessStore((s) => s.openDoorSheet);
+  const authGate = gateOpen && door !== 'open';
+  // While the account sheet is up the dog is IN it, sitting in the
+  // paper's corner. One dog: the marker goes quiet and invisible until
+  // the sheet closes and the dog is back here.
+  const sheetUp = useAccessStore((s) => s.doorSheet != null);
   // AT THE GATE, THE DOG CANNOT BE HIDDEN.
   //
   // `hidden` is the off-screen rule: when the dog leaves the viewport
@@ -542,6 +561,14 @@ export function Companion({
       // genuinely CHANGING. It runs the clear-slate reducer and flips
       // every piece of chrome, and paying that to re-enter the mode you
       // are already in is the flicker this whole level exists to avoid.
+      if (id === 'auth:yes') {
+        openDoorSheet('login');
+        return;
+      }
+      if (id === 'auth:no') {
+        openDoorSheet('register');
+        return;
+      }
       if (id.startsWith('mode:')) {
         switch (id) {
           case 'mode:lost': {
@@ -605,7 +632,7 @@ export function Companion({
       fireLeafAction(id);
       setMenuOpen(false);
     },
-    [menuPath, fireLeafAction, setMenuOpen, setAppMode, setLostFlowOpen, appMode, gateOpen]
+    [menuPath, fireLeafAction, setMenuOpen, setAppMode, setLostFlowOpen, appMode, gateOpen, openDoorSheet]
   );
 
   // Visit-leaf cache — keyed by the category drill (path[1] like
@@ -636,7 +663,18 @@ export function Companion({
     [t],
   );
 
+  // The two answers to «ми знайомі?». Same shape as the intents, so the
+  // ring draws them the same way.
+  const authActions = useMemo<RadialAction[]>(
+    () => [
+      { id: 'auth:yes', label: t.auth.knowYes },
+      { id: 'auth:no', label: t.auth.knowNo },
+    ],
+    [t],
+  );
+
   const currentActions = useMemo(() => {
+    if (authGate) return authActions;
     if (showModes) return modeActions;
     const nonVisit = getNonVisitActions(menuPath);
     if (nonVisit) return nonVisit;
@@ -650,7 +688,7 @@ export function Companion({
     const leaves = buildVisitLeaves(category, spots, userPosition);
     visitLeavesCacheRef.current = { key: visitKey, leaves };
     return leaves;
-  }, [showModes, modeActions, menuPath, spots, userPosition]);
+  }, [authGate, authActions, showModes, modeActions, menuPath, spots, userPosition]);
 
   // Hide bubbles while the radial menu is open — otherwise the bubble
   // (above the companion) and the top "search" button fight for the
@@ -833,9 +871,15 @@ export function Companion({
   // It IS their label — four bare verbs orbiting a dog with an ambient
   // bark above them would read as nonsense. At the gate it also outranks
   // `hideBubble`, because there the question is the screen.
-  const activeBubble = gateOpen
-    ? t.modes.ask
-    : hideBubble
+  const activeBubble = sheetUp
+    ? null
+    : authGate
+      ? door === null
+        ? null
+        : t.auth.knowAsk
+    : gateOpen
+      ? t.modes.ask
+      : hideBubble
       ? null
       : atModes
         ? t.modes.ask
@@ -911,8 +955,8 @@ export function Companion({
           // position can't float the dog in the sky at steep pitch —
           // except at the gate, where the dog is the whole interface.
           // See offscreenHidden.
-          visibility: offscreenHidden ? 'hidden' : 'visible',
-          pointerEvents: offscreenHidden ? 'none' : 'auto',
+          visibility: offscreenHidden || sheetUp ? 'hidden' : 'visible',
+          pointerEvents: offscreenHidden || sheetUp ? 'none' : 'auto',
         }}
       >
         {/* Pixel-art companion — 64×64 sprite scaled 2× = 128px on
@@ -936,7 +980,8 @@ export function Companion({
           // tucks in at the nose like every other thing the dog says.
         />
         <RadialMenu
-          open={menuOpen}
+          // Nothing to answer until the server has said who this is.
+          open={menuOpen && !sheetUp && !(authGate && door === null)}
           actions={currentActions}
           onSelect={handleSelect}
           // White buttons, black text and icons — the same way round as

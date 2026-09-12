@@ -1,8 +1,11 @@
 // THE DOOR. Registration before the map, for everybody — D-69.
 //
-// Shown in place of the whole app while /auth/me says the account is
-// not through: unregistered, or registered and waiting on the e-mail
-// link. Five screens on one sheet of paper, because they are one
+// A sheet over the map, not a page instead of it. The dog asks «ми
+// знайомі?» at the gate (Companion.tsx) and the answer opens this on
+// login or registration; the dog pops into the corner of the paper and
+// keeps talking from there. When the account is through the sheet
+// closes on its own and the dog is back at the gate with the four
+// intents. Five screens on one sheet of paper, because they are one
 // conversation with the dog and not five pages:
 //
 //   register   nickname, the pet (optional), e-mail, password, consent
@@ -21,6 +24,7 @@
 // every form in this app. Web is the only shipped target.
 
 import { useEffect, useState, type CSSProperties, type ReactNode } from 'react';
+import { createPortal } from 'react-dom';
 import { ApiError, auth, type Me } from '../../services/api';
 import { useAccessStore } from '../../stores/accessStore';
 import { useStrings } from '../../i18n/useStrings';
@@ -31,26 +35,34 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { SURFACE } from '../../constants/surface';
 import { TYPE } from '../../constants/type';
+import { Z } from '../../constants/z';
 import { HandDrawnFrame } from './HandDrawn';
 import { DogSprite } from '../map/DogSprite';
 
 type Screen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset';
 
-const PAGE: CSSProperties = {
+// The dimmed map behind, the paper in front. Same backdrop as the
+// lost-pet sheet, so the two read as one kind of thing.
+const OVERLAY: CSSProperties = {
   position: 'fixed',
   inset: 0,
   overflowY: 'auto',
-  background: '#F3F0E7',
+  background: 'rgba(20,20,15,0.45)',
   fontFamily: SYSTEM_FONT,
   color: colors.black,
   WebkitOverflowScrolling: 'touch',
+  zIndex: Z.MODAL_GLOBAL,
 };
 
 const COLUMN: CSSProperties = {
   maxWidth: 440,
   margin: '0 auto',
-  padding: `${S.xl}px ${S.l}px ${S.huge}px`,
+  padding: `calc(env(safe-area-inset-top, 0px) + ${S.xl}px) ${S.m}px calc(env(safe-area-inset-bottom, 0px) + ${S.xxl}px)`,
   boxSizing: 'border-box',
+  minHeight: '100%',
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
 };
 
 const PAPER: CSSProperties = {
@@ -157,11 +169,20 @@ function Secondary({ label, seed, onClick }: { label: string; seed: string; onCl
   );
 }
 
-// The dog and its line, above the paper.
+// The dog and its line, above the paper. The dog POPS into its corner
+// — the same overshoot the gate's answers arrive with — because it has
+// just left the map to sit here, and a sprite that simply appears reads
+// as a second dog.
 function Ask({ line }: { line: string }) {
   return (
     <div style={{ display: 'flex', alignItems: 'flex-end', gap: S.m, marginBottom: S.l }}>
-      <div style={{ flexShrink: 0 }}>
+      <style>{`
+        @keyframes door-dog-pop {
+          0%   { transform: scale(0.4) translateY(24px); opacity: 0; }
+          100% { transform: scale(1) translateY(0); opacity: 1; }
+        }
+      `}</style>
+      <div style={{ flexShrink: 0, animation: 'door-dog-pop 420ms cubic-bezier(0.34,1.56,0.64,1) both' }}>
         <DogSprite anim="sitting" facingLeft={false} scale={2} />
       </div>
       <div
@@ -183,11 +204,17 @@ function Ask({ line }: { line: string }) {
   );
 }
 
-function pickScreen(me: Me | null, resetToken: string | null, prefer: 'login' | null): Screen {
+function pickScreen(
+  requested: 'register' | 'login' | 'verify' | 'reset',
+  me: Me | null,
+  resetToken: string | null,
+  prefer: 'login' | null,
+): Screen {
   if (resetToken) return 'reset';
   if (me?.door === 'verify') return 'verify';
+  if (requested === 'reset' || requested === 'verify') return 'register';
   if (prefer === 'login') return 'login';
-  return 'register';
+  return requested;
 }
 
 // The placeholder a row gets on first contact is not a nickname anybody chose.
@@ -197,6 +224,12 @@ function suggestedNickname(me: Me | null): string {
 }
 
 export function AccountDoor() {
+  const sheet = useAccessStore((s) => s.doorSheet);
+  if (!sheet) return null;
+  return <AccountSheet requested={sheet} />;
+}
+
+function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify' | 'reset' }) {
   const t = useStrings().auth;
   const me = useAccessStore((s) => s.me);
   const setMe = useAccessStore((s) => s.setMe);
@@ -207,7 +240,7 @@ export function AccountDoor() {
   const notice = useAccessStore((s) => s.doorNotice);
   const setDoorNotice = useAccessStore((s) => s.setDoorNotice);
 
-  const [screen, setScreen] = useState<Screen>(() => pickScreen(me, resetToken, prefer));
+  const [screen, setScreen] = useState<Screen>(() => pickScreen(requested, me, resetToken, prefer));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(notice ? (t[notice as keyof typeof t] as string) ?? null : null);
@@ -342,8 +375,8 @@ export function AccountDoor() {
             ? t.resetAsk
             : t.forgotAsk;
 
-  return (
-    <div style={PAGE}>
+  return createPortal(
+    <div style={OVERLAY}>
       <div style={COLUMN}>
         <Ask line={ask} />
         <form style={PAPER} onSubmit={(e) => e.preventDefault()} autoComplete="on">
@@ -582,6 +615,7 @@ export function AccountDoor() {
           ) : null}
         </form>
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }

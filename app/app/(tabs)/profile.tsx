@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useFocusEffect } from 'expo-router';
+import { useFocusEffect, useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { View, Text, StyleSheet, Pressable } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -114,14 +114,19 @@ export default function ProfileScreen() {
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const setDoorPrefer = useAccessStore((s) => s.setDoorPrefer);
   const nudgeDoor = useAccessStore((s) => s.nudgeDoor);
-  // Forget the login on this device and go back to the door, on its
-  // login screen. The device identity underneath comes back; with the
-  // door up it is asked to log in (or register) before the map.
+  const setAppMode = useGameStore((s) => s.setAppMode);
+  const router = useRouter();
+  // Forget the login on this device and go back to the gate, where the
+  // dog asks «ми знайомі?» again. The device identity underneath comes
+  // back; with the door up it is asked to log in (or register) before
+  // the map.
   const logout = useCallback(async () => {
     await auth.logout();
     setDoorPrefer('login');
     nudgeDoor();
-  }, [setDoorPrefer, nudgeDoor]);
+    setAppMode('gate');
+    router.navigate('/');
+  }, [setDoorPrefer, nudgeDoor, setAppMode, router]);
   const [data, setData] = useState<ProfileData | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Territory standing. Its own fetch rather than a field on /profile/me
