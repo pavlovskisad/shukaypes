@@ -45,9 +45,18 @@ type Screen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset
 
 // The map stays as it is — no backdrop, no dimming, touches outside
 // the paper reach the map. The paper hangs from the bottom edge and
-// takes at most the lower ~58% of the screen, which is what the dog's
-// framing leaves it (MapView eases the dog to ~30% from the top); a
-// taller form scrolls inside its own paper.
+// takes at most the lower HALF of the visible screen; the dog is framed
+// above that (MapView eases it to ~28% from the top, same measure). A
+// taller form scrolls INSIDE the paper — the paper itself is not the
+// scroll container, or its drawn edge scrolls away with the fields.
+//
+// MEASURED, NOT `vh`. On iOS Safari `vh` is the height with the
+// toolbars hidden, so 58vh of it was more than half of what is actually
+// visible and the paper's top landed on the dog. `window.innerHeight`
+// is the visible height, and MapView frames the dog from the same
+// number, so the two agree. Read at mount and on orientation change —
+// not on every resize, or the keyboard opening would shrink the paper
+// under the person's thumb.
 const OVERLAY: CSSProperties = {
   position: 'fixed',
   inset: 0,
@@ -64,11 +73,27 @@ const COLUMN: CSSProperties = {
   bottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.m}px)`,
   maxWidth: 440,
   margin: '0 auto',
-  maxHeight: '58vh',
   display: 'flex',
   flexDirection: 'column',
   pointerEvents: 'auto',
 };
+
+// The share of the visible height the paper may take. MapView's
+// framing puts the dog's centre at (0.5 - DOG_LIFT) of the same height;
+// with the dog's 140px box that leaves a clear gap above this edge on
+// anything taller than ~560px.
+export const PAPER_SHARE = 0.5;
+
+function useVisibleHeight(): number {
+  const [h, setH] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800));
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const on = () => setH(window.innerHeight);
+    window.addEventListener('orientationchange', on);
+    return () => window.removeEventListener('orientationchange', on);
+  }, []);
+  return h;
+}
 
 const PAPER: CSSProperties = {
   position: 'relative',
@@ -76,10 +101,18 @@ const PAPER: CSSProperties = {
   borderRadius: R.card,
   border: '2px solid transparent',
   boxShadow: SURFACE.lift,
-  padding: S.l,
+  display: 'flex',
+  flexDirection: 'column',
+  minHeight: 0,
+  overflow: 'hidden',
+};
+
+// What scrolls: the form, inside the paper, under the drawn edge.
+const SCROLL: CSSProperties = {
   overflowY: 'auto',
   WebkitOverflowScrolling: 'touch',
   minHeight: 0,
+  padding: S.l,
 };
 
 const FIELD_PAPER: CSSProperties = {
@@ -337,6 +370,7 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
   const consentOk = consent;
   const canRegister = nickname.trim().length >= 2 && email.includes('@') && password.length >= 8 && consentOk;
 
+  const visibleH = useVisibleHeight();
   // The dog on the map says the line for this screen (Companion.tsx).
   const setDoorScreen = useAccessStore((s) => s.setDoorScreen);
   useEffect(() => {
@@ -345,9 +379,10 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
 
   return createPortal(
     <div style={OVERLAY}>
-      <div style={COLUMN}>
-        <form style={PAPER} onSubmit={(e) => e.preventDefault()} autoComplete="on">
+      <div style={{ ...COLUMN, maxHeight: Math.round(visibleH * PAPER_SHARE) }}>
+        <div style={PAPER}>
           <HandDrawnFrame seed={`door-${screen}`} radius={R.card} />
+          <form style={SCROLL} onSubmit={(e) => e.preventDefault()} autoComplete="on">
 
           {screen === 'register' ? (
             <>
@@ -580,7 +615,8 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
               </div>
             </>
           ) : null}
-        </form>
+          </form>
+        </div>
       </div>
     </div>,
     document.body,

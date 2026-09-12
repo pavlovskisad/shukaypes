@@ -939,9 +939,15 @@ load as always; at the gate, before the four intents, the dog asks
 познайомимось!» on registration. The sheet is a popup in the scene, not
 a dimmed modal over it: the map stays as it is, the camera eases so the
 dog sits in the upper part of the screen (the follow loop holds while
-the sheet is up, or it would pull the dog straight back to centre), the
-paper takes the lower part, and the dog — the same dog, on the map —
-says the line for whichever screen is showing. When the account is
+the sheet is up, or it would pull the dog straight back to centre; the
+onboarding hints wait too), the paper takes at most the lower half of
+the VISIBLE height — measured, not `vh`, which on iOS Safari counts the
+space under the toolbars — a long form scrolls inside the paper under
+its drawn edge, and the dog — the same dog, on the map — says the line
+for whichever screen is showing. The framing ease was being killed a few
+ms in by a padding reset on every spots update (MapLibre's `setPadding`
+is a `jumpTo`, and a `jumpTo` stops any ease); it now resets only
+padding that is there. When the account is
 through, the sheet closes, the camera settles back, and the same gate
 shows the four intents. A mail link opens the app already through.
 Logging out returns to the gate and the same question.
