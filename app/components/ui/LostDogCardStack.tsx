@@ -14,8 +14,9 @@ import { INK } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
+import { petPhotoAt } from '../../utils/petPhoto';
 import type { LatLng } from '@shukajpes/shared';
-import { CardStack, CardStackSkeleton } from './CardStack';
+import { CARD_W, CardStack, CardStackSkeleton } from './CardStack';
 import { HandDrawnFrame, HandDrawnPaperTop, PICTURE_INSET } from './HandDrawn';
 import { Icon } from './Icon';
 import { INLINE_ICON } from '../../constants/sizing';
@@ -82,7 +83,8 @@ export function LostDogCardStack({
       onTap={onTap}
       onCounterTap={onCounterTap}
       onSwipe={onSwipe}
-      getPhotoUrl={(d) => d.photoUrl}
+      // Card-sized, not the ad's 1200px render — utils/petPhoto.ts.
+      getPhotoUrl={(d) => petPhotoAt(d.photoUrl, CARD_W)}
       renderCard={renderCard}
       {...(cardWidth != null ? { cardWidth } : {})}
       {...(cardHeight != null ? { cardHeight } : {})}
@@ -191,7 +193,7 @@ export function LostDogCardView({
             // it is a mount: white, then the line, then the picture.
             inset: PICTURE_INSET,
             borderRadius: Math.max(0, R.card - PICTURE_INSET),
-            backgroundImage: `url("${dog.photoUrl}")`,
+            backgroundImage: `url("${petPhotoAt(dog.photoUrl, CARD_W)}")`,
             backgroundSize: 'cover',
             backgroundPosition: 'center center',
             backgroundRepeat: 'no-repeat',
