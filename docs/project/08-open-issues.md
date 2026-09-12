@@ -335,6 +335,16 @@ unchanged until a route actually does.
 and require the Telegram-signed identity for anything with real value. If
 device-id must stay first-class, issue an HMAC token on first contact.
 
+**Mostly closed by D-69 (12 Sep):** every account now registers with an
+e-mail and a password before the map opens, a password login carries a
+revocable refresh token rather than the device id, and the pre-door rows
+are wiped at rollout so no unregistered account with anything in it
+exists. What remains of the finding is narrower — a device id that leaks
+still resolves *that* row until its owner logs in from elsewhere; and a
+Telegram user who opens the PWA gets a second row until they log in by
+e-mail there (auto-linking `telegram_id` to the e-mail account is the
+follow-up, along with the Telegram Login Widget).
+
 *(P1-7 — client error tracking — and P1-8 — the ungated frontend deploy —
 are both closed; see the bottom.)*
 
