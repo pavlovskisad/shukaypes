@@ -41,8 +41,17 @@ interface AccessState {
   // A one-line notice for the door to show first (a strings.auth key),
   // e.g. that the link they arrived on has expired.
   doorNotice: string | null;
+  // The account sheet over the map: which screen it opens on, or null
+  // while it is closed. The dog's two answers at the gate set it; the
+  // door opening clears it.
+  doorSheet: 'register' | 'login' | 'verify' | 'reset' | null;
   setMe: (me: Me | null) => void;
+  // The server could not be asked (offline, a deploy). The app behaves
+  // as before the door existed; a 403 later nudges a re-read.
+  assumeOpen: () => void;
   nudgeDoor: () => void;
+  openDoorSheet: (s: 'register' | 'login' | 'verify' | 'reset') => void;
+  closeDoorSheet: () => void;
   setResetToken: (t: string | null) => void;
   setDoorPrefer: (p: 'login' | null) => void;
   setDoorNotice: (n: string | null) => void;
@@ -57,8 +66,20 @@ export const useAccessStore = create<AccessState>((set) => ({
   resetToken: null,
   doorPrefer: null,
   doorNotice: null,
-  setMe: (me) => set({ me, door: me ? me.door : null }),
+  doorSheet: null,
+  setMe: (me) =>
+    set((s) => ({
+      me,
+      door: me ? me.door : null,
+      // Through: the sheet has nothing left to ask. Waiting on the link:
+      // the sheet shows that, whatever it was showing. Otherwise leave
+      // the sheet where the person put it.
+      doorSheet: !me || me.door === 'open' ? null : me.door === 'verify' ? 'verify' : s.doorSheet,
+    })),
+  assumeOpen: () => set((s) => (s.door === null ? { door: 'open' } : {})),
   nudgeDoor: () => set((s) => ({ doorNudge: s.doorNudge + 1 })),
+  openDoorSheet: (doorSheet) => set({ doorSheet }),
+  closeDoorSheet: () => set({ doorSheet: null }),
   setResetToken: (resetToken) => set({ resetToken }),
   setDoorPrefer: (doorPrefer) => set({ doorPrefer }),
   setDoorNotice: (doorNotice) => set({ doorNotice }),

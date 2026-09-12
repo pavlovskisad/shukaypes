@@ -23,32 +23,53 @@ import { scrubLinkFromUrl, takeResetToken, takeVerifyToken } from '../services/a
 // opens the new-password screen. Lives in a hook rather than in the
 // door component because the door is not mounted while the answer is
 // 'open', and the question still has to be asked.
+// The mail-link half runs ONCE, outside the re-read below, and its
+// result is applied unconditionally: the game loop's first refused
+// requests nudge a re-read within the same second, and an effect
+// cleanup that dropped the in-flight verification left the person
+// looking at «ми знайомі?» with a login already stored.
+let linkFlight: Promise<void> | null = null;
+
 function useDoorKeeper(): void {
   const nudge = useAccessStore((s) => s.doorNudge);
   const setMe = useAccessStore((s) => s.setMe);
+  const assumeOpen = useAccessStore((s) => s.assumeOpen);
   const setResetToken = useAccessStore((s) => s.setResetToken);
   const setDoorNotice = useAccessStore((s) => s.setDoorNotice);
+  const openDoorSheet = useAccessStore((s) => s.openDoorSheet);
 
   useEffect(() => {
     let cancelled = false;
-    (async () => {
-      const verify = takeVerifyToken();
-      const reset = takeResetToken();
-      if (reset) setResetToken(reset);
-      scrubLinkFromUrl();
-      if (verify) {
-        try {
-          const me = await auth.verify(verify);
-          if (!cancelled) setMe(me);
-          return;
-        } catch {
-          // Spent or expired: fall through to the ordinary read, and
-          // tell the person why they are looking at the door.
-          if (!cancelled) setDoorNotice('linkExpired');
+    if (!linkFlight) {
+      linkFlight = (async () => {
+        const verify = takeVerifyToken();
+        const reset = takeResetToken();
+        if (reset) {
+          setResetToken(reset);
+          openDoorSheet('reset');
         }
-      }
+        scrubLinkFromUrl();
+        if (!verify) return;
+        try {
+          setMe(await auth.verify(verify));
+        } catch {
+          // Spent or expired: the ordinary read below draws the door,
+          // and the person is told why they are looking at it.
+          setDoorNotice('linkExpired');
+        }
+        // Again, now that expo-router has settled its initial route —
+        // it can rewrite the address after the first scrub and put the
+        // spent token back, and a reload would then say "link expired"
+        // to somebody who is already through.
+        scrubLinkFromUrl();
+      })();
+    }
+    (async () => {
+      await linkFlight;
       const me = await auth.me().catch(() => null);
-      if (!cancelled && me) setMe(me);
+      if (cancelled) return;
+      if (me) setMe(me);
+      else assumeOpen();
     })();
     return () => {
       cancelled = true;
@@ -105,25 +126,12 @@ export default function RootLayout() {
   // server-side, and false forever for anyone who already has an
   // account.
   const inviteRequired = useAccessStore((s) => s.inviteRequired);
-  const door = useAccessStore((s) => s.door);
   useDoorKeeper();
   if (inviteRequired) {
     return (
       <SafeAreaProvider>
         <StatusBar style="dark" />
         <InviteGate />
-      </SafeAreaProvider>
-    );
-  }
-  // Same replacement, same reasoning: an account that has not passed
-  // the door has no map to stand behind a form. Null (not yet asked)
-  // renders the app — the splash covers the first second, and a shut
-  // door arrives as soon as /auth/me answers.
-  if (door === 'register' || door === 'verify') {
-    return (
-      <SafeAreaProvider>
-        <StatusBar style="dark" />
-        <AccountDoor />
       </SafeAreaProvider>
     );
   }
@@ -154,6 +162,11 @@ export default function RootLayout() {
               carries a «?». A sheet mounted inside one tab cannot be
               opened from another. */}
           <AboutSheetHost />
+          {/* The account sheet (D-69). Self-gating: draws nothing until
+              the dog's «ми знайомі?» is answered at the gate, a mail
+              link opened the app, or the account is waiting on its
+              verification link. Over the map, never instead of it. */}
+          <AccountDoor />
           <Splash />
         </ErrorBoundary>
       </SafeAreaProvider>

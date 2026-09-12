@@ -30,6 +30,10 @@ export interface AppStrings {
   };
   // The door (D-69): registration before the map, for everybody.
   auth: {
+    // At the gate, before anything else: does the dog know you?
+    knowAsk: string;
+    knowYes: string;
+    knowNo: string;
     // The dog's line over the form.
     registerAsk: string;
     verifyAsk: string;
@@ -455,6 +459,9 @@ const uk: AppStrings = {
     home: 'дім',
   },
   auth: {
+    knowAsk: 'нюх-нюх! ми знайомі?',
+    knowYes: 'так, ти шо не впізнав?',
+    knowNo: 'ні, давай познайомимось!',
     registerAsk: 'нюх-нюх! спершу познайомимось — хто ти, і чи є в тебе хтось хвостатий?',
     verifyAsk: 'я надіслав листа. знайди його і натисни посилання — тоді гуляємо.',
     loginAsk: 'з поверненням. нагадай, хто ти?',
@@ -967,6 +974,9 @@ const en: AppStrings = {
     home: 'home',
   },
   auth: {
+    knowAsk: 'sniff sniff! do we know each other?',
+    knowYes: 'yes, don\'t you recognise me?',
+    knowNo: 'no, let\'s get acquainted!',
     registerAsk: 'sniff sniff! introductions first — who are you, and is there somebody with a tail?',
     verifyAsk: 'i sent a letter. find it and tap the link — then we walk.',
     loginAsk: 'welcome back. remind me who you are?',

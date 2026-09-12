@@ -932,6 +932,16 @@ carrying:
   exist for launch day: `REGISTRATION_REQUIRED=0` takes the door down
   entirely; `EMAIL_VERIFY_REQUIRED=0` keeps it up without the link.
 
+**The door is asked by the dog, not by a page.** The map and the dog
+load as always; at the gate, before the four intents, the dog asks
+«нюх-нюх! ми знайомі?» with two answers in the same pill grid — «так,
+ти шо не впізнав?» opens the account sheet on login, «ні, давай
+познайомимось!» on registration. The sheet sits over the dimmed map
+with the dog in the corner of the paper (the map's own dog hides
+meanwhile: one dog); when the account is through, the sheet closes and
+the same gate shows the four intents. A mail link opens the app already
+through. Logging out returns to the gate and the same question.
+
 The pet is optional (helpers without a pet skip it) and, when given,
 names the companion. Passwords are scrypt from Node's own crypto — no
 native module in the Fly image. Nickname uniqueness is on a key the
