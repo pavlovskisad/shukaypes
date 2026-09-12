@@ -138,7 +138,13 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
 
   return createPortal(
     <div style={OVERLAY}>
-      <div style={{ ...COLUMN, maxHeight: visibleH - DOG_ROOM - S.m }}>
+      <div
+        style={{
+          ...COLUMN,
+          bottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.m}px)`,
+          maxHeight: visibleH - DOG_ROOM - S.m,
+        }}
+      >
         <div style={PAPER}>
           <HandDrawnFrame seed="edit" radius={R.card} />
           <form style={SCROLL} onSubmit={(e) => e.preventDefault()} autoComplete="on">
