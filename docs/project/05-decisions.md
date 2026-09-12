@@ -994,3 +994,19 @@ keeping its id and points through registration — and by
 database: pets and sightings survived with their reporter nulled, the
 bot row survived, everything owned by the users went with them.
 
+### D-70 · The ink line has pressure ✅
+
+Every edge in the app is one component, `HandDrawnFrame`: an SVG
+outline that follows the rounded rectangle a CSS border would trace and
+nudges it by slow noise, so no two cards are the same rectangle. Until
+12 Sep the line itself was one width the whole way round — a plotter's
+line, however much it bowed — and when the account sheet's paper
+clipped its ink by accident, thick at the bows and thin at the corners,
+the owner liked the broken line better than the clean one. So the line
+now has pressure on purpose: it is drawn as a filled ribbon whose width
+swells and thins along the run (0.55–1.45× the nominal, its own noise,
+three to five swells around a card), which is what a hand does to a nib
+and what the eye reads as "drawn". One number, `DEFAULT_PRESSURE`, on
+every frame; `pressure={0}` gives the old plain stroke. Corner arcs
+also get at least four sample points now — a pill-shaped field's end
+was one step long and came out as a bevel.

@@ -301,6 +301,69 @@ export function splinePath(
 
 export type OpenEdge = 'top' | 'right' | undefined;
 
+// PEN PRESSURE. A line of one width the whole way round is a plotter's
+// line, however much it wobbles. A hand leans on the nib and eases off
+// — the line swells and thins as it goes — and that, more than the
+// bow of the edge, is what the eye reads as "drawn". The first account
+// sheet had it by accident: its paper clipped the ink at the corners,
+// thick here and thin there, and the owner liked the line better
+// broken than clean. This is the same effect on purpose.
+//
+// How much the width swells and thins around the nominal, as a share:
+// 0.45 runs from a little over half to a little under one-and-a-half
+// times the stroke. Its own noise, faster than the edge's wobble
+// (three to five swells around a card) so the two do not line up.
+export const DEFAULT_PRESSURE = 0.45;
+
+function pressureFn(seed: number, closed: boolean, period: number) {
+  const rand = rng(seed ^ 0x9e3779b9);
+  const f1 = closed ? 3 + Math.floor(rand() * 3) : 2 + rand() * 2;
+  const f2 = closed ? 7 + Math.floor(rand() * 3) : 5 + rand() * 2;
+  const p1 = rand() * Math.PI * 2;
+  const p2 = rand() * Math.PI * 2;
+  return (t: number) => {
+    const u = (t / period) * Math.PI * 2;
+    return Math.sin(u * f1 + p1) * 0.75 + Math.sin(u * f2 + p2) * 0.25;
+  };
+}
+
+// The outline as a RIBBON — the area between the line's two edges —
+// for a fill rather than a stroke, which is the only way an SVG path
+// gets a width that changes along it. The centre line is the same
+// wobbled outline handDrawnRectPath draws; each sample is pushed out
+// and in along its normal by half the local width. Closed shapes are
+// two loops under an even-odd fill; an open edge is one loop, out along
+// the outside and back along the inside.
+export function handDrawnRibbonPath(
+  w: number,
+  h: number,
+  radius: number,
+  seed: string | number,
+  strokeWidth: number,
+  opts?: { amp?: number; open?: OpenEdge; pressure?: number },
+): string {
+  if (!(w > 1 && h > 1)) return '';
+  const amp = opts?.amp ?? DEFAULT_AMP;
+  const pressure = opts?.pressure ?? DEFAULT_PRESSURE;
+  const open = opts?.open;
+  const step = stepFor(2 * (w + h));
+  const { pts, total } = sampleRoundRect(w, h, radius, open, step);
+  if (total <= 0) return '';
+  const noise = noiseFn(hashSeed(seed), !open, total);
+  const press = pressureFn(hashSeed(seed), !open, total);
+  const scaled = ampFor(w, h, amp);
+  const outer: { x: number; y: number }[] = [];
+  const inner: { x: number; y: number }[] = [];
+  for (const p of pts) {
+    const o = noise(p.t) * scaled;
+    const half = (strokeWidth * (1 + press(p.t) * pressure)) / 2;
+    outer.push({ x: p.x + p.nx * (o + half), y: p.y + p.ny * (o + half) });
+    inner.push({ x: p.x + p.nx * (o - half), y: p.y + p.ny * (o - half) });
+  }
+  if (open) return splinePath([...outer, ...inner.reverse()], true);
+  return `${splinePath(outer, true)} ${splinePath(inner, true)}`;
+}
+
 export function handDrawnRectPath(
   w: number,
   h: number,
@@ -573,6 +636,9 @@ interface FrameProps {
   color?: string;
   strokeWidth?: number;
   amp?: number;
+  // How much the line swells and thins along its run (DEFAULT_PRESSURE);
+  // 0 draws a plain stroke of one width.
+  pressure?: number;
   // An edge that runs off the screen and does not need drawing — see
   // sampleRoundRect. Sheets open at the top, the restack pill at the
   // right.
@@ -586,6 +652,7 @@ export function HandDrawnFrame({
   strokeWidth = 2,
   amp,
   open,
+  pressure = DEFAULT_PRESSURE,
 }: FrameProps) {
   const { ref, size, hostBorder } = useBoxSize();
   // One seed per mount when the caller has nothing stable to offer. In
@@ -595,15 +662,18 @@ export function HandDrawnFrame({
   // of white, then the stroke. Same number on a card, a pill, a disc and
   // a close button — see the constant.
   const inset = PAPER_EDGE + strokeWidth / 2;
+  // With pressure the line is a filled ribbon; without, a plain stroke.
+  const ribbon = pressure > 0;
+  const geom = [size.w - inset * 2, size.h - inset * 2, Math.max(0, radius - inset), seed ?? ownSeed] as const;
   const d =
     size.w > 0
-      ? handDrawnRectPath(
-          size.w - inset * 2,
-          size.h - inset * 2,
-          Math.max(0, radius - inset),
-          seed ?? ownSeed,
-          { ...(amp != null ? { amp } : {}), ...(open ? { open } : {}) },
-        )
+      ? ribbon
+        ? handDrawnRibbonPath(...geom, strokeWidth, {
+            ...(amp != null ? { amp } : {}),
+            ...(open ? { open } : {}),
+            pressure,
+          })
+        : handDrawnRectPath(...geom, { ...(amp != null ? { amp } : {}), ...(open ? { open } : {}) })
       : '';
   return (
     <div
@@ -628,15 +698,19 @@ export function HandDrawnFrame({
           viewBox={`0 0 ${size.w} ${size.h}`}
           style={{ display: 'block', overflow: 'visible' }}
         >
-          <path
-            d={d}
-            transform={`translate(${inset},${inset})`}
-            fill="none"
-            stroke={color}
-            strokeWidth={strokeWidth}
-            strokeLinecap="round"
-            strokeLinejoin="round"
-          />
+          {ribbon ? (
+            <path d={d} transform={`translate(${inset},${inset})`} fill={color} fillRule="evenodd" />
+          ) : (
+            <path
+              d={d}
+              transform={`translate(${inset},${inset})`}
+              fill="none"
+              stroke={color}
+              strokeWidth={strokeWidth}
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          )}
         </svg>
       ) : null}
     </div>
