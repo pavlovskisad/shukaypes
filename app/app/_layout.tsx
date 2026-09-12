@@ -13,8 +13,9 @@ import { useGameStore } from '../stores/gameStore';
 import { useAccessStore } from '../stores/accessStore';
 import { notifyTelegramReady } from '../services/telegram';
 import { installGlobalCrashHandlers } from '../services/crashReport';
-import { auth } from '../services/api';
-import { scrubLinkFromUrl, takeResetToken, takeVerifyToken } from '../services/account';
+import { ApiError, auth, type Me } from '../services/api';
+import { clearAccount, scrubLinkFromUrl, takeResetToken, takeVerifyToken } from '../services/account';
+import { clearSession } from '../services/session';
 
 // THE DOOR'S KEEPER (D-69). Asks the server who this account is and
 // whether it is through — once at boot, again whenever a refused
@@ -66,9 +67,20 @@ function useDoorKeeper(): void {
     }
     (async () => {
       await linkFlight;
-      const me = await auth.me().catch(() => null);
+      let me = await auth.me().catch((err: unknown) => err);
+      // The slip or login names an account that no longer exists (the
+      // fresh-start wipe, or a deleted account): forget both and ask
+      // again as a bare device, which mints a new row and meets the
+      // door. Without this the 404 read as "server unreachable" and
+      // the app assumed itself open — through the gate with every
+      // other request refused.
+      if (me instanceof ApiError && me.status === 404) {
+        clearSession();
+        clearAccount();
+        me = await auth.me().catch(() => null);
+      }
       if (cancelled) return;
-      if (me) setMe(me);
+      if (me && !(me instanceof Error)) setMe(me as Me);
       else assumeOpen();
     })();
     return () => {
