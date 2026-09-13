@@ -27,6 +27,9 @@ ENV HOST=0.0.0.0
 COPY --from=build /repo/node_modules ./node_modules
 COPY --from=build /repo/server/dist ./dist
 COPY --from=build /repo/server/migrations ./migrations
+# The illustrator's reference drawings the portrait recipe sends along
+# (services/avatar.ts); read relative to the working directory.
+COPY --from=build /repo/server/assets ./assets
 COPY --from=build /repo/server/package.json ./package.json
 
 EXPOSE 3000

@@ -1110,6 +1110,19 @@ small round drawing on paper. Nowhere else yet; the map's dog is still
 the pixel dog. Whether the portrait replaces it on the map, or marks
 the person's ground, is a later decision.
 
+**The hand (13 Sep, same day).** The owner showed the landing page's
+posters as the target and sent ten of the illustrator's drawings:
+thick felt-tip marker, one line weight, a big cartoon head, dot eyes,
+hatching only on shaggy fur. Words alone get a model near a style;
+a picture of it gets closer. So the default recipe now sends three
+of those drawings along with the photo on the multi-image endpoint
+(`AVATAR_RECIPE=reference`; `marker` is the words-only fallback, and
+the automatic one when the files are missing). The drawings live in
+`server/assets/avatar-refs` and ship in the image. If the hand is
+still not the illustrator's after that, the next step is a style
+adapter trained on all of the drawings, with the illustrator's
+agreement, since it clones their line.
+
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e
 stack. The storage: if photos ever leave Telegram, this leaves with

@@ -10,21 +10,43 @@
 // here — see crosspost.ts). The app's promise to the person is exactly
 // that, and it is made in the sheet that asks for the photo.
 //
-// Configuration, both optional — the feature ships dormant and /auth/me
-// says `avatarConfigured: false`, which hides the step entirely:
-//   FAL_KEY       the fal.ai API key. Each drawing costs a few cents,
-//                 which is why the route caps drawings per person per
-//                 day (routes/auth.ts) on top of the burst limiter.
-//   FAL_API_URL   the endpoint, overridable for the local e2e stack
-//                 (a fake on 127.0.0.1 that returns a fixed PNG), the
-//                 way RESEND_API_URL stands in for Resend.
+// TWO RECIPES, one env switch (AVATAR_RECIPE):
+//   reference  (default) the photo goes in beside three of the
+//              illustrator's own drawings (assets/avatar-refs, the
+//              landing page's posters) on the multi-image endpoint,
+//              and the model is told to borrow their hand. A picture
+//              of the style moves a model further than any adjective.
+//   marker     the photo alone on the single-image endpoint, with the
+//              style described in words. The fallback when the
+//              reference files are missing, and the cheaper call.
+//
+// Configuration — the feature ships dormant and /auth/me says
+// `avatarConfigured: false`, which hides the step entirely:
+//   FAL_KEY         the fal.ai API key. Each drawing costs a few
+//                   cents, which is why the route caps drawings per
+//                   person per day (routes/auth.ts) on top of the
+//                   burst limiter.
+//   AVATAR_RECIPE   'reference' | 'marker', see above.
+//   FAL_API_URL     overrides whichever endpoint the recipe picks, for
+//                   the local e2e stack (a fake on 127.0.0.1 that
+//                   returns a fixed PNG), the way RESEND_API_URL stands
+//                   in for Resend.
+//   AVATAR_REFS_DIR where the reference PNGs are; defaults to
+//                   ./assets/avatar-refs under the working directory,
+//                   which is where the Dockerfile puts them.
 //
 // Every failure is an AvatarError with a code the client has a
 // sentence for. Nothing here logs the photo or the drawing's bytes.
 
+import fs from 'node:fs';
+import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 
 const DEFAULT_API_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
+const DEFAULT_MULTI_API_URL = 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
+// Three of the illustrator's drawings, chosen for range rather than
+// breed: shaggy (hatching), bulldog (folds, dots), poodle (loops).
+const REF_FILES = ['shaggy.png', 'bulldog.png', 'poodle.png'];
 // The model takes ~5–15 s; the fetch of the result a second more.
 const DRAW_TIMEOUT_MS = 90_000;
 const FETCH_TIMEOUT_MS = 30_000;
@@ -48,8 +70,37 @@ export function avatarConfigured(): boolean {
   return !!process.env.FAL_KEY?.trim();
 }
 
-function apiUrl(): string {
-  return process.env.FAL_API_URL?.trim() || DEFAULT_API_URL;
+export type AvatarRecipe = 'reference' | 'marker';
+
+export function avatarRecipe(): AvatarRecipe {
+  return process.env.AVATAR_RECIPE?.trim() === 'marker' ? 'marker' : 'reference';
+}
+
+function apiUrl(recipe: AvatarRecipe): string {
+  const override = process.env.FAL_API_URL?.trim();
+  if (override) return override;
+  return recipe === 'reference' ? DEFAULT_MULTI_API_URL : DEFAULT_API_URL;
+}
+
+function refsDir(): string {
+  return process.env.AVATAR_REFS_DIR?.trim() || path.join(process.cwd(), 'assets', 'avatar-refs');
+}
+
+// Read once, kept as data URIs. Null when any file is missing — the
+// draw then falls back to the marker recipe rather than failing, and
+// says so in the log once.
+let refsCache: string[] | null | undefined;
+function referenceImages(log: Log): string[] | null {
+  if (refsCache !== undefined) return refsCache;
+  try {
+    refsCache = REF_FILES.map(
+      (f) => `data:image/png;base64,${fs.readFileSync(path.join(refsDir(), f)).toString('base64')}`,
+    );
+  } catch (err) {
+    log.warn({ kind: 'avatar_refs', dir: refsDir(), err: (err as Error).message }, '[avatar] reference drawings missing — marker recipe');
+    refsCache = null;
+  }
+  return refsCache;
 }
 
 // One recipe, like the ink line in the UI (D-70): not tuned per pet.
@@ -61,12 +112,28 @@ function apiUrl(): string {
 // "one line weight" get the poster. The species and breed are said so
 // the model keeps the right animal when the photo is ambiguous (a
 // puppy in a blanket).
-export function avatarPrompt(pet: { species: string | null; breed: string | null }): string {
-  const what =
-    pet.species === 'cat' ? 'cat' : pet.species === 'dog' ? 'dog' : 'pet';
-  const breed = pet.breed ? ` (${pet.breed})` : '';
+function petWord(pet: { species: string | null; breed: string | null }): string {
+  const what = pet.species === 'cat' ? 'cat' : pet.species === 'dog' ? 'dog' : 'pet';
+  return pet.breed ? `${what} (${pet.breed})` : what;
+}
+
+// The reference recipe's words: the same rules, said about the
+// drawings that ride along, plus the one thing a multi-image model
+// gets wrong without being told — it must not draw the reference
+// animals.
+export function referencePrompt(pet: { species: string | null; breed: string | null }): string {
   return (
-    `Redraw the ${what}${breed} in this photo as a bold hand-drawn cartoon portrait in thick black felt-tip marker ` +
+    `Draw the ${petWord(pet)} from the first image as a portrait in exactly the drawing style of the other ` +
+    'three images: thick black felt-tip marker, one uniform line weight, a big simplified head facing the viewer, ' +
+    "dot eyes, a solid black nose, hatching only where the fur is shaggy, plain white background and nothing else. Keep the first animal's " +
+    'own ear shape, muzzle, markings and expression recognisable. Do not draw any of the animals from the reference images, ' +
+    'only borrow their style. No shading, no grey, no colour, no text, no frame.'
+  );
+}
+
+export function avatarPrompt(pet: { species: string | null; breed: string | null }): string {
+  return (
+    `Redraw the ${petWord(pet)} in this photo as a bold hand-drawn cartoon portrait in thick black felt-tip marker ` +
     'on plain white paper, like a hand-drawn lost-pet poster. One uniform line weight everywhere, no thin lines. ' +
     'Simplify: a big head filling the frame, facing the viewer, dot eyes, a round nose, a simple mouth; a few ' +
     'short hatching strokes only where the fur is shaggy, none where it is smooth. Keep what makes this animal ' +
@@ -92,25 +159,27 @@ export async function drawAvatar(
   const key = process.env.FAL_KEY?.trim();
   if (!key) throw new AvatarError('avatar_unconfigured');
 
+  const photoUri = `data:${photo.mime};base64,${photo.bytes.toString('base64')}`;
+  const refs = avatarRecipe() === 'reference' ? referenceImages(log) : null;
+  const recipe: AvatarRecipe = refs ? 'reference' : 'marker';
+  // The model's own safety filter: 2 is its default; a family pet
+  // photo never trips it, and a refusal is still surfaced below.
+  const common = { output_format: 'png', aspect_ratio: '1:1', num_images: 1, safety_tolerance: '2' };
+  const request =
+    recipe === 'reference'
+      ? { prompt: referencePrompt(pet), image_urls: [photoUri, ...(refs as string[])], ...common }
+      : { prompt: avatarPrompt(pet), image_url: photoUri, ...common };
+
   const started = Date.now();
   const ctl = new AbortController();
   const timer = setTimeout(() => ctl.abort(), DRAW_TIMEOUT_MS);
   let json: FalResponse | null = null;
   let status = 0;
   try {
-    const res = await fetch(apiUrl(), {
+    const res = await fetch(apiUrl(recipe), {
       method: 'POST',
       headers: { authorization: `Key ${key}`, 'content-type': 'application/json' },
-      body: JSON.stringify({
-        prompt: avatarPrompt(pet),
-        image_url: `data:${photo.mime};base64,${photo.bytes.toString('base64')}`,
-        output_format: 'png',
-        aspect_ratio: '1:1',
-        num_images: 1,
-        // The model's own safety filter: 2 is its default; a family pet
-        // photo never trips it, and a refusal is still surfaced below.
-        safety_tolerance: '2',
-      }),
+      body: JSON.stringify(request),
       signal: ctl.signal,
     });
     status = res.status;
@@ -125,7 +194,7 @@ export async function drawAvatar(
   const url = json?.images?.[0]?.url;
   if (status < 200 || status >= 300 || !url) {
     log.warn(
-      { kind: 'avatar_draw', status, detail: typeof json?.detail === 'string' ? json.detail.slice(0, 200) : undefined, ms: Date.now() - started },
+      { kind: 'avatar_draw', recipe, status, detail: typeof json?.detail === 'string' ? json.detail.slice(0, 200) : undefined, ms: Date.now() - started },
       '[avatar] model rejected the call',
     );
     throw new AvatarError('avatar_failed', `status ${status}`);
@@ -145,7 +214,7 @@ export async function drawAvatar(
     const bytes = Buffer.from(await res.arrayBuffer());
     if (bytes.length === 0 || bytes.length > MAX_RESULT_BYTES) throw new Error(`result size ${bytes.length}`);
     const mime = json?.images?.[0]?.content_type || res.headers.get('content-type') || 'image/png';
-    log.info({ kind: 'avatar_draw', bytes: bytes.length, ms: Date.now() - started }, '[avatar] drawn');
+    log.info({ kind: 'avatar_draw', recipe, bytes: bytes.length, ms: Date.now() - started }, '[avatar] drawn');
     return { bytes, mime: (mime.split(';')[0] ?? 'image/png').trim() };
   } catch (err) {
     log.warn({ kind: 'avatar_draw', err: (err as Error).message, ms: Date.now() - started }, '[avatar] result fetch failed');
