@@ -171,9 +171,11 @@ export function referencePrompt(pet: { species: string | null; breed: string | n
     'drawings, not their animals. Do not make it realistic and do not copy the photo — take only what makes ' +
     `this ${what} recognisable: its coat, ears, muzzle and markings. Half the lines you would normally draw: ` +
     'an outline, the ears, two small dot eyes, a nose, a mouth, and that is all — no fur strokes, no whiskers, ' +
-    'no wrinkles, no marks for shading. Draw it in five seconds without looking at the paper. Leave the ' +
-    'mistakes in: lines that miss, overshoot or do not meet, proportions that are off. Head and shoulders ' +
-    'facing the viewer, black lines on plain white, nothing else.'
+    `no wrinkles, no marks for shading. Draw it the way a four-year-old would: a wobbly blob for the head, ` +
+    'the ears, two dots for eyes, a blob for the nose, one line for the mouth, and one more thing only if it ' +
+    `is what makes this ${what} this ${what}. If a line is not needed to tell it is this ${what}, do not draw ` +
+    'it. Leave the mistakes in: lines that miss, overshoot or do not meet, proportions that are off. Head ' +
+    'and shoulders facing the viewer, black lines on plain white, nothing else.'
   );
 }
 
@@ -223,8 +225,9 @@ export function describePrompt(
     "children's picture book, a cartoon, not a portrait. Copy the style and the idea of the " +
     `drawings, not their animals. Do not make it realistic. The ${what}: "${description}" ` +
     'Half the lines you would normally draw: an outline, the ears, two small dot eyes, a nose, a mouth, and ' +
-    'that is all — no fur strokes, no whiskers, no wrinkles. Draw it in five seconds without looking at ' +
-    'the paper. Leave the mistakes in. ' +
+    'that is all — no fur strokes, no whiskers, no wrinkles. Draw it the way a four-year-old would: a ' +
+    `wobbly blob for the head, the ears, two dots for eyes, a blob for the nose, one line for the mouth. If a ` +
+    `line is not needed to tell it is this ${what}, do not draw it. Leave the mistakes in. ` +
     'Head and shoulders facing the viewer, black lines on plain white, nothing else.'
   );
 }

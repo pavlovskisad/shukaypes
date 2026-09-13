@@ -1271,8 +1271,15 @@ the one species with no sample of its own, which is a request to the
 illustrator, not a code change. Two stays. "We already got the really
 strong result"; the owner validates with the art director. One last
 lever, tried as the last change: a chaos line in the prompt, "draw it
-in five seconds without looking at the paper" — kept if it helps,
-dropped if not. If this still polishes past the
+in five seconds without looking at the paper". It made the four
+drawings MORE detailed — the bulldog's freckles came back, the cat
+grew fur. To this model a five-second sketch is a gestural scribble,
+more marks, not fewer: speed words add lines. Replaced by a
+simplicity line that hands it a shape vocabulary instead of a mood —
+a wobbly blob for the head, the ears, two dots, a blob nose, one line
+for the mouth, one more thing only if it is what makes this dog this
+dog; if a line is not needed to tell it is this dog, do not draw it.
+Kept if it helps, dropped if not. If this still polishes past the
 samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
