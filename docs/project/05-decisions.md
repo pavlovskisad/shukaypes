@@ -1114,14 +1114,20 @@ the person's ground, is a later decision.
 posters as the target and sent ten of the illustrator's drawings:
 thick felt-tip marker, one line weight, a big cartoon head, dot eyes,
 hatching only on shaggy fur. Words alone get a model near a style;
-a picture of it gets closer. So the default recipe now sends three
-of those drawings along with the photo on the multi-image endpoint
-(`AVATAR_RECIPE=reference`; `marker` is the words-only fallback, and
-the automatic one when the files are missing). The drawings live in
-`server/assets/avatar-refs` and ship in the image. If the hand is
-still not the illustrator's after that, the next step is a style
-adapter trained on all of the drawings, with the illustrator's
-agreement, since it clones their line.
+a picture of it gets closer. So a second recipe sends three of
+those drawings along with the photo on the multi-image endpoint
+(`AVATAR_RECIPE=reference`). It shipped as the default and lasted one
+drawing: the owner sent a golden retriever and got the reference
+bulldog back, near verbatim — the editing model treated a reference
+as the subject, and "do not draw the reference animals" did not hold.
+Reverted the same afternoon: `marker` (words only, single image) is
+the default, `reference` stays in the code for experiments and the
+drawings stay in `server/assets/avatar-refs`. What is measured, not
+reasoned: this model cannot be handed an animal drawing as a style
+sample. The routes left are a reference that is not an animal, a
+model built for style transfer from a reference, or the style
+adapter trained on all ten drawings (with the illustrator's
+agreement, since it clones their line).
 
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e
