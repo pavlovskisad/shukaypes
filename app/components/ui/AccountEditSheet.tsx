@@ -22,7 +22,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { TYPE } from '../../constants/type';
-import { HandDrawnFrame, PICTURE_INSET } from './HandDrawn';
+import { HandDrawnFrame } from './HandDrawn';
 import { AvatarStudio } from './AvatarStudio';
 import {
   COLUMN,
@@ -49,8 +49,9 @@ interface Props {
   onLoggedOut: () => void;
 }
 
-// The portrait on the edit row: a small round one, on paper like the
-// profile card's.
+// The portrait on the edit row: a small round one like the profile
+// card's, and like it without a drawn ring — the marker line is the
+// edge.
 const PORTRAIT_SIZE = 44;
 const PORTRAIT: CSSProperties = {
   position: 'relative',
@@ -59,7 +60,6 @@ const PORTRAIT: CSSProperties = {
   flex: 'none',
   background: '#ffffff',
   borderRadius: '50%',
-  border: '2px solid transparent',
 };
 
 export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
@@ -248,13 +248,12 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
                 <div style={{ display: 'flex', alignItems: 'center', gap: S.m, marginTop: 4 }}>
                   {me.avatarUrl ? (
                     <div style={PORTRAIT}>
-                      <HandDrawnFrame seed="edit-portrait" radius={PORTRAIT_SIZE / 2} />
                       <div
                         role="img"
                         aria-label={t.avatarSection}
                         style={{
                           position: 'absolute',
-                          inset: PICTURE_INSET,
+                          inset: 0,
                           borderRadius: '50%',
                           backgroundImage: `url("${me.avatarUrl}")`,
                           backgroundSize: 'cover',

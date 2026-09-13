@@ -33,7 +33,7 @@ interface Props {
 // the portrait inside it. THIN line on purpose — the profile's 2px
 // frame at 44px reads as a coin; at chip size the mock's edge is a
 // hairline, so this one is drawn at 1.25.
-const CHIP = 40;
+const CHIP = 48;
 const CHIP_STROKE = 1.25;
 
 // Metres-per-degree helpers for the small movement/facing deltas.
@@ -222,7 +222,7 @@ export function OtherWalker({ player, onOpen }: Props) {
                 justifyContent: 'center',
               }}
             >
-              <DogSprite anim="sitting" facingLeft={facingLeft} scale={0.55} />
+              <DogSprite anim="sitting" facingLeft={facingLeft} scale={0.66} />
             </div>
           )}
         </div>

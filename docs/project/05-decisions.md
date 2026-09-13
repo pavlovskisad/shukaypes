@@ -1393,5 +1393,8 @@ list in the same order so the `bot:N` rows keep their names.
 **What would change it.** A message button: the card is the place
 for it, and the sheet's `Primary` is the only button now on purpose.
 The chip size and stroke are two constants at the top of
-`OtherWalker.tsx`. If presence ever carries the level, the second
+`OtherWalker.tsx` (48px since the first night on a phone: 40 read as
+small; and the profile card's and edit sheet's portraits lost their
+drawn ring the same night — the marker line is the edge, as on the
+card). If presence ever carries the level, the second
 fetch goes.
