@@ -11,11 +11,19 @@ import type {
 import type { WalkStop } from '../utils/walk';
 import { env } from '../constants/env';
 import { MULTIPLAYER } from '../constants/experiments';
-import { getDeviceId } from './deviceId';
-import { getTelegramInitData } from './telegram';
+import {
+  absorbIssuedSession,
+  authHeaders,
+  clearSession,
+  getSessionToken,
+  storeSession,
+} from './session';
+import { clearAccount, getAccount, storeAccount } from './account';
+import { getDeviceId, rotateDeviceId } from './deviceId';
+import { isInTelegram } from './telegram';
 import { getInviteCode, clearInviteCode } from './invite';
 import { getDevKey } from './devUnlock';
-import { markInviteRequired } from '../stores/accessStore';
+import { markInviteRequired, markRegistrationRequired } from '../stores/accessStore';
 import { useConnectionStore } from '../stores/connectionStore';
 
 /**
@@ -28,6 +36,93 @@ export class InviteRequiredError extends Error {
     super('invite required');
     this.name = 'InviteRequiredError';
   }
+}
+
+/**
+ * The server refused because the account has not passed the door
+ * (D-69). Like being uninvited, a state rather than a fault: the
+ * access store is nudged to re-read /auth/me and draw the screen.
+ */
+export class RegistrationRequiredError extends Error {
+  constructor() {
+    super('registration required');
+    this.name = 'RegistrationRequiredError';
+  }
+}
+
+/**
+ * Any non-2xx the wrapper turned into a throw, with the status and the
+ * server's error CODE (`{ error: 'email_taken' }`) on it, so a form can
+ * say what went wrong in the person's language instead of pasting
+ * `409 /auth/register: {...}` into the page. The message keeps the old
+ * shape for every caller that only ever read that.
+ */
+export class ApiError extends Error {
+  readonly status: number;
+  readonly code: string | null;
+  constructor(status: number, path: string, text: string) {
+    super(`${status} ${path}: ${text}`);
+    this.name = 'ApiError';
+    this.status = status;
+    let code: string | null = null;
+    try {
+      const parsed = JSON.parse(text) as { error?: unknown };
+      if (typeof parsed.error === 'string') code = parsed.error;
+    } catch {
+      /* not JSON */
+    }
+    this.code = code;
+  }
+}
+
+// ---- The account's slip ----
+//
+// With a login on this page and no fresh session slip, the ordinary
+// fallback headers (Telegram initData, the device id) would identify
+// the ANONYMOUS row this device also has, and every request until the
+// next login would land in the wrong account. So the slip is refreshed
+// first, from the 90-day token the login left behind, and only then
+// are headers asked for. One in-flight refresh at a time: the cold
+// start fires several requests at once and they all wait on the same
+// exchange.
+let refreshing: Promise<boolean> | null = null;
+
+async function refreshAccountSession(): Promise<boolean> {
+  const account = getAccount();
+  if (!account) return false;
+  if (!refreshing) {
+    refreshing = (async () => {
+      try {
+        const res = await fetch(`${env.apiUrl}/auth/refresh`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ refresh: account.refresh, deviceId: getDeviceId() }),
+        });
+        if (res.status === 401) {
+          // Revoked (a password reset elsewhere, a logout) or expired.
+          // The page goes back to being its device; the door will ask
+          // the person to log in again.
+          clearAccount();
+          clearSession();
+          return false;
+        }
+        if (!res.ok) return false;
+        const json = (await res.json()) as { session?: string };
+        if (typeof json.session !== 'string') return false;
+        storeSession(json.session);
+        return true;
+      } catch {
+        return false;
+      } finally {
+        refreshing = null;
+      }
+    })();
+  }
+  return refreshing;
+}
+
+async function ensureAccountSession(): Promise<void> {
+  if (getAccount() && !getSessionToken()) await refreshAccountSession();
 }
 
 // Projection returned by /dogs/nearby — narrower than the full LostDog type
@@ -194,28 +289,33 @@ export class TimeoutError extends Error {
 const noteSuccess = () => useConnectionStore.getState().noteSuccess();
 const noteFailure = (timedOut: boolean) => useConnectionStore.getState().noteFailure(timedOut);
 
-async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number }): Promise<T> {
-  // Prefer Telegram Mini App auth when running inside Telegram —
-  // server validates the signature with our bot token and resolves
-  // (or creates) the user keyed on telegram_id. Outside Telegram
-  // (regular browser / PWA) we send the existing device-id header
-  // and the user stays anonymous + browser-scoped.
-  const tgInitData = getTelegramInitData();
-  const authHeaders: Record<string, string> = tgInitData
-    ? { 'x-telegram-init-data': tgInitData }
-    : { 'x-device-id': getDeviceId() };
+async function req<T>(
+  path: string,
+  init?: RequestInit & { timeoutMs?: number },
+  // Set on the one retry a refused session token earns. Never chains.
+  retriedAfterStaleSession = false,
+): Promise<T> {
+  // Who we are: a session token while we hold a fresh one (about 200
+  // bytes, no database work server-side), else Telegram initData inside
+  // the Mini App (server-validated, keyed on telegram_id), else the
+  // device id (anonymous, browser-scoped). See services/session.ts.
+  // A logged-in account refreshes its slip first (see above) so the
+  // fallback never speaks for it.
+  await ensureAccountSession();
+  const usingSession = getSessionToken() != null;
+  const identity = authHeaders();
   // Only consulted by the server when CREATING an account, so sending it
   // on every request is harmless and saves having to know which call
   // will be the one that signs us up. Absent for everybody who already
   // has an account, and for everybody at all while the gate is off.
   const invite = getInviteCode();
-  if (invite) authHeaders['x-invite-code'] = invite;
+  if (invite) identity['x-invite-code'] = invite;
   // Only the two destructive dev routes look at this, and only when
   // somebody has unlocked at /dev. Sent on every request for the same
   // reason as the invite code — knowing which call needs it is the
   // caller's problem otherwise — and absent entirely for everybody else.
   const devKey = getDevKey();
-  if (devKey) authHeaders['x-dev-key'] = devKey;
+  if (devKey) identity['x-dev-key'] = devKey;
   // AbortController rather than Promise.race: racing leaves the request
   // running, so a stalled call keeps its socket and its memory and still
   // resolves into nothing later. Aborting actually cancels it.
@@ -229,7 +329,7 @@ async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number })
       signal: controller.signal,
       headers: {
         'content-type': 'application/json',
-        ...authHeaders,
+        ...identity,
         ...(init?.headers ?? {}),
       },
     });
@@ -252,6 +352,21 @@ async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number })
   // somebody they are offline when they are not would send them hunting
   // for signal over a bug at our end.
   noteSuccess();
+  // Any token the server handed back — first contact, or a renewal of
+  // the one we sent — replaces what we hold.
+  absorbIssuedSession(res);
+  // The server refused our session token (expired between our check
+  // and its; the key rotated; a deploy without the secret). It is not
+  // a fault in our identity, only in the slip: drop it and go once the
+  // old way, which mints a fresh one on the way back. One retry, never
+  // a loop — a 401 on the retry is a real 401.
+  if (res.status === 401 && usingSession && !retriedAfterStaleSession) {
+    clearSession();
+    // An account re-mints from its refresh token; if that fails the
+    // account is cleared and the retry identifies as the device.
+    if (getAccount()) await refreshAccountSession();
+    return req<T>(path, init, true);
+  }
   if (!res.ok) {
     const text = await res.text().catch(() => '');
     // 403 from the auth hook means the door is shut, not that anything
@@ -263,7 +378,11 @@ async function req<T>(path: string, init?: RequestInit & { timeoutMs?: number })
       markInviteRequired();
       throw new InviteRequiredError();
     }
-    throw new Error(`${res.status} ${path}: ${text}`);
+    if (res.status === 403 && text.includes('registration')) {
+      markRegistrationRequired();
+      throw new RegistrationRequiredError();
+    }
+    throw new ApiError(res.status, path, text);
   }
   // We are through the door, so the code has done its job. Dropping it
   // here keeps a used code from lingering in a shared browser and being
@@ -306,6 +425,118 @@ export interface StateResponse {
 // `lostDogs` must use this, or two of them disagree and the list changes
 // size depending on which one happened to run last.
 export const PET_RADIUS_M = 12000;
+
+// ---- Accounts (D-69) ----
+
+export type DoorState = 'open' | 'register' | 'verify';
+
+export interface Me {
+  userId: string;
+  via: 'telegram' | 'device' | 'email' | null;
+  door: DoorState;
+  registered: boolean;
+  emailVerified: boolean;
+  verifyRequired: boolean;
+  mailConfigured: boolean;
+  // Masked: ol***@example.com.
+  email: string | null;
+  nickname: string;
+  pet: { name: string | null; species: string | null; breed: string | null } | null;
+  hasPassword: boolean;
+  telegram: boolean;
+  avatarUrl: string | null;
+}
+
+export interface RegisterInput {
+  nickname: string;
+  petName?: string;
+  petSpecies?: 'dog' | 'cat';
+  petBreed?: string;
+  email: string;
+  password: string;
+  consent: true;
+}
+
+export type ProfileInput = Pick<RegisterInput, 'nickname' | 'petName' | 'petSpecies' | 'petBreed'>;
+
+interface LoginResponse {
+  ok: true;
+  session: string | null;
+  refresh: string;
+  me: Me;
+}
+
+// A login, a verified link and a password reset all leave the same
+// thing behind: this page is now that account. Keep the refresh token,
+// keep the slip, and forget any slip the device identity held.
+function adoptLogin(r: LoginResponse): Me {
+  clearSession();
+  storeAccount({ refresh: r.refresh, userId: r.me.userId });
+  if (r.session) storeSession(r.session);
+  return r.me;
+}
+
+export const auth = {
+  me: () => req<Me>('/auth/me'),
+  register: (input: RegisterInput) =>
+    req<{ ok: true; emailSent: boolean; me: Me }>('/auth/register', {
+      method: 'POST',
+      body: JSON.stringify(input),
+    }),
+  // From the profile: the door's fields, changed later.
+  updateProfile: (input: ProfileInput) =>
+    req<{ ok: true; me: Me }>('/auth/profile', { method: 'POST', body: JSON.stringify(input) }),
+  changePassword: (current: string, next: string) =>
+    req<{ ok: true }>('/auth/password', {
+      method: 'POST',
+      body: JSON.stringify({ current, next, refresh: getAccount()?.refresh }),
+    }),
+  // `{}` rather than no body: the wrapper sets a JSON content type on
+  // every request, and Fastify refuses an empty body under it.
+  resend: () =>
+    req<{ ok: true; emailSent: boolean; alreadyVerified?: boolean }>('/auth/resend', { method: 'POST', body: '{}' }),
+  verify: async (token: string) =>
+    adoptLogin(
+      await req<LoginResponse>('/auth/verify', {
+        method: 'POST',
+        body: JSON.stringify({ token, deviceId: getDeviceId() }),
+      }),
+    ),
+  login: async (email: string, password: string) =>
+    adoptLogin(
+      await req<LoginResponse>('/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email, password, deviceId: getDeviceId() }),
+      }),
+    ),
+  forgot: (email: string) => req<{ ok: true }>('/auth/forgot', { method: 'POST', body: JSON.stringify({ email }) }),
+  reset: async (token: string, password: string) =>
+    adoptLogin(
+      await req<LoginResponse>('/auth/reset', {
+        method: 'POST',
+        body: JSON.stringify({ token, password, deviceId: getDeviceId() }),
+      }),
+    ),
+  // Forget the login on this page — AND who the device was. The device
+  // that registered IS the account (its x-device-id maps to the
+  // registered row), so dropping the login alone put the person
+  // straight back in; a new device id makes the page a stranger, and
+  // with the door up it is asked to log in. Inside Telegram the
+  // identity is Telegram's and cannot be rotated; there the item is
+  // not shown at all.
+  logout: async () => {
+    const account = getAccount();
+    clearAccount();
+    clearSession();
+    if (account) {
+      await req<{ ok: true }>('/auth/logout', {
+        method: 'POST',
+        body: JSON.stringify({ refresh: account.refresh }),
+      }).catch(() => undefined);
+    }
+    if (!isInTelegram()) rotateDeviceId();
+  },
+};
 
 export const api = {
   getState: () => req<StateResponse>('/state'),

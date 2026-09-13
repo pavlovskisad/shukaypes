@@ -3,6 +3,7 @@ import { useRouter } from 'expo-router';
 import { MapLibreMarker } from './MapLibreMarker';
 import { useMaplibreMap } from './MapContext';
 import { useGameStore } from '../../stores/gameStore';
+import { useAccessStore } from '../../stores/accessStore';
 import { Z } from '../../constants/z';
 import { iconForCategory } from '../ui/Icon';
 import { SpeechBubble } from '../ui/SpeechBubble';
@@ -136,6 +137,38 @@ export function Companion({
   const setAppMode = useGameStore((s) => s.setAppMode);
   const setLostFlowOpen = useGameStore((s) => s.setLostFlowOpen);
   const gateOpen = appMode === 'gate';
+  // THE DOOR, ASKED BY THE DOG (D-69). Before the four intents there is
+  // an earlier question — «нюх-нюх! ми знайомі?» — and it is asked the
+  // same way, in the same bubble, with its answers in the same pill
+  // grid under the dog: two words instead of four. Each answer opens
+  // the account sheet over the map (login or registration); the sheet
+  // closes itself when the account is through, and the dog is back
+  // here with the four intents, exactly where it was.
+  //
+  // `door` is what /auth/me last said. Null is "not yet asked" — the
+  // splash covers that second — and the dog holds its tongue rather
+  // than ask a question it may have to take back.
+  const door = useAccessStore((s) => s.door);
+  const openDoorSheet = useAccessStore((s) => s.openDoorSheet);
+  const authGate = gateOpen && door !== 'open';
+  // While the account sheet is up the dog stays exactly where it is —
+  // the CAMERA moves so it sits high on screen with the paper below
+  // (MapView's framing effect) — and it says the line for whichever
+  // screen the sheet is on. One dog, one bubble, no second copy in the
+  // paper. The answers under it are put away until the sheet closes.
+  const sheetUp = useAccessStore((s) => s.doorSheet != null);
+  const doorScreen = useAccessStore((s) => s.doorScreen);
+  const sheetLine = !sheetUp
+    ? null
+    : doorScreen === 'login'
+      ? t.auth.loginAsk
+      : doorScreen === 'verify'
+        ? t.auth.verifyAsk
+        : doorScreen === 'forgot' || doorScreen === 'forgotSent'
+          ? t.auth.forgotAsk
+          : doorScreen === 'reset'
+            ? t.auth.resetAsk
+            : t.auth.registerAsk;
   // AT THE GATE, THE DOG CANNOT BE HIDDEN.
   //
   // `hidden` is the off-screen rule: when the dog leaves the viewport
@@ -542,6 +575,14 @@ export function Companion({
       // genuinely CHANGING. It runs the clear-slate reducer and flips
       // every piece of chrome, and paying that to re-enter the mode you
       // are already in is the flicker this whole level exists to avoid.
+      if (id === 'auth:yes') {
+        openDoorSheet('login');
+        return;
+      }
+      if (id === 'auth:no') {
+        openDoorSheet('register');
+        return;
+      }
       if (id.startsWith('mode:')) {
         switch (id) {
           case 'mode:lost': {
@@ -605,7 +646,7 @@ export function Companion({
       fireLeafAction(id);
       setMenuOpen(false);
     },
-    [menuPath, fireLeafAction, setMenuOpen, setAppMode, setLostFlowOpen, appMode, gateOpen]
+    [menuPath, fireLeafAction, setMenuOpen, setAppMode, setLostFlowOpen, appMode, gateOpen, openDoorSheet]
   );
 
   // Visit-leaf cache — keyed by the category drill (path[1] like
@@ -636,7 +677,18 @@ export function Companion({
     [t],
   );
 
+  // The two answers to «ми знайомі?». Same shape as the intents, so the
+  // ring draws them the same way.
+  const authActions = useMemo<RadialAction[]>(
+    () => [
+      { id: 'auth:yes', label: t.auth.knowYes },
+      { id: 'auth:no', label: t.auth.knowNo },
+    ],
+    [t],
+  );
+
   const currentActions = useMemo(() => {
+    if (authGate) return authActions;
     if (showModes) return modeActions;
     const nonVisit = getNonVisitActions(menuPath);
     if (nonVisit) return nonVisit;
@@ -650,7 +702,7 @@ export function Companion({
     const leaves = buildVisitLeaves(category, spots, userPosition);
     visitLeavesCacheRef.current = { key: visitKey, leaves };
     return leaves;
-  }, [showModes, modeActions, menuPath, spots, userPosition]);
+  }, [authGate, authActions, showModes, modeActions, menuPath, spots, userPosition]);
 
   // Hide bubbles while the radial menu is open — otherwise the bubble
   // (above the companion) and the top "search" button fight for the
@@ -674,7 +726,12 @@ export function Companion({
   // again — so a hint never fires mid-transition or off-screen.
   const hintsAllowed = useGameStore((s) => s.hintsAllowed);
   const noRealBubble = !menuOpen && !hideBubble && !bubble && !localBubble;
-  const hintsReady = hintsAllowed && noRealBubble;
+  // Not at the door either: the dog is asking who you are, or saying
+  // the line for the account sheet, and a tour of the logo has no place
+  // in that — and the snap a hint fires would re-centre the dog under
+  // the paper (MapView keeps the offset, but the hint has no business
+  // moving the camera here at all).
+  const hintsReady = hintsAllowed && noRealBubble && !authGate && !sheetUp;
   // FIRST, because the logo is the one control that changes what the
   // whole screen IS, and a brand mark in a corner gives no clue that it
   // does anything at all. It used to be last, on the reasoning that
@@ -833,9 +890,15 @@ export function Companion({
   // It IS their label — four bare verbs orbiting a dog with an ambient
   // bark above them would read as nonsense. At the gate it also outranks
   // `hideBubble`, because there the question is the screen.
-  const activeBubble = gateOpen
-    ? t.modes.ask
-    : hideBubble
+  const activeBubble = sheetUp
+    ? sheetLine
+    : authGate
+      ? door === null
+        ? null
+        : t.auth.knowAsk
+    : gateOpen
+      ? t.modes.ask
+      : hideBubble
       ? null
       : atModes
         ? t.modes.ask
@@ -936,7 +999,8 @@ export function Companion({
           // tucks in at the nose like every other thing the dog says.
         />
         <RadialMenu
-          open={menuOpen}
+          // Nothing to answer until the server has said who this is.
+          open={menuOpen && !sheetUp && !(authGate && door === null)}
           actions={currentActions}
           onSelect={handleSelect}
           // White buttons, black text and icons — the same way round as

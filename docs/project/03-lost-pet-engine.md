@@ -292,8 +292,11 @@ abbreviations resolve; the model is asked only on ads a regex gave up on,
 and answers in the ad's own alphabet.
 
 **`placement_source` (migration `0037`) records how each pin happened** —
-`owner`, `gazetteer-marked:<name>`, `model-landmark:<name>`, `fall-through`,
-`sighting`. `label-pins` backfilled the 167 pre-column rows by
+`owner`, `sighting`, `gazetteer-marked:<name>` (the ad wrote «вул. X» /
+«район X»), `gazetteer-bare:<name>` (a name matched with nothing marking
+it as a place), `gazetteer-judged:<name>` (bare, then confirmed by the
+judge — see below), `gazetteer-fuzzy:<name>`, `model-landmark:<name>`,
+`model-geo`, `fall-through`. `label-pins` backfilled the 167 pre-column rows by
 recomputation, never by touching coordinates, so `GROUP BY
 placement_source` now describes the whole active table with no nulls and no
 inference. Fall-through went **81 → 71**.
@@ -305,6 +308,170 @@ and when it did move, the dry run printed every candidate with the pet's
 stored description beside it, which is what exposed «Грейс → Контактна
 вулиця» as the resolver misreading contact-info boilerplate. Each applied
 move emits a per-pet reversal UPDATE with the previous coordinates.
+
+Since #541 `resolve-pins` picks its groups **by the column**, not by
+recomputing jitter. The jitter test silently missed 28 active pets whose
+coordinate came from the parser's own hint table rather than
+`landmarks.ts` — «Коля», placeable at his circus since the morning of
+3 Sep, was still drawn beside Maidan that afternoon because no jitter
+reproduced his Бессарабка hint and the CLI never considered him.
+
+### The resolver since 3 Sep (#537–#542, #553, #558–#559)
+
+The second campaign was driven by pets the owner reported from the map,
+one screenshot at a time. What changed, each with a fixture:
+
+- **Landmarks people navigate by.** Thirteen of 192 active pets were
+  located by «район цирку», «біля жд вокзалу», «район 9-ї лікарні» and
+  resolved to nothing, because the gazetteer held streets, parks, metro
+  and districts and no circus. The seed now pulls hospitals, stations,
+  markets, malls, the zoo, venues, universities, churches and schools —
+  chosen from the words that appeared in those ads. Multipolygon venues
+  need `nwr`, not `node`/`way` (the circus was always in OSM; the query
+  could not see it). And **the venue's OSM name is not what people
+  write**: what matches «Район цирка» is the bus stop outside it, named
+  «Цирк». Transit stops are their own chunk for that reason.
+- **Russian orthography fold and `name:ru`.** Russian-written ads were the
+  largest single reason for a refusal (65 of 126). The fold bridges
+  spelling; keeping `name:ru` bridges the cases where the languages use
+  different words.
+- **Specificity outranks exactness.** It was the other way round, so
+  «Солом'янський район, біля Охматдиту» resolved to four kilometres of
+  district because the district matched letter-for-letter and the
+  hospital only through a stem. Marked still beats everything.
+- **One side or the other must announce a place (#542).** Transit stops
+  brought thousands of names made of ordinary nouns, and measured on the
+  backfill two in five landmark moves were wrong — «Господар», «Фонтан»,
+  «Проспект», a stop literally named «hospital», each a word from
+  somebody's description of their animal. A name made only of generic
+  words is refused outright; the short-key guard moved from the name floor
+  to the stem floor (4-character stems were the noise, 5 is ordinary
+  inflection). 78 resolutions became 72: all ten bad landmark matches
+  gone, three new correct ones.
+- **A station and its district are one place (#553).** «Оболонь», «Позняки»,
+  «Святошин», «Лісова» were being refused as namesakes because the
+  gazetteer holds each name twice — the metro point and the district
+  centroid a kilometre off. Clusters are now counted within a category,
+  and a reading must be *dominant*: nothing of that name further than 5km
+  (metro exempt). «Перемога» — a district 30km east and two neighbourhoods
+  10km west, which once pinned a pet 26.5km from where its ad meant — is
+  still refused. And **«метро X» names a station and only a station**: the
+  first cut of this resolved «метро Спортивная» (Kharkiv) to Спортивна
+  площа in Kyiv, marked and therefore visible, and made «Таруша» worse.
+- **The `approximate` flag.** A place-name resolution that is real but
+  broad — a district, a neighbourhood — is carried to the client as
+  `approximate`, and the pet sheet (`LostDogModal`) says so: «місце приблизне —
+  дивись оголошення». Saying "we are guessing" is part of the placement.
+- **Districts that stand in for a city (#558–#559).** Ten active pets came
+  from Odesa, Lviv, Kharkiv, Mykolaiv ads that never name their city —
+  «на хтз», «в районі молдованка», «Люстдорфської дороги» — because nobody
+  writing to their neighbours does. The ingest gate needed no change:
+  every one arrived before it existed, and fetching an ad live shows the
+  gate rejecting it today. Seven unambiguous district names went into the
+  out-of-area module; `expire:out-of-area` now also reads the **ad body**,
+  report-only, because a body is a story and a story about a Kyiv pet can
+  name another city in passing.
+- **`relabel:marked`.** A gazetteer entry named «Вулиця Літня» swallowed
+  the ad's own «вул.», so «Буся» — «приватний сектор, вул. Літня», a properly
+  written address — was recorded as a guess. Nine active pets were in that
+  position. The CLI re-runs the resolver and re-stamps the label **only
+  when it names the same place**; coordinates are never touched, and a
+  changed answer is printed under its own heading for `resolve-pins`.
+
+### What the map is allowed to show: the confidence bar (#551, #557)
+
+Five misplaced pets reported from the map, 7 Sep, and they were not one
+bug. «Таруша» says «метро Спортивная» — a Kharkiv station — and the model
+answered Олімпійська, so the app sent somebody to a stadium two kilometres
+from a dog in another oblast. «Тимошка» names «Бригади Хартії» and
+«м.Армійська», both Kharkiv, and got Печерськ. A cat naming three villages
+matched a music school by fuzzy string. No list of other cities' street
+names would have caught any of them. What they share is that **nothing in
+the ad put the animal where we drew it** — and `placement_source` already
+records exactly that.
+
+So `services/placementConfidence.ts` is one bar, read by all four paths
+that can send a walker somewhere — map pins, the search-zone spawner, what
+the companion says is nearby, and `GET /dogs/nearby` behind the supersniff
+and quests carousels (the fourth was missed in #551 and added in #557; it
+matters because `/sync/map` and `/dogs/nearby` write the *same* client
+list, so whichever ran last decided what the walker saw). A pet appears
+when its coordinate came from a person (`owner`, `sighting`) or from a
+place the ad explicitly named (`gazetteer-marked:`), or — since #562 — a
+bare match a model confirmed (`gazetteer-judged:`). Everything else is
+hidden: bare, fuzzy, model-landmark, model-geo, fall-through, and the
+null rows that predate the column. The three hand-rolled fall-through
+filters are subsumed; the SQL and the predicate are both generated from
+one prefix list, so relaxing it is one line.
+
+**The cost was measured before it was chosen: 127 visible pets became
+roughly 28** (the ledger said 24 on 7 Sep; the quests tab showed 18, which
+is the 12km fetch radius, not a bug). A hidden pet is one nobody walks for,
+a genuine loss to its owner. A pet drawn in the wrong district is worse —
+it spends somebody's afternoon and teaches them the map lies. The owner's
+call, on those numbers.
+
+### The judge: a second reader that may only reject (#562, #563)
+
+Bare matches were hidden wholesale because one of them put «Горобчик» on
+Соборна площа in the centre when his ad said Софіївська Борщагівка — a
+village on the western edge with a вулиця Соборна of its own. That is not
+a matcher bug; a matcher cannot know a village street shares a name with
+a square. It is world knowledge.
+
+So `pipeline/placementJudge.ts` has a model read the ad afterwards and
+answer one question: does this ad support this pin? Over the 44 bare-placed
+pets on production it rejected 10, and every rejection held up on reading:
+«Вул. Ракетна» was «ракетної атаки», a rocket attack; «Забір'я» was
+«забирав», a verb; «Святошинський район» was Києво-Святошинський, an oblast
+raion; two «Васильківська» were a stem collision and a separate city. It
+also overruled a human call — «Брок» on «Лісова» is right; вул. Кубанської
+України is in Лісовий масив.
+
+**It may only reject.** That is the whole safety argument, not a style
+preference. Asking a model *where* a pet is produced «Таруша». Asking
+whether an ad supports a pin somebody else chose has a different worst
+case: a wrong rejection hides a pet, a real loss but a quiet, reversible
+one. The judge never returns a coordinate, never names a place, never
+promotes anything the resolver did not find. When it cannot run — no key,
+no budget, an API error, an answer in an unexpected shape — it returns
+null and the row keeps its unjudged label, which the bar already hides.
+An outage costs nothing that works. `check:placement-judge` pins that only
+an explicit refusal hides a pet.
+
+Opus, deliberately, not the parser's Haiku: the distinctions are the hard
+half of the task, and at $0.19 for 44 pets and roughly one new pet every
+other day the model choice is not the cost. `MAX_TOKENS` is 2000 because
+the first prototype's 300 left six answers *empty* — thinking spent the
+budget — and empty read as "no REJECT prefix", silently scoring six keeps.
+
+**`judge:pins` writes a plan.** The first version judged again inside
+`--apply` and the counts moved: the dry run a human read said 32 kept and
+12 refused; the apply wrote 33 and 11 («Муха», Hlevakha, defensible either
+way). A rule that says the dry run gets read before the apply means nothing
+if the apply writes something else. So the dry run writes every verdict
+with the label it was judged against, `--apply` reads that file with no
+model call, and a row whose label moved in between is skipped and named.
+
+### A sighting with an invented position is not a report (#544)
+
+Reporting a sighting could delete a pet from the map. When geolocation
+fails or is refused, the client substitutes Kyiv centre so the map has
+somewhere to open. That is fine for looking at a map and wrong for a
+sighting, where the coordinate *is* the evidence: the server measured it
+against the pet's radius, found it inside 2×, trusted it, and moved the pet
+there — onto the parser's fall-through pair, which both map queries filter
+out by exact match. **One constant doing three jobs** — parser
+fall-through, client fallback, map filter — is why the failure was invisible
+from any one of them. Measured: «Коля» was placed at his circus from his
+own ad on 3 Sep and a sighting carrying this pair took him off the map the
+same evening.
+
+Refused on both sides, because an old client keeps sending what it was
+built to send. `POST /sightings` answers 400; the walk flow drops only the
+coordinate and still pays the paws, because the person did walk the zone;
+and the app says *which* failure it is — "I can't see where you are"
+rather than "try again".
 
 ## The ad body
 
@@ -418,7 +585,13 @@ Between a parse and a row there are five filters, in order:
    outside it are refused, **but the ungeocoded fallback coord is let
    through on purpose** — which was the hole that let out-of-city pets into
    the table, because a post about a cat in Uzhhorod is exactly the post
-   that fails to geocode.
+   that fails to geocode. Since 7 Sep the confidence bar hides it along
+   with every other undefended placement, so it reaches the table but not
+   a walker.
+5. **The placement judge** (`pipeline/placementJudge.ts`, #562) — runs at
+   ingest on bare gazetteer matches only, and may only turn
+   `gazetteer-bare:` into `gazetteer-judged:` (shown) or leave it (hidden).
+   Not a gate on the row; a gate on visibility.
 
 ## Dedupe and upsert
 
@@ -613,6 +786,17 @@ nothing. Print the intermediate before trusting the aggregate.
   filter is too strict or those queries surface non-lost-pet traffic;
   `skip_reason` distinguishes `title-filter` from `rehoming` and would
   settle it. **Do not read a non-zero `fresh` as a healthy pipeline.**
+  Still true on 12 Sep: the last tick read `discovered 468, skipped 468,
+  parsed 0, inserted 0, errors 0, fresh 6`. The judge's own header
+  estimates "roughly one new pet every other day", so the table is
+  growing, but no session has yet counted inserts per week from
+  `scrape_log`. Count before believing either number.
+- **The active table is ~193 rows, not 78.** Every doc written on 20–25 Aug
+  carries 78 active after the corpus check; `placementConfidence.ts`
+  measured 193 on 7 Sep and #537 counted 192 on 3 Sep. The difference has
+  not been explained (revived live ads, the report path, or simply two
+  weeks of ingest) — somebody should run the admin report and write the
+  breakdown down before quoting either figure.
 - **`--sample=N` draws from an unshuffled list.** It reported "4 of 5 ads
   are live" when the true rate was nearer 1 in 3, because the query order
   put the freshest first. Shuffle before drawing, or the sample is a biased

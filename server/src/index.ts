@@ -7,6 +7,7 @@ import compress from '@fastify/compress';
 import rateLimit from '@fastify/rate-limit';
 import authPlugin from './auth.js';
 import stateRoute from './routes/state.js';
+import authRoute from './routes/auth.js';
 import tokensRoute from './routes/tokens.js';
 import foodRoute from './routes/food.js';
 import dogsRoute from './routes/dogs.js';
@@ -98,7 +99,9 @@ export async function buildServer(observe?: RouteObserver) {
     });
   }
 
-  await app.register(cors, { origin: true });
+  // The session token rides back on a response header (lib/session.ts);
+  // a browser can only read a custom header the server has listed.
+  await app.register(cors, { origin: true, exposedHeaders: ['x-session-token'] });
   // Compress JSON on the way out. Nothing in front of this process does
   // it — Fly's proxy passes bytes through — so until now every response
   // left uncompressed: /sync/map at ~27KB every 15s and /presence at
@@ -200,6 +203,7 @@ export async function buildServer(observe?: RouteObserver) {
   });
 
   await app.register(authPlugin);
+  await app.register(authRoute);
   await app.register(stateRoute);
   await app.register(tokensRoute);
   await app.register(foodRoute);

@@ -16,6 +16,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { DEV_TOOLS } from '../../constants/devTools';
 import { useGameStore } from '../../stores/gameStore';
+import { useAccessStore } from '../../stores/accessStore';
 import { MapContext } from './MapContext';
 import {
   LIGHT_PALETTE,
@@ -47,6 +48,9 @@ import { CollectBurst } from './CollectBurst';
 import { createDepthFogLayer, DEPTH_FOG_LAYER_ID } from './fogLayer';
 import { THREE_BUILDINGS_LAYER_ID, GROUND_FOG_LAYER_ID } from './layerIds';
 import { webgl2Supported } from '../../utils/webgl';
+import { petPhotoAt } from '../../utils/petPhoto';
+import { CARD_W } from '../ui/CardStack';
+import { DOG_MIN_Y, DOG_ROOM } from '../ui/AccountDoor';
 import { easeCamera } from './camera';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
@@ -218,6 +222,11 @@ const GAME_PITCH = 65;
 // are reachable at all. Named because the flat-camera modes below drop the
 // cap to zero and have to be able to put it back.
 const MAX_PITCH = 80;
+// After a WebGL context loss, how long to wait for the browser to restore
+// it before rebuilding the map anyway. iOS usually restores within a frame
+// of the page coming back to the foreground; a loss with no restore is a
+// dead canvas, and the user would otherwise stare at it for good.
+const CONTEXT_RESTORE_WAIT_MS = 4000;
 
 // ── THE FLAT GROUND CAMERA: walks ('explore') and territory ('play') ──────
 //
@@ -542,7 +551,8 @@ function loadGameRender(): Promise<GameRenderModule | null> {
 }
 
 export default function MapViewWeb() {
-  const location = useLocation();
+  // GPS runs only while the map is the screen — see useLocation.
+  const location = useLocation(useGameStore((s) => s.currentScreen === 'map'));
   // A top-edge chip has to clear the iOS status bar (clock, signal,
   // battery) — taps inside that strip are intercepted by the system
   // (scroll-to-top), so a chip overlapping it feels dead. The HUD
@@ -1243,12 +1253,30 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // dedupes by URL across re-renders. window.Image (not the RN
   // <Image> component imported up top) is the browser's HTMLImageElement
   // constructor which kicks off a network fetch when src is set.
+  //
+  // ONLY THE TWO NEIGHBOURS, AT CARD SIZE. This used to preload EVERY
+  // pet's photo at the ad's full 1200px render the moment any card
+  // opened — 184 photographed pets × 65–122 KB, up to 20 MB on mobile
+  // data, for swipes that reach two of them. The order is the one
+  // cycleSelectedDog walks (nearest first when we know where we are),
+  // so the photos that land in cache are the ones the next swipe shows.
   useEffect(() => {
     if (!selectedDogId || typeof window === 'undefined') return;
-    for (const d of lostDogs) {
-      if (d.photoUrl) {
+    const up = userPosRef.current;
+    const list = up
+      ? [...lostDogs].sort(
+          (a, b) =>
+            distanceMeters(up, a.lastSeen.position) - distanceMeters(up, b.lastSeen.position),
+        )
+      : lostDogs;
+    const idx = list.findIndex((d) => d.id === selectedDogId);
+    if (idx < 0 || list.length < 2) return;
+    const n = list.length;
+    for (const d of [list[(idx + 1) % n], list[(idx - 1 + n) % n]]) {
+      const src = petPhotoAt(d?.photoUrl, CARD_W);
+      if (src) {
         const img = new window.Image();
-        img.src = d.photoUrl;
+        img.src = src;
       }
     }
   }, [selectedDogId, lostDogs]);
@@ -1697,6 +1725,24 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // there is nothing to fight over. Holding on it was actively wrong:
   // explore opens with the ring up, so the camera stood still for the
   // whole first stretch of every walk.
+  //
+  // THE ACCOUNT SHEET (D-69) IS in the list: its framing eases the dog
+  // to the upper part of the screen with an offset (see the menu-camera
+  // effect below), and a follow tick would put the dog straight back in
+  // the centre, under the paper.
+  const doorSheetUp = useAccessStore((s) => s.doorSheet != null);
+  // Where the sheet's paper begins (AccountDoor reports it; null until
+  // it has). The paper hangs DOG_ROOM below the safe area and the dog
+  // sits DOG_ROOM - DOG_MIN_Y above its edge — measured from the
+  // paper's real position, so the safe area is in the number without
+  // this code knowing it. As an easeTo offset: how far from the
+  // viewport's centre.
+  const doorSheetTop = useAccessStore((s) => s.doorSheetTop);
+  const doorOffset = (): [number, number] => {
+    const h = typeof window !== 'undefined' ? window.innerHeight : 800;
+    const y = doorSheetTop != null ? doorSheetTop - (DOG_ROOM - DOG_MIN_Y) : DOG_MIN_Y;
+    return [0, y - Math.round(h / 2)];
+  };
   const flatCamHeld =
     !onMapScreen ||
     !!selectedDogId ||
@@ -1705,7 +1751,8 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     lostPinning ||
     sniffActive ||
     aboutOpen ||
-    lostFlowOpen;
+    lostFlowOpen ||
+    doorSheetUp;
   const flatCamHeldRef = useRef(flatCamHeld);
   flatCamHeldRef.current = flatCamHeld;
   // When the camera is next allowed to move itself. Pushed forward by every
@@ -2248,8 +2295,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // mid-flight (freezing pitch/zoom partway). It never needs a snap.
     if (activeHint === 'map:supersniff-exit') return;
     if (activeHint && activeHint.startsWith('map:')) {
+      // Keep the account sheet's framing if it is up: a plain centre
+      // would drop the dog straight back under the paper.
       easeCamera(map, 'short', {
         center: [companionPos.lng, companionPos.lat],
+        offset: doorSheetUp ? doorOffset() : [0, 0],
         duration: 400,
       });
     }
@@ -2738,7 +2788,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       // modal-padded region we set below. MapLibre persists
       // `padding` across calls, so leaving 460/110 in place
       // would visibly bias every later recenter low and right.
-      map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      //
+      // Only when there IS padding to clear. setPadding is a jumpTo,
+      // and a jumpTo stops whatever ease is in flight — and this effect
+      // re-runs on every `spots` update, several times a second while
+      // the dog walks. With no guard it cut the follow eases short and
+      // killed the account sheet's framing ease a few ms in, leaving
+      // the dog under the paper on about one open in three.
+      const pad = map.getPadding();
+      if (pad.top || pad.bottom || pad.left || pad.right) {
+        map.setPadding({ top: 0, bottom: 0, left: 0, right: 0 });
+      }
       return;
     }
     const spot = spots.find((s) => s.id === selectedSpotId);
@@ -2926,11 +2986,23 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // clears the ring + HUD; 'center' (later taps) just centres it. On
   // close, settle the dog back to centre. easeTo(center=companion,
   // offset:[0,N]) lands the dog N px below the viewport centre.
+  //
+  // THE ACCOUNT SHEET (D-69) borrows this framing: while it is up the
+  // dog is eased to the upper part of the screen — the same dog, on the
+  // same map, not a copy in the paper — so the sheet has the lower part
+  // and the dog's bubble still has headroom. `offset` is what moves it:
+  // a negative y lands the dog that many pixels ABOVE the viewport
+  // centre. Taken from where the paper's top edge actually is
+  // (doorOffset above), so a short login paper leaves the dog lower
+  // and a tall register paper lifts it, on any phone.
   const menuWasOpenRef = useRef(false);
   useEffect(() => {
     const map = mapRef.current;
     if (!map || !companionPos) return;
     const c: [number, number] = [companionPos.lng, companionPos.lat];
+    // The paper is as tall as its form; the dog sits in the strip above
+    // it, and follows when the paper grows (a pet named adds a row).
+    const offset: [number, number] = doorSheetUp ? doorOffset() : [0, 0];
     // Both modes just centre the dog now — there's room for the
     // explainer bubble above the ring at the default centre, so we no
     // longer drop the dog lower for it. (menuCamera keeps the two
@@ -2948,15 +3020,19 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // setting it once. There is no in-flight ease left for this move to
     // cut off — and naming a pitch here would be worse than silent, since
     // GAME_PITCH is 65 again and these are the modes that are flat.
-    const move = { center: c, offset: [0, 0] as [number, number], duration: 320 };
-    if (menuCamera) {
+    //
+    // `offset` is main's: [0,0] normally, lifted while the account door
+    // sheet is up so the dog rides above the paper instead of behind it.
+    const move = { center: c, offset, duration: 320 };
+    if (menuCamera || doorSheetUp) {
       menuWasOpenRef.current = true;
       easeCamera(map, 'short', move);
     } else if (menuWasOpenRef.current) {
       menuWasOpenRef.current = false;
       easeCamera(map, 'short', move);
     }
-  }, [menuCamera, companionPos?.lat, companionPos?.lng]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [menuCamera, doorSheetUp, doorSheetTop, companionPos?.lat, companionPos?.lng]);
 
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null
@@ -3028,6 +3104,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // clean map without "MapLibre" or "© ..." chrome reads as
           // a first-class app, not a map embed.
           attributionControl: false,
+          // MapLibre must NOT apply the OS reduce-motion setting on its
+          // own. Left to itself it zeroes every non-essential camera move
+          // and drops drag-pan inertia, so a flick of the map stopped
+          // dead for those users while everything else in the app
+          // followed D-61. The app has one policy for that setting —
+          // camera.ts decides which moves cut and which glide, and the
+          // decorative layers hold still — and inertia is the finger's
+          // own motion carrying on, the same class as the card stack's
+          // settle, which stays. So the flag is handled here by us, and
+          // MapLibre is told to keep out of it.
+          reduceMotion: false,
           // Drag-pan inertia tuning. The finger-follow phase is always
           // 1:1 — these only shape what happens after the user lifts.
           // Linearity 0.7 (default 0.3) makes a flick carry farther and
@@ -3085,6 +3172,62 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             sketchRef.current.refresh(true);
           }, 250);
         });
+        // WEBGL CONTEXT LOSS. iOS drops a page's WebGL contexts under
+        // memory pressure and after a long spell in the background. On
+        // restore MapLibre re-applies its own style, but it destroys the
+        // custom layers and says so in a console warning: the buildings,
+        // both fogs and the territory heat would simply be missing from
+        // then on, with the map otherwise looking alive. Rather than
+        // re-adding each layer by hand in the middle of a half-restored
+        // map, the whole map is rebuilt through the same path a retry
+        // takes — construction, style, layers, markers — which is one
+        // code path already exercised. Deferred a tick so the rebuild
+        // never runs inside MapLibre's own event dispatch, and skipped
+        // if the map has already been replaced or unmounted. (F-7.)
+        let lostTimer: ReturnType<typeof setTimeout> | null = null;
+        const rebuild = () => {
+          if (lostTimer) {
+            clearTimeout(lostTimer);
+            lostTimer = null;
+          }
+          setTimeout(() => {
+            if (mapRef.current !== map) return;
+            // THE SKETCH HAS TO BE TOLD, TOO — this path takes the map
+            // away without unmounting, and the unmount cleanup is the
+            // only other place that stops it. It holds sources and layers
+            // on the map being removed, and may have a debounced draw in
+            // flight: `refresh` guards on `disposed`, which nothing here
+            // would have set, so that draw would run build() against a
+            // removed map a moment later. Neither side of the merge could
+            // have known — context-loss recovery and the debounced draw
+            // arrived from different branches.
+            if (sketchTimerRef.current) {
+              clearTimeout(sketchTimerRef.current);
+              sketchTimerRef.current = null;
+            }
+            try {
+              sketchRef.current?.dispose();
+            } catch {
+              /* the context is already gone; nothing to release */
+            }
+            sketchRef.current = null;
+            try {
+              map.remove();
+            } catch {
+              /* the context is already gone; nothing to release */
+            }
+            mapRef.current = null;
+            setMapInstance(null);
+            setMapAttempt((n) => n + 1);
+          }, 0);
+        };
+        map.on('webglcontextlost', () => {
+          // eslint-disable-next-line no-console
+          console.warn('[maplibre] webgl context lost — waiting for restore');
+          if (lostTimer) clearTimeout(lostTimer);
+          lostTimer = setTimeout(rebuild, CONTEXT_RESTORE_WAIT_MS);
+        });
+        map.on('webglcontextrestored', rebuild);
         mapRef.current = map;
         map.on('style.load', () => {
           applyCrayonOverride(map, PAPER_PALETTE, lang);

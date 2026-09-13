@@ -95,7 +95,17 @@ export interface LocationState {
   usingFallback: boolean;
 }
 
-export function useLocation(): LocationState {
+// `active`: whether anything on screen is using the position right now.
+// The map screen stays mounted behind the other tabs (Expo Router keeps
+// tab screens alive), so this hook lived on through chat, profile and
+// the task list with the GPS at full accuracy the whole time — the
+// single biggest line on the battery bill, for a position nobody read:
+// every interval that consumes it already gates on the map being the
+// screen, and the /collect/path sweep on return catches up whatever was
+// walked past. Off the map the watch is cleared and the last fix is
+// kept; back on it, the watch restarts and the first fix lands within a
+// second or two. (F-6 in 12-beta-perf-compat.md.)
+export function useLocation(active = true): LocationState {
   const [state, setState] = useState<LocationState>({
     position: null,
     error: null,
@@ -161,6 +171,9 @@ export function useLocation(): LocationState {
         });
         return;
       }
+      // Nobody is looking at the map: no watch, no timers, keep what we
+      // have. The cleanup of the previous run already cleared the watch.
+      if (!active) return;
 
       const watchId = navigator.geolocation.watchPosition(
         (pos) => {
@@ -223,7 +236,7 @@ export function useLocation(): LocationState {
       usingFallback: true,
     });
     return;
-  }, []);
+  }, [active]);
 
   return state;
 }

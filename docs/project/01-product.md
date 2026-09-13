@@ -115,6 +115,9 @@ whether they saw the pet → the answer is recorded and paid in paws.
 
 Both answers count. "I walked the zone and it was empty" is worth 10 paws;
 "I saw them" is worth 20 and writes a sighting that can move the pet's pin.
+A sighting whose position the device invented (geolocation refused, the
+client's Kyiv-centre fallback) is **refused** rather than trusted — one
+such report took a correctly placed pet off the map on 3 Sep (PR #544).
 Negative information is information — a zone confirmed empty is a zone the
 next walker does not need to cover.
 
@@ -184,6 +187,7 @@ behind an always-on flag** · **⛔ not real yet**
 | Game render (Three.js city, fog, sun, shadows) | 🧪 | `GAME_RENDER = true`. WebGL2-gated with a clean MapLibre fallback. Perf and battery on low-end Android still unmeasured. |
 | Multiplayer presence + poke | 🧪 | `MULTIPLAYER = true`. 30 bots populate the map (`MULTIPLAYER_BOTS=30` in `fly.toml`). |
 | Lost-pet pins on the main map | ⛔ | `LOST_DOG_PINS = false` — deliberately off. Pets are still fetched and still drive supersniff, the carousel and the cinematic pet view. |
+| Placement confidence bar | ✅ | Since 7 Sep (PRs #551, #557) a pet is offered to a walker — pins, spawner, companion, carousel — only when its coordinate came from a person or from a place the ad explicitly named. Measured cost: 127 visible pets → ~28, then partly restored by the judge (#562). See [`03`](03-lost-pet-engine.md). |
 
 ### Backend / data
 
@@ -192,7 +196,7 @@ behind an always-on flag** · **⛔ not real yet**
 | Lost-pet ingestion | 🟡 | Hourly cron over OLX + Telegram + Facebook, plus real-time Telegram bot ingest. **OLX was never blocked** — the 403s were a coin flip a retry fixes, and a separate saturation bug (relevance-ordered page one) was why nothing new arrived. Both fixed. Telegram unconfigured, Facebook parked. See [`03-lost-pet-engine.md`](03-lost-pet-engine.md). |
 | Ad bodies + contact gating | ✅ | The real ad text stored and served one pet at a time; contacts redacted until a sighting is reported, enforced by a source-level fixture check. |
 | Territory service | ✅ | `services/territory.ts`. Grow/cut at mark time; syncs are box queries. Render reworked into a soft scent field (`territoryHeatLayer.ts`) with the flat fill kept as a fallback. |
-| Auth | 🟡 | Telegram initData is strong. `x-device-id` is unverified and spoofable. An invite gate is built and dormant (`INVITE_REQUIRED` unset) — existing accounts can never be gated out. |
+| Auth | 🟡 | **Accounts since 12 Sep (D-69):** nickname, pet, e-mail + password, verification by link, password recovery, at the door for everybody. Telegram initData and password logins are strong; a bare `x-device-id` only reaches the door. Needs `RESEND_API_KEY` / `EMAIL_FROM` / `APP_URL` on the domain before it ships. The invite gate stays built and dormant. |
 | Spawn / mapData / decay / cleanup crons | ✅ | All in-process on one machine. The lost-pet cleanup now runs at boot too — a bare 24h interval meant it had probably **never fired in production** (every deploy reset the timer). |
 | Walk destinations + landmark routing | ✅ | `/walk/destinations` and `POST /lore/route`, both served from our own tables. Google is optional for the whole walk loop. |
 | Postgres (no PostGIS — hand-rolled haversine + bbox) | 🟡 | Deliberate, documented, and a scaling ceiling later. |

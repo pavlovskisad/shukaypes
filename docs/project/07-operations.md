@@ -41,8 +41,12 @@ Deploying is a mutating action. Ask first.
 | `SCRAPE_PROXY_URL` | **Not set, and should stay that way.** Measured 17 Aug: residential exits are refused *more* than the Fly datacentre, not less. The seam is for the day the edge really hardens. |
 | `DASHBOARD_TOKEN` | **Not set.** Read-only key for `/admin/console` + `/admin/metrics` — the only one of the three keys safe to keep in a browser. Until it is set the console 401s for everyone. |
 | `DEV_TOOLS_PASSWORD` | **Not set.** Unlocks `/dev` (walk simulator + destructive territory test routes) per browser. Until it is set the dev affordances are off everywhere. |
+| `SESSION_SECRET` | **Set it now** (≥16 chars): since D-69 a slip can carry an e-mail login, and the key should not be the bot token's shadow. Was optional: key for session tokens (`lib/session.ts`, D-62). Unset, the key is derived from `TELEGRAM_BOT_TOKEN`, which is already the key Telegram's own signatures rest on, so tokens work with no action. Set it (≥16 chars) to rotate sessions independently of the bot token; changing it logs every phone out once, transparently — the next request re-identifies the old way. |
 | `INVITE_REQUIRED` | **Not set — the door is open.** With it set, new device ids must redeem an invite code; existing accounts are never gated. Mint codes with `pnpm --filter @shukajpes/server invite --new --uses=N --note=...` before flipping it. |
 | `CHAT_DISABLED` | Not set (chat on). The no-deploy kill switch for all model calls. |
+| `RESEND_API_KEY` + `EMAIL_FROM` | **Must be set before the door ships** (D-69). The verification and reset mails. `EMAIL_FROM` is `шукайпес <dog@<the domain>>` (a non-ASCII name is RFC 2047-encoded on the way out, stray quotes dropped; a value that cannot be parsed is named in the boot log as `[auth] EMAIL_FROM cannot be sent from` and does not switch verification on) and the domain must be verified in Resend (SPF + DKIM records at the DNS host), plus a DMARC record (`_dmarc` TXT `v=DMARC1; p=none; rua=mailto:<owner>`) — the first mail from the domain landed in Gmail's spam without one (12 Sep), which Gmail's sender rules predict — mail cannot go out from `vercel.app`. Without both the door still asks for registration but cannot require verification, and says so in the boot log. Resend's free tier caps at 100 mails a day, which launch day will exceed: budget the $20 plan. |
+| `APP_URL` | The public web app, where mail links point (`?verify=` / `?reset=`). Defaults to `https://shukaypes.vercel.app`; set it to the domain. |
+| `REGISTRATION_REQUIRED` / `EMAIL_VERIFY_REQUIRED` | Unset = strict (the door is up, the link is required when mail is configured). `0` on either is the launch-day switch: the first takes the door down, the second keeps it up without the link. |
 | Database | Supabase (Postgres). No direct credentials held in the repo. Reachable from the app host and from anywhere with the connection string. |
 
 `flyctl` is **not preinstalled** in cloud sessions:
@@ -137,12 +141,14 @@ or locally against a `DATABASE_URL`.
 | --- | --- |
 | `db:migrate` | Runs at container start automatically. |
 | `clean:lost-dogs [--apply]` | Dead-photo and city sweep. **Dry by default.** The city half needs a connection OLX will talk to and so cannot run from the app host; it gives up after 8 consecutive 403s. |
-| `expire:out-of-area [--apply]` | Catch-up sweep for out-of-city rows. **Dry by default.** Needs no network. |
+| `expire:out-of-area [--apply]` | Catch-up sweep for out-of-city rows. **Dry by default.** Needs no network. Since #559 it also reads the stored **ad body** as a third, report-only bucket (a body is a story and can name another city in passing), and its "drawn on the map" warning asks `placementConfidence` rather than the fall-through pin. Excerpts go through `redactContacts`. |
 | `expire:pet --id=<id> [--apply] [--photo] [--restore]` | **The takedown tool.** Dry by default; expire is reversible, `--photo` is not (opt-in, and the dry run says so); `--restore --photo` is refused rather than half-done. An unknown id fails loudly — a takedown that quietly matched nothing is the worst outcome, because somebody would report it as done. |
 | `invite --new --uses=N --note=...` | Mint beta invite codes. Held in reserve — the beta is open. |
 | `audit:pins` | Compare where each ad says the pet was lost against where it was pinned. **Independent of the parser on purpose** — matches text against the gazetteer directly, because a check that reproduces the thing it checks cannot fail. Prints no ad text. |
-| `resolve:pins [--apply] [--apply-landmarks]` | Re-place pets from the owner's words. Dry by default; prints every candidate move with the pet's stored description beside it, and emits a **per-pet reversal UPDATE with the previous coordinates**. `--apply` is the invisible group only; `--apply-landmarks` moves pets that are already visible, which is the riskier half. |
+| `resolve:pins [--apply] [--apply-landmarks]` | Re-place pets from the owner's words. Dry by default; prints every candidate move with the pet's stored description beside it, and emits a **per-pet reversal UPDATE with the previous coordinates**. `--apply` is the invisible group only; `--apply-landmarks` moves pets that are already visible, which is the riskier half. Since #541 the groups come from `placement_source`, not from recomputing jitter — the jitter test silently skipped 28 pets on the parser's own hint table. |
 | `label:pins [--apply]` | Backfill `placement_source` for rows placed before the column existed, by recomputation. **Never touches coordinates.** |
+| `relabel:marked [--apply]` | Re-stamp a `gazetteer-bare:` label as `-marked:` where the resolver now reads the address as marked **and names the same place**. A changed answer is printed under its own heading and left for `resolve:pins`. Coordinates never touched; active rows only. |
+| `judge:pins [--apply]` | Ask the placement judge about every bare/fuzzy-placed active pet. **Never moves a pet** — changes the label from unjudged to `gazetteer-judged:` (shown) or refused (hidden, with the model's one-line reason). The dry run **writes a plan file**; `--apply` replays it with no model call, skips rows whose label changed since, and refuses to run without a plan. First run 8 Sep: 33 kept, 11 refused. |
 | `probe:location-text`, `probe:crosspost`, `probe:ad-phone` | Read-only probes. |
 | `backfill:ad-bodies [--apply] [--repair]` | Fetch each pet's ad by its stored URL. **Three outcomes kept apart:** 200 stores the body, 404/410 marks `ad-gone`, anything else is left alone. `--repair` re-fetches bodies already stored (used to undo the CSS pollution). |
 | `expire:no-post [--apply]` | Expire only the `ad-gone` rows. Refuses to write if no scraped pet has a body at all. Dry run lists **newest first** behind an age histogram. |
@@ -151,11 +157,12 @@ or locally against a `DATABASE_URL`.
 | `clean:ad-bodies [--apply]` | Strip OLX section labels welded to the next word (`Описменя`). |
 | `flag-found-reports [--apply]` | Mark ads where somebody *found* an animal, so they stop appearing as pets to go looking for. |
 | `revive:live-ads` | Bring back a pet whose ad is serving again. |
-| `check` (`pnpm check`) | All **fourteen** fixture checks — out-of-area, ingest alert, pet identity, per-user rate limiting, invite gate, dev auth, contact redaction, ad-body containment, ad extraction, found reports, walk stops, landmark name match, lore writer parse, route coverage. **Runs in CI on PRs and before deploy.** |
+| `check` (`pnpm check`) | All **nineteen** fixture checks — placement judge, placement confidence, lore walk, lore match, enrich parse, out-of-area, ingest alert, pet identity, per-user rate limiting, invite gate, dev auth, session token, contact redaction, ad-body containment, ad extraction, found reports, owner reports, place resolution, route coverage. **Runs in CI on PRs and before deploy.** |
 | `seed:lore`, `seed:gazetteer` | One-off corpus builds from OSM. |
 | `enrich:lore [--apply] [--only osm\|links\|detail\|case\|title] [--limit N] [--id osm:…]` | Gives `kyiv_lore` its "read more". **Dry by default.** `osm` stores each row's OSM facts (inscription, description, date, commemorated subject, artist…) — the seed only ever read `name`, and 888 of the 2405 unlinked rows carry one of these. `links` finds the Wikipedia article for rows without one, most certain first: the `wikidata=` entity's sitelink (+24), the `subject:*` tags' article about whom the memorial is for (+122), the row's own name as an article title when it reads as a person's name (~+316, 70/120 sampled all correct), and last the uk.wikipedia article geotagged at the spot matched by name (~+58, fuzzy). Each handle is stamped in `wiki_source` so a tier can be audited or reverted as a group. `detail` has the model write the dog's 2–4-sentence telling from the article and facts for every row with research, and rewrites the one-liner of rows whose story was written before they had any. Facts and links cost nothing; detail is one Sonnet call a row (~$0.006) and the dry run prints the total. Idempotent — a crashed run resumes. The phases feed each other, and a dry run carries each phase's plan forward in memory so its counts match what the apply will do. `--only case` (opt-in, not part of the default run) puts the capitals back on proper names in every story and detail through Haiku, with a guard that throws away any answer that changed anything but letter case. `--only title` (also opt-in) gives rows named after a person a `title` that says what the object is — "Будинок, де працював Лесь Курбас" rather than "Лесь Курбас" — from the facts and detail through Haiku; the app shows `title ?? name`. Refused unless the answer keeps a word of the name, stays under 72 characters and is not a sentence, so a hallucinated title cannot replace a real name. Artworks skip the model: their title is built from the row's `artwork_type` alone ("Мурал «BB King»", "Скульптура «Корова»", and "Стріт-арт «…»" when OSM gave no type), with names that already say what they are left alone. First production run (6 Sep 2026): facts 2000, handles 226 → 745, details 1147, 926 one-liners rewritten; a snapshot of the pre-run stories sits in `kyiv_lore_story_backup`. |
 | `db:seed-dogs` | Local dev only. Production runs on real scraped pets. |
 | `wipe:stats` | Clears stats. |
+| `wipe:users [--list] [--apply] [--snapshot=<file>]` | **The fresh start the door ships with (D-69).** Deletes every human `users` row and, by cascade, everything they own; keeps the `bot:N` rows; pets, sightings and search results stay with their reporter link set to NULL. Dry by default and prints the counts for every affected table; `--list` prints the rows; `--snapshot` writes them to JSON before the delete. Not reversible. Run **after** the door is deployed, once, before announcing. |
 
 ## Data changes
 
@@ -181,7 +188,8 @@ Anything that writes to `lost_dogs`, `sightings` or `users`:
 | Client crash reporting | **Exists since PR #419.** Root boundary + global handlers → `POST /client-errors` → Fly logs (`kind: 'client_error'`). Capped and deduped client-side. |
 | Server error visibility | `setErrorHandler` masks 5xx bodies; `unhandledRejection` / `uncaughtException` handlers installed (several jobs are deliberately unawaited and Node's default is to crash). |
 | Admin console / metrics | Built, **dark** — `DASHBOARD_TOKEN` unset, so it 401s for everyone. |
-| Ingest alert | Built, **dormant** — `ALERT_CHAT_ID` unset. |
+| Ingest alert | Built and **armed** since 25 Aug (`ALERT_CHAT_ID` set; the same chat receives owner-report review buttons). 36h of zero inserts should fire it. **Whether it has ever fired is not verifiable from Fly logs** — the log window is hours, and the tick on 12 Sep still read `inserted 0`. Ask the chat. |
+| Spent-item janitor | Running daily since 6 Sep (`kind: 'spent_item_cleanup'` in logs). Bounded per tick, so a backlog shows as several days of full batches, not one big one. |
 | External uptime monitor on `/health/deep` | **Does not exist.** Recommended by the audit; still not done. Needs an account, so it is the owner's. |
 | Redis uptime alert | **Does not exist.** Redis silently degrades everywhere. |
 | Scrape tick history | In-memory only (`routes/stats.ts`). Gone on every restart. |
@@ -296,6 +304,38 @@ set `SCRAPE_PROXY_URL` on the current evidence; and read `scrape_log` or a
 tick summary rather than probing OLX by hand — a hand-run request and the
 cron's get different answers from the same address.
 
+### 3 Sep 2026 — a placed pet vanished the evening he was placed
+
+«Коля» was re-placed at his circus from his own ad on the morning of 3 Sep.
+That evening a sighting arrived carrying the client's Kyiv-centre fallback —
+geolocation refused, the device did not know where it was — and the server
+measured it inside 2× the pet's radius, trusted it, and moved him onto the
+parser's fall-through pair, which both map queries filter out by exact
+match. One constant did three jobs (parser fall-through, client fallback,
+map filter), so no one of them could see the failure. Fixed in #544:
+`POST /sightings` answers 400 to an invented position; the walk still pays
+the paws. See D-65.
+
+### 5 Sep 2026 — 270 of 500 MB, and the pets were not what filled it
+
+Checked while asking whether the database was near its tier. 175 MB was
+collected tokens and eaten bones that nothing had ever deleted since
+April; May alone added 226,309 tokens. A daily janitor now prunes spent
+rows older than seven days in bounded batches (#545, D-66). **The file
+does not shrink until somebody runs `VACUUM FULL` in a chosen window** — it
+takes an exclusive lock, so it is not in a cron. Open as P2-20.
+
+### 8 Sep 2026 — the app locked itself behind its own gate during an alarm
+
+Reported from Kyiv during an air-raid alarm: map loads, no «нюх-нюх», no
+buttons, no HUD, nothing to tap, and it does not recover. Alarms come with
+GPS spoofing that jumps people across the city; the dog's steps are capped
+at a jog, so it was left kilometres behind, and `MapView` hides an
+off-screen companion — including the gate that is its child. Reproduced by
+driving the real bundle with fixes teleporting around Kyiv every 30–100ms.
+Fixed in #561 with a 300m snap on fix and tick, and the off-screen rule
+stopping at the gate (D-67).
+
 ### Rate limiting was global, silently, since it was added
 
 The plugin installed at `onRequest`; auth sets `req.userId` at
@@ -324,6 +364,24 @@ Found by a browser test noticing a stray 500 on `/favicon.ico` while
 checking something else. A regression shipped and fixed within the same
 session, recorded because the *shape* — a safety net masking the signal it
 sits in front of — is worth remembering.
+
+### 12 Sep 2026 — no verification mail came
+
+The door's first real registration: the verify screen said the letter
+went, no letter came. `fly logs` had the answer in one line —
+`kind:"email_send", status:422, "Invalid \`from\` field"`: Resend
+refused `EMAIL_FROM`, set as the docs said (`шукайпес <dog@…>`), and
+the value could not be read back to see why. Registration completed
+regardless (mail failure is a return value, by design), so the person
+was stuck on a verify screen that could never be passed.
+
+Two things fixed: the sender is now parsed and re-formatted before the
+call (`lib/mailFrom.ts` — non-ASCII name encoded, quotes dropped), and
+a value that cannot be parsed is named in the boot log and does NOT
+switch verification on. The lesson is older than this incident: a
+config value that a vendor validates must be validated at boot, where
+the operator is looking, not at the first request, where a stranger
+is.
 
 ## Standing rules
 

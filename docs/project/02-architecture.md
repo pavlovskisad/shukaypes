@@ -8,8 +8,8 @@ the code is right.
 pnpm monorepo, three workspaces (`pnpm-workspace.yaml`).
 
 ```
-app/          Expo RN app (web-first). Expo Router. ~28,700 lines TS/TSX.
-server/       Fastify API. ~23,100 lines TS.
+app/          Expo RN app (web-first). Expo Router. ~33,700 lines TS/TSX.
+server/       Fastify API. ~30,900 lines TS.
 shared/       TypeScript types only (145 lines). No build step.
 docs/         Documentation. docs/project/ is this set.
 reference/    The original single-file HTML prototype. Read-only history.
@@ -135,7 +135,7 @@ Floating tab bar in `_layout.tsx`.
 companion stats, quests, spots, territory, multiplayer, dog-cam, walk
 stops, the menu/mode state, daylight. `stores/langStore.ts` for language (uk / en, `i18n/strings.ts`).
 
-**Map.** `components/map/MapView.tsx` (~3,900 lines) is the nerve centre.
+**Map.** `components/map/MapView.tsx` (~4,350 lines) is the nerve centre.
 MapLibre GL JS v5 with a heavily-overridden "crayon" style
 (`crayonStyle.ts`, 780 lines, based on OpenFreeMap liberty). Markers are DOM
 overlays via `MapLibreMarker.tsx` — companion, user dot, paws, bones, spots,
@@ -167,7 +167,10 @@ down partial state and reverts to MapLibre buildings + screen fog
 
 **Companion.** `Companion.tsx` (756 lines) + `DogSprite.tsx`, pixel-art
 sprite sheets in `app/public/dog/`. Lerps toward GPS; runs when hunting an
-item; sniffs on collect.
+item; sniffs on collect. A gap larger than `TELEPORT_M` (300m, `useCompanion.ts`)
+snaps instead of lerping, on the fix as well as the tick — a spoofed GPS
+jump used to leave the dog, and the gate that is its child, off-screen for
+good (PR #561).
 
 **Build note.** `app/babel.config.js` enables
 `@babel/plugin-transform-class-static-block` so Metro can bundle `three`
@@ -182,10 +185,33 @@ Redis, registers the Telegram webhook, listens.
 **Auth** `auth.ts` (Fastify `preHandler` plugin). Resolves `req.userId`
 from, in order of preference:
 
+0. `x-session` — a **session token** (`lib/session.ts`, D-62): about 200
+   bytes, HMAC-SHA256 over `{user, device, via, iat, exp}`, valid a day,
+   re-issued on the `x-session-token` response header when it has under
+   six hours left. Resolves the user with **no database round trip**.
+   Minted after either path below succeeds. A refused token is ignored,
+   not rejected: the client drops it and retries once the old way. Key:
+   `SESSION_SECRET`, else derived from `TELEGRAM_BOT_TOKEN`, else tokens
+   are off and every request identifies as before.
 1. `x-telegram-init-data` — validated against the bot token. Strong,
-   cross-device, keyed on `telegram_id`.
+   cross-device, keyed on `telegram_id`. The profile-refresh UPDATE
+   that used to run on every request now runs only here, at mint time.
 2. `x-device-id` — any client-supplied string 8–128 chars. Weak,
    browser-scoped, **unverified**.
+3. `via: 'email'` — a slip minted by `routes/auth.ts` after a password
+   login, a verified link or a password reset, and re-minted from a
+   90-day refresh token (`auth_sessions`, hashed) when it expires.
+
+**The door** (D-69, `lib/accountPolicy.ts`): once identified, every route
+but `/auth/*` answers 403 «registration required» until the account
+carries `registered_at` — and `email_verified_at` too when a mail sender
+is configured. The answer rides in the slip as a `registered` claim, so
+it costs no database read. Six credential routes (`/auth/login`,
+`/verify`, `/refresh`, `/logout`, `/forgot`, `/reset`) are bypassed by
+the hook entirely — a fresh browser logs in without first being minted
+an anonymous row — and rate-limited by address (`limitAuth`).
+`REGISTRATION_REQUIRED=0` takes the door down; `EMAIL_VERIFY_REQUIRED=0`
+keeps it up without the link.
 
 An **invite gate** sits in front of account creation (`lib/inviteGate.ts`,
 PR #417): with `INVITE_REQUIRED` set, a *new* device id must redeem an
@@ -287,6 +313,15 @@ new route ships unlimited.
 - `pipeline/sources/adHtml.ts` — pure HTML in, ad text out. Pure and
   db-free *on purpose*: it used to live in `olx.ts`, which imports the db
   module, so a check for it could not run without a `DATABASE_URL`.
+- `services/placementConfidence.ts` — **the one bar** every path that can
+  send a walker to a pet reads (map pins, search-zone spawner, companion
+  "nearby", `/dogs/nearby`). Both the SQL predicate and the in-memory
+  predicate are generated from one prefix list, so relaxing it is one
+  line. `pipeline/placementJudge.ts` is its second reader: Opus reads the
+  ad and may only reject a bare placement, never place one.
+- `services/spentItemCleanup.ts` — daily janitor for collected tokens
+  and eaten bones (migration `0038` adds the partial indexes the map
+  actually asks for).
 - `anthropic.ts`, `memory*.ts`, `quest*.ts`, `gazetteer.ts`, `lostDogsReport.ts`,
   `placesCache.ts`, `decay.ts`, `lostDogCleanup.ts`, `searchZoneExpansion.ts`.
 
@@ -300,6 +335,7 @@ new route ships unlimited.
 | zone expansion | — | Grow a lost pet's search radius as time passes. |
 | lost-dog cleanup | 24h, **and at boot** | Expire stale reports. The boot run matters: as a bare interval it needed a machine to live a full uninterrupted day to fire once, and with several deploys a day it had probably never run in production (fixed in PR #425). |
 | multiplayer | 3.5s | Step + publish bot walkers, purge stale presence. |
+| spent-item janitor | 24h | Delete `tokens` collected and `food_items` consumed more than 7 days ago, 5,000 rows a batch, 20 batches a tick (PR #545). Scores are counters on `users`, so this cannot cost anybody a point; `collect_events` is deliberately untouched. Does **not** shrink the database file — only `VACUUM FULL` does. |
 
 There is **no leader election**. A second machine would double every cron
 and run 2×30 bots. `services/scrape.ts` says so in a comment. This is the
@@ -308,7 +344,8 @@ single change that blocks horizontal scaling.
 **DB** (`db/`): `schema.ts` (Drizzle), `index.ts`
 (`postgres(url, { prepare: false })`, default pool ~10), `redis.ts`
 (`ioredis`, `lazyConnect`, throttled error log), `migrate.ts` run at
-container start. 38 migrations, latest `0037_placement_source.sql`.
+container start. 42 migrations, latest `0041_lore_title.sql` (`0038` partial
+indexes over unspent tokens/food, `0039`–`0041` lore detail/facts/favourites/title).
 
 **Migrations `0032`+ are hand-written, and that is a rule now:**
 `migrations/meta` holds snapshots for 0000–0002 and nothing for 0003–0031,
@@ -346,6 +383,9 @@ territory, a bbox range scan on plain B-trees.
 | `territory_ground` | **The ownership record.** One row per piece: ring + holes + bbox + area |
 | `territory_raids` | "Somebody took your ground" — queued in Postgres so an overnight raid still lands |
 | `invite_codes` | Beta invite codes, minted by the `invite` CLI (migration `0032`) |
+| `users.email` … `consent_at` | The account on top of the identity (migration `0042`, D-69): e-mail, verification time, scrypt password hash, the person's pet, the application-folded `nickname_key` the uniqueness index is on, registration and consent times, `avatar_file_id`. All nullable; legacy rows have none |
+| `auth_tokens` | One-time e-mail verification and password-reset tokens, stored as SHA-256 only, single use, cascade with the account |
+| `auth_sessions` | 90-day refresh tokens behind e-mail logins, hashed, revocable; a password reset revokes them all |
 | `search_results` | **Every** completed search — found or not — with the paws paid. Separate from `sightings` on purpose: a sighting asserts *the pet was here* and drives pin-moving; a search result may assert nothing. History starts 14 Aug 2026 (migration `0033`) |
 | `scrape_log.raw_body` | The ad text the parser actually read (migration `0034`). Served only by `/dogs/:id/post`, never in a bulk payload — enforced by a source-level fixture check |
 | `lost_dogs.is_found_report` | Somebody *has* this animal and is looking for its owner (migration `0035`). Kept in the table rather than filtered at ingest so these can get their own screen later; the map query simply does not return them |
@@ -412,7 +452,11 @@ A missing or unparseable var falls back to the tuned default, never to zero.
 `TELEGRAM_CHANNELS`, `FACEBOOK_GROUP_IDS`, `SCRAPE_PROXY_URL`,
 `ALERT_CHAT_ID`, `INGEST_STALL_HOURS`, `MULTIPLAYER`, `REPORT_TOKEN`,
 `INVITE_REQUIRED`, `DASHBOARD_TOKEN`, `DEV_TOOLS_PASSWORD`,
-`CHAT_DISABLED` and the chat-budget overrides. Two performance knobs
+`CHAT_DISABLED` and the chat-budget overrides. Accounts (D-69):
+`RESEND_API_KEY` and `EMAIL_FROM` (the mail sender; without both,
+verification is not required), `APP_URL` (where mail links point — the
+domain), `SESSION_SECRET` (set it explicitly now that slips carry logins),
+and the two switches `REGISTRATION_REQUIRED` / `EMAIL_VERIFY_REQUIRED`. Two performance knobs
 since the beta perf pass: `PG_POOL_MAX` (postgres-js pool size, default
 10) and `SPAWN_ATTEMPT_GAP_MS` (minimum gap between spawn rounds per
 user, default 30000; `0` disables the gate).
@@ -440,10 +484,11 @@ server:  needs: checks → flyctl deploy --remote-only
 
 The gate is real (PR #274). `react-hooks/rules-of-hooks` is an **error** —
 that is the class of bug that white-screened prod once. `pnpm check` (added
-PR #416) runs the **fourteen** fixture checks: out-of-area, ingest alert, pet identity, per-user rate limiting,
-invite gate, dev auth, contact redaction, ad-body containment, ad
-extraction, found reports, walk stops, landmark name match, lore writer
-parse, route coverage.
+PR #416) runs the **nineteen** fixture checks: placement judge, placement
+confidence, lore walk, lore match, enrich parse, out-of-area, ingest alert,
+pet identity, per-user rate limiting, invite gate, dev auth, session token,
+contact redaction, ad-body containment, ad extraction, found reports, owner
+reports, place resolution, route coverage.
 They existed before and **nothing ran them** — a broken rule deciding which
 pets get expired or merged would have shipped on the strength of having
 compiled.

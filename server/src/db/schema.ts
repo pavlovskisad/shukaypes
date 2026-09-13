@@ -36,9 +36,80 @@ export const users = pgTable('users', {
   telegramUsername: text('telegram_username'),
   telegramFirstName: text('telegram_first_name'),
   telegramPhotoUrl: text('telegram_photo_url'),
+  // The account on top of the identity (migration 0042). All nullable:
+  // a row exists before it registers. `registered_at`
+  // is what opens the door (lib/accountPolicy.ts); `email_verified_at`
+  // is required too when a mail sender is configured. Uniqueness on
+  // lower(email), and on lower(username) among registered rows only,
+  // lives in the migration as partial indexes.
+  email: text('email'),
+  emailVerifiedAt: timestamp('email_verified_at', { withTimezone: true }),
+  passwordHash: text('password_hash'),
+  // The person's real pet, asked at registration. Optional — helpers
+  // without a pet skip it. `pet_name` also names the companion when
+  // given (D-69).
+  petName: text('pet_name'),
+  petSpecies: text('pet_species'), // dog | cat
+  petBreed: text('pet_breed'),
+  // `username`, folded by foldNickname() in lib/accountPolicy.ts, for
+  // the uniqueness index — set at registration, null before it.
+  nicknameKey: text('nickname_key'),
+  registeredAt: timestamp('registered_at', { withTimezone: true }),
+  consentAt: timestamp('consent_at', { withTimezone: true }),
+  // A generated avatar, stored as a Telegram file_id like every other
+  // photo in this app and served through /photos/:fileId.
+  avatarFileId: text('avatar_file_id'),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
 });
+
+// One-time tokens for e-mail verification and password reset. The
+// token itself is never stored — only its SHA-256 — so a read of this
+// table yields nothing a person could click. See lib/authTokens.ts.
+export const authTokens = pgTable(
+  'auth_tokens',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    kind: text('kind').notNull(), // verify | reset
+    tokenHash: text('token_hash').notNull().unique(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    usedAt: timestamp('used_at', { withTimezone: true }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userIdx: index('auth_tokens_user_idx').on(t.userId),
+  }),
+);
+
+// Long-lived, revocable logins behind the short HMAC session token.
+// An e-mail login hands the client one of these; when the day-long
+// session slip expires the client trades it for a fresh slip instead
+// of falling back to an anonymous device identity. Hashed like
+// auth_tokens; revoking is setting revoked_at, and a password reset
+// revokes them all.
+export const authSessions = pgTable(
+  'auth_sessions',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    tokenHash: text('token_hash').notNull().unique(),
+    // The device the login happened on, carried into the session slip
+    // so presence and the rest keep a per-device key.
+    deviceId: text('device_id'),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+    lastUsedAt: timestamp('last_used_at', { withTimezone: true }).notNull().defaultNow(),
+    expiresAt: timestamp('expires_at', { withTimezone: true }).notNull(),
+    revokedAt: timestamp('revoked_at', { withTimezone: true }),
+  },
+  (t) => ({
+    userIdx: index('auth_sessions_user_idx').on(t.userId),
+  }),
+);
 
 // Companion state — 1:1 with users.
 export const companionState = pgTable('companion_state', {

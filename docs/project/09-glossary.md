@@ -96,9 +96,11 @@ standing on it: denser paws (`homeExtraPaws`), half-rate happiness decay
 `companion_state.on_home_ground` because the decay cron is a bulk UPDATE and
 cannot compute a hull per user.
 
-**Invisible pet** — an active `lost_dogs` row the map cannot draw, almost
-always because it is on the **fallback pin**. Not a status; a consequence of
-`/dogs/nearby`'s filters.
+**Invisible pet** — an active `lost_dogs` row the map cannot draw. Until
+7 Sep that meant the **fallback pin**; since the **confidence bar** it
+means any row whose `placement_source` the bar does not trust, which is
+most of the table. Not a status; a consequence of one filter, and
+`GROUP BY placement_source` says why for each.
 
 **Invite gate** — the door in front of account creation
 (`lib/inviteGate.ts`): with `INVITE_REQUIRED` set, a new device id must
@@ -126,10 +128,45 @@ confidence 1. Publishes to the crosspost channel on submit and is reviewed
 after the fact.
 
 **Placement source** — how a pin got its coordinates
-(`lost_dogs.placement_source`, migration `0037`): `owner`,
-`gazetteer-marked:<name>`, `model-landmark:<name>`, `fall-through`,
-`sighting`. The ledger that turned "are the pins any good" from an argument
-into a `GROUP BY`.
+(`lost_dogs.placement_source`, migration `0037`): `owner`, `sighting`,
+`gazetteer-marked:<name>`, `gazetteer-bare:<name>`,
+`gazetteer-judged:<name>`, `gazetteer-fuzzy:<name>`,
+`model-landmark:<name>`, `model-geo`, `fall-through`. The ledger that
+turned "are the pins any good" from an argument into a `GROUP BY` — and,
+since 7 Sep, the column the **confidence bar** filters on.
+
+**Confidence bar** — `services/placementConfidence.ts`. The one rule
+deciding which pets any path may offer a walker: only `owner`, `sighting`,
+`gazetteer-marked:` and `gazetteer-judged:`. Read by map pins, the
+search-zone spawner, the companion's "nearby" and `/dogs/nearby`. Cost
+127 → ~28 visible pets when it landed (D-63).
+
+**Placement judge** — `pipeline/placementJudge.ts`. Opus reads the ad
+after the resolver and answers one question: does this ad support this
+pin? **It may only reject**; it never returns a coordinate. A kept bare
+match becomes `gazetteer-judged:` and is shown; anything it cannot answer
+stays hidden (D-64). `judge:pins` asks it about the rows already in the
+table, dry run writing a plan that `--apply` replays.
+
+**Approximate pin** — a resolution to something real but broad (a
+district, a neighbourhood), flagged `approximate` in the sync payload so
+the pet sheet (`LostDogModal`) says «місце приблизне — дивись оголошення».
+
+**Namesake guard** — the resolver's refusal of a name that exists in
+several far-apart places («Перемога»: a district 30km east, two
+neighbourhoods 10km west). Counted within a category since #553, so a
+metro station and the district around it are one place; and a reading must
+be dominant — nothing of that name further than 5km, metro exempt.
+
+**Teleport snap** — `TELEPORT_M` (300m) in `useCompanion.ts`. A GPS jump
+bigger than that snaps the dog to the user instead of lerping at a jog;
+without it a spoofed fix during an alarm left the dog, and the gate that is
+its child, off-screen for good (D-67).
+
+**Spent item / janitor** — a token that has been collected or a bone that
+has been eaten. Nothing reads them after the double-collect window; scores
+are counters on `users`. `services/spentItemCleanup.ts` deletes them daily
+after seven days (D-66). Does not shrink the database file.
 
 **Paw** — the collectible token. Pure happiness, no hunger effect. Table
 `tokens`. Also the currency search results are paid in (20 for a find, 10

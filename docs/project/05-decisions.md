@@ -743,6 +743,10 @@ removes **non-essential, sweeping** movement and nothing else.
   the same day: the swipe "blinked" while the first pull-up rightly cut.)
 - The card stack's settle and rebound continue the finger's motion and
   stay; its lift flourish and confirmation focus follow the system.
+- Drag-pan inertia stays for the same reason — a flick carrying on is
+  the finger's own motion. MapLibre would drop it under the setting, so
+  the map is constructed with `reduceMotion: false` and the library
+  applies the flag nowhere; this policy is the only one.
 - The sun's rays, the fog particles, the dog-cam shimmer, the profile
   sun and clouds, and the splash wordmark hold still.
 
@@ -752,3 +756,257 @@ consumer reads the setting live through `prefersReducedMotion()` rather
 than snapshotting it. An in-app "less motion" switch that overrides the
 OS is a product option left open, not needed for this.
 
+### D-62 · Identity once, a session token thereafter ✅
+*Decided 12 Sep · `server/src/lib/session.ts`, `app/services/session.ts`*
+
+The Mini App sent the whole Telegram initData on every request — about
+half a kilobyte to a kilobyte, twenty times a minute on the presence
+poll, a megabyte an hour of upload on a walk (F-1). Behind it the server
+re-validated the signature and ran a profile-refresh UPDATE every time;
+device-id users cost a SELECT every time. None of it bought anything
+after the first request.
+
+Now the first request identifies the old way and the server hands back
+a signed token (HMAC-SHA256 over user, device, how identified, issued,
+expires; valid a day; renewed in its last six hours). The client sends
+that instead and the server resolves it with no database work. A
+refused token is dropped and the request retried once the old way.
+
+What it deliberately is not: a change to who can do what. The token
+asserts what the header it replaces asserted, for the same person, for
+less time than a device id lives. `via` is recorded so P1-6 can gate
+value on the Telegram-signed identity later without another handshake.
+
+The key derives from the bot token when `SESSION_SECRET` is unset —
+Telegram's own signature already rests on it, so no new trust is
+introduced — and with neither set the feature is off and the app is
+exactly as it was. `check:session` pins mint, verify, expiry, renewal,
+tamper, rotation and off-when-unconfigured.
+
+*D-63 to D-68 were decided between 3 and 8 Sep, before D-61/D-62, and are
+numbered in the order they were written up, not in date order.*
+
+### D-63 · Show only the pins we can defend ✅
+*Decided 7 Sep · PRs #551, #557 · `server/src/services/placementConfidence.ts`*
+
+Every pin is an invitation to walk somewhere and look. Five misplaced pets
+came back from the map as screenshots — a dog in Kharkiv drawn at a Kyiv
+stadium, another at Печерськ, a cat on a music school — and what they had
+in common was not the city. It was that nothing in the ad put the animal
+where we drew it, and `placement_source` already recorded that.
+
+So a pet is offered to a walker only when its coordinate came from a person
+(`owner`, `sighting`) or from a place the ad explicitly named
+(`gazetteer-marked:`, and since D-64 `gazetteer-judged:`). Bare name
+matches, fuzzy matches, model guesses and the fall-through are hidden. All
+four paths that can send somebody to a pet — map pins, the search-zone
+spawner, the companion's "nearby", `/dogs/nearby` — read one bar, so
+relaxing it is one line.
+
+**The cost was measured before it was chosen: 127 visible pets → ~28.** A
+hidden pet is one nobody walks for, a real loss to its owner. A pet drawn
+in the wrong district is worse: it spends somebody's afternoon and teaches
+them the map lies. The owner's call, made on those numbers.
+
+### D-64 · The judge may only reject ✅
+*Decided 8 Sep · PRs #562, #563 · `server/src/pipeline/placementJudge.ts`*
+
+A string matcher cannot know that a village street shares a name with a
+square in the centre; that is world knowledge, so a model reads the ad
+afterwards. But it answers one question — does this ad support this
+pin? — and **it never returns a coordinate, never names a place, never
+promotes anything the resolver did not find.** Asking a model *where* a pet
+is produced «Таруша»; asking whether an ad supports a pin somebody else
+chose has a worst case of hiding a pet, which is quiet and reversible.
+
+When it cannot run — no key, no budget, an error, an unreadable answer —
+nothing changes: the row keeps its unjudged label and the bar hides it.
+Opus rather than Haiku because the distinctions are the hard half and
+the volume is ~one pet every other day ($0.19 for 44). And the CLI's dry
+run writes a plan that `--apply` replays without asking the model again,
+because a model asked twice may answer differently and "a human reads the
+dry run" means nothing if the apply writes something else.
+
+### D-65 · A sighting with an invented position is refused ✅
+*Decided 5 Sep · PR #544 · `server/src/routes/sightings.ts`, `app/hooks/useLocation.ts`*
+
+The client's Kyiv-centre fallback is fine for opening a map and wrong for
+a sighting, where the coordinate *is* the evidence — one such report moved
+«Коля» onto the parser's fall-through pair and off the map the evening he
+was placed. `POST /sightings` now answers 400 to that pair; the walk flow
+drops only the coordinate and still pays the paws, because the person did
+walk; and the app says "I can't see where you are" rather than "try
+again". Refused on both sides because an old client keeps sending what it
+was built to send. An invented report is not a weak report; it is not a
+report.
+
+### D-66 · Spent game items are pruned; scores live on `users` ✅
+*Decided 6 Sep · PR #545 · `server/src/services/spentItemCleanup.ts`, migration `0038`*
+
+175 MB of a 500 MB database was collected tokens and eaten bones that
+nothing reads — all sixteen queries filter to unspent rows, and lifetime
+totals are counters on `users` incremented inside the collect transaction,
+so deleting every spent row leaves every profile reading the same number.
+A daily janitor keeps seven days (long enough for the double-collect guard
+to still answer 409), deleting 5,000 rows a batch so the backlog drains
+over days rather than as one long transaction on a shared vCPU.
+`collect_events` is deliberately untouched — «bones eaten» counts from it.
+
+Separately, a partial index on `owner_id` over unspent rows gives the
+planner a way to reach one player's tokens without walking every
+uncollected token in the city, which is the cost that scales with how many
+people are playing. What this is *not*: a smaller database file. Postgres
+reuses the space; the reported size drops only after a `VACUUM FULL`, which
+takes an exclusive lock and belongs in a chosen window, not a cron.
+
+### D-67 · A teleport snaps the dog; a walk is lerped ✅
+*Decided 8 Sep · PR #561 · `app/hooks/useCompanion.ts` `TELEPORT_M`*
+
+Air-raid alarms come with GPS spoofing that relocates people across the
+city, so a fix jumping kilometres is a recurring condition for these users.
+Every companion step was a lerp capped at a jog, so after a jump the dog
+was left kilometres behind and could never close the gap — and because
+the gate's question and buttons are children of the companion, which
+`MapView` hides when off-screen, the app was a dead map with nothing to
+tap. A gap larger than 300m (bigger than any real walk between ticks,
+smaller than the viewport) now snaps the dog to the user, on the fix as
+well as on the tick, above the `menuOpen` freeze; and the off-screen rule
+stops at the gate. Reproduced by driving the real bundle with spoofed
+fixes before and after.
+
+### D-68 · Specificity outranks exactness, and one side must announce a place ✅
+*Decided 3–7 Sep · PRs #537, #542, #553 · `server/src/pipeline/resolvePlace.ts`*
+
+Three ordering rules in the resolver, each with a measured cost written
+into the fixtures. A narrower reading beats a dictionary-exact broader
+one, so an inflected hospital beats a letter-perfect district (one
+resolution changed across 192 pets, from a district to a neighbourhood
+inside it). Marked still wins over everything. A landmark match needs
+either the ad or the gazetteer name to announce a place — «район цирка»,
+or a stop named «Вул. Празька» — and a name made only of generic words is
+refused (78 resolutions → 72, all ten bad ones gone). And a name shared by
+a station and its district is one place at two scales, not a namesake
+pair, while «метро X» names a station and only a station: a station we
+do not have is a refusal, not a square of the same name.
+
+### D-69 · Registration at the door, for everybody ✅
+*Decided 12 Sep · `server/src/lib/accountPolicy.ts`, `server/src/routes/auth.ts`, `app/components/ui/AccountDoor.tsx`*
+
+Every account gets a nickname, an e-mail and a password before the map
+opens — PWA and Mini App alike. The owner chose the strict shape over
+the two softer ones on the table (progressive registration after the
+first walk; Telegram users exempt because Telegram already signs who
+they are), and chose it knowing the cost at an open launch: a form in
+front of the dog.
+
+**And the table starts empty.** The ~543 rows that existed before the
+door were drive-by device ids with nothing real behind them, so rather
+than carry them across, they are wiped when the door ships
+(`wipe:users`, dry by default, `--apply` explicit) and everybody
+registers fresh. Pets and sightings are not the users' and stay; only
+their `reported_by` / `reporter_id` link goes (ON DELETE SET NULL). The
+multiplayer bots are kept so day one has a populated map.
+
+What the decision does NOT change is the mechanism. Identity still
+arrives as a device id or a Telegram signature and still resolves a
+`users` row on first contact — minutes before the form is filled — and
+registration writes onto that row, so nothing collected before the door
+is lost. D-35 (an existing account is never lost to a gate) still holds
+for every row created from here on. The three consequences worth
+carrying:
+
+- **The API enforces it, not only the UI.** Once identified, every
+  route but `/auth/*` answers 403 «registration required» until the
+  account is through — stamped into the session slip as a `registered`
+  claim so the hot path still costs no database read. A slip minted
+  before registration is replaced by the one `/auth/register`,
+  `/auth/verify` and `/auth/me` hand back.
+- **A login outlives the day.** An e-mail login leaves a 90-day refresh
+  token (hashed, revocable, `auth_sessions`) behind; the client trades
+  it for a fresh slip instead of falling back to the device id, which
+  would have quietly logged the person into an anonymous account. A
+  password reset revokes every one of them.
+- **Verification is required only when it is possible.** With no mail
+  sender configured (`RESEND_API_KEY`, `EMAIL_FROM`) nobody could ever
+  satisfy it, so `doorFor` stops asking, loudly, at boot. Two switches
+  exist for launch day: `REGISTRATION_REQUIRED=0` takes the door down
+  entirely; `EMAIL_VERIFY_REQUIRED=0` keeps it up without the link.
+
+**The door is asked by the dog, not by a page.** The map and the dog
+load as always; at the gate, before the four intents, the dog asks
+«нюх-нюх! ми знайомі?» with two answers in the same pill grid — «так,
+ти шо не впізнав?» opens the account sheet on login, «ні, давай
+познайомимось!» on registration. The sheet is a popup in the scene, not
+a dimmed modal over it: the map stays as it is, the camera eases so the
+dog sits in the upper part of the screen (the follow loop holds while
+the sheet is up, or it would pull the dog straight back to centre; the
+onboarding hints wait too), the paper is as tall as its form — up to
+what the dog needs above it (its centre no higher than 150 px from the
+top of the VISIBLE height, measured, not `vh`, which on iOS Safari
+counts the space under the toolbars), the register form tightened so
+it fits without scrolling even with a pet named (name and breed share
+a row); only a form taller than that room scrolls, inside the paper
+under its drawn edge. The paper hangs from just under the dog — 190 px
+below the safe area — not from the bottom of the screen, where a short
+login form left a band of empty map and sat on Safari's toolbar; the
+paper reports where its top edge is and the camera puts the dog 40 px
+above it. Its ink is not clipped by the paper (no `overflow: hidden`;
+the scroll container clips its own content, rounded), and a corner
+arc always gets at least four points, or a pill-shaped field comes out
+with pointed ends. The dog — the same dog, on the map —
+says the line for whichever screen is showing. The framing ease was being killed a few
+ms in by a padding reset on every spots update (MapLibre's `setPadding`
+is a `jumpTo`, and a `jumpTo` stops any ease); it now resets only
+padding that is there. When the account is
+through, the sheet closes, the camera settles back, and the same gate
+shows the four intents. A mail link opens the app already through.
+Logging out returns to the gate and the same question — and, outside
+Telegram, ROTATES THE DEVICE ID: the device that registered *is* the
+account (its `x-device-id` maps to the registered row), so dropping the
+login alone put the person straight back in. The account is edited from
+the profile: a small «змінити» chip on the dog card opens the same paper
+with the door's fields (nickname, the pet — renaming the pet renames the
+companion), a password change that needs the current one and revokes
+every other login, and «вийти з акаунта» as a line at the bottom. The
+e-mail is not editable there: a new address would have to be verified
+again and the door would close behind the person, so that is its own
+flow, not yet built.
+
+The pet is optional (helpers without a pet skip it) and, when given,
+names the companion. Passwords are scrypt from Node's own crypto — no
+native module in the Fly image. Nickname uniqueness is on a key the
+application folds (NFKC + lowercase), because whether «Оля» and «оля»
+are one person must not depend on the database's locale, and the local
+Postgres this was tested on folds nothing outside ASCII.
+
+Social logins were considered and parked: the Telegram Login Widget is
+the one worth adding (same bot, same HMAC, merges the PWA and Mini App
+rows for free); Google refuses OAuth inside Telegram's webview
+(`disallowed_useragent`); Facebook needs Meta review and Instagram no
+longer offers a consumer sign-in at all.
+
+Checked end to end against a local Postgres — the door, both
+registration errors and the happy path, verification by link from a
+different device, login on a second device, refresh, logout, forgot and
+reset, the spent-link and wrong-password cases, and an unregistered row
+keeping its id and points through registration — and by
+`check:accounts` for the pure half. The wipe was run on the same local
+database: pets and sightings survived with their reporter nulled, the
+bot row survived, everything owned by the users went with them.
+
+### D-70 · The ink line has pressure ✅
+
+Every edge in the app is one component, `HandDrawnFrame`: an SVG
+outline that follows the rounded rectangle a CSS border would trace and
+nudges it by slow noise, so no two cards are the same rectangle. Until
+12 Sep the line itself was one width the whole way round — a plotter's
+line, however much it bowed — and when the account sheet's paper
+clipped its ink by accident, thick at the bows and thin at the corners,
+the owner liked the broken line better than the clean one. So the line
+now has pressure on purpose: it is drawn as a filled ribbon whose width
+swells and thins along the run (0.55–1.45× the nominal, its own noise,
+three to five swells around a card), which is what a hand does to a nib
+and what the eye reads as "drawn". One number, `DEFAULT_PRESSURE`, on
+every frame; `pressure={0}` gives the old plain stroke. Corner arcs
+also get at least four sample points now — a pill-shaped field's end
+was one step long and came out as a bevel.

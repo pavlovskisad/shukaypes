@@ -21,8 +21,16 @@
 // turn or a fan-out of billable Google Places lookups — and those are
 // deliberately much tighter than the rest.
 
+import type { FastifyRequest } from 'fastify';
+
 interface RouteConfig {
-  config: { rateLimit: { max: number; timeWindow: string } };
+  config: {
+    rateLimit: {
+      max: number;
+      timeWindow: string;
+      keyGenerator?: (req: FastifyRequest) => string;
+    };
+  };
 }
 
 function perMinute(max: number): RouteConfig {
@@ -46,3 +54,15 @@ export const limitExpensive = perMinute(10);
 
 /** Image proxying: many per screen, cheap each, but not unbounded. */
 export const limitMedia = perMinute(120);
+
+/**
+ * Credential endpoints that run BEFORE anybody is identified — login,
+ * password reset, token exchange. Keyed by address, not user: the
+ * global key falls through to `req.ip` when there is no userId, but
+ * saying so here keeps a future "identify first" change from quietly
+ * turning a guess-the-password limit into a per-guesser one. Tight,
+ * because a human logs in once and a script does not.
+ */
+export const limitAuth: RouteConfig = {
+  config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: (req) => req.ip } },
+};
