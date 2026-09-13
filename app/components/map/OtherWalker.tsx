@@ -185,15 +185,10 @@ export function OtherWalker({ player, onOpen }: Props) {
             transition: 'transform 300ms ease',
           }}
         >
-          {/* The edge takes the owner's ground colour while the ground is
-              painted, same rule as the name tag had: "whose zone is that"
-              is answerable by the chip standing on it. */}
-          <HandDrawnFrame
-            seed={player.id}
-            radius={CHIP / 2}
-            strokeWidth={CHIP_STROKE}
-            color={territoryVisible ? ownerColorCss(player.id) : INK}
-          />
+          {/* Plain ink, like every drawn edge in the app — the coloured
+              ring the first cut borrowed from the name tag read as a
+              badge on the map, not a line. */}
+          <HandDrawnFrame seed={player.id} radius={CHIP / 2} strokeWidth={CHIP_STROKE} color={INK} />
           {player.avatarUrl ? (
             <div
               aria-hidden

@@ -156,9 +156,6 @@ export function PlayerCard({ player, onClose }: Props) {
                         {tp.areaValue(card.areaM2)}
                       </div>
                     ) : null}
-                    {piece ? (
-                      <div style={{ ...LINK, display: 'inline-block', marginTop: S.xs }}>{t.showOnMap}</div>
-                    ) : null}
                   </div>
                 </div>
               ) : null}

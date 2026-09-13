@@ -12,11 +12,12 @@
 // fountain" — and recognising WHO is worth more than re-reading HOW
 // MUCH, which the counter still says in numbers.
 //
-// Since D-73 the row also carries the dog's face: the drawn portrait
-// (D-72, or a bot's from the roster) beside the name, no ring — the
-// marker line is the edge, as on the profile card and the dog's card.
-// A row without one keeps the slot as a blank paper disc so the names
-// stay in a column.
+// Since D-73 the row reads rank, face, name with the counter under it,
+// and the silhouette last on the right: the drawn portrait (D-72, or a
+// bot's from the roster) is the first thing after the rank, no ring —
+// the marker line is the edge, as on the profile card and the dog's
+// card. A row without one keeps the slot as a blank paper disc so the
+// names stay in a column.
 
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { colors } from '../../constants/colors';
@@ -24,7 +25,9 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { TerritoryMini } from './TerritoryMini';
 
-const PORTRAIT = 44;
+// Twice the profile card's 44: on the board the face is the identity
+// and the silhouette is the second read, so the face gets the size.
+const PORTRAIT = 88;
 
 export function BoardRow({
   rank,
@@ -51,7 +54,6 @@ export function BoardRow({
       >
         {rank}
       </Text>
-      <TerritoryMini points={piece} color={color} size={92} />
       <View style={styles.portrait}>
         {avatarUrl ? (
           <Image source={{ uri: avatarUrl }} style={styles.portraitImage} accessibilityLabel={name} />
@@ -63,6 +65,7 @@ export function BoardRow({
         </Text>
         <Text style={[styles.boardArea, you && styles.boardYouText]}>{areaLabel}</Text>
       </View>
+      <TerritoryMini points={piece} color={color} size={92} />
     </View>
   );
 }
