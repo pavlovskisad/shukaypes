@@ -13,19 +13,27 @@
 // The photo goes to Claude for that one look and is not kept there
 // either (the API does not retain inputs); the promise in the sheet —
 // nothing stores the photo — still holds. Nothing here logs the photo
-// or the description's subject beyond the species.
+// or the photo's subject beyond the description itself, which is a
+// line about an animal's coat and ears and nothing else.
 
 import { AMBIENT_MODEL, anthropic } from './anthropic.js';
 
 // What a caricaturist needs and nothing a person would mind being
 // said: the animal, not the room, the sofa or the child holding it.
+// The first round of sentences read fine and drew the wrong dog: the
+// samples the image model sees are mostly shaggy, and a sentence that
+// did not SAY "smooth" lost to them. So the sentence is now five
+// labelled parts, and the coat's texture is one word from a fixed list
+// the drawing prompt can lean on.
 const SYSTEM =
-  'You describe a pet for a caricaturist who will draw it from your words alone, in a crude, ' +
-  'funny, childlike marker doodle. One sentence, at most 35 words, plain English. Say only what ' +
-  'makes THIS animal recognisable at a glance: coat colour and length, ear shape and set, muzzle ' +
-  'shape, distinctive markings, expression or pose (tongue out, head tilt). No name, no breed ' +
-  'guess unless obvious, nothing about the background, people, objects or setting. Respond with ' +
-  'the sentence only.';
+  'You describe a pet for a caricaturist who will draw it in a crude, funny, childlike marker doodle, ' +
+  'black line on white, from your words. Answer in ONE line of at most 40 words with exactly these five ' +
+  'labelled parts, in this order, separated by semicolons: ' +
+  'coat: <light|dark|mixed> and <smooth|short|long|shaggy|curly|wiry>, plus one or two words on how it hangs; ' +
+  'ears: shape and how they sit; muzzle: length and shape, nose; markings: patches, mask, blaze, or none; ' +
+  'look: expression or pose (grin, tongue out, head tilt). ' +
+  'Say only what makes THIS animal recognisable at a glance. No name, no breed guess, nothing about the ' +
+  'background, people, objects or setting. Respond with the line only.';
 
 export async function describePet(
   photo: { bytes: Buffer; mime: string },
@@ -50,6 +58,6 @@ export async function describePet(
   });
   const block = resp.content.find((c) => c.type === 'text');
   if (!block || block.type !== 'text') return null;
-  const text = block.text.trim().replace(/\s+/g, ' ');
+  const text = block.text.trim().replace(/\s+/g, ' ').replace(/^["“]|["”]$/g, '');
   return text.length >= 10 ? text : null;
 }

@@ -197,19 +197,42 @@ export function referenceBody(
 // The describe recipe's words: the samples and a sentence, no photo.
 // The model is told there is no photo on purpose, or it looks for
 // one among the samples and draws the maltese.
-export function describePrompt(description: string, pet: { species: string | null; breed: string | null }, refCount = REF_FILES.length): string {
+// The photo, in the describe recipe, is a likeness check and nothing
+// more: on by default, AVATAR_DESCRIBE_PHOTO=off drops it. The first
+// run without it drew the illustrator's usual shaggy dog for a smooth
+// golden one — the right hand, the wrong animal; the owner's read was
+// that a person would not feel it was their dog.
+export function describeWithPhoto(): boolean {
+  return process.env.AVATAR_DESCRIBE_PHOTO?.trim().toLowerCase() !== 'off';
+}
+
+export function describePrompt(
+  description: string,
+  pet: { species: string | null; breed: string | null },
+  refCount = REF_FILES.length,
+  withPhoto = true,
+): string {
   const what = pet.species === 'cat' ? 'cat' : pet.species === 'dog' ? 'dog' : 'pet';
+  const photoLine = withPhoto
+    ? 'The last image is a photo of the pet. It is ONLY there to check the likeness — the tone of the coat, ' +
+      'the ears, the length of the muzzle, the markings. Do not draw the photo, do not copy its fur, its ' +
+      'shading or its detail; draw the description. '
+    : 'There is no photo. ';
   return (
-    `These ${refCount} images are drawings by one illustrator. They show only a drawing STYLE: a fat black ` +
+    `The first ${refCount} images are drawings by one illustrator. They show only a drawing STYLE: a fat black ` +
     'felt-tip marker, one uniform thick line, uneven wobbly strokes made fast, like a child scribbling, a big ' +
-    'simplified head, dot eyes, a solid black nose, almost no detail, wonky proportions, at most five short loose ' +
-    "strokes for fur, plain white background and nothing else. Strokes overshoot and don't quite meet. " +
-    `Draw a NEW ${what} in exactly that style, from this description and nothing else — there is no photo: ` +
-    `"${description}" ` +
-    'Head and shoulders, facing the viewer, twenty strokes at most, funny, clumsy and ugly on purpose, the way a ' +
-    'five-year-old draws the family pet in ten seconds. It must look cruder than every drawing here, never ' +
-    'more polished. Do not copy any of the animals in the drawings. No shading, no grey, no colour, no fine ' +
-    'lines, no fur detail, no text, no frame.'
+    'simplified head, dot eyes, a solid black nose, almost no detail, wonky proportions, plain white background ' +
+    "and nothing else. Strokes overshoot and don't quite meet. The animals in those drawings do not matter " +
+    `and must not be drawn. ${photoLine}` +
+    `Draw a ${what} in exactly that style from this description: "${description}" ` +
+    'The description decides the animal and the drawings decide only the line: where they disagree, the ' +
+    'description wins — a smooth or short coat is one clean outline with NO fur strokes even though the ' +
+    'sample dogs are shaggy; only a shaggy, curly or wiry coat gets a few short loose strokes. A light coat is ' +
+    'left white; a dark coat or a dark patch is filled solid black. ' +
+    'Head and shoulders, facing the viewer, twenty strokes at most, a low-effort, low-detail sketch: funny, ' +
+    'clumsy and ugly on purpose, the way a five-year-old draws the family pet in ten seconds. It must look ' +
+    'cruder than every drawing here, never more polished. No shading, no grey, no colour, no fine lines, no ' +
+    'fur texture, no text, no frame.'
   );
 }
 
@@ -217,10 +240,11 @@ export function describeBody(
   refs: string[],
   description: string,
   pet: { species: string | null; breed: string | null },
+  photoUri: string | null = null,
 ): Record<string, unknown> {
   return {
-    prompt: describePrompt(description, pet, refs.length),
-    image_urls: refs,
+    prompt: describePrompt(description, pet, refs.length, photoUri !== null),
+    image_urls: photoUri ? [...refs, photoUri] : refs,
     output_format: 'png',
     aspect_ratio: '1:1',
     num_images: 1,
@@ -267,14 +291,16 @@ export async function drawAvatar(
       log.warn({ kind: 'avatar_describe', err: (err as Error).message }, '[avatar] description failed — reference recipe');
     }
     if (description) {
-      log.info({ kind: 'avatar_describe', words: description.split(' ').length }, '[avatar] pet described');
+      // The line is about an animal's coat and ears; logging it is
+      // what makes a wrong drawing debuggable.
+      log.info({ kind: 'avatar_describe', description, photo: describeWithPhoto() }, '[avatar] pet described');
     } else {
       recipe = 'reference';
     }
   }
   const request =
     recipe === 'describe'
-      ? describeBody(refs as string[], description as string, pet)
+      ? describeBody(refs as string[], description as string, pet, describeWithPhoto() ? photoUri : null)
       : recipe === 'reference'
         ? referenceBody(photoUri, refs as string[], pet)
         : // Kontext's own safety filter: 2 is its default; a family pet

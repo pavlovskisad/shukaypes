@@ -1169,10 +1169,31 @@ the request at all. A caricaturist works from a description. Likeness
 becomes breed-level plus the distinctive bits, which is exactly what
 the posters are. The photo still is not stored anywhere: one look,
 not retained by the API. `reference` (photo beside the samples) is
-the automatic fallback when no description can be made. If this one also copies the
-sample or polishes past it, what is left is the style adapter trained
-on all ten drawings (with the illustrator's agreement, since it
-clones their line).
+the automatic fallback when no description can be made.
+
+**The right hand, the wrong dog (first run, same evening).** The
+first drawing from words alone was the first one in the illustrator's
+hand — fat wobbly line, ugly on purpose, the ink pass and the missing
+photo landing together — and it was a fluffy poodle-ish dog for a
+smooth golden retriever. Two things lost to the samples: a sentence
+that said "long-coated" and did not say "smooth" left the coat to the
+eight shaggy sample dogs, and nothing in the request carried the
+actual animal. The owner's read: close in style, different pet, and a
+person would feel it is not their dog. So the description is now five
+labelled parts with the coat's texture one word from a fixed list
+(smooth, short, long, shaggy, curly, wiry), the drawing prompt says
+the description decides the animal and the samples decide only the
+line — a smooth coat is one clean outline with no fur strokes even
+though the samples are shaggy — and the photo goes back into the
+request, last, named as a likeness check that must not be drawn.
+That last part is the owner's suggestion and the one that risks
+pulling the model back toward the photo; `AVATAR_DESCRIBE_PHOTO=off`
+takes it out again without a code change. The description is logged
+now: a wrong drawing is not debuggable without knowing what the
+drawing model was told, and the line is about a coat and a pair of
+ears. If this still polishes past the samples, what is left is the
+style adapter trained on all ten drawings (with the illustrator's
+agreement, since it clones their line).
 
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e
