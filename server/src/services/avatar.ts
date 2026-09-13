@@ -164,7 +164,8 @@ export function referencePrompt(pet: { species: string | null; breed: string | n
   return (
     `The first ${refCount} images are drawings by one illustrator; the last image is a photo of a ${petWord(pet)}. ` +
     `Draw this ${what} exactly the way those drawings are drawn: hand-drawn, childish, fast, fat uneven black ` +
-    'marker lines, weird, low effort, a rough draft, funny and a bit ugly. Copy the style and the idea of the ' +
+    'marker lines, weird, low effort, a rough draft, funny and a bit ugly — a funny character out of a ' +
+    "children's picture book, a cartoon, not a portrait. Copy the style and the idea of the " +
     'drawings, not their animals. Do not make it realistic and do not copy the photo — take only what makes ' +
     `this ${what} recognisable: its coat, ears, muzzle and markings. Half the lines you would normally draw: ` +
     'an outline, the ears, two small dot eyes, a nose, a mouth, and that is all — no fur strokes, no whiskers, ' +
@@ -215,7 +216,8 @@ export function describePrompt(
   return (
     `The first ${refCount} images are drawings by one illustrator; ${photoLine}` +
     `Draw this ${what} exactly the way those drawings are drawn: hand-drawn, childish, fast, fat uneven black ` +
-    'marker lines, weird, low effort, a rough draft, funny and a bit ugly. Copy the style and the idea of the ' +
+    'marker lines, weird, low effort, a rough draft, funny and a bit ugly — a funny character out of a ' +
+    "children's picture book, a cartoon, not a portrait. Copy the style and the idea of the " +
     `drawings, not their animals. Do not make it realistic. The ${what}: "${description}" ` +
     'Half the lines you would normally draw: an outline, the ears, two small dot eyes, a nose, a mouth, and ' +
     'that is all — no fur strokes, no whiskers, no wrinkles. Leave the mistakes in. ' +
