@@ -11,21 +11,22 @@
 // that, and it is made in the sheet that asks for the photo.
 //
 // THREE RECIPES, one env switch (AVATAR_RECIPE):
-//   describe   (default) the photo is shown to a vision model ONCE,
-//              which says in one sentence what a caricaturist would
-//              need (petDescription.ts); the image model then draws
-//              from those words and the illustrator's samples, with
-//              NO photo in the request. Every drawing made from the
-//              photo came back a sketch of the photo — the owner's
-//              reading, 13 Sep: "it tries to do photorealistic things
-//              and very detailed" while the posters are "low effort,
-//              super simple, funny/ugly/clumsy". The photo was the
-//              anchor; take it out of the drawing step.
-//   reference  the photo goes to the image model beside the samples
-//              (Nano Banana, Google's Gemini image edit, behind
-//              fal.ai). The fallback when the description cannot be
-//              made (no ANTHROPIC_API_KEY, a refusal). Good likeness,
-//              still a sketch of a photo.
+//   reference  (default) the photo goes to the image model beside the
+//              samples (Nano Banana, Google's Gemini image edit, behind
+//              fal.ai), with a SHORT prompt: copy the style of the
+//              drawings, do not copy the photo, same dog. The long
+//              prompts before it — 300 words of rules about strokes,
+//              symmetry and fur — were mostly ignored, and the words
+//              that did land ("sketch", "low-detail") pushed the model
+//              toward a thin pen sketch, the opposite of the posters.
+//              The owner's read, 13 Sep evening: we give it too many
+//              instructions; ask for three things and show it the
+//              pictures.
+//   describe   the photo is shown to a vision model ONCE, which says
+//              in one line what a caricaturist would need
+//              (petDescription.ts); the image model then draws from
+//              those words, the samples and the photo. Kept for
+//              comparison; it drew the right dog and no less realistic.
 //   marker     the photo alone on FLUX Kontext, single image, the
 //              style in words. The fallback when the reference files
 //              are missing. Good likeness, wrong hand.
@@ -108,7 +109,7 @@ export type AvatarRecipe = 'describe' | 'reference' | 'marker';
 
 export function avatarRecipe(): AvatarRecipe {
   const raw = process.env.AVATAR_RECIPE?.trim();
-  return raw === 'marker' || raw === 'reference' ? raw : 'describe';
+  return raw === 'marker' || raw === 'describe' ? raw : 'reference';
 }
 
 function apiUrl(recipe: AvatarRecipe): string {
@@ -165,15 +166,12 @@ function petWord(pet: { species: string | null; breed: string | null }): string 
 export function referencePrompt(pet: { species: string | null; breed: string | null }, refCount = REF_FILES.length): string {
   const what = pet.species === 'cat' ? 'cat' : pet.species === 'dog' ? 'dog' : 'pet';
   return (
-    `The first ${refCount} images are drawings by one illustrator. They show only a drawing STYLE: a fat black ` +
-    'felt-tip marker, one uniform thick line, uneven wobbly strokes made fast, like a child scribbling, a big ' +
-    'simplified head, dot eyes, a solid black nose, almost no detail, wonky proportions, at most five short loose ' +
-    "strokes for fur and none if the fur is smooth, plain white background and nothing else. Strokes overshoot and don't quite meet. " +
-    `The last image is a photo of a ${petWord(pet)}. Draw the ${what} from the photo — this exact animal, its own ` +
-    'ear shape, muzzle, markings and expression — as a portrait in exactly that scribbly style, with about twenty ' +
-    'to thirty strokes and a line as fat as in the drawings. It must look like a five-year-old scribbled it in ten seconds, cruder ' +
-    'than a professional illustration; if in doubt, draw less. Do not draw any of the animals from the drawings. ' +
-    'No shading, no grey, no colour, no fine lines, no fur detail, no text, no frame.'
+    `The first ${refCount} images are drawings by one illustrator; the last image is a photo of a ${petWord(pet)}. ` +
+    `Draw this ${what} exactly the way those drawings are drawn: hand-drawn, childish, fast, fat uneven black ` +
+    'marker lines, weird, low effort, a rough draft, funny and a bit ugly. Copy the style and the idea of the ' +
+    'drawings, not their animals. Do not make it realistic and do not copy the photo — take only what makes ' +
+    `this ${what} recognisable: its coat, ears, muzzle and markings. Head and shoulders facing the viewer, black ` +
+    'lines on plain white, nothing else.'
   );
 }
 
@@ -214,27 +212,14 @@ export function describePrompt(
 ): string {
   const what = pet.species === 'cat' ? 'cat' : pet.species === 'dog' ? 'dog' : 'pet';
   const photoLine = withPhoto
-    ? 'The last image is a photo of the pet. It is ONLY there to check the likeness — the tone of the coat, ' +
-      'the ears, the length of the muzzle, the markings. Do not draw the photo, do not copy its fur, its ' +
-      'shading or its detail; draw the description. '
+    ? `the last image is a photo of the ${what}, only there so it is the same animal. `
     : 'There is no photo. ';
   return (
-    `The first ${refCount} images are drawings by one illustrator. They show only a drawing STYLE: a fat black ` +
-    'felt-tip marker, one uniform thick line, uneven wobbly strokes made fast, like a child scribbling, a big ' +
-    'simplified head, dot eyes, a solid black nose, almost no detail, wonky proportions, plain white background ' +
-    "and nothing else. Strokes overshoot and don't quite meet. The animals in those drawings do not matter " +
-    `and must not be drawn. ${photoLine}` +
-    `Draw a ${what} in exactly that style from this description: "${description}" ` +
-    'The description decides the animal and the drawings decide only the line: where they disagree, the ' +
-    'description wins — a smooth or short coat is one clean outline with NO fur strokes even though the ' +
-    'sample dogs are shaggy; only a shaggy, curly or wiry coat gets a few short loose strokes. A light coat is ' +
-    'left white; a dark coat or a dark patch is filled solid black. ' +
-    'Head and shoulders, facing the viewer, twenty strokes at most, a low-effort, low-detail sketch: funny, ' +
-    'clumsy and ugly on purpose, the way a five-year-old draws the family pet in ten seconds. Nothing ' +
-    'symmetrical: one eye higher and bigger than the other, one ear longer, the nose off-centre, the head ' +
-    'lopsided. It must look ' +
-    'cruder than every drawing here, never more polished. No shading, no grey, no colour, no fine lines, no ' +
-    'fur texture, no text, no frame.'
+    `The first ${refCount} images are drawings by one illustrator; ${photoLine}` +
+    `Draw this ${what} exactly the way those drawings are drawn: hand-drawn, childish, fast, fat uneven black ` +
+    'marker lines, weird, low effort, a rough draft, funny and a bit ugly. Copy the style and the idea of the ' +
+    `drawings, not their animals. Do not make it realistic. The ${what}: "${description}" ` +
+    'Head and shoulders facing the viewer, black lines on plain white, nothing else.'
   );
 }
 

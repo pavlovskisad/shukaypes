@@ -1197,21 +1197,34 @@ ears.
 floppy ears, long blunt muzzle, tongue out: the description was
 right, the photo held the likeness, and the drawing was a golden
 retriever — the owner's best so far, and "still a bit realistic":
-both eyes level, both ears the same length, tidy fur strokes. The
-model draws a competent animal however it is asked not to. So the
-last bit of "clumsy" is added by the app: the ink pass gains a WARP,
-the wobble's displacement at a much larger scale (70 px over a 500 px
-cell at 1024), one slow wave across the drawing, so the head is
-lopsided and the eyes sit unevenly. Chosen by inking the real drawing
-at 24–120 px and looking: under 50 reads as nothing, 120 leans the dog
-out of the frame. The prompt also asks for the asymmetry outright
-(one eye higher, one ear longer, the nose off-centre), which costs
-nothing if ignored. The daily cap went from 5 to 100 the same day:
-the owner tuned through three accounts in an afternoon, and the
-number left is a guard against a script, not a person. If this still
-polishes past the samples, what is left is the style adapter trained
-on all ten drawings (with the illustrator's agreement, since it
-clones their line).
+both eyes level, both ears the same length, tidy fur strokes. Two
+things were tried the same hour and both were wrong. A WARP in the
+ink pass (one slow wave across the drawing so the head is lopsided)
+read on five real drawings as a tilted picture, not a clumsy hand;
+a kid's drawing is lopsided in its shapes, not rotated as a whole.
+And more prompt — "a low-effort, low-detail sketch", "one eye higher
+than the other" — made the five drawings thinner and sketchier than
+the one before: "sketch" is a loaded word for an image model, and
+the asymmetry line was ignored. The prompt had grown to three hundred
+words of rules, and the model followed perhaps three of them. The
+daily cap went from 5 to 100 the same day: the owner tuned through
+three accounts in an afternoon, and the number left is a guard
+against a script, not a person.
+
+**Fewer instructions (the owner's call, same evening).** "We give
+him too much instructions instead of asking him to: not make
+realistic and not copy the photo; copy the style and concept of the
+reference drawings — hand drawn, childish, fast, fat uneven lines,
+weird, low effort, draft." So the default recipe is `reference`
+again, with a prompt of about eighty words that says exactly that
+plus the three things that keep an avatar usable: the same animal
+(coat, ears, muzzle, markings), head and shoulders facing the
+viewer, black on white and nothing else. The photo and the eight
+samples do the rest. The describe recipe stays behind the env switch
+for comparison; the warp is off. If this still polishes past the
+samples, what is left is the style adapter trained on all ten
+drawings (with the illustrator's agreement, since it clones their
+line).
 
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e
