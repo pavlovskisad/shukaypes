@@ -1290,8 +1290,17 @@ pet, not on the hand — the retriever got a raised eyebrow and a
 lolling tongue, the bulldog a cocked brow, drawn with a steady hand —
 and whiskers and freckles came back with it. The prompt the art
 director sees is the simplicity round: the two samples, the photo,
-the shape vocabulary, and nothing about speed or mood. If this still
-polishes past the
+the shape vocabulary, and nothing about speed or mood. The line
+itself has a little room and not much: the same drawings re-inked at
+a shakier setting read as a nervous hand at one step up and as
+static at two. One more framing, the owner's, tried on its own:
+CARICATURE, said as what to do with the drawing rather than as the
+word alone — wildly out of proportion, whatever is big on this dog is
+huge, whatever is small is tiny, the one thing that makes it this
+dog is the biggest thing in the drawing. A property of the drawing,
+which is what lands; not a funhouse mirror, which the model would
+take literally and photographically. Kept if it helps, dropped if
+not. If this still polishes past the
 samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
