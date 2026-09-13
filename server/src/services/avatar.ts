@@ -53,20 +53,25 @@ function apiUrl(): string {
 }
 
 // One recipe, like the ink line in the UI (D-70): not tuned per pet.
-// The species and breed are said so the model keeps the right animal
-// when the photo is ambiguous (a puppy in a blanket); the rest describes
-// the app's own paper — the drawing has to sit next to HandDrawn's
-// frames and read as the same hand.
+// The look is the landing page's posters (shukaypes.xyz, 13 Sep): a
+// thick felt-tip marker, ONE line weight, a big cartoon head with dot
+// eyes and a round nose, hatching only where the fur is shaggy, and
+// nothing else on the paper. Named as a tool and a set of rules rather
+// than as adjectives — "sketchy" gets a fine-line study, "marker" and
+// "one line weight" get the poster. The species and breed are said so
+// the model keeps the right animal when the photo is ambiguous (a
+// puppy in a blanket).
 export function avatarPrompt(pet: { species: string | null; breed: string | null }): string {
   const what =
     pet.species === 'cat' ? 'cat' : pet.species === 'dog' ? 'dog' : 'pet';
   const breed = pet.breed ? ` (${pet.breed})` : '';
   return (
-    `Redraw this ${what}${breed} as a minimal hand-drawn black ink line portrait on plain white paper: ` +
-    'a few confident, slightly wobbly pen strokes, head and shoulders, centred, facing the viewer. ' +
-    "Keep the animal's real features recognisable — ear shape, muzzle, markings, fur texture — " +
-    'but simplify everything into clean outlines. No shading, no colour, no grey fill, no background, ' +
-    'no text, no frame, no signature. Pure black lines on pure white.'
+    `Redraw the ${what}${breed} in this photo as a bold hand-drawn cartoon portrait in thick black felt-tip marker ` +
+    'on plain white paper, like a hand-drawn lost-pet poster. One uniform line weight everywhere, no thin lines. ' +
+    'Simplify: a big head filling the frame, facing the viewer, dot eyes, a round nose, a simple mouth; a few ' +
+    'short hatching strokes only where the fur is shaggy, none where it is smooth. Keep what makes this animal ' +
+    'recognisable — ear shape, muzzle, markings. Playful and naive, not realistic. No shading, no grey, no colour, ' +
+    'no background, no text, no frame, no signature. Solid black marker lines on pure white.'
   );
 }
 
