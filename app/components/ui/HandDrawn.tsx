@@ -60,7 +60,11 @@ export const PAPER_EDGE = 1.5;
 export const PICTURE_INSET = PAPER_EDGE + 2;
 
 const AMP_FULL_AT_PX = 150;
-const AMP_MIN_SCALE = 0.3;
+// The floor. At 0.3 a 35 px field wobbled a third of a pixel — every
+// field on the account sheet came out the same shape, seed or no seed,
+// and read as stamped. Half the full amount is still small on a pill
+// and lets two fields differ (owner, 13 Sep).
+const AMP_MIN_SCALE = 0.5;
 
 function ampFor(w: number, h: number, base: number): number {
   const s = Math.min(w, h) / AMP_FULL_AT_PX;
@@ -157,7 +161,12 @@ function sampleRoundRect(
 
   const arc = (cx: number, cy: number, a0: number, a1: number) => {
     const len = Math.abs(a1 - a0) * rr;
-    const n = Math.max(2, Math.round(len / step));
+    // Three points on a corner at least. With two, a pill-shaped
+    // field's end is one knot at 45° and the spline turns it into a
+    // point — the fields on the account sheet read as too sharp
+    // (owner, 13 Sep). Three keeps the slight unevenness of a drawn
+    // corner without the point.
+    const n = Math.max(3, Math.round(len / step));
     for (let i = 0; i < n; i++) {
       const a = a0 + (a1 - a0) * (i / n);
       pts.push({
