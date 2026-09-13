@@ -266,6 +266,10 @@ const plugin: FastifyPluginAsync = async (app) => {
     // public lost-pet groups, keyed by an opaque TG file_id, so it's
     // safe to leave open.
     if (path?.startsWith('/photos/')) return;
+    // The bots' drawn portraits (D-73) are loaded the same way — a chip
+    // on the map is a background image — and serve only files committed
+    // to the repo, by integer index. Left open for the same reason.
+    if (path?.startsWith('/bot-avatars/')) return;
     // Logging in, following a verification or reset link, trading a
     // refresh token: a fresh browser must be able to do these WITHOUT
     // first being minted an anonymous account. Each is rate-limited by

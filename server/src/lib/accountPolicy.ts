@@ -85,7 +85,8 @@ export function doorFor(
 
 // Routes that must work with the door shut, or nobody could ever open
 // it. Everything else 403s until doorFor says 'open'. The auth hook's
-// own bypasses (/health, /admin/*, /photos/*, /client-errors…) are
+// own bypasses (/health, /admin/*, /photos/*, /bot-avatars/*,
+// /client-errors…) are
 // decided before this list is consulted.
 export function passesDoor(path: string | undefined): boolean {
   if (!path) return false;
