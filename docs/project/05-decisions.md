@@ -1304,7 +1304,18 @@ model picked one feature per pet and blew it up — saucer eyes on the
 cat, a tongue the size of the head on the retriever — a caricature
 by instruction. "Maybe not so precise a guide": cut to the bare
 idea, "a caricature: exaggerated, wildly out of proportion", so the
-model chooses how. If this still polishes past the
+model chooses how. That one held: the cat's eyes two sizes, the
+retriever with a chin, the bulldog the cleanest of the day, nothing
+blown up on instruction — "very interesting". Kept. Then the owner
+recalled the crayon trend (photos "crayonised" with a prompt: "simple
+shapes, uneven lines, rough wax strokes, bright playful colours,
+looking like a 4-year-old's fridge art"). Fridge art is a genre the
+model has seen thousands of times, the same kind of handle as
+caricature — it names the drawing, not the artist. Taken minus the
+wax and the colour, which the ink pass would turn to blobs: "a
+4-year-old's fridge art: simple shapes, uneven lines, drawn with a
+fat black marker, no crayon, no colour". One line on top of the
+caricature round. If this still polishes past the
 samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
