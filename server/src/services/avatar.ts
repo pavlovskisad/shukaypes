@@ -174,10 +174,8 @@ export function referencePrompt(pet: { species: string | null; breed: string | n
     `no wrinkles, no marks for shading. Draw it the way a four-year-old would: a wobbly blob for the head, ` +
     'the ears, two dots for eyes, a blob for the nose, one line for the mouth, and one more thing only if it ' +
     `is what makes this ${what} this ${what}. If a line is not needed to tell it is this ${what}, do not draw ` +
-    'it. Draw it as if you were drunk: the hand wobbles, the proportions come out wrong, lines land in the ' +
-    'wrong place, and you do not fix any of it. Leave the mistakes in: lines that miss, overshoot or do not ' +
-    'meet, proportions that are off. Head and shoulders facing the viewer, black lines on plain white, ' +
-    'nothing else.'
+    'it. Leave the mistakes in: lines that miss, overshoot or do not meet, proportions that are off. Head ' +
+    'and shoulders facing the viewer, black lines on plain white, nothing else.'
   );
 }
 
@@ -229,9 +227,7 @@ export function describePrompt(
     'Half the lines you would normally draw: an outline, the ears, two small dot eyes, a nose, a mouth, and ' +
     'that is all — no fur strokes, no whiskers, no wrinkles. Draw it the way a four-year-old would: a ' +
     `wobbly blob for the head, the ears, two dots for eyes, a blob for the nose, one line for the mouth. If a ` +
-    `line is not needed to tell it is this ${what}, do not draw it. Draw it as if you were drunk: the hand ` +
-    'wobbles, the proportions come out wrong, lines land in the wrong place, and you do not fix any of it. ' +
-    'Leave the mistakes in. ' +
+    `line is not needed to tell it is this ${what}, do not draw it. Leave the mistakes in. ` +
     'Head and shoulders facing the viewer, black lines on plain white, nothing else.'
   );
 }
