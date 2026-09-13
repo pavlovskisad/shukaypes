@@ -75,9 +75,10 @@ const DEFAULT_REFERENCE_API_URL = 'https://fal.run/fal-ai/nano-banana/edit';
 // an experiment, the owner's: ONLY the two most chaotic — the poodle
 // with the loopy ears and the terrier. The risk is that two samples
 // pull the model toward those two animals; the photo and the prompt's
-// "not their animals" are what holds it. If it holds, the next lever
-// is more chaos in the prompt; if it copies the poodle, back to four
-// (poodle, terrier, mop, spaniel).
+// "not their animals" are what holds it. It held: the retriever and
+// the bulldog came out cleaner than with four, the poodle wore the
+// sample's ear loops (right for a poodle), the cat picked up a few
+// more ticks. Two stays.
 export const REF_FILES = ['poodle.png', 'terrier.png'];
 // The model takes ~5–15 s; the fetch of the result a second more.
 const DRAW_TIMEOUT_MS = 90_000;
@@ -170,8 +171,9 @@ export function referencePrompt(pet: { species: string | null; breed: string | n
     'drawings, not their animals. Do not make it realistic and do not copy the photo — take only what makes ' +
     `this ${what} recognisable: its coat, ears, muzzle and markings. Half the lines you would normally draw: ` +
     'an outline, the ears, two small dot eyes, a nose, a mouth, and that is all — no fur strokes, no whiskers, ' +
-    'no wrinkles, no marks for shading. Leave the mistakes in: lines that miss, overshoot or do not meet, ' +
-    'proportions that are off. Head and shoulders facing the viewer, black lines on plain white, nothing else.'
+    'no wrinkles, no marks for shading. Draw it in five seconds without looking at the paper. Leave the ' +
+    'mistakes in: lines that miss, overshoot or do not meet, proportions that are off. Head and shoulders ' +
+    'facing the viewer, black lines on plain white, nothing else.'
   );
 }
 
@@ -221,7 +223,8 @@ export function describePrompt(
     "children's picture book, a cartoon, not a portrait. Copy the style and the idea of the " +
     `drawings, not their animals. Do not make it realistic. The ${what}: "${description}" ` +
     'Half the lines you would normally draw: an outline, the ears, two small dot eyes, a nose, a mouth, and ' +
-    'that is all — no fur strokes, no whiskers, no wrinkles. Leave the mistakes in. ' +
+    'that is all — no fur strokes, no whiskers, no wrinkles. Draw it in five seconds without looking at ' +
+    'the paper. Leave the mistakes in. ' +
     'Head and shoulders facing the viewer, black lines on plain white, nothing else.'
   );
 }
