@@ -66,22 +66,17 @@ import { describePet } from './petDescription.js';
 
 const DEFAULT_API_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const DEFAULT_REFERENCE_API_URL = 'https://fal.run/fal-ai/nano-banana/edit';
-// The illustrator's drawings, all but the two tidiest. The owner's
-// direction (13 Sep): the most chaotic, most obviously hand-made ones,
-// and more of them — four scribbly samples still came back "too
-// clean", so the whole set goes, minus the bulldog and the dachshund
-// profile, which are the two the model would most like to imitate. A
-// model given tidy samples tidies.
-export const REF_FILES = [
-  'mop.png',
-  'maltese.png',
-  'terrier.png',
-  'poodle.png',
-  'spaniel.png',
-  'spitz.png',
-  'shaggy.png',
-  'poodle2.png',
-];
+// Which of the illustrator's ten drawings go in the request. The model
+// copies whatever the samples do, more than anything the prompt says:
+// given the fur-heavy ones (maltese, shaggy, spitz, the curly poodle)
+// it drew a retriever with fur strokes all over the chest and ears —
+// "good but need less detail and more mistakes" (the owner, 13 Sep
+// evening). So the set is the six sparsest, with the most visible
+// mistakes: the dachshund profile is a handful of strokes and a gap in
+// the outline, the spaniel and the loopy poodle are a dozen lines
+// each, the mop is one scribble, the terrier and the bulldog are
+// simple heads. Fewer lines in, fewer lines out.
+export const REF_FILES = ['dachshund.png', 'spaniel.png', 'poodle.png', 'mop.png', 'terrier.png', 'bulldog.png'];
 // The model takes ~5–15 s; the fetch of the result a second more.
 const DRAW_TIMEOUT_MS = 90_000;
 const FETCH_TIMEOUT_MS = 30_000;
@@ -170,8 +165,9 @@ export function referencePrompt(pet: { species: string | null; breed: string | n
     `Draw this ${what} exactly the way those drawings are drawn: hand-drawn, childish, fast, fat uneven black ` +
     'marker lines, weird, low effort, a rough draft, funny and a bit ugly. Copy the style and the idea of the ' +
     'drawings, not their animals. Do not make it realistic and do not copy the photo — take only what makes ' +
-    `this ${what} recognisable: its coat, ears, muzzle and markings. Head and shoulders facing the viewer, black ` +
-    'lines on plain white, nothing else.'
+    `this ${what} recognisable: its coat, ears, muzzle and markings. Use as few lines as you can, fewer than ` +
+    'the drawings, and no fur strokes. Leave the mistakes in: lines that miss, overshoot or do not meet, ' +
+    'proportions that are off. Head and shoulders facing the viewer, black lines on plain white, nothing else.'
   );
 }
 
@@ -219,6 +215,7 @@ export function describePrompt(
     `Draw this ${what} exactly the way those drawings are drawn: hand-drawn, childish, fast, fat uneven black ` +
     'marker lines, weird, low effort, a rough draft, funny and a bit ugly. Copy the style and the idea of the ' +
     `drawings, not their animals. Do not make it realistic. The ${what}: "${description}" ` +
+    'Use as few lines as you can, fewer than the drawings, and no fur strokes. Leave the mistakes in. ' +
     'Head and shoulders facing the viewer, black lines on plain white, nothing else.'
   );
 }

@@ -1221,10 +1221,21 @@ plus the three things that keep an avatar usable: the same animal
 (coat, ears, muzzle, markings), head and shoulders facing the
 viewer, black on white and nothing else. The photo and the eight
 samples do the rest. The describe recipe stays behind the env switch
-for comparison; the warp is off. If this still polishes past the
-samples, what is left is the style adapter trained on all ten
-drawings (with the illustrator's agreement, since it clones their
-line).
+for comparison; the warp is off.
+
+**Fewer lines in, fewer lines out.** The short prompt drew the
+retriever in the illustrator's hand — "good but need less detail and
+more mistakes". The detail was fur strokes on the chest and ears,
+and they came from the samples, not the prompt: the eight in the
+request were the fur-heavy ones. The model copies what the samples
+do. So the set is now the six sparsest of the ten, the ones with the
+most visible mistakes — the dachshund profile (a handful of strokes,
+a gap in the outline), the spaniel, the loopy poodle, the mop
+scribble, the terrier, the bulldog — and the prompt gained two lines:
+as few lines as you can, fewer than the drawings, no fur strokes;
+leave the mistakes in. If this still polishes past the samples, what
+is left is the style adapter trained on all ten drawings (with the
+illustrator's agreement, since it clones their line).
 
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e
