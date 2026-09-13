@@ -1299,8 +1299,12 @@ word alone — wildly out of proportion, whatever is big on this dog is
 huge, whatever is small is tiny, the one thing that makes it this
 dog is the biggest thing in the drawing. A property of the drawing,
 which is what lands; not a funhouse mirror, which the model would
-take literally and photographically. Kept if it helps, dropped if
-not. If this still polishes past the
+take literally and photographically. It landed, too literally: the
+model picked one feature per pet and blew it up — saucer eyes on the
+cat, a tongue the size of the head on the retriever — a caricature
+by instruction. "Maybe not so precise a guide": cut to the bare
+idea, "a caricature: exaggerated, wildly out of proportion", so the
+model chooses how. If this still polishes past the
 samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
