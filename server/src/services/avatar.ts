@@ -230,7 +230,9 @@ export function describePrompt(
     'sample dogs are shaggy; only a shaggy, curly or wiry coat gets a few short loose strokes. A light coat is ' +
     'left white; a dark coat or a dark patch is filled solid black. ' +
     'Head and shoulders, facing the viewer, twenty strokes at most, a low-effort, low-detail sketch: funny, ' +
-    'clumsy and ugly on purpose, the way a five-year-old draws the family pet in ten seconds. It must look ' +
+    'clumsy and ugly on purpose, the way a five-year-old draws the family pet in ten seconds. Nothing ' +
+    'symmetrical: one eye higher and bigger than the other, one ear longer, the nose off-centre, the head ' +
+    'lopsided. It must look ' +
     'cruder than every drawing here, never more polished. No shading, no grey, no colour, no fine lines, no ' +
     'fur texture, no text, no frame.'
   );

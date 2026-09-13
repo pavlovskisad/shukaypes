@@ -49,9 +49,11 @@ for (let i = 0; i < out.data.length; i += 4) {
   } else if (!(r === 255 && g === 255 && b === 255)) other++;
 }
 if (other > 0) fail(`${other} pixels are neither black nor white`);
-// Source ink: ~192 + ~3×192 px. Thickened and wobbled it must be several
-// times that, and still a small share of the paper.
-if (black < 1500) fail(`too little ink: ${black}`);
+// Source ink: ~192 + ~3×192 px, of which the soft line's grey fringe
+// falls under the threshold. At 256 px the nib scales to 1 px, so the
+// ink roughly doubles, less what the warp carries past the edge — and
+// it is still a small share of the paper.
+if (black < 1200) fail(`too little ink: ${black}`);
 if (black > 256 * 256 * 0.25) fail(`too much ink: ${black}`);
 // The horizontal line was one row; wobbled and thickened it spans many.
 if (rows.size < 8) fail(`line did not wobble: ${rows.size} rows`);

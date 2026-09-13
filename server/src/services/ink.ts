@@ -17,6 +17,15 @@
 //      pixels, so no edge is straight and no curve is clean. Seeded from
 //      the bytes, so the same drawing inks the same way twice and a
 //      redraw inks differently.
+//   4. WARP: the same displacement at a much larger scale — one or two
+//      slow waves across the whole drawing, tens of pixels — so the
+//      head is lopsided, one eye sits higher than the other and one
+//      ear hangs longer. The model draws a competent, symmetrical dog
+//      however it is asked not to; the posters are not symmetrical, and
+//      this is the part of "clumsy" the app can add itself. Tried on a
+//      real drawing at 24–120 px: under ~50 it reads as nothing, at 120
+//      the dog leans out of the frame; 70 over a 500 px cell keeps the
+//      dog and loses the neatness.
 //
 // Pure JS over pngjs, no native image library; a 1024² drawing takes
 // tens of milliseconds. Transparent pixels count as paper. Off with
@@ -33,9 +42,14 @@ export interface InkOptions {
   wobble?: number;
   /** Noise cell size in px at 1024; scaled. Bigger = lazier waves. */
   cell?: number;
+  /** Coarse warp amplitude in px at 1024: one slow wave across the whole
+   * drawing, so the head is lopsided and the eyes sit unevenly. 0 = off. */
+  warp?: number;
+  /** Coarse warp cell size in px at 1024. */
+  warpCell?: number;
 }
 
-const DEFAULTS: Required<InkOptions> = { threshold: 160, weight: 3, wobble: 5, cell: 56 };
+const DEFAULTS: Required<InkOptions> = { threshold: 160, weight: 3, wobble: 8, cell: 56, warp: 70, warpCell: 500 };
 
 export function inkEnabled(): boolean {
   return process.env.AVATAR_INK?.trim().toLowerCase() !== 'off';
@@ -97,6 +111,8 @@ export function inkify(png: Buffer, opts: InkOptions = {}): Buffer {
   const radius = Math.max(0, Math.round(o.weight * scale));
   const amp = o.wobble * scale;
   const cell = Math.max(8, o.cell * scale);
+  const warpAmp = o.warp * scale;
+  const warpCell = Math.max(32, o.warpCell * scale);
 
   // 1. Binary ink mask. Transparent = paper.
   const ink = new Uint8Array(w * h);
@@ -142,11 +158,13 @@ export function inkify(png: Buffer, opts: InkOptions = {}): Buffer {
   const rnd = mulberry32(hashBytes(png));
   const nx = noiseField(w, h, cell, rnd);
   const ny = noiseField(w, h, cell, rnd);
+  const wx = noiseField(w, h, warpCell, rnd);
+  const wy = noiseField(w, h, warpCell, rnd);
   const dst = new PNG({ width: w, height: h });
   for (let y = 0; y < h; y++) {
     for (let x = 0; x < w; x++) {
-      const sx = Math.round(x + nx(x, y) * amp);
-      const sy = Math.round(y + ny(x, y) * amp);
+      const sx = Math.round(x + nx(x, y) * amp + wx(x, y) * warpAmp);
+      const sy = Math.round(y + ny(x, y) * amp + wy(x, y) * warpAmp);
       const inside = sx >= 0 && sx < w && sy >= 0 && sy < h && mask[sy * w + sx] === 1;
       const p = (y * w + x) * 4;
       const v = inside ? 0 : 255;

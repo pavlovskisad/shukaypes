@@ -75,11 +75,13 @@ import { buildPhotoUrl } from '../services/photoUrl.js';
 import { decodePhoto } from '../lib/photoBytes.js';
 
 type Log = Pick<FastifyBaseLogger, 'info' | 'warn'>;
-// Portraits per person per day. Each is a paid model call; five is
-// enough to try again on a bad photo, not enough to run a bill up.
-// AVATAR_DAILY_CAP raises it while the recipe is being tuned on a real
-// phone (the owner hit five in an afternoon, 13 Sep).
-const AVATAR_DAILY_CAP = Math.max(1, Number(process.env.AVATAR_DAILY_CAP) || 5);
+// Portraits per person per day. Each is a paid model call, a few
+// cents. Five was the first number and the owner burned through it on
+// three accounts in one afternoon of tuning (13 Sep); a person trying
+// again on a bad photo never needs more than a handful, and the number
+// that is left is a guard against a script, not a person.
+// AVATAR_DAILY_CAP overrides it.
+const AVATAR_DAILY_CAP = Math.max(1, Number(process.env.AVATAR_DAILY_CAP) || 100);
 type UserRow = typeof schema.users.$inferSelect;
 
 // What the client needs to draw the right screen. Everything about
