@@ -1128,8 +1128,14 @@ in one afternoon, then: Kontext's multi-image endpoint cannot be
 handed an animal drawing as a style sample, and no sentence gets
 Kontext to the naive hand. So the reference recipe moved to a model
 built for "make this look like that" (Nano Banana, Google's image
-edit, via fal) with the same three drawings, and is the default
-again; `marker` stays as the fallback. If this one also copies the
+edit, via fal) with the illustrator's drawings, and is the default
+again; `marker` stays as the fallback. Its first drawing (15:32) was
+the retriever, in a hand close to the posters — "wow, that's nice
+already" — still a touch neat. The owner's next call: hand the model
+the most chaotic drawings, not the cleanest, so the reference set is
+now the four scribbliest (mop, maltese, terrier, poodle) and the two
+tidiest (bulldog, dachshund) are left out. A model given tidy samples
+tidies. If this one also copies the
 sample or polishes past it, what is left is the style adapter trained
 on all ten drawings (with the illustrator's agreement, since it
 clones their line).

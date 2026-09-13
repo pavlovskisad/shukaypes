@@ -54,9 +54,13 @@ import type { FastifyBaseLogger } from 'fastify';
 
 const DEFAULT_API_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const DEFAULT_REFERENCE_API_URL = 'https://fal.run/fal-ai/nano-banana/edit';
-// Three of the illustrator's drawings, chosen for range rather than
-// breed: shaggy (hatching), bulldog (folds, dots), poodle (loops).
-const REF_FILES = ['shaggy.png', 'bulldog.png', 'poodle.png'];
+// Four of the illustrator's drawings — the owner's pick (13 Sep): the
+// most chaotic, most obviously hand-made ones, not the cleanest. A
+// model given tidy samples tidies; given scribbles it scribbles. The
+// mop (a scrawl of loops), the maltese (angry, hairy), the terrier
+// (zigzag fur), the poodle (loopy ears). The bulldog and the
+// dachshund, the two cleanest, stay in the folder and out of the set.
+export const REF_FILES = ['mop.png', 'maltese.png', 'terrier.png', 'poodle.png'];
 // The model takes ~5–15 s; the fetch of the result a second more.
 const DRAW_TIMEOUT_MS = 90_000;
 const FETCH_TIMEOUT_MS = 30_000;
@@ -135,7 +139,7 @@ function petWord(pet: { species: string | null; breed: string | null }): string 
 export function referencePrompt(pet: { species: string | null; breed: string | null }): string {
   const what = pet.species === 'cat' ? 'cat' : pet.species === 'dog' ? 'dog' : 'pet';
   return (
-    `The first image is a photo of a ${petWord(pet)}. The other three images are drawings by one illustrator and ` +
+    `The first image is a photo of a ${petWord(pet)}. The other ${REF_FILES.length} images are drawings by one illustrator and ` +
     'show only a drawing STYLE: a thick black felt-tip marker, one uniform line weight, uneven wobbly hand-drawn ' +
     "lines like a child's drawing, a big simplified head, dot eyes, a solid black nose, very little detail, a few " +
     'hatching strokes only where the fur is shaggy, plain white background and nothing else. ' +

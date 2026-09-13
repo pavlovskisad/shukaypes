@@ -11,7 +11,9 @@
 //            ships (services/avatar.ts, AVATAR_RECIPE=marker)
 //   nb1      Nano Banana (Gemini image edit) with the photo and ONE of
 //            the illustrator's drawings
-//   nb3      Nano Banana with the photo and three drawings
+//   nbAll    Nano Banana with the photo and the app's own reference
+//            set (REF_FILES in services/avatar.ts) and prompt — what
+//            the app ships (AVATAR_RECIPE=reference)
 //
 // on three photos that ship in assets/avatar-probe (a lab, a beagle,
 // a cat — smooth, patched, whiskered). Each drawing is a paid call,
@@ -23,12 +25,12 @@
 //
 // Usage (from server/):
 //   FAL_KEY=… pnpm probe:avatar            all nine
-//   FAL_KEY=… pnpm probe:avatar nb1        one recipe
+//   FAL_KEY=… pnpm probe:avatar nbAll      one recipe
 //   FAL_KEY=… pnpm probe:avatar nb1 cat    one recipe, one pet
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { avatarPrompt } from '../services/avatar.js';
+import { REF_FILES, avatarPrompt, referencePrompt } from '../services/avatar.js';
 
 const KEY = process.env.FAL_KEY?.trim();
 if (!KEY) {
@@ -86,20 +88,17 @@ const RECIPES: Record<string, (p: Pet) => Call> = {
         `The first image is a photo of a ${p.species}; the second image is a drawing that shows a drawing STYLE only. ` +
         `Draw the ${p.species} from the photo — this exact animal, its own ear shape, muzzle, markings and expression — ` +
         `as a portrait in that style: ${STYLE} Do not draw the animal from the second image.`,
-      image_urls: [photo(p.file), ref('bulldog.png')],
+      image_urls: [photo(p.file), ref('mop.png')],
       output_format: 'png',
       aspect_ratio: '1:1',
       num_images: 1,
     },
   }),
-  nb3: (p) => ({
+  nbAll: (p) => ({
     url: endpoint('https://fal.run/fal-ai/nano-banana/edit'),
     body: {
-      prompt:
-        `The first image is a photo of a ${p.species}; the other three images are drawings by one illustrator and show a drawing STYLE only. ` +
-        `Draw the ${p.species} from the photo — this exact animal, its own ear shape, muzzle, markings and expression — ` +
-        `as a portrait in that illustrator's style: ${STYLE} Do not draw any of the animals from the drawings.`,
-      image_urls: [photo(p.file), ref('shaggy.png'), ref('bulldog.png'), ref('poodle.png')],
+      prompt: referencePrompt({ species: p.species, breed: p.breed }),
+      image_urls: [photo(p.file), ...REF_FILES.map(ref)],
       output_format: 'png',
       aspect_ratio: '1:1',
       num_images: 1,
