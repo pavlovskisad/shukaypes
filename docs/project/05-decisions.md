@@ -1043,7 +1043,12 @@ view glides on iOS (e^-4.6 over the run, 1% left at the end), with
 linearity 0.43 so the glide begins at exactly the finger's speed and
 deceleration 600 so it carries as far as before (~800 px for a brisk
 flick) over a longer, softer tail (~2.5 s, most of it in the first
-second). Computed from MapLibre's own formula, not felt: the headless
+second). The owner's second pass the same day — "smoother, slower,
+softer" — took it to e^-4.2, linearity 0.47 and deceleration 450: a
+brisk flick now glides ~3.3 s and ~1200 px, a moderate one ~1.8 s and
+~330 px, and is still moving at one second where the first cut had
+nearly stopped. Softer necessarily carries farther: the glide starts
+at the finger's speed either way, so a gentler decay is a longer run. Computed from MapLibre's own formula, not felt: the headless
 browser cannot drive a real drag here (the follow loop keeps the map
 perpetually easing), so the thumb test is the owner's.
 
