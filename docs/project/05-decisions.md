@@ -994,19 +994,27 @@ keeping its id and points through registration — and by
 database: pets and sightings survived with their reporter nulled, the
 bot row survived, everything owned by the users went with them.
 
-### D-70 · The ink line has pressure ✅
+### D-70 · The ink line is one recipe, and it is PR #514's ✅
 
-Every edge in the app is one component, `HandDrawnFrame`: an SVG
-outline that follows the rounded rectangle a CSS border would trace and
-nudges it by slow noise, so no two cards are the same rectangle. Until
-12 Sep the line itself was one width the whole way round — a plotter's
-line, however much it bowed — and when the account sheet's paper
-clipped its ink by accident, thick at the bows and thin at the corners,
-the owner liked the broken line better than the clean one. So the line
-now has pressure on purpose: it is drawn as a filled ribbon whose width
-swells and thins along the run (0.55–1.45× the nominal, its own noise,
-three to five swells around a card), which is what a hand does to a nib
-and what the eye reads as "drawn". One number, `DEFAULT_PRESSURE`, on
-every frame; `pressure={0}` gives the old plain stroke. Corner arcs
-also get at least four sample points now — a pill-shaped field's end
-was one step long and came out as a bevel.
+Every edge in the app is drawn by one component, `HandDrawnFrame`
+(`app/components/ui/HandDrawn.tsx`), written on the `app-ui-ux` branch
+and merged as PR #514 on 21 Aug: a 2 px stroke of one width that
+follows the rounded rectangle a CSS border would trace, nudged along
+its normals by one or two slow waves of at most 1.1 px (less on small
+things), with corners sampled coarsely enough that a pill's end is not
+a perfect semicircle. That is the recipe. The lost-pet form (#532), the
+profile park (#560) and the account sheet all draw with it unchanged.
+
+On 12 Sep two changes to the recipe were merged and reverted the next
+day: corners sampled with at least four points (#591), and a filled
+ribbon whose width swelled and thinned along the run, "pen pressure"
+(#592). Both were a session's own idea of hand-drawn, prompted by the
+account sheet's paper clipping its ink at the corners — thick where the
+line bowed, flat where the clip cut it — which the owner had read as
+the intended look. The clip was the defect (D-69: the paper no longer
+clips). The line was never meant to change, and the two PRs made every
+edge in the app inconsistent with the one they were trying to match.
+
+The rule for next time: the frame's look is not tuned per screen or
+per session. A surface that looks different from the cards is either
+clipping, sizing or measuring its frame wrong, and that is what to fix.
