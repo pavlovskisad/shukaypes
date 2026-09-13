@@ -1285,8 +1285,13 @@ craziness", the owner's line, "draw like you're drunk", written so
 it reads as geometry and not as texture (the speed line taught that a
 mood word alone becomes "sketchy", which is more marks): the hand
 wobbles, the proportions come out wrong, lines land in the wrong
-place, and you do not fix any of it. Kept if it helps, dropped if
-not. If this still polishes past the
+place, and you do not fix any of it. Dropped: "drunk" landed on the
+pet, not on the hand — the retriever got a raised eyebrow and a
+lolling tongue, the bulldog a cocked brow, drawn with a steady hand —
+and whiskers and freckles came back with it. The prompt the art
+director sees is the simplicity round: the two samples, the photo,
+the shape vocabulary, and nothing about speed or mood. If this still
+polishes past the
 samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
