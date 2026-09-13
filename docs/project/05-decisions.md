@@ -1025,3 +1025,35 @@ made a pill-shaped field's end a point), and the wobble floor on small
 things is half the full amount rather than 0.3 (at 0.3 a 35 px field
 wobbled a third of a pixel, so every field came out the same shape,
 seed or no seed). Those are the recipe now.
+
+### D-71 · Camera physics: a flick glides like a scroll view, a move from rest eases both ways ✅
+
+The owner's word for the map, 13 Sep: roaming felt "too linear". Two
+things were behind it, both in how the camera moves rather than where.
+
+**The flick.** MapLibre's inertia (`handler_inertia.ts`) takes the
+finger's speed × `linearity`, runs for that ÷ (`deceleration` ×
+`linearity`) seconds, travels speed × duration ÷ 2 along `easing` — so
+the glide STARTS at easing′(0) × linearity ÷ 2 times the finger's
+speed. The previous numbers (quintic ease-out, linearity 0.7,
+deceleration 950) started it at 1.7×: the map kicked forward the
+instant the thumb lifted, then died into a crawl within ~750 ms for a
+moderate flick. Now the speed decays exponentially, the way a scroll
+view glides on iOS (e^-4.6 over the run, 1% left at the end), with
+linearity 0.43 so the glide begins at exactly the finger's speed and
+deceleration 600 so it carries as far as before (~800 px for a brisk
+flick) over a longer, softer tail (~2.5 s, most of it in the first
+second). Computed from MapLibre's own formula, not felt: the headless
+browser cannot drive a real drag here (the follow loop keeps the map
+perpetually easing), so the thumb test is the owner's.
+
+**A move the app makes.** MapLibre's default curve is an ease-OUT: the
+camera leaves at full speed and only slows, which is right for inertia
+(the finger set the speed) and a jolt for a move from rest — a
+recentre on a tap, the lift when the account sheet opens, the swing
+into supersniff. `easeCamera` now applies a cubic ease-in-and-out
+(`HOUSE_EASING`) to every `short` and `cinematic` move whose caller
+did not pass its own curve. The chained `follow` ease keeps its linear
+curve: its whole trick is that each tick continues the last one. The
+two `panTo` calls that had bypassed the helper go through it now, so
+there is no camera move in the app outside camera.ts.

@@ -50,14 +50,27 @@ import { prefersReducedMotion } from '../../utils/motion';
 
 export type CameraMoveKind = 'follow' | 'short' | 'cinematic';
 
+// THE HOUSE CURVE for a move the app issues itself. MapLibre's own
+// default is a quadratic ease-OUT: the camera leaves at full speed and
+// only slows down, which is right for a flick's inertia (the finger set
+// the speed) and wrong for a move from rest — a recentre on a tap, the
+// lift when the account sheet opens, the swing into supersniff — where
+// starting at full speed is a jolt. Cubic in-and-out: the camera picks
+// up, travels, settles. The chained follow ease keeps its linear curve
+// (its whole trick is that each tick continues the last one), and a
+// caller that passes its own curve keeps it.
+export const HOUSE_EASING = (t: number): number =>
+  t < 0.5 ? 4 * t * t * t : 1 - Math.pow(-2 * t + 2, 3) / 2;
+
 export function easeCamera(
   map: MlMap | null | undefined,
   kind: CameraMoveKind,
   opts: EaseToOptions,
 ): void {
   if (!map) return;
+  const shaped = kind === 'follow' || opts.easing ? opts : { ...opts, easing: HOUSE_EASING };
   if (!prefersReducedMotion()) {
-    map.easeTo(opts);
+    map.easeTo(shaped);
     return;
   }
   // `essential` stops MapLibre from zeroing the duration on its own; the
@@ -65,7 +78,7 @@ export function easeCamera(
   // so `offset` and `padding` — which jumpTo does not take — still land
   // the target where the caller framed it.
   map.easeTo({
-    ...opts,
+    ...shaped,
     essential: true,
     ...(kind === 'cinematic' ? { duration: 0 } : {}),
   });
