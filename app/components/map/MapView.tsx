@@ -2874,20 +2874,21 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // off into a crawl. That is the "linear" feel the owner named.
           //
           // NOW: the speed decays exponentially, the way a scroll view
-          // glides on iOS (velocity × 0.998 per ms), which is the feel
-          // every thumb already knows. e^-4.6 brings it to 1% by the end;
-          // that curve's initial slope is 4.65, so linearity 0.43 makes
-          // the glide start at exactly the finger's speed — no kick, no
+          // glides on iOS, which is the feel every thumb already knows.
+          // e^-4.2 over the run brings it to 1.5% by the end; that
+          // curve's initial slope is 4.26, so linearity 0.47 makes the
+          // glide start at exactly the finger's speed — no kick, no
           // hitch, the map simply keeps going and lets go. Deceleration
-          // 600 keeps the distance a flick carries where it was (~800 px
-          // for a brisk one) with the longer, softer tail: a brisk flick
-          // glides ~2.5 s, most of it in the first second. maxSpeed 2600
-          // keeps a hard flick from clipping.
+          // 450 is the owner's second pass ("smoother, slower, softer",
+          // 13 Sep, from 600): a brisk flick glides ~3.3 s and ~1200 px,
+          // a moderate one ~1.8 s and ~330 px, still moving at a second
+          // where the first cut had nearly stopped. maxSpeed 2600 keeps
+          // a hard flick from clipping.
           dragPan: {
-            linearity: 0.43,
-            deceleration: 600,
+            linearity: 0.47,
+            deceleration: 450,
             maxSpeed: 2600,
-            easing: (t: number) => (1 - Math.exp(-4.6 * t)) / (1 - Math.exp(-4.6)),
+            easing: (t: number) => (1 - Math.exp(-4.2 * t)) / (1 - Math.exp(-4.2)),
           },
         });
         map.on('error', (e) => {
