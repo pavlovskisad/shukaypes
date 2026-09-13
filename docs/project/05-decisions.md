@@ -1315,7 +1315,18 @@ caricature — it names the drawing, not the artist. Taken minus the
 wax and the colour, which the ink pass would turn to blobs: "a
 4-year-old's fridge art: simple shapes, uneven lines, drawn with a
 fat black marker, no crayon, no colour". One line on top of the
-caricature round. If this still polishes past the
+caricature round. No effect: the four drawings were the caricature
+round's four within the model's own spread — the prompt already said
+everything the line said, and a synonym added nothing. Dropped, by
+the rule that a line stays only if it earned its place. That is the
+plateau: four rounds in a row look about the same and all look good.
+Words have done what words can do with this model and these two
+samples; the next lever is the illustrator's own — a cat drawn by
+them is still the one thing that would move the cat. The build for
+the art director is the caricature round: two samples, the photo,
+the shape vocabulary, "a caricature: exaggerated, wildly out of
+proportion", and nothing about speed, mood or genre. If this still
+polishes past the
 samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
