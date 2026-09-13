@@ -1135,7 +1135,13 @@ already" — still a touch neat. The owner's next call: hand the model
 the most chaotic drawings, not the cleanest, so the reference set is
 now the four scribbliest (mop, maltese, terrier, poodle) and the two
 tidiest (bulldog, dachshund) are left out. A model given tidy samples
-tidies. If this one also copies the
+tidies. That drawing (15:47) was "not enough, definitely too clean":
+the right dog, a tidy ink illustration. Three more turns of the same
+dial in one change: eight samples instead of four, the samples BEFORE
+the photo in the request so the register is set before the subject
+arrives, a prompt that asks for twenty to thirty fat strokes and
+"draw less", and the photo downscaled to 512 px on the phone so there
+is less texture to keep. If this one also copies the
 sample or polishes past it, what is left is the style adapter trained
 on all ten drawings (with the illustrator's agreement, since it
 clones their line).

@@ -24,9 +24,11 @@ import { ERROR, LINK, NOTE, Primary, Secondary } from './AccountDoor';
 // The portrait is square (the model is asked for 1:1); the mount is
 // the width of the register form's e-mail field, more or less.
 const MOUNT = 148;
-// A portrait is a small thing on screen; 1024 px is more than the
-// model needs to see the animal and a tenth of a camera original.
-const PHOTO_MAX_SIDE = 1024;
+// A portrait is a small thing on screen, and the model is asked for a
+// scribble: the less texture it is shown, the less it has to keep.
+// 512 px still shows the animal; 1024 showed every hair, and the
+// drawing came back with every hair (13 Sep).
+const PHOTO_MAX_SIDE = 512;
 
 export type AvatarStage = 'ask' | 'done';
 
