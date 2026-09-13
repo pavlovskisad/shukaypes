@@ -4,6 +4,7 @@ import { db, schema } from '../db/index.js';
 import { buildPhotoUrl } from '../services/photoUrl.js';
 import { isApproximatePlacement } from '../services/mapData.js';
 import { confidentPlacementSqlFragment } from '../services/placementConfidence.js';
+import { decodePhoto } from '../lib/photoBytes.js';
 import { limitExpensive, limitPolling, limitRead } from '../lib/rateLimit.js';
 import {
   looksLikeItHadContacts,
@@ -437,35 +438,5 @@ const plugin: FastifyPluginAsync = async (app) => {
     },
   );
 };
-
-// Base64 photo (optionally a data: URI) → sniffed bytes, or null when
-// it isn't one of the three formats phones actually produce, or is too
-// large. Magic bytes, not the client's claimed MIME — the claim is one
-// more thing the client can get wrong.
-const MAX_PHOTO_BYTES = 5 * 1024 * 1024;
-function decodePhoto(raw: string | undefined): { bytes: Buffer; mime: string } | null {
-  if (!raw || typeof raw !== 'string') return null;
-  const b64 = raw.startsWith('data:') ? raw.slice(raw.indexOf(',') + 1) : raw;
-  let bytes: Buffer;
-  try {
-    bytes = Buffer.from(b64, 'base64');
-  } catch {
-    return null;
-  }
-  if (bytes.length < 12 || bytes.length > MAX_PHOTO_BYTES) return null;
-  if (bytes[0] === 0xff && bytes[1] === 0xd8 && bytes[2] === 0xff) {
-    return { bytes, mime: 'image/jpeg' };
-  }
-  if (bytes[0] === 0x89 && bytes[1] === 0x50 && bytes[2] === 0x4e && bytes[3] === 0x47) {
-    return { bytes, mime: 'image/png' };
-  }
-  if (
-    bytes.toString('latin1', 0, 4) === 'RIFF' &&
-    bytes.toString('latin1', 8, 12) === 'WEBP'
-  ) {
-    return { bytes, mime: 'image/webp' };
-  }
-  return null;
-}
 
 export default plugin;

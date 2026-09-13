@@ -2779,8 +2779,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       menuWasOpenRef.current = false;
       easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
     }
+    // `mapInstance` is here for the sheet that is already up when the
+    // map is built — the portrait step (D-72) or a reset link, opened
+    // at boot from the address bar: without it the effect ran once
+    // against a null map and the dog stayed under the paper.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menuCamera, doorSheetUp, doorSheetTop, companionPos?.lat, companionPos?.lng]);
+  }, [menuCamera, doorSheetUp, doorSheetTop, companionPos?.lat, companionPos?.lng, mapInstance]);
 
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null

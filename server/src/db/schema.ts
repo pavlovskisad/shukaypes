@@ -111,6 +111,22 @@ export const authSessions = pgTable(
   }),
 );
 
+// One row per portrait drawn (D-72): the per-person daily cap on model
+// spend is counted here, not in process memory a deploy would reset.
+export const avatarDraws = pgTable(
+  'avatar_draws',
+  {
+    id: text('id').primaryKey(),
+    userId: text('user_id')
+      .notNull()
+      .references(() => users.id, { onDelete: 'cascade' }),
+    createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => ({
+    userTimeIdx: index('avatar_draws_user_time_idx').on(t.userId, t.createdAt),
+  }),
+);
+
 // Companion state — 1:1 with users.
 export const companionState = pgTable('companion_state', {
   userId: text('user_id')

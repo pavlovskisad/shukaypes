@@ -158,6 +158,7 @@ export function Companion({
   // paper. The answers under it are put away until the sheet closes.
   const sheetUp = useAccessStore((s) => s.doorSheet != null);
   const doorScreen = useAccessStore((s) => s.doorScreen);
+  const me = useAccessStore((s) => s.me);
   const sheetLine = !sheetUp
     ? null
     : doorScreen === 'login'
@@ -168,7 +169,11 @@ export function Companion({
           ? t.auth.forgotAsk
           : doorScreen === 'reset'
             ? t.auth.resetAsk
-            : t.auth.registerAsk;
+            : doorScreen === 'avatar'
+              ? t.auth.avatarAsk(me?.pet?.name ?? null)
+              : doorScreen === 'avatarDone'
+                ? t.auth.avatarDoneAsk
+                : t.auth.registerAsk;
   // AT THE GATE, THE DOG CANNOT BE HIDDEN.
   //
   // `hidden` is the off-screen rule: when the dog leaves the viewport

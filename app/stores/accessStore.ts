@@ -44,7 +44,7 @@ interface AccessState {
   // The account sheet over the map: which screen it opens on, or null
   // while it is closed. The dog's two answers at the gate set it; the
   // door opening clears it.
-  doorSheet: 'register' | 'login' | 'verify' | 'reset' | null;
+  doorSheet: DoorSheet | null;
   // Which of the sheet's screens is showing, so the map's dog can say
   // the line for it — the words come out of the dog, not the paper.
   doorScreen: DoorScreen | null;
@@ -56,7 +56,7 @@ interface AccessState {
   // as before the door existed; a 403 later nudges a re-read.
   assumeOpen: () => void;
   nudgeDoor: () => void;
-  openDoorSheet: (s: 'register' | 'login' | 'verify' | 'reset') => void;
+  openDoorSheet: (s: DoorSheet) => void;
   closeDoorSheet: () => void;
   setDoorScreen: (s: DoorScreen | null) => void;
   setDoorSheetTop: (top: number | null) => void;
@@ -65,7 +65,43 @@ interface AccessState {
   setDoorNotice: (n: string | null) => void;
 }
 
-export type DoorScreen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset';
+export type DoorScreen =
+  | 'register'
+  | 'verify'
+  | 'login'
+  | 'forgot'
+  | 'forgotSent'
+  | 'reset'
+  | 'avatar'
+  | 'avatarDone';
+
+// 'avatar' is the step after the door (D-72): the pet's portrait,
+// asked once, right after registering, and skippable.
+export type DoorSheet = 'register' | 'login' | 'verify' | 'reset' | 'avatar';
+
+// Whether the portrait step has anything to ask: the server can draw
+// one, there is a pet to draw, and none has been drawn.
+export function wantsPortrait(me: Me | null): boolean {
+  return !!me && me.avatarConfigured && !me.avatarUrl && !!me.pet?.species;
+}
+
+// Through: the sheet has nothing left to ask — except when the way
+// through was registering (the sheet was on 'register' or 'verify'),
+// where the portrait step follows. Once on it, it stays until the
+// person closes it, whatever /auth/me says in between (a drawing
+// landing sets avatarUrl, and the sheet is showing that drawing).
+// Waiting on the link: the sheet shows that, whatever it was showing.
+// Otherwise leave the sheet where the person put it.
+function nextSheet(current: DoorSheet | null, me: Me | null): DoorSheet | null {
+  if (!me) return null;
+  if (me.door === 'open') {
+    if (current === 'avatar') return 'avatar';
+    if ((current === 'register' || current === 'verify') && wantsPortrait(me)) return 'avatar';
+    return null;
+  }
+  if (me.door === 'verify') return 'verify';
+  return current;
+}
 
 export const useAccessStore = create<AccessState>((set) => ({
   inviteRequired: false,
@@ -83,10 +119,7 @@ export const useAccessStore = create<AccessState>((set) => ({
     set((s) => ({
       me,
       door: me ? me.door : null,
-      // Through: the sheet has nothing left to ask. Waiting on the link:
-      // the sheet shows that, whatever it was showing. Otherwise leave
-      // the sheet where the person put it.
-      doorSheet: !me || me.door === 'open' ? null : me.door === 'verify' ? 'verify' : s.doorSheet,
+      doorSheet: nextSheet(s.doorSheet, me),
     })),
   assumeOpen: () => set((s) => (s.door === null ? { door: 'open' } : {})),
   nudgeDoor: () => set((s) => ({ doorNudge: s.doorNudge + 1 })),

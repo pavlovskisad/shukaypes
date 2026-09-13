@@ -27,7 +27,10 @@
 import type { FastifyBaseLogger } from 'fastify';
 import { messages } from '../i18n/botMessages.js';
 
-const TG_API = 'https://api.telegram.org';
+// Overridable for the local end-to-end stack only (a fake Telegram on
+// 127.0.0.1 answering sendPhoto/getFile), the way RESEND_API_URL stands
+// in for Resend. Production never sets it.
+const TG_API = process.env.TELEGRAM_API_URL?.replace(/\/$/, '') || 'https://api.telegram.org';
 const SEND_TIMEOUT_MS = 15_000;
 // Telegram allows ~20 messages/minute to the same chat and 30/s overall;
 // one pet fanning out to a handful of groups is far below both, but
@@ -163,6 +166,38 @@ export async function publishToChannel(
     '[crosspost] published to channel',
   );
   return { messageId, photoFileId, postUrl };
+}
+
+// Where generated avatars are kept. sendPhoto to any chat the bot can
+// write to hands back a file_id, which is the whole storage layer of
+// this app (see the header). A dedicated chat keeps portraits out of
+// the public channel; the owner's alert chat is the fallback so the
+// feature works the day FAL_KEY is set, and doubles as a moderation
+// feed — every drawing goes past a human, captioned with who asked.
+export function avatarChatId(): string | null {
+  const raw = process.env.AVATAR_CHAT_ID?.trim() || process.env.ALERT_CHAT_ID?.trim();
+  return raw ? raw : null;
+}
+
+/**
+ * Uploads a photo for keeping, nothing more: sendPhoto to the avatar
+ * chat, and the largest size's file_id back. Null when no chat is
+ * configured or Telegram refused — the caller decides what that means.
+ */
+export async function storePhoto(
+  opts: { bytes: Buffer; mime: string; caption: string; filename?: string },
+  log: Log,
+): Promise<string | null> {
+  const chatId = avatarChatId();
+  if (!chatId) return null;
+  const form = new FormData();
+  form.set('chat_id', chatId);
+  form.set('caption', opts.caption);
+  form.set('photo', new Blob([new Uint8Array(opts.bytes)], { type: opts.mime }), opts.filename ?? 'photo.jpg');
+  const result = await tgCall('sendPhoto', form, log);
+  if (!result) return null;
+  const sizes = Array.isArray(result.photo) ? (result.photo as { file_id?: string }[]) : [];
+  return sizes.length > 0 ? sizes[sizes.length - 1]?.file_id ?? null : null;
 }
 
 /**

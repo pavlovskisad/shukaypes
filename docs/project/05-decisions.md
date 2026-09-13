@@ -1062,3 +1062,55 @@ did not pass its own curve. The chained `follow` ease keeps its linear
 curve: its whole trick is that each tick continues the last one. The
 two `panTo` calls that had bypassed the helper go through it now, so
 there is no camera move in the app outside camera.ts.
+
+### D-72 · The pet's portrait: a drawing kept, a photo never stored ✅
+
+The owner asked for "the avatar" on 13 Sep, and whether it should be
+"the second-level form after basic info". It is: the step after the
+door, not part of it. Registering asks for the four things the app
+cannot work without (D-69); the portrait is the first thing it asks
+for that it could do without, so it comes after the e-mail is
+verified — never a paid model call on an account that may not be
+real — and it is skippable («потім»). It comes back the same three
+ways: the dog asks once, right after «я підтвердив» or the link
+itself (the link device lands on the same step); the account sheet
+(«змінити») carries a row to draw, redraw or remove it; and a person
+with no pet named is never asked.
+
+**What is made.** A photo of the pet goes to an image-editing model
+(FLUX.1 Kontext behind fal.ai, `server/src/services/avatar.ts`) with
+one prompt — the app's own paper: a few black pen lines on white, no
+shading, no colour. One recipe, like the ink line (D-70), not tuned
+per pet. The drawing comes back as a PNG and is kept the way every
+picture here is kept: uploaded to a Telegram chat by the bot, stored
+as the `file_id`, served through `/photos/:fileId`. The chat is
+`AVATAR_CHAT_ID`, falling back to `ALERT_CHAT_ID`, so the feature
+works the day `FAL_KEY` is set and every drawing goes past the owner
+with the nickname and the pet's name as the caption.
+
+**What is not.** The photo. It travels inside one request as a data
+URI, the model reads it, and nothing writes it anywhere — not the
+database, not Telegram, not a log line. The sheet says so under the
+pick button, and the promise is the reason the design is a drawing
+and not a cropped photo: a drawing of a dog is not a photo of
+somebody's living room.
+
+**Money.** A drawing costs a few cents. Two ceilings: the burst
+limiter every paid route has (`limitExpensive`, 10/min), and five
+drawings per person per day, counted in `avatar_draws` (migration
+`0043`) rather than in process memory a deploy would reset, and
+counted BEFORE the model call, because a call that timed out on our
+side may still have been billed. The route also refuses before the
+door is open (`not_verified`) and says `avatar_unconfigured` when
+there is no key, in which case `/auth/me` says `avatarConfigured:
+false` and the client never mentions the step.
+
+**Where it shows.** The profile's dog card, beside the name, as a
+small round drawing on paper. Nowhere else yet; the map's dog is still
+the pixel dog. Whether the portrait replaces it on the map, or marks
+the person's ground, is a later decision.
+
+**What would change it.** The model: the endpoint and prompt are one
+file, and `FAL_API_URL` already stands in for it in the local e2e
+stack. The storage: if photos ever leave Telegram, this leaves with
+them. The cap: `AVATAR_DAILY_CAP` in routes/auth.ts, one number.

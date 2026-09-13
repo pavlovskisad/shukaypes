@@ -33,6 +33,7 @@ import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { env } from '../../constants/env';
 import { openTelegramChat } from '../../services/telegram';
 import { api } from '../../services/api';
+import { fileToJpegBase64 } from '../../services/photoFile';
 import { useGameStore } from '../../stores/gameStore';
 import { SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
@@ -45,15 +46,11 @@ import { INLINE_ICON } from '../../constants/sizing';
 // open and close on one clock.
 const SHEET_ANIM_MS = 280;
 
-// Longest side after downscale. 1600px keeps a dog recognisable on any
-// screen this app renders while cutting a camera original ~30-fold.
 // How far the picture sits inside its mount: the paper margin the drawn
 // line is measured from, plus the line. Same figure, same name, as the
 // pet card — white, then the line, then the picture.
 const PHOTO_INSET = PAPER_EDGE + 2;
 
-const PHOTO_MAX_SIDE = 1600;
-const PHOTO_JPEG_QUALITY = 0.82;
 
 type Step = 'form' | 'pin' | 'done';
 
@@ -124,42 +121,6 @@ function Field({ seed, children }: { seed: string; children: React.ReactNode }) 
       {children}
     </div>
   );
-}
-
-// File → downscaled JPEG data URL. createImageBitmap where the browser
-// has it (it decodes off the main thread), <img> decode as fallback.
-async function fileToJpegBase64(file: File): Promise<string> {
-  let width: number;
-  let height: number;
-  let source: CanvasImageSource;
-  if (typeof createImageBitmap === 'function') {
-    const bmp = await createImageBitmap(file);
-    width = bmp.width;
-    height = bmp.height;
-    source = bmp;
-  } else {
-    const url = URL.createObjectURL(file);
-    try {
-      const img = new Image();
-      img.src = url;
-      await img.decode();
-      width = img.naturalWidth;
-      height = img.naturalHeight;
-      source = img;
-    } finally {
-      URL.revokeObjectURL(url);
-    }
-  }
-  const scale = Math.min(1, PHOTO_MAX_SIDE / Math.max(width, height));
-  const w = Math.max(1, Math.round(width * scale));
-  const h = Math.max(1, Math.round(height * scale));
-  const canvas = document.createElement('canvas');
-  canvas.width = w;
-  canvas.height = h;
-  const ctx = canvas.getContext('2d');
-  if (!ctx) throw new Error('canvas 2d unavailable');
-  ctx.drawImage(source, 0, 0, w, h);
-  return canvas.toDataURL('image/jpeg', PHOTO_JPEG_QUALITY);
 }
 
 export function LostFlowModal({ open, onClose }: LostFlowModalProps) {

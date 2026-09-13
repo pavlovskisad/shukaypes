@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
-import { View, Text, StyleSheet, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -20,7 +20,7 @@ import { useStrings } from '../../i18n/useStrings';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useLangStore } from '../../stores/langStore';
 import { CardStack, CARD_W } from '../../components/ui/CardStack';
-import { HandDrawnBar, HandDrawnFrame } from '../../components/ui/HandDrawn';
+import { HandDrawnBar, HandDrawnFrame, PICTURE_INSET } from '../../components/ui/HandDrawn';
 import { AccountEditSheet } from '../../components/ui/AccountEditSheet';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
@@ -110,6 +110,11 @@ function StatRow({ label, value }: { label: string; value: string | number | und
 // The «змінити» chip on the dog card: smaller than the HUD pills, it
 // is a corner affordance and not a control row.
 const EDIT_CHIP_H = 28;
+// The pet's portrait beside its name: as tall as the name and level
+// lines together, and inset from its drawn edge like every picture on
+// paper here (HandDrawn's PICTURE_INSET).
+const PORTRAIT_SIZE = 44;
+const PORTRAIT_INSET = PICTURE_INSET;
 
 export default function ProfileScreen() {
   const t = useStrings();
@@ -118,6 +123,7 @@ export default function ProfileScreen() {
   const companionName = useGameStore((s) => s.companionName);
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const setDoorPrefer = useAccessStore((s) => s.setDoorPrefer);
+  const avatarUrl = useAccessStore((s) => s.me?.avatarUrl ?? null);
   const nudgeDoor = useAccessStore((s) => s.nudgeDoor);
   const setAppMode = useGameStore((s) => s.setAppMode);
   const router = useRouter();
@@ -230,17 +236,33 @@ export default function ProfileScreen() {
               <Text style={styles.editChipText}>{t.auth.editChip}</Text>
             </Pressable>
             <Text style={styles.sectionTitle}>{t.profile.stats.companionStats}</Text>
-            <Text style={styles.companionNameBig}>
-              {data?.companion.name ?? companionName}
-            </Text>
-            <Text style={styles.companionLevel}>
-              {t.profile.level(data?.companion.level ?? 1)}
-              {data && data.companion.level < data.companion.maxLevel
-                ? ` · ${t.profile.xpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)}`
-                : data?.companion.level === data?.companion.maxLevel
-                  ? ` · ${t.profile.max}`
-                  : ''}
-            </Text>
+            <View style={styles.companionRow}>
+              {/* The pet's portrait (D-72), when one has been drawn:
+                  a small round one on paper, beside the name. */}
+              {avatarUrl ? (
+                <View style={styles.portrait}>
+                  <HandDrawnFrame radius={PORTRAIT_SIZE / 2} />
+                  <Image
+                    source={{ uri: avatarUrl }}
+                    style={styles.portraitImage}
+                    accessibilityLabel={t.auth.avatarSection}
+                  />
+                </View>
+              ) : null}
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text style={styles.companionNameBig} numberOfLines={1}>
+                  {data?.companion.name ?? companionName}
+                </Text>
+                <Text style={styles.companionLevel}>
+                  {t.profile.level(data?.companion.level ?? 1)}
+                  {data && data.companion.level < data.companion.maxLevel
+                    ? ` · ${t.profile.xpProgress(data.companion.xpInLevel, data.companion.xpForNextLevel)}`
+                    : data?.companion.level === data?.companion.maxLevel
+                      ? ` · ${t.profile.max}`
+                      : ''}
+                </Text>
+              </View>
+            </View>
             {data ? (
               <View style={styles.xpBarTrack}>
                 <HandDrawnBar
@@ -328,7 +350,7 @@ export default function ProfileScreen() {
         ),
       },
     ],
-    [t, data, board, companionName],
+    [t, data, board, companionName, avatarUrl],
   );
 
   const skyColor = SCENE_SKY[sceneMode];
@@ -591,6 +613,26 @@ const styles = StyleSheet.create({
   // Companion identity card (first in the deck) — compact name +
   // level + xp bar + days-together row so the four elements fit
   // comfortably in the same 150-tall slot as the other 3-row cards.
+  companionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: S.m,
+  },
+  portrait: {
+    width: PORTRAIT_SIZE,
+    height: PORTRAIT_SIZE,
+    borderRadius: PORTRAIT_SIZE / 2,
+    backgroundColor: '#ffffff',
+    marginBottom: S.s,
+  },
+  portraitImage: {
+    position: 'absolute',
+    top: PORTRAIT_INSET,
+    left: PORTRAIT_INSET,
+    right: PORTRAIT_INSET,
+    bottom: PORTRAIT_INSET,
+    borderRadius: PORTRAIT_SIZE / 2 - PORTRAIT_INSET,
+  },
   companionNameBig: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.title,

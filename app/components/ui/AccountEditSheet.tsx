@@ -22,7 +22,8 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { TYPE } from '../../constants/type';
-import { HandDrawnFrame } from './HandDrawn';
+import { HandDrawnFrame, PICTURE_INSET } from './HandDrawn';
+import { AvatarStudio } from './AvatarStudio';
 import {
   COLUMN,
   DOG_ROOM,
@@ -48,6 +49,19 @@ interface Props {
   onLoggedOut: () => void;
 }
 
+// The portrait on the edit row: a small round one, on paper like the
+// profile card's.
+const PORTRAIT_SIZE = 44;
+const PORTRAIT: CSSProperties = {
+  position: 'relative',
+  width: PORTRAIT_SIZE,
+  height: PORTRAIT_SIZE,
+  flex: 'none',
+  background: '#ffffff',
+  borderRadius: '50%',
+  border: '2px solid transparent',
+};
+
 export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
   const t = useStrings().auth;
   const me = useAccessStore((s) => s.me);
@@ -61,6 +75,10 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
   const [petName, setPetName] = useState(me?.pet?.name ?? '');
   const [breed, setBreed] = useState(me?.pet?.breed ?? '');
   const [passwordOpen, setPasswordOpen] = useState(false);
+  // The portrait studio takes the whole paper while it is open: it
+  // has its own primary action, and two dark pills on one sheet is
+  // one too many.
+  const [studioOpen, setStudioOpen] = useState(false);
   const [current, setCurrent] = useState('');
   const [next, setNext] = useState('');
   const [busy, setBusy] = useState(false);
@@ -117,6 +135,13 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
       onLoggedOut();
     });
 
+  const removeAvatar = () =>
+    run(async () => {
+      const r = await auth.removeAvatar();
+      setMe(r.me);
+      onSaved();
+    });
+
   // Escape closes, like every sheet in the app.
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
@@ -147,6 +172,18 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
       >
         <div style={PAPER}>
           <HandDrawnFrame seed="edit" radius={R.card} />
+          {studioOpen ? (
+            <form style={SCROLL} onSubmit={(e) => e.preventDefault()}>
+              <div style={title}>{t.avatarSection}</div>
+              <AvatarStudio
+                seed="edit"
+                onClose={() => {
+                  setStudioOpen(false);
+                  onSaved();
+                }}
+              />
+            </form>
+          ) : (
           <form style={SCROLL} onSubmit={(e) => e.preventDefault()} autoComplete="on">
             <div style={title}>{t.editTitle}</div>
 
@@ -205,6 +242,39 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
               </div>
             ) : null}
 
+            {me?.avatarConfigured ? (
+              <>
+                <div style={LABEL}>{t.avatarSection}</div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: S.m, marginTop: 4 }}>
+                  {me.avatarUrl ? (
+                    <div style={PORTRAIT}>
+                      <HandDrawnFrame seed="edit-portrait" radius={PORTRAIT_SIZE / 2} />
+                      <div
+                        role="img"
+                        aria-label={t.avatarSection}
+                        style={{
+                          position: 'absolute',
+                          inset: PICTURE_INSET,
+                          borderRadius: '50%',
+                          backgroundImage: `url("${me.avatarUrl}")`,
+                          backgroundSize: 'cover',
+                          backgroundPosition: 'center center',
+                        }}
+                      />
+                    </div>
+                  ) : null}
+                  <button type="button" style={LINK} onClick={() => setStudioOpen(true)}>
+                    {me.avatarUrl ? t.avatarEditRedraw : t.avatarEditDraw}
+                  </button>
+                  {me.avatarUrl ? (
+                    <button type="button" style={{ ...LINK, color: colors.grey }} onClick={removeAvatar}>
+                      {t.avatarEditRemove}
+                    </button>
+                  ) : null}
+                </div>
+              </>
+            ) : null}
+
             {me?.hasPassword ? (
               passwordOpen ? (
                 <div style={{ display: 'flex', gap: S.s }}>
@@ -259,6 +329,7 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
               )}
             </div>
           </form>
+          )}
         </div>
       </div>
     </div>,

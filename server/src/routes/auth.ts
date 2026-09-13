@@ -35,7 +35,7 @@
 // The client maps codes to its own strings in both languages.
 
 import type { FastifyBaseLogger, FastifyPluginAsync, FastifyReply } from 'fastify';
-import { and, eq, gt, isNull, ne, sql } from 'drizzle-orm';
+import { and, eq, gt, gte, isNull, ne, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { limitAuth, limitExpensive, limitPolling } from '../lib/rateLimit.js';
@@ -69,8 +69,15 @@ import { SESSION_ISSUE_HEADER, mintSession, type SessionVia } from '../lib/sessi
 import { sendEmail } from '../services/email.js';
 import { fromProblem } from '../lib/mailFrom.js';
 import { resetMail, verifyMail } from '../services/authMail.js';
+import { AvatarError, avatarConfigured, drawAvatar } from '../services/avatar.js';
+import { storePhoto } from '../services/crosspost.js';
+import { buildPhotoUrl } from '../services/photoUrl.js';
+import { decodePhoto } from '../lib/photoBytes.js';
 
 type Log = Pick<FastifyBaseLogger, 'info' | 'warn'>;
+// Portraits per person per day. Each is a paid model call; five is
+// enough to try again on a bad photo, not enough to run a bill up.
+const AVATAR_DAILY_CAP = 5;
 type UserRow = typeof schema.users.$inferSelect;
 
 // What the client needs to draw the right screen. Everything about
@@ -89,7 +96,11 @@ export interface Me {
   pet: { name: string | null; species: string | null; breed: string | null } | null;
   hasPassword: boolean;
   telegram: boolean;
+  // Absolute, like every photo URL the server hands out.
   avatarUrl: string | null;
+  // FAL_KEY is set: the portrait step exists. Off, the client never
+  // mentions it.
+  avatarConfigured: boolean;
 }
 
 function buildMe(user: UserRow, via: SessionVia | null): Me {
@@ -109,7 +120,8 @@ function buildMe(user: UserRow, via: SessionVia | null): Me {
       : null,
     hasPassword: user.passwordHash != null,
     telegram: user.telegramId != null,
-    avatarUrl: user.avatarFileId ? `/photos/${user.avatarFileId}` : null,
+    avatarUrl: buildPhotoUrl(user.avatarFileId, null),
+    avatarConfigured: avatarConfigured(),
   };
 }
 
@@ -506,6 +518,80 @@ const plugin: FastifyPluginAsync = async (app) => {
     const session = issueSlip(reply, user, deviceId, 'email');
     if (!session) return fail(reply, 503, 'sessions_unconfigured');
     return { ok: true, session, me: buildMe(user, 'email') };
+  });
+
+  // The pet's portrait (D-72): a photo in, a drawing kept. Through the
+  // door only — a drawing costs money, and the daily cap is the second
+  // ceiling under the burst limiter. The photo is not stored: it goes
+  // to the model in this request and nowhere else.
+  app.post<{ Body: { photoBase64?: unknown } }>(
+    '/auth/avatar',
+    { ...limitExpensive, bodyLimit: 8 * 1024 * 1024 },
+    async (req, reply) => {
+      const user = await loadUser(req.userId);
+      if (!user) return fail(reply, 404, 'not_found');
+      if (!user.registeredAt) return fail(reply, 400, 'not_registered');
+      if (doorFor({ registeredAt: user.registeredAt, emailVerifiedAt: user.emailVerifiedAt }) !== 'open') {
+        return fail(reply, 403, 'not_verified');
+      }
+      if (!avatarConfigured()) return fail(reply, 503, 'avatar_unconfigured');
+      const photo = decodePhoto(req.body?.photoBase64);
+      if (!photo) return fail(reply, 400, 'photo_invalid');
+
+      const dayAgo = new Date(Date.now() - 24 * 3600 * 1000);
+      const [{ count: recent }] = (await db
+        .select({ count: sql<number>`count(*)::int` })
+        .from(schema.avatarDraws)
+        .where(and(eq(schema.avatarDraws.userId, user.id), gte(schema.avatarDraws.createdAt, dayAgo)))) as [
+        { count: number },
+      ];
+      if (recent >= AVATAR_DAILY_CAP) return fail(reply, 429, 'avatar_daily_limit');
+      // Counted before the call, not after: a call that timed out on
+      // our side may still have been billed.
+      await db.insert(schema.avatarDraws).values({ id: nanoid(), userId: user.id });
+
+      let drawing: { bytes: Buffer; mime: string };
+      try {
+        drawing = await drawAvatar(photo, { species: user.petSpecies, breed: user.petBreed }, req.log);
+      } catch (err) {
+        if (err instanceof AvatarError) return fail(reply, err.code === 'avatar_unconfigured' ? 503 : 502, err.code);
+        throw err;
+      }
+      const fileId = await storePhoto(
+        {
+          bytes: drawing.bytes,
+          mime: drawing.mime,
+          filename: drawing.mime === 'image/png' ? 'portrait.png' : 'portrait.jpg',
+          caption: `портрет · ${user.username}${user.petName ? ` · ${user.petName}` : ''}`,
+        },
+        req.log,
+      );
+      if (!fileId) {
+        req.log.warn({ kind: 'auth_avatar', user: user.id }, '[auth] drawing could not be stored');
+        return fail(reply, 502, 'avatar_unstored');
+      }
+      const [updated] = await db
+        .update(schema.users)
+        .set({ avatarFileId: fileId })
+        .where(eq(schema.users.id, user.id))
+        .returning();
+      if (!updated) return fail(reply, 500, 'update_failed');
+      req.log.info({ kind: 'auth_avatar', user: user.id, draws_today: recent + 1 }, '[auth] portrait drawn');
+      return { ok: true, me: buildMe(updated, viaOf(req)) };
+    },
+  );
+
+  app.delete('/auth/avatar', limitAuth, async (req, reply) => {
+    const user = await loadUser(req.userId);
+    if (!user) return fail(reply, 404, 'not_found');
+    const [updated] = await db
+      .update(schema.users)
+      .set({ avatarFileId: null })
+      .where(eq(schema.users.id, user.id))
+      .returning();
+    if (!updated) return fail(reply, 500, 'update_failed');
+    req.log.info({ kind: 'auth_avatar', user: user.id, removed: true }, '[auth] portrait removed');
+    return { ok: true, me: buildMe(updated, viaOf(req)) };
   });
 
   app.post<{ Body: { refresh?: unknown } }>('/auth/logout', limitAuth, async (req) => {
