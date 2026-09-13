@@ -14,7 +14,8 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { limitMedia } from '../lib/rateLimit.js';
 
-const TG_API = 'https://api.telegram.org';
+// Overridable for the local e2e stack only (see services/crosspost.ts).
+const TG_API = process.env.TELEGRAM_API_URL?.replace(/\/$/, '') || 'https://api.telegram.org';
 const PATH_TTL_MS = 45 * 60 * 1000;
 
 interface CachedPath {

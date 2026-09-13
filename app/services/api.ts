@@ -444,7 +444,11 @@ export interface Me {
   pet: { name: string | null; species: string | null; breed: string | null } | null;
   hasPassword: boolean;
   telegram: boolean;
+  // The pet's drawn portrait (D-72), absolute; null until one is drawn.
   avatarUrl: string | null;
+  // The server can draw one (its model key is set). Off, the step is
+  // never shown.
+  avatarConfigured: boolean;
 }
 
 export interface RegisterInput {
@@ -486,6 +490,20 @@ export const auth = {
   // From the profile: the door's fields, changed later.
   updateProfile: (input: ProfileInput) =>
     req<{ ok: true; me: Me }>('/auth/profile', { method: 'POST', body: JSON.stringify(input) }),
+  // The pet's portrait: a photo up (a data URL, downscaled by
+  // services/photoFile.ts), the drawing kept on the account. The photo
+  // itself is not stored anywhere — see the note in the sheet.
+  drawAvatar: (photoBase64: string) =>
+    req<{ ok: true; me: Me }>('/auth/avatar', {
+      method: 'POST',
+      body: JSON.stringify({ photoBase64 }),
+      // The model takes 5–15 s; the wrapper's default timeout is for
+      // ordinary calls.
+      timeoutMs: 120_000,
+    }),
+  // `{}` for the same reason as resend: the wrapper sets a JSON content
+  // type on every request, and Fastify refuses an empty body under it.
+  removeAvatar: () => req<{ ok: true; me: Me }>('/auth/avatar', { method: 'DELETE', body: '{}' }),
   changePassword: (current: string, next: string) =>
     req<{ ok: true }>('/auth/password', {
       method: 'POST',

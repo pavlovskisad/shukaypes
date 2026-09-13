@@ -86,6 +86,24 @@ export interface AppStrings {
     changePasswordLink: string;
     currentPasswordLabel: string;
     done: string;
+    // The pet's portrait (D-72): the dog's two lines, the studio's
+    // buttons, and the row on the edit sheet.
+    avatarAsk: (petName: string | null) => string;
+    avatarDoneAsk: string;
+    avatarPick: string;
+    avatarChange: string;
+    avatarDraw: string;
+    avatarDrawing: string;
+    avatarKeep: string;
+    avatarRetry: string;
+    avatarLater: string;
+    avatarNone: string;
+    avatarPrivacy: string;
+    avatarUnreadable: string;
+    avatarSection: string;
+    avatarEditDraw: string;
+    avatarEditRedraw: string;
+    avatarEditRemove: string;
     // Server error codes → sentences.
     errors: Record<string, string> & { generic: string };
   };
@@ -519,6 +537,25 @@ const uk: AppStrings = {
     changePasswordLink: 'змінити пароль',
     currentPasswordLabel: 'поточний пароль',
     done: 'готово',
+    avatarAsk: (petName) =>
+      petName
+        ? `а покажи мені ${petName}! я намалюю портрет для мапи.`
+        : 'а покажи мені свого хвостатого! я намалюю портрет для мапи.',
+    avatarDoneAsk: 'ось! схожий? якщо ні — спробуємо ще раз.',
+    avatarPick: 'вибрати фото',
+    avatarChange: 'інше фото',
+    avatarDraw: 'намалювати',
+    avatarDrawing: 'малюю… секунд десять',
+    avatarKeep: 'супер, лишаємо',
+    avatarRetry: 'спробувати ще',
+    avatarLater: 'потім',
+    avatarNone: 'краще без портрета',
+    avatarPrivacy: 'фото нікуди не зберігається — залишається тільки малюнок.',
+    avatarUnreadable: 'не можу прочитати це фото. спробуй інше (jpg або png).',
+    avatarSection: 'портрет улюбленця',
+    avatarEditDraw: 'намалювати портрет',
+    avatarEditRedraw: 'перемалювати',
+    avatarEditRemove: 'прибрати',
     errors: {
       generic: 'щось пішло не так. спробуй ще раз.',
       nickname_invalid: 'нік: від 2 до 24 символів, літери й цифри.',
@@ -540,6 +577,13 @@ const uk: AppStrings = {
       sessions_unconfigured: 'вхід тимчасово недоступний.',
       password_wrong: 'поточний пароль не підходить.',
       not_registered: 'спершу зареєструйся.',
+      not_verified: 'спершу підтверди пошту.',
+      photo_invalid: 'це не схоже на фото (jpg, png або webp, до 5 МБ).',
+      avatar_unconfigured: 'малювати поки не вмію — спробуй пізніше.',
+      avatar_failed: 'не вийшло намалювати. спробуй інше фото або трохи пізніше.',
+      avatar_refused: 'з цим фото не вийде. спробуй інше.',
+      avatar_daily_limit: 'на сьогодні досить малювання — завтра ще.',
+      avatar_unstored: 'малюнок не зберігся. спробуй ще раз.',
       network: "немає зв'язку. перевір інтернет.",
     },
   },
@@ -1043,6 +1087,25 @@ const en: AppStrings = {
     changePasswordLink: 'change password',
     currentPasswordLabel: 'current password',
     done: 'done',
+    avatarAsk: (petName) =>
+      petName
+        ? `now show me ${petName}! i will draw a portrait for the map.`
+        : 'now show me your tailed one! i will draw a portrait for the map.',
+    avatarDoneAsk: 'there! a likeness? if not, we try again.',
+    avatarPick: 'pick a photo',
+    avatarChange: 'another photo',
+    avatarDraw: 'draw',
+    avatarDrawing: 'drawing… ten seconds or so',
+    avatarKeep: 'great, keep it',
+    avatarRetry: 'try again',
+    avatarLater: 'later',
+    avatarNone: 'better without a portrait',
+    avatarPrivacy: 'the photo is not stored anywhere — only the drawing stays.',
+    avatarUnreadable: 'i cannot read that photo. try another (jpg or png).',
+    avatarSection: 'pet portrait',
+    avatarEditDraw: 'draw a portrait',
+    avatarEditRedraw: 'redraw',
+    avatarEditRemove: 'remove',
     errors: {
       generic: 'something went wrong. try again.',
       nickname_invalid: 'nickname: 2 to 24 characters, letters and digits.',
@@ -1064,6 +1127,13 @@ const en: AppStrings = {
       sessions_unconfigured: 'login is temporarily unavailable.',
       password_wrong: 'the current password does not match.',
       not_registered: 'register first.',
+      not_verified: 'confirm your e-mail first.',
+      photo_invalid: 'that does not look like a photo (jpg, png or webp, up to 5 MB).',
+      avatar_unconfigured: 'i cannot draw yet — try later.',
+      avatar_failed: 'the drawing did not work. try another photo, or a little later.',
+      avatar_refused: 'that photo will not do. try another.',
+      avatar_daily_limit: 'enough drawing for today — more tomorrow.',
+      avatar_unstored: 'the drawing was not saved. try again.',
       network: 'no connection. check the internet.',
     },
   },

@@ -10,7 +10,7 @@ import { ErrorBoundary } from '../components/ui/ErrorBoundary';
 import { ConnectionBanner } from '../components/ui/ConnectionBanner';
 import { AboutModal } from '../components/ui/AboutModal';
 import { useGameStore } from '../stores/gameStore';
-import { useAccessStore } from '../stores/accessStore';
+import { useAccessStore, wantsPortrait } from '../stores/accessStore';
 import { notifyTelegramReady } from '../services/telegram';
 import { installGlobalCrashHandlers } from '../services/crashReport';
 import { ApiError, auth, type Me } from '../services/api';
@@ -52,7 +52,12 @@ function useDoorKeeper(): void {
         scrubLinkFromUrl();
         if (!verify) return;
         try {
-          setMe(await auth.verify(verify));
+          const m = await auth.verify(verify);
+          setMe(m);
+          // The link is the last step of registering; the portrait is
+          // the step after it (D-72), the same as when the person taps
+          // «я підтвердив» in the sheet instead.
+          if (wantsPortrait(m)) openDoorSheet('avatar');
         } catch {
           // Spent or expired: the ordinary read below draws the door,
           // and the person is told why they are looking at it.

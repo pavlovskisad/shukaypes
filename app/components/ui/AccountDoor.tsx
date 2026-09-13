@@ -29,7 +29,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { ApiError, auth, type Me } from '../../services/api';
-import { useAccessStore } from '../../stores/accessStore';
+import { useAccessStore, type DoorSheet } from '../../stores/accessStore';
 import { useStrings } from '../../i18n/useStrings';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { colors } from '../../constants/colors';
@@ -40,8 +40,9 @@ import { SURFACE } from '../../constants/surface';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { HandDrawnFrame } from './HandDrawn';
+import { AvatarStudio, type AvatarStage } from './AvatarStudio';
 
-type Screen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset';
+type Screen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset' | 'avatar';
 
 // The map stays as it is — no backdrop, no dimming, touches outside
 // the paper reach the map. The paper hangs from the bottom edge and is
@@ -237,13 +238,16 @@ export function Secondary({ label, seed, onClick }: { label: string; seed: strin
 }
 
 function pickScreen(
-  requested: 'register' | 'login' | 'verify' | 'reset',
+  requested: DoorSheet,
   me: Me | null,
   resetToken: string | null,
   prefer: 'login' | null,
 ): Screen {
   if (resetToken) return 'reset';
   if (me?.door === 'verify') return 'verify';
+  // The portrait is a step AFTER the door; asked for with the door
+  // still shut, it is the door that shows.
+  if (requested === 'avatar') return me?.door === 'open' ? 'avatar' : 'register';
   if (requested === 'reset' || requested === 'verify') return 'register';
   if (prefer === 'login') return 'login';
   return requested;
@@ -261,7 +265,7 @@ export function AccountDoor() {
   return <AccountSheet requested={sheet} />;
 }
 
-function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify' | 'reset' }) {
+function AccountSheet({ requested }: { requested: DoorSheet }) {
   const t = useStrings().auth;
   const me = useAccessStore((s) => s.me);
   const setMe = useAccessStore((s) => s.setMe);
@@ -303,6 +307,15 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
   useEffect(() => {
     if (notice) setDoorNotice(null);
   }, [notice, setDoorNotice]);
+
+  // The store moves the sheet onto the portrait step when the door
+  // opens out of registering (accessStore nextSheet); this sheet is
+  // already mounted, so follow the prop rather than re-pick.
+  useEffect(() => {
+    if (requested === 'avatar') setScreen('avatar');
+  }, [requested]);
+  const [avatarStage, setAvatarStage] = useState<AvatarStage>('ask');
+  const closeDoorSheet = useAccessStore((s) => s.closeDoorSheet);
 
   const describe = (err: unknown): string => {
     if (err instanceof ApiError && err.code && t.errors[err.code]) return t.errors[err.code]!;
@@ -400,8 +413,8 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
   // The dog on the map says the line for this screen (Companion.tsx).
   const setDoorScreen = useAccessStore((s) => s.setDoorScreen);
   useEffect(() => {
-    setDoorScreen(screen);
-  }, [screen, setDoorScreen]);
+    setDoorScreen(screen === 'avatar' && avatarStage === 'done' ? 'avatarDone' : screen);
+  }, [screen, avatarStage, setDoorScreen]);
 
   // Where the paper's top edge is, for the camera. Observed rather than
   // computed: the paper is as tall as its form, and the form changes
@@ -638,6 +651,10 @@ function AccountSheet({ requested }: { requested: 'register' | 'login' | 'verify
               <div style={{ fontSize: TYPE.body, lineHeight: 1.4 }}>{t.forgotSent}</div>
               <Secondary label={t.backToLogin} seed="back" onClick={() => go('login')} />
             </>
+          ) : null}
+
+          {screen === 'avatar' ? (
+            <AvatarStudio seed="door" onStage={setAvatarStage} onClose={closeDoorSheet} />
           ) : null}
 
           {screen === 'reset' ? (

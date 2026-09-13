@@ -386,6 +386,7 @@ territory, a bbox range scan on plain B-trees.
 | `users.email` … `consent_at` | The account on top of the identity (migration `0042`, D-69): e-mail, verification time, scrypt password hash, the person's pet, the application-folded `nickname_key` the uniqueness index is on, registration and consent times, `avatar_file_id`. All nullable; legacy rows have none |
 | `auth_tokens` | One-time e-mail verification and password-reset tokens, stored as SHA-256 only, single use, cascade with the account |
 | `auth_sessions` | 90-day refresh tokens behind e-mail logins, hashed, revocable; a password reset revokes them all |
+| `avatar_draws` | One row per portrait drawn (migration `0043`, D-72): the per-person daily cap on model spend is counted here, not in process memory |
 | `search_results` | **Every** completed search — found or not — with the paws paid. Separate from `sightings` on purpose: a sighting asserts *the pet was here* and drives pin-moving; a search result may assert nothing. History starts 14 Aug 2026 (migration `0033`) |
 | `scrape_log.raw_body` | The ad text the parser actually read (migration `0034`). Served only by `/dogs/:id/post`, never in a bulk payload — enforced by a source-level fixture check |
 | `lost_dogs.is_found_report` | Somebody *has* this animal and is looking for its owner (migration `0035`). Kept in the table rather than filtered at ingest so these can get their own screen later; the map query simply does not return them |
@@ -456,7 +457,10 @@ A missing or unparseable var falls back to the tuned default, never to zero.
 `RESEND_API_KEY` and `EMAIL_FROM` (the mail sender; without both,
 verification is not required), `APP_URL` (where mail links point — the
 domain), `SESSION_SECRET` (set it explicitly now that slips carry logins),
-and the two switches `REGISTRATION_REQUIRED` / `EMAIL_VERIFY_REQUIRED`. Two performance knobs
+and the two switches `REGISTRATION_REQUIRED` / `EMAIL_VERIFY_REQUIRED`.
+The pet's portrait (D-72): `FAL_KEY` (without it the step does not
+exist) and the optional `AVATAR_CHAT_ID` (where drawings are kept;
+falls back to `ALERT_CHAT_ID`). Two performance knobs
 since the beta perf pass: `PG_POOL_MAX` (postgres-js pool size, default
 10) and `SPAWN_ATTEMPT_GAP_MS` (minimum gap between spawn rounds per
 user, default 30000; `0` disables the gate).

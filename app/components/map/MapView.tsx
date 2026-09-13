@@ -4,6 +4,7 @@ import { createPortal } from 'react-dom';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
@@ -432,6 +433,7 @@ export default function MapViewWeb() {
   // overlays render in a different subtree so we read the same inset
   // from the hook here.
   const insets = useSafeAreaInsets();
+  const pwaOvershoot = usePwaInsetOvershoot();
   const t = useStrings();
   const lang = useLangStore((s) => s.lang);
   const [bubble, setBubble] = useState<string | null>(null);
@@ -2777,8 +2779,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       menuWasOpenRef.current = false;
       easeCamera(map, 'short', { center: c, offset: [0, 0], duration: 320 });
     }
+    // `mapInstance` is here for the sheet that is already up when the
+    // map is built — the portrait step (D-72) or a reset link, opened
+    // at boot from the address bar: without it the effect ran once
+    // against a null map and the dog stayed under the paper.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [menuCamera, doorSheetUp, doorSheetTop, companionPos?.lat, companionPos?.lng]);
+  }, [menuCamera, doorSheetUp, doorSheetTop, companionPos?.lat, companionPos?.lng, mapInstance]);
 
   // MapLibre construction. Idempotent — bails if the map already
   // exists. Deps include `userPos` because on first paint it's null
@@ -3721,7 +3727,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             position: 'absolute',
             left: 0,
             right: 0,
-            bottom: -14,
+            // -14 hugs the screen's bottom edge. In the installed PWA the
+            // root is extended by the home-indicator inset (see
+            // usePwaInsetOvershoot), so without adding it back the deck
+            // sat that much too low and the card's breed line was cut.
+            bottom: -14 + pwaOvershoot,
             alignItems: 'center',
             zIndex: Z.HUD_CHIPS,
             // Slides down and fades as it leaves, back up as it returns.
