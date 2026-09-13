@@ -1264,8 +1264,15 @@ filling the frame, each plainly itself. "Look at those." The owner's
 next experiment: only the two most chaotic samples, the loopy poodle
 and the terrier, and nothing else changed, so what it does is
 legible. The risk is that two samples pull the model toward those
-two animals; if it copies the poodle, back to four. If this still
-polishes past the
+two animals. It held: the retriever and the bulldog came out cleaner
+than with four, the poodle wore the sample's ear loops (right for a
+poodle, not a copy), the cat picked up a few more forehead ticks —
+the one species with no sample of its own, which is a request to the
+illustrator, not a code change. Two stays. "We already got the really
+strong result"; the owner validates with the art director. One last
+lever, tried as the last change: a chaos line in the prompt, "draw it
+in five seconds without looking at the paper" — kept if it helps,
+dropped if not. If this still polishes past the
 samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
