@@ -30,7 +30,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { REF_FILES, avatarPrompt, referencePrompt } from '../services/avatar.js';
+import { REF_FILES, avatarPrompt, referenceBody } from '../services/avatar.js';
 
 const KEY = process.env.FAL_KEY?.trim();
 if (!KEY) {
@@ -96,13 +96,7 @@ const RECIPES: Record<string, (p: Pet) => Call> = {
   }),
   nbAll: (p) => ({
     url: endpoint('https://fal.run/fal-ai/nano-banana/edit'),
-    body: {
-      prompt: referencePrompt({ species: p.species, breed: p.breed }),
-      image_urls: [photo(p.file), ...REF_FILES.map(ref)],
-      output_format: 'png',
-      aspect_ratio: '1:1',
-      num_images: 1,
-    },
+    body: referenceBody(photo(p.file), REF_FILES.map(ref), { species: p.species, breed: p.breed }),
   }),
 };
 

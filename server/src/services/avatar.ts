@@ -54,13 +54,22 @@ import type { FastifyBaseLogger } from 'fastify';
 
 const DEFAULT_API_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const DEFAULT_REFERENCE_API_URL = 'https://fal.run/fal-ai/nano-banana/edit';
-// Four of the illustrator's drawings — the owner's pick (13 Sep): the
-// most chaotic, most obviously hand-made ones, not the cleanest. A
-// model given tidy samples tidies; given scribbles it scribbles. The
-// mop (a scrawl of loops), the maltese (angry, hairy), the terrier
-// (zigzag fur), the poodle (loopy ears). The bulldog and the
-// dachshund, the two cleanest, stay in the folder and out of the set.
-export const REF_FILES = ['mop.png', 'maltese.png', 'terrier.png', 'poodle.png'];
+// The illustrator's drawings, all but the two tidiest. The owner's
+// direction (13 Sep): the most chaotic, most obviously hand-made ones,
+// and more of them — four scribbly samples still came back "too
+// clean", so the whole set goes, minus the bulldog and the dachshund
+// profile, which are the two the model would most like to imitate. A
+// model given tidy samples tidies.
+export const REF_FILES = [
+  'mop.png',
+  'maltese.png',
+  'terrier.png',
+  'poodle.png',
+  'spaniel.png',
+  'spitz.png',
+  'shaggy.png',
+  'poodle2.png',
+];
 // The model takes ~5–15 s; the fetch of the result a second more.
 const DRAW_TIMEOUT_MS = 90_000;
 const FETCH_TIMEOUT_MS = 30_000;
@@ -131,22 +140,46 @@ function petWord(pet: { species: string | null; breed: string | null }): string 
   return pet.breed ? `${what} (${pet.breed})` : what;
 }
 
-// The reference recipe's words. The drawings carry the style; the
-// words say which image is the subject and which are the samples,
-// name the qualities the owner asked for (uneven, childlike, little
-// detail) so the model does not "improve" on the samples, and forbid
-// the one thing an editing model does unasked: drawing the sample.
-export function referencePrompt(pet: { species: string | null; breed: string | null }): string {
+// The reference recipe. The drawings carry the style; the words say
+// which image is the subject and which are the samples, name what the
+// owner asked for (uneven, childlike, few strokes, a fat line) so the
+// model does not "improve" on the samples, and forbid the one thing
+// an editing model does unasked: drawing the sample.
+//
+// ORDER MATTERS to a model like this: the drawings go first and the
+// photo last, so the run of samples sets the register before the
+// subject arrives. Photo first, four drawings after, and the model
+// drew a tidy ink illustration of the right dog (13 Sep, 15:47).
+export function referencePrompt(pet: { species: string | null; breed: string | null }, refCount = REF_FILES.length): string {
   const what = pet.species === 'cat' ? 'cat' : pet.species === 'dog' ? 'dog' : 'pet';
   return (
-    `The first image is a photo of a ${petWord(pet)}. The other ${REF_FILES.length} images are drawings by one illustrator and ` +
-    'show only a drawing STYLE: a thick black felt-tip marker, one uniform line weight, uneven wobbly hand-drawn ' +
-    "lines like a child's drawing, a big simplified head, dot eyes, a solid black nose, very little detail, a few " +
-    'hatching strokes only where the fur is shaggy, plain white background and nothing else. ' +
-    `Draw the ${what} from the photo — this exact animal, its own ear shape, muzzle, markings and expression — ` +
-    "as a portrait in that illustrator's style, as crude and playful as the drawings, not more polished. " +
-    'Do not draw any of the animals from the drawings. No shading, no grey, no colour, no fine detail, no text, no frame.'
+    `The first ${refCount} images are drawings by one illustrator. They show only a drawing STYLE: a fat black ` +
+    'felt-tip marker, one uniform thick line, uneven wobbly strokes made fast, like a child scribbling, a big ' +
+    'simplified head, dot eyes, a solid black nose, almost no detail, no fur texture except a few loose hatching ' +
+    "strokes where the fur is shaggy, plain white background and nothing else. Strokes overshoot and don't quite meet. " +
+    `The last image is a photo of a ${petWord(pet)}. Draw the ${what} from the photo — this exact animal, its own ` +
+    'ear shape, muzzle, markings and expression — as a portrait in exactly that scribbly style, with about twenty ' +
+    'to thirty strokes and a line as fat as in the drawings. It must look scribbled by hand in ten seconds, cruder ' +
+    'than a professional illustration; if in doubt, draw less. Do not draw any of the animals from the drawings. ' +
+    'No shading, no grey, no colour, no fine lines, no fur detail, no text, no frame.'
   );
+}
+
+// The request body for the reference recipe, in the order above —
+// shared with probe:avatar so a probe run and a real draw are the
+// same call.
+export function referenceBody(
+  photoUri: string,
+  refs: string[],
+  pet: { species: string | null; breed: string | null },
+): Record<string, unknown> {
+  return {
+    prompt: referencePrompt(pet, refs.length),
+    image_urls: [...refs, photoUri],
+    output_format: 'png',
+    aspect_ratio: '1:1',
+    num_images: 1,
+  };
 }
 
 export function avatarPrompt(pet: { species: string | null; breed: string | null }): string {
@@ -180,13 +213,19 @@ export async function drawAvatar(
   const photoUri = `data:${photo.mime};base64,${photo.bytes.toString('base64')}`;
   const refs = avatarRecipe() === 'reference' ? referenceImages(log) : null;
   const recipe: AvatarRecipe = refs ? 'reference' : 'marker';
-  const common = { output_format: 'png', aspect_ratio: '1:1', num_images: 1 };
   const request =
     recipe === 'reference'
-      ? { prompt: referencePrompt(pet), image_urls: [photoUri, ...(refs as string[])], ...common }
+      ? referenceBody(photoUri, refs as string[], pet)
       : // Kontext's own safety filter: 2 is its default; a family pet
         // photo never trips it, and a refusal is still surfaced below.
-        { prompt: avatarPrompt(pet), image_url: photoUri, ...common, safety_tolerance: '2' };
+        {
+          prompt: avatarPrompt(pet),
+          image_url: photoUri,
+          output_format: 'png',
+          aspect_ratio: '1:1',
+          num_images: 1,
+          safety_tolerance: '2',
+        };
 
   const started = Date.now();
   const ctl = new AbortController();
