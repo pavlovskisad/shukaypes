@@ -1228,10 +1228,11 @@ retriever in the illustrator's hand — "good but need less detail and
 more mistakes". The detail was fur strokes on the chest and ears,
 and they came from the samples, not the prompt: the eight in the
 request were the fur-heavy ones. The model copies what the samples
-do. So the set is now the six sparsest of the ten, the ones with the
-most visible mistakes — the dachshund profile (a handful of strokes,
-a gap in the outline), the spaniel, the loopy poodle, the mop
-scribble, the terrier, the bulldog — and the prompt gained two lines:
+do. So the set is now the four most abstract of the ten, the owner's
+pick — the poodle with the loopy ears and the terrier ("like these
+two"), the mop scribble, the spaniel — not the bulldog (a tidy head)
+and not the dachshund (a clean side profile, the only one not facing
+the viewer). The prompt gained two lines:
 as few lines as you can, fewer than the drawings, no fur strokes;
 leave the mistakes in. If this still polishes past the samples, what
 is left is the style adapter trained on all ten drawings (with the

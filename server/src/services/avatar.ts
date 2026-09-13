@@ -71,12 +71,13 @@ const DEFAULT_REFERENCE_API_URL = 'https://fal.run/fal-ai/nano-banana/edit';
 // given the fur-heavy ones (maltese, shaggy, spitz, the curly poodle)
 // it drew a retriever with fur strokes all over the chest and ears —
 // "good but need less detail and more mistakes" (the owner, 13 Sep
-// evening). So the set is the six sparsest, with the most visible
-// mistakes: the dachshund profile is a handful of strokes and a gap in
-// the outline, the spaniel and the loopy poodle are a dozen lines
-// each, the mop is one scribble, the terrier and the bulldog are
-// simple heads. Fewer lines in, fewer lines out.
-export const REF_FILES = ['dachshund.png', 'spaniel.png', 'poodle.png', 'mop.png', 'terrier.png', 'bulldog.png'];
+// evening). So the set is the four most abstract, the owner's pick:
+// the poodle with the loopy ears and the terrier ("like these two"),
+// the mop, which is one scribble, and the spaniel, a dozen loose
+// lines. Not the bulldog (a tidy head) and not the dachshund (a clean
+// side profile, the only one not facing the viewer). Fewer lines in,
+// fewer lines out.
+export const REF_FILES = ['poodle.png', 'terrier.png', 'mop.png', 'spaniel.png'];
 // The model takes ~5–15 s; the fetch of the result a second more.
 const DRAW_TIMEOUT_MS = 90_000;
 const FETCH_TIMEOUT_MS = 30_000;
