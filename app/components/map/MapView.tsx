@@ -2862,18 +2862,32 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // MapLibre is told to keep out of it.
           reduceMotion: false,
           // Drag-pan inertia tuning. The finger-follow phase is always
-          // 1:1 — these only shape what happens after the user lifts.
-          // Linearity 0.7 (default 0.3) makes a flick carry farther and
-          // map distance more proportionally to release speed; deceleration
-          // 950 (default 2500) lets the glide settle very gradually for a
-          // long, smooth slide; maxSpeed 2600 keeps fast flicks from
-          // clipping; quintic ease-out gives an even softer, longer tail.
-          // Net: pan glides like a sheet on ice rather than a rubber band.
+          // 1:1 — these only shape the glide after the finger lifts.
+          //
+          // HOW MAPLIBRE USES THEM (handler_inertia.ts): the glide's
+          // speed is the finger's × linearity, its duration that speed ÷
+          // (deceleration × linearity), and it travels speed × duration
+          // ÷ 2 along `easing`. So the glide STARTS at easing'(0) ×
+          // linearity ÷ 2 times the finger's speed — and the previous
+          // numbers (quintic, linearity 0.7) started it at 1.75×: the
+          // map kicked forward the instant the finger lifted, then died
+          // off into a crawl. That is the "linear" feel the owner named.
+          //
+          // NOW: the speed decays exponentially, the way a scroll view
+          // glides on iOS (velocity × 0.998 per ms), which is the feel
+          // every thumb already knows. e^-4.6 brings it to 1% by the end;
+          // that curve's initial slope is 4.65, so linearity 0.43 makes
+          // the glide start at exactly the finger's speed — no kick, no
+          // hitch, the map simply keeps going and lets go. Deceleration
+          // 600 keeps the distance a flick carries where it was (~800 px
+          // for a brisk one) with the longer, softer tail: a brisk flick
+          // glides ~2.5 s, most of it in the first second. maxSpeed 2600
+          // keeps a hard flick from clipping.
           dragPan: {
-            linearity: 0.7,
-            deceleration: 950,
+            linearity: 0.43,
+            deceleration: 600,
             maxSpeed: 2600,
-            easing: (t: number) => 1 - Math.pow(1 - t, 5),
+            easing: (t: number) => (1 - Math.exp(-4.6 * t)) / (1 - Math.exp(-4.6)),
           },
         });
         map.on('error', (e) => {
@@ -3262,14 +3276,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
 
   const recenterOnCompanion = () => {
     if (!companionPos || !mapRef.current) return;
-    mapRef.current.panTo(companionPos);
+    easeCamera(mapRef.current, 'short', { center: companionPos });
   };
 
 
 
   const panToDog = (target: LatLng) => {
     if (!mapRef.current) return;
-    mapRef.current.panTo(target);
+    easeCamera(mapRef.current, 'short', { center: target });
   };
 
   return (
