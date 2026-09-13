@@ -24,8 +24,11 @@
 //      however it is asked not to; the posters are not symmetrical, and
 //      this is the part of "clumsy" the app can add itself. Tried on a
 //      real drawing at 24–120 px: under ~50 it reads as nothing, at 120
-//      the dog leans out of the frame; 70 over a 500 px cell keeps the
-//      dog and loses the neatness.
+//      the dog leans out of the frame. Shipped at 70 for one evening
+//      and taken back out (warp 0): on five real drawings it read as a
+//      tilted picture, not a clumsy hand — a kid's drawing is lopsided
+//      in its shapes, not rotated as a whole. The option stays for a
+//      probe; the default is off.
 //
 // Pure JS over pngjs, no native image library; a 1024² drawing takes
 // tens of milliseconds. Transparent pixels count as paper. Off with
@@ -49,7 +52,7 @@ export interface InkOptions {
   warpCell?: number;
 }
 
-const DEFAULTS: Required<InkOptions> = { threshold: 160, weight: 3, wobble: 8, cell: 56, warp: 70, warpCell: 500 };
+const DEFAULTS: Required<InkOptions> = { threshold: 160, weight: 3, wobble: 5, cell: 56, warp: 0, warpCell: 500 };
 
 export function inkEnabled(): boolean {
   return process.env.AVATAR_INK?.trim().toLowerCase() !== 'off';
