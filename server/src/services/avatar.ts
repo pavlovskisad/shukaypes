@@ -45,12 +45,17 @@
 //                   ./assets/avatar-refs under the working directory,
 //                   which is where the Dockerfile puts them.
 //
+// Whatever the model returns then goes through OUR OWN INK (ink.ts):
+// thresholded to pure black, thickened to marker weight, wobbled —
+// the part of the hand the app can do itself. AVATAR_INK=off skips it.
+//
 // Every failure is an AvatarError with a code the client has a
 // sentence for. Nothing here logs the photo or the drawing's bytes.
 
 import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
+import { inkEnabled, inkify } from './ink.js';
 
 const DEFAULT_API_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const DEFAULT_REFERENCE_API_URL = 'https://fal.run/fal-ai/nano-banana/edit';
@@ -155,11 +160,11 @@ export function referencePrompt(pet: { species: string | null; breed: string | n
   return (
     `The first ${refCount} images are drawings by one illustrator. They show only a drawing STYLE: a fat black ` +
     'felt-tip marker, one uniform thick line, uneven wobbly strokes made fast, like a child scribbling, a big ' +
-    'simplified head, dot eyes, a solid black nose, almost no detail, no fur texture except a few loose hatching ' +
-    "strokes where the fur is shaggy, plain white background and nothing else. Strokes overshoot and don't quite meet. " +
+    'simplified head, dot eyes, a solid black nose, almost no detail, wonky proportions, at most five short loose ' +
+    "strokes for fur and none if the fur is smooth, plain white background and nothing else. Strokes overshoot and don't quite meet. " +
     `The last image is a photo of a ${petWord(pet)}. Draw the ${what} from the photo — this exact animal, its own ` +
     'ear shape, muzzle, markings and expression — as a portrait in exactly that scribbly style, with about twenty ' +
-    'to thirty strokes and a line as fat as in the drawings. It must look scribbled by hand in ten seconds, cruder ' +
+    'to thirty strokes and a line as fat as in the drawings. It must look like a five-year-old scribbled it in ten seconds, cruder ' +
     'than a professional illustration; if in doubt, draw less. Do not draw any of the animals from the drawings. ' +
     'No shading, no grey, no colour, no fine lines, no fur detail, no text, no frame.'
   );
@@ -270,9 +275,22 @@ export async function drawAvatar(
     if (!res.ok) throw new Error(`result fetch ${res.status}`);
     const bytes = Buffer.from(await res.arrayBuffer());
     if (bytes.length === 0 || bytes.length > MAX_RESULT_BYTES) throw new Error(`result size ${bytes.length}`);
-    const mime = json?.images?.[0]?.content_type || res.headers.get('content-type') || 'image/png';
+    const mime = (
+      (json?.images?.[0]?.content_type || res.headers.get('content-type') || 'image/png').split(';')[0] ?? 'image/png'
+    ).trim();
     log.info({ kind: 'avatar_draw', recipe, bytes: bytes.length, ms: Date.now() - started }, '[avatar] drawn');
-    return { bytes, mime: (mime.split(';')[0] ?? 'image/png').trim() };
+    // Our own ink over the model's line (ink.ts). A failure to re-ink
+    // is a log line and the model's drawing as it came.
+    if (mime === 'image/png' && inkEnabled()) {
+      try {
+        const inked = inkify(bytes);
+        log.info({ kind: 'avatar_ink', bytes: inked.length, ms: Date.now() - started }, '[avatar] inked');
+        return { bytes: inked, mime };
+      } catch (err) {
+        log.warn({ kind: 'avatar_ink', err: (err as Error).message }, '[avatar] ink pass failed — drawing kept as drawn');
+      }
+    }
+    return { bytes, mime };
   } catch (err) {
     log.warn({ kind: 'avatar_draw', err: (err as Error).message, ms: Date.now() - started }, '[avatar] result fetch failed');
     throw new AvatarError('avatar_failed', (err as Error).message);

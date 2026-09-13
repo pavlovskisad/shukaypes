@@ -24,7 +24,7 @@
     "expire:no-post": "tsx src/db/expire-no-post.ts",
     "check:placement-confidence": "tsx src/services/placementConfidence.check.ts",
     "check:placement-judge": "tsx src/pipeline/placementJudge.check.ts",
-    "check": "pnpm check:placement-judge && pnpm check:placement-confidence && pnpm check:lore-walk && pnpm check:lore-match && pnpm check:enrich-parse && pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:session && pnpm check:redact && pnpm check:ad-body && pnpm check:ad-extract && pnpm check:found-report && pnpm check:owner-report && pnpm check:resolve-place && pnpm check:route-coverage && pnpm check:accounts",
+    "check": "pnpm check:placement-judge && pnpm check:placement-confidence && pnpm check:lore-walk && pnpm check:lore-match && pnpm check:enrich-parse && pnpm check:out-of-area && pnpm check:ingest-alert && pnpm check:same-pet && pnpm check:rate-limit && pnpm check:invites && pnpm check:dev-auth && pnpm check:session && pnpm check:redact && pnpm check:ad-body && pnpm check:ad-extract && pnpm check:found-report && pnpm check:owner-report && pnpm check:resolve-place && pnpm check:route-coverage && pnpm check:accounts && pnpm check:ink",
     "check:same-pet": "tsx src/pipeline/samePet.check.ts",
     "check:lore-walk": "tsx src/services/loreWalk.check.ts",
     "check:lore-match": "tsx src/services/loreMatch.check.ts",
@@ -59,6 +59,7 @@
     "probe:location-text": "tsx src/db/probe-location-text.ts",
     "check:resolve-place": "tsx src/pipeline/resolvePlace.check.ts",
     "check:accounts": "tsx src/lib/accounts.check.ts",
+    "check:ink": "tsx src/services/ink.check.ts",
     "wipe:users": "tsx src/db/wipe-users.ts"
   },
   "dependencies": {
@@ -75,6 +76,7 @@
     "fastify-plugin": "^5.0.1",
     "ioredis": "^5.4.2",
     "nanoid": "^5.0.9",
+    "pngjs": "^7.0.0",
     "polygon-clipping": "^0.15.7",
     "postgres": "^3.4.5",
     "undici": "^6.25.0"
@@ -82,6 +84,7 @@
   "devDependencies": {
     "@types/concaveman": "^1.1.6",
     "@types/node": "^22.9.0",
+    "@types/pngjs": "^6.0.5",
     "drizzle-kit": "^0.28.1",
     "pino-pretty": "^11.3.0",
     "tsx": "^4.19.2",

@@ -31,6 +31,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { REF_FILES, avatarPrompt, referenceBody } from '../services/avatar.js';
+import { inkify } from '../services/ink.js';
 
 const KEY = process.env.FAL_KEY?.trim();
 if (!KEY) {
@@ -152,7 +153,10 @@ for (const pet of PETS) {
       } else {
         entry.size = `${img.width ?? '?'}x${img.height ?? '?'}`;
         const bytes = Buffer.from(await (await fetch(img.url)).arrayBuffer());
-        fs.writeFileSync(path.join(OUT, `${pet.id}-${name}.png`), bytes);
+        fs.writeFileSync(path.join(OUT, `${pet.id}-${name}-raw.png`), bytes);
+        // The app's own ink pass (services/ink.ts), so the pair shows
+        // what the model did and what the app does to it.
+        fs.writeFileSync(path.join(OUT, `${pet.id}-${name}.png`), inkify(bytes));
         entry.bytes = bytes.length;
       }
     } catch (err) {

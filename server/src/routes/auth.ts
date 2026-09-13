@@ -77,7 +77,9 @@ import { decodePhoto } from '../lib/photoBytes.js';
 type Log = Pick<FastifyBaseLogger, 'info' | 'warn'>;
 // Portraits per person per day. Each is a paid model call; five is
 // enough to try again on a bad photo, not enough to run a bill up.
-const AVATAR_DAILY_CAP = 5;
+// AVATAR_DAILY_CAP raises it while the recipe is being tuned on a real
+// phone (the owner hit five in an afternoon, 13 Sep).
+const AVATAR_DAILY_CAP = Math.max(1, Number(process.env.AVATAR_DAILY_CAP) || 5);
 type UserRow = typeof schema.users.$inferSelect;
 
 // What the client needs to draw the right screen. Everything about
