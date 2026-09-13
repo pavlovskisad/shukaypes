@@ -5,6 +5,7 @@ node_modules/
 # build
 dist/
 build/
+probe-out/
 .expo/
 .expo-shared/
 web-build/
