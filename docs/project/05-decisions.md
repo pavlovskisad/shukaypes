@@ -1018,3 +1018,10 @@ edge in the app inconsistent with the one they were trying to match.
 The rule for next time: the frame's look is not tuned per screen or
 per session. A surface that looks different from the cards is either
 clipping, sizing or measuring its frame wrong, and that is what to fix.
+
+The recipe has two numbers the owner asked to move on 13 Sep, once and
+for every frame: a corner is sampled with at least three points (two
+made a pill-shaped field's end a point), and the wobble floor on small
+things is half the full amount rather than 0.3 (at 0.3 a 35 px field
+wobbled a third of a pixel, so every field came out the same shape,
+seed or no seed). Those are the recipe now.
