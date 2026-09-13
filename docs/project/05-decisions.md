@@ -1141,7 +1141,19 @@ dial in one change: eight samples instead of four, the samples BEFORE
 the photo in the request so the register is set before the subject
 arrives, a prompt that asks for twenty to thirty fat strokes and
 "draw less", and the photo downscaled to 512 px on the phone so there
-is less texture to keep. If this one also copies the
+is less texture to keep. That got the retriever and a puppy (15:56,
+15:58) to a simpler, thicker sketch — "we moving" — still a sketch.
+
+**Our own ink (same afternoon).** What separated those drawings from
+the posters was no longer what was drawn but how the line sat on the
+paper: thinner than the marker, precise, tidy hatching. That part
+the app can do itself, as it draws the UI's frames itself (D-70):
+`services/ink.ts` thresholds the model's PNG to pure black and white,
+thickens the line to marker weight, and displaces the whole drawing
+through a smooth random field seeded from its bytes so no edge is
+straight. Previewed on the two real drawings before shipping; on by
+default, `AVATAR_INK=off` to compare. The model finds the animal; the
+app holds the pen. If this one also copies the
 sample or polishes past it, what is left is the style adapter trained
 on all ten drawings (with the illustrator's agreement, since it
 clones their line).
