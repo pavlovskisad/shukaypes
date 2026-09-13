@@ -21,6 +21,7 @@ import { haptic } from '../../utils/haptics';
 import { HandDrawnFrame } from '../ui/HandDrawn';
 import { COLUMN, LINK, OVERLAY, PAPER, Primary } from '../ui/AccountDoor';
 import { ownerColorCss } from './territoryColor';
+import { TerritoryMini } from '../ui/TerritoryMini';
 import { INK } from '../../constants/surface';
 import { S } from '../../constants/spacing';
 import { R } from '../../constants/radius';
@@ -34,31 +35,11 @@ interface Props {
 }
 
 const PORTRAIT = 96;
-const MINI = 56;
-
-// The largest piece of ground as a thumbnail: the ring fitted into a
-// square, longitude scaled by cos(lat) so the shape is the shape on the
-// map and not a stretched one.
-function MiniTerritory({ id, piece }: { id: string; piece: { lat: number; lng: number }[] }) {
-  const lat0 = piece.reduce((a, p) => a + p.lat, 0) / piece.length;
-  const k = Math.cos((lat0 * Math.PI) / 180) || 1;
-  const xs = piece.map((p) => p.lng * k);
-  const ys = piece.map((p) => -p.lat);
-  const minX = Math.min(...xs), maxX = Math.max(...xs), minY = Math.min(...ys), maxY = Math.max(...ys);
-  const span = Math.max(maxX - minX, maxY - minY) || 1;
-  const pad = 4;
-  const sc = (MINI - pad * 2) / span;
-  const ox = pad + ((MINI - pad * 2) - (maxX - minX) * sc) / 2;
-  const oy = pad + ((MINI - pad * 2) - (maxY - minY) * sc) / 2;
-  const d = piece
-    .map((_, i) => `${i ? 'L' : 'M'}${(ox + (xs[i]! - minX) * sc).toFixed(1)} ${(oy + (ys[i]! - minY) * sc).toFixed(1)}`)
-    .join(' ') + ' Z';
-  return (
-    <svg width={MINI} height={MINI} viewBox={`0 0 ${MINI} ${MINI}`} aria-hidden style={{ flex: 'none' }}>
-      <path d={d} fill={ownerColorCss(id)} fillOpacity={0.45} stroke={INK} strokeWidth={1.5} strokeLinejoin="round" />
-    </svg>
-  );
-}
+// The territory thumbnail is the leaderboard's own (ui/TerritoryMini):
+// the same simplification, the same dashed edge over a wash, the same
+// 92px — so the piece a walker recognises in the standings is the piece
+// on their card, not a cousin of it.
+const MINI = 92;
 
 export function PlayerCard({ player, onClose }: Props) {
   const t = useStrings().playerCard;
@@ -132,20 +113,23 @@ export function PlayerCard({ player, onClose }: Props) {
                 {card ? (card.level === null ? t.levelUnknown : tp.level(card.level)) : failed ? t.levelUnknown : '…'}
                 {isBot ? ` · ${t.bot}` : ''}
               </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: S.s, marginTop: S.s }}>
-                {card?.piece ? <MiniTerritory id={player.id} piece={card.piece} /> : null}
-                <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: INK }}>
-                  {card
-                    ? card.areaM2 > 0
-                      ? `${t.territory} ${tp.areaValue(card.areaM2)}`
-                      : t.noTerritory
-                    : failed
-                      ? t.noTerritory
-                      : ''}
-                </div>
-              </div>
             </div>
           </div>
+          {card || failed ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: S.m, marginTop: S.m }}>
+              {card?.piece ? <TerritoryMini points={card.piece} color={ownerColorCss(player.id)} size={MINI} /> : null}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ font: `600 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK }}>
+                  {card && card.areaM2 > 0 ? t.territory : t.noTerritory}
+                </div>
+                {card && card.areaM2 > 0 ? (
+                  <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
+                    {tp.areaValue(card.areaM2)}
+                  </div>
+                ) : null}
+              </div>
+            </div>
+          ) : null}
           <Primary label={poked ? t.poked : t.poke} onClick={poke} />
           <button type="button" style={{ ...LINK, alignSelf: 'center', marginTop: S.m }} onClick={onClose}>
             {t.close}

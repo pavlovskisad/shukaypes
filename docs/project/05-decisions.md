@@ -1363,7 +1363,12 @@ and the card's header render from what the map already has; the
 sheet then fetches `GET /players/:id` for the level and the
 territory — the largest piece of their ground, decimated to the same
 48 points the map's own polygons use, and the area — so the map
-poll does not grow by a polygon per walker. A person's level is
+poll does not grow by a polygon per walker. The miniature is the
+leaderboard's own `TerritoryMini` at the board's 92px — the same
+simplification, the same dashed edge over a wash — so the piece a
+walker recognises in the standings is the piece on the card, not a
+cousin of it (the first cut drew its own solid-edged polygon; the
+owner asked for the board's recipe, for consistency). A person's level is
 `xpProgress(companion_state.xp)`; a walker without ground shows
 «ще без території». The poke button is the existing `POST /poke`;
 pokes at bots are still swallowed server-side (the wave is local).
