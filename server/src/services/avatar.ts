@@ -11,14 +11,17 @@
 // that, and it is made in the sheet that asks for the photo.
 //
 // TWO RECIPES, one env switch (AVATAR_RECIPE):
-//   reference  (default) the photo goes in beside three of the
-//              illustrator's own drawings (assets/avatar-refs, the
-//              landing page's posters) on the multi-image endpoint,
-//              and the model is told to borrow their hand. A picture
-//              of the style moves a model further than any adjective.
-//   marker     the photo alone on the single-image endpoint, with the
-//              style described in words. The fallback when the
-//              reference files are missing, and the cheaper call.
+//   marker     (default) the photo alone on the single-image endpoint,
+//              with the style described in words. The cheaper call.
+//   reference  the photo goes in beside three of the illustrator's own
+//              drawings (assets/avatar-refs, the landing page's
+//              posters) on the multi-image endpoint, and the model is
+//              told to borrow their hand. NOT THE DEFAULT: on its first
+//              real run (13 Sep, a golden retriever) the model drew
+//              the reference bulldog, near verbatim, and ignored the
+//              photo — the "do not draw the reference animals" line
+//              did not hold. Kept for experiments; the fix is a
+//              different model or a single non-animal reference.
 //
 // Configuration — the feature ships dormant and /auth/me says
 // `avatarConfigured: false`, which hides the step entirely:
@@ -73,7 +76,7 @@ export function avatarConfigured(): boolean {
 export type AvatarRecipe = 'reference' | 'marker';
 
 export function avatarRecipe(): AvatarRecipe {
-  return process.env.AVATAR_RECIPE?.trim() === 'marker' ? 'marker' : 'reference';
+  return process.env.AVATAR_RECIPE?.trim() === 'reference' ? 'reference' : 'marker';
 }
 
 function apiUrl(recipe: AvatarRecipe): string {
