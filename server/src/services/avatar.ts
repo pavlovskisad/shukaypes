@@ -10,17 +10,22 @@
 // here — see crosspost.ts). The app's promise to the person is exactly
 // that, and it is made in the sheet that asks for the photo.
 //
-// TWO RECIPES, one env switch (AVATAR_RECIPE):
-//   reference  (default) the photo goes to an image-editing model
-//              built for "make this look like that" (Nano Banana,
-//              Google's Gemini image edit, behind fal.ai) beside three
-//              of the illustrator's own drawings (assets/avatar-refs,
-//              the landing page's posters), and the model is told to
-//              borrow their hand. The owner's words, 13 Sep: the style
-//              is a child's uneven marker doodle, and no sentence got
-//              a model there — the words-only drawing came back a
-//              handsome, detailed, realistic ink retriever. Pictures
-//              of the hand are the brief.
+// THREE RECIPES, one env switch (AVATAR_RECIPE):
+//   describe   (default) the photo is shown to a vision model ONCE,
+//              which says in one sentence what a caricaturist would
+//              need (petDescription.ts); the image model then draws
+//              from those words and the illustrator's samples, with
+//              NO photo in the request. Every drawing made from the
+//              photo came back a sketch of the photo — the owner's
+//              reading, 13 Sep: "it tries to do photorealistic things
+//              and very detailed" while the posters are "low effort,
+//              super simple, funny/ugly/clumsy". The photo was the
+//              anchor; take it out of the drawing step.
+//   reference  the photo goes to the image model beside the samples
+//              (Nano Banana, Google's Gemini image edit, behind
+//              fal.ai). The fallback when the description cannot be
+//              made (no ANTHROPIC_API_KEY, a refusal). Good likeness,
+//              still a sketch of a photo.
 //   marker     the photo alone on FLUX Kontext, single image, the
 //              style in words. The fallback when the reference files
 //              are missing. Good likeness, wrong hand.
@@ -36,7 +41,7 @@
 //                   cents, which is why the route caps drawings per
 //                   person per day (routes/auth.ts) on top of the
 //                   burst limiter.
-//   AVATAR_RECIPE   'reference' | 'marker', see above.
+//   AVATAR_RECIPE   'describe' | 'reference' | 'marker', see above.
 //   FAL_API_URL     overrides whichever endpoint the recipe picks, for
 //                   the local e2e stack (a fake on 127.0.0.1 that
 //                   returns a fixed PNG), the way RESEND_API_URL stands
@@ -56,6 +61,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 import { inkEnabled, inkify } from './ink.js';
+import { describePet } from './petDescription.js';
 
 const DEFAULT_API_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
 const DEFAULT_REFERENCE_API_URL = 'https://fal.run/fal-ai/nano-banana/edit';
@@ -98,16 +104,17 @@ export function avatarConfigured(): boolean {
   return !!process.env.FAL_KEY?.trim();
 }
 
-export type AvatarRecipe = 'reference' | 'marker';
+export type AvatarRecipe = 'describe' | 'reference' | 'marker';
 
 export function avatarRecipe(): AvatarRecipe {
-  return process.env.AVATAR_RECIPE?.trim() === 'marker' ? 'marker' : 'reference';
+  const raw = process.env.AVATAR_RECIPE?.trim();
+  return raw === 'marker' || raw === 'reference' ? raw : 'describe';
 }
 
 function apiUrl(recipe: AvatarRecipe): string {
   const override = process.env.FAL_API_URL?.trim();
   if (override) return override;
-  return recipe === 'reference' ? DEFAULT_REFERENCE_API_URL : DEFAULT_API_URL;
+  return recipe === 'marker' ? DEFAULT_API_URL : DEFAULT_REFERENCE_API_URL;
 }
 
 function refsDir(): string {
@@ -187,6 +194,39 @@ export function referenceBody(
   };
 }
 
+// The describe recipe's words: the samples and a sentence, no photo.
+// The model is told there is no photo on purpose, or it looks for
+// one among the samples and draws the maltese.
+export function describePrompt(description: string, pet: { species: string | null; breed: string | null }, refCount = REF_FILES.length): string {
+  const what = pet.species === 'cat' ? 'cat' : pet.species === 'dog' ? 'dog' : 'pet';
+  return (
+    `These ${refCount} images are drawings by one illustrator. They show only a drawing STYLE: a fat black ` +
+    'felt-tip marker, one uniform thick line, uneven wobbly strokes made fast, like a child scribbling, a big ' +
+    'simplified head, dot eyes, a solid black nose, almost no detail, wonky proportions, at most five short loose ' +
+    "strokes for fur, plain white background and nothing else. Strokes overshoot and don't quite meet. " +
+    `Draw a NEW ${what} in exactly that style, from this description and nothing else — there is no photo: ` +
+    `"${description}" ` +
+    'Head and shoulders, facing the viewer, twenty strokes at most, funny, clumsy and ugly on purpose, the way a ' +
+    'five-year-old draws the family pet in ten seconds. It must look cruder than every drawing here, never ' +
+    'more polished. Do not copy any of the animals in the drawings. No shading, no grey, no colour, no fine ' +
+    'lines, no fur detail, no text, no frame.'
+  );
+}
+
+export function describeBody(
+  refs: string[],
+  description: string,
+  pet: { species: string | null; breed: string | null },
+): Record<string, unknown> {
+  return {
+    prompt: describePrompt(description, pet, refs.length),
+    image_urls: refs,
+    output_format: 'png',
+    aspect_ratio: '1:1',
+    num_images: 1,
+  };
+}
+
 export function avatarPrompt(pet: { species: string | null; breed: string | null }): string {
   return (
     `Redraw the ${petWord(pet)} in this photo as a bold hand-drawn cartoon portrait in thick black felt-tip marker ` +
@@ -216,14 +256,30 @@ export async function drawAvatar(
   if (!key) throw new AvatarError('avatar_unconfigured');
 
   const photoUri = `data:${photo.mime};base64,${photo.bytes.toString('base64')}`;
-  const refs = avatarRecipe() === 'reference' ? referenceImages(log) : null;
-  const recipe: AvatarRecipe = refs ? 'reference' : 'marker';
+  const wanted = avatarRecipe();
+  const refs = wanted === 'marker' ? null : referenceImages(log);
+  let recipe: AvatarRecipe = refs ? wanted : 'marker';
+  let description: string | null = null;
+  if (recipe === 'describe') {
+    try {
+      description = await describePet(photo, pet);
+    } catch (err) {
+      log.warn({ kind: 'avatar_describe', err: (err as Error).message }, '[avatar] description failed — reference recipe');
+    }
+    if (description) {
+      log.info({ kind: 'avatar_describe', words: description.split(' ').length }, '[avatar] pet described');
+    } else {
+      recipe = 'reference';
+    }
+  }
   const request =
-    recipe === 'reference'
-      ? referenceBody(photoUri, refs as string[], pet)
-      : // Kontext's own safety filter: 2 is its default; a family pet
-        // photo never trips it, and a refusal is still surfaced below.
-        {
+    recipe === 'describe'
+      ? describeBody(refs as string[], description as string, pet)
+      : recipe === 'reference'
+        ? referenceBody(photoUri, refs as string[], pet)
+        : // Kontext's own safety filter: 2 is its default; a family pet
+          // photo never trips it, and a refusal is still surfaced below.
+          {
           prompt: avatarPrompt(pet),
           image_url: photoUri,
           output_format: 'png',

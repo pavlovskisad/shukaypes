@@ -1153,7 +1153,23 @@ thickens the line to marker weight, and displaces the whole drawing
 through a smooth random field seeded from its bytes so no edge is
 straight. Previewed on the two real drawings before shipping; on by
 default, `AVATAR_INK=off` to compare. The model finds the animal; the
-app holds the pen. If this one also copies the
+app holds the pen.
+
+**No photo in the drawing step (same afternoon, the owner's
+reading).** Every drawing made from the photo was a sketch of the
+photo — fur, highlights, a nose with nostrils — however the samples
+and the words were arranged; "it tries to do photorealistic things
+and very detailed", while the posters are "low effort, super simple,
+funny/ugly/clumsy". The photo was the anchor. So the default recipe
+(`describe`) shows the photo to a vision model once (Claude Haiku,
+`petDescription.ts`), which says in one sentence what a caricaturist
+would need — coat, ears, muzzle, markings, expression — and the image
+model draws from that sentence and the eight samples with no photo in
+the request at all. A caricaturist works from a description. Likeness
+becomes breed-level plus the distinctive bits, which is exactly what
+the posters are. The photo still is not stored anywhere: one look,
+not retained by the API. `reference` (photo beside the samples) is
+the automatic fallback when no description can be made. If this one also copies the
 sample or polishes past it, what is left is the style adapter trained
 on all ten drawings (with the illustrator's agreement, since it
 clones their line).
