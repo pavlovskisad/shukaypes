@@ -79,6 +79,27 @@ export const LIGHT_PALETTE = {
   labelStreet: '#3a3a3a',
   // Multiply overlay opacity (lightens darken effect).
   paperOpacity: 0.48,
+  // INK EDGE. Null here, and that is not an oversight.
+  //
+  // Park and water polygons get a soft halo in their OWN colour, which is
+  // what makes a flat fill sit on the page instead of being stamped onto
+  // it. Put a pen line round the same fill and it stops reading as a
+  // drawn shape and starts reading as a border — the fill is doing the
+  // work, and the edge is arguing with it.
+  //
+  // The paper map is the other way round: the fill is white, so the edge
+  // IS the shape. PAPER_PALETTE sets this; every coloured palette leaves
+  // it null and keeps the halo.
+  outline: null as string | null,
+  outlineOpacity: 0,
+  // Building footprints traced in ink, and the extruded walls dropped.
+  // Zero on the coloured maps, where buildings are volumes.
+  buildingOutline: 0,
+  // Is the city redrawn by hand? When true the roads, buildings, parks
+  // and water on THIS style are hidden and map/mapSketch.ts draws
+  // wobbled copies of them instead. See that file for why MapLibre
+  // cannot do it from a stylesheet.
+  handDrawn: false,
   // Sky dome + horizon haze: a blue dome fading to a light neutral-grey
   // horizon that matches the grey depth-fog layer so the join is seamless.
   //
@@ -128,8 +149,107 @@ export const PLAY_PALETTE: Palette = {
   blueDark: '#afb8bd',
   blueLight: '#e4e8e9',
   labelWater: '#5b737f',
+  // TERRITORY IS A WORLD, NOT A PAGE — so this palette stays on the tile
+  // geometry and keeps every default above.
+  //
+  // It was briefly hand-drawn, for a real reason worth remembering: with
+  // the paper map's FLAT camera this view went nearly blank. Buildings
+  // are painted `paper` here and their footprint outline is off, so
+  // looked at straight down a white fill on a white page is nothing at
+  // all. The 3D walls were the only thing that had ever made a building
+  // visible in this palette, and flattening the camera took them away.
+  // Ink was the fix for a camera problem.
+  //
+  // Territory keeps the extruded city and its mist instead, which
+  // restores the walls this palette always assumed and makes the ink
+  // unnecessary. `handDrawn` stays false, so the sketch hides and the
+  // tile layers are shown again (see `show()`).
+  //
+  // The camera it is read from is FLAT_GROUND_CAM's, not this branch's:
+  // main arrived at the same overhead view for walks and territory by a
+  // better route — a follow camera that glides into flat and caps itself
+  // there — so the walls stand under a plan view either way.
+  //
+  // The quiet greens and blues above are the point and are untouched: a
+  // dozen owner colours are the subject here, and the city underneath is
+  // the ground they are painted on.
 };
 
+// THE PAPER MAP — the walking city as a pen drawing (experiment).
+//
+// Same construction as the profile scene: white page, nothing but line.
+// No texture anywhere — no crayon grain in the fills, no dry-pen fleck in
+// the roads, no paper tooth over the top — and no volume: the extruded
+// city and the mist it stood in are switched off (PAPER_MAP in
+// constants/experiments.ts), and buildings are traced as footprints
+// instead. Everything that carried tone carries none, so what is left to
+// tell a park from a river from a block is outline and line weight.
+//
+// Every fill is `paper`. That is the whole idea and it is also the whole
+// risk: a lawn and the Dnipro are both white, and only their edge and
+// their scale separate them. Weight is what does the separating —
+// buildings finest, polygon edges mid, roads carrying the street
+// hierarchy the tiles already encode.
+//
+// Roads go DARK, which is the one inversion here: `greyRoad` is the ink
+// the street network is drawn in, not a wash it is filled with. On the
+// paper map they take no pattern at all (see the transportation branch).
+export const PAPER_PALETTE: Palette = {
+  ...LIGHT_PALETTE,
+  // Parks and water keep the walking map's OWN green and blue — this
+  // palette inherits them rather than naming quieter ones. The paler
+  // pair here was reasoned from "a fill under a pen outline only has to
+  // whisper", which stopped being true the moment the outlines came off
+  // them: with no ink on their edge, the colour IS the shape, and a
+  // whisper is a shape you cannot find.
+  greyRoad: '#3a3a3a',
+  handDrawn: true,
+  outline: '#2a2a2a',
+  outlineOpacity: 0.85,
+  buildingOutline: 0.55,
+  labelWater: '#4c4c4c',
+  // White page all the way up. With the ground fog gone this is MapLibre's
+  // own sky dome, so it is flat by construction — which is what a drawing
+  // has above the horizon.
+  sky: {
+    skyColor: '#ffffff',
+    horizonColor: '#ffffff',
+    fogColor: '#ffffff',
+  },
+};
+
+// The palette the last applyCrayonOverride() ran with. The WebGL layers
+// (ground fog's sky dome) need the sky colours, and they render on their
+// own clock rather than being called with a palette — this is how they
+// ask. Read via getActivePalette(); never mutate the object it returns.
+let activePalette: Palette = LIGHT_PALETTE;
+
+export function getActivePalette(): Palette {
+  return activePalette;
+}
+
+// Polygon edge geometry. The halo is a wide, blurred bloom in the fill's
+// own colour; the ink edge is a narrow, near-crisp pen line. Same layer,
+// two jobs — see `outline` in LIGHT_PALETTE.
+const HALO_WIDTH: unknown = [
+  'interpolate', ['linear'], ['zoom'],
+  10, 0.6,
+  14, 1.6,
+  18, 3.5,
+];
+const HALO_BLUR: unknown = [
+  'interpolate', ['linear'], ['zoom'],
+  10, 1.5,
+  14, 4,
+  18, 9,
+];
+const INK_WIDTH: unknown = [
+  'interpolate', ['linear'], ['zoom'],
+  10, 0.7,
+  14, 1.2,
+  18, 2.1,
+];
+const INK_BLUR: unknown = 0.3;
 
 // How much of the upstream style's road width we keep. Liberty draws for a
 // road map, where the street network is the subject; here the subject is
@@ -219,7 +339,6 @@ function scaledLineWidth(
   }
   return null;
 }
-
 // ---------------------------------------------------------------------
 // Canvas pattern generators
 // ---------------------------------------------------------------------
@@ -426,6 +545,62 @@ export function applyCrayonOverride(
   palette: Palette,
   lang: 'uk' | 'en' = 'uk',
 ): void {
+  activePalette = palette;
+  const ink = palette.outline;
+
+  // THE HAND-DRAWN CITY IS SOMEBODY ELSE'S JOB.
+  //
+  // When this is on, every road, building, park and water layer below
+  // is hidden and mapSketch.ts draws a wobbled copy from the same
+  // features. Note what keeps working because of what: MapLibre only
+  // fetches and keeps a tile while some VISIBLE layer needs it, and
+  // querySourceFeatures reads out of loaded tiles — so the sketch can
+  // only see geometry because the LABEL layers (place, water_name,
+  // transportation_name) are still drawing off this source and holding
+  // the tiles in. Hide those too and the sketch goes blank with no
+  // error, which is the same trap the territory comment above describes.
+  const drawn = palette.handDrawn;
+
+  // PUT BACK WHAT THE OTHER MODE HID.
+  //
+  // The hand-drawn palettes hide the tile style's own roads, water and
+  // green so the sketch can draw them instead. The styling paths below
+  // then set colour and width on those same layers when a coloured
+  // palette comes back — but setting paint on a hidden layer paints
+  // nothing, and nothing here ever turned visibility back on. Supersniff
+  // therefore came back with no roads and no parks: eighteen road layers
+  // correctly patterned, all invisible, because a flat page had hidden
+  // them on the way past. Anything this loop deliberately keeps hidden
+  // (casings, rail, service roads, paths) is hidden AFTER this, so it
+  // stays hidden.
+  const show = (id: string) => {
+    try {
+      map.setLayoutProperty(id, 'visibility', 'visible');
+    } catch {
+      /* layer not ready */
+    }
+  };
+
+  // Flat colour, not the crayon noise pattern. The grain earned its keep
+  // when the fills were the richest thing on the map; under the territory
+  // field's multiply stain the speckles and blobs showed through every
+  // claim and read as dirt on the colour. On the paper map there is no
+  // colour to grain: the fill is the page and the edge is the shape.
+  //
+  // fill-outline-color is set to the fill's own colour rather than left
+  // alone. The tile style gives `park` an outline of rgb(95,208,100) — a
+  // vivid green a good deal louder than any fill this file has ever
+  // painted — and nothing here had ever overridden it. Under a green park
+  // it passed as a slightly keener edge; on the white page it is a bright
+  // green hairline round every park in the frame, which is how it was
+  // finally noticed. Same for the building fill's beige rim.
+  const paintFill = (id: string, colour: string) => {
+    clear(map, id, 'fill-pattern');
+    map.setPaintProperty(id, 'fill-color', colour);
+    map.setPaintProperty(id, 'fill-outline-color', colour);
+    map.setPaintProperty(id, 'fill-opacity', 1);
+  };
+
   addImg(map, 'crayon-park', parkPattern(palette), 1);
   addImg(map, 'crayon-water', waterPattern(palette), 1);
   addImg(map, 'crayon-road', roadPattern(palette), 1);
@@ -509,7 +684,11 @@ export function applyCrayonOverride(
       // right features, sits inside the viewport, and renders none of
       // them — while an identical source under a different id renders
       // fine. Found by exactly that comparison; the id was the variable.
-      id.startsWith('territory-')
+      id.startsWith('territory-') ||
+      // Same argument, different owner: map/mapSketch.ts draws the
+      // hand-drawn city into these, and this loop would hide every one
+      // of them as unrecognised furniture.
+      id.startsWith('sketch-')
     ) {
       // Layers we've injected previously — re-style updates them via
       // setPaintProperty in the appropriate branch below if needed.
@@ -524,13 +703,12 @@ export function applyCrayonOverride(
 
     if (sl === 'water') {
       if (type === 'fill') {
-        // Flat colour, not the crayon noise pattern. The grain earned its
-        // keep when the fills were the richest thing on the map; under
-        // the territory field's multiply stain the speckles and blobs
-        // showed through every claim and read as dirt on the colour.
-        clear(map, id, 'fill-pattern');
-        map.setPaintProperty(id, 'fill-color', palette.blue);
-        map.setPaintProperty(id, 'fill-opacity', 1);
+        if (drawn) {
+          map.setLayoutProperty(id, 'visibility', 'none');
+          continue;
+        }
+        show(id);
+        paintFill(id, palette.blue);
         const src = (l as { source?: string }).source;
         const filt = (l as { filter?: unknown }).filter;
         if (src)
@@ -548,16 +726,32 @@ export function applyCrayonOverride(
     }
 
     if (sl === 'building') {
+      if (drawn) {
+        map.setLayoutProperty(id, 'visibility', 'none');
+        continue;
+      }
       if (type === 'fill') {
-        clear(map, id, 'fill-pattern');
-        map.setPaintProperty(id, 'fill-color', palette.paper);
-        map.setPaintProperty(id, 'fill-opacity', 1);
+        show(id);
+        paintFill(id, palette.paper);
+        // Keep the flat footprint VISIBLE on the paper map even though it
+        // is the same white as the page: it is what the ink outline below
+        // is drawn around, and it occludes the polygon edges of anything
+        // underneath, so a block reads as solid rather than as a window
+        // onto the park behind it.
+        if (ink) map.setLayoutProperty(id, 'visibility', 'visible');
       } else if (type === 'fill-extrusion') {
-        clear(map, id, 'fill-extrusion-pattern');
-        map.setPaintProperty(id, 'fill-extrusion-color', palette.paper);
-        // Fully opaque so nothing shows through to grey them; the built-in
-        // vertical gradient still gives walls their depth shading.
-        map.setPaintProperty(id, 'fill-extrusion-opacity', 1);
+        if (ink) {
+          // No volume on a line drawing. The walls are the one thing here
+          // that can only be shaded, never drawn.
+          map.setLayoutProperty(id, 'visibility', 'none');
+        } else {
+          show(id);
+          clear(map, id, 'fill-extrusion-pattern');
+          map.setPaintProperty(id, 'fill-extrusion-color', palette.paper);
+          // Fully opaque so nothing shows through to grey them; the built-in
+          // vertical gradient still gives walls their depth shading.
+          map.setPaintProperty(id, 'fill-extrusion-opacity', 1);
+        }
       }
       continue;
     }
@@ -572,10 +766,12 @@ export function applyCrayonOverride(
           lower,
         );
       if (isGreen) {
-        // Flat colour — same reasoning as the water fill above.
-        clear(map, id, 'fill-pattern');
-        map.setPaintProperty(id, 'fill-color', palette.green);
-        map.setPaintProperty(id, 'fill-opacity', 1);
+        if (drawn) {
+          map.setLayoutProperty(id, 'visibility', 'none');
+          continue;
+        }
+        show(id);
+        paintFill(id, palette.green);
         const src = (l as { source?: string }).source;
         const filt = (l as { filter?: unknown }).filter;
         if (src && sl)
@@ -634,11 +830,26 @@ export function applyCrayonOverride(
         map.setLayoutProperty(id, 'visibility', 'none');
         continue;
       }
-      clear(map, id, 'line-color');
+      if (drawn) {
+        map.setLayoutProperty(id, 'visibility', 'none');
+        continue;
+      }
+      show(id);
       clear(map, id, 'line-dasharray');
-      map.setPaintProperty(id, 'line-pattern', 'crayon-road');
+      if (ink) {
+        // A drawn street has no fill and no texture — it is the stroke.
+        clear(map, id, 'line-pattern');
+        map.setPaintProperty(id, 'line-color', palette.greyRoad);
+      } else {
+        clear(map, id, 'line-color');
+        map.setPaintProperty(id, 'line-pattern', 'crayon-road');
+      }
       map.setPaintProperty(id, 'line-opacity', 1);
       const curW = map.getPaintProperty(id, 'line-width');
+      // main's scaledLineWidth, not this branch's scaleWidth: the same
+      // bug (a zoom ramp wrapped in an arithmetic expression is rejected
+      // whole) was found and fixed on both sides, and main's landed first
+      // and carries its own width tuning with it.
       const newW = scaledLineWidth(curW, ROAD_WIDTH_SCALE, ROAD_MIN_WIDTH_PX);
       if (newW !== null) {
         (
@@ -715,11 +926,26 @@ export function applyCrayonOverride(
     map.setLayoutProperty(id, 'visibility', 'none');
   }
 
-  // Soft polygon halos.
+  // Polygon edges — a soft same-colour halo, or a pen line on the paper
+  // map. The layer is the same one either way, so a palette flip restyles
+  // it in place rather than leaving the previous treatment behind.
+  const edgePaint = {
+    'line-width': ink ? INK_WIDTH : HALO_WIDTH,
+    'line-blur': ink ? INK_BLUR : HALO_BLUR,
+    'line-opacity': ink ? palette.outlineOpacity : 0.9,
+  };
+  const setEdge = (layerId: string, prop: string, value: unknown) => {
+    (map.setPaintProperty as (l: string, p: string, v: unknown) => void)(
+      layerId, prop, value,
+    );
+  };
   for (const p of polygonsToSoften) {
     const softId = `soften-${p.baseId}`;
     if (map.getLayer(softId)) {
-      map.setPaintProperty(softId, 'line-color', p.color);
+      setEdge(softId, 'line-color', ink ?? p.color);
+      setEdge(softId, 'line-width', edgePaint['line-width']);
+      setEdge(softId, 'line-blur', edgePaint['line-blur']);
+      setEdge(softId, 'line-opacity', edgePaint['line-opacity']);
       continue;
     }
     try {
@@ -730,20 +956,8 @@ export function applyCrayonOverride(
         'source-layer': p.sourceLayer,
         ...(p.filter !== undefined ? { filter: p.filter } : {}),
         paint: {
-          'line-color': p.color,
-          'line-width': [
-            'interpolate', ['linear'], ['zoom'],
-            10, 0.6,
-            14, 1.6,
-            18, 3.5,
-          ],
-          'line-blur': [
-            'interpolate', ['linear'], ['zoom'],
-            10, 1.5,
-            14, 4,
-            18, 9,
-          ],
-          'line-opacity': 0.9,
+          ...edgePaint,
+          'line-color': ink ?? p.color,
         },
         layout: {
           'line-cap': 'round',
@@ -786,9 +1000,23 @@ export function applyCrayonOverride(
     // hint at a doubled crayon stroke, not enough to read as a
     // separate cable. Two clones at ±5 with blur 2 stacked into the
     // "wires across the city" effect.
-    const variants: Array<{ suffix: string; offset: number; color: string }> = [
-      { suffix: 'lo', offset: 1.5, color: palette.roadWobbleLight },
-    ];
+    //
+    // NOT DRAWN, and that is deliberate rather than broken. These clones
+    // copy the base layer's line-width, which was an expression MapLibre
+    // rejected, so addLayer threw into the catch below and no wobble has
+    // rendered since the road width scaling was introduced — the coloured map
+    // was tuned, at length, on a street network that never had them.
+    // scaleWidth() above makes the copied width valid again, so leaving
+    // this on would put a doubled ghost under every road in play mode as
+    // a SIDE EFFECT of a width fix, which is not a change anybody asked
+    // for or looked at. Turning it back on is its own decision, with its
+    // own before/after. The paper map wants no part of it either way: a
+    // doubled stroke is texture, and there is no texture here.
+    const WOBBLE_CLONES = false;
+    const variants: Array<{ suffix: string; offset: number; color: string }> =
+      WOBBLE_CLONES && !ink
+        ? [{ suffix: 'lo', offset: 1.5, color: palette.roadWobbleLight }]
+        : [];
     for (const v of variants) {
       const id = `wobble-${baseId}-${v.suffix}`;
       if (map.getLayer(id)) {
@@ -825,12 +1053,21 @@ export function applyCrayonOverride(
     }
   }
 
-  // Building outline — currently hidden to see how the map reads
-  // without the dark trace. Flip BUILDING_OUTLINE_OPACITY back to
-  // a non-zero value (0.3 — 0.55 was the prior tuning) to restore.
-  const BUILDING_OUTLINE_OPACITY = 0;
+  // Building outline. Off on the coloured maps, where buildings are
+  // volumes and a dark trace over the extrusion reads as grime; it is the
+  // paper map's only way to draw a block at all, so the palette carries
+  // the opacity rather than a constant here.
+  //
+  // The FINEST weight on the page, by design. Footprints outnumber every
+  // other shape on a city map by an order of magnitude — at the polygon
+  // edges' weight they stop being buildings and become hatching.
+  // …and none at all when the city is hand-drawn: mapSketch draws its own
+  // wobbled footprint line, and this one would trace the true geometry
+  // right beside it — the exact rectangle next to the drawn one.
+  const outlineOpacity = drawn ? 0 : palette.buildingOutline;
+  const outlineColor = palette.outline ?? palette.crayon;
   if (
-    BUILDING_OUTLINE_OPACITY > 0 &&
+    outlineOpacity > 0 &&
     buildingSource &&
     !map.getLayer('crayon-building-outline')
   ) {
@@ -841,8 +1078,8 @@ export function applyCrayonOverride(
       'source-layer': 'building',
       minzoom: 13,
       paint: {
-        'line-color': palette.crayon,
-        'line-opacity': BUILDING_OUTLINE_OPACITY,
+        'line-color': outlineColor,
+        'line-opacity': outlineOpacity,
         'line-width': [
           'interpolate', ['linear'], ['zoom'],
           13, 0.4,
@@ -859,11 +1096,11 @@ export function applyCrayonOverride(
   } else if (buildingSource && map.getLayer('crayon-building-outline')) {
     // Layer exists from a prior render — drop it if we've disabled
     // outlines, otherwise re-sync its colour.
-    if (BUILDING_OUTLINE_OPACITY <= 0) {
+    if (outlineOpacity <= 0) {
       map.removeLayer('crayon-building-outline');
     } else {
-      map.setPaintProperty('crayon-building-outline', 'line-color', palette.crayon);
-      map.setPaintProperty('crayon-building-outline', 'line-opacity', BUILDING_OUTLINE_OPACITY);
+      map.setPaintProperty('crayon-building-outline', 'line-color', outlineColor);
+      map.setPaintProperty('crayon-building-outline', 'line-opacity', outlineOpacity);
     }
   }
 }

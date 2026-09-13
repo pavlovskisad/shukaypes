@@ -1,0 +1,899 @@
+// THE MAP, DRAWN BY HAND.
+//
+// components/ui/HandDrawn.tsx made every border in the app an ink line
+// that wobbles — a card is a rectangle somebody drew, not a rectangle a
+// browser computed, and no two are the same rectangle. This does the
+// same thing to the city: the roads, the buildings, the parks and the
+// river stop being the tile style's exact geometry and become lines with
+// a hand in them.
+//
+// MapLibre cannot do this from a stylesheet. A style sets colour and
+// width on geometry it already has; there is no hook that moves a vertex.
+// So we take the geometry back: read the features out of the vector
+// source, push every point off the true line, and draw the result from
+// our own GeoJSON layers with the originals hidden.
+//
+// ---------------------------------------------------------------------
+// WHY THE NOISE IS SPATIAL HERE AND PER-ELEMENT THERE
+//
+// HandDrawn seeds each element from its own id, which is exactly right
+// for cards: they are independent, and a pet keeps its frame for as long
+// as it exists. Map features are not independent. They arrive CLIPPED
+// PER TILE — one road crossing a tile boundary comes back as two
+// features, and a per-feature noise run restarts its phase at each
+// half's own start, so the two halves meet at the seam pointing in
+// different directions. Every tile edge in the city would show a kink.
+//
+// So the displacement is a FIELD: a smooth 2D noise over world position,
+// sampled wherever a point happens to be. Both halves of a split road
+// ask the field the same question at the seam and get the same answer,
+// so they join. Every shape still gets its own wobble — it occupies its
+// own ground — which is the property that made the cards worth drawing.
+// It also closes rings for free: a ring's last point IS its first point,
+// so it gets the same displacement and the shape stays shut.
+//
+// ---------------------------------------------------------------------
+// ROUNDING, AND HOW MUCH OF IT
+//
+// HandDrawn runs its wobbled points through centripetal Catmull-Rom so a
+// card's corners come out round, and the city gets the same curve — but
+// not the same amount of it, and both halves of that took correcting.
+//
+// WHERE the curve is fitted keeps it bounded: not through the shape's
+// own corner points, which on a rectangle is four knots and a blob, but
+// through the RESAMPLED run, whose points sit a step apart. The step
+// scales with the shape (stepFor), so a 40px shed does not round itself
+// away while a 300px park is barely nibbed.
+//
+// HOW MUCH is POLYGON_ROUNDNESS, and a footprint takes well under the
+// full curve. At 1 a building reads as bubbly: it has a corner every few
+// steps and each one turns over a whole step, so the block stops being a
+// building with a drawn edge and becomes a bean. Streets keep the full
+// curve — a road that bends really is a smooth bend.
+
+import type maplibregl from 'maplibre-gl';
+import type {
+  GeoJSONSource,
+  LayerSpecification,
+  GeoJSONFeature,
+} from 'maplibre-gl';
+import type { Palette } from './crayonStyle';
+
+// Every id we own. crayonStyle's whitelist skips this prefix for the
+// same reason it skips `territory-`: a sweep that does not recognise a
+// layer hides it, and these are not the tiles' furniture.
+export const SKETCH_PREFIX = 'sketch-';
+
+const SRC = {
+  road: 'sketch-road-src',
+  building: 'sketch-building-src',
+  park: 'sketch-park-src',
+  water: 'sketch-water-src',
+} as const;
+
+// ---------------------------------------------------------------------
+// Web Mercator world pixels
+// ---------------------------------------------------------------------
+
+// The wobble has to be a constant number of PIXELS, not of metres. A
+// fixed metre amplitude is invisible at z14 and a stagger at z18; a
+// fixed pixel amplitude is a hand holding a pen at every zoom.
+//
+// So points are projected to world pixels at the zoom we are generating
+// for — camera-independent, unlike map.project(), which folds in pitch
+// and bearing and would re-wobble the whole city every time you turned.
+const TILE = 512;
+
+function worldScale(z: number): number {
+  return TILE * Math.pow(2, z);
+}
+
+function lngToX(lng: number, scale: number): number {
+  return ((lng + 180) / 360) * scale;
+}
+
+function latToY(lat: number, scale: number): number {
+  const s = Math.sin((lat * Math.PI) / 180);
+  return (0.5 - Math.log((1 + s) / (1 - s)) / (4 * Math.PI)) * scale;
+}
+
+function xToLng(x: number, scale: number): number {
+  return (x / scale) * 360 - 180;
+}
+
+function yToLat(y: number, scale: number): number {
+  const n = Math.PI * (1 - (2 * y) / scale);
+  return (180 / Math.PI) * Math.atan(Math.sinh(n));
+}
+
+// ---------------------------------------------------------------------
+// The field
+// ---------------------------------------------------------------------
+
+// Lattice hash → [-1, 1]. Integer mixing rather than a seeded PRNG walk,
+// because the field is asked for points in no particular order and has
+// to answer the same way every time regardless.
+function latticeAt(ix: number, iy: number, seed: number, axis: number): number {
+  let n = Math.imul(ix, 374761393) ^ Math.imul(iy, 668265263) ^ Math.imul(axis, 1442695041);
+  n = Math.imul(n ^ (n >>> 13), 1274126177) ^ seed;
+  return (((n ^ (n >>> 16)) >>> 0) / 2147483648) - 1;
+}
+
+// Smoothstep-interpolated value noise. One octave is a slow bow; the
+// quiet second octave is the small tremor on top. Same shape as
+// HandDrawn's noiseFn, which carries a dominant wave plus a harmonic at
+// ~0.14–0.28 weight, and for the same reason: one long drift reads as a
+// hand, a ripple reads as a bad printer.
+const HARMONIC = 0.22;
+
+function fieldAt(
+  x: number,
+  y: number,
+  cell: number,
+  seed: number,
+  axis: number,
+): number {
+  const u = x / cell;
+  const v = y / cell;
+  const x0 = Math.floor(u);
+  const y0 = Math.floor(v);
+  const fx = u - x0;
+  const fy = v - y0;
+  const sx = fx * fx * (3 - 2 * fx);
+  const sy = fy * fy * (3 - 2 * fy);
+  const a = latticeAt(x0, y0, seed, axis);
+  const b = latticeAt(x0 + 1, y0, seed, axis);
+  const c = latticeAt(x0, y0 + 1, seed, axis);
+  const d = latticeAt(x0 + 1, y0 + 1, seed, axis);
+  return (a + (b - a) * sx) + ((c + (d - c) * sx) - (a + (b - a) * sx)) * sy;
+}
+
+// How far apart the field's waves are, in world px. At this spacing a
+// city block bows about once across its face — the "drifts off and comes
+// back, once, over the whole run" that HandDrawn's comments argue for.
+// Tightened along with the amplitude: a bigger push over the same long
+// wave slides whole facades sideways instead of bending them.
+const CELL = 72;
+
+function displace(
+  x: number,
+  y: number,
+  amp: number,
+  seed: number,
+  cell: number,
+): [number, number] {
+  const dx =
+    fieldAt(x, y, cell, seed, 1) * (1 - HARMONIC) +
+    fieldAt(x, y, cell / 3.7, seed, 3) * HARMONIC;
+  const dy =
+    fieldAt(x, y, cell, seed, 2) * (1 - HARMONIC) +
+    fieldAt(x, y, cell / 3.7, seed, 4) * HARMONIC;
+  return [x + dx * amp, y + dy * amp];
+}
+
+// ---------------------------------------------------------------------
+// Resampling
+// ---------------------------------------------------------------------
+
+// A 400px straight road with two endpoints cannot bow: displacing two
+// points just moves the line. Long runs get intermediate points so the
+// field has something to push.
+//
+// Raised from 14 when the rounding went in. Every span now emits
+// SAMPLES_PER_SPAN points instead of one, so holding the old step would
+// have tripled the vertex count of the whole city — and the vertex count
+// is what decides whether a pan hitches. Wider steps, each one curved,
+// lands at a similar density and a smoother line.
+const STEP_PX = 20;
+
+// …but a flat step is not a flat amount of rounding. The curve is fitted
+// through the RESAMPLED points, so the corner it turns is one step wide
+// — which is a soft nib on a 300px park and the entire shape on a 40px
+// shed, whose facades are shorter than one step to begin with. That is
+// the "four knots and a blob" case, arriving through the back door: at a
+// fixed step, small buildings came out as pebbles.
+//
+// So the step scales with the shape, exactly as HandDrawn's stepFor()
+// does against its own perimeter, guaranteeing enough points around the
+// smallest footprint that rounding stays proportional to it.
+const MIN_STEP_PX = 5;
+const POINTS_AROUND = 9;
+
+function stepFor(span: number): number {
+  return Math.max(MIN_STEP_PX, Math.min(STEP_PX, span / POINTS_AROUND));
+}
+
+// A ROAD HAS NO SIZE, IT HAS A LENGTH.
+//
+// stepFor() asks how big a shape is and spaces points so the wobble is
+// proportional to it. That is right for a footprint and wrong for a
+// street: a road's span is its whole run across the city, so it always
+// took the maximum step, and 2.7px of drift every 20px along a
+// 600px-long line is a line. Measured on the drawn geometry — mean turn
+// per vertex of 1.07 degrees for roads against 14.40 for buildings,
+// which is the difference between a drawn line and a ruled one, and is
+// exactly what "isn't that a subway line?" looks like.
+//
+// So lines are stepped per unit LENGTH, finely, and the wobble is a
+// property of the pen rather than of the thing being drawn.
+const LINE_STEP_PX = 9;
+
+// …and a finer step alone does not do it, which took a second
+// measurement to see. Sampling a smooth field more often does not bend
+// the line more, it only follows the same bend more closely — the first
+// attempt cut the step from 20 to 9 and the drawn road came out
+// STRAIGHTER by mean-turn, because turn-per-vertex falls as the vertices
+// get closer. That metric was measuring the step, not the wobble.
+//
+// What actually separates a drawn street from a ruled one is how far it
+// strays from its own chord, and over what distance. So a line gets a
+// bigger push and a shorter wave than a footprint does: a lean of a few
+// percent over a 72px wave is not something anybody reads as a hand on a
+// 600px street.
+const LINE_AMP = 3.0;
+const LINE_CELL = 40;
+
+// The wobble, in world px, on a shape big enough to carry it. HandDrawn
+// uses 1.1 on a card; the map takes a good deal more, because a card's
+// edge is 300px of one clean run where 1.1px is plainly a hand, and a
+// city is thousands of short edges where the same amount averages out
+// into looking straight.
+const AMP = 1.8;
+
+// …and the same 1.8px is not the same amount on a 300px park and a
+// 14px shed — flat, it made HandDrawn's small discs read as potatoes,
+// and it does exactly that to a row of houses. Amplitude scales with the
+// shape down to a floor, so small footprints stay square.
+const AMP_FULL_AT_PX = 120;
+const AMP_MIN_SCALE = 0.28;
+
+function ampForSpan(span: number): number {
+  const s = span / AMP_FULL_AT_PX;
+  return AMP * Math.max(AMP_MIN_SCALE, Math.min(1, s));
+}
+
+type Pt = [number, number];
+
+// Resample a ring/line at STEP_PX and push every point off the true
+// line. Returns world-pixel points; the caller unprojects.
+function sketchRun(pts: Pt[], amp: number, seed: number, step: number, cell: number): Pt[] {
+  const out: Pt[] = [];
+  for (let i = 0; i < pts.length - 1; i++) {
+    const [ax, ay] = pts[i]!;
+    const [bx, by] = pts[i + 1]!;
+    const len = Math.hypot(bx - ax, by - ay);
+    const steps = Math.max(1, Math.round(len / step));
+    for (let s = 0; s < steps; s++) {
+      const t = s / steps;
+      out.push(displace(ax + (bx - ax) * t, ay + (by - ay) * t, amp, seed, cell));
+    }
+  }
+  const last = pts[pts.length - 1]!;
+  out.push(displace(last[0], last[1], amp, seed, cell));
+  return out;
+}
+
+// CENTRIPETAL Catmull-Rom, evaluated into points.
+//
+// The same curve HandDrawn draws, and the same alpha, for the reason its
+// comments give: uniform handles across unevenly spaced points either
+// overshoot into a little loop or collapse and pinch, and a pinch is
+// what a corner drawn by a program looks like. HandDrawn emits SVG cubic
+// segments because a browser can draw a Bézier; MapLibre draws
+// polylines, so the same cubic is sampled instead.
+const CR_ALPHA = 0.5;
+
+// Points emitted per span. Three is where a turn stops reading as a
+// bevel; more only costs vertices, and the vertex count is the thing
+// that decides whether panning hitches.
+const SAMPLES_PER_SPAN = 3;
+
+// HOW ROUND A CORNER GETS, on HandDrawn's own dial: 1 is the full
+// Catmull-Rom curve, 0 puts every handle on its own knot, which draws a
+// straight line — so one number spans "curve" and "polygon" with no
+// second code path.
+//
+// Footprints take less than the full curve. At 1 a building reads as
+// bubbly: every corner turns over a whole step, and a block has a corner
+// every few steps, so the shape stops being a building with a drawn edge
+// and becomes a bean. Streets keep the full curve — a road that bends
+// really is a smooth bend, and there is nothing to preserve the crispness
+// of.
+const POLYGON_ROUNDNESS = 0.45;
+const LINE_ROUNDNESS = 1;
+
+function smooth(pts: Pt[], closed: boolean, roundness: number): Pt[] {
+  const n = pts.length;
+  if (n < 3) return pts;
+  const at = (i: number): Pt =>
+    pts[closed ? ((i % n) + n) % n : Math.max(0, Math.min(n - 1, i))]!;
+  const knot = (a: Pt, b: Pt) =>
+    Math.max(1e-4, Math.pow(Math.hypot(b[0] - a[0], b[1] - a[1]), CR_ALPHA));
+  const out: Pt[] = [at(0)];
+  const last = closed ? n : n - 1;
+  for (let i = 0; i < last; i++) {
+    const p0 = at(i - 1), p1 = at(i), p2 = at(i + 1), p3 = at(i + 2);
+    const d1 = knot(p0, p1), d2 = knot(p1, p2), d3 = knot(p2, p3);
+    const c1x =
+      (d1 * d1 * p2[0] - d2 * d2 * p0[0] + (2 * d1 * d1 + 3 * d1 * d2 + d2 * d2) * p1[0]) /
+      (3 * d1 * (d1 + d2));
+    const c1y =
+      (d1 * d1 * p2[1] - d2 * d2 * p0[1] + (2 * d1 * d1 + 3 * d1 * d2 + d2 * d2) * p1[1]) /
+      (3 * d1 * (d1 + d2));
+    const c2x =
+      (d3 * d3 * p1[0] - d2 * d2 * p3[0] + (2 * d3 * d3 + 3 * d3 * d2 + d2 * d2) * p2[0]) /
+      (3 * d3 * (d3 + d2));
+    const c2y =
+      (d3 * d3 * p1[1] - d2 * d2 * p3[1] + (2 * d3 * d3 + 3 * d3 * d2 + d2 * d2) * p2[1]) /
+      (3 * d3 * (d3 + d2));
+    // Handles pulled toward their own knot — see POLYGON_ROUNDNESS.
+    const h1x = p1[0] + (c1x - p1[0]) * roundness;
+    const h1y = p1[1] + (c1y - p1[1]) * roundness;
+    const h2x = p2[0] + (c2x - p2[0]) * roundness;
+    const h2y = p2[1] + (c2y - p2[1]) * roundness;
+    for (let s = 1; s <= SAMPLES_PER_SPAN; s++) {
+      const t = s / SAMPLES_PER_SPAN;
+      const u = 1 - t;
+      const a = u * u * u, b = 3 * u * u * t, c = 3 * u * t * t, d = t * t * t;
+      out.push([
+        a * p1[0] + b * h1x + c * h2x + d * p2[0],
+        a * p1[1] + b * h1y + c * h2y + d * p2[1],
+      ]);
+    }
+  }
+  return out;
+}
+
+function spanOf(pts: Pt[]): number {
+  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+  for (const [x, y] of pts) {
+    if (x < minX) minX = x;
+    if (x > maxX) maxX = x;
+    if (y < minY) minY = y;
+    if (y > maxY) maxY = y;
+  }
+  return Math.hypot(maxX - minX, maxY - minY);
+}
+
+// ---------------------------------------------------------------------
+// Feature → sketched GeoJSON
+// ---------------------------------------------------------------------
+
+interface Ctx {
+  scale: number;
+  seed: number;
+  // Rings shorter than this in world px are left alone — below a few
+  // pixels a wobble is noise, and there are thousands of them.
+  minSpan: number;
+  // Polygons scale their amplitude with their own size; lines hold a
+  // constant one so the two halves of a tile-split road agree.
+  sizeScaled: boolean;
+}
+
+function toWorldRing(coords: number[][], scale: number): Pt[] {
+  const out: Pt[] = new Array(coords.length);
+  for (let i = 0; i < coords.length; i++) {
+    const c = coords[i]!;
+    out[i] = [lngToX(c[0]!, scale), latToY(c[1]!, scale)];
+  }
+  return out;
+}
+
+function toLngLatRing(pts: Pt[], scale: number): number[][] {
+  const out: number[][] = new Array(pts.length);
+  for (let i = 0; i < pts.length; i++) {
+    const p = pts[i]!;
+    out[i] = [xToLng(p[0], scale), yToLat(p[1], scale)];
+  }
+  return out;
+}
+
+function sketchRing(
+  coords: number[][],
+  ctx: Ctx,
+  closed: boolean,
+): number[][] | null {
+  if (coords.length < 2) return null;
+  let world = toWorldRing(coords, ctx.scale);
+  const span = spanOf(world);
+  if (span < ctx.minSpan) return null;
+  const amp = ctx.sizeScaled ? ampForSpan(span) : LINE_AMP;
+  // A GeoJSON ring repeats its first point at the end. Smoothing over
+  // that duplicate fits a curve through a zero-length span — the knot
+  // floor keeps it from dividing by zero, but the segment it produces is
+  // a stub at the seam. Drop it, smooth as a genuine loop, close after.
+  if (closed && world.length > 2) {
+    const f = world[0]!;
+    const l = world[world.length - 1]!;
+    if (f[0] === l[0] && f[1] === l[1]) world = world.slice(0, -1);
+  }
+  // `sizeScaled` distinguishes the two: polygons have a size to be
+  // proportional to, lines only have length.
+  const step = ctx.sizeScaled ? stepFor(span) : LINE_STEP_PX;
+  const cell = ctx.sizeScaled ? CELL : LINE_CELL;
+  const run = smooth(
+    sketchRun(world, amp, ctx.seed, step, cell),
+    closed,
+    closed ? POLYGON_ROUNDNESS : LINE_ROUNDNESS,
+  );
+  if (closed && run.length > 1) run.push(run[0]!);
+  return toLngLatRing(run, ctx.scale);
+}
+
+function sketchFeature(
+  f: GeoJSONFeature,
+  ctx: Ctx,
+): GeoJSON.Feature | null {
+  const g = f.geometry;
+  if (g.type === 'LineString') {
+    const r = sketchRing(g.coordinates as number[][], ctx, false);
+    return r && { type: 'Feature', properties: {}, geometry: { type: 'LineString', coordinates: r } };
+  }
+  if (g.type === 'MultiLineString') {
+    const lines = (g.coordinates as number[][][])
+      .map((l) => sketchRing(l, ctx, false))
+      .filter((l): l is number[][] => l != null);
+    return lines.length
+      ? { type: 'Feature', properties: {}, geometry: { type: 'MultiLineString', coordinates: lines } }
+      : null;
+  }
+  if (g.type === 'Polygon') {
+    const rings = (g.coordinates as number[][][])
+      .map((r) => sketchRing(r, ctx, true))
+      .filter((r): r is number[][] => r != null);
+    // An outer ring that fell under minSpan takes its holes with it.
+    return rings.length
+      ? { type: 'Feature', properties: {}, geometry: { type: 'Polygon', coordinates: rings } }
+      : null;
+  }
+  if (g.type === 'MultiPolygon') {
+    const polys = (g.coordinates as number[][][][])
+      .map((p) => p.map((r) => sketchRing(r, ctx, true)).filter((r): r is number[][] => r != null))
+      .filter((p) => p.length > 0);
+    return polys.length
+      ? { type: 'Feature', properties: {}, geometry: { type: 'MultiPolygon', coordinates: polys } }
+      : null;
+  }
+  return null;
+}
+
+// ---------------------------------------------------------------------
+// Which features
+// ---------------------------------------------------------------------
+
+// Mirrors the hide rules in crayonStyle's transportation branch — rail,
+// service roads and footpaths are off the drawing there, and drawing
+// them by hand here would put them back.
+const ROAD_SKIP =
+  /(^|[_-])(rail|railway|aerialway|cable|gondola|chair|funicular|ferry|transit|tram|monorail|subway|pier|service|track|construction|raceway|path|footway|pedestrian|cycleway|steps|bridleway)([_-]|$)/;
+
+const GREEN_CLASS =
+  /park|grass|wood|forest|cemetery|recreation|pitch|meadow|farm|garden|scrub|playground|nature/;
+
+// First coordinate of any geometry, for the id-less fallback key.
+function firstCoord(f: GeoJSONFeature): number[] | null {
+  let c: unknown = (f.geometry as { coordinates?: unknown }).coordinates;
+  while (Array.isArray(c) && Array.isArray(c[0])) c = c[0];
+  return Array.isArray(c) ? (c as number[]) : null;
+}
+
+function classOf(f: GeoJSONFeature): string {
+  const p = f.properties ?? {};
+  return String(p.class ?? p.subclass ?? '').toLowerCase();
+}
+
+// ---------------------------------------------------------------------
+// Layers
+// ---------------------------------------------------------------------
+
+function ensureSource(map: maplibregl.Map, id: string) {
+  if (!map.getSource(id)) {
+    map.addSource(id, {
+      type: 'geojson',
+      data: { type: 'FeatureCollection', features: [] },
+    });
+  }
+}
+
+function setData(map: maplibregl.Map, id: string, features: GeoJSON.Feature[]) {
+  const src = map.getSource(id) as GeoJSONSource | undefined;
+  src?.setData({ type: 'FeatureCollection', features });
+}
+
+// APPEND, DO NOT RE-SEND.
+//
+// setData replaces the source and re-indexes every feature in it, so the
+// cost of drawing one newly-arrived tile was the cost of the ENTIRE city
+// drawn so far — and the city only grows as you walk. That is why a walk
+// went slower the longer it went, and why ground you had just stepped
+// onto stayed blank: each batch was paying for all the ones before it.
+//
+// updateData applies a diff instead, which needs every feature to carry
+// a unique id (see nextFeatureId). Falls back to a full setData if the
+// source has not been populated yet, or if this MapLibre build has no
+// updateData.
+function appendData(
+  map: maplibregl.Map,
+  id: string,
+  add: GeoJSON.Feature[],
+  remove: (string | number)[],
+): boolean {
+  const src = map.getSource(id) as (GeoJSONSource & {
+    updateData?: (d: unknown) => unknown;
+  }) | undefined;
+  if (!src || typeof src.updateData !== 'function') return false;
+  try {
+    src.updateData({ ...(add.length ? { add } : {}), ...(remove.length ? { remove } : {}) });
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// Unique per feature for the lifetime of the page — updateData refuses a
+// source whose features are not individually addressable.
+let featureIdSeq = 1;
+function nextFeatureId(): number {
+  return featureIdSeq++;
+}
+
+function ensureLayer(map: maplibregl.Map, spec: LayerSpecification, before?: string) {
+  if (map.getLayer(spec.id)) return;
+  try {
+    map.addLayer(spec, before && map.getLayer(before) ? before : undefined);
+  } catch {
+    /* the style is mid-update; the next refresh puts it in */
+  }
+}
+
+// Paint that follows a palette change without rebuilding geometry.
+function paintSketch(map: maplibregl.Map, p: Palette) {
+  const ink = p.outline ?? p.crayon;
+  const set = (id: string, prop: string, v: unknown) => {
+    if (!map.getLayer(id)) return;
+    try {
+      (map.setPaintProperty as (l: string, k: string, v: unknown) => void)(id, prop, v);
+    } catch {
+      /* ignore */
+    }
+  };
+  set('sketch-water-fill', 'fill-color', p.blue);
+  set('sketch-park-fill', 'fill-color', p.green);
+  set('sketch-building-fill', 'fill-color', p.paper);
+  set('sketch-building-line', 'line-color', ink);
+  set('sketch-road-line', 'line-color', p.greyRoad);
+  set('sketch-building-line', 'line-opacity', p.buildingOutline || 0.55);
+}
+
+// Parks and water are COLOUR ONLY — no pen line round either.
+//
+// They had one, on the argument that on a white page the edge is the
+// shape. It is not, once the shape is filled: the fill already draws the
+// edge, exactly, in the same place, and the ink beside it only says the
+// same thing twice and thickens it. What the wobble does to a park is
+// visible in the fill's own outline. Buildings keep their line because
+// their fill is the same white as the page and has no edge of its own.
+const SKETCH_LAYERS = [
+  'sketch-water-fill', 'sketch-park-fill',
+  'sketch-building-fill', 'sketch-building-line', 'sketch-road-line',
+] as const;
+
+// Show or hide the whole hand-drawn city in one call. Hidden rather than
+// disposed on a palette that does not want it (play mode), because the
+// geometry took real work to build and the mode is a toggle: throwing it
+// away means paying for it again on the way back.
+export function setSketchVisible(map: maplibregl.Map, visible: boolean): void {
+  for (const id of SKETCH_LAYERS) {
+    if (!map.getLayer(id)) continue;
+    try {
+      map.setLayoutProperty(id, 'visibility', visible ? 'visible' : 'none');
+    } catch {
+      /* style mid-update */
+    }
+  }
+}
+
+export interface MapSketch {
+  // Rebuild from whatever the source currently holds. Cheap to call —
+  // it no-ops unless the zoom bucket moved or a tile arrived.
+  refresh(force?: boolean): void;
+  restyle(palette: Palette): void;
+  // What the last build cost. Read by the render probes so a claim about
+  // this being affordable is a measurement rather than a hope.
+  stats(): { features: number; ms: number };
+  dispose(): void;
+}
+
+// Buildings are the expensive half (699 features / 51k vertices in one
+// city viewport, measured) and the least legible when tiny. Below this
+// many world px across, a footprint is a smudge either way.
+const MIN_BUILDING_SPAN = 10;
+const MIN_LINE_SPAN = 8;
+// Water takes anything — a pond is a landmark on a walk. Green does
+// not: `landcover` carries a grass polygon for every verge and traffic
+// island in the city, and drawn at this weight they stipple the whole
+// page with slivers that are not places anybody walks a dog.
+const MIN_WATER_SPAN = 6;
+const MIN_GREEN_SPAN = 22;
+
+export function createMapSketch(
+  map: maplibregl.Map,
+  palette: Palette,
+  vectorSource: string,
+): MapSketch {
+  for (const id of Object.values(SRC)) ensureSource(map, id);
+
+  // Order: water and park under the buildings under the roads, and the
+  // whole stack under the first label so street names stay on top.
+  const firstSymbol = map
+    .getStyle()
+    .layers?.find((l) => l.type === 'symbol')?.id;
+
+  const ink = palette.outline ?? palette.crayon;
+  ensureLayer(map, {
+    id: 'sketch-water-fill', type: 'fill', source: SRC.water,
+    paint: { 'fill-color': palette.blue, 'fill-opacity': 1 },
+  } as LayerSpecification, firstSymbol);
+  ensureLayer(map, {
+    id: 'sketch-park-fill', type: 'fill', source: SRC.park,
+    paint: { 'fill-color': palette.green, 'fill-opacity': 1 },
+  } as LayerSpecification, firstSymbol);
+  ensureLayer(map, {
+    id: 'sketch-building-fill', type: 'fill', source: SRC.building,
+    paint: { 'fill-color': palette.paper, 'fill-opacity': 1 },
+  } as LayerSpecification, firstSymbol);
+  ensureLayer(map, {
+    id: 'sketch-building-line', type: 'line', source: SRC.building,
+    minzoom: 13,
+    paint: {
+      'line-color': ink,
+      'line-opacity': palette.buildingOutline || 0.55,
+      'line-width': ['interpolate', ['linear'], ['zoom'], 13, 0.4, 16, 0.9, 19, 1.4],
+    },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+  } as LayerSpecification, firstSymbol);
+  ensureLayer(map, {
+    id: 'sketch-road-line', type: 'line', source: SRC.road,
+    paint: {
+      'line-color': palette.greyRoad,
+      'line-opacity': 1,
+      // The tile style's per-class widths are gone with its layers, so
+      // the hierarchy is rebuilt from the feature's own class: a
+      // motorway is not a lane.
+      // Streets lead the drawing, as they do on the styled paper map —
+      // the first ramp here was carried over from the tile style's own
+      // weights and came out finer than the building footprints, which
+      // is the same mistake in a new place: a page of blocks with no
+      // network through it.
+      'line-width': [
+        'interpolate', ['linear'], ['zoom'],
+        12, ['match', ['get', 'k'], 3, 2.2, 2, 1.5, 1, 1.0, 0.7],
+        16, ['match', ['get', 'k'], 3, 5.0, 2, 3.4, 1, 2.4, 1.6],
+        19, ['match', ['get', 'k'], 3, 9.0, 2, 6.2, 1, 4.2, 2.8],
+      ],
+    },
+    layout: { 'line-cap': 'round', 'line-join': 'round' },
+  } as LayerSpecification, firstSymbol);
+
+  // One seed for the whole city, so the field is continuous across every
+  // feature and every tile. Fixed rather than random: a reload should
+  // not redraw Kyiv.
+  const seed = 0x5ce7c4;
+  let lastCount = 0;
+  let lastMs = 0;
+  // Has this source had its first full push? Until then there is nothing
+  // to diff against.
+  const seeded: Record<keyof typeof SRC, boolean> =
+    { road: false, building: false, park: false, water: false };
+  let disposed = false;
+
+  // Redrawing the city is not free and it runs on a user-visible thread.
+  // Anything past this is a hitch somebody can feel, and a silent one —
+  // so it says so. Threshold rather than always-on: a log line per tile
+  // batch is its own kind of noise.
+  const SLOW_MS = 120;
+
+  // DRAWN ONCE, AND THEN IT IS DRAWN.
+  //
+  // The first version generated for whatever zoom the camera was at and
+  // rebuilt on every zoom bucket. Two things went wrong with that, and
+  // the second is the one that mattered:
+  //
+  //   The rebuild cost 200ms, and it landed exactly when the user was
+  //   already busy — mid-zoom.
+  //
+  //   Worse, the city CHANGED SHAPE when it did. Amplitude and step are
+  //   in world pixels, so generating at a new zoom re-wobbles every wall
+  //   by a different amount and resamples it at different points. Zoom
+  //   in and out and the buildings breathe. A drawing that redraws
+  //   itself when you look closer is not a drawing.
+  //
+  // So: geometry is generated ONCE per feature, always at REF_Z, and
+  // kept. Zooming re-uses it — a paper map you hold closer, which is the
+  // whole idea and also free. The wobble is then fixed in GROUND
+  // distance rather than pixels, which is what makes it scale with
+  // everything else instead of against it.
+  //
+  // Keyed by feature id, which every basemap feature carries (measured:
+  // 1891/1891 roads, 699/699 buildings). A feature clipped across tiles
+  // arrives as several parts under one id, and more parts appear as more
+  // tiles load — so the part COUNT is cached too, and a feature is
+  // redrawn only when it has grown. Without that, panning to reveal the
+  // far half of a road would leave the road half-drawn forever.
+  const REF_Z = 16;
+  const CACHE_CAP = 12000;
+
+  // Parts kept as an array rather than folded into a GeometryCollection:
+  // one less bet on how geojson-vt handles a type nothing else in this
+  // codebase emits, and mixed geometry types under one id stay legal.
+  interface Cached { parts: number; features: GeoJSON.Feature[] }
+  const caches: Record<keyof typeof SRC, Map<string, Cached>> = {
+    road: new Map(), building: new Map(), park: new Map(), water: new Map(),
+  };
+
+  const build = () => {
+    const t0 = performance.now();
+    const scale = worldScale(REF_Z);
+    const q = (sourceLayer: string) => {
+      try {
+        return map.querySourceFeatures(vectorSource, { sourceLayer });
+      } catch {
+        return [] as GeoJSONFeature[];
+      }
+    };
+
+    let added = 0;
+    // What changed THIS pass, per source: the new features to append and
+    // the ids of anything they replace.
+    const fresh: Record<keyof typeof SRC, GeoJSON.Feature[]> =
+      { road: [], building: [], park: [], water: [] };
+    const dropped: Record<keyof typeof SRC, (string | number)[]> =
+      { road: [], building: [], park: [], water: [] };
+
+    // Group the loaded parts of each feature under its id, so a
+    // tile-split road is sketched as one thing and counted as one.
+    const group = (
+      feats: GeoJSONFeature[],
+      keep: (f: GeoJSONFeature) => boolean,
+    ): Map<string, GeoJSONFeature[]> => {
+      const by = new Map<string, GeoJSONFeature[]>();
+      for (const f of feats) {
+        if (!keep(f)) continue;
+        // Every basemap feature carries an id (measured), but a missing
+        // one must not collide with every OTHER missing one — that would
+        // cache the first and silently drop the rest.
+        const k = f.id != null ? String(f.id) : `@${JSON.stringify(firstCoord(f))}`;
+        const list = by.get(k);
+        if (list) list.push(f);
+        else by.set(k, [f]);
+      }
+      return by;
+    };
+
+    const fill = (
+      which: keyof typeof SRC,
+      feats: GeoJSONFeature[],
+      keep: (f: GeoJSONFeature) => boolean,
+      ctx: Omit<Ctx, 'scale' | 'seed'>,
+      decorate?: (f: GeoJSONFeature, s: GeoJSON.Feature) => void,
+    ) => {
+      const cache = caches[which];
+      for (const [k, parts] of group(feats, keep)) {
+        const hit = cache.get(k);
+        if (hit && hit.parts >= parts.length) continue;
+        // One entry per id, so the parts are sketched together and the
+        // cache never holds a half of anything.
+        const out: GeoJSON.Feature[] = [];
+        for (const f of parts) {
+          const s = sketchFeature(f, { ...ctx, scale, seed });
+          if (s) {
+            if (decorate) decorate(f, s);
+            out.push(s);
+          }
+        }
+        // A feature being REDRAWN (its far half just arrived) has to take
+        // its old ids out of the source, or both versions stack.
+        if (hit) for (const f of hit.features) if (f.id != null) dropped[which].push(f.id);
+        for (const f of out) f.id = nextFeatureId();
+        cache.set(k, { parts: parts.length, features: out });
+        fresh[which].push(...out);
+        added++;
+      }
+    };
+
+    fill('road', q('transportation'), (f) => !ROAD_SKIP.test(classOf(f)),
+      { minSpan: MIN_LINE_SPAN, sizeScaled: false },
+      (f, s) => {
+        const cls = classOf(f);
+        // Road weight tier, read once here so the style expression above
+        // stays a lookup rather than a chain of string comparisons.
+        s.properties = {
+          k: /motorway|trunk/.test(cls) ? 3
+            : /primary/.test(cls) ? 2
+            : /secondary|tertiary/.test(cls) ? 1
+            : 0,
+        };
+      });
+    fill('building', q('building'), () => true, { minSpan: MIN_BUILDING_SPAN, sizeScaled: true });
+    fill('water', q('water'), () => true, { minSpan: MIN_WATER_SPAN, sizeScaled: true });
+    const green = (f: GeoJSONFeature) => GREEN_CLASS.test(classOf(f));
+    fill('park', q('park'), () => true, { minSpan: MIN_GREEN_SPAN, sizeScaled: true });
+    fill('park', q('landuse'), green, { minSpan: MIN_GREEN_SPAN, sizeScaled: true });
+    fill('park', q('landcover'), green, { minSpan: MIN_GREEN_SPAN, sizeScaled: true });
+
+    // Nothing new on the page: no re-upload. This is what makes zooming
+    // and panning inside drawn ground cost nothing at all — setData
+    // re-indexes the whole collection, so calling it for an unchanged
+    // city was most of the old cost.
+    if (added === 0) {
+      lastMs = performance.now() - t0;
+      return;
+    }
+
+    let total = 0;
+    for (const which of Object.keys(caches) as (keyof typeof SRC)[]) {
+      const cache = caches[which];
+      // A walk far enough to fill this is a walk across the whole city;
+      // dropping the oldest keeps the drawing bounded without ever
+      // redrawing ground the user is standing on.
+      while (cache.size > CACHE_CAP) {
+        const oldest = cache.keys().next().value;
+        if (oldest === undefined) break;
+        const evicted = cache.get(oldest);
+        if (evicted) for (const f of evicted.features) if (f.id != null) dropped[which].push(f.id);
+        cache.delete(oldest);
+      }
+      total += cache.size;
+      if (!seeded[which]) {
+        const features: GeoJSON.Feature[] = [];
+        for (const c of cache.values()) for (const f of c.features) features.push(f);
+        setData(map, SRC[which], features);
+        seeded[which] = true;
+      } else if (fresh[which].length || dropped[which].length) {
+        if (!appendData(map, SRC[which], fresh[which], dropped[which])) {
+          // No diff support — fall back to the old whole-collection push
+          // rather than silently leaving the new ground undrawn.
+          const features: GeoJSON.Feature[] = [];
+          for (const c of cache.values()) for (const f of c.features) features.push(f);
+          setData(map, SRC[which], features);
+        }
+      }
+    }
+    lastCount = total;
+
+    const ms = performance.now() - t0;
+    lastMs = ms;
+    if (ms > SLOW_MS) {
+      // eslint-disable-next-line no-console
+      console.warn(
+        `[sketch] drew ${added} new features (${total} on the page) in ${ms.toFixed(0)}ms`,
+      );
+    }
+  };
+
+  return {
+    refresh(force = false) {
+      if (disposed) return;
+      // No zoom check any more: geometry does not depend on the camera.
+      // A refresh is only ever "has anything new arrived", and build()
+      // answers that itself by finding nothing to add.
+      void force;
+      build();
+    },
+    restyle(next: Palette) {
+      paintSketch(map, next);
+    },
+    stats() {
+      return { features: lastCount, ms: lastMs };
+    },
+    dispose() {
+      disposed = true;
+      for (const id of SKETCH_LAYERS) {
+        try { if (map.getLayer(id)) map.removeLayer(id); } catch { /* ignore */ }
+      }
+      for (const id of Object.values(SRC)) {
+        try { if (map.getSource(id)) map.removeSource(id); } catch { /* ignore */ }
+      }
+    },
+  };
+}
