@@ -1191,9 +1191,27 @@ pulling the model back toward the photo; `AVATAR_DESCRIBE_PHOTO=off`
 takes it out again without a code change. The description is logged
 now: a wrong drawing is not debuggable without knowing what the
 drawing model was told, and the line is about a coat and a pair of
-ears. If this still polishes past the samples, what is left is the
-style adapter trained on all ten drawings (with the illustrator's
-agreement, since it clones their line).
+ears.
+
+**The right dog, still too competent (second run).** Light and long,
+floppy ears, long blunt muzzle, tongue out: the description was
+right, the photo held the likeness, and the drawing was a golden
+retriever — the owner's best so far, and "still a bit realistic":
+both eyes level, both ears the same length, tidy fur strokes. The
+model draws a competent animal however it is asked not to. So the
+last bit of "clumsy" is added by the app: the ink pass gains a WARP,
+the wobble's displacement at a much larger scale (70 px over a 500 px
+cell at 1024), one slow wave across the drawing, so the head is
+lopsided and the eyes sit unevenly. Chosen by inking the real drawing
+at 24–120 px and looking: under 50 reads as nothing, 120 leans the dog
+out of the frame. The prompt also asks for the asymmetry outright
+(one eye higher, one ear longer, the nose off-centre), which costs
+nothing if ignored. The daily cap went from 5 to 100 the same day:
+the owner tuned through three accounts in an afternoon, and the
+number left is a guard against a script, not a person. If this still
+polishes past the samples, what is left is the style adapter trained
+on all ten drawings (with the illustrator's agreement, since it
+clones their line).
 
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e
