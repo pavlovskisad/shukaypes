@@ -167,10 +167,8 @@ export function referencePrompt(pet: { species: string | null; breed: string | n
     `The first ${refCount} images are drawings by one illustrator; the last image is a photo of a ${petWord(pet)}. ` +
     `Draw this ${what} exactly the way those drawings are drawn: hand-drawn, childish, fast, fat uneven black ` +
     'marker lines, weird, low effort, a rough draft, funny and a bit ugly — a funny character out of a ' +
-    "children's picture book, a cartoon, not a portrait. It should look like a 4-year-old's fridge art: " +
-    'simple shapes, uneven lines, drawn with a fat black marker, no crayon, no colour. Copy the style and ' +
-    'the idea of the drawings, not their animals. Do not make it realistic and do not copy the photo — take ' +
-    'only what makes ' +
+    "children's picture book, a cartoon, not a portrait. Copy the style and the idea of the " +
+    'drawings, not their animals. Do not make it realistic and do not copy the photo — take only what makes ' +
     `this ${what} recognisable: its coat, ears, muzzle and markings. Half the lines you would normally draw: ` +
     'an outline, the ears, two small dot eyes, a nose, a mouth, and that is all — no fur strokes, no whiskers, ' +
     `no wrinkles, no marks for shading. Draw it the way a four-year-old would: a wobbly blob for the head, ` +
@@ -225,9 +223,8 @@ export function describePrompt(
     `The first ${refCount} images are drawings by one illustrator; ${photoLine}` +
     `Draw this ${what} exactly the way those drawings are drawn: hand-drawn, childish, fast, fat uneven black ` +
     'marker lines, weird, low effort, a rough draft, funny and a bit ugly — a funny character out of a ' +
-    "children's picture book, a cartoon, not a portrait. It should look like a 4-year-old's fridge art: " +
-    'simple shapes, uneven lines, drawn with a fat black marker, no crayon, no colour. Copy the style and ' +
-    `the idea of the drawings, not their animals. Do not make it realistic. The ${what}: "${description}" ` +
+    "children's picture book, a cartoon, not a portrait. Copy the style and the idea of the " +
+    `drawings, not their animals. Do not make it realistic. The ${what}: "${description}" ` +
     'Half the lines you would normally draw: an outline, the ears, two small dot eyes, a nose, a mouth, and ' +
     'that is all — no fur strokes, no whiskers, no wrinkles. Draw it the way a four-year-old would: a ' +
     `wobbly blob for the head, the ears, two dots for eyes, a blob for the nose, one line for the mouth. If a ` +
