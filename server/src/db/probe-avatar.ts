@@ -16,7 +16,7 @@
 //            (AVATAR_RECIPE=reference)
 //   describe the app's default: the photo described in a sentence by
 //            Claude, then Nano Banana from the sentence and the samples
-//            with no photo in the request. Needs ANTHROPIC_API_KEY;
+//            with the photo last as a likeness check. Needs ANTHROPIC_API_KEY;
 //            skipped with a note when it is not set.
 //
 // on three photos that ship in assets/avatar-probe (a lab, a beagle,
@@ -113,7 +113,7 @@ const RECIPES: Record<string, (p: Pet) => Call | Promise<Call>> = {
     console.log(JSON.stringify({ pet: p.id, description }));
     return {
       url: endpoint('https://fal.run/fal-ai/nano-banana/edit'),
-      body: describeBody(REF_FILES.map(ref), description, { species: p.species, breed: p.breed }),
+      body: describeBody(REF_FILES.map(ref), description, { species: p.species, breed: p.breed }, photo(p.file)),
     };
   },
 };
