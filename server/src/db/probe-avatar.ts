@@ -12,8 +12,12 @@
 //   nb1      Nano Banana (Gemini image edit) with the photo and ONE of
 //            the illustrator's drawings
 //   nbAll    Nano Banana with the photo and the app's own reference
-//            set (REF_FILES in services/avatar.ts) and prompt — what
-//            the app ships (AVATAR_RECIPE=reference)
+//            set (REF_FILES in services/avatar.ts) and prompt
+//            (AVATAR_RECIPE=reference)
+//   describe the app's default: the photo described in a sentence by
+//            Claude, then Nano Banana from the sentence and the samples
+//            with no photo in the request. Needs ANTHROPIC_API_KEY;
+//            skipped with a note when it is not set.
 //
 // on three photos that ship in assets/avatar-probe (a lab, a beagle,
 // a cat — smooth, patched, whiskered). Each drawing is a paid call,
@@ -30,7 +34,8 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
-import { REF_FILES, avatarPrompt, referenceBody } from '../services/avatar.js';
+import { REF_FILES, avatarPrompt, describeBody, referenceBody } from '../services/avatar.js';
+import { describePet } from '../services/petDescription.js';
 import { inkify } from '../services/ink.js';
 
 const KEY = process.env.FAL_KEY?.trim();
@@ -71,7 +76,9 @@ interface Call {
   body: Record<string, unknown>;
 }
 
-const RECIPES: Record<string, (p: Pet) => Call> = {
+const photoBytes = (name: string) => ({ bytes: fs.readFileSync(path.join(ASSETS, 'avatar-probe', name)), mime: 'image/jpeg' });
+
+const RECIPES: Record<string, (p: Pet) => Call | Promise<Call>> = {
   marker: (p) => ({
     url: endpoint('https://fal.run/fal-ai/flux-pro/kontext'),
     body: {
@@ -99,6 +106,16 @@ const RECIPES: Record<string, (p: Pet) => Call> = {
     url: endpoint('https://fal.run/fal-ai/nano-banana/edit'),
     body: referenceBody(photo(p.file), REF_FILES.map(ref), { species: p.species, breed: p.breed }),
   }),
+  describe: async (p) => {
+    if (!process.env.ANTHROPIC_API_KEY) throw new Error('ANTHROPIC_API_KEY not set — describe recipe skipped');
+    const description = await describePet(photoBytes(p.file), { species: p.species, breed: p.breed });
+    if (!description) throw new Error('no description came back');
+    console.log(JSON.stringify({ pet: p.id, description }));
+    return {
+      url: endpoint('https://fal.run/fal-ai/nano-banana/edit'),
+      body: describeBody(REF_FILES.map(ref), description, { species: p.species, breed: p.breed }),
+    };
+  },
 };
 
 interface FalImage {
@@ -135,9 +152,9 @@ for (const pet of PETS) {
   for (const [name, make] of Object.entries(RECIPES)) {
     if (onlyRecipe && onlyRecipe !== name) continue;
     const t0 = Date.now();
-    const { url, body } = make(pet);
     const entry: Entry = { pet: pet.id, recipe: name };
     try {
+      const { url, body } = await make(pet);
       const res = await fetch(url, {
         method: 'POST',
         headers: { authorization: `Key ${KEY}`, 'content-type': 'application/json' },
