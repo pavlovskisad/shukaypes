@@ -1256,7 +1256,16 @@ never removes ink. The detail ask went to the prompt, said plainly:
 half the lines, an outline, ears, two small dot eyes, a nose, a
 mouth, and that is all — and, the owner's last note, a funny
 character out of a children's picture book, a cartoon, not a
-portrait. If this still polishes past the
+portrait.
+
+**Four for the poster (same evening).** A retriever, a cat, a
+bulldog and a poodle: dot eyes, one outline, a dozen lines, the pet
+filling the frame, each plainly itself. "Look at those." The owner's
+next experiment: only the two most chaotic samples, the loopy poodle
+and the terrier, and nothing else changed, so what it does is
+legible. The risk is that two samples pull the model toward those
+two animals; if it copies the poodle, back to four. If this still
+polishes past the
 samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
