@@ -45,6 +45,8 @@ export function PlayerCard({ player, onClose }: Props) {
   const t = useStrings().playerCard;
   const tp = useStrings().profile;
   const pokePlayer = useGameStore((s) => s.pokePlayer);
+  const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
+  const setAppMode = useGameStore((s) => s.setAppMode);
   const [card, setCard] = useState<Card | null>(null);
   const [failed, setFailed] = useState(false);
   const [poked, setPoked] = useState(false);
@@ -75,6 +77,20 @@ export function PlayerCard({ player, onClose }: Props) {
     setPoked(true);
     setTimeout(() => setPoked(false), 1500);
     void pokePlayer(player.id);
+  };
+
+  // Tap the ground → the map lands on it, the same jump a row on the
+  // standing makes (tasks.tsx onPickOwner): into the territory view
+  // first, since ground is only drawn there, then the flight. The card
+  // is already on the map screen, so there is no route to push; it
+  // closes itself so the flight is visible.
+  const piece = card?.piece ?? null;
+  const showGround = () => {
+    if (!piece || piece.length < 3) return;
+    haptic('light');
+    if (useGameStore.getState().appMode !== 'play') setAppMode('play');
+    setFocusedTerritory({ ownerId: player.id, ring: piece, pos: player.position });
+    onClose();
   };
 
   const portrait: CSSProperties = {
@@ -116,8 +132,18 @@ export function PlayerCard({ player, onClose }: Props) {
             </div>
           </div>
           {card || failed ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: S.m, marginTop: S.m }}>
-              {card?.piece ? <TerritoryMini points={card.piece} color={ownerColorCss(player.id)} size={MINI} /> : null}
+            <div
+              role={piece ? 'button' : undefined}
+              onClick={piece ? showGround : undefined}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: S.m,
+                marginTop: S.m,
+                cursor: piece ? 'pointer' : 'default',
+              }}
+            >
+              {piece ? <TerritoryMini points={piece} color={ownerColorCss(player.id)} size={MINI} /> : null}
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ font: `600 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK }}>
                   {card && card.areaM2 > 0 ? t.territory : t.noTerritory}
@@ -126,6 +152,9 @@ export function PlayerCard({ player, onClose }: Props) {
                   <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
                     {tp.areaValue(card.areaM2)}
                   </div>
+                ) : null}
+                {piece ? (
+                  <div style={{ ...LINK, display: 'inline-block', marginTop: S.xs }}>{t.showOnMap}</div>
                 ) : null}
               </div>
             </div>

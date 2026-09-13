@@ -23,6 +23,7 @@ import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColo
 import { BoardRow } from '../../components/ui/BoardRow';
 import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
 import { useHint } from '../../hooks/useHint';
+import { useAccessStore } from '../../stores/accessStore';
 import { HandDrawnBar } from '../../components/ui/HandDrawn';
 
 interface QuestHistoryRow {
@@ -211,6 +212,9 @@ export default function TasksScreen() {
   // The row already carries the largest piece's ring (the silhouette is
   // drawn from it) and the owner's freshest mark, so the jump needs no
   // extra fetch; rows without geometry simply don't navigate.
+  // Your own row's portrait comes from the account, not the board: the
+  // board is a server read that may be a poll old, the account is live.
+  const myAvatarUrl = useAccessStore((s) => s.me?.avatarUrl ?? null);
   const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
   const setAppMode = useGameStore((s) => s.setAppMode);
   const onPickOwner = useCallback(
@@ -464,6 +468,7 @@ export default function TasksScreen() {
                   piece={yourPiece}
                   color={OWN_COLOR_CSS}
                   you
+                  avatarUrl={myAvatarUrl}
                 />
               </Pressable>
             </View>
@@ -493,6 +498,7 @@ export default function TasksScreen() {
                         piece={row.mainPiece}
                         color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
                         you={isYou}
+                        avatarUrl={row.avatarUrl}
                       />
                     </Pressable>
                   );

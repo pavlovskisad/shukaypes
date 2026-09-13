@@ -109,6 +109,8 @@ import {
 } from './ground.js';
 import { isOnWater } from '../data/kyivWater.js';
 import { presencePositions } from './presence.js';
+import { buildPhotoUrl } from './photoUrl.js';
+import { botAvatarUrl, botIndex } from './botAvatars.js';
 
 const T = balance.territory;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -872,6 +874,9 @@ export interface LeaderboardEntry {
   name: string;
   areaM2: number;
   bot: boolean;
+  // The owner's drawn portrait (D-72), or a bot's (D-73); null when
+  // nobody has drawn one yet. The board row shows it beside the name.
+  avatarUrl: string | null;
   // The outer ring of the owner's largest piece, decimated for a
   // thumbnail — the board draws it as a silhouette in the owner's colour.
   // Absent only if the ground vanished between the sum and this read.
@@ -924,8 +929,9 @@ export async function territoryLeaderboard(
     .slice(0, limit);
 
   const ids = totals.map((e) => e.userId);
-  const [names, rings, marks, livePos] = await Promise.all([
+  const [names, avatars, rings, marks, livePos] = await Promise.all([
     ownerNames(ids),
+    ownerAvatars(ids),
     largestPieceRings(ids),
     latestMarks(ids),
     presencePositions(ids).catch(() => new Map<string, { lat: number; lng: number }>()),
@@ -938,6 +944,7 @@ export async function territoryLeaderboard(
       ...e,
       name: names.get(e.userId) ?? 'сусід',
       bot: isBot(e.userId),
+      avatarUrl: avatars.get(e.userId) ?? null,
       ...(ring && ring.length >= 3
         ? {
             mainPiece: trimPoints(
@@ -997,6 +1004,34 @@ async function ownerNames(ids: string[]): Promise<Map<string, string>> {
     .from(schema.users)
     .where(inArray(schema.users.id, ids));
   return new Map(rows.map((r) => [r.id, r.first || r.username || 'сусід']));
+}
+
+// Each owner's portrait URL: a person's drawn one (D-72) by its stored
+// file id, a bot's from the committed roster files (D-73). Missing
+// portraits are simply absent from the map.
+async function ownerAvatars(ids: string[]): Promise<Map<string, string>> {
+  const out = new Map<string, string>();
+  if (ids.length === 0) return out;
+  const people: string[] = [];
+  for (const id of ids) {
+    const bi = botIndex(id);
+    if (bi === null) {
+      people.push(id);
+      continue;
+    }
+    const u = botAvatarUrl(bi);
+    if (u) out.set(id, u);
+  }
+  if (people.length === 0) return out;
+  const rows = await db
+    .select({ id: schema.users.id, a: schema.users.avatarFileId })
+    .from(schema.users)
+    .where(inArray(schema.users.id, people));
+  for (const r of rows) {
+    const u = buildPhotoUrl(r.a, null);
+    if (u) out.set(r.id, u);
+  }
+  return out;
 }
 
 // Each owner's freshest mark — where their dog last was. The board ships
