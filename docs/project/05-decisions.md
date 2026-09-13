@@ -1243,15 +1243,20 @@ and all plainly themselves. The asks: eyes too black, half the
 detail, more approximate lines, a thinner stroke — and the pet
 bigger in the frame. The ink pass took the ones it can: weight 3 →
 2 (the dilation was fattening the eyes as much as the line), wobble
-5 → 8, a FIT step that crops to the ink and rescales so the pet fills
-80% of the frame, and an eraser for small loose blobs (freckles,
-whisker lines, fur ticks — small, or medium and thin). The eraser
-was measured before it was trusted: the retriever drawing is eight
-blobs, and the outline, ears, mouth and most of the chest strokes
-are one of them, so nothing in the pass can halve the detail without
-cutting the outline. That ask went to the prompt instead, said
-plainly: half the lines, an outline, ears, two small dot eyes, a
-nose, a mouth, and that is all. If this still polishes past the
+5 → 8, and a FIT step that crops to the ink and rescales so the pet
+fills 80% of the frame — a rescale only, the geometry untouched. An
+eraser for small loose blobs (freckles, whisker lines, fur ticks) was
+built, measured and dropped the same hour: the retriever drawing is
+eight blobs, and the outline, ears, mouth and most of the chest
+strokes are one of them, so it could only nibble at the edges; and
+the owner's call was that less detail belongs at generation, because
+detail dictates the geometry of the whole picture, and erasing after
+the fact breaks the simple drawing's charm and skeleton. So the pass
+never removes ink. The detail ask went to the prompt, said plainly:
+half the lines, an outline, ears, two small dot eyes, a nose, a
+mouth, and that is all — and, the owner's last note, a funny
+character out of a children's picture book, a cartoon, not a
+portrait. If this still polishes past the
 samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
