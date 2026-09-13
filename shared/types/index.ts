@@ -123,7 +123,25 @@ export interface NearbyPlayer {
   position: LatLng;
   name: string;
   photoUrl: string | null;
+  // The pet's drawn portrait (D-72), when there is one: what the map
+  // chip shows. Bots ship one drawn for their roster entry.
+  avatarUrl?: string | null;
   bot?: boolean;
+}
+
+// What opens when a dog on the map is tapped (D-73): who it is, the
+// portrait big, the level, and how much ground it holds with the shape
+// of the largest piece for a thumbnail.
+export interface PlayerCard {
+  id: string;
+  name: string;
+  bot: boolean;
+  avatarUrl: string | null;
+  level: number | null;
+  areaM2: number;
+  // The largest piece of ground, decimated to a thumbnail's worth of
+  // corners; null when the dog holds nothing.
+  piece: LatLng[] | null;
 }
 
 // A "poke" from another player, delivered on the target's next map sync.

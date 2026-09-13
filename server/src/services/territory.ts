@@ -951,6 +951,22 @@ export async function territoryLeaderboard(
   });
 }
 
+// One dog's ground for its card (D-73): how much, and the largest
+// piece decimated to a thumbnail's worth of corners.
+export async function territoryCard(
+  userId: string,
+): Promise<{ areaM2: number; piece: { lat: number; lng: number }[] | null }> {
+  const [standing, rings] = await Promise.all([groundStanding(userId), largestPieceRings([userId])]);
+  const ring = rings.get(userId);
+  return {
+    areaM2: Math.round(standing.areaM2),
+    piece:
+      ring && ring.length >= 3
+        ? trimPoints(decimateRing(ring).map(([lng, lat]) => ({ lat: lat!, lng: lng! })))
+        : null,
+  };
+}
+
 // Where a given user stands, and how much they hold.
 //
 // ALWAYS A REAL POSITION. This used to return the index in the top ten and

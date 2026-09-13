@@ -49,6 +49,7 @@
     "revive:live-ads": "tsx src/db/revive-live-ads.ts",
     "clean:ad-bodies": "tsx src/db/clean-ad-bodies.ts",
     "census:contacts": "tsx src/db/census-contacts.ts",
+    "bots:avatars": "tsx src/db/bot-avatars.ts",
     "probe:avatar": "tsx src/db/probe-avatar.ts",
     "probe:crosspost": "tsx src/db/probe-crosspost.ts",
     "audit:pins": "tsx src/db/audit-pins.ts",

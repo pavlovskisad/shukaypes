@@ -17,6 +17,13 @@ export const GAME_RENDER = true;
 // nor see other players until we ship it.
 export const MULTIPLAYER = true;
 
+// How other walkers' dogs are drawn on the map (D-73).
+//   'chip' — a round paper chip with the dog's portrait in it (the
+//            landing page's mock, 13 Sep); tapping opens the dog's card.
+//   'dog'  — the shared animated sprite with a name tag, as before.
+// One word to flip back if the chips do not read on the phone.
+export const OTHER_WALKER_STYLE: 'chip' | 'dog' = 'chip';
+
 // Dog-cam (prototype): a low, close "car-navigation" chase camera that follows
 // the companion — heading-locked to the dog's travel so forward is up. Exposes
 // a toggle button; off by default. Flag-gated so we can pull the whole thing
