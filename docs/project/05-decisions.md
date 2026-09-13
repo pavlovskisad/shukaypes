@@ -1234,9 +1234,27 @@ two"), the mop scribble, the spaniel — not the bulldog (a tidy head)
 and not the dachshund (a clean side profile, the only one not facing
 the viewer). The prompt gained two lines:
 as few lines as you can, fewer than the drawings, no fur strokes;
-leave the mistakes in. If this still polishes past the samples, what
-is left is the style adapter trained on all ten drawings (with the
-illustrator's agreement, since it clones their line).
+leave the mistakes in. Then the owner's pick of samples: the four
+most abstract — the loopy poodle, the terrier, the mop, the spaniel.
+
+**"Not bad" (four-sample round, same evening).** A retriever, a
+bulldog, a poodle and a cat, all plainly in the illustrator's hand
+and all plainly themselves. The asks: eyes too black, half the
+detail, more approximate lines, a thinner stroke — and the pet
+bigger in the frame. The ink pass took the ones it can: weight 3 →
+2 (the dilation was fattening the eyes as much as the line), wobble
+5 → 8, a FIT step that crops to the ink and rescales so the pet fills
+80% of the frame, and an eraser for small loose blobs (freckles,
+whisker lines, fur ticks — small, or medium and thin). The eraser
+was measured before it was trusted: the retriever drawing is eight
+blobs, and the outline, ears, mouth and most of the chest strokes
+are one of them, so nothing in the pass can halve the detail without
+cutting the outline. That ask went to the prompt instead, said
+plainly: half the lines, an outline, ears, two small dot eyes, a
+nose, a mouth, and that is all. If this still polishes past the
+samples, what is left is the style adapter trained on all ten
+drawings (with the illustrator's agreement, since it clones their
+line).
 
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e

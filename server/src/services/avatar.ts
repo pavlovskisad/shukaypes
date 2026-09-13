@@ -166,8 +166,9 @@ export function referencePrompt(pet: { species: string | null; breed: string | n
     `Draw this ${what} exactly the way those drawings are drawn: hand-drawn, childish, fast, fat uneven black ` +
     'marker lines, weird, low effort, a rough draft, funny and a bit ugly. Copy the style and the idea of the ' +
     'drawings, not their animals. Do not make it realistic and do not copy the photo — take only what makes ' +
-    `this ${what} recognisable: its coat, ears, muzzle and markings. Use as few lines as you can, fewer than ` +
-    'the drawings, and no fur strokes. Leave the mistakes in: lines that miss, overshoot or do not meet, ' +
+    `this ${what} recognisable: its coat, ears, muzzle and markings. Half the lines you would normally draw: ` +
+    'an outline, the ears, two small dot eyes, a nose, a mouth, and that is all — no fur strokes, no whiskers, ' +
+    'no wrinkles, no marks for shading. Leave the mistakes in: lines that miss, overshoot or do not meet, ' +
     'proportions that are off. Head and shoulders facing the viewer, black lines on plain white, nothing else.'
   );
 }
@@ -216,7 +217,8 @@ export function describePrompt(
     `Draw this ${what} exactly the way those drawings are drawn: hand-drawn, childish, fast, fat uneven black ` +
     'marker lines, weird, low effort, a rough draft, funny and a bit ugly. Copy the style and the idea of the ' +
     `drawings, not their animals. Do not make it realistic. The ${what}: "${description}" ` +
-    'Use as few lines as you can, fewer than the drawings, and no fur strokes. Leave the mistakes in. ' +
+    'Half the lines you would normally draw: an outline, the ears, two small dot eyes, a nose, a mouth, and ' +
+    'that is all — no fur strokes, no whiskers, no wrinkles. Leave the mistakes in. ' +
     'Head and shoulders facing the viewer, black lines on plain white, nothing else.'
   );
 }

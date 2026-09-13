@@ -30,6 +30,20 @@
 //      in its shapes, not rotated as a whole. The option stays for a
 //      probe; the default is off.
 //
+//   5. ERASE the small blobs: freckle dots, whisker lines, loose fur
+//      ticks — anything small, or medium and thin, that stands on its
+//      own. Only what stands on its own: measured on a real drawing,
+//      the outline, ears, mouth and most of the fur strokes are ONE
+//      connected blob, so "less detail" has to be asked of the model;
+//      this catches what it sprinkles around.
+//   6. FIT: crop to the ink and rescale so the pet fills most of the
+//      frame; the model leaves a wide margin and the avatar is small.
+//
+// Weight went 3 → 2 and wobble 5 → 8 on the owner's read of the
+// four-sample round ("a bit thinner stroke", "more approximate stroke
+// lines", "eyes too black" — the dilation was fattening the eyes as
+// much as the line).
+//
 // Pure JS over pngjs, no native image library; a 1024² drawing takes
 // tens of milliseconds. Transparent pixels count as paper. Off with
 // AVATAR_INK=off, and never applied to a non-PNG result.
@@ -50,9 +64,16 @@ export interface InkOptions {
   warp?: number;
   /** Coarse warp cell size in px at 1024. */
   warpCell?: number;
+  /** Ink blobs smaller than this many px² at 1024² are erased: freckle
+   * dots, whisker lines, short fur ticks. Scaled by area. 0 = keep all. */
+  minBlob?: number;
+  /** Share of the frame the drawing's longer side should fill, 0–1.
+   * The ink is cropped to its bounding box and rescaled so the pet is
+   * big in the frame however the model placed it. 0 = leave as is. */
+  fit?: number;
 }
 
-const DEFAULTS: Required<InkOptions> = { threshold: 160, weight: 3, wobble: 5, cell: 56, warp: 0, warpCell: 500 };
+const DEFAULTS: Required<InkOptions> = { threshold: 160, weight: 2, wobble: 8, cell: 56, warp: 0, warpCell: 500, minBlob: 700, fit: 0.8 };
 
 export function inkEnabled(): boolean {
   return process.env.AVATAR_INK?.trim().toLowerCase() !== 'off';
@@ -155,6 +176,82 @@ export function inkify(png: Buffer, opts: InkOptions = {}): Buffer {
       }
     }
     mask = out;
+  }
+
+  // 2b. Erase the small blobs. Connected components (4-neighbour) of
+  // the dilated mask below the area threshold are set back to paper:
+  // that is the freckles, whisker lines, wrinkle marks and short fur
+  // ticks the model adds, and not the outline, eyes, nose or mouth.
+  const minBlob = Math.round(o.minBlob * scale * scale);
+  if (minBlob > 0) {
+    const seen = new Uint8Array(w * h);
+    const stack: number[] = [];
+    for (let start = 0; start < mask.length; start++) {
+      if (!mask[start] || seen[start]) continue;
+      const blob: number[] = [];
+      stack.push(start);
+      seen[start] = 1;
+      while (stack.length) {
+        const i = stack.pop()!;
+        blob.push(i);
+        const x = i % w;
+        const y = (i - x) / w;
+        const next = [x > 0 ? i - 1 : -1, x < w - 1 ? i + 1 : -1, y > 0 ? i - w : -1, y < h - 1 ? i + w : -1];
+        for (const j of next) {
+          if (j >= 0 && mask[j] && !seen[j]) {
+            seen[j] = 1;
+            stack.push(j);
+          }
+        }
+      }
+      // Below the threshold it goes. Up to three times the threshold it
+      // goes if it is thin — a stroke fills little of its bounding box;
+      // an eye or a nose, filled and compact, fills most of it.
+      let erase = blob.length < minBlob;
+      if (!erase && blob.length < minBlob * 3) {
+        let bx0 = w, bx1 = -1, by0 = h, by1 = -1;
+        for (const i of blob) {
+          const x = i % w;
+          const y = (i - x) / w;
+          if (x < bx0) bx0 = x;
+          if (x > bx1) bx1 = x;
+          if (y < by0) by0 = y;
+          if (y > by1) by1 = y;
+        }
+        erase = blob.length / ((bx1 - bx0 + 1) * (by1 - by0 + 1)) < 0.45;
+      }
+      if (erase) for (const i of blob) mask[i] = 0;
+    }
+  }
+
+  // 2c. Fit: crop to the ink's bounding box and rescale so the drawing
+  // fills `fit` of the frame, centred. The model leaves a wide margin
+  // and the avatar is shown small; the pet should be big in it.
+  if (o.fit > 0) {
+    let x0 = w, y0 = h, x1 = -1, y1 = -1;
+    for (let y = 0; y < h; y++) {
+      for (let x = 0; x < w; x++) {
+        if (!mask[y * w + x]) continue;
+        if (x < x0) x0 = x;
+        if (x > x1) x1 = x;
+        if (y < y0) y0 = y;
+        if (y > y1) y1 = y;
+      }
+    }
+    if (x1 >= x0) {
+      const side = Math.max(x1 - x0 + 1, y1 - y0 + 1) / o.fit;
+      const cx = (x0 + x1) / 2;
+      const cy = (y0 + y1) / 2;
+      const fitted = new Uint8Array(w * h);
+      for (let y = 0; y < h; y++) {
+        for (let x = 0; x < w; x++) {
+          const sx = Math.round(cx + ((x + 0.5) / w - 0.5) * side);
+          const sy = Math.round(cy + ((y + 0.5) / h - 0.5) * side);
+          if (sx >= 0 && sx < w && sy >= 0 && sy < h && mask[sy * w + sx]) fitted[y * w + x] = 1;
+        }
+      }
+      mask = fitted;
+    }
   }
 
   // 3. Wobble: sample the mask through a smooth displacement field.
