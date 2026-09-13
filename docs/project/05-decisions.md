@@ -1279,7 +1279,14 @@ simplicity line that hands it a shape vocabulary instead of a mood —
 a wobbly blob for the head, the ears, two dots, a blob nose, one line
 for the mouth, one more thing only if it is what makes this dog this
 dog; if a line is not needed to tell it is this dog, do not draw it.
-Kept if it helps, dropped if not. If this still polishes past the
+"Simplicity works, I love these": the cleanest retriever of the day,
+dot eyes, one outline, a tongue. Kept. Then, for "a bit of
+craziness", the owner's line, "draw like you're drunk", written so
+it reads as geometry and not as texture (the speed line taught that a
+mood word alone becomes "sketchy", which is more marks): the hand
+wobbles, the proportions come out wrong, lines land in the wrong
+place, and you do not fix any of it. Kept if it helps, dropped if
+not. If this still polishes past the
 samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
