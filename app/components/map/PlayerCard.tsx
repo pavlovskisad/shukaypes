@@ -34,17 +34,24 @@ interface Props {
   onClose: () => void;
 }
 
-const PORTRAIT = 96;
+// The layout is the mock's: the portrait big on the left, and on the
+// right, one under another, the name, the level and the ground. The
+// portrait is the largest thing on the paper on purpose — the card is
+// about a dog's face.
+const PORTRAIT = 128;
 // The territory thumbnail is the leaderboard's own (ui/TerritoryMini):
 // the same simplification, the same dashed edge over a wash, the same
-// 92px — so the piece a walker recognises in the standings is the piece
-// on their card, not a cousin of it.
-const MINI = 92;
+// recipe — so the piece a walker recognises in the standings is the
+// piece on their card, not a cousin of it. Drawn a little under the
+// board's 92 to share the right column with its label.
+const MINI = 80;
 
 export function PlayerCard({ player, onClose }: Props) {
   const t = useStrings().playerCard;
   const tp = useStrings().profile;
   const pokePlayer = useGameStore((s) => s.pokePlayer);
+  const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
+  const setAppMode = useGameStore((s) => s.setAppMode);
   const [card, setCard] = useState<Card | null>(null);
   const [failed, setFailed] = useState(false);
   const [poked, setPoked] = useState(false);
@@ -77,6 +84,20 @@ export function PlayerCard({ player, onClose }: Props) {
     void pokePlayer(player.id);
   };
 
+  // Tap the ground → the map lands on it, the same jump a row on the
+  // standing makes (tasks.tsx onPickOwner): into the territory view
+  // first, since ground is only drawn there, then the flight. The card
+  // is already on the map screen, so there is no route to push; it
+  // closes itself so the flight is visible.
+  const piece = card?.piece ?? null;
+  const showGround = () => {
+    if (!piece || piece.length < 3) return;
+    haptic('light');
+    if (useGameStore.getState().appMode !== 'play') setAppMode('play');
+    setFocusedTerritory({ ownerId: player.id, ring: piece, pos: player.position });
+    onClose();
+  };
+
   const portrait: CSSProperties = {
     width: PORTRAIT,
     height: PORTRAIT,
@@ -95,9 +116,9 @@ export function PlayerCard({ player, onClose }: Props) {
       <div style={{ ...COLUMN, bottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.m}px)` }}>
         <div style={{ ...PAPER, padding: S.l }}>
           <HandDrawnFrame seed={`card-${player.id}`} radius={R.card} />
-          <div style={{ display: 'flex', alignItems: 'center', gap: S.m }}>
+          <div style={{ display: 'flex', alignItems: 'flex-start', gap: S.m }}>
             <div style={portrait} role="img" aria-label={name} />
-            <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
               <div
                 style={{
                   font: `700 ${TYPE.hero}px ${SYSTEM_FONT}`,
@@ -113,23 +134,36 @@ export function PlayerCard({ player, onClose }: Props) {
                 {card ? (card.level === null ? t.levelUnknown : tp.level(card.level)) : failed ? t.levelUnknown : '…'}
                 {isBot ? ` · ${t.bot}` : ''}
               </div>
+              {card || failed ? (
+                <div
+                  role={piece ? 'button' : undefined}
+                  onClick={piece ? showGround : undefined}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: S.s,
+                    marginTop: S.s,
+                    cursor: piece ? 'pointer' : 'default',
+                  }}
+                >
+                  {piece ? <TerritoryMini points={piece} color={ownerColorCss(player.id)} size={MINI} /> : null}
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{ font: `600 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK }}>
+                      {card && card.areaM2 > 0 ? t.territory : t.noTerritory}
+                    </div>
+                    {card && card.areaM2 > 0 ? (
+                      <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
+                        {tp.areaValue(card.areaM2)}
+                      </div>
+                    ) : null}
+                    {piece ? (
+                      <div style={{ ...LINK, display: 'inline-block', marginTop: S.xs }}>{t.showOnMap}</div>
+                    ) : null}
+                  </div>
+                </div>
+              ) : null}
             </div>
           </div>
-          {card || failed ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: S.m, marginTop: S.m }}>
-              {card?.piece ? <TerritoryMini points={card.piece} color={ownerColorCss(player.id)} size={MINI} /> : null}
-              <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ font: `600 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK }}>
-                  {card && card.areaM2 > 0 ? t.territory : t.noTerritory}
-                </div>
-                {card && card.areaM2 > 0 ? (
-                  <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
-                    {tp.areaValue(card.areaM2)}
-                  </div>
-                ) : null}
-              </div>
-            </div>
-          ) : null}
           <Primary label={poked ? t.poked : t.poke} onClick={poke} />
           <button type="button" style={{ ...LINK, alignSelf: 'center', marginTop: S.m }} onClick={onClose}>
             {t.close}

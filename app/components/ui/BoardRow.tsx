@@ -11,12 +11,20 @@
 // a player has actually walked past on the map — "the red blob by the
 // fountain" — and recognising WHO is worth more than re-reading HOW
 // MUCH, which the counter still says in numbers.
+//
+// Since D-73 the row also carries the dog's face: the drawn portrait
+// (D-72, or a bot's from the roster) beside the name, no ring — the
+// marker line is the edge, as on the profile card and the dog's card.
+// A row without one keeps the slot as a blank paper disc so the names
+// stay in a column.
 
-import { View, Text, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet } from 'react-native';
 import { colors } from '../../constants/colors';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { TerritoryMini } from './TerritoryMini';
+
+const PORTRAIT = 44;
 
 export function BoardRow({
   rank,
@@ -25,6 +33,7 @@ export function BoardRow({
   piece,
   color,
   you,
+  avatarUrl,
 }: {
   rank: string;
   name: string;
@@ -32,6 +41,7 @@ export function BoardRow({
   piece: { lat: number; lng: number }[] | undefined;
   color: string;
   you: boolean;
+  avatarUrl?: string | null;
 }) {
   return (
     <View style={styles.boardRow}>
@@ -42,6 +52,11 @@ export function BoardRow({
         {rank}
       </Text>
       <TerritoryMini points={piece} color={color} size={92} />
+      <View style={styles.portrait}>
+        {avatarUrl ? (
+          <Image source={{ uri: avatarUrl }} style={styles.portraitImage} accessibilityLabel={name} />
+        ) : null}
+      </View>
       <View style={styles.boardText}>
         <Text style={[styles.boardName, you && styles.boardYouText]} numberOfLines={1}>
           {name}
@@ -58,6 +73,20 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: S.m,
     paddingVertical: S.s,
+  },
+  // The face: as tall as the name and counter together, like the
+  // profile card's. Blank paper when nobody has drawn one.
+  portrait: {
+    width: PORTRAIT,
+    height: PORTRAIT,
+    borderRadius: PORTRAIT / 2,
+    backgroundColor: '#f4f4f4',
+    flexShrink: 0,
+  },
+  portraitImage: {
+    width: PORTRAIT,
+    height: PORTRAIT,
+    borderRadius: PORTRAIT / 2,
   },
   boardRank: {
     // 22 fitted a single digit and nothing else, so a two-character rank

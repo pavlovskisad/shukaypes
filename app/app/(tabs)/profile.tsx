@@ -20,7 +20,7 @@ import { useStrings } from '../../i18n/useStrings';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useLangStore } from '../../stores/langStore';
 import { CardStack, CARD_W } from '../../components/ui/CardStack';
-import { HandDrawnBar, HandDrawnFrame, PICTURE_INSET } from '../../components/ui/HandDrawn';
+import { HandDrawnBar, HandDrawnFrame } from '../../components/ui/HandDrawn';
 import { AccountEditSheet } from '../../components/ui/AccountEditSheet';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
@@ -111,10 +111,11 @@ function StatRow({ label, value }: { label: string; value: string | number | und
 // is a corner affordance and not a control row.
 const EDIT_CHIP_H = 28;
 // The pet's portrait beside its name: as tall as the name and level
-// lines together, and inset from its drawn edge like every picture on
-// paper here (HandDrawn's PICTURE_INSET).
+// lines together. No drawn ring — the drawing's own marker line is the
+// edge (the owner asked for the border dropped, 14 Sep); the same rule
+// as the dog's card on the map.
 const PORTRAIT_SIZE = 44;
-const PORTRAIT_INSET = PICTURE_INSET;
+const PORTRAIT_INSET = 0;
 
 export default function ProfileScreen() {
   const t = useStrings();
@@ -238,10 +239,9 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>{t.profile.stats.companionStats}</Text>
             <View style={styles.companionRow}>
               {/* The pet's portrait (D-72), when one has been drawn:
-                  a small round one on paper, beside the name. */}
+                  a small round one beside the name, no ring. */}
               {avatarUrl ? (
                 <View style={styles.portrait}>
-                  <HandDrawnFrame radius={PORTRAIT_SIZE / 2} />
                   <Image
                     source={{ uri: avatarUrl }}
                     style={styles.portraitImage}
