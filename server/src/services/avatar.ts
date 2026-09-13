@@ -11,17 +11,24 @@
 // that, and it is made in the sheet that asks for the photo.
 //
 // TWO RECIPES, one env switch (AVATAR_RECIPE):
-//   marker     (default) the photo alone on the single-image endpoint,
-//              with the style described in words. The cheaper call.
-//   reference  the photo goes in beside three of the illustrator's own
-//              drawings (assets/avatar-refs, the landing page's
-//              posters) on the multi-image endpoint, and the model is
-//              told to borrow their hand. NOT THE DEFAULT: on its first
-//              real run (13 Sep, a golden retriever) the model drew
-//              the reference bulldog, near verbatim, and ignored the
-//              photo — the "do not draw the reference animals" line
-//              did not hold. Kept for experiments; the fix is a
-//              different model or a single non-animal reference.
+//   reference  (default) the photo goes to an image-editing model
+//              built for "make this look like that" (Nano Banana,
+//              Google's Gemini image edit, behind fal.ai) beside three
+//              of the illustrator's own drawings (assets/avatar-refs,
+//              the landing page's posters), and the model is told to
+//              borrow their hand. The owner's words, 13 Sep: the style
+//              is a child's uneven marker doodle, and no sentence got
+//              a model there — the words-only drawing came back a
+//              handsome, detailed, realistic ink retriever. Pictures
+//              of the hand are the brief.
+//   marker     the photo alone on FLUX Kontext, single image, the
+//              style in words. The fallback when the reference files
+//              are missing. Good likeness, wrong hand.
+//
+// NOT Kontext's own multi-image endpoint for the reference recipe: on
+// its one real run it drew the reference bulldog instead of the
+// owner's retriever. An editing model that composites its inputs
+// cannot be handed an animal as a style sample.
 //
 // Configuration — the feature ships dormant and /auth/me says
 // `avatarConfigured: false`, which hides the step entirely:
@@ -46,7 +53,7 @@ import path from 'node:path';
 import type { FastifyBaseLogger } from 'fastify';
 
 const DEFAULT_API_URL = 'https://fal.run/fal-ai/flux-pro/kontext';
-const DEFAULT_MULTI_API_URL = 'https://fal.run/fal-ai/flux-pro/kontext/max/multi';
+const DEFAULT_REFERENCE_API_URL = 'https://fal.run/fal-ai/nano-banana/edit';
 // Three of the illustrator's drawings, chosen for range rather than
 // breed: shaggy (hatching), bulldog (folds, dots), poodle (loops).
 const REF_FILES = ['shaggy.png', 'bulldog.png', 'poodle.png'];
@@ -76,13 +83,13 @@ export function avatarConfigured(): boolean {
 export type AvatarRecipe = 'reference' | 'marker';
 
 export function avatarRecipe(): AvatarRecipe {
-  return process.env.AVATAR_RECIPE?.trim() === 'reference' ? 'reference' : 'marker';
+  return process.env.AVATAR_RECIPE?.trim() === 'marker' ? 'marker' : 'reference';
 }
 
 function apiUrl(recipe: AvatarRecipe): string {
   const override = process.env.FAL_API_URL?.trim();
   if (override) return override;
-  return recipe === 'reference' ? DEFAULT_MULTI_API_URL : DEFAULT_API_URL;
+  return recipe === 'reference' ? DEFAULT_REFERENCE_API_URL : DEFAULT_API_URL;
 }
 
 function refsDir(): string {
@@ -120,17 +127,21 @@ function petWord(pet: { species: string | null; breed: string | null }): string 
   return pet.breed ? `${what} (${pet.breed})` : what;
 }
 
-// The reference recipe's words: the same rules, said about the
-// drawings that ride along, plus the one thing a multi-image model
-// gets wrong without being told — it must not draw the reference
-// animals.
+// The reference recipe's words. The drawings carry the style; the
+// words say which image is the subject and which are the samples,
+// name the qualities the owner asked for (uneven, childlike, little
+// detail) so the model does not "improve" on the samples, and forbid
+// the one thing an editing model does unasked: drawing the sample.
 export function referencePrompt(pet: { species: string | null; breed: string | null }): string {
+  const what = pet.species === 'cat' ? 'cat' : pet.species === 'dog' ? 'dog' : 'pet';
   return (
-    `Draw the ${petWord(pet)} from the first image as a portrait in exactly the drawing style of the other ` +
-    'three images: thick black felt-tip marker, one uniform line weight, a big simplified head facing the viewer, ' +
-    "dot eyes, a solid black nose, hatching only where the fur is shaggy, plain white background and nothing else. Keep the first animal's " +
-    'own ear shape, muzzle, markings and expression recognisable. Do not draw any of the animals from the reference images, ' +
-    'only borrow their style. No shading, no grey, no colour, no text, no frame.'
+    `The first image is a photo of a ${petWord(pet)}. The other three images are drawings by one illustrator and ` +
+    'show only a drawing STYLE: a thick black felt-tip marker, one uniform line weight, uneven wobbly hand-drawn ' +
+    "lines like a child's drawing, a big simplified head, dot eyes, a solid black nose, very little detail, a few " +
+    'hatching strokes only where the fur is shaggy, plain white background and nothing else. ' +
+    `Draw the ${what} from the photo — this exact animal, its own ear shape, muzzle, markings and expression — ` +
+    "as a portrait in that illustrator's style, as crude and playful as the drawings, not more polished. " +
+    'Do not draw any of the animals from the drawings. No shading, no grey, no colour, no fine detail, no text, no frame.'
   );
 }
 
@@ -165,13 +176,13 @@ export async function drawAvatar(
   const photoUri = `data:${photo.mime};base64,${photo.bytes.toString('base64')}`;
   const refs = avatarRecipe() === 'reference' ? referenceImages(log) : null;
   const recipe: AvatarRecipe = refs ? 'reference' : 'marker';
-  // The model's own safety filter: 2 is its default; a family pet
-  // photo never trips it, and a refusal is still surfaced below.
-  const common = { output_format: 'png', aspect_ratio: '1:1', num_images: 1, safety_tolerance: '2' };
+  const common = { output_format: 'png', aspect_ratio: '1:1', num_images: 1 };
   const request =
     recipe === 'reference'
       ? { prompt: referencePrompt(pet), image_urls: [photoUri, ...(refs as string[])], ...common }
-      : { prompt: avatarPrompt(pet), image_url: photoUri, ...common };
+      : // Kontext's own safety filter: 2 is its default; a family pet
+        // photo never trips it, and a refusal is still surfaced below.
+        { prompt: avatarPrompt(pet), image_url: photoUri, ...common, safety_tolerance: '2' };
 
   const started = Date.now();
   const ctl = new AbortController();

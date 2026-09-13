@@ -1120,14 +1120,19 @@ those drawings along with the photo on the multi-image endpoint
 drawing: the owner sent a golden retriever and got the reference
 bulldog back, near verbatim — the editing model treated a reference
 as the subject, and "do not draw the reference animals" did not hold.
-Reverted the same afternoon: `marker` (words only, single image) is
-the default, `reference` stays in the code for experiments and the
-drawings stay in `server/assets/avatar-refs`. What is measured, not
-reasoned: this model cannot be handed an animal drawing as a style
-sample. The routes left are a reference that is not an animal, a
-model built for style transfer from a reference, or the style
-adapter trained on all ten drawings (with the illustrator's
-agreement, since it clones their line).
+Reverted the same afternoon to `marker` (words only, single
+image), whose first drawing was the retriever, recognisable — and,
+the owner's words, "too detailed and too realistic": a handsome ink
+illustration, not a child's uneven marker doodle. Two things measured
+in one afternoon, then: Kontext's multi-image endpoint cannot be
+handed an animal drawing as a style sample, and no sentence gets
+Kontext to the naive hand. So the reference recipe moved to a model
+built for "make this look like that" (Nano Banana, Google's image
+edit, via fal) with the same three drawings, and is the default
+again; `marker` stays as the fallback. If this one also copies the
+sample or polishes past it, what is left is the style adapter trained
+on all ten drawings (with the illustrator's agreement, since it
+clones their line).
 
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e
