@@ -1349,8 +1349,9 @@ Three things follow.
 `OtherWalker` draws a 40px white disc with a `HandDrawnFrame` at
 stroke 1.25 (the profile card's ring is 2 — "check the chips border
 so its thin like here and not fat like we have now in profile") in
-the walker's territory colour, and the drawn portrait (D-72) inside
-it; a walker without a portrait gets the sitting dog sprite in the
+plain ink (the first cut coloured it by territory; on the map that
+read as a badge, and the owner asked for black "as everywhere"), and
+the drawn portrait (D-72) inside it; a walker without a portrait gets the sitting dog sprite in the
 disc, so a chip is never blank. The old rendering — sprite plus name
 tag — is not deleted: `OTHER_WALKER_STYLE` in
 `app/constants/experiments.ts` is `'chip' | 'dog'`, one word to flip
@@ -1392,13 +1393,15 @@ list in the same order so the `bot:N` rows keep their names.
 
 **The face travels.** The same night the board rows (the profile's
 «хто тримає цей район» and the full sheet) got the portrait beside
-the name, 44px and ringless, from a new `avatarUrl` on each
-leaderboard entry — a person's by stored file id, a bot's from the
+the name — 88px, twice the profile card's, ringless, first after the
+rank with the silhouette moved to the row's end — from a new
+`avatarUrl` on each leaderboard entry — a person's by stored file id, a bot's from the
 roster — with a blank paper disc where nobody has drawn one so the
 names stay in a column; and the card's territory row became a tap
 that makes the standing's jump (`onPickOwner`: into the territory
 view, then the flight onto the dog), closing the card so the flight
-is seen.
+is seen; no link text says so — the section is the tap, like a board
+row.
 
 **What would change it.** A message button: the card is the place
 for it, and the sheet's `Primary` is the only button now on purpose.

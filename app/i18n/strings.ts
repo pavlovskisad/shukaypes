@@ -293,7 +293,6 @@ export interface AppStrings {
     poke: string;
     poked: string;
     close: string;
-    showOnMap: string;
   };
   chat: {
     needLocation: string;
@@ -849,7 +848,6 @@ const uk: AppStrings = {
     poke: 'помахати 👋',
     poked: 'помахали!',
     close: 'закрити',
-    showOnMap: 'показати на мапі',
   },
   chat: {
     needLocation: 'потрібна твоя геолокація',
@@ -1394,7 +1392,6 @@ const en: AppStrings = {
     poke: 'wave 👋',
     poked: 'waved!',
     close: 'close',
-    showOnMap: 'show on the map',
   },
   chat: {
     needLocation: 'need your location first',
