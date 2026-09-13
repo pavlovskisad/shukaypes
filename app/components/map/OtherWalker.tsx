@@ -10,6 +10,8 @@ import { useGameStore } from '../../stores/gameStore';
 import { haptic } from '../../utils/haptics';
 import { R } from '../../constants/radius';
 import { INK, SURFACE } from '../../constants/surface';
+import { OTHER_WALKER_STYLE } from '../../constants/experiments';
+import { HandDrawnFrame, PICTURE_INSET } from '../ui/HandDrawn';
 
 // One other player's dog on the map (real player or bot). Presence updates
 // arrive every ~15s (real) / ~3.5s (bots), so we GLIDE the dog toward its
@@ -22,12 +24,22 @@ import { INK, SURFACE } from '../../constants/surface';
 
 interface Props {
   player: NearbyPlayer;
+  // Chip mode: a tap opens the dog's card (D-73) instead of poking
+  // straight away; the poke lives on the card.
+  onOpen?: (player: NearbyPlayer) => void;
 }
+
+// The chip (D-73): a round paper disc the size of a map pin's head,
+// the portrait inside it. THIN line on purpose — the profile's 2px
+// frame at 44px reads as a coin; at chip size the mock's edge is a
+// hairline, so this one is drawn at 1.25.
+const CHIP = 40;
+const CHIP_STROKE = 1.25;
 
 // Metres-per-degree helpers for the small movement/facing deltas.
 const M_PER_LAT = 110540;
 
-export function OtherWalker({ player }: Props) {
+export function OtherWalker({ player, onOpen }: Props) {
   // The current LEG: where this dog was when the last position arrived,
   // where it is headed, when it set off, and how long it should take.
   //
@@ -141,6 +153,83 @@ export function OtherWalker({ player }: Props) {
     void pokePlayer(player.id);
   };
 
+  const chip = OTHER_WALKER_STYLE === 'chip';
+  const onTap = chip && onOpen ? () => { haptic('light'); onOpen(player); } : onPoke;
+
+  if (chip) {
+    return (
+      <MapLibreMarker
+        position={pos}
+        anchor="center"
+        cullNearHorizon
+        cullSkyMarginPx={CHIP}
+        zIndex={Z.HUD_CHIPS - 2}
+        onClick={onTap}
+      >
+        <div
+          role="button"
+          aria-label={player.name}
+          style={{
+            position: 'relative',
+            width: CHIP,
+            height: CHIP,
+            borderRadius: '50%',
+            background: SURFACE.fill,
+            border: '2px solid transparent',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+            cursor: 'pointer',
+            // The chip walks: a subtle lean in the direction of travel
+            // is the only motion it gets, so a moving dog still reads
+            // as moving against the still ones.
+            transform: moving ? `rotate(${facingLeft ? -6 : 6}deg)` : 'none',
+            transition: 'transform 300ms ease',
+          }}
+        >
+          {/* The edge takes the owner's ground colour while the ground is
+              painted, same rule as the name tag had: "whose zone is that"
+              is answerable by the chip standing on it. */}
+          <HandDrawnFrame
+            seed={player.id}
+            radius={CHIP / 2}
+            strokeWidth={CHIP_STROKE}
+            color={territoryVisible ? ownerColorCss(player.id) : INK}
+          />
+          {player.avatarUrl ? (
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                inset: PICTURE_INSET,
+                borderRadius: '50%',
+                backgroundImage: `url("${player.avatarUrl}")`,
+                backgroundSize: 'cover',
+                backgroundPosition: 'center center',
+                backgroundRepeat: 'no-repeat',
+              }}
+            />
+          ) : (
+            // No portrait drawn: the shared dog, small, sitting in the
+            // chip. Bottom-aligned so its paws are on the chip's floor.
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                inset: PICTURE_INSET,
+                borderRadius: '50%',
+                overflow: 'hidden',
+                display: 'flex',
+                alignItems: 'flex-end',
+                justifyContent: 'center',
+              }}
+            >
+              <DogSprite anim="sitting" facingLeft={facingLeft} scale={0.55} />
+            </div>
+          )}
+        </div>
+      </MapLibreMarker>
+    );
+  }
+
   return (
     <MapLibreMarker
       position={pos}
@@ -151,7 +240,7 @@ export function OtherWalker({ player }: Props) {
       // steep pitch. We accept a little float on the truly-distant ones.
       cullSkyMarginPx={40}
       zIndex={Z.HUD_CHIPS - 2}
-      onClick={onPoke}
+      onClick={onTap}
     >
       <div
         style={{

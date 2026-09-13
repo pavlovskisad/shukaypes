@@ -71,6 +71,7 @@ import { fromProblem } from '../lib/mailFrom.js';
 import { resetMail, verifyMail } from '../services/authMail.js';
 import { AvatarError, avatarConfigured, drawAvatar } from '../services/avatar.js';
 import { storePhoto } from '../services/crosspost.js';
+import { forgetMeta } from '../services/presence.js';
 import { buildPhotoUrl } from '../services/photoUrl.js';
 import { decodePhoto } from '../lib/photoBytes.js';
 
@@ -580,6 +581,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         .where(eq(schema.users.id, user.id))
         .returning();
       if (!updated) return fail(reply, 500, 'update_failed');
+      forgetMeta(user.id);
       req.log.info({ kind: 'auth_avatar', user: user.id, draws_today: recent + 1 }, '[auth] portrait drawn');
       return { ok: true, me: buildMe(updated, viaOf(req)) };
     },
@@ -594,6 +596,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       .where(eq(schema.users.id, user.id))
       .returning();
     if (!updated) return fail(reply, 500, 'update_failed');
+    forgetMeta(user.id);
     req.log.info({ kind: 'auth_avatar', user: user.id, removed: true }, '[auth] portrait removed');
     return { ok: true, me: buildMe(updated, viaOf(req)) };
   });

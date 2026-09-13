@@ -1335,3 +1335,58 @@ line).
 file, and `FAL_API_URL` already stands in for it in the local e2e
 stack. The storage: if photos ever leave Telegram, this leaves with
 them. The cap: `AVATAR_DAILY_CAP` in routes/auth.ts, one number.
+
+### D-73 · Other walkers are chips, and a tap opens their card ✅
+
+The owner's mock (13 Sep) shows the people on the map as small
+round portraits with a thin ink ring, not as the shared dog sprite,
+and a tap on one opening a sheet: the portrait big and unframed, the
+name, the level, a miniature of their territory with its size, and a
+«помахати» button — "without msg button right now only poke button".
+Three things follow.
+
+**The chip is the portrait; the sprite stays one constant away.**
+`OtherWalker` draws a 40px white disc with a `HandDrawnFrame` at
+stroke 1.25 (the profile card's ring is 2 — "check the chips border
+so its thin like here and not fat like we have now in profile") in
+the walker's territory colour, and the drawn portrait (D-72) inside
+it; a walker without a portrait gets the sitting dog sprite in the
+disc, so a chip is never blank. The old rendering — sprite plus name
+tag — is not deleted: `OTHER_WALKER_STYLE` in
+`app/constants/experiments.ts` is `'chip' | 'dog'`, one word to flip
+back "if we dont like chips". The tap on a chip opens the card; the
+tap on a dog still pokes directly, as before.
+
+**The card reads from presence first and asks the server second.**
+Presence (`mp:meta`) carries the portrait URL now (`a`), so the chip
+and the card's header render from what the map already has; the
+sheet then fetches `GET /players/:id` for the level and the
+territory — the largest piece of their ground, decimated to the same
+48 points the map's own polygons use, and the area — so the map
+poll does not grow by a polygon per walker. A person's level is
+`xpProgress(companion_state.xp)`; a walker without ground shows
+«ще без території». The poke button is the existing `POST /poke`;
+pokes at bots are still swallowed server-side (the wave is local).
+The portrait cache in `selfMeta` is forgotten when a portrait is
+drawn, kept or removed, so the next poll carries the new one rather
+than the hour-old null.
+
+**The bots have breeds, portraits and a level, and none of it is
+real.** Thirty names in `services/botAvatars.ts`, each with a breed
+and a one-line description written by hand in the shape
+`petDescription.ts` produces; `pnpm bots:avatars` draws each through
+the D-72 recipe (the two samples, no photo) and the ink pass into
+`server/assets/bot-avatars/<i>.png`, served at `/bot-avatars/:n.png`
+with a day's cache and committed to the repo like any asset. The
+level is `2 + (i·7 mod 11)`, a stable fiction so a bot's card does
+not say «рівень невідомий» beside a portrait. Until the files are
+drawn — it needs `FAL_KEY` in the session that runs it — the chips
+show the sprite and the card shows no portrait, which is the honest
+state, not an error. The first twenty names are the old `NAMES`
+list in the same order so the `bot:N` rows keep their names.
+
+**What would change it.** A message button: the card is the place
+for it, and the sheet's `Primary` is the only button now on purpose.
+The chip size and stroke are two constants at the top of
+`OtherWalker.tsx`. If presence ever carries the level, the second
+fetch goes.

@@ -23,6 +23,7 @@ import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { markAsBot, seedBotTerritory } from './territory.js';
 import { isOnWater } from '../data/kyivWater.js';
+import { botAvatarUrl, botEntry } from './botAvatars.js';
 
 interface LatLng {
   lat: number;
@@ -101,11 +102,6 @@ const OFFLINE_MAX_MS = 240_000;
 const TICK_MS = 3500;
 const MAX_DT_S = 10;
 
-const NAMES = [
-  'Рекс', 'Барон', 'Лакі', 'Бім', 'Джек', 'Марс', 'Тузік', 'Шарік',
-  'Найда', 'Белла', 'Молі', 'Чапа', 'Персик', 'Умка', 'Гав', 'Кузя',
-  'Арчі', 'Боня', 'Джесі', 'Локі',
-];
 
 const mPerLat = 110540;
 const mPerLng = (lat: number) => 111320 * Math.cos((lat * Math.PI) / 180);
@@ -176,6 +172,9 @@ interface Bot {
   // something to take — and so the PvP half of the mechanic is testable
   // before the population exists.
   home: LatLng; // the patch they seed and keep coming back to
+  // The portrait drawn for this roster entry (botAvatars.ts), or null
+  // until `pnpm bots:avatars` has run for it.
+  avatar: string | null;
   lastMarkAt: number;
   // Where it last marked. Same spacing rule the player's dog gets: never
   // twice on the same patch in a row, but free to mark near an OLDER mark
@@ -236,7 +235,8 @@ function spawnBot(i: number, home: LatLng): Bot {
     id: `bot:${i}`,
     pos,
     target: pos,
-    name: NAMES[i % NAMES.length]!,
+    name: botEntry(i).name,
+    avatar: botAvatarUrl(i),
     speed: rand(SPEED_MIN, SPEED_MAX),
     wander: rand(-WANDER_MAX_RAD, WANDER_MAX_RAD),
     state: 'walk',
@@ -400,7 +400,7 @@ export function startMultiplayerCron(
           const marking: Bot[] = [];
           for (const b of bots) {
             if (!tickBot(b, dtS, now)) continue;
-            online.push({ id: b.id, pos: b.pos, name: b.name, photo: null, bot: true });
+            online.push({ id: b.id, pos: b.pos, name: b.name, photo: null, avatar: b.avatar, bot: true });
             // EXACTLY the gate a player's dog gets, and nothing else.
             //
             // There were two extra conditions here, and both made a bot

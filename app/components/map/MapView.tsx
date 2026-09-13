@@ -53,6 +53,7 @@ import { DOG_MIN_Y, DOG_ROOM } from '../ui/AccountDoor';
 import { easeCamera } from './camera';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
+import { PlayerCard } from './PlayerCard';
 import { LostDogCardStack, LostDogCardView } from '../ui/LostDogCardStack';
 import { DogPrompt } from './DogPrompt';
 import { createBuildingAvoider } from './buildingAvoider';
@@ -80,7 +81,7 @@ import { clusterByDistance, jitterInRadius } from '../../utils/cluster';
 import { SniffPress } from './SniffPress';
 import { WalkStops } from './WalkStops';
 import { TerritoryLayer } from './TerritoryLayer';
-import type { LatLng } from '@shukajpes/shared';
+import type { LatLng, NearbyPlayer } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -445,6 +446,8 @@ export default function MapViewWeb() {
   // Stored in state too so React-tree children (markers) can be wired
   // to the map via MapContext when it's ready.
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
+  // The dog whose card is open (D-73), from a tap on its chip.
+  const [cardPlayer, setCardPlayer] = useState<NearbyPlayer | null>(null);
   // Map fires its own click on the canvas independently of DOM event
   // propagation from markers — `stopPropagation` inside a marker
   // child doesn't reach it. At low zoom the companion overlaps the
@@ -3360,7 +3363,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             Hidden in supersniff so the whole focus is the dog search. */}
         {DOG_CAM && dogCam
           ? null
-          : otherWalkers.map((p) => <OtherWalker key={p.id} player={p} />)}
+          : otherWalkers.map((p) => <OtherWalker key={p.id} player={p} onOpen={setCardPlayer} />)}
 
         {/* No zone RING in the cinematic dog view — at the close zoom the
             circle cut across mid-screen and read as clutter. The blue
@@ -3688,6 +3691,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           <CrayonRoute path={searchRoute} autoFit={false} />
         ) : null}
       </MapContext.Provider>
+
+      {/* A tapped dog's card (D-73). Portaled to body like the toast. */}
+      {MULTIPLAYER && onMapScreen && cardPlayer ? (
+        <PlayerCard player={cardPlayer} onClose={() => setCardPlayer(null)} />
+      ) : null}
 
       {/* "X poked you!" notification (multiplayer). Portaled to body; taps
           fly the camera to the poker if they're still online. */}

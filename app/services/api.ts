@@ -3,6 +3,7 @@ import type {
   FoodItem,
   LatLng,
   NearbyPlayer,
+  PlayerCard,
   Poke,
   Quest,
   Token,
@@ -754,6 +755,9 @@ export const api = {
       method: 'POST',
       body: JSON.stringify({ targetId }),
     }),
+
+  // The card behind a dog on the map (D-73).
+  playerCard: (id: string) => req<PlayerCard>(`/players/${encodeURIComponent(id)}`),
 
   collectToken: (tokenId: string, pos: LatLng, force = false) =>
     req<{ ok: true; value: number }>('/collect/token', {

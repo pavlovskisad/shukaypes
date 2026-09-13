@@ -284,6 +284,16 @@ export interface AppStrings {
     };
     sceneA11y: (mode: string) => string;
   };
+  // The card behind a dog on the map (D-73).
+  playerCard: {
+    levelUnknown: string;
+    bot: string;
+    territory: string;
+    noTerritory: string;
+    poke: string;
+    poked: string;
+    close: string;
+  };
   chat: {
     needLocation: string;
     noNearbySpots: string;
@@ -830,6 +840,15 @@ const uk: AppStrings = {
     },
     sceneA11y: (mode) => `сцена: ${mode}. натисни на пса — гавкне.`,
   },
+  playerCard: {
+    levelUnknown: 'рівень невідомий',
+    bot: 'сусідський пес',
+    territory: 'територія',
+    noTerritory: 'ще без території',
+    poke: 'помахати 👋',
+    poked: 'помахали!',
+    close: 'закрити',
+  },
   chat: {
     needLocation: 'потрібна твоя геолокація',
     noNearbySpots: 'поряд поки нічого',
@@ -1364,6 +1383,15 @@ const en: AppStrings = {
       en: 'english',
     },
     sceneA11y: (mode) => `scene: ${mode}. tap the dog to make them bark.`,
+  },
+  playerCard: {
+    levelUnknown: 'level unknown',
+    bot: 'neighbourhood dog',
+    territory: 'territory',
+    noTerritory: 'no territory yet',
+    poke: 'wave 👋',
+    poked: 'waved!',
+    close: 'close',
   },
   chat: {
     needLocation: 'need your location first',
