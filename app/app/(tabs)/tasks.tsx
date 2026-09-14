@@ -136,7 +136,7 @@ export default function TasksScreen() {
     board: TerritoryRanking[];
     you: { areaM2: number; rank: number | null };
   } | null>(null);
-  // The happiness index board (D-74), same lifecycle as the standing:
+  // The happiness index board (D-75), same lifecycle as the standing:
   // null until fetched, and a failed fetch leaves the card unrendered.
   const [happy, setHappy] = useState<{
     board: HappinessRanking[];
@@ -535,7 +535,7 @@ export default function TasksScreen() {
           </View>
         ) : null}
 
-        {/* The happiness index (D-74): whose dog lives the happiest
+        {/* The happiness index (D-75): whose dog lives the happiest
             life — an all-time, time-weighted average of the meter over
             the hours the person was with the dog. Same row as the
             standing, the number where the silhouette would be; your

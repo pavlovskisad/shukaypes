@@ -88,7 +88,10 @@ export interface AppStrings {
     done: string;
     // The pet's portrait (D-72): the dog's two lines, the studio's
     // buttons, and the row on the edit sheet.
-    avatarAsk: (petName: string | null) => string;
+    // Three askings: a named pet, a pet with no name, and no pet at all —
+    // the last is asked for their own photo (the model draws them as an
+    // animal), because the portrait is for everybody on the map.
+    avatarAsk: (pet: { name: string | null } | null) => string;
     avatarDoneAsk: string;
     avatarPick: string;
     avatarChange: string;
@@ -120,6 +123,10 @@ export interface AppStrings {
     recenterOnCompanion: string;
     locating: string;
     usingKyivFallback: string;
+    // GPS is being jammed (the fix landed outside the city) and the app
+    // is standing on the last real position, or on Maidan if there never
+    // was one. A status, not a button — nothing to do but wait (D-74).
+    gpsHeld: string;
     // The map cannot be drawn here (no WebGL2 — an old iOS or Android
     // browser). Says what to do rather than leaving "locating…" up forever.
     mapUnsupported: string;
@@ -146,6 +153,10 @@ export interface AppStrings {
   };
   bubbles: {
     greeting: string;
+    // The dog explaining a jammed GPS on the way in, and the fix coming
+    // back on the way out. Once each, not every tick.
+    gpsJammed: string;
+    gpsBack: string;
     // Varied "leaving supersniff" lines so repeated toggles don't feel canned.
     backToWalks: string[];
     // Varied "entering supersniff" lines for repeat entries. The FIRST entry
@@ -551,10 +562,12 @@ const uk: AppStrings = {
     changePasswordLink: 'змінити пароль',
     currentPasswordLabel: 'поточний пароль',
     done: 'готово',
-    avatarAsk: (petName) =>
-      petName
-        ? `а покажи мені ${petName}! я намалюю портрет для мапи. тільки знай: у нас звірячий всесвіт — якщо на фото людина, перетворю її на звіра, який їй пасує.`
-        : 'а покажи мені свого хвостатого! я намалюю портрет для мапи. тільки знай: у нас звірячий всесвіт — якщо на фото людина, перетворю її на звіра, який їй пасує.',
+    avatarAsk: (pet) =>
+      pet?.name
+        ? `а покажи мені ${pet.name}! я намалюю портрет для мапи. тільки знай: у нас звірячий всесвіт — якщо на фото людина, перетворю її на звіра, який їй пасує.`
+        : pet
+          ? 'а покажи мені свого хвостатого! я намалюю портрет для мапи. тільки знай: у нас звірячий всесвіт — якщо на фото людина, перетворю її на звіра, який їй пасує.'
+          : 'а покажи мені себе! я намалюю портрет для мапи. у нас звірячий всесвіт — тож на мапі ти будеш звіром, який тобі пасує.',
     avatarDoneAsk: 'ось! схожий? якщо ні — спробуємо ще раз.',
     avatarPick: 'вибрати фото',
     avatarChange: 'інше фото',
@@ -614,6 +627,7 @@ const uk: AppStrings = {
     recenterOnCompanion: 'повернутись до пса',
     locating: 'шукаю себе…',
     usingKyivFallback: 'опускаюсь на Київ',
+    gpsHeld: 'gps глушать — стоїмо тут',
     mapUnsupported:
       'цей браузер не вміє малювати мапу. онови систему або відкрий шукайпес у свіжому Chrome чи Safari',
     mapLoadFailed: 'мапа не довантажилась. перевір звʼязок',
@@ -636,6 +650,9 @@ const uk: AppStrings = {
   },
   bubbles: {
     greeting: 'гав! натисни на мене — розкажу, що до чого 🐾',
+    gpsJammed:
+      'gps зараз глушать, тож я не бачу, де ми. постоїмо тут, поки не повернеться — все інше працює 🐾',
+    gpsBack: 'о, gps повернувся! йдемо далі 🐕',
     backToWalks: [
       'добре, повертаємось гуляти 🐾',
       'ніс відпочине — просто гуляємо 🐕',
@@ -1114,10 +1131,12 @@ const en: AppStrings = {
     changePasswordLink: 'change password',
     currentPasswordLabel: 'current password',
     done: 'done',
-    avatarAsk: (petName) =>
-      petName
-        ? `now show me ${petName}! i will draw a portrait for the map. fair warning: this is an animal world — a human in the photo gets turned into the animal that suits them.`
-        : 'now show me your tailed one! i will draw a portrait for the map. fair warning: this is an animal world — a human in the photo gets turned into the animal that suits them.',
+    avatarAsk: (pet) =>
+      pet?.name
+        ? `now show me ${pet.name}! i will draw a portrait for the map. fair warning: this is an animal world — a human in the photo gets turned into the animal that suits them.`
+        : pet
+          ? 'now show me your tailed one! i will draw a portrait for the map. fair warning: this is an animal world — a human in the photo gets turned into the animal that suits them.'
+          : "now show me you! i will draw a portrait for the map. this is an animal world — so on the map you'll be the animal that suits you.",
     avatarDoneAsk: 'there! a likeness? if not, we try again.',
     avatarPick: 'pick a photo',
     avatarChange: 'another photo',
@@ -1177,6 +1196,7 @@ const en: AppStrings = {
     recenterOnCompanion: 'recenter on companion',
     locating: 'locating…',
     usingKyivFallback: 'using kyiv fallback',
+    gpsHeld: 'gps jammed — standing here',
     mapUnsupported:
       'this browser cannot draw the map. update your system, or open шукайпес in a recent Chrome or Safari',
     mapLoadFailed: 'the map did not load. check your connection',
@@ -1199,6 +1219,9 @@ const en: AppStrings = {
   },
   bubbles: {
     greeting: "woof! tap me to learn what's what 🐾",
+    gpsJammed:
+      "gps is being jammed right now, so I can't tell where we are. we'll stand here until it comes back — everything else works 🐾",
+    gpsBack: 'oh, gps is back! onwards 🐕',
     backToWalks: [
       'okay, back to walks 🐾',
       'nose off duty — just strolling now 🐕',

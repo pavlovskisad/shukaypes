@@ -21,7 +21,7 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     if (!user || !companion) return { error: 'user not found' };
 
-    // "The person is with the dog" (D-74): the decay cron drains
+    // "The person is with the dog" (D-75): the decay cron drains
     // happiness and counts time toward the happiness index only for
     // rows polled within the online window. Coming back after a gap
     // also restarts the decay clock, so the dog wakes as it was left

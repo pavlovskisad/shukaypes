@@ -1,4 +1,4 @@
-// The happiness index (D-74): whose dog lives the happiest life.
+// The happiness index (D-75): whose dog lives the happiest life.
 //
 // An honest, all-time, time-weighted average of the happiness meter
 // over the seconds the person was actually with the dog. The two

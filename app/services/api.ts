@@ -214,7 +214,7 @@ export interface RivalTerritory {
   shapes: TerritoryShape[];
 }
 
-// A place on the happiness index board (D-74).
+// A place on the happiness index board (D-75).
 export interface HappinessRanking {
   userId: string;
   name: string;
@@ -846,7 +846,7 @@ export const api = {
   // nobody is looking at. `rank` is null when you're outside the top ten.
   // `limit` widens the board past the default ten (clamped server-side)
   // for the fullscreen "see all" view.
-  // The happiness index board (D-74): whose dog lives the happiest
+  // The happiness index board (D-75): whose dog lives the happiest
   // life — an all-time, time-weighted average of the meter over the
   // time the person was with the dog. `you.index` is null until the
   // dog has an hour of counted life.

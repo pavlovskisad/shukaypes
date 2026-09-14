@@ -154,7 +154,7 @@ export const companionState = pgTable('companion_state', {
   // UPDATE across every row, and it can branch on a column but can't go
   // and compute a hull per user.
   onHomeGround: boolean('on_home_ground').notNull().default(false),
-  // The happiness index (D-74): happiness × seconds and seconds, summed
+  // The happiness index (D-75): happiness × seconds and seconds, summed
   // by the decay cron only while the person is with the dog. The index
   // is the ratio — an all-time, time-weighted average that moves with
   // how the person plays. `last_poll_at` is the "with the dog" signal:

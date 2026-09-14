@@ -15,7 +15,7 @@ import { runCronTick } from './cronUtils.js';
 // the geometry in hand. Hunger is untouched on purpose: that's the bones
 // economy, and slowing it would take the point out of walking to parks.
 //
-// ONLY WHILE THE PERSON IS THERE (D-74). Rows whose last /state poll is
+// ONLY WHILE THE PERSON IS THERE (D-75). Rows whose last /state poll is
 // older than the online window are skipped entirely: the dog does not
 // drain while its person is away (it wakes as it was left, instead of
 // greeting them grumpy after every hour apart), and the same rows are

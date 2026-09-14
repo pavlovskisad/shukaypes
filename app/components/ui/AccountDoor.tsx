@@ -41,6 +41,7 @@ import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { HandDrawnFrame } from './HandDrawn';
 import { AvatarStudio, type AvatarStage } from './AvatarStudio';
+import { safeAreaBottomPx, safeAreaTopPx } from '../../utils/safeArea';
 
 type Screen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset' | 'avatar';
 
@@ -95,14 +96,56 @@ export const DOG_ROOM = DOG_MIN_Y + 40;
 // The door's paper hangs from just under the dog, not from the bottom
 // of the screen: a short form (login) at the bottom left a band of
 // empty map between the dog and the paper and sat on the browser's
-// toolbar, and the keyboard covers the lower half anyway. The dog is
-// framed at DOG_MIN_Y below the safe area; the paper starts DOG_ROOM
-// below it (MapView reads the paper's real top edge and puts the dog
-// 40 px above it, safe area included).
+// toolbar, and the keyboard covers the lower half anyway. MapView reads
+// the paper's real top edge and puts the dog DOG_TO_PAPER above it.
+//
+// ONE BLOCK, CENTRED. The dog's line, the dog and the paper are laid
+// out together: the same margin above the bubble as below the paper,
+// inside the visible height and the safe areas (the owner, 14 Sep,
+// after the portrait step's five-line asking pushed the bubble off the
+// top). The bubble's height comes from the bubble (SpeechBubble
+// reports it while the sheet is up), the paper's from the paper; the
+// paper's top follows from both. Before either is known the paper sits
+// at its old fixed place, DOG_ROOM below the safe area — one frame,
+// then the measured layout takes over, and `top` eases the same 320 ms
+// the camera takes to move the dog with it.
+//
+// Geometry: SpeechBubble hangs at bottom:85% of the dog's 140 px box,
+// so its bottom edge is 49 px above the dog's centre; the paper starts
+// DOG_TO_PAPER below the centre.
+export const BUBBLE_TO_DOG = 49;
+export const DOG_TO_PAPER = DOG_ROOM - DOG_MIN_Y;
 export const DOOR_COLUMN: CSSProperties = {
   ...COLUMN,
   top: `calc(env(safe-area-inset-top, 0px) + ${DOG_ROOM}px)`,
+  transition: 'top 320ms ease',
 };
+
+// Where the paper's top edge goes so that bubble + dog + paper sit
+// centred, and never closer than S.m to either safe edge. When the
+// block is taller than the room, the top margin wins and the paper is
+// capped (doorPaperMaxHeight) so it scrolls inside instead.
+export function doorPaperTop(
+  visibleH: number,
+  safeTop: number,
+  safeBottom: number,
+  bubbleH: number,
+  paperH: number,
+): number {
+  const usable = visibleH - safeTop - safeBottom;
+  const block = bubbleH + BUBBLE_TO_DOG + DOG_TO_PAPER + paperH;
+  const margin = Math.max(S.m, (usable - block) / 2);
+  return Math.round(safeTop + margin + bubbleH + BUBBLE_TO_DOG + DOG_TO_PAPER);
+}
+
+export function doorPaperMaxHeight(
+  visibleH: number,
+  safeTop: number,
+  safeBottom: number,
+  bubbleH: number,
+): number {
+  return Math.max(120, visibleH - safeTop - safeBottom - 2 * S.m - bubbleH - BUBBLE_TO_DOG - DOG_TO_PAPER);
+}
 
 export function useVisibleHeight(): number {
   const [h, setH] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800));
@@ -410,6 +453,8 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
   const canRegister = nickname.trim().length >= 2 && email.includes('@') && password.length >= 8 && consentOk;
 
   const visibleH = useVisibleHeight();
+  const safeTop = safeAreaTopPx();
+  const safeBottom = safeAreaBottomPx();
   // The dog on the map says the line for this screen (Companion.tsx).
   const setDoorScreen = useAccessStore((s) => s.setDoorScreen);
   useEffect(() => {
@@ -421,10 +466,33 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
   // height on its own (a pet named adds a row, an error adds a line).
   const paperRef = useRef<HTMLDivElement>(null);
   const setDoorSheetTop = useAccessStore((s) => s.setDoorSheetTop);
+  // The paper's own height, for the centring below; the bubble's comes
+  // through the store from the dog.
+  const [paperH, setPaperH] = useState<number | null>(null);
+  const bubbleH = useAccessStore((s) => s.doorBubbleHeight);
+  // The centred layout's answer, or null until both heights are known.
+  const columnTop =
+    bubbleH != null && paperH != null
+      ? doorPaperTop(visibleH, safeTop, safeBottom, bubbleH, paperH)
+      : null;
+  // Once the layout is computed, the camera is told the TARGET top, not
+  // the measured one: `top` eases over 320 ms, and a rect read mid-ease
+  // would send the dog to where the paper was passing through. The
+  // observer below keeps reporting the measured edge only while the
+  // layout is still the fixed fallback.
+  const columnTopRef = useRef(columnTop);
+  columnTopRef.current = columnTop;
+  useEffect(() => {
+    if (columnTop != null) setDoorSheetTop(columnTop);
+  }, [columnTop, setDoorSheetTop]);
   useEffect(() => {
     const el = paperRef.current;
     if (!el || typeof ResizeObserver === 'undefined') return;
-    const report = () => setDoorSheetTop(Math.round(el.getBoundingClientRect().top));
+    const report = () => {
+      const r = el.getBoundingClientRect();
+      if (columnTopRef.current == null) setDoorSheetTop(Math.round(r.top));
+      setPaperH(Math.round(r.height));
+    };
     report();
     const ro = new ResizeObserver(report);
     ro.observe(el);
@@ -439,7 +507,14 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
       <div
         style={{
           ...DOOR_COLUMN,
-          maxHeight: `calc(${visibleH - DOG_ROOM - S.m}px - env(safe-area-inset-top, 0px))`,
+          ...(columnTop != null && bubbleH != null
+            ? {
+                top: columnTop,
+                maxHeight: doorPaperMaxHeight(visibleH, safeTop, safeBottom, bubbleH),
+              }
+            : {
+                maxHeight: `calc(${visibleH - DOG_ROOM - S.m}px - env(safe-area-inset-top, 0px))`,
+              }),
         }}
       >
         <div style={PAPER} ref={paperRef}>

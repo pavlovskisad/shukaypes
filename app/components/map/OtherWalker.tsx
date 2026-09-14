@@ -184,11 +184,14 @@ export function OtherWalker({ player, onOpen }: Props) {
             // stays ink. Full strength in the territory view, where the
             // ground is painted in the same colour; gentler on a walk,
             // where the map is plain and a strong halo would be the
-            // loudest thing on it. The paper's small drop shadow stays
-            // under both.
+            // loudest thing on it. The walk halo was halved again on the
+            // owner's ask (14 Sep): a tint at the paper's edge that says
+            // "someone", not a colour that says "whose" — that question
+            // belongs to the territory view. The paper's small drop
+            // shadow stays under both.
             boxShadow: territoryVisible
               ? `0 0 0 3px rgba(${glow},0.35), 0 0 14px 6px rgba(${glow},0.55), 0 1px 3px rgba(0,0,0,0.18)`
-              : `0 0 0 2px rgba(${glow},0.18), 0 0 10px 3px rgba(${glow},0.3), 0 1px 3px rgba(0,0,0,0.18)`,
+              : `0 0 0 2px rgba(${glow},0.09), 0 0 8px 2px rgba(${glow},0.15), 0 1px 3px rgba(0,0,0,0.18)`,
             cursor: 'pointer',
             // The chip walks: a subtle lean in the direction of travel
             // is the only motion it gets, so a moving dog still reads

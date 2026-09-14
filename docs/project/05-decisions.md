@@ -950,7 +950,17 @@ under its drawn edge. The paper hangs from just under the dog — 190 px
 below the safe area — not from the bottom of the screen, where a short
 login form left a band of empty map and sat on Safari's toolbar; the
 paper reports where its top edge is and the camera puts the dog 40 px
-above it. Its ink is not clipped by the paper (no `overflow: hidden`;
+above it. **Amended 14 Sep (PR #631): one block, centred.** The
+portrait step's five-line asking pushed the bubble off the top of the
+screen, and the GPS pill (D-74) landed between the line and the dog.
+Now the dog's line, the dog and the paper are laid out together —
+the bubble reports its height, the paper its own, and the paper's
+top is chosen so the margin above the bubble equals the margin below
+the paper, inside the visible height and both safe areas, never under
+12 px; a block taller than the room keeps the top margin and the paper
+scrolls inside. Every step of the door gets this, since every step is
+the same paper under the same dog. The HUD's pills stay hidden under
+the sheet. Its ink is not clipped by the paper (no `overflow: hidden`;
 the scroll container clips its own content, rounded), and a corner
 arc always gets at least four points, or a pill-shaped field comes out
 with pointed ends. The dog — the same dog, on the map —
@@ -1075,7 +1085,11 @@ real — and it is skippable («потім»). It comes back the same three
 ways: the dog asks once, right after «я підтвердив» or the link
 itself (the link device lands on the same step); the account sheet
 («змінити») carries a row to draw, redraw or remove it; and a person
-with no pet named is never asked.
+with no pet is asked for their own photo instead — the model draws them
+as the animal that suits them, so everyone on the map has a portrait.
+(Until 14 Sep the step required a pet: leaving «маю тваринку» unticked
+skipped it, and the portrait only surfaced later through «змінити».
+The owner asked for everybody; PR #630.)
 
 **What is made.** A photo of the pet goes to an image-editing model
 (FLUX.1 Kontext behind fal.ai, `server/src/services/avatar.ts`) with
@@ -1365,7 +1379,10 @@ so its thin like here and not fat like we have now in profile") in
 plain ink (the first cut coloured it by territory; on the map that
 read as a badge, and the owner asked for black "as everywhere") —
 the chip instead GLOWS in the owner's colour, a soft halo behind
-the paper — full in the territory view, gentler on a walk — so
+the paper — full in the territory view, gentler on a walk (halved
+again on 14 Sep, PR #629: on a plain map the halo is a tint at the
+paper's edge that says "someone", and "whose" waits for the painted
+ground) — so
 "whose zone is that" is still answerable by the chip standing on it — and the drawn portrait
 (D-72) inside it; a walker without a portrait gets the sitting dog sprite in the
 disc, so a chip is never blank. The old rendering — sprite plus name
@@ -1441,7 +1458,66 @@ drawn ring the same night — the marker line is the edge, as on the
 card). If presence ever carries the level, the second
 fetch goes.
 
-### D-74 · The happiness index: whose dog lives the happiest life ✅
+### D-74 · A GPS fix outside the city is not a position — the app holds where it last knew you ✅
+
+Kyiv's air defence jams and spoofs GPS whenever drones are up. The
+phone does not report an error: it reports Lima, or a village sixty
+kilometres south-west, at full confidence, once a second. The owner's
+phone did both on 14 Sep. Measured on production that afternoon: 60
+paws, 16 bones and 3 territory marks written at 50.0 / 29.8, outside
+any map anybody will open.
+
+What an accepted Lima fix did to the client: the dog (and the gate's
+buttons, which are children of its marker) went to Peru, the map clamped
+its camera to the Kyiv bounds' south-west corner, and every follow tick
+eased toward Lima and was clamped again — a bare green field over
+Boyarka, no HUD, no way back, and the lag of a camera fighting its own
+bounds. D-67's teleport snap handled the case where the fix jumps
+*within* the city; it could not handle a fix the map cannot show.
+
+**The rule.** A fix outside the served area is not believed. The
+location hook stands on the last believable fix — the walker's real
+street, so the map stays where they are — or on the Maidan fallback if
+there never was one, exactly as no-GPS does. The watch keeps running;
+the first believable fix resumes everything with no reload. The hook
+reports `held: 'jammed'` and nothing else changes shape: every consumer
+already reads `position`, and the position is now one worth acting on.
+A jammed phone repeating Lima returns the same state object, so it no
+longer re-renders the map screen once a second either; the same
+dedupe drops a fix identical to the last one.
+
+**The dog says why.** Once on the way in — «gps зараз глушать, тож я не
+бачу, де ми. постоїмо тут, поки не повернеться — все інше працює» —
+and once on the way out. A HUD pill («gps глушать — стоїмо тут») stays
+up while held, so a person coming back to the phone sees why nothing
+moved. A status, not a button: there is nothing to do but wait.
+
+**The server refuses too.** `/sync/map` answers 400 to a position
+outside the box (no spawn, no home-ground note), `/presence` publishes
+nothing and shows nobody, `/collect/path` sweeps nothing, marks nothing
+and leaves the anchor where the walker really was, so the segment that
+resumes when GPS returns is the one they walked. The current client
+never sends such a position; an older one gets a clear answer instead
+of a world it cannot see.
+
+**One box, two copies, one check.** `SERVED_AREA` in the shared package
+is the client's; `KYIV_BBOX` in `server/src/lib/servedArea.ts` is the
+server's — the same four numbers the ingest gate and the Places spend
+gate already used. The server cannot load the shared package at runtime,
+so `check:served-area` reads the shared file and fails the build the
+moment they differ. Generous on purpose: Boyarka, Brovary and Boryspil
+are inside; what it excludes is not "outside Kyiv" but "not a place this
+person could be standing".
+
+**What it does not catch, on purpose.** A spoof that lands *near* the
+walker and stops moving — the "mildly spoofed" afternoon before the
+Lima one — is indistinguishable from a person on a bench. A heuristic
+that guesses wrong grounds real walks. Left alone, and noted.
+
+The junk rows are left in place: paws and bones expire on the janitor's
+schedule, three marks sixty kilometres out can never close a shape, and
+nothing draws them. PR #628.
+### D-75 · The happiness index: whose dog lives the happiest life ✅
 
 The owner asked (14 Sep) for a second standing beside territory —
 "whos dog lives the most time with high happiness levels" — and

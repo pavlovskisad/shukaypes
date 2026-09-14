@@ -1,4 +1,4 @@
--- The happiness index (D-74): two running totals per dog — happiness
+-- The happiness index (D-75): two running totals per dog — happiness
 -- weighted by seconds, and seconds — accumulated by the decay cron only
 -- while the person is with the dog (last_poll_at within the online
 -- window). Index = happy_weight_s / active_s, an honest all-time average

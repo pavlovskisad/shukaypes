@@ -1,4 +1,4 @@
-// The happiness index board (D-74): who lives the happiest life, plus
+// The happiness index board (D-75): who lives the happiest life, plus
 // where the caller stands. Read from the profile tab, its own trip —
 // like the territory board, not something the 15s sync should carry.
 
