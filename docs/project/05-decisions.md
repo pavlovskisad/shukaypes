@@ -1535,10 +1535,12 @@ screen touches `last_poll_at`, and the decay cron — which already
 walks every companion row every 8 seconds — sums both totals for the
 rows polled within the online window (90 s), from the pre-decay
 value, elapsed capped at ~4 minutes. A closed tab adds nothing, a
-crash loses at most one poll. **A dog ranks after an hour** of
+crash loses at most one poll. **A dog ranks after ten minutes** of
 counted life (`balance.happinessIndex.minActiveS`), so three perfect
 minutes on a fresh account are not a life; until then your own row
-shows a dash and the hours.
+shows a dash and the minutes. (It was an hour for a day: nobody saw
+themselves on the board on the day they tried it, and a bot's first
+session is shorter than that.)
 
 **The drain now pauses while the person is away.** Happiness used to
 fall to zero within a quarter of an hour of closing the app, so every

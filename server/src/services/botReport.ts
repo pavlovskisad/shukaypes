@@ -211,6 +211,6 @@ export function formatBotReport(r: BotReport): string {
     );
   }
   L.push('');
-  L.push('on = online now · h = hours counted (with the person) · idx = happiness index, — until an hour · marks = live marks · m24 = marks in the last day');
+  L.push(`on = online now · h = hours counted (with the person) · idx = happiness index, — until ${balance.happinessIndex.minActiveS / 60} min · marks = live marks · m24 = marks in the last day`);
   return L.join('\n') + '\n';
 }

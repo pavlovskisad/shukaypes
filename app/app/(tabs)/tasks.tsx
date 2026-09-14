@@ -551,7 +551,7 @@ export default function TasksScreen() {
             life — an all-time, time-weighted average of the meter over
             the hours the person was with the dog. Same row as the
             standing, the number where the silhouette would be; your
-            row first, unranked as a dash until the dog has an hour of
+            row first, unranked as a dash until the dog has ten minutes of
             counted life, then the top three and «показати всіх». */}
         {happy ? (
           <View nativeID="snap-card-happy" style={styles.card}>
@@ -560,7 +560,7 @@ export default function TasksScreen() {
               <BoardRow
                 rank={String(happy.you.rank ?? t.profile.unranked)}
                 name={t.tasks.boardYou}
-                areaLabel={t.profile.hoursTogether(Math.floor(happy.you.activeS / 3600))}
+                areaLabel={t.profile.timeTogether(happy.you.activeS)}
                 piece={undefined}
                 color={OWN_COLOR_CSS}
                 you
@@ -582,7 +582,7 @@ export default function TasksScreen() {
                     key={row.userId}
                     rank={String(i + 1)}
                     name={isYou ? t.tasks.boardYou : row.name}
-                    areaLabel={t.profile.hoursTogether(Math.floor(row.activeS / 3600))}
+                    areaLabel={t.profile.timeTogether(row.activeS)}
                     piece={undefined}
                     color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
                     you={isYou}
