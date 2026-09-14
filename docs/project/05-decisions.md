@@ -1704,16 +1704,18 @@ at night — night is empty by design). The count is the Fly secret
 `MULTIPLAYER_BOTS`; the owner sets it after this lands, because raising
 it first would put blank chips with repeated names on the map.
 
-**Room.** The home planner keeps bots 420 m apart around the hotspots.
-Around the ten central ones a hundred and twenty fit, but out to 4 km
-rings with nothing to walk to. Fifteen more hotspots (`HOTSPOTS` in
-bots.ts) — Park Slavy, Lukianivka, Solomianka, Nyvky, Obolon,
-Hydropark, Rusanivka, Darnytsia, KPI, the botanical garden,
-Holosiiv, Syrets, Troieshchyna, Vynohradar, Pozniaky — every one a
-real dog-walking park and checked against the water mask; the
-planner now places 120 with no fallbacks inside 1.8 km rings, and
-200 inside 3.2 km. The first thirty bots' homes move as a result
-(`bot:N` → hotspot N mod 25); with the wipe below that costs nothing.
+**Room.** The home planner keeps bots a minimum distance apart around
+the ten central hotspots. At the old 420 m a hundred and twenty spilled
+out to 4.5 km rings — the first cut added fifteen outer-district parks
+to give those rings somewhere to be, and the owner sent it back: "dont
+spread them that far sir we dont need, let it be 120 close to my
+neighbourhood-district, center." So the spacing came down instead:
+at 300 m (`HOME_MIN_SEP_M`, still well past the 110 m contest radius
+and inside the 240 m home range, so neighbours meet on every outing)
+115 of 120 live within 3 km of Maidan and 74 within 2 km, no
+fallbacks. Denser means more border wars, which is what they are for.
+The first thirty bots' homes shift a little as a result; with the wipe
+below that costs nothing.
 
 **Names and faces.** Ninety more roster entries in
 `services/botAvatars.ts`, hand-written like the first thirty, and
