@@ -4,7 +4,7 @@ import { MapLibreMarker } from './MapLibreMarker';
 import { useMaplibreMap } from './MapContext';
 import { DogSprite } from './DogSprite';
 import { Z } from '../../constants/z';
-import { ownerColorCss } from './territoryColor';
+import { ownerColorCss, ownerColorRgb } from './territoryColor';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { useGameStore } from '../../stores/gameStore';
 import { haptic } from '../../utils/haptics';
@@ -75,6 +75,8 @@ export function OtherWalker({ player, onOpen }: Props) {
   const [poked, setPoked] = useState(false);
   const pokePlayer = useGameStore((s) => s.pokePlayer);
   const territoryVisible = useGameStore((s) => s.territoryVisible);
+  // The owner's paint as 0..255 channels for the rgba() halo below.
+  const glow = ownerColorRgb(player.id).map((v) => Math.round(v * 255)).join(',');
   // Kept in a ref so the []-deps glide interval always reads the current map
   // without re-creating. Used for screen-space facing (rotation-proof).
   const map = useMaplibreMap();
@@ -176,13 +178,21 @@ export function OtherWalker({ player, onOpen }: Props) {
             borderRadius: '50%',
             background: SURFACE.fill,
             border: '2px solid transparent',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.18)',
+            // In the territory view the chip GLOWS in the owner's colour
+            // — a soft halo behind the paper, not a coloured ring: "whose
+            // zone is that" is still answerable by the chip standing on
+            // it, and every drawn line stays ink. Off the territory view
+            // the halo goes, and only the paper's small drop shadow is
+            // left.
+            boxShadow: territoryVisible
+              ? `0 0 0 3px rgba(${glow},0.35), 0 0 14px 6px rgba(${glow},0.55), 0 1px 3px rgba(0,0,0,0.18)`
+              : '0 1px 3px rgba(0,0,0,0.18)',
             cursor: 'pointer',
             // The chip walks: a subtle lean in the direction of travel
             // is the only motion it gets, so a moving dog still reads
             // as moving against the still ones.
             transform: moving ? `rotate(${facingLeft ? -6 : 6}deg)` : 'none',
-            transition: 'transform 300ms ease',
+            transition: 'transform 300ms ease, box-shadow 300ms ease',
           }}
         >
           {/* Plain ink, like every drawn edge in the app — the coloured

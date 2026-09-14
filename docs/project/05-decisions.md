@@ -1350,8 +1350,11 @@ Three things follow.
 stroke 1.25 (the profile card's ring is 2 — "check the chips border
 so its thin like here and not fat like we have now in profile") in
 plain ink (the first cut coloured it by territory; on the map that
-read as a badge, and the owner asked for black "as everywhere"), and
-the drawn portrait (D-72) inside it; a walker without a portrait gets the sitting dog sprite in the
+read as a badge, and the owner asked for black "as everywhere") —
+in the territory view the chip instead GLOWS in the owner's colour, a
+soft halo behind the paper, so "whose zone is that" is still
+answerable by the chip standing on it — and the drawn portrait
+(D-72) inside it; a walker without a portrait gets the sitting dog sprite in the
 disc, so a chip is never blank. The old rendering — sprite plus name
 tag — is not deleted: `OTHER_WALKER_STYLE` in
 `app/constants/experiments.ts` is `'chip' | 'dog'`, one word to flip
