@@ -549,8 +549,8 @@ const uk: AppStrings = {
     done: 'готово',
     avatarAsk: (petName) =>
       petName
-        ? `а покажи мені ${petName}! я намалюю портрет для мапи.`
-        : 'а покажи мені свого хвостатого! я намалюю портрет для мапи.',
+        ? `а покажи мені ${petName}! я намалюю портрет для мапи. тільки знай: у нас звірячий всесвіт — якщо на фото людина, перетворю її на звіра, який їй пасує.`
+        : 'а покажи мені свого хвостатого! я намалюю портрет для мапи. тільки знай: у нас звірячий всесвіт — якщо на фото людина, перетворю її на звіра, який їй пасує.',
     avatarDoneAsk: 'ось! схожий? якщо ні — спробуємо ще раз.',
     avatarPick: 'вибрати фото',
     avatarChange: 'інше фото',
@@ -560,7 +560,7 @@ const uk: AppStrings = {
     avatarRetry: 'спробувати ще',
     avatarLater: 'потім',
     avatarNone: 'краще без портрета',
-    avatarPrivacy: 'фото нікуди не зберігається — залишається тільки малюнок.',
+    avatarPrivacy: 'фото нікуди не зберігається — залишається тільки малюнок. людина на фото стане звіром: тут звірячий всесвіт.',
     avatarUnreadable: 'не можу прочитати це фото. спробуй інше (jpg або png).',
     avatarSection: 'портрет улюбленця',
     avatarEditDraw: 'намалювати портрет',
@@ -1108,8 +1108,8 @@ const en: AppStrings = {
     done: 'done',
     avatarAsk: (petName) =>
       petName
-        ? `now show me ${petName}! i will draw a portrait for the map.`
-        : 'now show me your tailed one! i will draw a portrait for the map.',
+        ? `now show me ${petName}! i will draw a portrait for the map. fair warning: this is an animal world — a human in the photo gets turned into the animal that suits them.`
+        : 'now show me your tailed one! i will draw a portrait for the map. fair warning: this is an animal world — a human in the photo gets turned into the animal that suits them.',
     avatarDoneAsk: 'there! a likeness? if not, we try again.',
     avatarPick: 'pick a photo',
     avatarChange: 'another photo',
@@ -1119,7 +1119,7 @@ const en: AppStrings = {
     avatarRetry: 'try again',
     avatarLater: 'later',
     avatarNone: 'better without a portrait',
-    avatarPrivacy: 'the photo is not stored anywhere — only the drawing stays.',
+    avatarPrivacy: 'the photo is not stored anywhere — only the drawing stays. a human in the photo becomes an animal: this is an animal world.',
     avatarUnreadable: 'i cannot read that photo. try another (jpg or png).',
     avatarSection: 'pet portrait',
     avatarEditDraw: 'draw a portrait',

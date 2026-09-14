@@ -1337,9 +1337,12 @@ one thing the map should never show. Their idea, one line in the
 prompt: if the photo is of a person and not an animal, draw the dog
 (or cat, by the profile) this person would be, the breed that suits
 their face, keeping one thing of theirs so they recognise themselves.
-Funny, shareable, and every chip on the map is an animal. Untested on
-a real face at the time of writing; the line is where the rest of
-the prompt lives.
+Funny, shareable, and every chip on the map is an animal. Tested
+the same morning on the owner's own face: a scruffy grinning terrier
+with the curls, unmistakably them. So that nobody is surprised, the
+dog says so when it asks for the photo ("у нас звірячий всесвіт —
+якщо на фото людина, перетворю її на звіра, який їй пасує"), and the
+studio's privacy note repeats it.
 
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e
