@@ -12,11 +12,20 @@
 // So each bot gets a TIMETABLE, drawn once per Kyiv calendar day:
 //
 //   morning   start 06:30–09:30   nearly always
-//   midday    start 12:00–16:00   half the days
+//   midday    start 12:00–16:00   most days
 //   evening   start 18:00–22:00   nearly always
 //
-// each 20–45 minutes long. Roughly 2.3 walks and 75 minutes a day, which
-// is about what a real owner does. Between walks the bot is OFFLINE: not
+// each 20–45 minutes long. Roughly 2.6 walks and 85 minutes a day, which
+// is about what a real owner does.
+//
+// Midday was drawn at half the days on the first cut, and the owner —
+// who watches the real street — said it is busier than that: "i think
+// midday its more dogs than you assume … is quite active time". At 0.8
+// a pool of 120 shows about thirteen dogs at one in the afternoon
+// against nine, which sits just under the evening's fifteen. Widening
+// the window instead was measured and is worse: the same walks spread
+// over six hours put FEWER dogs on the map at any one moment (eight at
+// 13:00), so the chance is the lever, not the hours. Between walks the bot is OFFLINE: not
 // in presence, not polled, its dog's meters frozen the same way a
 // person's are when the app is closed (decay.ts only touches rows polled
 // in the last 90 s).
@@ -51,7 +60,7 @@ export interface KyivClock {
 export const BOT_DAY = {
   windows: [
     { name: 'morning', from: 6 * 60 + 30, to: 9 * 60 + 30, chance: 0.9 },
-    { name: 'midday', from: 12 * 60, to: 16 * 60, chance: 0.5 },
+    { name: 'midday', from: 12 * 60, to: 16 * 60, chance: 0.8 },
     { name: 'evening', from: 18 * 60, to: 22 * 60, chance: 0.95 },
   ],
   minMinutes: 20,

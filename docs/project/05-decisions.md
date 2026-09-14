@@ -1743,3 +1743,59 @@ go past 120 in one step. Both leaderboards get 120 bot rows; whether
 bots should be capped or filtered there is a separate decision. The
 morning peak of ~21 out is below the 27 that ran fine before, so the
 tick itself is not the risk.
+
+### D-79 · Midday is a real walk, and the index starts fresh ✅
+
+Two corrections from the owner an hour after the hundred and twenty
+went live, both about the same thing: the bots' day was drawn from my
+assumptions, not from the street.
+
+**Midday was too quiet.** "i think midday its more dogs than you
+assume thats just my observations, is quite active time." He watches
+the real thing; the 50% in `BOT_DAY` was a guess. At 0.8 a pool of
+120 shows about thirteen dogs at one in the afternoon against nine,
+which sits just under the evening's fifteen — busy, and still not the
+busiest part of the day. Widening the window instead was measured and
+is worse: the same walks spread over 11:00–17:00 put FEWER dogs on the
+map at any one moment (eight at 13:00), because what the owner sees is
+concurrency, not walks. The chance is the lever, not the hours. The
+day is now 2.66 walks and 86 minutes, 6% online. `check:bot-day`
+asserts midday holds at least 60% of the evening's crowd, so the next
+person to tune a window cannot quietly flatten it again.
+
+**"hapines didnt wipe i think."** Correct, and on purpose — D-78's
+wipe took territory, and progression is not territory. But the
+happiness index (D-75) is an all-time time-weighted average, and every
+counted hour the bots held was measured under the round-the-clock
+regime, when a dog was never left alone long enough to get hungry.
+Those hours are a picture of a game nobody plays any more, and the
+ninety new bots have none at all, so the board starts crooked either
+way. `wipe:territory --progress` now also zeroes `happy_weight_s` and
+`active_s` for the chosen cohort and sets the meters back to the
+starting hunger and happiness, with the decay clock reset so nothing
+settles a gap in one tick. The dry run prints what the index holds
+first — counted hours, how many are on the board, the mean — so the
+choice is made with the numbers in view. XP, level, points and
+collected bones are untouched; `wipe:stats` is the tool for those.
+
+### D-80 · One map palette, in every mode ✅
+
+Territory swapped in a near-monochrome city while it was drawn
+(`PLAY_PALETTE`), on the argument that a green park under a green
+territory is two greens arguing and the owner colours should be the
+only hues on screen. Measured, it did what it claimed: park against
+water fell from 24.5 to 10.0 CIE76 — enough to still read the river
+against a lawn, not enough to fight somebody's paint.
+
+The owner looked at both and kept the bright one: "lets not change map
+pallete in game mode let it be bright as the normal one." He is right
+about what it costs. The chips and the ground already carry a ring and
+a coloured glow (D-73, the territory view's glow), and that is what
+separates them from the city underneath; draining the map the moment
+you open the thing you actually play reads as the app going flat, not
+as the territory coming forward — on a game about going outside, in a
+city that is grey enough in February.
+
+`PLAY_PALETTE` is gone rather than left unused, with the measurement
+kept as a note where it stood, so the next person to reach for a
+quieter map finds the numbers and the reason it was not taken.
