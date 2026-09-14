@@ -418,7 +418,8 @@ walking game.
   does not de-jitter it. Every call guards on `redis.status === 'ready'`.
 - **Bots** (`services/bots.ts`, 463 lines): `MULTIPLAYER_BOTS` (30 in
   `fly.toml`) simulated walkers on a state machine — roam, dwell at
-  hardcoded hotspots, go offline and back. They write to the same presence
+  hardcoded hotspots, and keep an owner's hours (D-77, `botDay.ts`: two
+  or three walks a day, offline between). They write to the same presence
   set as real players and they mark territory on the same cadence rule, so
   they render and compete identically.
 - **Poke** (`routes/poke.ts`): tap another walker → queued in Redis →

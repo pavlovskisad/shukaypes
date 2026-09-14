@@ -1,10 +1,14 @@
 // Bot walkers for the multiplayer presence system.
 //
 // A pool of simulated dogs that behave like people out walking: they roam,
-// linger, and go OFFLINE for a while then come back — so the live population
-// breathes (connect/reconnect) instead of drifting uniformly forever. They
-// write into the SAME Redis presence set as real players, so to a client
-// they're indistinguishable. Enabled via MULTIPLAYER_BOTS=<count> (0 = off).
+// linger, and — since D-77 — keep an owner's hours: two or three walks a
+// day of twenty to forty-five minutes, drawn per bot per Kyiv day
+// (botDay.ts), and OFFLINE in between, so the live population breathes
+// the way a city's does instead of being on the map around the clock.
+// They write into the SAME Redis presence set as real players, so to a
+// client they're indistinguishable. Enabled via MULTIPLAYER_BOTS=<count>
+// (0 = off); MULTIPLAYER_BOTS_ALWAYS_ON=1 drops the timetable and keeps
+// them all out all day, for a local stack.
 //
 // Each bot LIVES ON ITS OWN PATCH. Its home is picked once from the hotspot
 // list (separated from every other bot's), it seeds territory there, and it
@@ -24,6 +28,7 @@ import { balance } from '../config/balance.js';
 import { markAsBot, seedBotTerritory } from './territory.js';
 import { isOnWater } from '../data/kyivWater.js';
 import { botAvatarUrl, botEntry } from './botAvatars.js';
+import { isOut, kyivClock, planDay, type DayPlan, type KyivClock } from './botDay.js';
 import {
   botForage,
   botMarkRefusals,
@@ -103,9 +108,9 @@ const SPEED_MAX = 3.0;
 const ARRIVE_M = 22;
 const DWELL_MIN_MS = 8_000; // linger at a destination
 const DWELL_MAX_MS = 30_000;
-const OFFLINE_CHANCE = 0.14; // after a dwell, chance to "log off"
-const OFFLINE_MIN_MS = 60_000;
-const OFFLINE_MAX_MS = 240_000;
+// (There used to be a 14% chance to "log off" for 1–4 minutes after a
+// dwell, which made a bot online ~22 hours a day. The timetable in
+// botDay.ts decides that now — D-77.)
 const TICK_MS = 3500;
 const MAX_DT_S = 10;
 // A bot's "map sync" — the spawn a phone asks for — every this many
@@ -176,6 +181,7 @@ type BotState = 'walk' | 'dwell' | 'offline';
 
 interface Bot {
   id: string;
+  i: number; // roster index — `bot:${i}`; seeds the day's plan
   pos: LatLng;
   target: LatLng;
   name: string;
@@ -184,7 +190,10 @@ interface Bot {
   // Current heading offset from the true bearing, in radians. Random-walks
   // as the bot moves so its path curves instead of ruling a line.
   wander: number;
-  until: number; // ms timestamp the current dwell/offline ends
+  until: number; // ms timestamp the current dwell ends
+  // Today's walks (botDay.ts), drawn when the Kyiv day changes. Null
+  // until the first tick, or always when the timetable is off.
+  plan: DayPlan | null;
   // Territory. Bots hold ground so a city without real players still has
   // something to take — and so the PvP half of the mechanic is testable
   // before the population exists.
@@ -250,6 +259,7 @@ function spawnBot(i: number, home: LatLng): Bot {
   const pos = landNear(home, HOME_RANGE_M);
   const bot: Bot = {
     id: `bot:${i}`,
+    i,
     pos,
     target: pos,
     name: botEntry(i).name,
@@ -258,6 +268,7 @@ function spawnBot(i: number, home: LatLng): Bot {
     wander: rand(-WANDER_MAX_RAD, WANDER_MAX_RAD),
     state: 'walk',
     until: 0,
+    plan: null,
     home,
     // Stagger the first marks so a restart doesn't fire the whole pool
     // into the same tick.
@@ -341,26 +352,32 @@ function stepTowardTarget(b: Bot, dtS: number): void {
 }
 
 // Advance one bot's state machine. Returns true if it's ONLINE (should be
-// published to presence this tick).
-function tickBot(b: Bot, dtS: number, now: number): boolean {
-  switch (b.state) {
-    case 'offline':
-      if (now >= b.until) {
-        // Come back "online" on their own patch — they live there.
-        b.pos = landNear(b.home, HOME_RANGE_M);
-        b.target = newTarget(b);
-        b.speed = rand(SPEED_MIN, SPEED_MAX);
-        b.state = 'walk';
-        return true;
-      }
+// published to presence this tick). `clock` is Kyiv time for the
+// timetable, or null when the bots are always on.
+//
+// Returns 'out' the tick a bot leaves the house, so the cron can count
+// outings.
+function tickBot(b: Bot, dtS: number, now: number, clock: KyivClock | null): boolean | 'out' {
+  if (clock) {
+    if (!b.plan || b.plan.day !== clock.day) b.plan = planDay(b.i, clock.day);
+    if (!isOut(b.plan, clock.minute)) {
+      // Home. Stops publishing → expires from presence → vanishes, and
+      // the decay cron leaves its dog alone — same as a closed app.
+      b.state = 'offline';
       return false;
+    }
+  }
+  switch (b.state) {
+    case 'offline': {
+      // Out the door, on their own patch — they live there.
+      b.pos = landNear(b.home, HOME_RANGE_M);
+      b.target = newTarget(b);
+      b.speed = rand(SPEED_MIN, SPEED_MAX);
+      b.state = 'walk';
+      return 'out';
+    }
     case 'dwell':
       if (now >= b.until) {
-        if (Math.random() < OFFLINE_CHANCE) {
-          b.state = 'offline';
-          b.until = now + rand(OFFLINE_MIN_MS, OFFLINE_MAX_MS);
-          return false; // stops publishing → expires from presence → vanishes
-        }
         b.state = 'walk';
         b.target = newTarget(b);
       }
@@ -382,12 +399,17 @@ function tickBot(b: Bot, dtS: number, now: number): boolean {
 export function startMultiplayerCron(
   log: FastifyBaseLogger,
   botCount: number,
+  opts: { alwaysOn?: boolean } = {},
 ): () => void {
   const count = Math.max(0, botCount);
+  const alwaysOn = opts.alwaysOn === true;
   const homes = planHomes(count);
   const bots: Bot[] = Array.from({ length: count }, (_, i) => spawnBot(i, homes[i]!));
   if (bots.length) {
-    log.info({ kind: 'mp_bots', count: bots.length }, `multiplayer: spawned ${bots.length} bot walkers`);
+    log.info(
+      { kind: 'mp_bots', count: bots.length, alwaysOn },
+      `multiplayer: spawned ${bots.length} bot walkers, ${alwaysOn ? 'always on' : 'on an owner\'s hours (botDay.ts)'}`,
+    );
   }
   // Give the pool their user rows and a starting patch each, so the very
   // first walk a real player takes already has ground to run into.
@@ -407,8 +429,9 @@ export function startMultiplayerCron(
 
   let last = Date.now();
   let tick = 0;
+  let lastOnline = 0;
   // Life counters since the last log line (D-76): what the bots did.
-  const life = { paws: 0, bones: 0, marks: 0, grumpy: 0, hungry: 0, since: Date.now() };
+  const life = { paws: 0, bones: 0, marks: 0, grumpy: 0, hungry: 0, outings: 0, since: Date.now() };
   const id = setInterval(() => {
     void runCronTick(
       'multiplayer',
@@ -421,8 +444,11 @@ export function startMultiplayerCron(
           const online: PresenceEntry[] = [];
           const onlineBots: Bot[] = [];
           const marking: Bot[] = [];
+          const clock = alwaysOn ? null : kyivClock(now);
           for (const [i, b] of bots.entries()) {
-            if (!tickBot(b, dtS, now)) continue;
+            const up = tickBot(b, dtS, now, clock);
+            if (!up) continue;
+            if (up === 'out') life.outings++;
             online.push({ id: b.id, pos: b.pos, name: b.name, photo: null, avatar: b.avatar, bot: true });
             onlineBots.push(b);
             // Its map sync, on its turn: the spawn a phone would ask for.
@@ -456,6 +482,7 @@ export function startMultiplayerCron(
               marking.push(b);
             }
           }
+          lastOnline = online.length;
           await writePresenceBatch(online, now);
           // THE LIFE (D-76): the online bots are "with their person" for
           // the decay cron and the happiness index, and they pick up
@@ -506,10 +533,10 @@ export function startMultiplayerCron(
         await purgeStalePresence(now);
         if (bots.length && now - life.since >= LIFE_LOG_MS) {
           log.info(
-            { kind: 'mp_bot_life', paws: life.paws, bones: life.bones, marks: life.marks, grumpy: life.grumpy, hungry: life.hungry, windowS: Math.round((now - life.since) / 1000) },
-            `multiplayer: bots ate ${life.bones} bones, took ${life.paws} paws, marked ${life.marks}×, refused ${life.grumpy} grumpy / ${life.hungry} hungry`,
+            { kind: 'mp_bot_life', paws: life.paws, bones: life.bones, marks: life.marks, grumpy: life.grumpy, hungry: life.hungry, outings: life.outings, online: lastOnline, windowS: Math.round((now - life.since) / 1000) },
+            `multiplayer: ${lastOnline} of ${bots.length} bots out, ${life.outings} went out; they ate ${life.bones} bones, took ${life.paws} paws, marked ${life.marks}×, refused ${life.grumpy} grumpy / ${life.hungry} hungry`,
           );
-          life.paws = life.bones = life.marks = life.grumpy = life.hungry = 0;
+          life.paws = life.bones = life.marks = life.grumpy = life.hungry = life.outings = 0;
           life.since = now;
         }
       },

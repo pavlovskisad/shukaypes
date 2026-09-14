@@ -62,6 +62,7 @@
     "check:resolve-place": "tsx src/pipeline/resolvePlace.check.ts",
     "check:accounts": "tsx src/lib/accounts.check.ts",
     "check:ink": "tsx src/services/ink.check.ts",
+    "check:bot-day": "tsx src/services/botDay.check.ts",
     "wipe:users": "tsx src/db/wipe-users.ts"
   },
   "dependencies": {
