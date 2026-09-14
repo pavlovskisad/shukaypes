@@ -149,6 +149,18 @@ export default function TasksScreen() {
   // on screen, then swaps in the long board when the fetch lands; a
   // failed fetch leaves the ten showing, which is the honest fallback.
   const [boardAll, setBoardAll] = useState<TerritoryRanking[] | null>(null);
+  // The happiness index's full sheet, the same way: opens with the
+  // rows on the card, swaps in the long board when it lands.
+  const [happyAll, setHappyAll] = useState<HappinessRanking[] | null>(null);
+  const openFullHappy = useCallback(() => {
+    setHappyAll((cur) => cur ?? happy?.board ?? null);
+    api
+      .happinessLeaderboard(100)
+      .then((res) => setHappyAll((cur) => (cur ? res.board : cur)))
+      .catch(() => {
+        /* the short board stays up */
+      });
+  }, [happy]);
   const openFullBoard = useCallback(() => {
     setBoardAll((cur) => cur ?? board?.board ?? null);
     api
@@ -540,7 +552,7 @@ export default function TasksScreen() {
             the hours the person was with the dog. Same row as the
             standing, the number where the silhouette would be; your
             row first, unranked as a dash until the dog has an hour of
-            counted life. No "see all": ten is the board for now. */}
+            counted life, then the top three and «показати всіх». */}
         {happy ? (
           <View nativeID="snap-card-happy" style={styles.card}>
             <Text style={styles.cardTitle}>{t.tasks.happinessBoard}</Text>
@@ -563,7 +575,7 @@ export default function TasksScreen() {
             {happy.board.length === 0 ? (
               <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
             ) : (
-              happy.board.map((row, i) => {
+              happy.board.slice(0, BOARD_CARD_ROWS).map((row, i) => {
                 const isYou = happy.you.rank === i + 1;
                 return (
                   <BoardRow
@@ -583,6 +595,15 @@ export default function TasksScreen() {
                 );
               })
             )}
+            {happy.board.length > BOARD_CARD_ROWS ? (
+              <Pressable onPress={openFullHappy} hitSlop={8}>
+                {({ pressed }) => (
+                  <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
+                    {t.tasks.boardSeeAll}
+                  </Text>
+                )}
+              </Pressable>
+            ) : null}
             <Text style={styles.boardHint}>{t.tasks.happinessHint}</Text>
           </View>
         ) : null}
@@ -737,6 +758,12 @@ export default function TasksScreen() {
           setBoardAll(null);
           onPickOwner(row.userId, row.mainPiece, row.lastMark, row.pos);
         }}
+      />
+      <LeaderboardModal
+        kind="happiness"
+        board={happyAll}
+        youRank={happy?.you.rank ?? null}
+        onClose={() => setHappyAll(null)}
       />
     </SafeAreaView>
   );
