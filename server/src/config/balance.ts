@@ -24,8 +24,10 @@ export const balance = {
   // a /state poll landed within onlineWindowMs; only then does happiness
   // drain and only then does time count toward the index. A dog needs
   // minActiveS of counted time before it ranks, so a fresh account's
-  // three perfect minutes cannot top the board.
-  happinessIndex: { onlineWindowMs: 90_000, minActiveS: 3600 },
+  // three perfect minutes cannot top the board. Ten minutes: an hour
+  // meant nobody saw themselves on the board on the day they tried it
+  // (owner, 14 Sep), and a bot's first session is shorter than that.
+  happinessIndex: { onlineWindowMs: 90_000, minActiveS: 600 },
   bone: { hunger: 20, happiness: 18 },
   // Paws are a treat, not a meal: pure happiness, no hunger effect.
   // Only bones feed the dog. (token.hunger stays in the schema as 0 so

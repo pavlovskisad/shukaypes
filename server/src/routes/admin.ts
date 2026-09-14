@@ -22,6 +22,7 @@ import {
 // Token checks live in lib/adminAuth so /stats and the admin console ask
 // the same question the same way. See that file for the two-key model.
 import { checkAdminAuth, checkReportAuth } from '../lib/adminAuth.js';
+import { buildBotReport, formatBotReport } from '../services/botReport.js';
 import { limitRead } from '../lib/rateLimit.js';
 
 const MAX_TEXT_CHARS = 4000;
@@ -166,6 +167,27 @@ const plugin: FastifyPluginAsync = async (app) => {
       if (req.query?.format === 'text') {
         reply.type('text/plain; charset=utf-8');
         return formatLostDogsReport(report);
+      }
+      return report;
+    },
+  );
+
+  // The bots' life as numbers (D-76): per-bot meters, XP, counted time,
+  // the happiness index, bones and paws and marks, next to the same
+  // per-hour rates for the people — the tuning bench. Read-only, the
+  // report token; `?format=text` for a human.
+  app.get<{ Querystring: { format?: string } }>(
+    '/admin/bots/report',
+    { config: { rateLimit: { max: 30, timeWindow: '1 minute' } } },
+    async (req, reply) => {
+      if (!checkReportAuth(req.headers.authorization)) {
+        reply.code(401);
+        return { error: 'unauthorized' };
+      }
+      const report = await buildBotReport();
+      if (req.query?.format === 'text') {
+        reply.type('text/plain; charset=utf-8');
+        return formatBotReport(report);
       }
       return report;
     },
