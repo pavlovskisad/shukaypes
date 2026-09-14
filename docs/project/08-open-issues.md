@@ -465,7 +465,7 @@ Kept so nobody re-files them.
 | Labels wrong where the gazetteer name swallowed the ad's «вул.» | ✅ `relabel:marked` (#551). |
 | The about sheet described a product that no longer existed | ✅ Rewritten around the gate, the report form, supersniff, sightings (#543). |
 | 6.6 MB/h on a walk, 1 MB of script before anything draws, initData on every request | ✅ Beta perf pass — see [`12`](12-beta-perf-compat.md) (#569–#581, D-61, D-62). |
-| GPS spoofed to Lima during an alarm: dog and HUD off the map, camera clamped to the bounds' corner, paws and marks written sixty km out | ✅ A fix outside the served area is held, not believed: the app stands where it last knew you, the dog says why, the server refuses the position (D-74). |
+| GPS spoofed to Lima during an alarm: dog and HUD off the map, camera clamped to the bounds' corner, paws and marks written sixty km out | ✅ A fix outside the served area is held, not believed: the app stands where it last knew you, the dog says why, the server refuses the position (#628, D-74). |
 
 ### Closed by the engine rescue (15–20 Aug, PRs #433–#494)
 

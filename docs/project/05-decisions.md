@@ -1499,4 +1499,4 @@ that guesses wrong grounds real walks. Left alone, and noted.
 
 The junk rows are left in place: paws and bones expire on the janitor's
 schedule, three marks sixty kilometres out can never close a shape, and
-nothing draws them.
+nothing draws them. PR #628.
