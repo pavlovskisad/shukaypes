@@ -1005,7 +1005,7 @@ export async function territoryStanding(
 // dog's name when the account has one, else the person's nickname —
 // with the nickname kept beside a dog's name so the board can show
 // «Вася · pavlovski». Bots have a dog's name and no owner.
-async function ownerNames(ids: string[]): Promise<Map<string, { name: string; owner: string | null }>> {
+export async function ownerNames(ids: string[]): Promise<Map<string, { name: string; owner: string | null }>> {
   if (ids.length === 0) return new Map();
   const rows = await db
     .select({
@@ -1027,7 +1027,7 @@ async function ownerNames(ids: string[]): Promise<Map<string, { name: string; ow
 // Each owner's portrait URL: a person's drawn one (D-72) by its stored
 // file id, a bot's from the committed roster files (D-73). Missing
 // portraits are simply absent from the map.
-async function ownerAvatars(ids: string[]): Promise<Map<string, string>> {
+export async function ownerAvatars(ids: string[]): Promise<Map<string, string>> {
   const out = new Map<string, string>();
   if (ids.length === 0) return out;
   const people: string[] = [];

@@ -19,6 +19,7 @@
 // card. A row without one keeps the slot as a blank paper disc so the
 // names stay in a column.
 
+import type { ReactNode } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { colors } from '../../constants/colors';
 import { S } from '../../constants/spacing';
@@ -38,6 +39,7 @@ export function BoardRow({
   you,
   avatarUrl,
   owner,
+  trailing,
 }: {
   rank: string;
   name: string;
@@ -49,6 +51,10 @@ export function BoardRow({
   color: string;
   you: boolean;
   avatarUrl?: string | null;
+  // What sits at the row's end: the territory silhouette by default,
+  // or whatever the board is about — the happiness board puts its
+  // number there.
+  trailing?: ReactNode;
 }) {
   return (
     <View style={styles.boardRow}>
@@ -71,7 +77,7 @@ export function BoardRow({
           {owner ? `${areaLabel} · ${owner}` : areaLabel}
         </Text>
       </View>
-      <TerritoryMini points={piece} color={color} size={92} />
+      {trailing !== undefined ? trailing : <TerritoryMini points={piece} color={color} size={92} />}
     </View>
   );
 }

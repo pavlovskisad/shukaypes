@@ -14,15 +14,29 @@ import { runCronTick } from './cronUtils.js';
 // UPDATE across every companion; /sync/map writes the flag when it has
 // the geometry in hand. Hunger is untouched on purpose: that's the bones
 // economy, and slowing it would take the point out of walking to parks.
+//
+// ONLY WHILE THE PERSON IS THERE (D-75). Rows whose last /state poll is
+// older than the online window are skipped entirely: the dog does not
+// drain while its person is away (it wakes as it was left, instead of
+// greeting them grumpy after every hour apart), and the same rows are
+// the ones whose time counts toward the happiness index — happiness ×
+// seconds and seconds, summed here from the pre-decay value so a poll
+// gap never double-counts. Elapsed is capped, so a tick that fires late
+// counts at most ~4 minutes.
 export async function runDecayTick() {
   const hungerPerMs = balance.hunger.decay / balance.hunger.intervalMs;
   const happinessPerMs = balance.happiness.decay / balance.happiness.intervalMs;
   const homeHappinessPerMs = happinessPerMs * balance.territory.homeHappinessDecayFactor;
   const maxElapsedMs = balance.hunger.intervalMs * 30; // cap at 30 ticks (~4min)
+  const onlineMs = balance.happinessIndex.onlineWindowMs;
 
   await db.execute(sql`
     UPDATE ${schema.companionState} AS c
     SET
+      happy_weight_s = c.happy_weight_s
+        + c.happiness * (LEAST(${maxElapsedMs}, EXTRACT(EPOCH FROM (NOW() - c.last_decay_at)) * 1000) / 1000.0),
+      active_s = c.active_s
+        + (LEAST(${maxElapsedMs}, EXTRACT(EPOCH FROM (NOW() - c.last_decay_at)) * 1000) / 1000.0),
       hunger = GREATEST(0, c.hunger - LEAST(
         ${balance.hunger.decay * 30},
         ROUND(${hungerPerMs} * LEAST(${maxElapsedMs}, EXTRACT(EPOCH FROM (NOW() - c.last_decay_at)) * 1000))
@@ -39,6 +53,8 @@ export async function runDecayTick() {
       )::int),
       last_decay_at = NOW()
     WHERE EXTRACT(EPOCH FROM (NOW() - c.last_decay_at)) * 1000 >= ${balance.hunger.intervalMs}
+      AND c.last_poll_at IS NOT NULL
+      AND c.last_poll_at > NOW() - (${onlineMs}::int * interval '1 millisecond')
   `);
 }
 

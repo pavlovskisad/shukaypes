@@ -154,6 +154,14 @@ export const companionState = pgTable('companion_state', {
   // UPDATE across every row, and it can branch on a column but can't go
   // and compute a hull per user.
   onHomeGround: boolean('on_home_ground').notNull().default(false),
+  // The happiness index (D-75): happiness × seconds and seconds, summed
+  // by the decay cron only while the person is with the dog. The index
+  // is the ratio — an all-time, time-weighted average that moves with
+  // how the person plays. `last_poll_at` is the "with the dog" signal:
+  // touched by every /state poll (15s from any screen).
+  happyWeightS: doublePrecision('happy_weight_s').notNull().default(0),
+  activeS: doublePrecision('active_s').notNull().default(0),
+  lastPollAt: timestamp('last_poll_at', { withTimezone: true }),
 });
 
 // Tokens — scattered around user home zones. PostGIS point added via raw SQL migration.

@@ -214,6 +214,19 @@ export interface RivalTerritory {
   shapes: TerritoryShape[];
 }
 
+// A place on the happiness index board (D-75).
+export interface HappinessRanking {
+  userId: string;
+  name: string;
+  owner?: string | null;
+  bot: boolean;
+  avatarUrl?: string | null;
+  // 0–100.
+  index: number;
+  // Seconds of counted life together.
+  activeS: number;
+}
+
 // A place on the territory board. `bot` marks the simulated walkers, so
 // the UI can label them rather than pass them off as neighbours.
 export interface TerritoryRanking {
@@ -833,6 +846,16 @@ export const api = {
   // nobody is looking at. `rank` is null when you're outside the top ten.
   // `limit` widens the board past the default ten (clamped server-side)
   // for the fullscreen "see all" view.
+  // The happiness index board (D-75): whose dog lives the happiest
+  // life — an all-time, time-weighted average of the meter over the
+  // time the person was with the dog. `you.index` is null until the
+  // dog has an hour of counted life.
+  happinessLeaderboard: (limit?: number) =>
+    req<{
+      board: HappinessRanking[];
+      you: { index: number | null; activeS: number; rank: number | null };
+    }>(limit != null ? `/happiness/leaderboard?limit=${limit}` : '/happiness/leaderboard'),
+
   territoryLeaderboard: (limit?: number) =>
     req<{ board: TerritoryRanking[]; you: { areaM2: number; rank: number | null } }>(
       limit != null ? `/territory/leaderboard?limit=${limit}` : '/territory/leaderboard',
