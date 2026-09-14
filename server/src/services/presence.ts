@@ -12,7 +12,7 @@
 // Keys:
 //   mp:pos   GEO set (a ZSET under the hood) member=id -> position
 //   mp:seen  ZSET member=id -> lastSeen ms (drives TTL + purge)
-//   mp:meta  HASH member=id -> JSON {n:name, p:photoUrl, b:isBot, a:avatarUrl}
+//   mp:meta  HASH member=id -> JSON {n:name, o:ownerNick, p:photoUrl, b:isBot, a:avatarUrl}
 
 import { redis } from '../db/redis.js';
 import { db, schema } from '../db/index.js';
@@ -25,7 +25,10 @@ import type { LatLng } from '../utils/geo.js';
 export interface NearbyPlayer {
   id: string;
   position: LatLng;
+  // The dog's name when the account has a pet, else the nickname.
   name: string;
+  // The nickname when `name` is the dog's; null otherwise.
+  owner: string | null;
   photoUrl: string | null;
   avatarUrl: string | null;
   bot?: boolean;
@@ -67,13 +70,17 @@ function jitter(id: string, pos: LatLng): LatLng {
 
 // In-memory name/photo cache so we don't hit Postgres on every poll — a
 // user's display identity barely changes. 1h TTL per user.
-const metaCache = new Map<string, { name: string; photo: string | null; avatar: string | null; exp: number }>();
+const metaCache = new Map<
+  string,
+  { name: string; owner: string | null; photo: string | null; avatar: string | null; exp: number }
+>();
 export async function selfMeta(
   userId: string,
-): Promise<{ name: string; photo: string | null; avatar: string | null }> {
+): Promise<{ name: string; owner: string | null; photo: string | null; avatar: string | null }> {
   const cached = metaCache.get(userId);
   if (cached && cached.exp > Date.now()) return cached;
   let name = 'walker';
+  let owner: string | null = null;
   let photo: string | null = null;
   let avatar: string | null = null;
   try {
@@ -81,6 +88,7 @@ export async function selfMeta(
       .select({
         u: schema.users.username,
         f: schema.users.telegramFirstName,
+        d: schema.users.petName,
         p: schema.users.telegramPhotoUrl,
         a: schema.users.avatarFileId,
       })
@@ -88,20 +96,26 @@ export async function selfMeta(
       .where(eq(schema.users.id, userId))
       .limit(1);
     if (u) {
-      name = u.f || u.u || 'walker';
+      // The dog's name is what the map shows (D-73: an animal world);
+      // the person's nickname rides along as `owner` so a friend can
+      // still find them. No pet: the nickname is the name.
+      const nick = u.f || u.u || null;
+      name = u.d || nick || 'walker';
+      owner = u.d ? nick : null;
       photo = u.p || null;
       avatar = buildPhotoUrl(u.a, null);
     }
   } catch {
     /* fall back to defaults */
   }
-  const rec = { name, photo, avatar, exp: Date.now() + 3_600_000 };
+  const rec = { name, owner, photo, avatar, exp: Date.now() + 3_600_000 };
   metaCache.set(userId, rec);
   return rec;
 }
 
-// The portrait just changed (drawn, kept, removed): the next presence
-// write must carry the new one, not the hour-old cache.
+// The portrait or the names just changed (drawn, kept, removed; the
+// profile saved): the next presence write must carry the new ones,
+// not the hour-old cache.
 export function forgetMeta(userId: string): void {
   metaCache.delete(userId);
 }
@@ -110,6 +124,8 @@ export interface PresenceEntry {
   id: string;
   pos: LatLng;
   name: string;
+  // The nickname behind a dog's name; absent for bots.
+  owner?: string | null;
   photo: string | null;
   // The drawn portrait's URL (D-72), for the map chip.
   avatar?: string | null;
@@ -131,7 +147,10 @@ export async function writePresenceBatch(
   for (const e of entries) {
     geoArgs.push(e.pos.lng, e.pos.lat, e.id);
     zaddArgs.push(now, e.id);
-    hsetArgs.push(e.id, JSON.stringify({ n: e.name, p: e.photo, b: e.bot ? 1 : 0, a: e.avatar ?? null }));
+    hsetArgs.push(
+      e.id,
+      JSON.stringify({ n: e.name, o: e.owner ?? null, p: e.photo, b: e.bot ? 1 : 0, a: e.avatar ?? null }),
+    );
   }
   const pipe = redis.pipeline();
   pipe.geoadd(POS_KEY, ...geoArgs);
@@ -151,8 +170,9 @@ export async function writePresence(
   now: number,
   bot = false,
   avatar: string | null = null,
+  owner: string | null = null,
 ): Promise<void> {
-  await writePresenceBatch([{ id, pos: shownPos, name, photo, avatar, bot }], now);
+  await writePresenceBatch([{ id, pos: shownPos, name, owner, photo, avatar, bot }], now);
 }
 
 // Live positions for specific ids — the freshest place each of these
@@ -186,7 +206,7 @@ export async function syncPresence(userId: string, pos: LatLng): Promise<NearbyP
   if (redis.status !== 'ready') return [];
   const now = Date.now();
   const meta = await selfMeta(userId);
-  await writePresence(userId, jitter(userId, pos), meta.name, meta.photo, now, false, meta.avatar);
+  await writePresence(userId, jitter(userId, pos), meta.name, meta.photo, now, false, meta.avatar, meta.owner);
 
   let raw: unknown;
   try {
@@ -228,6 +248,7 @@ export async function syncPresence(userId: string, pos: LatLng): Promise<NearbyP
     if (now - score > PRESENCE_TTL_MS) continue; // stale (not yet purged)
     const coord = row[1];
     let name = 'walker';
+    let owner: string | null = null;
     let photo: string | null = null;
     let avatar: string | null = null;
     let bot = false;
@@ -236,6 +257,7 @@ export async function syncPresence(userId: string, pos: LatLng): Promise<NearbyP
       try {
         const j = JSON.parse(m);
         name = j.n ?? name;
+        owner = typeof j.o === 'string' ? j.o : null;
         photo = j.p ?? null;
         avatar = typeof j.a === 'string' ? j.a : null;
         bot = !!j.b;
@@ -247,6 +269,7 @@ export async function syncPresence(userId: string, pos: LatLng): Promise<NearbyP
       id: row[0],
       position: { lat: Number(coord[1]), lng: Number(coord[0]) },
       name,
+      owner,
       photoUrl: photo,
       avatarUrl: avatar,
       bot,

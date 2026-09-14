@@ -847,7 +847,7 @@ export async function fetchMapTerritory(
     home: pieces.some((p) => p.userId === userId && pieceCovers(p, pos)),
     rivals: rivalIds.map((id) => ({
       ownerId: id,
-      ownerName: names.get(id) ?? 'сусід',
+      ownerName: names.get(id)?.name ?? 'сусід',
       shapes: byOwnerGround.get(id) ?? [],
     })),
   };
@@ -871,7 +871,10 @@ export async function noteHomeGround(userId: string, home: boolean): Promise<voi
 
 export interface LeaderboardEntry {
   userId: string;
+  // The dog's name, or the nickname when there is no pet (D-73).
   name: string;
+  // The nickname when `name` is the dog's; null for bots and petless.
+  owner: string | null;
   areaM2: number;
   bot: boolean;
   // The owner's drawn portrait (D-72), or a bot's (D-73); null when
@@ -942,7 +945,8 @@ export async function territoryLeaderboard(
     const live = livePos.get(e.userId);
     return {
       ...e,
-      name: names.get(e.userId) ?? 'сусід',
+      name: names.get(e.userId)?.name ?? 'сусід',
+      owner: names.get(e.userId)?.owner ?? null,
       bot: isBot(e.userId),
       avatarUrl: avatars.get(e.userId) ?? null,
       ...(ring && ring.length >= 3
@@ -997,13 +1001,27 @@ export async function territoryStanding(
 
 // Display names for territory owners. Bots carry their dog name as
 // username, so this reads the same for both.
-async function ownerNames(ids: string[]): Promise<Map<string, string>> {
+// Who a piece of ground belongs to, as the map says it (D-73): the
+// dog's name when the account has one, else the person's nickname —
+// with the nickname kept beside a dog's name so the board can show
+// «Вася · pavlovski». Bots have a dog's name and no owner.
+async function ownerNames(ids: string[]): Promise<Map<string, { name: string; owner: string | null }>> {
   if (ids.length === 0) return new Map();
   const rows = await db
-    .select({ id: schema.users.id, username: schema.users.username, first: schema.users.telegramFirstName })
+    .select({
+      id: schema.users.id,
+      username: schema.users.username,
+      first: schema.users.telegramFirstName,
+      pet: schema.users.petName,
+    })
     .from(schema.users)
     .where(inArray(schema.users.id, ids));
-  return new Map(rows.map((r) => [r.id, r.first || r.username || 'сусід']));
+  return new Map(
+    rows.map((r) => {
+      const nick = r.first || r.username || null;
+      return [r.id, { name: r.pet || nick || 'сусід', owner: r.pet && !isBot(r.id) ? nick : null }];
+    }),
+  );
 }
 
 // Each owner's portrait URL: a person's drawn one (D-72) by its stored

@@ -121,7 +121,12 @@ export interface WalkerSession {
 export interface NearbyPlayer {
   id: string;
   position: LatLng;
+  // The dog's name when the account has a pet, else the person's
+  // nickname — the map is an animal world (D-73).
   name: string;
+  // The person's nickname when `name` is their dog's; null for bots
+  // and for a walker without a pet (their nickname IS the name).
+  owner?: string | null;
   photoUrl: string | null;
   // The pet's drawn portrait (D-72), when there is one: what the map
   // chip shows. Bots ship one drawn for their roster entry.
@@ -134,7 +139,10 @@ export interface NearbyPlayer {
 // of the largest piece for a thumbnail.
 export interface PlayerCard {
   id: string;
+  // The dog's name, or the nickname when there is no pet.
   name: string;
+  // The nickname when `name` is the dog's; null otherwise.
+  owner: string | null;
   bot: boolean;
   avatarUrl: string | null;
   level: number | null;

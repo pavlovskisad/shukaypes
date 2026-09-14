@@ -75,6 +75,9 @@ export function PlayerCard({ player, onClose }: Props) {
 
   const avatar = card?.avatarUrl ?? player.avatarUrl ?? null;
   const name = card?.name ?? player.name;
+  // The person behind the dog's name (D-73): the nickname on the small
+  // line, so a friend can still find who it is.
+  const owner = card ? card.owner : (player.owner ?? null);
   const isBot = card?.bot ?? !!player.bot;
 
   const poke = () => {
@@ -132,7 +135,7 @@ export function PlayerCard({ player, onClose }: Props) {
               </div>
               <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
                 {card ? (card.level === null ? t.levelUnknown : tp.level(card.level)) : failed ? t.levelUnknown : '…'}
-                {isBot ? ` · ${t.bot}` : ''}
+                {isBot ? ` · ${t.bot}` : owner ? ` · ${t.owner(owner)}` : ''}
               </div>
               {card || failed ? (
                 <div

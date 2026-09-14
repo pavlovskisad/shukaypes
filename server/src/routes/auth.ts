@@ -400,6 +400,9 @@ const plugin: FastifyPluginAsync = async (app) => {
           .set({ name: petName })
           .where(eq(schema.companionState.userId, user.id));
       }
+      // The map shows the dog's name, or the nickname (D-73): the
+      // presence cache must not carry the old one for an hour.
+      forgetMeta(user.id);
       req.log.info({ kind: 'auth_profile', user: user.id, hasPet: !!petName }, '[auth] profile edited');
       return { ok: true, me: buildMe(updated, viaOf(req)) };
     },

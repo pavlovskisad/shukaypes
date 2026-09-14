@@ -37,10 +37,14 @@ export function BoardRow({
   color,
   you,
   avatarUrl,
+  owner,
 }: {
   rank: string;
   name: string;
   areaLabel: string;
+  // The nickname behind a dog's name; shown after the counter so a
+  // friend can find a person on a board of dogs.
+  owner?: string | null;
   piece: { lat: number; lng: number }[] | undefined;
   color: string;
   you: boolean;
@@ -63,7 +67,9 @@ export function BoardRow({
         <Text style={[styles.boardName, you && styles.boardYouText]} numberOfLines={1}>
           {name}
         </Text>
-        <Text style={[styles.boardArea, you && styles.boardYouText]}>{areaLabel}</Text>
+        <Text style={[styles.boardArea, you && styles.boardYouText]} numberOfLines={1}>
+          {owner ? `${areaLabel} · ${owner}` : areaLabel}
+        </Text>
       </View>
       <TerritoryMini points={piece} color={color} size={92} />
     </View>
