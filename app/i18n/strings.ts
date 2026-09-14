@@ -88,7 +88,10 @@ export interface AppStrings {
     done: string;
     // The pet's portrait (D-72): the dog's two lines, the studio's
     // buttons, and the row on the edit sheet.
-    avatarAsk: (petName: string | null) => string;
+    // Three askings: a named pet, a pet with no name, and no pet at all —
+    // the last is asked for their own photo (the model draws them as an
+    // animal), because the portrait is for everybody on the map.
+    avatarAsk: (pet: { name: string | null } | null) => string;
     avatarDoneAsk: string;
     avatarPick: string;
     avatarChange: string;
@@ -556,10 +559,12 @@ const uk: AppStrings = {
     changePasswordLink: 'змінити пароль',
     currentPasswordLabel: 'поточний пароль',
     done: 'готово',
-    avatarAsk: (petName) =>
-      petName
-        ? `а покажи мені ${petName}! я намалюю портрет для мапи. тільки знай: у нас звірячий всесвіт — якщо на фото людина, перетворю її на звіра, який їй пасує.`
-        : 'а покажи мені свого хвостатого! я намалюю портрет для мапи. тільки знай: у нас звірячий всесвіт — якщо на фото людина, перетворю її на звіра, який їй пасує.',
+    avatarAsk: (pet) =>
+      pet?.name
+        ? `а покажи мені ${pet.name}! я намалюю портрет для мапи. тільки знай: у нас звірячий всесвіт — якщо на фото людина, перетворю її на звіра, який їй пасує.`
+        : pet
+          ? 'а покажи мені свого хвостатого! я намалюю портрет для мапи. тільки знай: у нас звірячий всесвіт — якщо на фото людина, перетворю її на звіра, який їй пасує.'
+          : 'а покажи мені себе! я намалюю портрет для мапи. у нас звірячий всесвіт — тож на мапі ти будеш звіром, який тобі пасує.',
     avatarDoneAsk: 'ось! схожий? якщо ні — спробуємо ще раз.',
     avatarPick: 'вибрати фото',
     avatarChange: 'інше фото',
@@ -1120,10 +1125,12 @@ const en: AppStrings = {
     changePasswordLink: 'change password',
     currentPasswordLabel: 'current password',
     done: 'done',
-    avatarAsk: (petName) =>
-      petName
-        ? `now show me ${petName}! i will draw a portrait for the map. fair warning: this is an animal world — a human in the photo gets turned into the animal that suits them.`
-        : 'now show me your tailed one! i will draw a portrait for the map. fair warning: this is an animal world — a human in the photo gets turned into the animal that suits them.',
+    avatarAsk: (pet) =>
+      pet?.name
+        ? `now show me ${pet.name}! i will draw a portrait for the map. fair warning: this is an animal world — a human in the photo gets turned into the animal that suits them.`
+        : pet
+          ? 'now show me your tailed one! i will draw a portrait for the map. fair warning: this is an animal world — a human in the photo gets turned into the animal that suits them.'
+          : "now show me you! i will draw a portrait for the map. this is an animal world — so on the map you'll be the animal that suits you.",
     avatarDoneAsk: 'there! a likeness? if not, we try again.',
     avatarPick: 'pick a photo',
     avatarChange: 'another photo',

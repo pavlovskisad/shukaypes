@@ -1075,7 +1075,11 @@ real — and it is skippable («потім»). It comes back the same three
 ways: the dog asks once, right after «я підтвердив» or the link
 itself (the link device lands on the same step); the account sheet
 («змінити») carries a row to draw, redraw or remove it; and a person
-with no pet named is never asked.
+with no pet is asked for their own photo instead — the model draws them
+as the animal that suits them, so everyone on the map has a portrait.
+(Until 14 Sep the step required a pet: leaving «маю тваринку» unticked
+skipped it, and the portrait only surfaced later through «змінити».
+The owner asked for everybody; PR #630.)
 
 **What is made.** A photo of the pet goes to an image-editing model
 (FLUX.1 Kontext behind fal.ai, `server/src/services/avatar.ts`) with

@@ -80,9 +80,14 @@ export type DoorScreen =
 export type DoorSheet = 'register' | 'login' | 'verify' | 'reset' | 'avatar';
 
 // Whether the portrait step has anything to ask: the server can draw
-// one, there is a pet to draw, and none has been drawn.
+// one and none has been drawn. A pet is NOT required — the owner found
+// (14 Sep) that leaving «маю тваринку» unticked skipped the step, and
+// the portrait only surfaced later through «змінити». Everyone on the
+// map gets a portrait: the model draws a person as the animal that
+// suits them (D-72), so a walker without a pet is asked for their own
+// photo instead.
 export function wantsPortrait(me: Me | null): boolean {
-  return !!me && me.avatarConfigured && !me.avatarUrl && !!me.pet?.species;
+  return !!me && me.avatarConfigured && !me.avatarUrl;
 }
 
 // Through: the sheet has nothing left to ask — except when the way
