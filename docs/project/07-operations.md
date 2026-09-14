@@ -129,6 +129,7 @@ Other read surfaces:
 | --- | --- | --- |
 | `/health` | none | `{ ok: true }` unconditionally. Fly's rotation check. |
 | `/health/deep` | none | Checks Postgres and Redis; 503 if either is unhealthy. **Point an *external* uptime monitor here — do not repoint Fly's own check at it** (see the note below). |
+| `/admin/bots/report[?format=text]` | `REPORT_TOKEN` or admin | The bots' life as numbers (D-76): per bot the meters, level, counted hours, happiness index, bones and paws (24h), live marks; and two cohort lines — bots and people — with per-online-hour rates of bones, paws and marks, mean index, mean meters, next to the balance rules in force. The tuning bench: read it before touching a spawn or decay number. |
 | `/admin/metrics[?format=text]` | `DASHBOARD_TOKEN` or admin | Users, DAU/WAU, retention, ingest heartbeat, search funnel, chat token spend by model. Bots excluded structurally. |
 | `/admin/console` | `DASHBOARD_TOKEN` | The same numbers as a page. Open with `…/admin/console?k=<token>` — the key is stripped from the URL bar on load and redacted in the request log. Read-only by construction. |
 | `/stats` | bearer | Active counts, per-source breakdown, last 30 scrape-log rows. **No longer public** — it was leaking bot-ingested users' DM text. |

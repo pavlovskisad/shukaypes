@@ -1614,10 +1614,17 @@ mean nothing without a person reading them), pokes and chat.
 **Measured.** Every five minutes the cron logs one line — bones eaten,
 paws taken, marks made, refusals by reason — and the `collect_events`
 table holds the ledger per bot, so a report can answer the owner's
-questions from the database: bones per session at the current spawn
-rates, time above the lucky threshold, how often marking is refused,
-how fast XP moves, whether the drain and the bone economy balance.
-The report itself is the next PR.
+questions from the database. `GET /admin/bots/report?format=text`
+(the report token) is that report: per bot the meters, level, counted
+hours, index, bones and paws and marks; and the same per-online-hour
+rates for the people, on one screen with the balance rules in force —
+so "the bots eat twice what a person finds" is a line to read, not a
+guess. The first ten minutes in production said: ~15 bones, ~110 paws
+and ~280 marks per five minutes across thirty bots, zero refusals —
+and the report shows why the last number is zero: `minHappiness` and
+`minHunger` for a mark are both 0 in balance.ts, so the gate is open
+for everyone. That is a balance decision to make with the report in
+hand, not in this PR.
 
 **Cost.** Per tick: one UPDATE, two SELECTs, and a transaction per
 item picked up; per bot every ~30 s: the spawn a phone would have
