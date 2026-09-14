@@ -1,11 +1,12 @@
 import type { FastifyPluginAsync } from 'fastify';
-import { and, eq, isNull, sql } from 'drizzle-orm';
+import { and, eq, isNull } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
 import { ensureFoodForUser } from '../services/spawn.js';
 import { limitInteractive, limitPolling } from '../lib/rateLimit.js';
+import { eatFoodTx } from '../services/collect.js';
 
 interface NearbyQuery {
   lat: string;
@@ -121,39 +122,8 @@ const plugin: FastifyPluginAsync = async (app) => {
       }
     }
 
-    const now = new Date();
-    await db.transaction(async (tx) => {
-      await tx
-        .update(schema.foodItems)
-        .set({ consumedAt: now })
-        .where(eq(schema.foodItems.id, foodId));
-      await tx
-        .update(schema.companionState)
-        .set({
-          hunger: sql`LEAST(${balance.hunger.max}, ${schema.companionState.hunger} + ${balance.bone.hunger})`,
-          happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${balance.bone.happiness})`,
-          // Bones are scarcer than paws (1 per nearby park vs ~20 in
-          // the user-area pool), so they're worth more XP — feeding
-          // the dog at parks is the small daily ritual we want to
-          // reward.
-          xp: sql`${schema.companionState.xp} + ${balance.xp.perBone}`,
-          lastFedAt: now,
-          // See note in tokens.ts collect — reset decay clock on every
-          // active interaction so a single post-idle tick can't eat the
-          // bump.
-          lastDecayAt: now,
-        })
-        .where(eq(schema.companionState.userId, req.userId));
-      await tx.insert(schema.collectEvents).values({
-        id: nanoid(),
-        userId: req.userId,
-        kind: 'food',
-        targetId: foodId,
-        lat,
-        lng,
-        accepted: true,
-      });
-    });
+    // The meal, the same write a bot makes on its walk (services/collect.ts).
+    await eatFoodTx(req.userId, foodId, { lat, lng });
 
     return { ok: true };
   });

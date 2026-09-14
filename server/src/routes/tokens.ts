@@ -6,6 +6,7 @@ import { distanceMeters, type LatLng } from '../utils/geo.js';
 import { ensureTokensForUser } from '../services/spawn.js';
 import { nanoid } from 'nanoid';
 import { limitInteractive, limitPolling } from '../lib/rateLimit.js';
+import { collectTokenTx } from '../services/collect.js';
 
 interface NearbyQuery {
   lat: string;
@@ -141,59 +142,9 @@ const plugin: FastifyPluginAsync = async (app) => {
       }
     }
 
-    // Mark collected + credit points + bump companion stats, atomically.
-    const now = new Date();
-    await db.transaction(async (tx) => {
-      await tx
-        .update(schema.tokens)
-        .set({ collectedAt: now })
-        .where(eq(schema.tokens.id, tokenId));
-      await tx
-        .update(schema.users)
-        .set({
-          points: sql`${schema.users.points} + ${token.value}`,
-          totalTokens: sql`${schema.users.totalTokens} + 1`,
-          lastSeenAt: now,
-        })
-        .where(eq(schema.users.id, req.userId));
-      // XP per paw is balance.xp.perPaw, with a lucky 2× when happiness
-      // is high enough — pure bonus, never a penalty. Both the dice
-      // roll and the multiplier happen in SQL so it's atomic with the
-      // happiness/hunger bump.
-      //
-      // The ::int casts on the CASE branches matter: postgres-js binds
-      // JS numbers as untyped parameters, and pg's planner defaults
-      // CASE branches to TEXT when context doesn't pin a type. Without
-      // the casts, `xp + (text)` throws 'operator does not exist:
-      // integer + text' (42883).
-      const base = balance.xp.perPaw;
-      const luckyXp = base * balance.xp.luckyPawMultiplier;
-      const threshold = balance.xp.luckyPawHappinessThreshold;
-      const chance = balance.xp.luckyPawChance;
-      await tx
-        .update(schema.companionState)
-        .set({
-          hunger: sql`LEAST(${balance.hunger.max}, ${schema.companionState.hunger} + ${balance.token.hunger})`,
-          happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${balance.token.happiness})`,
-          xp: sql`${schema.companionState.xp} + CASE WHEN ${schema.companionState.happiness} >= ${threshold} AND random() < ${chance}::float8 THEN ${luckyXp}::int ELSE ${base}::int END`,
-          // Reset the decay clock — the user is actively engaged, the
-          // companion isn't sitting alone losing happiness. Without
-          // this, the first collect after a long idle gap gets clobbered
-          // by a single -30 decay tick (the per-tick cap), making the
-          // meter visibly drop *despite* the +bump landing.
-          lastDecayAt: now,
-        })
-        .where(eq(schema.companionState.userId, req.userId));
-      await tx.insert(schema.collectEvents).values({
-        id: nanoid(),
-        userId: req.userId,
-        kind: 'token',
-        targetId: tokenId,
-        lat,
-        lng,
-        accepted: true,
-      });
-    });
+    // Mark collected + credit points + bump companion stats, atomically —
+    // the same write a bot makes on its walk (services/collect.ts).
+    await collectTokenTx(req.userId, tokenId, token.value, { lat, lng });
 
     return { ok: true, value: token.value };
   });

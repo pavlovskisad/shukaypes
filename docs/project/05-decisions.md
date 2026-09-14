@@ -1550,11 +1550,9 @@ after a gap restarts the decay clock, so it wakes as it was left.
 Hunger is gated the same way, as the two live in one UPDATE; the
 bones economy is untouched while you are there.
 
-**Bots are a fiction here, like their level.** They have no meter:
-each gets an index 55–95 seeded by its number with a ±4 drift over a
-week so the board breathes, and a fake active time past the guard.
-`services/happiness.ts` says so at the top; swap for the real thing
-if bots ever get a meter.
+**Bots were a fiction here for a day.** The first cut gave each a
+seeded index with a weekly drift and a fake active time; D-76 gave
+them a meter, and the fiction went with it.
 
 **The board.** `GET /happiness/leaderboard` mirrors the territory
 one (people past the guard plus every bot, best index first, and
@@ -1568,3 +1566,67 @@ in balance.ts. If the index should forget — a rolling month instead
 of a life — the totals become a per-day ledger; the read side does
 not change. If the offline pause proves too kind (a dog never hungry
 on return), gate only happiness and let hunger run.
+
+### D-76 · Bots live by the player's rules ✅
+
+The owner asked (14 Sep): "what if we route bots through same rules
+as humans … so they come and spawn food and paws for them and let
+them go through everything as players would and measure that nicely
+and see how systems work and tune balances?" Yes. Until now a bot was
+a user row, a spot in presence and territory marks — no companion, no
+hunger, no happiness, nothing to eat, and a made-up level and
+happiness index on its card. That made the bots scenery, and it made
+every balance question answerable only by one person walking one dog.
+
+**A companion row each, and the same crons.** `ensureBotCompanions`
+gives every bot the row a person's dog has, with the roster name and
+the starting meters. The walker sim already had sessions — a bot goes
+offline after a dwell and comes back — so ONLINE is the person being
+there: each multiplayer tick touches the online bots' `last_poll_at`
+in one statement, the same touch `/state` makes for a phone, and the
+decay cron (D-75) then drains their happiness while they are out and
+counts their time toward the happiness index, and freezes them while
+they are away. Nothing in decay.ts knows a bot from a person.
+
+**Food and paws spawn for them, and they pick them up.** On its turn
+(every ninth tick, ~30 s, staggered) a bot makes the spawn a phone's
+map sync makes — `ensureTokensForUser` and `ensureFoodForUser`,
+unchanged — with the hotspots within 700 m standing in for the parks
+a phone would have sent, so bones land in the same parks people find
+them in. Every tick, one read for all online bots' live paws and one
+for their bones, and anything within `collectMaxDistanceM` (the reach
+a tap has) goes through `services/collect.ts` — the transaction lifted
+out of the two routes so a tap and a bot make literally the same
+write: item consumed, points, hunger, happiness, XP with the lucky
+paw, decay clock reset, a `collect_events` row. Level is then earned:
+the card reads the bot's XP through the same curve.
+
+**Marking costs and refuses the same.** `placeMark` already charged
+the companion; with a row to charge, a bot's mark now costs it hunger
+and earns it happiness like a person's. Before marking, one query
+reads the online markers' meters and a grumpy or hungry dog is refused
+for the same thresholds as `markIfDue`. The bots' own cap logic
+(`markAsBot`) stays — it corrects a leak the person path cannot have.
+
+**Closed to bots, on purpose:** quests and lore (paid model calls that
+mean nothing without a person reading them), pokes and chat.
+
+**Measured.** Every five minutes the cron logs one line — bones eaten,
+paws taken, marks made, refusals by reason — and the `collect_events`
+table holds the ledger per bot, so a report can answer the owner's
+questions from the database: bones per session at the current spawn
+rates, time above the lucky threshold, how often marking is refused,
+how fast XP moves, whether the drain and the bone economy balance.
+The report itself is the next PR.
+
+**Cost.** Per tick: one UPDATE, two SELECTs, and a transaction per
+item picked up; per bot every ~30 s: the spawn a phone would have
+asked for anyway. On one shared vCPU the tick was ~1.1 s before this;
+watch `cron_slow` after the deploy.
+
+**What would change it.** `SYNC_EVERY_TICKS` and `PARKS_NEAR_M` at the
+top of bots.ts. If the bots' collecting proves too greedy — a bot
+walks over its own spawn radius constantly, a person does not — the
+reach is the lever, or a per-bot appetite. If quests should be open to
+them for the numbers alone, the model call is the only thing in the
+way.

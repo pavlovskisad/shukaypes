@@ -95,9 +95,3 @@ export function botAvatarUrl(i: number): string | null {
   return have ? `${publicBase()}/bot-avatars/${i}.png` : null;
 }
 
-// A bot's level, for its card. Bots have no experience; this is a stable
-// number per bot so the card has one, spread over the range a walker a
-// few weeks in would have. It is a fiction, like the bot.
-export function botLevel(i: number): number {
-  return 2 + ((i * 7) % 11);
-}
