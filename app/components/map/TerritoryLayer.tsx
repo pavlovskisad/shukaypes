@@ -87,6 +87,16 @@ import {
   type TerritoryHeatLayer,
 } from './territoryHeatLayer';
 
+// The first label layer, which is where the 3D buildings and the ground
+// fog are inserted too (MapView has its own copy for them). Everything
+// custom goes in below the type.
+function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
+  for (const l of map.getStyle().layers ?? []) {
+    if (l.type === 'symbol') return l.id;
+  }
+  return undefined;
+}
+
 const AREA_SOURCE = 'territory-area-src';
 const AREA_FILL = 'territory-area-fill';
 const LINK_SOURCE = 'territory-link-src';
@@ -332,15 +342,44 @@ export function TerritoryLayer({
     const dots = dotsGeoJSON(marks, Date.now(), rivalMarks);
 
     const apply = () => {
-      // Territory is paint on the FLOOR — it belongs under the city, not
-      // over it. The 3D buildings are their own custom layer, so inserting
-      // beneath it lets them stand on the claimed ground (and occlude it)
-      // instead of the blue washing over their roofs. Falls back to the top
-      // of the stack when the buildings layer isn't present (the flat map
-      // style), where there's nothing to sit under anyway.
-      const under = map.getLayer(THREE_BUILDINGS_LAYER_ID)
+      // ONE STAIN OVER THE WHOLE PICTURE — floor and city together.
+      //
+      // This used to insert BENEATH the 3D buildings, so they stood on the
+      // claimed ground and occluded it, and the buildings were tinted
+      // separately in their own shader. Two paints of one claim, and they
+      // never agreed: the building tint was computed per FOOTPRINT, so
+      // neighbouring blocks stepped between values instead of grading, and
+      // it was gated on the distance haze, so how much of it you saw
+      // changed with the zoom. The owner, with four screenshots: "paints
+      // different on different zooms and not gradual kinda… except if its
+      // unified overlay paint thats same as we paint floor but above
+      // buildings and floor together like a sandwich kinda?"
+      //
+      // That is exactly this line. The heat layer's last pass is already a
+      // fullscreen multiply stain with the depth test off (see
+      // territoryHeatLayer) — it dyes whatever has been drawn beneath it.
+      // Drawn after the buildings it dyes the city too, per pixel, from the
+      // same blurred field, so there is one paint and it cannot disagree
+      // with itself. It costs nothing: the same pass, later in the order.
+      //
+      // BELOW THE LABELS, though — `firstSymbolLayerId` is where the
+      // buildings go in too — because a multiply stain over place names
+      // would dye the type as well.
+      //
+      // What it trades: the stain lands where the GROUND projects, so a
+      // building is dyed by the claim its screen footprint covers rather
+      // than the one it stands on. At the near-top-down camera the
+      // territory view opens at, those are the same place; the more the
+      // camera pitches, the more a tall block wears the colour of the
+      // ground behind it, which reads as paint over the city — which is
+      // what it is.
+      const under = firstSymbolLayerId(map);
+      // The MARKS are not the paint. A dot is a thing lying on the
+      // pavement, so a building in front of it should still hide it —
+      // it stays under the city, where it always was.
+      const underCity = map.getLayer(THREE_BUILDINGS_LAYER_ID)
         ? THREE_BUILDINGS_LAYER_ID
-        : undefined;
+        : under;
       const setOr = (id: string, data: GeoJSON.FeatureCollection): boolean => {
         const src = map.getSource(id) as maplibregl.GeoJSONSource | undefined;
         if (src) {
@@ -372,6 +411,17 @@ export function TerritoryLayer({
             console.error('[territory] soft layer addLayer failed', e);
             heatRef.current = null;
             setHeatFailed(true);
+          }
+        }
+        // The buildings layer can arrive AFTER this one (entering game
+        // mode loads its chunk lazily), and inserting is a one-off — so
+        // re-assert the order every apply. A move to where it already is
+        // is free.
+        if (map.getLayer(TERRITORY_HEAT_LAYER_ID) && map.getLayer(THREE_BUILDINGS_LAYER_ID)) {
+          try {
+            map.moveLayer(TERRITORY_HEAT_LAYER_ID, under);
+          } catch {
+            /* style mid-swap; the next apply re-asserts it */
           }
         }
         heatRef.current?.setGroups(
@@ -427,7 +477,7 @@ export function TerritoryLayer({
               'fill-antialias': false,
             },
           },
-          under,
+          underCity,
         );
       }
 
@@ -445,7 +495,7 @@ export function TerritoryLayer({
               'line-dasharray': [2, 2],
             },
           },
-          under,
+          underCity,
         );
       }
 

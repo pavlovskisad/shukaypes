@@ -286,208 +286,28 @@ export function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number
   return [x, y, z];
 }
 
-// A building standing on claimed ground takes its owner's colour. The
-// ground fill alone stops at the pavement, so at the pitched angles this
-// map is normally viewed at the city itself stayed neutral and the claim
-// read as a rug thrown under it rather than a neighbourhood belonging to
-// someone. Painting the blocks is what makes a territory look held.
+// THE BUILDINGS ARE NOT PAINTED HERE ANY MORE.
 //
-// Ownership is decided per BUILDING, off its footprint centre, against the
-// same partitioned shapes the ground fill draws — so a block is never one
-// colour underfoot and another above it.
-// How strongly a claim tints the building it holds. Third time this has
-// been decided, and the earlier reasons still stand — they were about
-// something else:
+// They were, for a long time and in three different ways: a flat tint per
+// claimed footprint, then a base-to-roof gradient, then the supersniff
+// beacon's recipe — strength, falloff and distance gate copied whole. Each
+// was an improvement and none of them was right, for one reason that the
+// owner found by looking at four screenshots at once: a claim was being
+// painted TWICE, once on the ground as a blurred field and once on the
+// buildings as a per-footprint value, and two paints of one thing cannot
+// be made to agree. Per footprint means neighbouring blocks step instead
+// of grading. Gated on the haze means the amount changes with the zoom.
 //
-// - At 0.45 every claimed block was a solid slab of colour that buried
-//   the architecture and broke the soft field the ground draws.
-// - A base-to-roof gradient (0.6 at the pavement fading to 0.16 above
-//   ~26m, mimicking the mist pool) failed the other way: the game camera
-//   is pitched, so what it mostly shows is ROOFS — which went pale, and
-//   ownership stopped reading on buildings at all. Pale roofs over
-//   tinted walls looked like a fog bug, not a style.
+// "except if its unified overlay paint thats same as we paint floor but
+// above buildings and floor together like a sandwich kinda?"
 //
-// WHY 0.50 IS NOT A REPEAT OF THE 0.45 MISTAKE. Supersniff's beacon
-// washes buildings at exactly this strength and reads beautifully — a
-// district lit up, blocks standing out as solid volumes. The thing that
-// makes it work is not the number: it is that the beacon paints ONLY the
-// buildings, over ground that stays plain, so there is a figure and a
-// background. The 0.45 slab failed because the ground underneath was
-// dyed just as hard, leaving nothing for the buildings to stand out
-// AGAINST — every surface on screen was colour, so none of it read as
-// deliberate.
-//
-// So the two move together, and the old ranking is deliberately
-// inverted: the buildings become the loud voice and the ground field
-// drops to a quiet backdrop (see FILL_ALPHA in territoryHeatLayer). The
-// city keeps its architecture because the paint still fades with the
-// claim, which the 0.45 version had no way to do.
-//
-// LATER, AND THIS IS THE PART THAT MATTERED. 0.5 was the beacon's
-// number, but it was applied the beacon's number ONLY — not the beacon's
-// recipe — and the result on a phone was still a wall of slabs. What was
-// missing is the distance gate: the beacon multiplies by the raw haze,
-// so it is absent where the camera is and builds toward the horizon.
-// This constant is unchanged; where it is applied is not. See the
-// fragment shader.
-const TERRITORY_PAINT = 0.5;
-
-// The falloff is no longer a constant here at all: it rides in on the
-// vertex attribute, one beacon per zone, computed where the owner of each
-// footprint is already known (see zonesFor). What used to do this job was
-// a lookup into the ground layer's depth field — correct, but it made the
-// buildings depend on another layer's render targets to answer a question
-// about their own claim.
-
-// One building's slice of the merged vertex buffer, plus where it stands.
-interface BuildingSpan {
-  start: number; // first vertex index
-  count: number; // how many vertices
-  lat: number;
-  lng: number;
-}
-
-interface PaintPoly {
-  outer: { lat: number; lng: number }[];
-  holes: { lat: number; lng: number }[][];
-  rgb: [number, number, number];
-}
-
-// Two views turn the claims off entirely: supersniff, and the lost-dog
-// view. Both are about ONE place — a beacon lit on the ground saying
-// "here" — and a city carved into a dozen owner colours underneath makes
-// that beacon one more coloured patch among many. The ground fill goes
-// with it (see MapView's TerritoryLayer gate); muting one without the
-// other leaves the pavement neutral under painted blocks, which reads as
-// a rendering fault rather than a decision.
-// `dogCam` is the one that matters for supersniff — it is the state the
-// current supersniff actually sets — MapView's ground-fill gate has always
-// checked the same one, and the two have to agree or the pavement goes
-// neutral under painted blocks.
-// The third reason to mute it is now the plainest one: the user has not
-// asked to see territory at all. `territoryVisible` is off everywhere
-// except 'грати', and this gate has to move with MapView's ground-fill
-// gate for exactly the reason above — painted blocks over neutral
-// pavement look broken, not intentional.
-function territoryPaintHidden(): boolean {
-  const s = useGameStore.getState();
-  return !s.territoryVisible || (DOG_CAM && s.dogCam) || s.selectedDogId != null;
-}
-
-function territoryPaintPolys(): PaintPoly[] {
-  if (territoryPaintHidden()) return [];
-  const { territoryShapes, rivalTerritory } = useGameStore.getState();
-  const out: PaintPoly[] = [];
-  for (const r of rivalTerritory) {
-    const rgb = ownerColorRgb(r.ownerId);
-    for (const sh of r.shapes) {
-      if (sh.kind !== 'area' || sh.points.length < 3) continue;
-      out.push({ outer: sh.points, holes: sh.holes ?? [], rgb });
-    }
-  }
-  // Yours last so it wins any tie — the partition means there shouldn't be
-  // one, but "which bit is mine" is the answer that matters most.
-  for (const sh of territoryShapes) {
-    if (sh.kind !== 'area' || sh.points.length < 3) continue;
-    out.push({ outer: sh.points, holes: sh.holes ?? [], rgb: OWN_COLOR_RGB });
-  }
-  return out;
-}
-
-// ── One beacon per zone ─────────────────────────────────────────────
-// The supersniff preview lights a place by distance from its middle:
-// full strength inside, fading out past the edge, so a district reads as
-// somewhere lit rather than a shape filled in. Territory now does the
-// same, one beacon per OWNER — not per piece, which would light every
-// walked fragment separately and put the map back to a scatter of
-// islands.
-//
-// It is computed here, on the CPU, once per claim change, because the
-// answer is per BUILDING: which owner holds it and how far that building
-// stands from the middle of their ground. That lands in the vertex
-// attribute the colour already travels in, so the shader stays two lines
-// and needs no field texture, no second render target and no lookup.
-//
-// The one thing NOT copied from the beacon is its distance-fog gate. The
-// preview wants blue that builds toward the horizon and leaves the
-// foreground clean; territory has the opposite job — whose ground you
-// are standing on is most urgent right under your feet.
-interface Zone {
-  lat: number;
-  lng: number;
-  radiusM: number;
-}
-
-// Where the falloff starts and ends, as fractions of the zone's radius —
-// the beacon's own numbers.
-const ZONE_GLOW_IN = 0.3;
-const ZONE_GLOW_OUT = 1.25;
-// ...and it fades to NOTHING at the end of it, exactly as the beacon
-// does, which is the rest of taking the beacon's recipe whole.
-//
-// There used to be a floor of 0.45 here, on the argument that ground
-// somebody holds is held all the way to its edge, and a block fading to
-// zero reads as UNCLAIMED rather than as far-from-the-middle — measured,
-// the floorless version leaves 14-21% of a claim's pieces unpainted.
-// That argument was about buildings having to answer "whose is this",
-// and they no longer do: the ground fill answers it, at full strength,
-// under your feet. What is left for the buildings is the glow, and a
-// glow with a floor under it is a slab.
-
-function zonesFor(polys: PaintPoly[]): Map<string, Zone> {
-  // Grouped by colour, which is one per owner — the palette hands out a
-  // slot per id, and yours is reserved.
-  const acc = new Map<string, { lat: number; lng: number; n: number; pts: PaintPoly[] }>();
-  for (const p of polys) {
-    const key = p.rgb.join(',');
-    let a = acc.get(key);
-    if (!a) acc.set(key, (a = { lat: 0, lng: 0, n: 0, pts: [] }));
-    for (const v of p.outer) {
-      a.lat += v.lat;
-      a.lng += v.lng;
-      a.n++;
-    }
-    a.pts.push(p);
-  }
-  const out = new Map<string, Zone>();
-  for (const [key, a] of acc) {
-    if (!a.n) continue;
-    const lat = a.lat / a.n;
-    const lng = a.lng / a.n;
-    const kx = Math.cos((lat * Math.PI) / 180);
-    // Radius from the spread of the claim itself: the distance nearly all
-    // of it falls inside. A plain maximum would let one far-flung morning
-    // walk stretch the glow across the city, but the upper QUARTILE (the
-    // first cut) drew the beacon far too small — most of a claim ended up
-    // outside the falloff entirely.
-    const d: number[] = [];
-    for (const p of a.pts)
-      for (const v of p.outer)
-        d.push(
-          Math.hypot((v.lng - lng) * kx * 111320, (v.lat - lat) * 111320),
-        );
-    d.sort((x, y) => x - y);
-    const q = d[Math.min(d.length - 1, Math.floor(d.length * 0.9))] ?? 0;
-    // The minimum matters more than it looks: this is computed from the
-    // pieces LOADED right now, so a claim whose far half is still off
-    // screen would otherwise get a tiny beacon and a hard edge through
-    // the middle of itself.
-    out.set(key, { lat, lng, radiusM: Math.max(200, q) });
-  }
-  return out;
-}
-
-function paintAt(lat: number, lng: number, polys: PaintPoly[]): PaintPoly | null {
-  // Last match wins, so the loop can't stop early — see the ordering note
-  // above.
-  let hit: PaintPoly | null = null;
-  for (const p of polys) {
-    if (!pointInRing(lat, lng, p.outer)) continue;
-    if (p.holes.some((h) => pointInRing(lat, lng, h))) continue;
-    hit = p;
-  }
-  return hit;
-}
+// Yes. The ground field's last pass is a fullscreen multiply stain with
+// the depth test off, so moving it above this layer in the style order
+// dyes the city with the same pixels that dye the pavement — one paint,
+// per pixel, identical at every zoom, and no extra draw. See the
+// insertion comment in TerritoryLayer. Everything that used to compute a
+// per-building colour is gone with it, including the vertex attribute it
+// travelled in.
 
 export function createThreeBuildingsLayer(
   // Live getter for the companion (dog) position — drives the always-on orb that
@@ -495,17 +315,6 @@ export function createThreeBuildingsLayer(
   getDogPos?: () => { lat: number; lng: number } | null,
 ): CustomLayerInterface {
   let renderer: THREE.WebGLRenderer | null = null;
-  // Territory painting state. `paintedShapes`/`paintedRivals` hold the array
-  // references last painted; the store swaps them on every sync, so an
-  // identity check is enough to notice a change and costs nothing per frame.
-  let buildingSpans: BuildingSpan[] = [];
-  let paintedShapes: unknown = null;
-  let paintedRivals: unknown = null;
-  // Whether the last paint pass ran with the claims muted. Entering or
-  // leaving supersniff / the lost-dog view changes what should be on
-  // screen without touching either array, so the identity check alone
-  // would leave the blocks painted until the next sync swapped them.
-  let paintedHidden = false;
   const scene = new THREE.Scene();
   const camera = new THREE.Camera();
 
@@ -587,13 +396,13 @@ export function createThreeBuildingsLayer(
     shader.uniforms.u_dogLocal = fogUniforms.u_dogLocal;
     shader.uniforms.u_dogActive = fogUniforms.u_dogActive;
     shader.vertexShader =
-      'varying vec3 vLocalPos;\nattribute vec4 aTerr;\nvarying vec4 vTerr;\n' +
+      'varying vec3 vLocalPos;\n' +
       shader.vertexShader.replace(
         '#include <begin_vertex>',
-        '#include <begin_vertex>\n  vLocalPos = position;\n  vTerr = aTerr;',
+        '#include <begin_vertex>\n  vLocalPos = position;',
       );
     shader.fragmentShader =
-      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform float u_fogZoom;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nuniform vec3 u_dogLocal;\nuniform float u_dogActive;\nvarying vec3 vLocalPos;\nvarying vec4 vTerr;\n' +
+      'uniform vec3 u_camLocal;\nuniform vec3 u_fogColor;\nuniform float u_fogNear;\nuniform float u_fogDensity;\nuniform float u_fogZoom;\nuniform vec3 u_focusLocal;\nuniform float u_clearRadius;\nuniform float u_clearBand;\nuniform float u_dogCam;\nuniform float u_time;\nuniform vec3 u_previewLocal;\nuniform float u_previewRadius;\nuniform vec3 u_previewColor;\nuniform float u_previewStrength;\nuniform vec3 u_dogLocal;\nuniform float u_dogActive;\nvarying vec3 vLocalPos;\n' +
       shader.fragmentShader.replace(
         '#include <dithering_fragment>',
         [
@@ -615,42 +424,6 @@ export function createThreeBuildingsLayer(
           '  float _fd = length(vLocalPos.xz - u_focusLocal.xz);',
           '  _f *= smoothstep(u_clearRadius, u_clearRadius + u_clearBand, _fd);',
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
-          // Claimed ground lights the buildings standing on it, with
-          // SUPERSNIFF'S BEACON RECIPE — the owner's call, looking at both
-          // on a phone: "check the beacon in supersniff mode recipe, the
-          // exact one, and accept it to buildings paint in game mode?"
-          //
-          // So it is the line below, verbatim, with two substitutions:
-          // vTerr.a stands in for the preview's falloff × strength, and
-          // the owner's colour for brand blue. Same 0.5 mix, same gate on
-          // the raw distance haze, and — the part that actually changes
-          // what you see — it now runs AFTER the fog instead of before.
-          //
-          // That gate is what the beacon has and the old paint did not.
-          // Before, every claimed block was tinted at full strength right
-          // under the camera: a wall of flat slabs, the architecture
-          // buried. Gated, the foreground stays the city as it is and the
-          // colour builds toward the horizon, which is what makes the
-          // supersniff beacon read as a district lit up rather than a
-          // shape filled in.
-          //
-          // What it costs: a block you are standing next to is no longer
-          // painted, so buildings stop answering "whose is this" up close.
-          // They do not have to — THE FLOOR STAYS AS IT WAS (the owner's
-          // words, and the ground fill in territoryHeatLayer is untouched
-          // by this): the pavement under your feet carries the claim, and
-          // the buildings carry the glow.
-          //
-          // The one thing that cannot be literally the same: the beacon
-          // measures its falloff per PIXEL from one centre in the shader,
-          // and there are a dozen owners on screen at once. vTerr.a is
-          // therefore evaluated per building, on the CPU, from the same
-          // 0.3→1.25 smoothstep (see ZONE_GLOW_IN/OUT). At the size of a
-          // footprint against the size of a claim, that difference is not
-          // visible.
-          '  float _terr = vTerr.a * clamp(_distFog, 0.0, 1.0);',
-          '  gl_FragColor.rgb = mix(gl_FragColor.rgb, vTerr.rgb, clamp(_terr * ' +
-            TERRITORY_PAINT.toFixed(2) + ', 0.0, 1.0));',
           // Sniff-and-lead preview beacon: wash the previewed zone's area in
           // brand blue. Weighted by the distance haze (+ a small floor) so the
           // target reads as blue fog lighting up toward the horizon, not flat
@@ -862,10 +635,6 @@ export function createThreeBuildingsLayer(
 
       const positions: number[] = [];
       const normals: number[] = [];
-      // Which vertices belong to which building, plus where that building
-      // stands. Kept so territory can be REPAINTED without rebuilding the
-      // whole city: claims change every sync, geometry only when you pan.
-      const spans: BuildingSpan[] = [];
       // Ground drop-shadow geometry (flat quads swept toward the sun). Shadow
       // ground direction + length-per-height from the same azimuth/elevation
       // the building light uses.
@@ -933,17 +702,6 @@ export function createThreeBuildingsLayer(
 
           const shape = shapeFromRings(rings, originX, originY, mPerUnit);
           if (!shape) continue;
-          const spanStart = positions.length / 3;
-          // Footprint centre, in lng/lat — what decides whose ground this
-          // building is on.
-          let cLng = 0;
-          let cLat = 0;
-          const outerRing = rings[0] ?? [];
-          const n = Math.max(1, outerRing.length - 1); // last point repeats the first
-          for (let i = 0; i < n; i++) {
-            cLng += outerRing[i]![0] / n;
-            cLat += outerRing[i]![1] / n;
-          }
           let geo: THREE.ExtrudeGeometry;
           try {
             geo = new THREE.ExtrudeGeometry(shape, {
@@ -968,8 +726,6 @@ export function createThreeBuildingsLayer(
           }
           geo.dispose();
           ni.dispose();
-          const spanCount = positions.length / 3 - spanStart;
-          if (spanCount > 0) spans.push({ start: spanStart, count: spanCount, lat: cLat, lng: cLng });
         }
       }
 
@@ -987,19 +743,12 @@ export function createThreeBuildingsLayer(
         'normal',
         new THREE.Float32BufferAttribute(normals, 3),
       );
-      // rgb = the owner's colour, a = how strongly to paint (0 = unclaimed).
-      merged.setAttribute(
-        'aTerr',
-        new THREE.Float32BufferAttribute(new Float32Array((positions.length / 3) * 4), 4),
-      );
 
       if (mesh) {
         scene.remove(mesh);
         mesh.geometry.dispose();
       }
       mesh = new THREE.Mesh(merged, material);
-      buildingSpans = spans;
-      paintedShapes = null; // force a paint pass against the fresh geometry
       // We drive placement entirely through camera.projectionMatrix, so the
       // mesh stays at the identity origin. Frustum culling would use its
       // (untransformed) local bounds and wrongly cull it — turn it off.
@@ -1075,52 +824,6 @@ export function createThreeBuildingsLayer(
     if (moved > REBUILD_MOVE_M || dz > REBUILD_ZOOM_D) rebuild();
   };
 
-  // Recolour the buildings from the current claims. Cheap enough to run on
-  // any change (a few thousand footprints against a handful of polygons)
-  // and far cheaper than re-extruding the city, which is why the colour
-  // lives in its own attribute rather than in the geometry.
-  function repaintTerritory(): void {
-    if (!mesh) return;
-    const attr = mesh.geometry.getAttribute('aTerr') as
-      | THREE.BufferAttribute
-      | undefined;
-    if (!attr) return;
-    const polys = territoryPaintPolys();
-    const zones = zonesFor(polys);
-    const arr = attr.array as Float32Array;
-    arr.fill(0);
-    if (polys.length) {
-      for (const span of buildingSpans) {
-        const hit = paintAt(span.lat, span.lng, polys);
-        if (!hit) continue;
-        const [r, g, b] = hit.rgb;
-        // How brightly this building is lit by its owner's beacon: full
-        // inside the heart of their ground, fading out past the edge.
-        const z = zones.get(hit.rgb.join(','));
-        let glow = 1;
-        if (z) {
-          const kx = Math.cos((z.lat * Math.PI) / 180);
-          const d = Math.hypot(
-            (span.lng - z.lng) * kx * 111320,
-            (span.lat - z.lat) * 111320,
-          );
-          const t = (d - z.radiusM * ZONE_GLOW_IN) /
-            (z.radiusM * (ZONE_GLOW_OUT - ZONE_GLOW_IN));
-          const u = Math.min(1, Math.max(0, t));
-          // The beacon's own smoothstep, landing on nothing as it does.
-          glow = 1 - u * u * (3 - 2 * u);
-        }
-        const end = (span.start + span.count) * 4;
-        for (let o = span.start * 4; o < end; o += 4) {
-          arr[o] = r;
-          arr[o + 1] = g;
-          arr[o + 2] = b;
-          arr[o + 3] = glow;
-        }
-      }
-    }
-    attr.needsUpdate = true;
-  }
 
   return {
     id: THREE_BUILDINGS_LAYER_ID,
@@ -1174,23 +877,6 @@ export function createThreeBuildingsLayer(
     ) {
       if (!renderer || !mesh) return;
       try {
-        // Claims change on the 15s sync, geometry only when you pan — so
-        // watch the store's array identities (swapped on every sync) and
-        // repaint just the colour attribute when they move. An identity
-        // check per frame is free; re-extruding the city would not be.
-        const gs = useGameStore.getState();
-        const terrHidden = territoryPaintHidden();
-        if (
-          gs.territoryShapes !== paintedShapes ||
-          gs.rivalTerritory !== paintedRivals ||
-          terrHidden !== paintedHidden
-        ) {
-          paintedShapes = gs.territoryShapes;
-          paintedRivals = gs.rivalTerritory;
-          paintedHidden = terrHidden;
-          repaintTerritory();
-        }
-
         const tone = DAY;
         // The see-through dissolve is always on (u_dogActive below); this flag
         // only adds its animated shimmer/banding while the dog-cam chase view
