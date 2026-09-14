@@ -36,10 +36,10 @@ const MAP_FONT = 'Annex Fam Normal';
 // over the walking map in a dozen saturated colours, and a vivid green
 // park read as somebody's claim rather than as a park. That is not the
 // arrangement any more: territory is a lens now, it only paints in play
-// mode, and play mode has its own palette (PLAY_PALETTE below) which
-// takes the hue out for exactly that reason. So the walking map was
-// paying for a conflict that had moved somewhere else — a grey-green
-// city under a bright white HUD, on an app about going outside.
+// mode, and the chips and ground there carry their own ring and glow.
+// So the walking map was paying for a conflict that had moved somewhere
+// else — a grey-green city under a bright white HUD, on an app about
+// going outside.
 //
 // Saturation goes back x1.9, to 0.49 base — where it was before the
 // paling — with LIGHTNESS UNTOUCHED, so the parks and the river get
@@ -51,8 +51,8 @@ const MAP_FONT = 'Annex Fam Normal';
 //   paled           25           20/27         0.26
 //   here            46           24/38         0.49
 //
-// PLAY_PALETTE is untouched by this: it names its own greens and blues,
-// so the territory view stays as quiet as it was.
+// This is the only palette the map has, in every mode — see the note
+// below where the territory view's quieter one used to be.
 export const LIGHT_PALETTE = {
   paper: '#ffffff',
   crayon: '#2a2a2a',
@@ -96,39 +96,17 @@ export const LIGHT_PALETTE = {
 
 export type Palette = typeof LIGHT_PALETTE;
 
-// The same map with its hue taken out, for the territory view.
+// THERE IS NO SECOND PALETTE. The territory view used to get one
+// (PLAY_PALETTE), every hue desaturated to 0.35 so a green park could not
+// argue with a green territory drawn over it. Measured, it worked: park
+// against water fell from 24.5 to 10.0 CIE76, enough to still tell the
+// river from a lawn and not enough to fight an owner's paint.
 //
-// Owner colours are the subject there — a dozen of them, drawn over the
-// city — and a green park under a green territory is two greens arguing.
-// Every hue below is LIGHT_PALETTE's own, desaturated to 0.35 of its
-// saturation with lightness untouched, so what goes is the colour and
-// not the shape: you can still see where the river runs and where the
-// parks are, by tone.
-//
-// Measured the same way the desaturation above was, CIE76 against the
-// paper:
-//
-//                park vs water   park vs paper   water vs paper   base sat
-//   walking map       24.5            26.8            19.5          0.262
-//   here              10.0            22.7            17.8          0.092
-//   fully grey         5.8            23.0            17.2          0.000
-//
-// 0.35 rather than 0: the structure argument is the same one the file
-// makes above — pale everything the whole way and the river reads as a
-// wide grey street. At 10 the water is still about four JNDs cooler
-// than a lawn, which is enough to tell them apart and not enough to
-// fight an owner's paint. Roads, paper and labels are already neutral
-// and are left alone.
-export const PLAY_PALETTE: Palette = {
-  ...LIGHT_PALETTE,
-  green: '#bec4b8',
-  greenDark: '#a5ad9f',
-  greenLight: '#e0e3dc',
-  blue: '#c7cfd4',
-  blueDark: '#afb8bd',
-  blueLight: '#e4e8e9',
-  labelWater: '#5b737f',
-};
+// The owner looked at both and kept the bright one: "lets not change map
+// pallete in game mode let it be bright as the normal one." The chips and
+// the ground carry their own ring and glow, which is what actually
+// separates them from the city underneath; draining the map's colour the
+// moment you open the thing you play reads as the app going flat.
 
 
 // How much of the upstream style's road width we keep. Liberty draws for a

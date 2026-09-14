@@ -1777,3 +1777,25 @@ settles a gap in one tick. The dry run prints what the index holds
 first — counted hours, how many are on the board, the mean — so the
 choice is made with the numbers in view. XP, level, points and
 collected bones are untouched; `wipe:stats` is the tool for those.
+
+### D-80 · One map palette, in every mode ✅
+
+Territory swapped in a near-monochrome city while it was drawn
+(`PLAY_PALETTE`), on the argument that a green park under a green
+territory is two greens arguing and the owner colours should be the
+only hues on screen. Measured, it did what it claimed: park against
+water fell from 24.5 to 10.0 CIE76 — enough to still read the river
+against a lawn, not enough to fight somebody's paint.
+
+The owner looked at both and kept the bright one: "lets not change map
+pallete in game mode let it be bright as the normal one." He is right
+about what it costs. The chips and the ground already carry a ring and
+a coloured glow (D-73, the territory view's glow), and that is what
+separates them from the city underneath; draining the map the moment
+you open the thing you actually play reads as the app going flat, not
+as the territory coming forward — on a game about going outside, in a
+city that is grey enough in February.
+
+`PLAY_PALETTE` is gone rather than left unused, with the measurement
+kept as a note where it stood, so the next person to reach for a
+quieter map finds the numbers and the reason it was not taken.

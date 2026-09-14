@@ -21,7 +21,6 @@ import { useAccessStore } from '../../stores/accessStore';
 import { MapContext } from './MapContext';
 import {
   LIGHT_PALETTE,
-  PLAY_PALETTE,
   applyCrayonOverride,
   setStreetLabelsVisible,
   fetchCrayonStyleSpec,
@@ -707,9 +706,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // outlive the condition that hid it. Visible → still mounted and
   // sliding away → gone. `deckVisible` is the truth; `deckMounted` is
   // what the DOM holds.
-  // The city goes near-monochrome while territory is drawn over it, so a
-  // dozen owner colours are the only hues on screen. See PLAY_PALETTE.
-  const mapPalette = territoryVisible ? PLAY_PALETTE : LIGHT_PALETTE;
+  // ONE PALETTE, EVERYWHERE.
+  //
+  // Territory used to swap in a near-monochrome city (PLAY_PALETTE), on
+  // the argument that a green park under a green territory is two greens
+  // arguing and the owner colours should be the only hues on screen. The
+  // owner's call, looking at both: "lets not change map pallete in game
+  // mode let it be bright as the normal one." The chips and the ground
+  // already carry a ring and a glow that separate them from the map, and
+  // a city that drains its colour the moment you open the thing you play
+  // reads as the app going flat, not as the territory coming forward.
+  const mapPalette = LIGHT_PALETTE;
 
   const deckVisible = DOG_CAM && dogCam && onMapScreen && !menuOpen;
   const [deckMounted, setDeckMounted] = useState(deckVisible);
