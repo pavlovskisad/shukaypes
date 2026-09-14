@@ -1687,3 +1687,59 @@ windows, their chances, the length. A "check-in" — the owner opening
 the app at home for a minute to feed the dog — is the one thing real
 owners do that the bots still do not; add a fourth, short window if
 the hunger numbers say it matters.
+
+### D-78 · A hundred and twenty bots, and a fresh city ✅
+
+The owner, an hour after D-77 landed: "id do more bots sir and generate
+more avatars for them so its like at least 10-15 online? … now i see
+like 2", and then: "also wipe the territories so we see how it'll work
+in more or less close to real situation bc now they're just fully
+taken."
+
+**How many.** On an owner's hours a pool is out at about 12% during
+the evening window and peaks near 18% around 08:45, so thirty bots
+show three or four in the evening and a hundred and twenty show twelve
+to fifteen (about twenty-one at the morning peak, four at midday, none
+at night — night is empty by design). The count is the Fly secret
+`MULTIPLAYER_BOTS`; the owner sets it after this lands, because raising
+it first would put blank chips with repeated names on the map.
+
+**Room.** The home planner keeps bots a minimum distance apart around
+the ten central hotspots. At the old 420 m a hundred and twenty spilled
+out to 4.5 km rings — the first cut added fifteen outer-district parks
+to give those rings somewhere to be, and the owner sent it back: "dont
+spread them that far sir we dont need, let it be 120 close to my
+neighbourhood-district, center." So the spacing came down instead:
+at 300 m (`HOME_MIN_SEP_M`, still well past the 110 m contest radius
+and inside the 240 m home range, so neighbours meet on every outing)
+115 of 120 live within 3 km of Maidan and 74 within 2 km, no
+fallbacks. Denser means more border wars, which is what they are for.
+The first thirty bots' homes shift a little as a result; with the wipe
+below that costs nothing.
+
+**Names and faces.** Ninety more roster entries in
+`services/botAvatars.ts`, hand-written like the first thirty, and
+their portraits drawn with `pnpm bots:avatars` through the D-72 recipe
+(about three dollars, ~2 MB of PNGs in the image). An index keeps its
+name for good, so `bot:N`'s users row is untouched.
+
+**The wipe.** `pnpm wipe:territory` (`src/db/wipe-territory.ts`) —
+dry by default, `--apply` explicit, bots only unless `--all`, and the
+dry run prints what is held (marks, ground pieces, holders, km², raids
+per cohort, the biggest holders) and exactly what the apply deletes:
+the chosen owners' marks, ground and raids, plus a reset of the
+last-mark spacing and home-ground flag on their companion rows so the
+first mark after the wipe is not refused against a mark that no
+longer exists. Progression — points, XP, bones, the happiness index —
+is not territory and stays. Not reversible; `--snapshot=<path>` writes
+the rows out first. Nothing re-seeds at boot (`botSeedMarks` is 0),
+so after the wipe the city is claimed at the new pace, from nothing,
+which is the picture the owner wants to watch.
+
+**Risks named before doing it.** Territory is the load: 120 × 12 marks
+is 1,440 against 360, on one shared vCPU, read by every phone's sync —
+watch `cron_slow` and sync timings after the count goes up, and do not
+go past 120 in one step. Both leaderboards get 120 bot rows; whether
+bots should be capped or filtered there is a separate decision. The
+morning peak of ~21 out is below the 27 that ran fine before, so the
+tick itself is not the risk.

@@ -219,8 +219,16 @@ interface Bot {
 // ever holds anything and the map just shows them flickering. A naive
 // per-hotspot ring isn't enough: rings around two nearby hotspots can
 // collide, which put two bots 20m apart in the first cut.
-const HOME_RING_M = 450;
-const HOME_MIN_SEP_M = 420;
+//
+// Sized for a hundred and twenty in the centre (D-78). At 420 m apart
+// the pool spilled out to 4.5 km rings; the owner wants them "close to
+// my neighbourhood-district, center", and at 300 m — still well past the
+// 110 m contest radius and inside the 240 m home range, so neighbours
+// meet on every outing — 115 of 120 live within 3 km of Maidan and 74
+// within 2 km (homes.mts simulation, 14 Sep). Closer means more border
+// wars, which is the point of them.
+const HOME_RING_M = 320;
+const HOME_MIN_SEP_M = 300;
 // Golden angle: successive attempts land on different bearings instead of
 // marching along one line, so a crowded hotspot fills evenly.
 const GOLDEN_ANGLE = 2.399963;
