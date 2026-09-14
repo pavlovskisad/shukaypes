@@ -1799,3 +1799,44 @@ city that is grey enough in February.
 `PLAY_PALETTE` is gone rather than left unused, with the measurement
 kept as a note where it stood, so the next person to reach for a
 quieter map finds the numbers and the reason it was not taken.
+
+### D-81 · The buildings take the beacon's recipe whole ✅
+
+Same evening, the same eye: "check the beacon in supersniff mode
+recipe, the exact one, and accept it to buildings paint in game mode?
+but like literally the same one or it cant be done? floor stays as is."
+
+It can, and it is the answer. Territory already used the beacon's
+strength (0.5) and the beacon's falloff shape (a 0.3→1.25 smoothstep
+out from the middle of a claim) — and still came out as a wall of flat
+slabs in a phone screenshot, because it copied the numbers and not the
+recipe. Two things were different:
+
+- **The distance gate.** The beacon multiplies by the raw distance
+  haze, so it is absent where the camera is and builds toward the
+  horizon. That is the whole reason a supersniff preview reads as a
+  district lit up rather than a shape filled in. Territory had no gate:
+  every claimed block was tinted at full strength right under the
+  camera, and the architecture went under the paint.
+- **The floor.** The falloff landed on 0.45 rather than on nothing, so
+  even the far edge of a claim kept half a coat.
+
+Both are gone; the wash is now the beacon's line verbatim, after the
+fog instead of before it, with the owner's colour for brand blue and
+the per-building falloff for the preview's per-pixel one.
+
+**What it costs, and why it is affordable.** A block you stand next to
+is no longer painted, so buildings stop answering "whose is this" up
+close — which was exactly the argument for the floor (measured: without
+it, 14-21% of a claim's pieces carry no paint). They do not have to
+answer it any more. The floor stays as it was, at the owner's
+instruction: the ground fill carries the claim under your feet, and the
+buildings carry the glow.
+
+**The one thing that cannot be literal.** The beacon measures its
+falloff per pixel from a single centre held in a uniform, and a
+territory view has a dozen owners on screen. The falloff therefore
+stays where it was computed — per building, on the CPU, from the same
+smoothstep — and rides in on the vertex attribute the colour already
+travels in. At the size of a footprint against the size of a claim that
+is not a visible difference.
