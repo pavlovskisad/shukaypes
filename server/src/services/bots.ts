@@ -55,6 +55,26 @@ const HOTSPOTS: LatLng[] = [
   { lat: 50.4595, lng: 30.5265 }, // Poshtova Sq
   { lat: 50.4523, lng: 30.5147 }, // St. Sophia
   { lat: 50.4330, lng: 30.5215 }, // Olimpiiska
+  // The outer districts (D-78). Thirty bots fit around the ten central
+  // spots; a hundred and twenty pushed the home planner out to 4 km
+  // rings with nothing to walk to. These are where those bots live —
+  // every one a real park people walk dogs in, and a place bones can
+  // spawn (PARKS_NEAR_M). All checked against the water mask.
+  { lat: 50.4385, lng: 30.5545 }, // Park Slavy (Pechersk)
+  { lat: 50.4620, lng: 30.4870 }, // Lukianivska Sq
+  { lat: 50.4290, lng: 30.4720 }, // Solomianskyi Park
+  { lat: 50.4600, lng: 30.4030 }, // Nyvky Park
+  { lat: 50.5190, lng: 30.5300 }, // Natalka Park (Obolon)
+  { lat: 50.4470, lng: 30.5760 }, // Hydropark
+  { lat: 50.4470, lng: 30.5920 }, // Rusanivka canal
+  { lat: 50.4380, lng: 30.6200 }, // Peremohy Park (Darnytsia)
+  { lat: 50.4490, lng: 30.4600 }, // KPI Park
+  { lat: 50.4130, lng: 30.5600 }, // Hryshko Botanical Garden
+  { lat: 50.4020, lng: 30.5050 }, // Holosiivskyi Park
+  { lat: 50.4740, lng: 30.4340 }, // Syrets Park
+  { lat: 50.5130, lng: 30.6110 }, // Desnianskyi Park (Troieshchyna)
+  { lat: 50.4980, lng: 30.3960 }, // Vynohradar
+  { lat: 50.4030, lng: 30.6250 }, // Pozniaky lake
 ];
 
 // How far a bot wanders from the patch it holds. Sized against

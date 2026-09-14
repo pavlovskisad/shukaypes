@@ -63,7 +63,8 @@
     "check:accounts": "tsx src/lib/accounts.check.ts",
     "check:ink": "tsx src/services/ink.check.ts",
     "check:bot-day": "tsx src/services/botDay.check.ts",
-    "wipe:users": "tsx src/db/wipe-users.ts"
+    "wipe:users": "tsx src/db/wipe-users.ts",
+    "wipe:territory": "tsx src/db/wipe-territory.ts"
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.90.0",
