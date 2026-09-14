@@ -1,6 +1,7 @@
-// Fullscreen "see all" modal for the territory standing. Opened by the
-// "see all" link under the top ten on the tasks tab; renders the whole
-// board as the same portrait rows the card uses, silhouettes and all.
+// Fullscreen "see all" modal for the territory standing — and, since
+// D-75, for the happiness index too (`kind`): the same portrait rows,
+// the silhouette for one and the big number for the other. Opened by
+// the "see all" link under the card's rows on the tasks tab.
 // Floating X in the top-right corner closes; no header bar (the user
 // just came from the card titled "who holds the city" — no need to
 // repeat the label). Same sheet mechanics as LostDogsModal: nullable
@@ -8,7 +9,7 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
-import type { TerritoryRanking } from '../../services/api';
+import type { HappinessRanking, TerritoryRanking } from '../../services/api';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
@@ -21,9 +22,25 @@ import { BoardRow } from './BoardRow';
 
 const SHEET_ANIM_MS = 240;
 
+// The happiness index at the row's end, the same width as the
+// territory silhouette so the two boards' rows line up.
+const INDEX: React.CSSProperties = {
+  display: 'inline-block',
+  width: 92,
+  textAlign: 'center',
+  fontSize: TYPE.display,
+  fontWeight: 800,
+  flex: 'none',
+};
+
+type Row = TerritoryRanking | HappinessRanking;
+
 interface Props {
   // null = closed. Non-null array = open showing those rows.
-  board: TerritoryRanking[] | null;
+  board: Row[] | null;
+  // Which board these rows are: the territory standing (silhouettes,
+  // tappable rows) or the happiness index (the number, no tap).
+  kind?: 'territory' | 'happiness';
   // Your rank on the FULL board, so your row reads in your blue here
   // exactly as it does on the card.
   youRank: number | null;
@@ -33,9 +50,9 @@ interface Props {
   onPick?: (row: TerritoryRanking) => void;
 }
 
-export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
+export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, onPick }: Props) {
   const t = useStrings();
-  const [renderBoard, setRenderBoard] = useState<TerritoryRanking[] | null>(board);
+  const [renderBoard, setRenderBoard] = useState<Row[] | null>(board);
   const [closing, setClosing] = useState(false);
 
   useEffect(() => {
@@ -90,26 +107,46 @@ export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
       >
         {renderBoard.map((row, i) => {
           const isYou = youRank === i + 1;
-          const pickable = onPick && row.mainPiece && row.mainPiece.length >= 3;
+          if (kind === 'happiness') {
+            const h = row as HappinessRanking;
+            return (
+              <BoardRow
+                key={h.userId}
+                rank={String(i + 1)}
+                name={isYou ? t.tasks.boardYou : h.name}
+                areaLabel={t.profile.hoursTogether(Math.floor(h.activeS / 3600))}
+                piece={undefined}
+                color={isYou ? OWN_COLOR_CSS : ownerColorCss(h.userId)}
+                you={isYou}
+                avatarUrl={h.avatarUrl}
+                owner={isYou ? null : h.owner}
+                trailing={
+                  <span style={{ ...INDEX, color: isYou ? OWN_COLOR_CSS : undefined }}>{String(h.index)}</span>
+                }
+              />
+            );
+          }
+          const r = row as TerritoryRanking;
+          const pickable = onPick && r.mainPiece && r.mainPiece.length >= 3;
           return (
             <div
-              key={row.userId}
+              key={r.userId}
               onClick={
                 pickable
-                  ? (e) => playPopThen(e.currentTarget, () => onPick(row))
+                  ? (e) => playPopThen(e.currentTarget, () => onPick(r))
                   : undefined
               }
               style={{ cursor: pickable ? 'pointer' : 'default' }}
             >
               <BoardRow
                 rank={String(i + 1)}
-                name={isYou ? t.tasks.boardYou : row.name}
-                areaLabel={t.profile.areaValue(row.areaM2)}
-                piece={row.mainPiece}
-                color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
+                name={isYou ? t.tasks.boardYou : r.name}
+                areaLabel={t.profile.areaValue(r.areaM2)}
+                piece={r.mainPiece}
+                color={isYou ? OWN_COLOR_CSS : ownerColorCss(r.userId)}
                 you={isYou}
-                avatarUrl={row.avatarUrl}
-                owner={isYou ? null : row.owner}
+                avatarUrl={r.avatarUrl}
+                owner={isYou ? null : r.owner}
               />
             </div>
           );
