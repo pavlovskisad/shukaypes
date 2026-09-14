@@ -1365,7 +1365,10 @@ so its thin like here and not fat like we have now in profile") in
 plain ink (the first cut coloured it by territory; on the map that
 read as a badge, and the owner asked for black "as everywhere") —
 the chip instead GLOWS in the owner's colour, a soft halo behind
-the paper — full in the territory view, gentler on a walk — so
+the paper — full in the territory view, gentler on a walk (halved
+again on 14 Sep, PR #629: on a plain map the halo is a tint at the
+paper's edge that says "someone", and "whose" waits for the painted
+ground) — so
 "whose zone is that" is still answerable by the chip standing on it — and the drawn portrait
 (D-72) inside it; a walker without a portrait gets the sitting dog sprite in the
 disc, so a chip is never blank. The old rendering — sprite plus name
