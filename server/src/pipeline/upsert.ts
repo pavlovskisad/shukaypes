@@ -35,23 +35,13 @@ const POSITION_UPDATE_THRESHOLD_M = 150;
 // is what stops somebody walking the globe to force cache misses on a
 // billable Google API. Two bounding boxes would drift, and then the
 // ingest gate and the spend gate would disagree about where Kyiv is.
-export const KYIV_BBOX = {
-  north: 50.65,
-  south: 50.20,
-  west: 30.10,
-  east: 30.90,
-};
+// Re-exported so the existing importers (routes/places.ts) keep their
+// path; the numbers themselves live in lib/servedArea.ts, with the
+// client's copy checked against them.
+export { KYIV_BBOX, inKyivBbox } from '../lib/servedArea.js';
+import { inKyivBbox } from '../lib/servedArea.js';
 const FALLBACK_LAT = 50.4501;
 const FALLBACK_LNG = 30.5234;
-
-function inKyivBbox(lat: number, lng: number): boolean {
-  return (
-    lat >= KYIV_BBOX.south &&
-    lat <= KYIV_BBOX.north &&
-    lng >= KYIV_BBOX.west &&
-    lng <= KYIV_BBOX.east
-  );
-}
 
 function isFallbackCoord(lat: number, lng: number): boolean {
   return lat === FALLBACK_LAT && lng === FALLBACK_LNG;

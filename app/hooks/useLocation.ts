@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Platform } from 'react-native';
-import type { LatLng } from '@shukajpes/shared';
+import { insideServedArea, type LatLng } from '@shukajpes/shared';
 import { DEV_TOOLS } from '../constants/devTools';
 
 // THE POSITION WE INVENT WHEN WE DO NOT KNOW ONE.
@@ -93,6 +93,35 @@ export interface LocationState {
   error: string | null;
   granted: boolean;
   usingFallback: boolean;
+  // GPS IS BEING JAMMED. The phone is reporting a place this person
+  // cannot be standing — Lima, a village sixty kilometres out — and the
+  // app is holding `position` where it last knew them to be (or on the
+  // fallback, if it never knew). Everything downstream keeps working on
+  // that position; the dog says why nothing is moving. Clears itself on
+  // the first believable fix, no reload. (D-74.)
+  held: 'jammed' | null;
+}
+
+// A fix is believed only inside the served area. Kyiv's air defence
+// spoofs GPS whenever drones are up, and the phone reports the spoofed
+// place with full confidence — no accuracy figure, no error callback,
+// nothing to distinguish it from a real fix except that it cannot be
+// true. Measured on the owner's phone, 14 Sep: an afternoon of fixes
+// sixty kilometres south-west of the city, then Lima. Downstream, an
+// accepted Lima fix put the dog (and the gate's buttons under it)
+// outside the map's bounds, so the camera clamped to the map's corner
+// and every follow tick fought that clamp: a bare map, no HUD, no way
+// back. This is the gate that used to be missing.
+//
+// Only the gross case is caught here. A spoof that lands NEAR the walker
+// and stops moving looks exactly like a person on a bench, and a
+// heuristic that guesses wrong grounds real walks — so that one stays.
+function believable(fix: LatLng): boolean {
+  return insideServedArea(fix);
+}
+
+function sameSpot(a: LatLng | null, b: LatLng): boolean {
+  return !!a && a.lat === b.lat && a.lng === b.lng;
 }
 
 // `active`: whether anything on screen is using the position right now.
@@ -111,6 +140,7 @@ export function useLocation(active = true): LocationState {
     error: null,
     granted: false,
     usingFallback: false,
+    held: null,
   });
 
   useEffect(() => {
@@ -124,7 +154,13 @@ export function useLocation(active = true): LocationState {
       let heading = Math.random() * Math.PI * 2;
       let pos = { ...sim.start };
       const emit = () => {
-        setState({ position: { ...pos }, error: null, granted: true, usingFallback: false });
+        setState({
+          position: { ...pos },
+          error: null,
+          granted: true,
+          usingFallback: false,
+          held: null,
+        });
       };
       emit();
       const id = setInterval(() => {
@@ -168,6 +204,7 @@ export function useLocation(active = true): LocationState {
           error: 'geolocation unavailable',
           granted: false,
           usingFallback: true,
+          held: null,
         });
         return;
       }
@@ -177,11 +214,27 @@ export function useLocation(active = true): LocationState {
 
       const watchId = navigator.geolocation.watchPosition(
         (pos) => {
-          setState({
-            position: { lat: pos.coords.latitude, lng: pos.coords.longitude },
-            error: null,
-            granted: true,
-            usingFallback: false,
+          const fix = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+          setState((s) => {
+            if (!believable(fix)) {
+              // Stand where we last really were; on the fallback if we
+              // never had a real fix. The same state object is returned
+              // once held, so a jammed phone reporting Lima once a second
+              // does not re-render the map screen once a second.
+              if (s.held === 'jammed') return s;
+              const real = s.position && !s.usingFallback ? s.position : null;
+              return {
+                position: real ?? KYIV_FALLBACK,
+                error: null,
+                granted: true,
+                usingFallback: !real,
+                held: 'jammed',
+              };
+            }
+            // Same coordinates as last time (a phone standing still often
+            // repeats the fix exactly): nothing to tell anyone.
+            if (s.held === null && !s.usingFallback && sameSpot(s.position, fix)) return s;
+            return { position: fix, error: null, granted: true, usingFallback: false, held: null };
           });
         },
         (err) => {
@@ -195,6 +248,7 @@ export function useLocation(active = true): LocationState {
                   error: err.message,
                   granted: false,
                   usingFallback: true,
+                  held: s.held,
                 },
           );
         },
@@ -218,6 +272,7 @@ export function useLocation(active = true): LocationState {
                 error: 'location timed out',
                 granted: false,
                 usingFallback: true,
+                held: null,
               },
         );
       }, 6000);
@@ -234,6 +289,7 @@ export function useLocation(active = true): LocationState {
       error: null,
       granted: false,
       usingFallback: true,
+      held: null,
     });
     return;
   }, [active]);

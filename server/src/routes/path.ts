@@ -8,6 +8,7 @@ import { distanceMeters, pointToSegmentDistanceM, type LatLng } from '../utils/g
 import { markIfDue, type MarkResult } from '../services/territory.js';
 import { selfMeta } from '../services/presence.js';
 import { limitPolling } from '../lib/rateLimit.js';
+import { inKyivBbox } from '../lib/servedArea.js';
 
 interface PathBody {
   lat: number;
@@ -121,6 +122,14 @@ const plugin: FastifyPluginAsync = async (app) => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
       reply.code(400);
       return { error: 'invalid body' };
+    }
+
+    // A jammed fix (Lima, a village sixty kilometres out — D-74) is not a
+    // place the walker went. No sweep, no mark, and the anchor stays where
+    // they really were, so the segment that resumes when GPS comes back
+    // is the one they actually walked.
+    if (!inKyivBbox(lat, lng)) {
+      return { tokensCollected: 0, foodConsumed: 0, reason: 'outside-area', marked: null };
     }
 
     const userId = req.userId;

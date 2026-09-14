@@ -1440,3 +1440,63 @@ small; and the profile card's and edit sheet's portraits lost their
 drawn ring the same night — the marker line is the edge, as on the
 card). If presence ever carries the level, the second
 fetch goes.
+
+### D-74 · A GPS fix outside the city is not a position — the app holds where it last knew you ✅
+
+Kyiv's air defence jams and spoofs GPS whenever drones are up. The
+phone does not report an error: it reports Lima, or a village sixty
+kilometres south-west, at full confidence, once a second. The owner's
+phone did both on 14 Sep. Measured on production that afternoon: 60
+paws, 16 bones and 3 territory marks written at 50.0 / 29.8, outside
+any map anybody will open.
+
+What an accepted Lima fix did to the client: the dog (and the gate's
+buttons, which are children of its marker) went to Peru, the map clamped
+its camera to the Kyiv bounds' south-west corner, and every follow tick
+eased toward Lima and was clamped again — a bare green field over
+Boyarka, no HUD, no way back, and the lag of a camera fighting its own
+bounds. D-67's teleport snap handled the case where the fix jumps
+*within* the city; it could not handle a fix the map cannot show.
+
+**The rule.** A fix outside the served area is not believed. The
+location hook stands on the last believable fix — the walker's real
+street, so the map stays where they are — or on the Maidan fallback if
+there never was one, exactly as no-GPS does. The watch keeps running;
+the first believable fix resumes everything with no reload. The hook
+reports `held: 'jammed'` and nothing else changes shape: every consumer
+already reads `position`, and the position is now one worth acting on.
+A jammed phone repeating Lima returns the same state object, so it no
+longer re-renders the map screen once a second either; the same
+dedupe drops a fix identical to the last one.
+
+**The dog says why.** Once on the way in — «gps зараз глушать, тож я не
+бачу, де ми. постоїмо тут, поки не повернеться — все інше працює» —
+and once on the way out. A HUD pill («gps глушать — стоїмо тут») stays
+up while held, so a person coming back to the phone sees why nothing
+moved. A status, not a button: there is nothing to do but wait.
+
+**The server refuses too.** `/sync/map` answers 400 to a position
+outside the box (no spawn, no home-ground note), `/presence` publishes
+nothing and shows nobody, `/collect/path` sweeps nothing, marks nothing
+and leaves the anchor where the walker really was, so the segment that
+resumes when GPS returns is the one they walked. The current client
+never sends such a position; an older one gets a clear answer instead
+of a world it cannot see.
+
+**One box, two copies, one check.** `SERVED_AREA` in the shared package
+is the client's; `KYIV_BBOX` in `server/src/lib/servedArea.ts` is the
+server's — the same four numbers the ingest gate and the Places spend
+gate already used. The server cannot load the shared package at runtime,
+so `check:served-area` reads the shared file and fails the build the
+moment they differ. Generous on purpose: Boyarka, Brovary and Boryspil
+are inside; what it excludes is not "outside Kyiv" but "not a place this
+person could be standing".
+
+**What it does not catch, on purpose.** A spoof that lands *near* the
+walker and stops moving — the "mildly spoofed" afternoon before the
+Lima one — is indistinguishable from a person on a bench. A heuristic
+that guesses wrong grounds real walks. Left alone, and noted.
+
+The junk rows are left in place: paws and bones expire on the janitor's
+schedule, three marks sixty kilometres out can never close a shape, and
+nothing draws them. PR #628.

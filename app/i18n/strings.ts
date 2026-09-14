@@ -120,6 +120,10 @@ export interface AppStrings {
     recenterOnCompanion: string;
     locating: string;
     usingKyivFallback: string;
+    // GPS is being jammed (the fix landed outside the city) and the app
+    // is standing on the last real position, or on Maidan if there never
+    // was one. A status, not a button — nothing to do but wait (D-74).
+    gpsHeld: string;
     // The map cannot be drawn here (no WebGL2 — an old iOS or Android
     // browser). Says what to do rather than leaving "locating…" up forever.
     mapUnsupported: string;
@@ -146,6 +150,10 @@ export interface AppStrings {
   };
   bubbles: {
     greeting: string;
+    // The dog explaining a jammed GPS on the way in, and the fix coming
+    // back on the way out. Once each, not every tick.
+    gpsJammed: string;
+    gpsBack: string;
     // Varied "leaving supersniff" lines so repeated toggles don't feel canned.
     backToWalks: string[];
     // Varied "entering supersniff" lines for repeat entries. The FIRST entry
@@ -611,6 +619,7 @@ const uk: AppStrings = {
     recenterOnCompanion: 'повернутись до пса',
     locating: 'шукаю себе…',
     usingKyivFallback: 'опускаюсь на Київ',
+    gpsHeld: 'gps глушать — стоїмо тут',
     mapUnsupported:
       'цей браузер не вміє малювати мапу. онови систему або відкрий шукайпес у свіжому Chrome чи Safari',
     mapLoadFailed: 'мапа не довантажилась. перевір звʼязок',
@@ -633,6 +642,9 @@ const uk: AppStrings = {
   },
   bubbles: {
     greeting: 'гав! натисни на мене — розкажу, що до чого 🐾',
+    gpsJammed:
+      'gps зараз глушать, тож я не бачу, де ми. постоїмо тут, поки не повернеться — все інше працює 🐾',
+    gpsBack: 'о, gps повернувся! йдемо далі 🐕',
     backToWalks: [
       'добре, повертаємось гуляти 🐾',
       'ніс відпочине — просто гуляємо 🐕',
@@ -1171,6 +1183,7 @@ const en: AppStrings = {
     recenterOnCompanion: 'recenter on companion',
     locating: 'locating…',
     usingKyivFallback: 'using kyiv fallback',
+    gpsHeld: 'gps jammed — standing here',
     mapUnsupported:
       'this browser cannot draw the map. update your system, or open шукайпес in a recent Chrome or Safari',
     mapLoadFailed: 'the map did not load. check your connection',
@@ -1193,6 +1206,9 @@ const en: AppStrings = {
   },
   bubbles: {
     greeting: "woof! tap me to learn what's what 🐾",
+    gpsJammed:
+      "gps is being jammed right now, so I can't tell where we are. we'll stand here until it comes back — everything else works 🐾",
+    gpsBack: 'oh, gps is back! onwards 🐕',
     backToWalks: [
       'okay, back to walks 🐾',
       'nose off duty — just strolling now 🐕',

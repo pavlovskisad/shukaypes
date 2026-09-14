@@ -169,3 +169,34 @@ export interface ChatMessage {
   mode: ChatMode;
   createdAt: string;
 }
+
+// WHERE THE APP IS PLAYED.
+//
+// One box, read by both halves. The client uses it to refuse a GPS fix
+// that cannot be true — Kyiv's air defence jams and spoofs GPS whenever
+// drones are up, and a phone then reports Lima, or a village sixty
+// kilometres out, with a straight face. The server uses the same box to
+// refuse to act on such a position: no paws spawned in Peru, no
+// territory marked there, no presence published from there. The
+// server's own copy (`KYIV_BBOX` in pipeline/upsert.ts, which the ingest
+// gate and the Places spend gate already share) is asserted equal to
+// this one by a check, so the two cannot drift.
+//
+// Generous on purpose: the map's own bounds are tighter, and a walker
+// in Boyarka or Brovary is a real walker. What this excludes is not
+// "outside Kyiv" but "not a place this person could be standing".
+export const SERVED_AREA = {
+  north: 50.65,
+  south: 50.2,
+  west: 30.1,
+  east: 30.9,
+} as const;
+
+export function insideServedArea(pos: LatLng): boolean {
+  return (
+    pos.lat >= SERVED_AREA.south &&
+    pos.lat <= SERVED_AREA.north &&
+    pos.lng >= SERVED_AREA.west &&
+    pos.lng <= SERVED_AREA.east
+  );
+}
