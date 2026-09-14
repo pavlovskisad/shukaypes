@@ -322,6 +322,14 @@ export function eyeFromMainMatrix(m: ArrayLike<number>): [number, number, number
 // drops to a quiet backdrop (see FILL_ALPHA in territoryHeatLayer). The
 // city keeps its architecture because the paint still fades with the
 // claim, which the 0.45 version had no way to do.
+//
+// LATER, AND THIS IS THE PART THAT MATTERED. 0.5 was the beacon's
+// number, but it was applied the beacon's number ONLY — not the beacon's
+// recipe — and the result on a phone was still a wall of slabs. What was
+// missing is the distance gate: the beacon multiplies by the raw haze,
+// so it is absent where the camera is and builds toward the horizon.
+// This constant is unchanged; where it is applied is not. See the
+// fragment shader.
 const TERRITORY_PAINT = 0.5;
 
 // The falloff is no longer a constant here at all: it rides in on the
@@ -414,21 +422,17 @@ interface Zone {
 // the beacon's own numbers.
 const ZONE_GLOW_IN = 0.3;
 const ZONE_GLOW_OUT = 1.25;
-// ...and what is left of the coat out past the end of it.
+// ...and it fades to NOTHING at the end of it, exactly as the beacon
+// does, which is the rest of taking the beacon's recipe whole.
 //
-// The beacon proper fades to nothing, because the place it lights has no
-// owner — it is a hint about where to go. A claim is not that. Ground
-// somebody holds is held all the way to its edge, and a block that fades
-// to zero does not read as "far from the middle", it reads as UNCLAIMED,
-// which is a lie about the one thing this map exists to answer. Measured
-// on claims shaped like real ones, the floorless version left 14-21% of
-// a claim's pieces with no paint at all — the white buildings sitting
-// inside a painted district.
-//
-// So the falloff spans this to full instead of zero to full. The
-// gradient survives; the answer to "whose is this" does not depend on
-// how far the block sits from its owner's middle.
-const ZONE_GLOW_FLOOR = 0.45;
+// There used to be a floor of 0.45 here, on the argument that ground
+// somebody holds is held all the way to its edge, and a block fading to
+// zero reads as UNCLAIMED rather than as far-from-the-middle — measured,
+// the floorless version leaves 14-21% of a claim's pieces unpainted.
+// That argument was about buildings having to answer "whose is this",
+// and they no longer do: the ground fill answers it, at full strength,
+// under your feet. What is left for the buildings is the glow, and a
+// glow with a floor under it is a slab.
 
 function zonesFor(polys: PaintPoly[]): Map<string, Zone> {
   // Grouped by colour, which is one per owner — the palette hands out a
@@ -594,16 +598,6 @@ export function createThreeBuildingsLayer(
         '#include <dithering_fragment>',
         [
           '#include <dithering_fragment>',
-          // Claimed ground tints the building that stands on it. Applied
-          // BEFORE the fog and the see-through orb so a painted block still
-          // fades into the distance and still dissolves around the dog —
-          // territory is a coat of paint on the city, not a layer over it.
-          // vTerr.a is the zone beacon's falloff at this building — full
-          // in the heart of its owner's ground, fading out past the edge.
-          // Same shape and same strength as the supersniff preview, in
-          // the owner's colour instead of brand blue.
-          `  float _paint = vTerr.a * ${TERRITORY_PAINT.toFixed(2)};`,
-          '  gl_FragColor.rgb = mix(gl_FragColor.rgb, vTerr.rgb, _paint);',
           '  float _dist = length(vLocalPos - u_camLocal);',
           // Exponential distance fog — the "wall" that swallows the far.
           '  float _distFog = 1.0 - exp(-u_fogDensity * max(0.0, _dist - u_fogNear));',
@@ -621,6 +615,42 @@ export function createThreeBuildingsLayer(
           '  float _fd = length(vLocalPos.xz - u_focusLocal.xz);',
           '  _f *= smoothstep(u_clearRadius, u_clearRadius + u_clearBand, _fd);',
           '  gl_FragColor.rgb = mix(gl_FragColor.rgb, u_fogColor, _f);',
+          // Claimed ground lights the buildings standing on it, with
+          // SUPERSNIFF'S BEACON RECIPE — the owner's call, looking at both
+          // on a phone: "check the beacon in supersniff mode recipe, the
+          // exact one, and accept it to buildings paint in game mode?"
+          //
+          // So it is the line below, verbatim, with two substitutions:
+          // vTerr.a stands in for the preview's falloff × strength, and
+          // the owner's colour for brand blue. Same 0.5 mix, same gate on
+          // the raw distance haze, and — the part that actually changes
+          // what you see — it now runs AFTER the fog instead of before.
+          //
+          // That gate is what the beacon has and the old paint did not.
+          // Before, every claimed block was tinted at full strength right
+          // under the camera: a wall of flat slabs, the architecture
+          // buried. Gated, the foreground stays the city as it is and the
+          // colour builds toward the horizon, which is what makes the
+          // supersniff beacon read as a district lit up rather than a
+          // shape filled in.
+          //
+          // What it costs: a block you are standing next to is no longer
+          // painted, so buildings stop answering "whose is this" up close.
+          // They do not have to — THE FLOOR STAYS AS IT WAS (the owner's
+          // words, and the ground fill in territoryHeatLayer is untouched
+          // by this): the pavement under your feet carries the claim, and
+          // the buildings carry the glow.
+          //
+          // The one thing that cannot be literally the same: the beacon
+          // measures its falloff per PIXEL from one centre in the shader,
+          // and there are a dozen owners on screen at once. vTerr.a is
+          // therefore evaluated per building, on the CPU, from the same
+          // 0.3→1.25 smoothstep (see ZONE_GLOW_IN/OUT). At the size of a
+          // footprint against the size of a claim, that difference is not
+          // visible.
+          '  float _terr = vTerr.a * clamp(_distFog, 0.0, 1.0);',
+          '  gl_FragColor.rgb = mix(gl_FragColor.rgb, vTerr.rgb, clamp(_terr * ' +
+            TERRITORY_PAINT.toFixed(2) + ', 0.0, 1.0));',
           // Sniff-and-lead preview beacon: wash the previewed zone's area in
           // brand blue. Weighted by the distance haze (+ a small floor) so the
           // target reads as blue fog lighting up toward the horizon, not flat
@@ -1077,10 +1107,8 @@ export function createThreeBuildingsLayer(
           const t = (d - z.radiusM * ZONE_GLOW_IN) /
             (z.radiusM * (ZONE_GLOW_OUT - ZONE_GLOW_IN));
           const u = Math.min(1, Math.max(0, t));
-          // smoothstep, as the beacon does, but landing on the floor
-          // rather than on nothing.
-          glow = ZONE_GLOW_FLOOR +
-            (1 - ZONE_GLOW_FLOOR) * (1 - u * u * (3 - 2 * u));
+          // The beacon's own smoothstep, landing on nothing as it does.
+          glow = 1 - u * u * (3 - 2 * u);
         }
         const end = (span.start + span.count) * 4;
         for (let o = span.start * 4; o < end; o += 4) {
