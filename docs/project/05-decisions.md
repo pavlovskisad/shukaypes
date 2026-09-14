@@ -950,7 +950,17 @@ under its drawn edge. The paper hangs from just under the dog — 190 px
 below the safe area — not from the bottom of the screen, where a short
 login form left a band of empty map and sat on Safari's toolbar; the
 paper reports where its top edge is and the camera puts the dog 40 px
-above it. Its ink is not clipped by the paper (no `overflow: hidden`;
+above it. **Amended 14 Sep (PR #631): one block, centred.** The
+portrait step's five-line asking pushed the bubble off the top of the
+screen, and the GPS pill (D-74) landed between the line and the dog.
+Now the dog's line, the dog and the paper are laid out together —
+the bubble reports its height, the paper its own, and the paper's
+top is chosen so the margin above the bubble equals the margin below
+the paper, inside the visible height and both safe areas, never under
+12 px; a block taller than the room keeps the top margin and the paper
+scrolls inside. Every step of the door gets this, since every step is
+the same paper under the same dog. The HUD's pills stay hidden under
+the sheet. Its ink is not clipped by the paper (no `overflow: hidden`;
 the scroll container clips its own content, rounded), and a corner
 arc always gets at least four points, or a pill-shaped field comes out
 with pointed ends. The dog — the same dog, on the map —

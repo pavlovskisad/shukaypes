@@ -157,6 +157,7 @@ export function Companion({
   // screen the sheet is on. One dog, one bubble, no second copy in the
   // paper. The answers under it are put away until the sheet closes.
   const sheetUp = useAccessStore((s) => s.doorSheet != null);
+  const setDoorBubbleHeight = useAccessStore((s) => s.setDoorBubbleHeight);
   const doorScreen = useAccessStore((s) => s.doorScreen);
   const me = useAccessStore((s) => s.me);
   const sheetLine = !sheetUp
@@ -997,6 +998,9 @@ export function Companion({
             carried existed only to climb over a button that is gone. */}
         <SpeechBubble
           text={activeBubble}
+          // While the account sheet is up the paper needs the line's
+          // height to centre itself under the dog (D-69).
+          onHeight={sheetUp ? setDoorBubbleHeight : undefined}
           // Two rings, two clearances. The intents put a pill at twelve
           // o'clock whose top edge is ~140px above the dog's centre, so
           // the question has to start above that. The walking ring is
