@@ -1840,3 +1840,48 @@ stays where it was computed — per building, on the CPU, from the same
 smoothstep — and rides in on the vertex attribute the colour already
 travels in. At the size of a footprint against the size of a claim that
 is not a visible difference.
+
+### D-82 · One stain over the whole picture ✅
+
+D-81 was the third attempt at painting the buildings and the owner shot
+it down within the hour, with four screenshots at four zooms: "paints
+different on different zooms and not gradual kinda, idk if its possible
+to make matching to our floor painting style to buildings. except if
+its unified overlay paint thats same as we paint floor but above
+buildings and floor together like a sandwich kinda? or costly?"
+
+Both faults were real and both were symptoms of the same thing. A claim
+was being painted **twice** — once on the ground as a blurred field,
+once on the buildings as a value per footprint — and two paints of one
+claim cannot be made to agree:
+
+- **Not gradual**, because the building value is computed per FOOTPRINT.
+  Every block is one flat number, so neighbours step instead of grading.
+  The ground field is per pixel and never does that.
+- **Different at different zooms**, because D-81's gate was the distance
+  haze. That is what makes the supersniff beacon read as a district lit
+  up — it is also what makes the amount of paint depend on where the
+  camera is.
+
+**The sandwich is right, and it is free.** The ground field's last pass
+is already a fullscreen multiply stain with the depth test off
+(territoryHeatLayer, step 3): it dyes whatever has been drawn beneath
+it. It was inserted BELOW the 3D buildings so they would occlude the
+ground. Inserted above them instead — still below the labels, where the
+buildings go in too, because a multiply stain over place names would dye
+the type — it dyes the city with the same pixels that dye the pavement.
+One paint, per pixel, identical at every zoom. No new pass, no new
+draw, no new texture: the same work, later in the order.
+
+So every per-building paint is gone: the vertex attribute, the
+per-footprint ownership test, the zone falloff, the CPU repaint on every
+sync, and about 350 lines with them. The marks and their links stay
+under the city, where they were — a dot lies on the pavement, and a
+building in front of it should still hide it.
+
+**What it trades.** The stain lands where the GROUND projects, so a
+building is dyed by the claim its screen footprint covers rather than
+the one it stands on. At the near-top-down camera the territory view
+opens at, those are the same place. The more the camera pitches, the
+more a tall block wears the colour of the ground behind it — which
+reads as paint lying over the city, which is what it is.
