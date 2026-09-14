@@ -1639,3 +1639,51 @@ walks over its own spawn radius constantly, a person does not — the
 reach is the lever, or a per-bot appetite. If quests should be open to
 them for the numbers alone, the model call is the only thing in the
 way.
+
+### D-77 · Bots keep an owner's hours ✅
+
+The owner asked (14 Sep) what the bots' online/offline ratio was. It
+was 14% chance to log off for one to four minutes after each stop —
+about 22 hours a day online per bot, 27 of 30 on the map at any
+moment. Fine for making a map look lived in; as a picture of how the
+game plays it is wrong in the one place that matters: a dog that is
+never left alone never gets hungry, never decays, and its owner's
+"time together" is the whole day. Every number the bots exist to
+measure (D-76) sits on that rhythm. "id do it so we see close to real
+picture, than scale these tests to bigger bot quantities."
+
+**A timetable per bot per day** (`services/botDay.ts`). Three start
+windows on the Kyiv clock — morning 06:30–09:30 nearly always, midday
+12:00–16:00 half the days, evening 18:00–22:00 nearly always — each
+walk 20–45 minutes. That comes to 2.35 walks and 76 minutes a day, a
+5% online share: on average 1.6 of 30 bots out, peaking at about five
+around 08:45 and again in the evening (`pnpm check:bot-day` prints
+the measured figures from 30 bots × 60 days and fails if the share
+drifts out of a few percent). Between walks a bot is offline: not in
+presence, not polled, its meters frozen exactly as a person's are with
+the app closed. The random log-off is gone; the in-walk state machine
+(walk, dwell, raid) is untouched.
+
+**Deterministic on (bot, day).** The plan is a seeded draw, so a deploy
+or a restart puts every bot back where its day says — before, a
+restart marched all thirty online at once. Kyiv time via `Intl`, not a
+fixed offset, because Ukraine keeps summer time. Nothing is stored.
+
+**What it costs the map.** Thirty bots on these hours show two to
+five dogs at a time instead of twenty-seven. That is the honest
+number, and it is what the owner wants to see first; the count is
+the lever for a fuller map (`MULTIPLAYER_BOTS`, a Fly secret), and
+each one now costs a fraction of the ticks it used to.
+`MULTIPLAYER_BOTS_ALWAYS_ON=1` restores the round-the-clock pool for a
+local stack, where a test at three in the morning still needs dogs on
+the map.
+
+**Measured.** The `mp_bot_life` line now leads with how many are out
+and how many went out in the window, and `mp_bots` at boot says which
+regime is on.
+
+**What would change it.** `BOT_DAY` at the top of botDay.ts: the
+windows, their chances, the length. A "check-in" — the owner opening
+the app at home for a minute to feed the dog — is the one thing real
+owners do that the bots still do not; add a fourth, short window if
+the hunger numbers say it matters.

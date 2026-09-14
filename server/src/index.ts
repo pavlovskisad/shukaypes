@@ -294,6 +294,9 @@ async function main() {
   const stopMultiplayer = startMultiplayerCron(
     app.log,
     Number(process.env.MULTIPLAYER_BOTS ?? 0) || 0,
+    // D-77: bots keep an owner's hours unless told to stay out all day
+    // (a local stack, where a test at 03:00 still wants a map with dogs).
+    { alwaysOn: process.env.MULTIPLAYER_BOTS_ALWAYS_ON === '1' },
   );
   // One-shot retrofit: strip transcript prefixes from any existing
   // memory notes written before PR #158 added the filter to new
