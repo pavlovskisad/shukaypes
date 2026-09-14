@@ -16,7 +16,7 @@ import { limitPolling, limitMedia } from '../lib/rateLimit.js';
 import { xpProgress } from '../lib/xp.js';
 import { buildPhotoUrl } from '../services/photoUrl.js';
 import { territoryCard } from '../services/territory.js';
-import { botAvatarFile, botAvatarUrl, botEntry, botIndex, botLevel } from '../services/botAvatars.js';
+import { botAvatarFile, botAvatarUrl, botEntry, botIndex } from '../services/botAvatars.js';
 
 // Local shape (matches @shukajpes/shared PlayerCard); the server does
 // not import the shared package, same as presence.ts.
@@ -50,13 +50,20 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     const bi = botIndex(id);
     if (bi !== null) {
+      // A bot's level is earned (D-76): its companion row's XP, the
+      // same curve as a person's. Null only before its first tick.
+      const [bc] = await db
+        .select({ xp: schema.companionState.xp })
+        .from(schema.companionState)
+        .where(eq(schema.companionState.userId, id))
+        .limit(1);
       const card: PlayerCard = {
         id,
         name: botEntry(bi).name,
         owner: null,
         bot: true,
         avatarUrl: botAvatarUrl(bi),
-        level: botLevel(bi),
+        level: bc ? xpProgress(bc.xp).level : null,
         areaM2: ground.areaM2,
         piece: ground.piece,
       };

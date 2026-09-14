@@ -12,16 +12,14 @@
 // A dog ranks only after minActiveS of counted time (balance): three
 // perfect minutes on a fresh account are not a life.
 //
-// BOTS ARE A FICTION HERE, like their level (services/botAvatars.ts):
-// they have no meter, so each gets a stable index seeded by its
-// number with a slow daily drift so the board breathes, and a fake
-// active time that clears the guard. Swap for the real thing if bots
-// ever get a meter.
+// Bots are on the board on the same terms (D-76): they have a
+// companion row, they are polled while online, they eat and get
+// grumpy, and their index is the same ratio over the same guard.
+// (The first cut gave them a seeded fiction; it went with D-76.)
 
 import { sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
-import { BOT_ROSTER, botAvatarUrl, botEntry } from './botAvatars.js';
 import { ownerAvatars, ownerNames } from './territory.js';
 
 export interface HappinessEntry {
@@ -38,37 +36,9 @@ export interface HappinessEntry {
   activeS: number;
 }
 
-const BOT_PREFIX = 'bot:';
-const DAY_MS = 86_400_000;
-
-// A bot's index for today: 55–95 by seed, ±4 drifting over ~a week.
-export function botHappiness(i: number, now = Date.now()): { index: number; activeS: number } {
-  const base = 55 + ((i * 37) % 41);
-  const day = Math.floor(now / DAY_MS);
-  const drift = Math.round(4 * Math.sin(day / 3 + i));
-  const index = Math.max(0, Math.min(100, base + drift));
-  // Days "together" grow one a day from a per-bot start, in hours.
-  const activeS = (12 + ((i * 5) % 40) + (day % 7)) * 3600;
-  return { index, activeS };
-}
-
-function botEntries(now: number): HappinessEntry[] {
-  return BOT_ROSTER.map((_, i) => {
-    const { index, activeS } = botHappiness(i, now);
-    return {
-      userId: `${BOT_PREFIX}${i}`,
-      name: botEntry(i).name,
-      owner: null,
-      bot: true,
-      avatarUrl: botAvatarUrl(i),
-      index,
-      activeS,
-    };
-  });
-}
-
-// The board: people past the guard plus every bot, by index, best first.
-export async function happinessLeaderboard(limit = 10, now = Date.now()): Promise<HappinessEntry[]> {
+// The board: every dog past the guard, people and bots alike, by index,
+// best first; ties broken by the longer life.
+export async function happinessLeaderboard(limit = 10): Promise<HappinessEntry[]> {
   const min = balance.happinessIndex.minActiveS;
   const rows = await db
     .select({
@@ -77,23 +47,20 @@ export async function happinessLeaderboard(limit = 10, now = Date.now()): Promis
       a: schema.companionState.activeS,
     })
     .from(schema.companionState)
-    .where(sql`${schema.companionState.activeS} >= ${min} AND ${schema.companionState.userId} NOT LIKE ${BOT_PREFIX + '%'}`)
-    .orderBy(sql`${schema.companionState.happyWeightS} / ${schema.companionState.activeS} DESC`)
+    .where(sql`${schema.companionState.activeS} >= ${min}`)
+    .orderBy(sql`${schema.companionState.happyWeightS} / ${schema.companionState.activeS} DESC, ${schema.companionState.activeS} DESC`)
     .limit(limit);
   const ids = rows.map((r) => r.userId);
   const [names, avatars] = await Promise.all([ownerNames(ids), ownerAvatars(ids)]);
-  const people: HappinessEntry[] = rows.map((r) => ({
+  return rows.map((r) => ({
     userId: r.userId,
     name: names.get(r.userId)?.name ?? 'сусід',
     owner: names.get(r.userId)?.owner ?? null,
-    bot: false,
+    bot: r.userId.startsWith('bot:'),
     avatarUrl: avatars.get(r.userId) ?? null,
     index: Math.round(r.w / r.a),
     activeS: Math.round(r.a),
   }));
-  return [...people, ...botEntries(now)]
-    .sort((x, y) => y.index - x.index || y.activeS - x.activeS)
-    .slice(0, limit);
 }
 
 // Where the caller stands: their index (null until past the guard),

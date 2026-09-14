@@ -24,6 +24,13 @@ import { balance } from '../config/balance.js';
 import { markAsBot, seedBotTerritory } from './territory.js';
 import { isOnWater } from '../data/kyivWater.js';
 import { botAvatarUrl, botEntry } from './botAvatars.js';
+import {
+  botForage,
+  botMarkRefusals,
+  botSync,
+  ensureBotCompanions,
+  touchBotsOnline,
+} from './botLife.js';
 
 interface LatLng {
   lat: number;
@@ -101,6 +108,16 @@ const OFFLINE_MIN_MS = 60_000;
 const OFFLINE_MAX_MS = 240_000;
 const TICK_MS = 3500;
 const MAX_DT_S = 10;
+// A bot's "map sync" — the spawn a phone asks for — every this many
+// ticks (~30s at TICK_MS), staggered by bot so a tick never spawns for
+// more than a few of them at once. The person's sync is 15s with the
+// spawn cooldown in front of it; this lands about as often.
+const SYNC_EVERY_TICKS = 9;
+// The hotspots within this of a bot stand in for the parks a phone
+// would have sent with its sync (D-76): bones spawn there.
+const PARKS_NEAR_M = 700;
+// How often the life counters go to the log.
+const LIFE_LOG_MS = 300_000;
 
 
 const mPerLat = 110540;
@@ -379,6 +396,7 @@ export function startMultiplayerCron(
     void (async () => {
       try {
         await ensureBotUsers(bots);
+        await ensureBotCompanions(bots);
         for (const b of bots) await seedBotTerritory(b.id, b.name, b.home);
         log.info({ kind: 'mp_bots_territory', count: bots.length }, 'multiplayer: bot territory seeded');
       } catch (err) {
@@ -388,6 +406,9 @@ export function startMultiplayerCron(
   }
 
   let last = Date.now();
+  let tick = 0;
+  // Life counters since the last log line (D-76): what the bots did.
+  const life = { paws: 0, bones: 0, marks: 0, grumpy: 0, hungry: 0, since: Date.now() };
   const id = setInterval(() => {
     void runCronTick(
       'multiplayer',
@@ -395,12 +416,23 @@ export function startMultiplayerCron(
         const now = Date.now();
         const dtS = Math.min(MAX_DT_S, (now - last) / 1000);
         last = now;
+        tick++;
         if (bots.length) {
           const online: PresenceEntry[] = [];
+          const onlineBots: Bot[] = [];
           const marking: Bot[] = [];
-          for (const b of bots) {
+          for (const [i, b] of bots.entries()) {
             if (!tickBot(b, dtS, now)) continue;
             online.push({ id: b.id, pos: b.pos, name: b.name, photo: null, avatar: b.avatar, bot: true });
+            onlineBots.push(b);
+            // Its map sync, on its turn: the spawn a phone would ask for.
+            if ((tick + i) % SYNC_EVERY_TICKS === 0) {
+              try {
+                await botSync(b, HOTSPOTS.filter((h) => distM(h, b.pos) <= PARKS_NEAR_M));
+              } catch (err) {
+                log.warn({ err, kind: 'mp_bot_sync', bot: b.id }, 'multiplayer: bot sync failed');
+              }
+            }
             // EXACTLY the gate a player's dog gets, and nothing else.
             //
             // There were two extra conditions here, and both made a bot
@@ -425,10 +457,28 @@ export function startMultiplayerCron(
             }
           }
           await writePresenceBatch(online, now);
+          // THE LIFE (D-76): the online bots are "with their person" for
+          // the decay cron and the happiness index, and they pick up
+          // what they walked past through the same writes a tap makes.
+          try {
+            await touchBotsOnline(onlineBots.map((b) => b.id));
+            const got = await botForage(onlineBots);
+            life.paws += got.paws;
+            life.bones += got.bones;
+          } catch (err) {
+            log.warn({ err, kind: 'mp_bot_life' }, 'multiplayer: bot life tick failed');
+          }
+          // …and a grumpy or hungry dog does not mark, same as a person's.
+          const refused = await botMarkRefusals(marking.map((b) => b.id)).catch(
+            () => new Map<string, 'grumpy' | 'hungry'>(),
+          );
+          for (const r of refused.values()) life[r]++;
           // Sequential: a handful of marks per tick at most, and running
           // them in parallel would have bots inside one hotspot contest
           // each other off the same pre-read snapshot.
           for (const b of marking) {
+            if (refused.has(b.id)) continue;
+            life.marks++;
             try {
               // A bot driven off its ground entirely goes home and starts
               // again. Without this, aggression is a one-way ratchet: bots
@@ -454,6 +504,14 @@ export function startMultiplayerCron(
           }
         }
         await purgeStalePresence(now);
+        if (bots.length && now - life.since >= LIFE_LOG_MS) {
+          log.info(
+            { kind: 'mp_bot_life', paws: life.paws, bones: life.bones, marks: life.marks, grumpy: life.grumpy, hungry: life.hungry, windowS: Math.round((now - life.since) / 1000) },
+            `multiplayer: bots ate ${life.bones} bones, took ${life.paws} paws, marked ${life.marks}×, refused ${life.grumpy} grumpy / ${life.hungry} hungry`,
+          );
+          life.paws = life.bones = life.marks = life.grumpy = life.hungry = 0;
+          life.since = now;
+        }
       },
       log,
     );
