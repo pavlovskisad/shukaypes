@@ -170,7 +170,7 @@ export function Companion({
           : doorScreen === 'reset'
             ? t.auth.resetAsk
             : doorScreen === 'avatar'
-              ? t.auth.avatarAsk(me?.pet?.name ?? null)
+              ? t.auth.avatarAsk(me?.pet ?? null)
               : doorScreen === 'avatarDone'
                 ? t.auth.avatarDoneAsk
                 : t.auth.registerAsk;
