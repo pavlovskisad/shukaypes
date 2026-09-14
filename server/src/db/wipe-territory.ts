@@ -1,4 +1,5 @@
-// Wipe the territory layer, for a fresh city.
+// Wipe the territory layer, for a fresh city — and, with --progress,
+// the happiness index that was measured under the old rhythm.
 //
 // The owner's call (14 Sep, D-78): thirty bots on the map twenty-two
 // hours a day for weeks had taken every street in the centre, and the
@@ -22,6 +23,20 @@
 // `--all` includes people's ground too; the dry run prints both cohorts
 // either way so the choice is made with the numbers in view.
 //
+// --progress ALSO RESETS THE HAPPINESS INDEX (D-79). The owner, after
+// the first wipe: "hapines didnt wipe i think". Correct, and on purpose
+// — territory is not progression. But the index (D-75) is an all-time
+// time-weighted average, and every counted hour the bots hold was
+// measured under the old round-the-clock regime (D-76 → D-77), when a
+// dog was never left alone long enough to get hungry. Those hours are
+// not a picture of the game as it is now played, and the ninety new
+// bots have none at all, so the board starts crooked either way. With
+// the flag the chosen owners' `happy_weight_s` and `active_s` go to
+// zero and their meters go back to the starting hunger and happiness,
+// with the decay clock reset so nothing catches up in one tick.
+// Everything else — XP, level, points, bones collected — is untouched;
+// `wipe:stats` is the tool for those.
+//
 // NOT REVERSIBLE. There is no undo and the free-tier database has no
 // point-in-time recovery. `--snapshot=<path>` writes the ground and mark
 // rows to a JSON file before the delete, as the cheapest insurance.
@@ -30,6 +45,7 @@
 //   pnpm wipe:territory                       dry run, bots
 //   pnpm wipe:territory --all                 dry run, everyone
 //   pnpm wipe:territory --apply               wipe the bots' territory
+//   pnpm wipe:territory --progress --apply    …and their happiness index
 //   pnpm wipe:territory --all --apply --snapshot=/tmp/territory.json
 //   production: fly ssh console -a shukajpes-api -C "node dist/db/wipe-territory.js [--apply]"
 
@@ -37,10 +53,12 @@ import 'dotenv/config';
 import fs from 'node:fs';
 import { sql } from 'drizzle-orm';
 import { db, pg } from './index.js';
+import { balance } from '../config/balance.js';
 
 const args = process.argv.slice(2);
 const apply = args.includes('--apply');
 const all = args.includes('--all');
+const progress = args.includes('--progress');
 const snapshot = args.find((a) => a.startsWith('--snapshot='))?.slice('--snapshot='.length);
 
 // Whose rows go. Bots are the `bot:N` users; `--all` is everybody.
@@ -66,7 +84,9 @@ async function cohort(label: string, who: ReturnType<typeof sql>) {
 }
 
 async function main() {
-  console.log(`▶ territory wipe — ${apply ? 'APPLY' : 'dry run'} — ${all ? 'EVERYONE' : 'bots only'}`);
+  console.log(
+    `▶ territory wipe — ${apply ? 'APPLY' : 'dry run'} — ${all ? 'EVERYONE' : 'bots only'}${progress ? ' — AND the happiness index' : ''}`,
+  );
   console.log('\nwhat is held now:');
   const bots = await cohort('bots', sql`user_id like 'bot:%'`);
   const people = await cohort('people', sql`user_id not like 'bot:%'`);
@@ -90,6 +110,24 @@ async function main() {
   if (!all && people.ground > 0) {
     console.log(`(people's ${people.ground} pieces stay — pass --all to include them)`);
   }
+
+  // The happiness index, counted under the old rhythm.
+  const idx = (await db.execute(sql`
+    select count(*)::int as rows,
+           count(*) filter (where active_s >= ${balance.happinessIndex.minActiveS})::int as ranked,
+           round(sum(active_s) / 3600)::int as hours,
+           round(avg(case when active_s > 0 then happy_weight_s / active_s end))::int as idx
+    from companion_state where ${chosen}
+  `)) as unknown as Array<{ rows: number; ranked: number; hours: number; idx: number | null }>;
+  const i = idx[0]!;
+  console.log(
+    `\nhappiness index held by these ${i.rows} rows: ${i.hours ?? 0} counted hours, ${i.ranked} on the board, mean index ${i.idx ?? '—'}`,
+  );
+  console.log(
+    progress
+      ? `the apply would ALSO zero those counters and set hunger ${balance.hunger.start} / happiness ${balance.happiness.start}.`
+      : 'those stay — pass --progress to zero them and start the measurement on the new rhythm.',
+  );
 
   if (!apply) {
     console.log('\ndry run — nothing written. Re-run with --apply to do it.');
@@ -115,6 +153,20 @@ async function main() {
       where ${chosen}
     `);
     console.log(`\n✓ deleted ${marks.count} marks, ${ground.count} ground pieces, ${raids.count} raids`);
+    if (progress) {
+      // last_decay_at with it: a row that comes back online after this
+      // should start its next drain now, not settle a gap in one tick.
+      const reset = await tx.execute(sql`
+        update companion_state
+        set happy_weight_s = 0,
+            active_s = 0,
+            hunger = ${balance.hunger.start},
+            happiness = ${balance.happiness.start},
+            last_decay_at = NOW()
+        where ${chosen}
+      `);
+      console.log(`✓ reset the happiness index and meters on ${reset.count} companion rows`);
+    }
   });
   console.log('done. The bots re-mark from their homes on their next walk; nothing re-seeds at boot (botSeedMarks = 0).');
 }

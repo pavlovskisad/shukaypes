@@ -54,10 +54,15 @@ for (let m = 0; m < 24 * 60; m++) {
   if (c > peak) { peak = c; peakAt = m; }
 }
 if (isOut(planDay(0, day0), 3 * 60)) fail('somebody is out at 03:00');
-if (perDayWalks < 1.8 || perDayWalks > 2.8) fail(`${perDayWalks.toFixed(2)} walks a day, expected ~2.3`);
-if (share < 0.03 || share > 0.09) fail(`online share ${(share * 100).toFixed(1)}%, expected a few percent`);
+if (perDayWalks < 2.1 || perDayWalks > 3.1) fail(`${perDayWalks.toFixed(2)} walks a day, expected ~2.6`);
+if (share < 0.03 || share > 0.10) fail(`online share ${(share * 100).toFixed(1)}%, expected a few percent`);
+// Midday is a real part of the day, not a rounding error (D-79).
+const midday = concurrent.slice(13 * 60, 14 * 60).reduce((a, b) => a + b, 0) / (60 * DAYS);
+const evening = concurrent.slice(20 * 60, 21 * 60).reduce((a, b) => a + b, 0) / (60 * DAYS);
+if (midday < evening * 0.6) fail(`midday ${midday.toFixed(1)} of ${BOTS} out vs evening ${evening.toFixed(1)} — too quiet`);
 
 const hhmm = (m: number) => `${String(Math.floor(m / 60)).padStart(2, '0')}:${String(Math.floor(m % 60)).padStart(2, '0')}`;
 console.log(`✓ bot-day: ${BOTS} bots × ${DAYS} days — ${perDayWalks.toFixed(2)} walks/day, ${perDayMin.toFixed(0)} min/day online (${(share * 100).toFixed(1)}%), on average ${(share * BOTS).toFixed(1)} of ${BOTS} out at any moment, peak ${peak.toFixed(1)} at ${hhmm(peakAt)} Kyiv`);
+console.log(`  at 13:00 ${midday.toFixed(1)} of ${BOTS} out, at 20:00 ${evening.toFixed(1)} — scaled to 120: ${(midday * 4).toFixed(0)} and ${(evening * 4).toFixed(0)}`);
 const now = kyivClock(Date.now());
 console.log(`  now ${hhmm(now.minute)} Kyiv, day ${now.day}; bot 0 today: ${planDay(0, now.day).walks.map((w) => `${hhmm(w.start)}–${hhmm(w.end)}`).join(', ') || 'stays in'}`);
