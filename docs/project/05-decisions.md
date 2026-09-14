@@ -1419,6 +1419,19 @@ view, then the flight onto the dog), closing the card so the flight
 is seen; no link text says so — the section is the tap, like a board
 row.
 
+**The name on the map is the dog's.** The owner asked (14 Sep)
+what the card and the chip show — the nickname, it turned out, while
+a bot showed a dog's name and a person's own dog's name showed
+nowhere but on their profile. An animal world names its animals:
+presence, the card and the board now say the dog's name when the
+account has a pet, with the nickname beside it as `owner` («рівень
+8 · господар pavlovski» on the card, «0.51 кв. км · pavlovski» on
+the board) so a friend can still find a person; a walker without a
+pet keeps their nickname as the name, which after the person-to-dog
+portrait is a dog with a human name, and that is part of the joke.
+The presence cache is forgotten on a profile save so a renamed dog
+is renamed on the map within a poll.
+
 **What would change it.** A message button: the card is the place
 for it, and the sheet's `Primary` is the only button now on purpose.
 The chip size and stroke are two constants at the top of

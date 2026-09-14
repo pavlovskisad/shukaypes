@@ -293,6 +293,7 @@ export interface AppStrings {
     poke: string;
     poked: string;
     close: string;
+    owner: (nick: string) => string;
   };
   chat: {
     needLocation: string;
@@ -848,6 +849,7 @@ const uk: AppStrings = {
     poke: 'помахати 👋',
     poked: 'помахали!',
     close: 'закрити',
+    owner: (nick) => `господар ${nick}`,
   },
   chat: {
     needLocation: 'потрібна твоя геолокація',
@@ -1392,6 +1394,7 @@ const en: AppStrings = {
     poke: 'wave 👋',
     poked: 'waved!',
     close: 'close',
+    owner: (nick) => `owner ${nick}`,
   },
   chat: {
     needLocation: 'need your location first',

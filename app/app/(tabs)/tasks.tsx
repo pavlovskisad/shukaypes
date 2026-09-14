@@ -499,6 +499,7 @@ export default function TasksScreen() {
                         color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
                         you={isYou}
                         avatarUrl={row.avatarUrl}
+                        owner={isYou ? null : row.owner}
                       />
                     </Pressable>
                   );

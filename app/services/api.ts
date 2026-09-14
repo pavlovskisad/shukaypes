@@ -218,7 +218,10 @@ export interface RivalTerritory {
 // the UI can label them rather than pass them off as neighbours.
 export interface TerritoryRanking {
   userId: string;
+  // The dog's name, or the nickname when there is no pet.
   name: string;
+  // The nickname when `name` is the dog's; absent/null otherwise.
+  owner?: string | null;
   areaM2: number;
   bot: boolean;
   // The owner's drawn portrait, or a bot's; null (or absent from an

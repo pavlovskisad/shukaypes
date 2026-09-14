@@ -109,6 +109,7 @@ export function LeaderboardModal({ board, youRank, onClose, onPick }: Props) {
                 color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
                 you={isYou}
                 avatarUrl={row.avatarUrl}
+                owner={isYou ? null : row.owner}
               />
             </div>
           );
