@@ -50,6 +50,7 @@ import { webgl2Supported } from '../../utils/webgl';
 import { petPhotoAt } from '../../utils/petPhoto';
 import { CARD_W } from '../ui/CardStack';
 import { DOG_MIN_Y, DOG_ROOM } from '../ui/AccountDoor';
+import { safeAreaTopPx } from '../../utils/safeArea';
 import { easeCamera } from './camera';
 import { OtherWalker } from './OtherWalker';
 import { PokeToast } from './PokeToast';
@@ -287,25 +288,6 @@ const FLAT_ZOOM_SETTLED = 0.05;
 // camera moving at walking pace, which is the only thing it has to.
 const VIEWPORT_SNAPSHOT_MIN_MS = 1000;
 
-// Safe-area top inset in CSS px, measured once via an env() probe —
-// SafeAreaView values aren't reachable here and the inset differs
-// between browser-tab (0) and installed-PWA (notch height) contexts.
-let cachedSafeTop: number | null = null;
-function safeAreaTopPx(): number {
-  if (cachedSafeTop != null) return cachedSafeTop;
-  if (typeof document === 'undefined') return 0;
-  try {
-    const el = document.createElement('div');
-    el.style.cssText =
-      'position:fixed;top:0;height:0;padding-top:env(safe-area-inset-top, 0px);visibility:hidden;pointer-events:none;';
-    document.body.appendChild(el);
-    cachedSafeTop = el.getBoundingClientRect().height;
-    el.remove();
-  } catch {
-    cachedSafeTop = 0;
-  }
-  return cachedSafeTop;
-}
 // Preview beacon fragment: rather than lighting the whole (up-to-1.25km) search
 // zone, we pick one candidate quest spot and glow a small patch around it — the
 // bit of the zone the quest point will actually come from. Target distance keeps
@@ -4032,7 +4014,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           at 42. Each child carries its own tier instead, and both are
           then measured against the markers rather than against each
           other. Don't add a z-index here. */}
-      {(walkRoute || activeQuest || gpsHeld) && !(DOG_CAM && dogCam) ? (
+      {/* Not under the account sheet either: the HUD is already gone
+          there, and a pill at top:100 landed between the dog's line and
+          the dog. */}
+      {(walkRoute || activeQuest || gpsHeld) && !(DOG_CAM && dogCam) && !doorSheetUp ? (
         <div
           style={{
             position: 'absolute',
