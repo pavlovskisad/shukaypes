@@ -31,6 +31,7 @@ import {
 import type { LatLng } from '../utils/geo.js';
 import { limitExpensive, limitPolling, limitRead } from '../lib/rateLimit.js';
 import { DEV_KEY_HEADER, devAccessAllowed } from '../lib/devAuth.js';
+import { inKyivBbox } from '../lib/servedArea.js';
 
 // Server kill-switch for multiplayer presence. Off only if explicitly set to
 // 'off'; otherwise presence runs when the client opts in via `mp=1` (so prod
@@ -90,6 +91,11 @@ const plugin: FastifyPluginAsync = async (app) => {
     const lat = Number(req.query.lat);
     const lng = Number(req.query.lng);
     if (!Number.isFinite(lat) || !Number.isFinite(lng)) return { players: [] };
+    // A position outside the city is not where this person is standing
+    // — Kyiv's air defence spoofs GPS to Lima and beyond (D-74). Publish
+    // nothing, and show nobody: the client holds its last real fix and
+    // asks again from there.
+    if (!inKyivBbox(lat, lng)) return { players: [] };
     // Same call /sync/map makes, so the two can never disagree about who
     // is nearby: it publishes the caller's own position and reads back the
     // neighbours in one trip.
@@ -158,6 +164,18 @@ const plugin: FastifyPluginAsync = async (app) => {
     if (!Number.isFinite(lat) || !Number.isFinite(lng) || !Number.isFinite(radiusM)) {
       reply.code(400);
       return { error: 'invalid query' };
+    }
+
+    // Refused outright, not served empty: acting on a jammed fix means
+    // spawning paws and bones in Peru and remembering the walker there.
+    // Measured before this guard (14 Sep): 60 paws, 16 bones and 3
+    // territory marks sixty kilometres outside the city, from one
+    // afternoon of one walker's jammed phone. The client never sends
+    // such a position any more (D-74); an older client gets a clear
+    // answer instead of a world it cannot see.
+    if (!inKyivBbox(lat, lng)) {
+      reply.code(400);
+      return { error: 'outside served area' };
     }
 
     const pos: LatLng = { lat, lng };

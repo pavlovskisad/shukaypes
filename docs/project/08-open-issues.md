@@ -370,6 +370,35 @@ stays available.
 
 ---
 
+### P1-11 · Google Places is out of quota, and has been since June 🔴
+*Found 14 Sep, measured from the production machine*
+
+One `searchNearby` call from the API machine answers **429 —
+"Quota exceeded for quota metric 'SearchNearbyRequest' and limit
+'SearchNearbyRequest per day'"**. `places_cache` has no row newer than
+**8 June**; its TTL is 14 days, so every cell is expired. The read path
+then does the worst of both: every `/places/spots` fans out to Google
+for every cell in range (up to 175 calls, 35 for `/places/parks`), every
+call fails, the failure is swallowed with no log line (`loadCategory`'s
+`catch {}`), and the stale June rows are served where they exist. Where
+they do not — the west and south-west of the city has five cells per
+category, the centre fifty — a walker sees no places at all, and each
+look is a burst of failing calls that also count against the day.
+
+The parks half runs *inside* every map sync, before `/sync/map` is sent,
+and the client's places fetch has no timeout; a slow Places answer holds
+up paws, bones and territory too.
+
+Three pieces, in order: **(1)** the daily cap lives in the Google Cloud
+console and only the owner can raise it (P0-4's budget alert may be the
+same setting, set low on purpose — check before raising); **(2)** a
+circuit breaker in `placesCache.ts`: on a 429 stop calling Google for
+the rest of the day, log it once, serve stale beyond TTL without asking
+again; **(3)** a timeout on the client fetch and the parks lookup out of
+the sync's critical path. (2) and (3) are a session's work with no key.
+
+---
+
 ## Perf and compatibility flags from the beta pass (10 Sep)
 
 Thirteen items, F-1 … F-13, ranked, live in
@@ -436,6 +465,7 @@ Kept so nobody re-files them.
 | Labels wrong where the gazetteer name swallowed the ad's «вул.» | ✅ `relabel:marked` (#551). |
 | The about sheet described a product that no longer existed | ✅ Rewritten around the gate, the report form, supersniff, sightings (#543). |
 | 6.6 MB/h on a walk, 1 MB of script before anything draws, initData on every request | ✅ Beta perf pass — see [`12`](12-beta-perf-compat.md) (#569–#581, D-61, D-62). |
+| GPS spoofed to Lima during an alarm: dog and HUD off the map, camera clamped to the bounds' corner, paws and marks written sixty km out | ✅ A fix outside the served area is held, not believed: the app stands where it last knew you, the dog says why, the server refuses the position (D-74). |
 
 ### Closed by the engine rescue (15–20 Aug, PRs #433–#494)
 

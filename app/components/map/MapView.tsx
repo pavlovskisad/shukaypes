@@ -427,6 +427,11 @@ function loadGameRender(): Promise<GameRenderModule | null> {
 export default function MapViewWeb() {
   // GPS runs only while the map is the screen — see useLocation.
   const location = useLocation(useGameStore((s) => s.currentScreen === 'map'));
+  // GPS is being jammed and the hook is standing on the last real fix
+  // (D-74). Read here for the dog's line and the HUD pill; nothing else
+  // needs to know, because `location.position` is already the position
+  // to act on.
+  const gpsHeld = location.held === 'jammed';
   // A top-edge chip has to clear the iOS status bar (clock, signal,
   // battery) — taps inside that strip are intercepted by the system
   // (scroll-to-top), so a chip overlapping it feels dead. The HUD
@@ -1081,6 +1086,19 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           : t.bubbles.tooGlumToMark;
     showBubble(lines[Math.floor(Math.random() * lines.length)]!, 3500);
   }, [markMood, showBubble, t]);
+
+  // The dog explains a jammed GPS once on the way in and once on the way
+  // out — a phone in a jammed area reports Lima every second, and a line
+  // per report would be the whole conversation. `false` at mount so a
+  // session that opens already jammed gets the explanation, and one that
+  // opens fine does not get told that GPS "came back".
+  const gpsHeldSeenRef = useRef(false);
+  useEffect(() => {
+    if (gpsHeld === gpsHeldSeenRef.current) return;
+    gpsHeldSeenRef.current = gpsHeld;
+    if (gpsHeld) showBubble(t.bubbles.gpsJammed, 8000);
+    else showBubble(t.bubbles.gpsBack, 4000);
+  }, [gpsHeld, showBubble, t]);
 
   // Greet on every map-tab focus — pick a random "woof" so it doesn't
   // get repetitive. Same energy as Claude Code's *percolating* /
@@ -4014,7 +4032,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           at 42. Each child carries its own tier instead, and both are
           then measured against the markers rather than against each
           other. Don't add a z-index here. */}
-      {(walkRoute || activeQuest) && !(DOG_CAM && dogCam) ? (
+      {(walkRoute || activeQuest || gpsHeld) && !(DOG_CAM && dogCam) ? (
         <div
           style={{
             position: 'absolute',
@@ -4041,6 +4059,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               gap: S.s,
             }}
           >
+            {/* A status, not a way out: there is nothing to do about a
+                jammed GPS but wait. Same line as the exits so the HUD keeps
+                one place for "what is going on right now". */}
+            {gpsHeld ? (
+              <div
+                role="status"
+                style={{ ...HUD_OVERLAY_PILL, cursor: 'default', pointerEvents: 'none' }}
+              >
+                📡 {t.hud.gpsHeld}
+              </div>
+            ) : null}
             {walkRoute ? (
               <div
                 role="button"
