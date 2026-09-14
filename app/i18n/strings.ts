@@ -791,7 +791,8 @@ const uk: AppStrings = {
     unknownPet: 'невідомий пес',
     territoryBoard: 'хто тримає цей район',
     happinessBoard: 'індекс щастя',
-    happinessHint: 'середня радість пса за весь час поруч. рахується від 10 хвилин разом.',
+    happinessHint:
+      'і хто тут в нас найщасливіший?! індекс рахує, чий пес був на високих відмітках показника щастя найдовше: добре їж, більше збирай, більше шукай, більше гуляй — і все буде добре!',
     boardYou: 'ти',
     boardEmpty: 'місто ще нічиє — познач перший',
     boardSeeAll: 'показати всіх',
@@ -1361,7 +1362,8 @@ const en: AppStrings = {
     unknownPet: 'unknown pet',
     territoryBoard: 'who holds this district',
     happinessBoard: 'happiness index',
-    happinessHint: 'the dog\'s average happiness over all the time spent together. counts from ten minutes together.',
+    happinessHint:
+      'so who is the happiest one here?! the index counts whose dog stayed high on the happiness meter the longest: eat well, collect more, search more, walk more — and all will be well!',
     boardYou: 'you',
     boardEmpty: 'nobody holds the city yet — go and mark',
     boardSeeAll: 'see all',
