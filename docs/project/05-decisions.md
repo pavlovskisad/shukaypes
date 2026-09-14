@@ -1331,6 +1331,16 @@ samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
 
+**A person becomes their dog.** The owner drew themselves (14 Sep)
+and the recipe drew a person — a good one, curls and grin, and the
+one thing the map should never show. Their idea, one line in the
+prompt: if the photo is of a person and not an animal, draw the dog
+(or cat, by the profile) this person would be, the breed that suits
+their face, keeping one thing of theirs so they recognise themselves.
+Funny, shareable, and every chip on the map is an animal. Untested on
+a real face at the time of writing; the line is where the rest of
+the prompt lives.
+
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e
 stack. The storage: if photos ever leave Telegram, this leaves with
