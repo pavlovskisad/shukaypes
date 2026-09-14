@@ -8,7 +8,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK } from '../../constants/surface';
-import { api, type NearbyLostDog, type TerritoryRanking } from '../../services/api';
+import { api, type HappinessRanking, type NearbyLostDog, type TerritoryRanking } from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
 import {
   LostDogCardStack,
@@ -135,6 +135,12 @@ export default function TasksScreen() {
   const [board, setBoard] = useState<{
     board: TerritoryRanking[];
     you: { areaM2: number; rank: number | null };
+  } | null>(null);
+  // The happiness index board (D-74), same lifecycle as the standing:
+  // null until fetched, and a failed fetch leaves the card unrendered.
+  const [happy, setHappy] = useState<{
+    board: HappinessRanking[];
+    you: { index: number | null; activeS: number; rank: number | null };
   } | null>(null);
   // Open the "see all" fullscreen list when truthy.
   const [seeAllDogsOpen, setSeeAllDogsOpen] = useState(false);
@@ -294,6 +300,14 @@ export default function TasksScreen() {
         })
         .catch(() => {
           /* fail silent — the card just doesn't render */
+        });
+      api
+        .happinessLeaderboard()
+        .then((res) => {
+          if (!cancelled) setHappy(res);
+        })
+        .catch(() => {
+          /* same: no card */
         });
       return () => {
         cancelled = true;
@@ -518,6 +532,58 @@ export default function TasksScreen() {
                 </Pressable>
               </>
             )}
+          </View>
+        ) : null}
+
+        {/* The happiness index (D-74): whose dog lives the happiest
+            life — an all-time, time-weighted average of the meter over
+            the hours the person was with the dog. Same row as the
+            standing, the number where the silhouette would be; your
+            row first, unranked as a dash until the dog has an hour of
+            counted life. No "see all": ten is the board for now. */}
+        {happy ? (
+          <View nativeID="snap-card-happy" style={styles.card}>
+            <Text style={styles.cardTitle}>{t.tasks.happinessBoard}</Text>
+            <View style={styles.boardYouRow}>
+              <BoardRow
+                rank={String(happy.you.rank ?? t.profile.unranked)}
+                name={t.tasks.boardYou}
+                areaLabel={t.profile.hoursTogether(Math.floor(happy.you.activeS / 3600))}
+                piece={undefined}
+                color={OWN_COLOR_CSS}
+                you
+                avatarUrl={myAvatarUrl}
+                trailing={
+                  <Text style={[styles.happyIndex, styles.happyIndexYou]}>
+                    {happy.you.index === null ? t.profile.unranked : String(happy.you.index)}
+                  </Text>
+                }
+              />
+            </View>
+            {happy.board.length === 0 ? (
+              <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
+            ) : (
+              happy.board.map((row, i) => {
+                const isYou = happy.you.rank === i + 1;
+                return (
+                  <BoardRow
+                    key={row.userId}
+                    rank={String(i + 1)}
+                    name={isYou ? t.tasks.boardYou : row.name}
+                    areaLabel={t.profile.hoursTogether(Math.floor(row.activeS / 3600))}
+                    piece={undefined}
+                    color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
+                    you={isYou}
+                    avatarUrl={row.avatarUrl}
+                    owner={isYou ? null : row.owner}
+                    trailing={
+                      <Text style={[styles.happyIndex, isYou && styles.happyIndexYou]}>{String(row.index)}</Text>
+                    }
+                  />
+                );
+              })
+            )}
+            <Text style={styles.boardHint}>{t.tasks.happinessHint}</Text>
           </View>
         ) : null}
 
@@ -831,6 +897,24 @@ const styles = StyleSheet.create({
   },
   boardSeeAllPressed: { opacity: 0.55 },
   boardRowPressed: { opacity: 0.6 },
+  // The index where the silhouette would be: one big number, the
+  // same width as the 92px thumbnail so the rows line up with the
+  // standing above.
+  happyIndex: {
+    width: 92,
+    textAlign: 'center',
+    fontFamily: SYSTEM_FONT,
+    fontSize: TYPE.display,
+    fontWeight: '800',
+    color: colors.black,
+  },
+  // Your row's ink, the same blue BoardRow uses for «ти».
+  happyIndexYou: { color: 'rgba(0,60,255,0.85)' },
+  boardHint: {
+    fontSize: TYPE.caption,
+    color: '#777',
+    marginTop: S.s,
+  },
   boardEmpty: {
     fontSize: TYPE.small,
     color: '#777',

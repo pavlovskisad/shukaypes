@@ -21,6 +21,7 @@ import pathRoute from './routes/path.js';
 import syncMapRoute from './routes/syncMap.js';
 import pokeRoute from './routes/poke.js';
 import playersRoute from './routes/players.js';
+import happinessRoute from './routes/happiness.js';
 import dailyTasksRoute from './routes/dailyTasks.js';
 import loreRoute from './routes/lore.js';
 import placesRoute from './routes/places.js';
@@ -219,6 +220,7 @@ export async function buildServer(observe?: RouteObserver) {
   await app.register(syncMapRoute);
   await app.register(pokeRoute);
   await app.register(playersRoute);
+  await app.register(happinessRoute);
   await app.register(dailyTasksRoute);
   await app.register(loreRoute);
   await app.register(placesRoute);

@@ -20,6 +20,12 @@ export const balance = {
   // raising decay's intervalMs above the cron rate would round-to-zero
   // and stall the meter entirely.
   happiness: { start: 80, decay: 1, intervalMs: 8000, min: 0, max: 100 },
+  // The happiness index (D-74). A dog counts as "with its person" while
+  // a /state poll landed within onlineWindowMs; only then does happiness
+  // drain and only then does time count toward the index. A dog needs
+  // minActiveS of counted time before it ranks, so a fresh account's
+  // three perfect minutes cannot top the board.
+  happinessIndex: { onlineWindowMs: 90_000, minActiveS: 3600 },
   bone: { hunger: 20, happiness: 18 },
   // Paws are a treat, not a meal: pure happiness, no hunger effect.
   // Only bones feed the dog. (token.hunger stays in the schema as 0 so

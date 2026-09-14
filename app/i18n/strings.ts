@@ -221,6 +221,8 @@ export interface AppStrings {
     abandoned: string;
     unknownPet: string;
     territoryBoard: string;
+    happinessBoard: string;
+    happinessHint: string;
     boardYou: string;
     boardEmpty: string;
     boardSeeAll: string;
@@ -275,6 +277,7 @@ export interface AppStrings {
     // unit spelled out because the superscript glyph is missing from the
     // app's font and silently turned areas into distances.
     areaValue: (m2: number) => string;
+    hoursTogether: (h: number) => string;
     luckyActive: string;
     luckyInactive: string;
     language: {
@@ -770,6 +773,8 @@ const uk: AppStrings = {
     abandoned: 'припинено',
     unknownPet: 'невідомий пес',
     territoryBoard: 'хто тримає цей район',
+    happinessBoard: 'індекс щастя',
+    happinessHint: 'середня радість пса за весь час поруч. рахується від години разом.',
     boardYou: 'ти',
     boardEmpty: 'місто ще нічиє — познач перший',
     boardSeeAll: 'показати всіх',
@@ -832,6 +837,7 @@ const uk: AppStrings = {
     // AREA read as a DISTANCE — "0.16 км" is a number you could walk.
     // Spelled out, it cannot fail on a font.
     areaValue: (m2) => `${(m2 / 1_000_000).toFixed(2)} кв. км`,
+    hoursTogether: (h) => `${h} год разом`,
     luckyActive: 'активна',
     luckyInactive: 'щастя ≥ 70%',
     language: {
@@ -1330,6 +1336,8 @@ const en: AppStrings = {
     abandoned: 'abandoned',
     unknownPet: 'unknown pet',
     territoryBoard: 'who holds this district',
+    happinessBoard: 'happiness index',
+    happinessHint: 'the dog\'s average happiness over all the time spent together. counts from one hour together.',
     boardYou: 'you',
     boardEmpty: 'nobody holds the city yet — go and mark',
     boardSeeAll: 'see all',
@@ -1377,6 +1385,7 @@ const en: AppStrings = {
     rankValue: (n) => `#${n}`,
     unranked: '—',
     areaValue: (m2) => `${(m2 / 1_000_000).toFixed(2)} sq km`,
+    hoursTogether: (h) => `${h} h together`,
     luckyActive: 'active',
     luckyInactive: 'happiness ≥ 70%',
     language: {

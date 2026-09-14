@@ -1440,3 +1440,55 @@ small; and the profile card's and edit sheet's portraits lost their
 drawn ring the same night — the marker line is the edge, as on the
 card). If presence ever carries the level, the second
 fetch goes.
+
+### D-74 · The happiness index: whose dog lives the happiest life ✅
+
+The owner asked (14 Sep) for a second standing beside territory —
+"whos dog lives the most time with high happiness levels" — and
+proposed the shape: snapshot the meter while the person is online,
+derive a score, fold it into the account's running average, so the
+number is honest, all-time, and moves with how the person plays.
+Built that way, with two corrections and one consequence.
+
+**Time-weighted, not session-weighted.** Two running totals on the
+companion row — happiness × seconds, and seconds — and the index is
+the ratio, 0–100. A forty-second feed-and-leave at 100 then weighs
+forty seconds, not one session. **The poll is the snapshot.** There
+is no logout on a phone web app; the 15-second `/state` poll from any
+screen touches `last_poll_at`, and the decay cron — which already
+walks every companion row every 8 seconds — sums both totals for the
+rows polled within the online window (90 s), from the pre-decay
+value, elapsed capped at ~4 minutes. A closed tab adds nothing, a
+crash loses at most one poll. **A dog ranks after an hour** of
+counted life (`balance.happinessIndex.minActiveS`), so three perfect
+minutes on a fresh account are not a life; until then your own row
+shows a dash and the hours.
+
+**The drain now pauses while the person is away.** Happiness used to
+fall to zero within a quarter of an hour of closing the app, so every
+session began with a grumpy dog climbing back — and an average over
+sessions would have measured how fast you feed after opening, not how
+you play. The same online gate that counts time is the gate on the
+drain: a dog its person is not with does not drain, and coming back
+after a gap restarts the decay clock, so it wakes as it was left.
+Hunger is gated the same way, as the two live in one UPDATE; the
+bones economy is untouched while you are there.
+
+**Bots are a fiction here, like their level.** They have no meter:
+each gets an index 55–95 seeded by its number with a ±4 drift over a
+week so the board breathes, and a fake active time past the guard.
+`services/happiness.ts` says so at the top; swap for the real thing
+if bots ever get a meter.
+
+**The board.** `GET /happiness/leaderboard` mirrors the territory
+one (people past the guard plus every bot, best index first, and
+your standing), and the profile tab draws it under the standing with
+the same `BoardRow` — portrait, name, «N год разом», the index where
+the silhouette would be — and a one-line hint of what the number is.
+No "see all" yet; ten is the board.
+
+**What would change it.** The window and the guard are two numbers
+in balance.ts. If the index should forget — a rolling month instead
+of a life — the totals become a per-day ledger; the read side does
+not change. If the offline pause proves too kind (a dog never hungry
+on return), gate only happiness and let hunger run.
