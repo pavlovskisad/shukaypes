@@ -176,7 +176,14 @@ export function referencePrompt(pet: { species: string | null; breed: string | n
     `is what makes this ${what} this ${what}. If a line is not needed to tell it is this ${what}, do not draw ` +
     'it. Make it a caricature: exaggerated, wildly out of proportion. Leave the mistakes in: lines that ' +
     'miss, overshoot or do not meet, proportions that are off. Head and shoulders facing the viewer, black ' +
-    'lines on plain white, nothing else.'
+    'lines on plain white, nothing else. ' +
+    // A person in the photo becomes the pet they would be (owner's
+    // idea, 14 Sep, after drawing themselves): the breed that suits
+    // their face, and one thing of theirs kept so they recognise
+    // themselves. Never a human on the map.
+    `If the photo shows a person and not an animal, do not draw the person: draw the ${what === 'pet' ? 'dog' : what} ` +
+    'this person would be — pick the breed that suits their face, hair and expression — and keep one ' +
+    'thing of theirs (the hair, the glasses, the grin) so they recognise themselves in it.'
   );
 }
 

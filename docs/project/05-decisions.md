@@ -1331,6 +1331,16 @@ samples, what is left is the style adapter trained on all ten
 drawings (with the illustrator's agreement, since it clones their
 line).
 
+**A person becomes their dog.** The owner drew themselves (14 Sep)
+and the recipe drew a person — a good one, curls and grin, and the
+one thing the map should never show. Their idea, one line in the
+prompt: if the photo is of a person and not an animal, draw the dog
+(or cat, by the profile) this person would be, the breed that suits
+their face, keeping one thing of theirs so they recognise themselves.
+Funny, shareable, and every chip on the map is an animal. Untested on
+a real face at the time of writing; the line is where the rest of
+the prompt lives.
+
 **What would change it.** The model: the endpoint and prompt are one
 file, and `FAL_API_URL` already stands in for it in the local e2e
 stack. The storage: if photos ever leave Telegram, this leaves with
@@ -1351,9 +1361,9 @@ stroke 1.25 (the profile card's ring is 2 — "check the chips border
 so its thin like here and not fat like we have now in profile") in
 plain ink (the first cut coloured it by territory; on the map that
 read as a badge, and the owner asked for black "as everywhere") —
-in the territory view the chip instead GLOWS in the owner's colour, a
-soft halo behind the paper, so "whose zone is that" is still
-answerable by the chip standing on it — and the drawn portrait
+the chip instead GLOWS in the owner's colour, a soft halo behind
+the paper — full in the territory view, gentler on a walk — so
+"whose zone is that" is still answerable by the chip standing on it — and the drawn portrait
 (D-72) inside it; a walker without a portrait gets the sitting dog sprite in the
 disc, so a chip is never blank. The old rendering — sprite plus name
 tag — is not deleted: `OTHER_WALKER_STYLE` in

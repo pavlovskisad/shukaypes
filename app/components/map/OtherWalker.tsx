@@ -178,15 +178,17 @@ export function OtherWalker({ player, onOpen }: Props) {
             borderRadius: '50%',
             background: SURFACE.fill,
             border: '2px solid transparent',
-            // In the territory view the chip GLOWS in the owner's colour
-            // — a soft halo behind the paper, not a coloured ring: "whose
-            // zone is that" is still answerable by the chip standing on
-            // it, and every drawn line stays ink. Off the territory view
-            // the halo goes, and only the paper's small drop shadow is
-            // left.
+            // The chip GLOWS in the owner's colour — a soft halo behind
+            // the paper, not a coloured ring: "whose zone is that" is
+            // answerable by the chip standing on it, and every drawn line
+            // stays ink. Full strength in the territory view, where the
+            // ground is painted in the same colour; gentler on a walk,
+            // where the map is plain and a strong halo would be the
+            // loudest thing on it. The paper's small drop shadow stays
+            // under both.
             boxShadow: territoryVisible
               ? `0 0 0 3px rgba(${glow},0.35), 0 0 14px 6px rgba(${glow},0.55), 0 1px 3px rgba(0,0,0,0.18)`
-              : '0 1px 3px rgba(0,0,0,0.18)',
+              : `0 0 0 2px rgba(${glow},0.18), 0 0 10px 3px rgba(${glow},0.3), 0 1px 3px rgba(0,0,0,0.18)`,
             cursor: 'pointer',
             // The chip walks: a subtle lean in the direction of travel
             // is the only motion it gets, so a moving dog still reads
