@@ -316,6 +316,13 @@
       "when": 1786530681907,
       "tag": "0044_happiness_index",
       "breakpoints": true
+    },
+    {
+      "idx": 45,
+      "version": "7",
+      "when": 1786530681908,
+      "tag": "0045_metrics_snapshots",
+      "breakpoints": true
     }
   ]
 }

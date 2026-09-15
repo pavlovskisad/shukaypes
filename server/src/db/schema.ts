@@ -780,3 +780,37 @@ export const searchResults = pgTable(
     dogIdx: index('search_results_dog_id_idx').on(t.dogId),
   }),
 );
+
+// THE CONSOLE'S MEMORY (D-84). One row every five minutes, holding the
+// numbers worth a line on a chart. Everything else the console shows is
+// computed live; this exists only so a panel can answer "is it moving",
+// which no snapshot can.
+//
+// `at` is the primary key, which also gives the only query this table
+// ever serves — the last N hours, oldest first — its index for free.
+//
+// Nullable where the underlying number legitimately has no value: a mean
+// over zero rows is not zero, and storing it as zero would draw a line
+// crashing to the floor every night when the bots go home.
+export const metricsSnapshots = pgTable('metrics_snapshots', {
+  at: timestamp('at', { withTimezone: true }).primaryKey().defaultNow(),
+  presenceTotal: integer('presence_total').notNull().default(0),
+  presencePeople: integer('presence_people').notNull().default(0),
+  presenceBots: integer('presence_bots').notNull().default(0),
+  withDogPeople: integer('with_dog_people').notNull().default(0),
+  withDogBots: integer('with_dog_bots').notNull().default(0),
+  paws5m: integer('paws_5m').notNull().default(0),
+  bones5m: integer('bones_5m').notNull().default(0),
+  marks5m: integer('marks_5m').notNull().default(0),
+  pawsLive: integer('paws_live').notNull().default(0),
+  bonesLive: integer('bones_live').notNull().default(0),
+  marksTotal: integer('marks_total').notNull().default(0),
+  groundPieces: integer('ground_pieces').notNull().default(0),
+  ownersWithGround: integer('owners_with_ground').notNull().default(0),
+  realAccounts: integer('real_accounts').notNull().default(0),
+  dau: integer('dau').notNull().default(0),
+  tickMaxMs: integer('tick_max_ms').notNull().default(0),
+  botsIndexMean: doublePrecision('bots_index_mean'),
+  botsHungerMean: doublePrecision('bots_hunger_mean'),
+  botsHappinessMean: doublePrecision('bots_happiness_mean'),
+});
