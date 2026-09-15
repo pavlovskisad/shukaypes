@@ -13,7 +13,30 @@ function envNum(name: string, fallback: number): number {
   return Number.isFinite(n) && n >= 0 ? n : fallback;
 }
 export const balance = {
-  hunger: { start: 80, decay: 2, intervalMs: 8000, min: 0, max: 100 },
+  // HUNGER DRAINS ONCE A MINUTE, NOT EVERY EIGHT SECONDS.
+  //
+  // At 2 per 8s a dog lost 900 hunger an hour of being online, and a
+  // bone restores 20 — so standing still cost 45 bones an hour. The
+  // console's first honest look (D-86) measured what the pool actually
+  // finds: 7.7 bones per online hour for the bots, 47.7 for a person.
+  // The bots were therefore pinned at a hunger of 1.0 out of 100, and a
+  // full dog emptied in under seven minutes of a twenty-to-forty-five
+  // minute walk. That is not a hunger mechanic, it is a dog that is
+  // always starving, and every meter downstream of it — happiness, the
+  // index, whether a mark is refused — was reading off the floor.
+  //
+  // At 2 per 60s it is 120 an hour: a thirty-minute walk costs 60, which
+  // is most of a bar and real tension, and the ~4 bones a bot finds in
+  // that walk (+80) covers it with something to spare. A dog left alone
+  // still gets hungry; it just no longer does so faster than the city
+  // can feed it.
+  //
+  // The decay cron's catch-up cap is derived from this (30 ticks), so the
+  // most one tick can settle after a gap moves from 4 minutes to 30 —
+  // which is the right shape for a meter that now moves this slowly. It
+  // also means the cron updates a row at most once a minute instead of
+  // seven times, which is the cheapest write saving in the file.
+  hunger: { start: 80, decay: 2, intervalMs: 60000, min: 0, max: 100 },
   // Happiness starts high (the dog is excited), decays slow, and gets
   // big visible bumps on collect + quest milestones. Decay runs at the
   // hunger cron's interval so SQL ROUND lands on a non-zero step;

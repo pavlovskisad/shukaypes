@@ -2025,3 +2025,61 @@ it should be on the day somebody actually needs to write to a person.
 reach anybody: nickname, pet and breed, whether the address is verified,
 whether they drew an avatar, Telegram handle, points, kilometres walked,
 first seen, registered, last seen. Tap a row for the rest.
+
+### D-86 · The first thing the console found ✅
+
+Within an hour of the dashboard going live the owner looked at two
+panels and said "doesnt these numbers feel odd?". They did. Three
+separate things, and the first one was mine.
+
+**The 96% was a measurement bug.** The economy panel counted
+`tokens.collected_at` as "a dog picked this up". That column is a
+tombstone for THREE events: a real pickup (`services/collect.ts`), the
+five-minute age-out, and the over-cap cull (both `services/spawn.ts`).
+With a five-minute lifetime nearly everything ever spawned ends up
+stamped, so the panel was measuring expiry and calling it appetite. It
+now counts from `collect_events`, which only a genuine pickup writes and
+which the bots report already read — the two surfaces agreed on nothing
+before and cannot disagree now. Measured after the fix on a local pool:
+24% of paws taken, 76% aged out. The panel shows that third number
+explicitly, because a spawner producing four times what anybody picks up
+is a cost that is invisible if you only print the two halves that look
+healthy.
+
+**The bots were starving, and that was real.** Hunger drained 2 every 8
+seconds of being online — 900 an hour — and a bone restores 20, so
+standing still cost 45 bones an hour. The console measured what the pool
+actually finds: 7.7 bones per online hour for a bot, 47.7 for a person.
+So the bots sat pinned at a hunger of 1.0 out of 100, a full dog emptied
+in under seven minutes of a twenty-to-forty-five minute walk, and every
+meter downstream — happiness, the index, whether a mark is refused — was
+reading off the floor. That is not a hunger mechanic; it is a dog that is
+always starving.
+
+`hunger.intervalMs` 8000 → 60000, on the owner's call ("lets make far
+slower drain"): 120 an hour. A thirty-minute walk costs 60, which is most
+of a bar and real tension, and the four-ish bones a bot finds in that
+walk cover it with something to spare. Happiness is left alone at 450 an
+hour, because paws feed it and paws are abundant — the observed mean of
+44 is a meter doing its job, not one on the floor.
+
+**A hole in "bots live by the player's rules".** `routes/syncMap.ts` asks
+`shouldAttemptSpawn` before topping anything up; `botSync` called the
+spawner straight. A hundred and twenty bots were asking the database for
+work a hundred and twenty phones would not. Gated now. It is a smaller
+win than it sounds — the expensive gate is the movement threshold inside
+`ensureTokensForUser`, which bots already passed through — but it is
+exactly the kind of drift D-76 exists to prevent.
+
+**The write traffic underneath is not a bug and has no cleanup to fix
+it.** `spentItemCleanup` already exists and works; it bounds STORAGE by
+deleting spent rows past their retention. It does nothing about WRITES,
+and writes are what ~42,000 paw spawns a day cost on a 512 MB tier. Two
+of those came free with this change: the decay cron's gate moved from 8s
+to 60s, so `companion_state` is updated about seven times less often.
+The rest is the spawner doing what it is told — twenty paws in the area
+around a dog that keeps walking into new area. The levers, in order of
+bluntness, are `tokensInUserArea` (20), `userAreaMovementThresholdM`
+(300) and `tokenExpireMinutes` (5, so a paw behind you dies before the
+next top-up can count it). Left for the owner with the numbers in hand,
+which is the whole reason the panel exists.

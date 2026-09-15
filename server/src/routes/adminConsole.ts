@@ -298,11 +298,15 @@ const PAGE = `<!doctype html>
     out.push('<div class="panel"><h2>economy · 24h</h2>' +
       row('paws spawned', num(e.pawsSpawned24h)) +
       row('paws taken', num(e.pawsCollected24h) + ' (' + pc(e.pawsCollected24h, e.pawsSpawned24h) + ')') +
+      row('paws aged out', num(e.pawsWasted24h)) +
       row('paws live now', num(e.pawsLive)) +
       row('bones spawned', num(e.bonesSpawned24h)) +
       row('bones eaten', num(e.bonesEaten24h) + ' (' + pc(e.bonesEaten24h, e.bonesSpawned24h) + ')') +
+      row('bones aged out', num(e.bonesWasted24h)) +
       row('bones live now', num(e.bonesLive)) +
-      '<div class="note">live = on the map and not yet picked up.</div></div>');
+      '<div class="note">taken/eaten are real pickups from collect_events, not the item\u2019s ' +
+      'collected_at \u2014 that column also marks the 5-minute age-out and the over-cap cull. ' +
+      'live = on the map and not yet picked up.</div></div>');
 
     return out.join('');
   }
