@@ -133,6 +133,7 @@ Other read surfaces:
 | `/admin/bots/report[?format=text]` | `REPORT_TOKEN` or admin | The bots' life as numbers (D-76): per bot the meters, level, counted hours, happiness index, bones and paws (24h), live marks; and two cohort lines — bots and people — with per-online-hour rates of bones, paws and marks, mean index, mean meters, next to the balance rules in force. The tuning bench: read it before touching a spawn or decay number. |
 | `/admin/metrics[?format=text]` | `DASHBOARD_TOKEN` or admin | Users, DAU/WAU, retention, ingest heartbeat, search funnel, chat token spend by model. Bots excluded structurally. |
 | `/admin/live[?format=text]` | `DASHBOARD_TOKEN` or admin | What is happening right now (D-83): who is on the map, who is with a dog, paws/bones/marks in the last 5 and 60 minutes with the bots' share, the bots' last window, cron tick p50/max/slow, uptime and machine. Cheap enough to poll every 20s — four indexed queries plus in-memory counters. |
+| `/admin/history?hours=N` | `DASHBOARD_TOKEN` or admin | The metrics snapshot series (D-84): one row every five minutes, oldest first, `hours` clamped to 30 days. Feeds the console's sparklines. |
 | `/admin/console` | `DASHBOARD_TOKEN` | The same numbers as a page. Open with `…/admin/console?k=<token>` — the key is stripped from the URL bar on load and redacted in the request log. Read-only by construction. |
 | `/stats` | bearer | Active counts, per-source breakdown, last 30 scrape-log rows. **No longer public** — it was leaking bot-ingested users' DM text. |
 | `/admin/lost-dogs/scrape-log` | admin | The same, with auth and filters. |
@@ -202,7 +203,7 @@ Anything that writes to `lost_dogs`, `sightings` or `users`:
 | Watchdog | Armed. Kills a process whose event loop has been blocked 30s. |
 | Client crash reporting | **Exists since PR #419.** Root boundary + global handlers → `POST /client-errors` → Fly logs (`kind: 'client_error'`). Capped and deduped client-side. |
 | Server error visibility | `setErrorHandler` masks 5xx bodies; `unhandledRejection` / `uncaughtException` handlers installed (several jobs are deliberately unawaited and Node's default is to crash). |
-| Admin console / metrics | Built, and since D-83 carries a live strip (presence, pickups, marks, tick health) plus bots / happiness / economy panels. Still **dark** until `DASHBOARD_TOKEN` is set — it 401s for everyone without it. |
+| Admin console / metrics | Built, and since D-83/D-84 carries a live strip with 24h sparklines (presence, pickups, marks, tick health) plus bots / happiness / economy panels. Still **dark** until `DASHBOARD_TOKEN` is set — it 401s for everyone without it. |
 | Ingest alert | Built and **armed** since 25 Aug (`ALERT_CHAT_ID` set; the same chat receives owner-report review buttons). 36h of zero inserts should fire it. **Whether it has ever fired is not verifiable from Fly logs** — the log window is hours, and the tick on 12 Sep still read `inserted 0`. Ask the chat. |
 | Spent-item janitor | Running daily since 6 Sep (`kind: 'spent_item_cleanup'` in logs). Bounded per tick, so a backlog shows as several days of full batches, not one big one. |
 | External uptime monitor on `/health/deep` | **Does not exist.** Recommended by the audit; still not done. Needs an account, so it is the owner's. |

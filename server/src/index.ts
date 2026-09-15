@@ -42,6 +42,7 @@ import { startScrapeCron } from './services/scrape.js';
 import { startLostDogCleanupCron } from './services/lostDogCleanup.js';
 import { startSpentItemCleanupCron } from './services/spentItemCleanup.js';
 import { startMultiplayerCron } from './services/bots.js';
+import { startMetricsSnapshotCron } from './services/metricsHistory.js';
 import { balance } from './config/balance.js';
 import { pg } from './db/index.js';
 import { redis } from './db/redis.js';
@@ -293,6 +294,9 @@ async function main() {
   // Multiplayer presence maintenance: purge stale walkers, and (if
   // MULTIPLAYER_BOTS>0) step + publish the bot walkers that populate the
   // presence set. Purge-only when no bots, so real presence still works.
+  // One metrics row every five minutes (D-84), so the console can show a
+  // trend and not only a reading.
+  const stopMetricsSnapshot = startMetricsSnapshotCron(app.log);
   const stopMultiplayer = startMultiplayerCron(
     app.log,
     Number(process.env.MULTIPLAYER_BOTS ?? 0) || 0,
@@ -320,6 +324,7 @@ async function main() {
     stopLostDogCleanup();
     stopSpentItemCleanup();
     stopMultiplayer();
+    stopMetricsSnapshot();
     stopWatchdog();
     process.exit(1);
   }
@@ -331,6 +336,7 @@ async function main() {
     stopSpentItemCleanup();
     stopZoneExpansion();
     stopMultiplayer();
+    stopMetricsSnapshot();
     // The watchdog stays armed THROUGH app.close(), and is only stood down
     // once we know we got past it. A close that hangs is the same outage
     // as any other hang — the machine stays up, unreachable, looking fine.

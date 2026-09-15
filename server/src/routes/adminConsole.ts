@@ -78,11 +78,16 @@ const PAGE = `<!doctype html>
      card of statistics. */
   .live { display: grid; gap: 10px 14px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
           background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
-          padding: 14px 16px; margin: 0 0 14px; }
-  .live .cell { min-width: 0; }
+          padding: 14px 16px 16px; margin: 0 0 14px; }
+  .live .cell { min-width: 0; display: flex; flex-direction: column; }
+  .live .cell .spark { margin-top: auto; }
   .live .k { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
   .live .v { font-size: 22px; line-height: 1.2; }
   .live .s { font-size: 11px; color: var(--dim); }
+  .live .spark { display: block; margin-top: 6px; width: 100%; height: 26px; }
+  .live .spark path { fill: none; stroke: var(--accent); stroke-width: 1.5;
+                      stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
+  .live .spark rect { fill: var(--line); opacity: .35; }
   .strip-note { color: var(--dim); font-size: 11px; margin: -6px 0 14px; }
   /* A tick that crossed the warn threshold reads amber, same as a stale
      ingest source — one colour meaning "look at this" across the page. */
@@ -288,25 +293,88 @@ const PAGE = `<!doctype html>
   // process, so it can be asked every twenty seconds; /admin/metrics is
   // a dozen aggregates and stays on two minutes. Mixing them would mean
   // either a stale strip or a database serving a wall display.
-  function cell(k, v, sub, warn) {
+  // The last day of five-minute rows (D-84), kept between renders so the
+  // strip can draw a line under each number without refetching on its own
+  // twenty-second clock — the history moves once every five minutes, so
+  // asking for it more often than the panels do would be pure waste.
+  var history = [];
+
+  // A sparkline as one <path>, scaled to its own min and max.
+  //
+  // Its own, not a shared scale: these are different units (dogs, marks,
+  // milliseconds) and the question each one answers is "is this going up",
+  // which is about shape. The baseline strip behind it says "this is a
+  // chart and not a squiggle" when the series is flat.
+  //
+  // Nulls are holes, not zeros — a mean over no bots is absent, and
+  // drawing it at the floor would invent a nightly collapse. A hole
+  // breaks the path and the line resumes after it.
+  function spark(vals) {
+    var pts = [];
+    var lo = Infinity, hi = -Infinity;
+    for (var i = 0; i < vals.length; i++) {
+      var n = vals[i];
+      if (n == null || isNaN(n)) continue;
+      if (n < lo) lo = n;
+      if (n > hi) hi = n;
+    }
+    if (lo === Infinity) return '';
+    var W = 100, H = 26, pad = 2;
+    var span = hi - lo || 1;
+    var d = '', pen = false;
+    for (var j = 0; j < vals.length; j++) {
+      var v = vals[j];
+      if (v == null || isNaN(v)) { pen = false; continue; }
+      var x = vals.length < 2 ? W / 2 : (j / (vals.length - 1)) * W;
+      var y = H - pad - ((v - lo) / span) * (H - pad * 2);
+      d += (pen ? 'L' : 'M') + x.toFixed(1) + ' ' + y.toFixed(1) + ' ';
+      pen = true;
+    }
+    if (!d) return '';
+    return '<svg class="spark" viewBox="0 0 ' + W + ' ' + H + '" preserveAspectRatio="none">' +
+      '<rect x="0" y="' + (H - 1) + '" width="' + W + '" height="1"></rect>' +
+      '<path d="' + d + '"></path></svg>';
+  }
+
+  // Pull one column out of the history, as numbers.
+  function series(key) {
+    var out = [];
+    for (var i = 0; i < history.length; i++) {
+      var v = history[i][key];
+      out.push(v == null ? null : Number(v));
+    }
+    return out;
+  }
+  function sum2(a, b) {
+    var x = series(a), y = series(b), out = [];
+    for (var i = 0; i < x.length; i++) {
+      out.push(x[i] == null && y[i] == null ? null : (x[i] || 0) + (y[i] || 0));
+    }
+    return out;
+  }
+
+  function cell(k, v, sub, warn, vals) {
     return '<div class="cell"><div class="k">' + esc(k) + '</div>' +
       '<div class="v' + (warn ? ' warn' : '') + '">' + esc(v) + '</div>' +
-      '<div class="s">' + esc(sub || '') + '</div></div>';
+      '<div class="s">' + esc(sub || '') + '</div>' +
+      (vals && vals.length > 1 ? spark(vals) : '') + '</div>';
   }
 
   function renderLive(l) {
     var out = [];
     var p = l.presence;
-    out.push(cell('on the map', num(p.total), p.people + ' people · ' + p.bots + ' bots'));
+    out.push(cell('on the map', num(p.total), p.people + ' people · ' + p.bots + ' bots',
+      false, series('presence_total')));
     out.push(cell('with a dog', num(l.withDog.people + l.withDog.bots),
-      l.withDog.people + ' people · ' + l.withDog.bots + ' bots'));
+      l.withDog.people + ' people · ' + l.withDog.bots + ' bots',
+      false, sum2('with_dog_people', 'with_dog_bots')));
 
     // Five minutes is the window the bots' own log line uses, so the two
     // agree when you put them side by side.
     var w = l.last5m;
-    out.push(cell('paws · 5m', num(w.paws), w.botPaws + ' by bots'));
-    out.push(cell('bones · 5m', num(w.bones), w.botBones + ' by bots'));
-    out.push(cell('marks · 5m', num(w.marks), w.botMarks + ' by bots'));
+    out.push(cell('paws · 5m', num(w.paws), w.botPaws + ' by bots', false, series('paws_5m')));
+    out.push(cell('bones · 5m', num(w.bones), w.botBones + ' by bots', false, series('bones_5m')));
+    out.push(cell('marks · 5m', num(w.marks), w.botMarks + ' by bots', false, series('marks_5m')));
 
     // The slowest cron in the window. One number, because the question
     // this answers is "is the machine keeping up", and the answer is the
@@ -318,7 +386,7 @@ const PAGE = `<!doctype html>
     if (worst) {
       out.push(cell('slowest tick', worst.max + 'ms',
         worst.name + ' · p50 ' + worst.p50 + 'ms · ' + worst.slow + ' slow',
-        worst.max >= 2000));
+        worst.max >= 2000, series('tick_max_ms')));
     }
 
     var up = Math.floor(l.process.uptimeS / 60);
@@ -329,10 +397,16 @@ const PAGE = `<!doctype html>
     $('live').innerHTML = out.join('');
 
     var b = l.botLife;
-    $('liveNote').textContent = b
+    // The chart's own window belongs on the line whether or not the bots
+    // have logged one yet — a fresh process has no bot window for five
+    // minutes, and the lines are already there.
+    var parts = [];
+    if (history.length > 1) parts.push('lines: last ' + history.length + ' five-minute points');
+    parts.push(b
       ? 'bots\u2019 last ' + b.windowS + 's window: ' + b.online + '/' + b.pool + ' out, ' +
         b.outings + ' went out, refused ' + b.grumpy + ' grumpy / ' + b.hungry + ' hungry'
-      : 'no bot window yet \u2014 the pool logs one every five minutes.';
+      : 'no bot window yet \u2014 the pool logs one every five minutes.');
+    $('liveNote').textContent = parts.join(' \u00b7 ');
   }
 
   function loadLive() {
@@ -347,6 +421,15 @@ const PAGE = `<!doctype html>
         $('err').textContent = e.message;
         if (/401/.test(e.message)) { forget(); }
       });
+  }
+
+  function loadHistory() {
+    return fetch('/admin/history?hours=24', { headers: { Authorization: 'Bearer ' + token } })
+      .then(function (res) { return res.ok ? res.json() : { rows: [] }; })
+      .then(function (h) { history = h.rows || []; })
+      // A console with no chart is still a console. Never let the history
+      // take the numbers down with it.
+      .catch(function () { history = []; });
   }
 
   function load() {
@@ -372,7 +455,7 @@ const PAGE = `<!doctype html>
   function show() {
     $('gate').hidden = !!token;
     $('main').hidden = !token;
-    if (token) { load(); loadLive(); }
+    if (token) { load(); loadHistory().then(loadLive); }
   }
   function forget() {
     token = null;
@@ -388,12 +471,12 @@ const PAGE = `<!doctype html>
     show();
   };
   $('tok').onkeydown = function (e) { if (e.key === 'Enter') $('go').click(); };
-  $('refresh').onclick = function () { load(); loadLive(); };
+  $('refresh').onclick = function () { load(); loadHistory().then(loadLive); };
   $('forget').onclick = forget;
   // Slow on purpose: /admin/metrics is a dozen aggregates and is rate
   // limited to 10/min. A console left open on a wall should not compete
   // with the map for the database.
-  setInterval(function () { if (token && !document.hidden) load(); }, 120000);
+  setInterval(function () { if (token && !document.hidden) { load(); loadHistory(); } }, 120000);
   // The strip, on its own much faster clock — and only while the tab is
   // actually being looked at, so a forgotten tab costs nothing.
   setInterval(function () { if (token && !document.hidden) loadLive(); }, 20000);

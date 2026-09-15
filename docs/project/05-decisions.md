@@ -1940,3 +1940,49 @@ is the one thing this change cannot do for itself.
 snapshot, so the page can say what is true and not whether it is moving.
 That is the next piece (a snapshot table and a cron), and it is what
 turns a dashboard into an instrument.
+
+### D-84 · The console gets a memory ✅
+
+Phase two of the owner's beta instrument, and the half that makes the
+page worth opening twice. D-83 gave it a pulse: every panel says what is
+true this second. None of them can say whether it is moving, which is
+the only question a tuning pass ever asks — "did lifting midday to 0.8
+actually put more dogs out" was answered last night by me reading
+five-minute log lines out of Fly, one window at a time.
+
+**One row every five minutes** (`metrics_snapshots`, migration 0045).
+Nineteen columns of the numbers worth a line on a chart: presence split
+three ways, who is with a dog, the five-minute pickups and marks, items
+live on the map, territory totals, accounts, DAU, the worst cron tick,
+and the bots' three means. 288 rows a day, ~105k a year, a few megabytes
+— the cheapest thing on this database. Pruned past sixty days by the
+same cron, once a day's worth of ticks have gone by.
+
+**Wide and explicit, not a JSON blob keyed by metric name.** These get
+charted, and a chart wants a column. Adding a series later is a
+migration, which is the right amount of friction for something that
+becomes a line on a page somebody reads.
+
+**A mean over nothing is NULL, not zero.** The bot means are nullable
+and stay null when no bot is online. Storing zero would draw the
+happiness line crashing to the floor every night when the pool goes home
+— a chart lying about the one rhythm the whole system is built on. The
+sparkline treats a null as a HOLE: the path breaks and resumes, rather
+than interpolating across an absence or dropping to the axis.
+
+**Cheap by construction.** The cron reuses `collectLive()`, which the
+console is already calling every twenty seconds anyway, plus one query
+for the slower-moving totals. Nothing in it scans a table the live path
+does not already scan.
+
+**Sparklines, as one `<path>` each, scaled to their own min and max.**
+Their own, not a shared scale: these are dogs, marks and milliseconds,
+and the question each answers is "is this going up", which is about
+shape. A faint baseline strip behind the line says "this is a chart" when
+the series is flat. `/admin/history?hours=N` serves them, same token,
+clamped to thirty days.
+
+**Where it stops.** The page still has no alerting and no comparison
+across days — "this hour against the same hour yesterday" is a real
+question and not one line of code. If the console earns a third pass,
+that is what it should be.
