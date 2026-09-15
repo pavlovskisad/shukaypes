@@ -1986,3 +1986,42 @@ clamped to thirty days.
 across days — "this hour against the same hour yesterday" is a real
 question and not one line of code. If the console earns a third pass,
 that is what it should be.
+
+### D-85 · Who they are, with the address held back ✅
+
+The owner, reading the new console: "it says 72 real accounts
+interesting who are they?)".
+
+**The number was flattering him.** "Real accounts" is every row in
+`users` that is not a bot, and most of them are ANONYMOUS — a device id
+minted the first time somebody opened the app, months before the door
+(D-72) existed, with no name they chose and no address. Counting those
+beside people who registered, verified and named a dog makes a beta look
+four times bigger than it is. So the panel splits them, and the split is
+the headline: **registered** went through the door; **anonymous** is a
+device row that might be a person who looked once, or the same person's
+second phone.
+
+**Masked in the service, not in the page.** `lib/maskEmail` turns
+`sashko@gmail.com` into `sa•••@gmail.com` before it leaves the process,
+so the full string is not in the payload and no toggle in the markup, no
+devtools tab and no screenshot can reveal it. Two characters, then
+exactly three bullets whatever the length — a mask that grows with the
+local part hands out the length for free — then the whole domain, which
+disambiguates least and is the most useful for spotting a run of
+sign-ups from one place.
+
+The reasoning is about the key, not about trust: `DASHBOARD_TOKEN` is a
+shared secret kept in a phone browser and passable in a link, and until
+this panel it opened nothing but aggregates. The realistic way a list of
+users escapes is a screenshot, not a breach. `pnpm check:mask` guards the
+property, because the next person to improve the mask should have to
+argue with a failing script rather than with a comment.
+
+**The full address stays one query away** in the database, which is where
+it should be on the day somebody actually needs to write to a person.
+
+**Everything else is shown in full**, because none of it can be used to
+reach anybody: nickname, pet and breed, whether the address is verified,
+whether they drew an avatar, Telegram handle, points, kilometres walked,
+first seen, registered, last seen. Tap a row for the rest.
