@@ -1885,3 +1885,58 @@ the one it stands on. At the near-top-down camera the territory view
 opens at, those are the same place. The more the camera pitches, the
 more a tall block wears the colour of the ground behind it — which
 reads as paint lying over the city, which is what it is.
+
+### D-83 · The console gets a pulse ✅
+
+The owner, after a morning of me reading numbers out of the logs to
+him: "i recall i had a session on admin dashboard a long ago, can you
+check how it looks, whats there, whats missing … id like to have a
+front end live view with all kinds of things to monitor as this starts
+to look like some real beta test mode is on."
+
+**What the audit found.** The console (D-38) was built, is live at
+`/admin/console`, and has never shown anybody a number: `DASHBOARD_TOKEN`
+was never set, so every panel 401s. The operations doc has said "Built,
+**dark**" this whole time. Its seven panels also predate D-72 through
+D-82 entirely — nothing about bots, presence, the happiness index, the
+economy or the health of the process.
+
+**The split that makes a live view affordable.** `/admin/metrics` is a
+dozen aggregates over every table that matters; it is rate-limited to
+ten a minute and must stay on a two-minute clock. Watching means asking
+every twenty seconds, so the live half is its own endpoint,
+`/admin/live` (services/live.ts): one ZRANGEBYSCORE of the presence set,
+three counts over indexed time columns, and the rest read out of the
+process itself. Same token, same two formats, different rate limit.
+
+**What the process now knows about itself** (services/liveStats.ts). Cron
+tick durations, recorded for EVERY tick rather than only the slow ones —
+a median computed from the ticks that were already too slow is not a
+median of anything — and the bots' last five-minute window as a value
+instead of a log line somebody has to grep. Held in memory on purpose: a
+restart empties it, which is correct, because after a deploy these are
+facts about a different process.
+
+**The strip reads NOW; the panels read TODAY.** On the map, with a dog,
+paws and bones and marks in the last five minutes with the bots' share
+under each, the slowest cron tick, uptime and machine. Bots are counted
+and named here — metrics.ts excludes them structurally because those
+numbers describe a business, while these describe a system, and a system
+carrying 120 synthetic walkers should say so.
+
+**Three new panels**, from what the last month built: per online hour
+(bots against people, which is the only comparison that means anything
+when one cohort is out 6% of the day), the happiness index top three,
+and the economy — spawned against taken, over the same day, because
+either half alone is misleading: plenty of bones nobody eats and no
+bones at all both read as a low count of meals. The cohorts are
+`buildBotReport`'s own, not a second implementation, so the console and
+the report cannot disagree.
+
+**Still the owner's to switch on.** `fly secrets set DASHBOARD_TOKEN=…`
+is the one thing this change cannot do for itself.
+
+**What is deliberately not here.** History. Every number is still a
+snapshot, so the page can say what is true and not whether it is moving.
+That is the next piece (a snapshot table and a cron), and it is what
+turns a dashboard into an instrument.

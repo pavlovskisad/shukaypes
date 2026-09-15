@@ -73,6 +73,20 @@ const PAGE = `<!doctype html>
   .row span:last-child { color: var(--ink); }
   .row span:first-child { color: var(--dim); }
   .big { font-size: 26px; line-height: 1.1; margin: 2px 0 8px; }
+  /* The live strip. Its own row above the panels, and visually quieter
+     than a panel so the eye reads it as a status bar and not as another
+     card of statistics. */
+  .live { display: grid; gap: 10px 14px; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+          background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+          padding: 14px 16px; margin: 0 0 14px; }
+  .live .cell { min-width: 0; }
+  .live .k { font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--accent); }
+  .live .v { font-size: 22px; line-height: 1.2; }
+  .live .s { font-size: 11px; color: var(--dim); }
+  .strip-note { color: var(--dim); font-size: 11px; margin: -6px 0 14px; }
+  /* A tick that crossed the warn threshold reads amber, same as a stale
+     ingest source — one colour meaning "look at this" across the page. */
+  .live .v.warn, .warn { color: var(--warn); }
   .note { color: var(--dim); font-size: 12px; margin-top: 10px; }
   .warn { color: var(--warn); }
   table { width: 100%; border-collapse: collapse; }
@@ -106,6 +120,8 @@ const PAGE = `<!doctype html>
       <button id="forget">forget token</button>
       <span id="err" class="warn"></span>
     </div>
+    <div class="live" id="live"></div>
+    <div class="strip-note" id="liveNote"></div>
     <div class="grid" id="panels"></div>
   </div>
 </div>
@@ -215,7 +231,122 @@ const PAGE = `<!doctype html>
       row('claimed shapes', num(m.territory.claimedShapes)) +
       row('owners holding ground', num(m.territory.ownersWithGround)) + '</div>');
 
+    // BOTS AND PEOPLE IN THE SAME TABLE, on purpose. Every figure here is
+    // per ONLINE HOUR, which is the only way the two are comparable: the
+    // pool is out about six percent of the day and a person is out when
+    // they are out. Raw totals would say nothing except how many bots
+    // there are.
+    var rate = function (n) { return n == null ? '—' : n.toFixed(1); };
+    var pair = function (label, a, b) {
+      return '<tr><td>' + esc(label) + '</td><td>' + esc(rate(a)) + '</td><td>' + esc(rate(b)) + '</td></tr>';
+    };
+    out.push('<div class="panel"><h2>per online hour</h2>' +
+      '<table><tr><td></td><td>bots</td><td>people</td></tr>' +
+      pair('bones', m.bots.bonesPerHour, m.peopleLive.bonesPerHour) +
+      pair('paws', m.bots.pawsPerHour, m.peopleLive.pawsPerHour) +
+      pair('marks · 24h', m.bots.marksPerHour24h, m.peopleLive.marksPerHour24h) +
+      pair('hunger mean', m.bots.hungerMean, m.peopleLive.hungerMean) +
+      pair('happiness mean', m.bots.happinessMean, m.peopleLive.happinessMean) +
+      pair('hours counted', m.bots.hoursCounted, m.peopleLive.hoursCounted) +
+      '</table><div class="note">' + num(m.bots.online) + ' of ' + num(m.bots.walkers) +
+      ' bots online, ' + num(m.peopleLive.online) + ' of ' + num(m.peopleLive.walkers) +
+      ' people. same numbers as /admin/bots/report.</div></div>');
+
+    var h = m.happiness;
+    var hb = '<table>';
+    for (var k = 0; k < h.top.length; k++) {
+      hb += '<tr><td>' + esc(h.top[k].index) + '</td><td>' + esc(h.top[k].name) +
+        (h.top[k].bot ? ' <span style="color:var(--dim)">bot</span>' : '') +
+        '</td><td>' + esc(h.top[k].hours) + 'h</td></tr>';
+    }
+    hb += '</table>';
+    out.push('<div class="panel"><h2>happiness index</h2>' + hb +
+      '<div class="note">' + num(h.ranked) + ' bots past the ten-minute floor. ' +
+      'the index is happiness × time ÷ time, all-time.</div></div>');
+
+    // SPAWNED AGAINST TAKEN. Either half alone is misleading: plenty of
+    // bones with nobody eating them and no bones at all both read as a
+    // low count of meals.
+    var e = m.economy;
+    var pc = function (a, b) { return b > 0 ? Math.round((a / b) * 100) + '%' : '—'; };
+    out.push('<div class="panel"><h2>economy · 24h</h2>' +
+      row('paws spawned', num(e.pawsSpawned24h)) +
+      row('paws taken', num(e.pawsCollected24h) + ' (' + pc(e.pawsCollected24h, e.pawsSpawned24h) + ')') +
+      row('paws live now', num(e.pawsLive)) +
+      row('bones spawned', num(e.bonesSpawned24h)) +
+      row('bones eaten', num(e.bonesEaten24h) + ' (' + pc(e.bonesEaten24h, e.bonesSpawned24h) + ')') +
+      row('bones live now', num(e.bonesLive)) +
+      '<div class="note">live = on the map and not yet picked up.</div></div>');
+
     return out.join('');
+  }
+
+  // THE STRIP IS NOW; THE PANELS ARE TODAY.
+  //
+  // Two endpoints on two clocks, because they cost different amounts.
+  // /admin/live is four indexed queries and some numbers held in the
+  // process, so it can be asked every twenty seconds; /admin/metrics is
+  // a dozen aggregates and stays on two minutes. Mixing them would mean
+  // either a stale strip or a database serving a wall display.
+  function cell(k, v, sub, warn) {
+    return '<div class="cell"><div class="k">' + esc(k) + '</div>' +
+      '<div class="v' + (warn ? ' warn' : '') + '">' + esc(v) + '</div>' +
+      '<div class="s">' + esc(sub || '') + '</div></div>';
+  }
+
+  function renderLive(l) {
+    var out = [];
+    var p = l.presence;
+    out.push(cell('on the map', num(p.total), p.people + ' people · ' + p.bots + ' bots'));
+    out.push(cell('with a dog', num(l.withDog.people + l.withDog.bots),
+      l.withDog.people + ' people · ' + l.withDog.bots + ' bots'));
+
+    // Five minutes is the window the bots' own log line uses, so the two
+    // agree when you put them side by side.
+    var w = l.last5m;
+    out.push(cell('paws · 5m', num(w.paws), w.botPaws + ' by bots'));
+    out.push(cell('bones · 5m', num(w.bones), w.botBones + ' by bots'));
+    out.push(cell('marks · 5m', num(w.marks), w.botMarks + ' by bots'));
+
+    // The slowest cron in the window. One number, because the question
+    // this answers is "is the machine keeping up", and the answer is the
+    // worst tick, not the average of all of them.
+    var worst = null;
+    for (var i = 0; i < l.ticks.length; i++) {
+      if (!worst || l.ticks[i].max > worst.max) worst = l.ticks[i];
+    }
+    if (worst) {
+      out.push(cell('slowest tick', worst.max + 'ms',
+        worst.name + ' · p50 ' + worst.p50 + 'ms · ' + worst.slow + ' slow',
+        worst.max >= 2000));
+    }
+
+    var up = Math.floor(l.process.uptimeS / 60);
+    var m = l.process.machine;
+    out.push(cell('uptime', up < 90 ? up + 'm' : (up / 60).toFixed(1) + 'h',
+      (m.region || '?') + (m.version ? ' · v' + m.version : '')));
+
+    $('live').innerHTML = out.join('');
+
+    var b = l.botLife;
+    $('liveNote').textContent = b
+      ? 'bots\u2019 last ' + b.windowS + 's window: ' + b.online + '/' + b.pool + ' out, ' +
+        b.outings + ' went out, refused ' + b.grumpy + ' grumpy / ' + b.hungry + ' hungry'
+      : 'no bot window yet \u2014 the pool logs one every five minutes.';
+  }
+
+  function loadLive() {
+    return fetch('/admin/live', { headers: { Authorization: 'Bearer ' + token } })
+      .then(function (res) {
+        if (res.status === 401) throw new Error('401 — token refused');
+        if (!res.ok) throw new Error(res.status + ' — ' + res.statusText);
+        return res.json();
+      })
+      .then(renderLive)
+      .catch(function (e) {
+        $('err').textContent = e.message;
+        if (/401/.test(e.message)) { forget(); }
+      });
   }
 
   function load() {
@@ -241,7 +372,7 @@ const PAGE = `<!doctype html>
   function show() {
     $('gate').hidden = !!token;
     $('main').hidden = !token;
-    if (token) load();
+    if (token) { load(); loadLive(); }
   }
   function forget() {
     token = null;
@@ -257,12 +388,15 @@ const PAGE = `<!doctype html>
     show();
   };
   $('tok').onkeydown = function (e) { if (e.key === 'Enter') $('go').click(); };
-  $('refresh').onclick = load;
+  $('refresh').onclick = function () { load(); loadLive(); };
   $('forget').onclick = forget;
   // Slow on purpose: /admin/metrics is a dozen aggregates and is rate
   // limited to 10/min. A console left open on a wall should not compete
   // with the map for the database.
   setInterval(function () { if (token && !document.hidden) load(); }, 120000);
+  // The strip, on its own much faster clock — and only while the tab is
+  // actually being looked at, so a forgotten tab costs nothing.
+  setInterval(function () { if (token && !document.hidden) loadLive(); }, 20000);
   show();
 })();
 </script>

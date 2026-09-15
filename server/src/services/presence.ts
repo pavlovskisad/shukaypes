@@ -280,6 +280,21 @@ export async function syncPresence(userId: string, pos: LatLng): Promise<NearbyP
 
 // Drop entries that haven't pinged within the TTL. GEO sets are ZSETs, so
 // ZREM removes a geo member. Runs on a cron (services/bots.ts).
+// Who is on the map right now, split the way the console needs it.
+//
+// Reads the same ZSET the purge does, so it counts exactly what a phone
+// would see: an entry that has not been refreshed inside the TTL is
+// already gone from here. Cheap — one ZRANGEBYSCORE of a set whose size
+// is the live population.
+export async function presenceCounts(
+  now = Date.now(),
+): Promise<{ total: number; bots: number; people: number }> {
+  if (redis.status !== 'ready') return { total: 0, bots: 0, people: 0 };
+  const ids = await redis.zrangebyscore(SEEN_KEY, now - PRESENCE_TTL_MS, '+inf');
+  const bots = ids.filter((id) => id.startsWith('bot:')).length;
+  return { total: ids.length, bots, people: ids.length - bots };
+}
+
 export async function purgeStalePresence(now = Date.now()): Promise<void> {
   if (redis.status !== 'ready') return;
   const cutoff = now - PRESENCE_TTL_MS;

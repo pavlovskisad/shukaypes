@@ -30,6 +30,7 @@ import photosRoute from './routes/photos.js';
 import clientErrorsRoute from './routes/clientErrors.js';
 import devRoute from './routes/dev.js';
 import adminMetricsRoute from './routes/adminMetrics.js';
+import adminLiveRoute from './routes/adminLive.js';
 import adminConsoleRoute from './routes/adminConsole.js';
 import telegramRoute, { registerTelegramWebhook } from './routes/telegram.js';
 import { startDecayCron } from './services/decay.js';
@@ -229,6 +230,7 @@ export async function buildServer(observe?: RouteObserver) {
   await app.register(clientErrorsRoute);
   await app.register(devRoute);
   await app.register(adminMetricsRoute);
+  await app.register(adminLiveRoute);
   await app.register(adminConsoleRoute);
   await app.register(telegramRoute);
 

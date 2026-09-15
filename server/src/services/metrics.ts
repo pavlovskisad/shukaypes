@@ -19,6 +19,8 @@
 // instrumentation, no event pipeline, nothing to keep in sync.
 
 import { pg } from '../db/index.js';
+import { buildBotReport, type Cohort } from './botReport.js';
+import { happinessLeaderboard } from './happiness.js';
 
 export interface Metrics {
   generatedAt: string;
@@ -76,6 +78,28 @@ export interface Metrics {
     marks: number;
     claimedShapes: number;
     ownersWithGround: number;
+  };
+  // Everything below is the beta instrument (D-83): the systems built
+  // since this console was written, which it had no way to see. The two
+  // cohorts come from /admin/bots/report's own computation rather than a
+  // second one — "a bot eats twice what a person finds" must be the same
+  // sentence on both surfaces or neither is trustworthy.
+  bots: Cohort;
+  peopleLive: Cohort;
+  happiness: {
+    ranked: number;
+    top: { name: string; index: number; hours: number; bot: boolean }[];
+  };
+  // Spawned against picked up, over the same day. The open balance
+  // question (D-76) is whether bones are scarce next to paws, and it is
+  // unanswerable without both halves.
+  economy: {
+    pawsLive: number;
+    bonesLive: number;
+    pawsSpawned24h: number;
+    bonesSpawned24h: number;
+    pawsCollected24h: number;
+    bonesEaten24h: number;
   };
 }
 
@@ -184,6 +208,24 @@ export async function collectMetrics(): Promise<Metrics> {
     // Under ten people a percentage is theatre, not a measurement.
     cohort < 10 ? null : Math.round((returned / cohort) * 1000) / 10;
 
+  // The bot report and the happiness board, both already written, and a
+  // small economy query. Run together: three more round trips on a call
+  // the console makes every two minutes.
+  const [report, board, econRows] = await Promise.all([
+    buildBotReport(),
+    happinessLeaderboard(3),
+    pg`
+      select
+        (select count(*)::int from tokens     where collected_at is null) as paws_live,
+        (select count(*)::int from food_items where consumed_at  is null) as bones_live,
+        (select count(*)::int from tokens     where spawned_at  >= now() - interval '24 hours') as paws_spawned,
+        (select count(*)::int from food_items where spawned_at  >= now() - interval '24 hours') as bones_spawned,
+        (select count(*)::int from tokens     where collected_at >= now() - interval '24 hours') as paws_taken,
+        (select count(*)::int from food_items where consumed_at  >= now() - interval '24 hours') as bones_eaten
+    `,
+  ]);
+  const econ = (econRows as unknown as Array<Record<string, number>>)[0];
+
   const now = Date.now();
   return {
     generatedAt: new Date().toISOString(),
@@ -247,6 +289,25 @@ export async function collectMetrics(): Promise<Metrics> {
       claimedShapes: terr?.shapes ?? 0,
       ownersWithGround: terr?.owners ?? 0,
     },
+    bots: report.botsTotal,
+    peopleLive: report.people,
+    happiness: {
+      ranked: report.bots.filter((b) => b.index != null).length,
+      top: board.map((e) => ({
+        name: e.name,
+        index: e.index,
+        hours: Math.round((e.activeS / 3600) * 10) / 10,
+        bot: e.userId.startsWith('bot:'),
+      })),
+    },
+    economy: {
+      pawsLive: econ?.paws_live ?? 0,
+      bonesLive: econ?.bones_live ?? 0,
+      pawsSpawned24h: econ?.paws_spawned ?? 0,
+      bonesSpawned24h: econ?.bones_spawned ?? 0,
+      pawsCollected24h: econ?.paws_taken ?? 0,
+      bonesEaten24h: econ?.bones_eaten ?? 0,
+    },
   };
 }
 
@@ -290,6 +351,27 @@ export function renderMetricsText(m: Metrics): string {
   }
   L.push('');
   L.push(`TERRITORY  ${m.territory.marks} marks, ${m.territory.claimedShapes} shapes, ${m.territory.ownersWithGround} owners`);
+
+  const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : '—');
+  const rate = (n: number | null) => (n == null ? '—' : n.toFixed(1));
+  L.push('');
+  L.push('per online hour   bots      people');
+  L.push(`  bones           ${rate(m.bots.bonesPerHour).padStart(6)}    ${rate(m.peopleLive.bonesPerHour).padStart(6)}`);
+  L.push(`  paws            ${rate(m.bots.pawsPerHour).padStart(6)}    ${rate(m.peopleLive.pawsPerHour).padStart(6)}`);
+  L.push(`  marks (24h)     ${rate(m.bots.marksPerHour24h).padStart(6)}    ${rate(m.peopleLive.marksPerHour24h).padStart(6)}`);
+  L.push(`  hunger mean     ${rate(m.bots.hungerMean).padStart(6)}    ${rate(m.peopleLive.hungerMean).padStart(6)}`);
+  L.push(`  happiness mean  ${rate(m.bots.happinessMean).padStart(6)}    ${rate(m.peopleLive.happinessMean).padStart(6)}`);
+  L.push(`  counted hours   ${m.bots.hoursCounted.toFixed(1).padStart(6)}    ${m.peopleLive.hoursCounted.toFixed(1).padStart(6)}`);
+  L.push('');
+  L.push(`happiness index — ${m.happiness.ranked} bots ranked`);
+  for (const t of m.happiness.top) {
+    L.push(`  ${String(t.index).padStart(3)}  ${t.name}${t.bot ? ' (bot)' : ''} · ${t.hours}h`);
+  }
+  L.push('');
+  const e = m.economy;
+  L.push('economy · 24h');
+  L.push(`  paws   ${e.pawsSpawned24h} spawned, ${e.pawsCollected24h} taken (${pct(e.pawsCollected24h, e.pawsSpawned24h)}), ${e.pawsLive} live`);
+  L.push(`  bones  ${e.bonesSpawned24h} spawned, ${e.bonesEaten24h} eaten (${pct(e.bonesEaten24h, e.bonesSpawned24h)}), ${e.bonesLive} live`);
   return L.join('\n');
 }
 

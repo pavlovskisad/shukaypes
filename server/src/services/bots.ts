@@ -29,6 +29,7 @@ import { markAsBot, seedBotTerritory } from './territory.js';
 import { isOnWater } from '../data/kyivWater.js';
 import { botAvatarUrl, botEntry } from './botAvatars.js';
 import { isOut, kyivClock, planDay, type DayPlan, type KyivClock } from './botDay.js';
+import { recordBotLife } from './liveStats.js';
 import {
   botForage,
   botMarkRefusals,
@@ -544,6 +545,20 @@ export function startMultiplayerCron(
             { kind: 'mp_bot_life', paws: life.paws, bones: life.bones, marks: life.marks, grumpy: life.grumpy, hungry: life.hungry, outings: life.outings, online: lastOnline, windowS: Math.round((now - life.since) / 1000) },
             `multiplayer: ${lastOnline} of ${bots.length} bots out, ${life.outings} went out; they ate ${life.bones} bones, took ${life.paws} paws, marked ${life.marks}×, refused ${life.grumpy} grumpy / ${life.hungry} hungry`,
           );
+          // …and the same window as a value, for the console (the log
+          // line answers "what happened"; the console answers "what is
+          // happening", and it should not have to read logs to do it).
+          recordBotLife({
+            online: lastOnline,
+            pool: bots.length,
+            outings: life.outings,
+            paws: life.paws,
+            bones: life.bones,
+            marks: life.marks,
+            grumpy: life.grumpy,
+            hungry: life.hungry,
+            windowS: Math.round((now - life.since) / 1000),
+          });
           life.paws = life.bones = life.marks = life.grumpy = life.hungry = life.outings = 0;
           life.since = now;
         }
