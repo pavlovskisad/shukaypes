@@ -89,6 +89,26 @@ const PAGE = `<!doctype html>
                       stroke-linejoin: round; stroke-linecap: round; opacity: .85; }
   .live .spark rect { fill: var(--line); opacity: .35; }
   .strip-note { color: var(--dim); font-size: 11px; margin: -6px 0 14px; }
+  /* The people list. Full width below the panels, because a name, an
+     address and a last-seen do not fit in a 260px card and squeezing
+     them there is how a list becomes unreadable. */
+  .people { background: var(--panel); border: 1px solid var(--line); border-radius: 10px;
+            padding: 14px 16px 6px; margin: 14px 0 0; }
+  .people h2 { font-size: 11px; letter-spacing: .12em; text-transform: uppercase;
+               color: var(--accent); margin: 0 0 10px; font-weight: 400; }
+  .person { border-top: 1px solid var(--line); padding: 7px 0; cursor: pointer; }
+  .person:first-of-type { border-top: 0; }
+  .person .line { display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap; }
+  .person .who { flex: 1 1 180px; min-width: 0; }
+  .person .mail { color: var(--dim); flex: 0 1 auto; }
+  .person .num { color: var(--dim); font-size: 11px; }
+  /* A registered person is the subject of this list; a device row is
+     context. One dim letter says which without a column of badges. */
+  .person .tag { color: var(--dim); font-size: 10px; letter-spacing: .1em; }
+  .person .tag.r { color: var(--accent); }
+  .person .more { display: none; color: var(--dim); font-size: 11px; padding: 6px 0 2px; }
+  .person.open .more { display: block; }
+  .person .more div { padding: 1px 0; }
   /* A tick that crossed the warn threshold reads amber, same as a stale
      ingest source — one colour meaning "look at this" across the page. */
   .live .v.warn, .warn { color: var(--warn); }
@@ -128,6 +148,7 @@ const PAGE = `<!doctype html>
     <div class="live" id="live"></div>
     <div class="strip-note" id="liveNote"></div>
     <div class="grid" id="panels"></div>
+    <div class="people" id="people" hidden></div>
   </div>
 </div>
 <script>
@@ -423,6 +444,69 @@ const PAGE = `<!doctype html>
       });
   }
 
+  // WHO THEY ARE.
+  //
+  // Split registered from anonymous, because "72 accounts" counts every
+  // device row ever minted and most of those are somebody who opened the
+  // app once before the door existed. Addresses arrive already masked
+  // (services/accounts.ts) — the full string is not in this payload, so
+  // there is nothing here for a screenshot to give away.
+  function when(iso) {
+    if (!iso) return '—';
+    var d = new Date(iso);
+    return isNaN(d) ? '—' : d.toLocaleDateString() + ' ' + d.toTimeString().slice(0, 5);
+  }
+
+  function renderPeople(a) {
+    var s = a.summary;
+    var out = ['<h2>accounts</h2>'];
+    out.push('<div class="row"><span>registered — went through the door</span><span>' +
+      num(s.registered) + '</span></div>');
+    out.push('<div class="row"><span>anonymous — device rows, no door</span><span>' +
+      num(s.anonymous) + '</span></div>');
+    out.push('<div class="row"><span>verified · named a pet · drew an avatar</span><span>' +
+      num(s.verified) + ' · ' + num(s.withPet) + ' · ' + num(s.withAvatar) + '</span></div>');
+    out.push('<div class="row"><span>via telegram · seen in 7d</span><span>' +
+      num(s.viaTelegram) + ' · ' + num(s.activeLast7d) + '</span></div>');
+    out.push('<div class="note">tap a row for the rest. addresses are masked before they leave the server.</div>');
+
+    for (var i = 0; i < a.rows.length; i++) {
+      var r = a.rows[i];
+      out.push('<div class="person" data-i="' + i + '">' +
+        '<div class="line">' +
+          '<span class="tag' + (r.registered ? ' r' : '') + '">' + (r.registered ? 'REG' : 'anon') + '</span>' +
+          '<span class="who">' + esc(r.username) + (r.pet ? ' <span class="num">· ' + esc(r.pet) + '</span>' : '') + '</span>' +
+          '<span class="mail">' + esc(r.email || '—') + (r.email && !r.verified ? ' <span class="warn">unverified</span>' : '') + '</span>' +
+          '<span class="num">' + num(r.points) + 'p · ' + r.distanceKm + 'km</span>' +
+        '</div>' +
+        '<div class="more">' +
+          '<div>id ' + esc(r.id) + '</div>' +
+          '<div>pet: ' + esc(r.pet || '—') + (r.species ? ' (' + esc(r.species) + (r.breed ? ', ' + esc(r.breed) + ')' : ')') : '') + '</div>' +
+          '<div>avatar drawn: ' + (r.avatar ? 'yes' : 'no') + (r.telegram ? ' · telegram: ' + esc(r.telegram) : '') + '</div>' +
+          '<div>first seen ' + esc(when(r.createdAt)) + (r.registeredAt ? ' · registered ' + esc(when(r.registeredAt)) : '') + '</div>' +
+          '<div>last seen ' + esc(when(r.lastSeenAt)) + '</div>' +
+        '</div>' +
+      '</div>');
+    }
+    $('people').innerHTML = out.join('');
+    $('people').hidden = false;
+  }
+
+  // One delegated handler rather than a listener per row: the list is
+  // rewritten on every refresh, and per-row listeners would leak with it.
+  $('people').onclick = function (e) {
+    var el = e.target;
+    while (el && el !== this && !el.classList.contains('person')) el = el.parentNode;
+    if (el && el.classList.contains('person')) el.classList.toggle('open');
+  };
+
+  function loadPeople() {
+    return fetch('/admin/accounts', { headers: { Authorization: 'Bearer ' + token } })
+      .then(function (res) { return res.ok ? res.json() : null; })
+      .then(function (a) { if (a) renderPeople(a); })
+      .catch(function () { /* the numbers above still stand */ });
+  }
+
   function loadHistory() {
     return fetch('/admin/history?hours=24', { headers: { Authorization: 'Bearer ' + token } })
       .then(function (res) { return res.ok ? res.json() : { rows: [] }; })
@@ -455,7 +539,7 @@ const PAGE = `<!doctype html>
   function show() {
     $('gate').hidden = !!token;
     $('main').hidden = !token;
-    if (token) { load(); loadHistory().then(loadLive); }
+    if (token) { load(); loadPeople(); loadHistory().then(loadLive); }
   }
   function forget() {
     token = null;
@@ -471,12 +555,12 @@ const PAGE = `<!doctype html>
     show();
   };
   $('tok').onkeydown = function (e) { if (e.key === 'Enter') $('go').click(); };
-  $('refresh').onclick = function () { load(); loadHistory().then(loadLive); };
+  $('refresh').onclick = function () { load(); loadPeople(); loadHistory().then(loadLive); };
   $('forget').onclick = forget;
   // Slow on purpose: /admin/metrics is a dozen aggregates and is rate
   // limited to 10/min. A console left open on a wall should not compete
   // with the map for the database.
-  setInterval(function () { if (token && !document.hidden) { load(); loadHistory(); } }, 120000);
+  setInterval(function () { if (token && !document.hidden) { load(); loadPeople(); loadHistory(); } }, 120000);
   // The strip, on its own much faster clock — and only while the tab is
   // actually being looked at, so a forgotten tab costs nothing.
   setInterval(function () { if (token && !document.hidden) loadLive(); }, 20000);
