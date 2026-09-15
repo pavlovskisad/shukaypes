@@ -181,16 +181,25 @@ export function OtherWalker({ player, onOpen }: Props) {
             // The chip GLOWS in the owner's colour — a soft halo behind
             // the paper, not a coloured ring: "whose zone is that" is
             // answerable by the chip standing on it, and every drawn line
-            // stays ink. Full strength in the territory view, where the
-            // ground is painted in the same colour; gentler on a walk,
-            // where the map is plain and a strong halo would be the
-            // loudest thing on it. The walk halo was halved again on the
-            // owner's ask (14 Sep): a tint at the paper's edge that says
-            // "someone", not a colour that says "whose" — that question
-            // belongs to the territory view. The paper's small drop
-            // shadow stays under both.
+            // stays ink. Stronger in the territory view, where the ground
+            // is painted in the same colour; gentler on a walk, where the
+            // map is plain and a strong halo would be the loudest thing on
+            // it. The walk halo was halved on the owner's ask (14 Sep): a
+            // tint at the paper's edge that says "someone", not a colour
+            // that says "whose" — that question belongs to the territory
+            // view. The paper's small drop shadow stays under both.
+            //
+            // The territory halo came down too (15 Sep, "lets make glow in
+            // game mode bit gentler"), and the reason it could is that it
+            // no longer has to carry the claim on its own: since D-82 the
+            // ground and the buildings under the chip are both stained in
+            // the same colour, so the halo is only there to tie the paper
+            // to the paint. It stays clearly above the walk's tint —
+            // otherwise the two views would read the same — but the ring
+            // thins and the bloom loses the punch that made a dozen chips
+            // shout at each other across the centre.
             boxShadow: territoryVisible
-              ? `0 0 0 3px rgba(${glow},0.35), 0 0 14px 6px rgba(${glow},0.55), 0 1px 3px rgba(0,0,0,0.18)`
+              ? `0 0 0 2px rgba(${glow},0.22), 0 0 12px 4px rgba(${glow},0.32), 0 1px 3px rgba(0,0,0,0.18)`
               : `0 0 0 2px rgba(${glow},0.09), 0 0 8px 2px rgba(${glow},0.15), 0 1px 3px rgba(0,0,0,0.18)`,
             cursor: 'pointer',
             // The chip walks: a subtle lean in the direction of travel
