@@ -37,6 +37,7 @@ import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
 import { ensureFoodForUser, ensureTokensForUser } from './spawn.js';
+import { shouldAttemptSpawn } from './spawnCooldown.js';
 import { collectTokenTx, eatFoodTx } from './collect.js';
 
 export interface BotWalker {
@@ -89,6 +90,19 @@ export async function touchBotsOnline(ids: string[]): Promise<void> {
 // this across ticks so it lands about as often as a phone's 15s sync
 // with the spawn cooldown applied.
 export async function botSync(bot: BotWalker, parks: LatLng[]): Promise<void> {
+  // THE SAME GATE A PHONE PASSES THROUGH (D-86).
+  //
+  // routes/syncMap.ts asks `shouldAttemptSpawn` before it calls either of
+  // these; the bots called them straight, which is a small hole in the
+  // D-76 rule that a bot lives by the player's rules — and the one place
+  // where a hundred and twenty of them ask the database to do work a
+  // hundred and twenty phones would not.
+  //
+  // It changes the volume less than it looks: the expensive gate is the
+  // movement threshold inside ensureTokensForUser, which the bots were
+  // already passing through. What this saves is the age-out UPDATE and
+  // the pool reads on every sync that was never going to spawn anything.
+  if (!(await shouldAttemptSpawn(bot.id))) return;
   await Promise.all([
     ensureTokensForUser(bot.id, bot.pos, parks),
     ensureFoodForUser(bot.id, bot.pos, parks),

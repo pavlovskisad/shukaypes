@@ -59,8 +59,13 @@ export interface BotReport {
     tokensInUserArea: number;
     bonesPerPark: number;
     foodCount: number;
-    hungerDecayPer8s: number;
-    happinessDecayPer8s: number;
+    // PER HOUR, not per tick. The tick is an implementation detail that
+    // has already changed once (D-86 moved hunger from 8s to 60s) and
+    // silently turned this line into a lie. An hour is also the unit
+    // every rate below it uses, so the drain and the supply can finally
+    // be read against each other: 120 an hour out, 20 back per bone.
+    hungerPerHour: number;
+    happinessPerHour: number;
     markMinHappiness: number;
     markMinHunger: number;
     luckyPawThreshold: number;
@@ -175,8 +180,8 @@ export async function buildBotReport(nowMs = Date.now()): Promise<BotReport> {
       tokensInUserArea: balance.tokensInUserArea,
       bonesPerPark: balance.bonesPerPark,
       foodCount: balance.foodCount,
-      hungerDecayPer8s: balance.hunger.decay,
-      happinessDecayPer8s: balance.happiness.decay,
+      hungerPerHour: Math.round((balance.hunger.decay / balance.hunger.intervalMs) * 3_600_000),
+      happinessPerHour: Math.round((balance.happiness.decay / balance.happiness.intervalMs) * 3_600_000),
       markMinHappiness: balance.territory.minHappiness,
       markMinHunger: balance.territory.minHunger,
       luckyPawThreshold: balance.xp.luckyPawHappinessThreshold,
@@ -196,7 +201,7 @@ export function formatBotReport(r: BotReport): string {
   L.push('');
   L.push(
     `rules: online window ${r.rules.onlineWindowMs / 1000}s · reach ${r.rules.collectReachM}m · paws/area ${r.rules.tokensInUserArea} · bones/park ${r.rules.bonesPerPark} (no park: ${r.rules.foodCount}) · ` +
-      `decay per 8s hunger −${r.rules.hungerDecayPer8s} happiness −${r.rules.happinessDecayPer8s} · mark needs happiness ≥ ${r.rules.markMinHappiness}, hunger ≥ ${r.rules.markMinHunger} · lucky paw at ≥ ${r.rules.luckyPawThreshold}`,
+      `drain per online hour: hunger −${r.rules.hungerPerHour} (${Math.round(r.rules.hungerPerHour / 20)} bones to stand still), happiness −${r.rules.happinessPerHour} · mark needs happiness ≥ ${r.rules.markMinHappiness}, hunger ≥ ${r.rules.markMinHunger} · lucky paw at ≥ ${r.rules.luckyPawThreshold}`,
   );
   L.push('');
   const co = (label: string, c: Cohort) =>

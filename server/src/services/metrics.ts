@@ -93,6 +93,16 @@ export interface Metrics {
   // Spawned against picked up, over the same day. The open balance
   // question (D-76) is whether bones are scarce next to paws, and it is
   // unanswerable without both halves.
+  //
+  // TAKEN COMES FROM `collect_events`, NOT FROM `collected_at`. The first
+  // cut of this panel counted the timestamp on the item and reported 96%
+  // of paws collected, which was nonsense: that column is a tombstone for
+  // THREE different events — a real pickup (services/collect.ts), the
+  // five-minute age-out, and the over-cap cull (both services/spawn.ts).
+  // With a five-minute lifetime nearly everything ever spawned ends up
+  // stamped, so the panel was measuring expiry and calling it appetite.
+  // `collect_events` is written only by a genuine pickup, which is why
+  // the bots report already reads it. The two now agree.
   economy: {
     pawsLive: number;
     bonesLive: number;
@@ -100,6 +110,12 @@ export interface Metrics {
     bonesSpawned24h: number;
     pawsCollected24h: number;
     bonesEaten24h: number;
+    // Spawned minus taken minus what is still out there: the share that
+    // aged out or was culled. Shown because a spawner producing six times
+    // what anybody picks up is a cost, and it is invisible if you only
+    // print the two halves that look healthy.
+    pawsWasted24h: number;
+    bonesWasted24h: number;
   };
 }
 
@@ -220,8 +236,10 @@ export async function collectMetrics(): Promise<Metrics> {
         (select count(*)::int from food_items where consumed_at  is null) as bones_live,
         (select count(*)::int from tokens     where spawned_at  >= now() - interval '24 hours') as paws_spawned,
         (select count(*)::int from food_items where spawned_at  >= now() - interval '24 hours') as bones_spawned,
-        (select count(*)::int from tokens     where collected_at >= now() - interval '24 hours') as paws_taken,
-        (select count(*)::int from food_items where consumed_at  >= now() - interval '24 hours') as bones_eaten
+        (select count(*)::int from collect_events
+           where kind = 'token' and accepted and at >= now() - interval '24 hours') as paws_taken,
+        (select count(*)::int from collect_events
+           where kind = 'food'  and accepted and at >= now() - interval '24 hours') as bones_eaten
     `,
   ]);
   const econ = (econRows as unknown as Array<Record<string, number>>)[0];
@@ -307,6 +325,8 @@ export async function collectMetrics(): Promise<Metrics> {
       bonesSpawned24h: econ?.bones_spawned ?? 0,
       pawsCollected24h: econ?.paws_taken ?? 0,
       bonesEaten24h: econ?.bones_eaten ?? 0,
+      pawsWasted24h: Math.max(0, (econ?.paws_spawned ?? 0) - (econ?.paws_taken ?? 0)),
+      bonesWasted24h: Math.max(0, (econ?.bones_spawned ?? 0) - (econ?.bones_eaten ?? 0)),
     },
   };
 }
@@ -370,8 +390,8 @@ export function renderMetricsText(m: Metrics): string {
   L.push('');
   const e = m.economy;
   L.push('economy · 24h');
-  L.push(`  paws   ${e.pawsSpawned24h} spawned, ${e.pawsCollected24h} taken (${pct(e.pawsCollected24h, e.pawsSpawned24h)}), ${e.pawsLive} live`);
-  L.push(`  bones  ${e.bonesSpawned24h} spawned, ${e.bonesEaten24h} eaten (${pct(e.bonesEaten24h, e.bonesSpawned24h)}), ${e.bonesLive} live`);
+  L.push(`  paws   ${e.pawsSpawned24h} spawned, ${e.pawsCollected24h} taken (${pct(e.pawsCollected24h, e.pawsSpawned24h)}), ${e.pawsWasted24h} aged out, ${e.pawsLive} live`);
+  L.push(`  bones  ${e.bonesSpawned24h} spawned, ${e.bonesEaten24h} eaten (${pct(e.bonesEaten24h, e.bonesSpawned24h)}), ${e.bonesWasted24h} aged out, ${e.bonesLive} live`);
   return L.join('\n');
 }
 
