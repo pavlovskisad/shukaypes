@@ -39,7 +39,7 @@ Deploying is a mutating action. Ask first.
 | `CROSSPOST_CHANNEL_ID` / `_USERNAME` | ✅ **Set.** Owner reports publish to the public channel. `CROSSPOST_GROUP_IDS` is still unset, so district groups get no copy. |
 | `TELEGRAM_CHANNELS` | **Not set.** The channel-scrape source is a no-op until it is. |
 | `SCRAPE_PROXY_URL` | **Not set, and should stay that way.** Measured 17 Aug: residential exits are refused *more* than the Fly datacentre, not less. The seam is for the day the edge really hardens. |
-| `DASHBOARD_TOKEN` | **Not set.** Read-only key for `/admin/console` + `/admin/metrics` — the only one of the three keys safe to keep in a browser. Until it is set the console 401s for everyone. |
+| `DASHBOARD_TOKEN` | **Not set.** Read-only key for `/admin/console`, `/admin/metrics` and `/admin/live` — the only one of the three keys safe to keep in a browser. Until it is set the console 401s for everyone. |
 | `DEV_TOOLS_PASSWORD` | **Not set.** Unlocks `/dev` (walk simulator + destructive territory test routes) per browser. Until it is set the dev affordances are off everywhere. |
 | `SESSION_SECRET` | **Set it now** (≥16 chars): since D-69 a slip can carry an e-mail login, and the key should not be the bot token's shadow. Was optional: key for session tokens (`lib/session.ts`, D-62). Unset, the key is derived from `TELEGRAM_BOT_TOKEN`, which is already the key Telegram's own signatures rest on, so tokens work with no action. Set it (≥16 chars) to rotate sessions independently of the bot token; changing it logs every phone out once, transparently — the next request re-identifies the old way. |
 | `INVITE_REQUIRED` | **Not set — the door is open.** With it set, new device ids must redeem an invite code; existing accounts are never gated. Mint codes with `pnpm --filter @shukajpes/server invite --new --uses=N --note=...` before flipping it. |
@@ -132,6 +132,7 @@ Other read surfaces:
 | `/health/deep` | none | Checks Postgres and Redis; 503 if either is unhealthy. **Point an *external* uptime monitor here — do not repoint Fly's own check at it** (see the note below). |
 | `/admin/bots/report[?format=text]` | `REPORT_TOKEN` or admin | The bots' life as numbers (D-76): per bot the meters, level, counted hours, happiness index, bones and paws (24h), live marks; and two cohort lines — bots and people — with per-online-hour rates of bones, paws and marks, mean index, mean meters, next to the balance rules in force. The tuning bench: read it before touching a spawn or decay number. |
 | `/admin/metrics[?format=text]` | `DASHBOARD_TOKEN` or admin | Users, DAU/WAU, retention, ingest heartbeat, search funnel, chat token spend by model. Bots excluded structurally. |
+| `/admin/live[?format=text]` | `DASHBOARD_TOKEN` or admin | What is happening right now (D-83): who is on the map, who is with a dog, paws/bones/marks in the last 5 and 60 minutes with the bots' share, the bots' last window, cron tick p50/max/slow, uptime and machine. Cheap enough to poll every 20s — four indexed queries plus in-memory counters. |
 | `/admin/console` | `DASHBOARD_TOKEN` | The same numbers as a page. Open with `…/admin/console?k=<token>` — the key is stripped from the URL bar on load and redacted in the request log. Read-only by construction. |
 | `/stats` | bearer | Active counts, per-source breakdown, last 30 scrape-log rows. **No longer public** — it was leaking bot-ingested users' DM text. |
 | `/admin/lost-dogs/scrape-log` | admin | The same, with auth and filters. |
@@ -201,7 +202,7 @@ Anything that writes to `lost_dogs`, `sightings` or `users`:
 | Watchdog | Armed. Kills a process whose event loop has been blocked 30s. |
 | Client crash reporting | **Exists since PR #419.** Root boundary + global handlers → `POST /client-errors` → Fly logs (`kind: 'client_error'`). Capped and deduped client-side. |
 | Server error visibility | `setErrorHandler` masks 5xx bodies; `unhandledRejection` / `uncaughtException` handlers installed (several jobs are deliberately unawaited and Node's default is to crash). |
-| Admin console / metrics | Built, **dark** — `DASHBOARD_TOKEN` unset, so it 401s for everyone. |
+| Admin console / metrics | Built, and since D-83 carries a live strip (presence, pickups, marks, tick health) plus bots / happiness / economy panels. Still **dark** until `DASHBOARD_TOKEN` is set — it 401s for everyone without it. |
 | Ingest alert | Built and **armed** since 25 Aug (`ALERT_CHAT_ID` set; the same chat receives owner-report review buttons). 36h of zero inserts should fire it. **Whether it has ever fired is not verifiable from Fly logs** — the log window is hours, and the tick on 12 Sep still read `inserted 0`. Ask the chat. |
 | Spent-item janitor | Running daily since 6 Sep (`kind: 'spent_item_cleanup'` in logs). Bounded per tick, so a backlog shows as several days of full batches, not one big one. |
 | External uptime monitor on `/health/deep` | **Does not exist.** Recommended by the audit; still not done. Needs an account, so it is the owner's. |

@@ -8,6 +8,7 @@
 // failure, with the cron name + duration_ms tag for easy grepping.
 
 import type { FastifyBaseLogger } from 'fastify';
+import { recordTick } from './liveStats.js';
 
 interface CronLogger {
   info: FastifyBaseLogger['info'];
@@ -25,6 +26,10 @@ export async function runCronTick(
   try {
     await fn();
     const durationMs = Date.now() - start;
+    // Every tick, not just the slow ones: the console reports a median
+    // as well as a maximum, and a median computed from only the ticks
+    // that were already too slow is not a median of anything.
+    recordTick(name, durationMs);
     // Tick durations are usually ms-scale and uninteresting; only log
     // at info if the tick took longer than a sensible threshold (1s),
     // which signals the DB is under pressure or a query plan flipped.
