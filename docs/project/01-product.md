@@ -30,10 +30,40 @@ the wrong neighbourhood.
 
 ## The front door
 
-Until 20 Aug the app opened straight onto the map with a six-verb radial
-menu (`search / walk / visit / meet / chat / about`) and nothing anywhere
-saying what it was for. **Now the dog asks first** — «нюх-нюх! шо ти?» —
-and the answer picks a mode. Four intents at the top level:
+**Since 12 Sep there is a door in front of the map** (D-69). Every
+account — PWA and Mini App alike — gives a nickname, an e-mail and a
+password before the map opens, verifies the address by a link, and can
+recover the password. The owner chose that over the two softer shapes on
+the table (register after the first walk; exempt Telegram users because
+Telegram already signs who they are), knowing what it costs at an open
+launch: a form in front of the dog.
+
+**The dog asks, not a page.** «ми знайомі?» at the gate, and the form is
+a sheet of the app's own paper hanging under the dog, with the camera
+framing the dog above it. The API enforces the door too, not just the
+screen: every route but `/auth/*` answers 403 until the account is
+through, and the answer rides in the session slip so the hot path still
+costs no database read.
+
+**Then the portrait** (D-72), the step after the door rather than part of
+it: a photo of the pet goes to an image model and comes back as a drawing
+in the app's own ink — a few black pen lines on white. The photo is never
+stored anywhere, which is the reason the design is a drawing and not a
+cropped photo. It is skippable, editable later from the profile, and
+somebody with no pet is drawn as the animal that suits them, so everybody
+on the map has a face. A hundred drawings per person per day
+(`AVATAR_DAILY_CAP`) — a guard against a script, not against a person.
+
+**And the table started empty.** The ~543 rows that existed before the
+door were drive-by device ids with nothing real behind them, so they were
+wiped at rollout rather than carried across (`wipe:users`). Pets and
+sightings are not the users' and stayed.
+
+Behind the door, the map still explains itself the way it has since
+20 Aug. Until then it opened on a six-verb radial menu
+(`search / walk / visit / meet / chat / about`) with nothing saying what
+it was for. **Now the dog asks first** — «нюх-нюх! шо ти?» — and the
+answer picks a mode. Four intents at the top level:
 
 | | |
 | --- | --- |
@@ -185,8 +215,12 @@ behind an always-on flag** · **⛔ not real yet**
 | **Supersniff → search → sighting** | 🟡 | **The core.** End-to-end and coherent since PRs #393–#397. Never validated against a batch of real posts. |
 | Quests / daily tasks / lore / spots | 🟡 | Present and wired. Content volume and tuning unvalidated at any real scale. |
 | Game render (Three.js city, fog, sun, shadows) | 🧪 | `GAME_RENDER = true`. WebGL2-gated with a clean MapLibre fallback. Perf and battery on low-end Android still unmeasured. |
-| Multiplayer presence + poke | 🧪 | `MULTIPLAYER = true`. 30 bots populate the map (`MULTIPLAYER_BOTS=30` in `fly.toml`). |
+| Multiplayer presence + poke | 🧪 | `MULTIPLAYER = true`. Other walkers render as **chips** since 13 Sep (D-73) — the drawn portrait in a 40px disc with a thin ink ring and a soft owner-colour glow; a tap opens their card (portrait, level, a miniature of their territory, «помахати»). `OTHER_WALKER_STYLE` flips back to the old sprite in one word. |
+| **The door: registration, verification, login, recovery** | ✅ | Since 12 Sep (D-69), `AccountDoor.tsx`. Asked by the dog at the gate; enforced by the API, not only the screen. Mail is configured in production (verified 16 Sep). |
+| **The pet's drawn portrait** | ✅ | Since 13–14 Sep (D-72), `AvatarStudio.tsx`. The step after verification, skippable, editable from the profile. The photo is never stored. `FAL_KEY` is set in production, so the step is live. |
+| **The happiness board** | ✅ | Since 14 Sep (D-75): a second standing beside territory — whose dog lives the happiest life, time-weighted and all-time. You and the top three, «показати всіх» opens the full sheet. A dog ranks after ten minutes of counted life. |
 | Lost-pet pins on the main map | ⛔ | `LOST_DOG_PINS = false` — deliberately off. Pets are still fetched and still drive supersniff, the carousel and the cinematic pet view. |
+| **GPS hold when the signal is jammed** | ✅ | Since 14 Sep (D-74). Kyiv's air defence spoofs GPS when drones are up and the phone reports Lima at full confidence. A fix outside the served area is held, not believed: the app stands where it last knew you, the dog says why, a HUD pill stays up, and the server refuses the position too. |
 | Placement confidence bar | ✅ | Since 7 Sep (PRs #551, #557) a pet is offered to a walker — pins, spawner, companion, carousel — only when its coordinate came from a person or from a place the ad explicitly named. Measured cost: 127 visible pets → ~28, then partly restored by the judge (#562). See [`03`](03-lost-pet-engine.md). |
 
 ### Backend / data

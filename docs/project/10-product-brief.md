@@ -1,6 +1,6 @@
 # 10 — Product brief & running costs
 
-Written 15 Aug 2026, updated 25 Aug and 12 Sep 2026, for business and strategy work. **Self-contained on
+Written 15 Aug 2026, updated 25 Aug, 12 Sep and 16 Sep 2026, for business and strategy work. **Self-contained on
 purpose** — it repeats things the other docs say so it can be handed to
 someone (or a planning session) that reads nothing else. Where a number is
 measured it says so and carries its date; where it is an estimate it says
@@ -51,7 +51,7 @@ is city-specific and compounding, and it is the part a copycat cannot lift
 from screenshots. It is also what makes the walking half work without
 paying Google: the destinations, the stops and the stories are all ours.
 
-## 2. Where it stands (12 Sep 2026)
+## 2. Where it stands (16 Sep 2026)
 
 **Built and live:** the full game (map, companion, chat, quests,
 territory, multiplayer presence with 30 labelled bots), the full search
@@ -60,9 +60,45 @@ gated behind a reported sighting — landmark walks that route you through
 Kyiv's history, the ingestion pipeline, an admin metrics console, crash
 reporting, per-user rate limiting, LLM spend ceilings, an invite gate. The
 engineering posture is unusually disciplined for the stage: CI gates both
-deploys on typecheck + lint + nineteen fixture checks, data mutations are
+deploys on typecheck + lint + twenty-two fixture checks, data mutations are
 dry-run-first, and production numbers separate bots from humans
 structurally "because these numbers are going into a fundraise".
+
+**The week of 12–16 Sep changed what the product is in four ways**, and
+all four are live in production.
+
+*It has accounts.* Every person now registers — nickname, e-mail,
+password, a verification link — before the map opens, on both the web app
+and inside Telegram. The owner chose the strict version over softer ones
+knowing it puts a form in front of an open launch. The pre-existing ~543
+device rows were wiped rather than carried, so the user table now counts
+only people who actually signed up. **Any user number from before 12 Sep
+is not comparable to one after it.**
+
+*Everybody has a face.* After verifying, a person gives a photo of their
+pet and gets back a drawing — a few black pen lines in the app's own
+style. The photo is never stored anywhere; only the drawing is. Those
+portraits are what other walkers look like on the map now, and tapping
+one opens that person's card. Somebody with no pet gets drawn as the
+animal that suits them.
+
+*The map is populated on purpose.* The simulated walkers stopped being
+scenery: they have dogs, hunger, happiness, and they pick up food through
+exactly the same code a person's tap uses. They keep an owner's hours —
+two or three walks a day, offline between — so a hundred and twenty of
+them put twelve to fifteen dogs on an evening map and none at night. This
+is both a populated launch-day city and, more importantly, **a bench that
+can answer balance questions with a population instead of one person
+walking one dog.**
+
+*And it can now see itself.* The admin console had been built for weeks
+and had never displayed a single number, because its access key was never
+set. It now has a live view polled every twenty seconds and a five-minute
+history going back sixty days. Within an hour of going live it caught two
+things the team had been quoting wrongly: the "96% of items collected"
+figure was counting expiry as pickup (the real number is 24%), and the
+simulated dogs were starving at a hunger of 1 out of 100, which had been
+skewing every meter beneath it.
 
 **Since 7 Sep the map shows only pins it can defend.** Five pets reported
 from the map in the wrong place — one from another city — led to a single
@@ -164,6 +200,8 @@ discrete step-ups.** Three deliberate engineering choices produced that:
 | Upstash Redis | $0 | Free tier (noted as flaky; app degrades gracefully without it) |
 | Vercel (web hosting + CDN) | $0 | Hobby tier |
 | Anthropic API | ~$1–5 | **Measured:** 3 Opus chat turns in 7 days across the whole service; Haiku parsing ≈ $0.001/call at ~4 ad fetches/day; Haiku ambient bubbles; placement judge ≈ $0.004/pet on Opus ($0.19 for 44) at ~one new pet every other day |
+| fal.ai (the pet portraits) | ~$1–3 | **New 13 Sep.** A few cents per drawing, one per person at registration plus redraws. Capped per person per day and behind the burst limiter. One-off: the 120 bot portraits cost about a dollar |
+| Resend (verification + reset mail) | $0 now, **$20 at launch** | **New 12 Sep.** Free tier is 100 mails/day, which a launch to ~130K passes in the first hour. The door means an undelivered verification mail is a person who cannot use the app at all |
 | Google Maps (Places server-side + Routes client-side) | ~$0 | Within Google's monthly free credit at current volume |
 | Telegram Bot API, GitHub Actions CI | $0 | Free |
 | **Total today** | **≈ $5–10** | Effectively one small VM plus pennies of LLM |
@@ -230,6 +268,15 @@ mapped fixes.
   uncapped liability until the owner sets a billing quota — precedent
   exists (~$100 burned in days in an earlier incident). A ten-minute
   Google Cloud task.
+- **Google Places has been out of quota since June, and nobody knew.**
+  Every `searchNearby` from the production machine answers 429; the cache
+  has no row newer than 8 June and the failure was swallowed with no log
+  line. Cost implication cuts both ways: the bill is zero because nothing
+  succeeds, and raising the cap (only the owner can, in the Google console)
+  turns a real spend back on. See [`08`](08-open-issues.md) P1-11.
+- **The item spawner writes four times what players pick up** (24% taken,
+  76% expired, measured 15 Sep). Not a bill today at this scale, but it is
+  the multiplier that will show up first if usage grows.
 - **Redis is free-tier and flaky.** The app survives outages by design,
   but two spend-control systems (chat budget, spawn cooldowns) *fail
   open* without it — deliberately, and loudly logged. A paid Redis
@@ -243,7 +290,10 @@ mapped fixes.
 **Exist, measured:** ingest volume (2–9 pets/day from one source in early
 Aug); the pet table (**78 active**, 67 with full ad text, after the first
 check against source reality; ~193 active measured 7 Sep, ~57 shown);
-wire cost of a walk (~1.5MB/h after gzip, 6.6 before);
+wire cost of a walk (~1.5MB/h after gzip, 6.6 before); and since 15 Sep
+a live console plus a five-minute metrics history (presence, pickups,
+marks, accounts, cron health) that makes week-over-week movement
+answerable for the first time;
 sync latency (<20ms steady state); the fact that every user-facing metric
 excludes bots structurally. From 14 Aug, the search funnel (every
 completed search, found or not) accumulates in `search_results`, and

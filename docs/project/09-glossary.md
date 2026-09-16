@@ -12,6 +12,56 @@ which is user-initiated and runs on Opus.
 **Bone** — the food item. Only bones feed the dog; paws are a treat. Spawns
 in and around parks. Table `food_items`.
 
+**The door** — the registration wall in front of the map since 12 Sep
+(D-69): nickname, e-mail, password, a verification link. Asked by the dog
+(«ми знайомі?») and enforced by the API — every route but `/auth/*`
+answers 403 «registration required» until the account is through, read
+from a `registered` claim in the session slip rather than from the
+database. `REGISTRATION_REQUIRED=0` takes it down; `EMAIL_VERIFY_REQUIRED=0`
+keeps it up without the link.
+
+**Portrait (the drawing)** — the pet's avatar (D-72), made by an image
+model from a photo and kept as a Telegram `file_id` like every other
+picture here. A few black pen lines on white, one recipe for everybody,
+with the app's own ink pass over it. **The photo is never stored** — it
+travels inside one request and nothing writes it anywhere. A hundred a day
+per person (`AVATAR_DAILY_CAP`, raised from five), counted in
+`avatar_draws` rather than in process memory a deploy would reset. Somebody with no pet is drawn as the
+animal that suits them.
+
+**Chip** — how another walker is drawn on the map since D-73: a 40px white
+disc with a thin hand-drawn ring, their portrait inside, and a soft halo
+in their territory colour (full in the territory view, gentle on a walk).
+A tap opens their card; a walker with no portrait gets the sitting dog
+sprite, so a chip is never blank. `OTHER_WALKER_STYLE` flips back to the
+old sprite-and-name-tag rendering.
+
+**Happiness index** — the second standing beside territory (D-75): the
+time-weighted average of a dog's happiness over its whole life, 0–100,
+from two counters on the companion row (happiness × seconds, and
+seconds). Only counts while the person is online, which is also when the
+meters move at all — a dog nobody is with neither drains nor accrues. A
+dog ranks after ten minutes of counted life.
+
+**Bot day** — the bots' timetable (`services/botDay.ts`, D-77/D-79): two
+or three walks a day on the Kyiv clock, morning and evening nearly
+always, midday 80% of days, 20–45 minutes each. About 6% of the pool
+online at once — twelve to fifteen of 120 in the evening, none at night.
+Replaced a 14%-chance-to-log-off rule that kept 27 of 30 bots online
+around the clock and made every balance number a fiction.
+
+**Served area** — the box the app can actually draw (`lib/servedArea.ts`,
+D-74). A GPS fix outside it is **held, not believed**: the client stands
+on the last believable fix and says why, and `/sync/map` answers 400.
+Kyiv's air defence spoofs GPS when drones are up, and a spoofed fix
+arrives at full confidence, so "the phone is sure" is not evidence.
+
+**The pulse / the memory** — the two halves of the admin console since
+D-83/D-84. The pulse is `/admin/live`: what is true this second, cheap
+enough to poll every twenty seconds. The memory is `metrics_snapshots`,
+one nineteen-column row every five minutes, kept sixty days, which is what
+makes "is this number moving" answerable without grepping logs.
+
 **Bot** — a simulated walker. `MULTIPLAYER_BOTS` moved from `fly.toml` into
 a **Fly secret**, so the count is no longer readable from the repo — confirm
 it before reading any engagement number. Bots are

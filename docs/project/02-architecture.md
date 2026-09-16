@@ -8,8 +8,8 @@ the code is right.
 pnpm monorepo, three workspaces (`pnpm-workspace.yaml`).
 
 ```
-app/          Expo RN app (web-first). Expo Router. ~33,700 lines TS/TSX.
-server/       Fastify API. ~30,900 lines TS.
+app/          Expo RN app (web-first). Expo Router. ~36,700 lines TS/TSX.
+server/       Fastify API. ~36,600 lines TS.
 shared/       TypeScript types only (145 lines). No build step.
 docs/         Documentation. docs/project/ is this set.
 reference/    The original single-file HTML prototype. Read-only history.
@@ -135,7 +135,7 @@ Floating tab bar in `_layout.tsx`.
 companion stats, quests, spots, territory, multiplayer, dog-cam, walk
 stops, the menu/mode state, daylight. `stores/langStore.ts` for language (uk / en, `i18n/strings.ts`).
 
-**Map.** `components/map/MapView.tsx` (~4,350 lines) is the nerve centre.
+**Map.** `components/map/MapView.tsx` (~4,450 lines) is the nerve centre.
 MapLibre GL JS v5 with a heavily-overridden "crayon" style
 (`crayonStyle.ts`, 780 lines, based on OpenFreeMap liberty). Markers are DOM
 overlays via `MapLibreMarker.tsx` — companion, user dot, paws, bones, spots,
@@ -322,6 +322,30 @@ new route ships unlimited.
 - `services/spentItemCleanup.ts` — daily janitor for collected tokens
   and eaten bones (migration `0038` adds the partial indexes the map
   actually asks for).
+- **Accounts** (D-69): `lib/accountPolicy.ts` (the door, as a predicate),
+  `lib/password.ts` (scrypt), `lib/authTokens.ts` (one-time verification
+  and reset tokens, stored as SHA-256 only), `lib/mailFrom.ts`,
+  `services/accounts.ts`, `services/authMail.ts`, `services/email.ts`
+  (Resend), `routes/auth.ts`.
+- **The portrait** (D-72): `services/avatar.ts` (FLUX.1 Kontext behind
+  fal.ai), `services/petDescription.ts`, `services/ink.ts` (the app's own
+  ink pass over the model's drawing, fixture-checked for pure black on
+  white), `lib/photoBytes.ts`. `services/botAvatars.ts` draws the bot
+  roster's portraits from the same recipe.
+- **The bots' life** (D-76 … D-79): `services/botLife.ts` (companion rows,
+  spawning and collecting by the player's code path), `services/botDay.ts`
+  (the timetable — morning, midday, evening walks on the Kyiv clock),
+  `services/botReport.ts` (the tuning bench behind `/admin/bots/report`).
+- **Instrumentation** (D-83 … D-86): `services/live.ts` (the live
+  endpoint), `services/liveStats.ts` (what the process knows about
+  itself — cron tick durations for every tick, not only slow ones),
+  `services/metricsHistory.ts` (the five-minute snapshot series),
+  `lib/maskEmail.ts` (addresses masked before they leave the process).
+- `services/happiness.ts` — the index and the board (D-75).
+- `lib/servedArea.ts` — is this coordinate somewhere we can draw? The
+  server's half of the GPS hold (D-74); `check:served-area` pins it.
+- `services/collect.ts` — the pickup transaction, lifted out of the route
+  so bots and phones take an item by exactly the same code.
 - `anthropic.ts`, `memory*.ts`, `quest*.ts`, `gazetteer.ts`, `lostDogsReport.ts`,
   `placesCache.ts`, `decay.ts`, `lostDogCleanup.ts`, `searchZoneExpansion.ts`.
 
@@ -336,6 +360,17 @@ new route ships unlimited.
 | lost-dog cleanup | 24h, **and at boot** | Expire stale reports. The boot run matters: as a bare interval it needed a machine to live a full uninterrupted day to fire once, and with several deploys a day it had probably never run in production (fixed in PR #425). |
 | multiplayer | 3.5s | Step + publish bot walkers, purge stale presence. |
 | spent-item janitor | 24h | Delete `tokens` collected and `food_items` consumed more than 7 days ago, 5,000 rows a batch, 20 batches a tick (PR #545). Scores are counters on `users`, so this cannot cost anybody a point; `collect_events` is deliberately untouched. Does **not** shrink the database file — only `VACUUM FULL` does. |
+| metrics snapshot | 5min | One row of nineteen columns into `metrics_snapshots` (D-84, migration `0045`) — the console's memory, and the only way to answer "is this number moving". Prunes past 60 days once a day's ticks have gone by. |
+
+**The decay cron does three jobs now, not one.** Since D-75 it also folds
+the happiness index (happiness × seconds, and seconds, on the companion
+row) for every row polled inside the 90-second online window, from the
+pre-decay value — and it *gates the drain on being online*, so a dog its
+person is not with neither decays nor accrues. That gate is what makes
+the index a measure of how somebody plays rather than how fast they feed
+after opening the app. Bots pass through the same code: the multiplayer
+tick touches online bots' `last_poll_at` exactly as `/state` does for a
+phone, and nothing in `decay.ts` knows a bot from a person (D-76).
 
 There is **no leader election**. A second machine would double every cron
 and run 2×30 bots. `services/scrape.ts` says so in a comment. This is the
@@ -344,8 +379,10 @@ single change that blocks horizontal scaling.
 **DB** (`db/`): `schema.ts` (Drizzle), `index.ts`
 (`postgres(url, { prepare: false })`, default pool ~10), `redis.ts`
 (`ioredis`, `lazyConnect`, throttled error log), `migrate.ts` run at
-container start. 42 migrations, latest `0041_lore_title.sql` (`0038` partial
-indexes over unspent tokens/food, `0039`–`0041` lore detail/facts/favourites/title).
+container start. 46 migrations, latest `0045_metrics_snapshots.sql` (`0038`
+partial indexes over unspent tokens/food, `0039`–`0041` lore
+detail/facts/favourites/title, `0042` accounts, `0043` avatar draws,
+`0044` the happiness index's two counters, `0045` the console's memory).
 
 **Migrations `0032`+ are hand-written, and that is a rule now:**
 `migrations/meta` holds snapshots for 0000–0002 and nothing for 0003–0031,
@@ -416,7 +453,7 @@ walking game.
   (name / photo / bot). Then `GEOSEARCH` within **8km**. Jitter is a stable
   per-id offset of ≤25m derived from an FNV hash, so averaging many reads
   does not de-jitter it. Every call guards on `redis.status === 'ready'`.
-- **Bots** (`services/bots.ts`, 463 lines): `MULTIPLAYER_BOTS` (30 in
+- **Bots** (`services/bots.ts`, 571 lines): `MULTIPLAYER_BOTS` (30 in
   `fly.toml`) simulated walkers on a state machine — roam, dwell at
   hardcoded hotspots (homes 300 m apart around the ten central parks
   since D-78, 120 of them within ~3 km of Maidan), and keep an owner's
@@ -490,11 +527,14 @@ server:  needs: checks → flyctl deploy --remote-only
 
 The gate is real (PR #274). `react-hooks/rules-of-hooks` is an **error** —
 that is the class of bug that white-screened prod once. `pnpm check` (added
-PR #416) runs the **nineteen** fixture checks: placement judge, placement
+PR #416) runs the **twenty-two** fixture checks: placement judge, placement
 confidence, lore walk, lore match, enrich parse, out-of-area, ingest alert,
 pet identity, per-user rate limiting, invite gate, dev auth, session token,
-contact redaction, ad-body containment, ad extraction, found reports, owner
-reports, place resolution, route coverage.
+served area, contact redaction, ad-body containment, ad extraction, found
+reports, owner reports, place resolution, route coverage, accounts, ink.
+`check:bot-day` and `check:mask` exist but are deliberately outside the
+aggregate — run them by name when touching the bots' timetable or the
+address mask.
 They existed before and **nothing ran them** — a broken rule deciding which
 pets get expired or merged would have shipped on the strength of having
 compiled.
