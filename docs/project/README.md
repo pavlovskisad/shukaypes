@@ -1,12 +1,20 @@
 # шукайпес — project documentation
 
 The map and the source of truth. Written 11 Aug 2026 against `f421b7e`;
-last updated **12 Sep 2026** against `97245bf` (PR #581 merged), folding in
+last updated **16 Sep 2026** against `08e59c4` (PR #645 merged), folding in
+the door every account now walks through, the pet's drawn portrait, other
+walkers as chips, the GPS hold, the happiness index, bots that live by the
+player's rules, and the admin console finally lit. The 12 Sep update added
 the placement confidence bar and the judge that may only reject, the
-sighting refusal, the spent-item janitor, the GPS-spoof lockout fix, the
-beta perf pass and session tokens. The 25 Aug update added the placement
-campaign, the in-app lost-pet report, and the decision to run an **open**
-beta rather than a closed one.
+sighting refusal, the spent-item janitor and the beta perf pass; 25 Aug
+added the placement campaign, the in-app lost-pet report, and the decision
+to run an **open** beta rather than a closed one.
+
+**Decisions D-69 … D-86 were written by the sessions that made them**, and
+they are the detailed record of 12–16 Sep. This index, the history, the
+glossary and the brief were caught up afterwards; where they disagree with
+[`05-decisions.md`](05-decisions.md), the decision entry is the one that
+was written with the code.
 
 ## Read in this order
 
@@ -88,24 +96,35 @@ this tree. If the repo ever goes private, move it in.
 
 ## Facts verified at the time of writing
 
-Run against `97245bf` on 12 Sep 2026, with `pnpm install --frozen-lockfile`:
+Run against `08e59c4` on 16 Sep 2026, with `pnpm install --frozen-lockfile`:
 
 ```
 pnpm -r typecheck     shared / server / app — all clean
-pnpm lint             22 problems (0 errors, 22 warnings)
-pnpm check            19 fixture checks — all pass
-                      (52 routes: 49 limited, 3 knowingly exempt)
+pnpm lint             21 problems (0 errors, 21 warnings)
+pnpm check            22 fixture checks — all pass
+                      (72 routes: 69 limited, 3 knowingly exempt)
 ```
 
-The 22 warnings are all `react-hooks/exhaustive-deps` and that is the
-current baseline; `CLAUDE.md` agrees since the beta perf pass (it was 23
-from 20 Aug to 10 Sep, 21 before that). The number has drifted three
-times in a month, so measure `origin/main` in a scratch worktree rather
-than trusting any doc, this one included.
+The 21 warnings are all `react-hooks/exhaustive-deps` and that is the
+current baseline. **`CLAUDE.md` still says 22**, which was true from
+10 Sep; it was 23 from 20 Aug, and 21 before that. The number has drifted
+four times in five weeks, so measure `origin/main` in a scratch worktree
+rather than trusting any doc, this one included — and note the direction:
+it went *down*, so a session treating 22 as the bar will let a new warning
+in unnoticed.
 
-`pnpm check` has run in CI since PR #416 and now carries twenty checks:
-placement judge, placement confidence, lore walk, lore match, enrich
-parse, out-of-area, ingest alert, pet identity, per-user rate limiting,
-invite gate, dev auth, session token, contact redaction, ad-body
-containment, ad extraction, found reports, owner reports, place
-resolution, route coverage, accounts (the door, passwords, tokens).
+The route count grew 52 → 72 with accounts, players, happiness and the
+three admin endpoints. The three knowingly exempt routes are unchanged.
+
+`pnpm check` has run in CI since PR #416 and now carries twenty-two
+checks, in this order: placement judge, placement confidence, lore walk,
+lore match, enrich parse, out-of-area, ingest alert, pet identity,
+per-user rate limiting, invite gate, dev auth, session token, **served
+area**, contact redaction, ad-body containment, ad extraction, found
+reports, owner reports, place resolution, route coverage, **accounts**
+(the door, passwords, tokens) and **ink**.
+
+Two more exist and are deliberately **not** in the aggregate:
+`check:bot-day` (the bots' timetable, D-77/D-79 — it prints measured
+figures from 30 bots × 60 days) and `check:mask` (address masking, D-85).
+Run them by name when touching those.

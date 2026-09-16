@@ -473,6 +473,17 @@ coordinate and still pays the paws, because the person did walk the zone;
 and the app says *which* failure it is — "I can't see where you are"
 rather than "try again".
 
+**The same rule grew a second half on 14 Sep (D-74).** A position can also
+be wrong while being sincerely reported: Kyiv's air defence spoofs GPS
+when drones are up, and the phone answers Lima, or a village sixty
+kilometres out, at full confidence. So a fix outside the served area
+(`lib/servedArea.ts`) is held rather than believed — the client stands on
+the last believable position, and `/sync/map` answers 400 to one outside
+the box. Measured on production the afternoon it was found: 60 paws, 16
+bones and 3 territory marks had been written at 50.0 / 29.8. **A device's
+confidence is not evidence**, which is the same lesson as the invented
+sighting arriving in a different disguise.
+
 ## The ad body
 
 Since 17 Aug (migration `0034`) `scrape_log.raw_body` stores the ad text

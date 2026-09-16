@@ -203,21 +203,34 @@ the same direction, for a month. See [`03`](03-lost-pet-engine.md).*
 
 **Cheapest first, unchanged:** set `TELEGRAM_CHANNELS`.
 
-### P0-3 · Config still dark — two of four now set
-*Verified against `fly secrets list`, 25 Aug.*
+### P0-3 · Config: mostly lit now 🟢
+*Re-verified against `fly secrets list -a shukajpes-api`, 16 Sep 2026.
+The table below is the 25 Aug state with the September corrections
+called out; the current full list is in
+[`07-operations.md`](07-operations.md).*
+
+**What changed between 12 and 16 Sep:** `RESEND_API_KEY`, `EMAIL_FROM`,
+`APP_URL`, `SESSION_SECRET`, `FAL_KEY` and `DASHBOARD_TOKEN` are all set.
+So the door ships with real verification mail, the portrait step is on,
+and **the console is lit** — the thing this item said "hurts" for three
+weeks. What remains unset is `DEV_TOOLS_PASSWORD`, `CROSSPOST_GROUP_IDS`,
+`TELEGRAM_CHANNELS`, `REPORT_TOKEN` and `INVITE_REQUIRED` (by choice).
 
 | Secret | State |
 | --- | --- |
 | `ALERT_CHAT_ID` | ✅ **Set.** The ingest alert is live, and the owner-report review button rides on it. |
 | `CROSSPOST_CHANNEL_ID` + `_USERNAME` | ✅ **Set.** Owner reports publish to the channel. |
-| `DASHBOARD_TOKEN` | ❌ **Unset.** `/admin/console` and `/admin/metrics` 401 for everyone. **You cannot read your own launch without it** — and the launch is the data the raise runs on. |
+| `DASHBOARD_TOKEN` | ✅ **Set 15 Sep.** Was unset from D-38 until D-83 went looking; `/admin/console`, `/admin/metrics`, `/admin/live`, `/admin/history` and `/admin/accounts` all answer now. |
 | `DEV_TOOLS_PASSWORD` | ❌ Unset. The walk simulator is off everywhere, including for a load rehearsal. |
 | `CROSSPOST_GROUP_IDS` | ❌ Unset. District groups get no copy; only the channel is wired. |
 | `TELEGRAM_CHANNELS` | ❌ Unset. The free second ingest source still does nothing. |
 | `INVITE_REQUIRED` | ❌ Unset — **now by choice.** See Q-1. |
 
-`DASHBOARD_TOKEN` is the one that hurts: any random string will do, it is
-read-only, and without it launch week produces numbers nobody can see.
+`DASHBOARD_TOKEN` was the one that hurt, and it is done. The residue is
+smaller: `CROSSPOST_GROUP_IDS` (district groups still get no copy of an
+owner's report) and `TELEGRAM_CHANNELS` (the free second ingest source
+still does nothing) are both a value away, and both matter more now that
+L-4 says the map is not filling from OLX.
 
 ### P0-4 · Compromised Google Maps key still committed — in a public repo
 *`AUDIT_FINDINGS` §1.1 · `docs/TECHNICAL.md:236`,
@@ -407,6 +420,49 @@ matter in launch week: the auth header as per-request upload (F-1, same
 fix as P1-6), tile data per walk never measured (F-4), pet photos served
 at ad size (F-5), WebGL context loss untested (F-7).
 
+### P1-12 · The spawner produces four times what anybody picks up 🟠
+*Found by the console within an hour of it going live, 15 Sep (D-86)*
+
+Measured after the counting bug was fixed: **24% of paws are taken, 76%
+age out.** The panel prints the third number on purpose, because a
+spawner producing four times what is collected is a cost — database
+writes, sync payload, planner work — that is invisible if you only show
+the two halves that look healthy.
+
+Nobody has decided whether that ratio is wrong. A five-minute item
+lifetime on a map you glance at may be exactly right, and lowering spawn
+density changes how alive the map looks, which is the art director's
+call. **What this item asks for is the decision, not a change**: read the
+economy panel across a week now that the memory exists (D-84), then set
+the ratio deliberately.
+
+Related and closed: the same panel used to report 96% collected, because
+`tokens.collected_at` is a tombstone for three different events (a real
+pickup, the five-minute age-out, the over-cap cull). It counts from
+`collect_events` now. **Any older document quoting a collection rate near
+100% is quoting the bug.**
+
+---
+
+### P1-13 · Mail deliverability is one DNS record deep 🟠
+*D-69's tail, 12–16 Sep*
+
+The first mail the domain sent landed in Gmail's spam because there was
+no DMARC record; SPF, DKIM and DMARC are in place now and mail is
+configured in production. Two things still stand between that and a
+launch:
+
+1. **Resend's free tier caps at 100 mails a day**, and a launch to
+   ~130K people will pass that in the first hour. Budget the $20 plan
+   *before* the announcement, not after the first bounce.
+2. **Nobody has measured the delivery rate** — how many verification
+   links land in inboxes rather than spam, across Gmail, Ukr.net and
+   iCloud. Every one that does not land is a person who registered and
+   cannot get in, and the door means they cannot use the app at all.
+   Send to one address on each and look, before the announcement.
+
+---
+
 ## P2 — worth doing
 
 | ID | Issue | Where |
@@ -447,6 +503,19 @@ at ad size (F-5), WebGL context loss untested (F-7).
 ## Closed since the July audits
 
 Kept so nobody re-files them.
+
+### Closed by the door-and-instrument week (12–16 Sep, PRs #583–#645)
+
+| Was | Now |
+| --- | --- |
+| Anyone who opened the app was an anonymous device row; `x-device-id` was the whole identity | ✅ **The door** (D-69): nickname, e-mail, password, verification link, recovery, enforced by the API as a claim in the slip. The ~543 pre-door rows were wiped rather than carried. |
+| Nobody had a face; every walker was a copy of your own dog sprite | ✅ **Portraits** (D-72) and **chips** (D-73): a drawing per person, kept as a Telegram `file_id`, the photo never stored; other walkers render as a portrait disc with a card behind a tap. |
+| GPS spoofing during an alarm wrote paws and marks sixty km outside the city | ✅ **The served-area hold** (D-74): a fix the map cannot draw is held, not believed, on both client and server. |
+| Territory was the only standing, and happiness was a meter nobody competed on | ✅ **The happiness index** (D-75): time-weighted, all-time, and the drain now pauses while the person is away, so it measures how you play rather than how fast you feed after opening. |
+| Bots were scenery — no dog, no hunger, a made-up level — so every balance question needed one person walking one dog | ✅ **Bots live by the player's rules** (D-76 … D-79): companion rows, the same spawn and collect code, an owner's hours, 120 of them, and `/admin/bots/report` as the tuning bench. |
+| The admin console had never shown anybody a number | ✅ **Lit** (D-83 … D-85): a live endpoint cheap enough to poll every 20s, a five-minute snapshot series kept 60 days, and a people panel with addresses masked in the service. `DASHBOARD_TOKEN` is set. |
+| "96% of paws are collected" | ✅ **That was a measurement bug** (D-86) — `collected_at` is a tombstone for three events. True figure: 24% taken, 76% aged out. See P1-12. |
+| Bots pinned at hunger 1/100, so every meter downstream read off the floor | ✅ Hunger drain 900/h → 120/h on the owner's call (D-86), measured against the 7.7 bones an online bot-hour actually finds. |
 
 ### Closed in the open beta's first weeks (25 Aug–12 Sep, PRs #534–#581)
 

@@ -1111,7 +1111,9 @@ somebody's living room.
 
 **Money.** A drawing costs a few cents. Two ceilings: the burst
 limiter every paid route has (`limitExpensive`, 10/min), and five
-drawings per person per day, counted in `avatar_draws` (migration
+drawings per person per day *(raised to 100 since this was written —
+`AVATAR_DAILY_CAP` in `routes/auth.ts`, a guard against a script rather
+than against a person; noted 16 Sep)*, counted in `avatar_draws` (migration
 `0043`) rather than in process memory a deploy would reset, and
 counted BEFORE the model call, because a call that timed out on our
 side may still have been billed. The route also refuses before the

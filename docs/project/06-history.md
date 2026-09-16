@@ -406,6 +406,78 @@ The era's shape: **every fix arrived with the number it was chosen on**,
 and two of the numbers were costs the owner accepted rather than wins —
 fewer pins, and a database that stops growing but does not shrink.
 
+## Era 13 — A door, a face, a populated city, and an instrument
+**#583–#645 · 12–16 Sep · 5 days · 63 PRs · D-69 … D-86**
+
+The densest week in the project's history, and the one where it stopped
+being a thing one person walks a dog around and started being something
+with accounts, faces and a measurement bench. Four strands.
+
+**The door (#583–#591, #630–#631, D-69, D-72).** Every account now gives
+a nickname, an e-mail and a password before the map opens, verifies by a
+link, and can recover it. The owner picked the strict shape over two
+softer ones, at an open launch, knowing it puts a form in front of the
+dog — and then insisted the dog ask it: «ми знайомі?» at the gate, the
+form on the app's own paper, the camera framing the dog above it. The
+API enforces it too, as a claim in the session slip rather than a
+database read. The ~543 pre-door device rows were wiped rather than
+carried, so the table started empty and honest.
+
+Then the face. A photo goes to an image model and comes back as a few
+black pen lines on white — the app's own ink, one recipe, and **the
+photo is never stored anywhere**, which is why it is a drawing and not a
+crop. Twenty-one PRs (#598–#618) went into that prompt alone: eight
+sample drawings, then six, then two; "draw it in five seconds without
+looking at the paper"; "as if you were drunk" (dropped — it landed on
+the pet, not on the hand); "a 4-year-old's fridge art" (no effect);
+caricature, which is the build that shipped. The record of what *didn't*
+work is the valuable half.
+
+**The city got faces and rhythm (#619–#641, D-73, D-76 … D-79).** Other
+walkers stopped being copies of your own dog sprite and became chips —
+the drawn portrait in a small disc, a thin ink ring, a soft
+owner-colour glow, a tap opening their card. Then the bots stopped being
+scenery: they got companion rows, hunger, happiness, food that spawns for
+them and a pickup through the same transaction a phone uses, so every
+balance question could be asked of 120 dogs instead of one. They were
+given an owner's hours — two or three walks a day on the Kyiv clock,
+offline between, meters frozen while away — because a dog that is never
+left alone is never hungry, and every number the bots exist to measure
+sits on that rhythm. Thirty became a hundred and twenty, homes 300 m
+apart around the central parks, and the territory layer was wiped so the
+city was not already fully claimed.
+
+**The GPS hold (#628, D-74).** Kyiv's air defence spoofs GPS when drones
+are up, and the phone does not report an error — it reports Lima, at
+full confidence, once a second. Measured on production: 60 paws, 16 bones
+and 3 marks written sixty kilometres out. A fix outside the served area
+is now held rather than believed; the app stands where it last knew you,
+the dog explains, the server refuses the position. D-67's teleport snap
+handled a jump *inside* the city; this is the case the map cannot draw.
+
+**The instrument (#642–#645, D-83 … D-86).** The admin console had been
+built since D-38 and had **never shown anybody a number** — `DASHBOARD_TOKEN`
+was never set, so every panel 401'd, and the ops doc had said "built,
+dark" for weeks. It got a pulse (a live endpoint cheap enough to poll
+every twenty seconds), a memory (one nineteen-column row every five
+minutes, so "did lifting midday to 0.8 put more dogs out" stops being
+answered by reading log lines), and a people panel that splits registered
+accounts from anonymous device rows with addresses masked in the service.
+
+Within an hour of it going live it earned itself: the economy panel's
+"96% of paws collected" was **counting expiry as appetite** (the
+`collected_at` column is a tombstone for three different events), and the
+true number is 24% taken, 76% aged out. It also showed the bots pinned at
+a hunger of 1 out of 100 — 900 drain an hour against 7.7 bones found —
+so a dog was emptying in under seven minutes of a forty-minute walk and
+every meter downstream was reading off the floor. The drain went to 120
+an hour.
+
+The era's shape: **the product grew a front door and a mirror in the same
+week**, and the mirror immediately falsified two numbers the team had been
+quoting. Instrumentation is not overhead; it is the thing that tells you
+which of your measurements were fiction.
+
 ---
 
 ## The pivots, in one list
@@ -431,6 +503,10 @@ fewer pins, and a database that stops growing but does not shrink.
 | 17 | **Closed beta → open launch** | 25 Aug | 50–150 invite-gated testers → a founder announcement to ~130K, invite gate held in reserve. |
 | 18 | **Show every pin → show only defensible pins** | #551, #557, 7 Sep | Every active pet with a coordinate offered to walkers → only pets placed by a person or by a place the ad named. 127 → ~28 visible, by measured choice. |
 | 19 | **Model places pets → model may only reject** | #562, 8 Sep | The parser guessing coordinates from prose → a judge that reads the ad afterwards and can hide a pin but never move one. |
+| 20 | **Anonymous device rows → accounts at the door** | #583, 12 Sep | Open the app and you are a device id → nickname, e-mail, password and a verification link before the map, with the pre-door table wiped. |
+| 21 | **A shared sprite → everybody has a face** | #598–#627, 13–14 Sep | Every walker drawn as a copy of your own dog → a drawn portrait per person, in a chip on the map and on a card you can open. |
+| 22 | **Bots as scenery → bots as the measurement bench** | #634–#638, 14–15 Sep | Thirty walkers with no dog, no hunger and a made-up level → 120 living by the player's rules on an owner's hours, so balance can be asked of a population. |
+| 23 | **Numbers read out of logs → a console with a memory** | #642–#645, 15 Sep | One person grepping Fly logs → a live view polled every 20s and a five-minute snapshot series, which falsified two quoted numbers in its first hour. |
 
 ## What the history is trying to tell you
 

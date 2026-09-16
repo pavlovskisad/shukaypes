@@ -39,13 +39,13 @@ Deploying is a mutating action. Ask first.
 | `CROSSPOST_CHANNEL_ID` / `_USERNAME` | ✅ **Set.** Owner reports publish to the public channel. `CROSSPOST_GROUP_IDS` is still unset, so district groups get no copy. |
 | `TELEGRAM_CHANNELS` | **Not set.** The channel-scrape source is a no-op until it is. |
 | `SCRAPE_PROXY_URL` | **Not set, and should stay that way.** Measured 17 Aug: residential exits are refused *more* than the Fly datacentre, not less. The seam is for the day the edge really hardens. |
-| `DASHBOARD_TOKEN` | **Not set.** Read-only key for `/admin/console`, `/admin/metrics` and `/admin/live` — the only one of the three keys safe to keep in a browser. Until it is set the console 401s for everyone. |
+| `DASHBOARD_TOKEN` | **Set in production** (verified 16 Sep — the console is lit; it was dark from D-38 until 15 Sep, which is what D-83 found). Read-only key for `/admin/console`, `/admin/metrics` and `/admin/live` — the only one of the three keys safe to keep in a browser. Until it is set the console 401s for everyone. |
 | `DEV_TOOLS_PASSWORD` | **Not set.** Unlocks `/dev` (walk simulator + destructive territory test routes) per browser. Until it is set the dev affordances are off everywhere. |
-| `SESSION_SECRET` | **Set it now** (≥16 chars): since D-69 a slip can carry an e-mail login, and the key should not be the bot token's shadow. Was optional: key for session tokens (`lib/session.ts`, D-62). Unset, the key is derived from `TELEGRAM_BOT_TOKEN`, which is already the key Telegram's own signatures rest on, so tokens work with no action. Set it (≥16 chars) to rotate sessions independently of the bot token; changing it logs every phone out once, transparently — the next request re-identifies the old way. |
+| `SESSION_SECRET` | **Set in production** (verified 16 Sep; ≥16 chars): since D-69 a slip can carry an e-mail login, and the key should not be the bot token's shadow. Was optional: key for session tokens (`lib/session.ts`, D-62). Unset, the key is derived from `TELEGRAM_BOT_TOKEN`, which is already the key Telegram's own signatures rest on, so tokens work with no action. Set it (≥16 chars) to rotate sessions independently of the bot token; changing it logs every phone out once, transparently — the next request re-identifies the old way. |
 | `INVITE_REQUIRED` | **Not set — the door is open.** With it set, new device ids must redeem an invite code; existing accounts are never gated. Mint codes with `pnpm --filter @shukajpes/server invite --new --uses=N --note=...` before flipping it. |
 | `CHAT_DISABLED` | Not set (chat on). The no-deploy kill switch for all model calls. |
-| `RESEND_API_KEY` + `EMAIL_FROM` | **Must be set before the door ships** (D-69). The verification and reset mails. `EMAIL_FROM` is `шукайпес <dog@<the domain>>` (a non-ASCII name is RFC 2047-encoded on the way out, stray quotes dropped; a value that cannot be parsed is named in the boot log as `[auth] EMAIL_FROM cannot be sent from` and does not switch verification on) and the domain must be verified in Resend (SPF + DKIM records at the DNS host), plus a DMARC record (`_dmarc` TXT `v=DMARC1; p=none; rua=mailto:<owner>`) — the first mail from the domain landed in Gmail's spam without one (12 Sep), which Gmail's sender rules predict — mail cannot go out from `vercel.app`. Without both the door still asks for registration but cannot require verification, and says so in the boot log. Resend's free tier caps at 100 mails a day, which launch day will exceed: budget the $20 plan. |
-| `FAL_KEY` | **Not set — the portrait step is off.** The fal.ai key for the pet's drawn portrait (D-72). Once set, `/auth/me` says `avatarConfigured: true` and the dog asks for a photo after verification. Each drawing is a paid call (cents); the route caps five per person per day in `avatar_draws`. `FAL_API_URL` overrides the endpoint for the local e2e stack only. |
+| `RESEND_API_KEY` + `EMAIL_FROM` | **Both set in production**, with `APP_URL` (verified 16 Sep), so the door ships with verification on (D-69). The verification and reset mails. `EMAIL_FROM` is `шукайпес <dog@<the domain>>` (a non-ASCII name is RFC 2047-encoded on the way out, stray quotes dropped; a value that cannot be parsed is named in the boot log as `[auth] EMAIL_FROM cannot be sent from` and does not switch verification on) and the domain must be verified in Resend (SPF + DKIM records at the DNS host), plus a DMARC record (`_dmarc` TXT `v=DMARC1; p=none; rua=mailto:<owner>`) — the first mail from the domain landed in Gmail's spam without one (12 Sep), which Gmail's sender rules predict — mail cannot go out from `vercel.app`. Without both the door still asks for registration but cannot require verification, and says so in the boot log. Resend's free tier caps at 100 mails a day, which launch day will exceed: budget the $20 plan. |
+| `FAL_KEY` | **Set in production** (verified 16 Sep — the portrait step is live). The fal.ai key for the pet's drawn portrait (D-72). Once set, `/auth/me` says `avatarConfigured: true` and the dog asks for a photo after verification. Each drawing is a paid call (cents); the route caps **100** per person per day in `avatar_draws` (`AVATAR_DAILY_CAP`, default 100 in `routes/auth.ts` — D-72 shipped with five and the cap was raised afterwards). `FAL_API_URL` overrides the endpoint for the local e2e stack only. |
 | `AVATAR_RECIPE` | Optional. `reference` (default): the photo goes to Nano Banana (via fal) beside the two most chaotic of the illustrator's drawings with a short prompt — copy the style of the drawings, not the photo, same dog. `describe`: Claude (Haiku) first writes one labelled line about the pet (logged as `avatar_describe`) and the image model draws from the line, the drawings and the photo; kept for comparison. `marker`: the photo alone on FLUX Kontext, style in words — the fallback when the reference files are missing. Flip with `fly secrets set` to compare on a real pet. |
 | `AVATAR_DESCRIBE_PHOTO` | Optional. `off` drops the photo from the `describe` recipe's drawing request, so the image model works from the description and the samples alone. On by default: without the photo the first real run drew the samples' shaggy dog for a smooth golden one. |
 | `AVATAR_INK` | Optional. `off` skips the app's own ink pass over the model's drawing (`services/ink.ts`: pure black and white, thickened to marker weight, wobbled, cropped so the pet fills the frame; it never removes ink). On by default; the pass is where the fat uneven line comes from. |
@@ -146,6 +146,31 @@ take the app down. On a real database outage, restarting the machine fixes
 nothing while costing the logs you would diagnose from. The deep endpoint
 is for an external monitor that tells a human.
 
+## Production secrets, as of 16 Sep 2026
+
+Read from `fly secrets list -a shukajpes-api` (names and digests only —
+Fly does not allow reading a value back). **Set:** `ANTHROPIC_API_KEY`,
+`DATABASE_URL`, `GOOGLE_MAPS_API_KEY`, `REDIS_URL`, `ADMIN_TOKEN`,
+`TELEGRAM_BOT_TOKEN`, `TELEGRAM_WEBHOOK_SECRET`, `MULTIPLAYER_BOTS`,
+`TERRITORY_COOLDOWN_MS`, `TERRITORY_MIN_DISTANCE_M`, `ALERT_CHAT_ID`,
+`CROSSPOST_CHANNEL_ID`, `CROSSPOST_CHANNEL_USERNAME`, and — new since
+12 Sep — `RESEND_API_KEY`, `EMAIL_FROM`, `APP_URL`, `SESSION_SECRET`,
+`FAL_KEY`, `DASHBOARD_TOKEN`.
+
+So the door, the mail, the portrait step and the console are all **on in
+production**, which several older lines in this file and in
+[`08-open-issues.md`](08-open-issues.md) still describe as pending.
+
+**Still unset:** `DEV_TOOLS_PASSWORD`, `REPORT_TOKEN`, `INVITE_REQUIRED`,
+`TELEGRAM_CHANNELS`, `FACEBOOK_GROUP_IDS`, `SCRAPE_PROXY_URL`,
+`AVATAR_CHAT_ID` (drawings go to `ALERT_CHAT_ID`), `CHAT_DISABLED`.
+
+**`MULTIPLAYER_BOTS` is set as a secret, so its value cannot be read
+back** — `fly.toml` still says 30, and a secret overrides it. D-78 built
+the roster and the portraits for 120 and left the number to the owner.
+Ask the console (`/admin/live`) how many bots are actually out rather
+than inferring it from either file.
+
 ## Server-side CLIs
 
 Run in the container (`fly ssh console -a shukajpes-api -C "node dist/…"`)
@@ -175,7 +200,7 @@ or locally against a `DATABASE_URL`.
 | `clean:ad-bodies [--apply]` | Strip OLX section labels welded to the next word (`Описменя`). |
 | `flag-found-reports [--apply]` | Mark ads where somebody *found* an animal, so they stop appearing as pets to go looking for. |
 | `revive:live-ads` | Bring back a pet whose ad is serving again. |
-| `check` (`pnpm check`) | All **nineteen** fixture checks — placement judge, placement confidence, lore walk, lore match, enrich parse, out-of-area, ingest alert, pet identity, per-user rate limiting, invite gate, dev auth, session token, contact redaction, ad-body containment, ad extraction, found reports, owner reports, place resolution, route coverage. **Runs in CI on PRs and before deploy.** |
+| `check` (`pnpm check`) | All **twenty-two** fixture checks — placement judge, placement confidence, lore walk, lore match, enrich parse, out-of-area, ingest alert, pet identity, per-user rate limiting, invite gate, dev auth, session token, served area, contact redaction, ad-body containment, ad extraction, found reports, owner reports, place resolution, route coverage, accounts, ink. **Runs in CI on PRs and before deploy.** `check:bot-day` and `check:mask` are deliberately outside the aggregate — run them by name when touching the bots' timetable or the address mask. |
 | `seed:lore`, `seed:gazetteer` | One-off corpus builds from OSM. |
 | `enrich:lore [--apply] [--only osm\|links\|detail\|case\|title] [--limit N] [--id osm:…]` | Gives `kyiv_lore` its "read more". **Dry by default.** `osm` stores each row's OSM facts (inscription, description, date, commemorated subject, artist…) — the seed only ever read `name`, and 888 of the 2405 unlinked rows carry one of these. `links` finds the Wikipedia article for rows without one, most certain first: the `wikidata=` entity's sitelink (+24), the `subject:*` tags' article about whom the memorial is for (+122), the row's own name as an article title when it reads as a person's name (~+316, 70/120 sampled all correct), and last the uk.wikipedia article geotagged at the spot matched by name (~+58, fuzzy). Each handle is stamped in `wiki_source` so a tier can be audited or reverted as a group. `detail` has the model write the dog's 2–4-sentence telling from the article and facts for every row with research, and rewrites the one-liner of rows whose story was written before they had any. Facts and links cost nothing; detail is one Sonnet call a row (~$0.006) and the dry run prints the total. Idempotent — a crashed run resumes. The phases feed each other, and a dry run carries each phase's plan forward in memory so its counts match what the apply will do. `--only case` (opt-in, not part of the default run) puts the capitals back on proper names in every story and detail through Haiku, with a guard that throws away any answer that changed anything but letter case. `--only title` (also opt-in) gives rows named after a person a `title` that says what the object is — "Будинок, де працював Лесь Курбас" rather than "Лесь Курбас" — from the facts and detail through Haiku; the app shows `title ?? name`. Refused unless the answer keeps a word of the name, stays under 72 characters and is not a sentence, so a hallucinated title cannot replace a real name. Artworks skip the model: their title is built from the row's `artwork_type` alone ("Мурал «BB King»", "Скульптура «Корова»", and "Стріт-арт «…»" when OSM gave no type), with names that already say what they are left alone. First production run (6 Sep 2026): facts 2000, handles 226 → 745, details 1147, 926 one-liners rewritten; a snapshot of the pre-run stories sits in `kyiv_lore_story_backup`. |
 | `db:seed-dogs` | Local dev only. Production runs on real scraped pets. |
@@ -205,7 +230,7 @@ Anything that writes to `lost_dogs`, `sightings` or `users`:
 | Watchdog | Armed. Kills a process whose event loop has been blocked 30s. |
 | Client crash reporting | **Exists since PR #419.** Root boundary + global handlers → `POST /client-errors` → Fly logs (`kind: 'client_error'`). Capped and deduped client-side. |
 | Server error visibility | `setErrorHandler` masks 5xx bodies; `unhandledRejection` / `uncaughtException` handlers installed (several jobs are deliberately unawaited and Node's default is to crash). |
-| Admin console / metrics | Built, and since D-83/D-84 carries a live strip with 24h sparklines (presence, pickups, marks, tick health) plus bots / happiness / economy panels. Still **dark** until `DASHBOARD_TOKEN` is set — it 401s for everyone without it. |
+| Admin console / metrics | Built, and since D-83/D-84 carries a live strip with 24h sparklines (presence, pickups, marks, tick health) plus bots / happiness / economy panels. **Lit since 15 Sep** — `DASHBOARD_TOKEN` is set in production (verified 16 Sep). It had been dark since D-38 and every panel 401'd, which is what D-83 went looking for. |
 | Ingest alert | Built and **armed** since 25 Aug (`ALERT_CHAT_ID` set; the same chat receives owner-report review buttons). 36h of zero inserts should fire it. **Whether it has ever fired is not verifiable from Fly logs** — the log window is hours, and the tick on 12 Sep still read `inserted 0`. Ask the chat. |
 | Spent-item janitor | Running daily since 6 Sep (`kind: 'spent_item_cleanup'` in logs). Bounded per tick, so a backlog shows as several days of full batches, not one big one. |
 | External uptime monitor on `/health/deep` | **Does not exist.** Recommended by the audit; still not done. Needs an account, so it is the owner's. |
@@ -408,13 +433,13 @@ is.
 - Open a PR when a task is done; the owner merges manually.
 - **A merged PR is finished.** Restart the branch from `origin/main` for
   follow-up work rather than stacking onto merged history.
-- `pnpm -r typecheck`, `pnpm -r lint` and `pnpm check` before every PR. The
-  lint baseline is **0 errors, 21 `react-hooks/exhaustive-deps` warnings**;
-  `pnpm check` is fourteen fixture checks and all must pass. Verified on
-  20 Aug at `43808c6`. **The lint baseline is 23, not the 21 `CLAUDE.md`
-  still states** — it drifted to 22 during the walk work and to 23 with
-  `LostFlowModal`, both ordinary `exhaustive-deps` warnings matching
-  sibling modals.
+- `pnpm -r typecheck`, `pnpm -r lint` and `pnpm check` before every PR.
+  Measured on `origin/main` at `08e59c4`, 16 Sep: **0 errors, 21
+  `react-hooks/exhaustive-deps` warnings**, and `pnpm check` is
+  twenty-two fixture checks, all passing. The warning count has been 21,
+  22, 23 and 21 again since 11 Aug and `CLAUDE.md` currently says 22, so
+  **measure `origin/main` in a scratch worktree rather than trusting any
+  number written down** — including this one.
 - When a check cannot run — blocked, throttled, unauthenticated — **say so
   loudly.** A check that read nothing must never be reported as a check that
   found nothing.
