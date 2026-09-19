@@ -167,6 +167,44 @@ export const balance = {
   collectMaxDistanceM: 150,
   // Rate limit (hits) per 1min window on /collect.
   collectRateLimitPerMin: 120,
+  // THE GAP A POCKETED PHONE LEAVES.
+  //
+  // There is no background geolocation on the web — not in a PWA, not
+  // in the Mini App, and a Service Worker cannot reach the Geolocation
+  // API at all. So a walker who locks their screen stops sending fixes,
+  // and the next one arrives minutes and hundreds of metres later. Paws
+  // and bones already survive that: /collect/path sweeps the whole
+  // segment. Territory did not — the dog laid ONE mark where the phone
+  // came back out, where a live walk would have laid a dozen.
+  //
+  // The old gate was `segLen > 5000m = teleport`, which is a distance
+  // test with no clock in it: five kilometres in ten seconds passed,
+  // and six kilometres walked over two hours failed. Speed is the
+  // honest test. If the displacement was covered at a walking pace
+  // then the walker really did cover that ground on foot — the only
+  // thing in doubt is WHICH streets, and the dog's own 160m roam
+  // (MAX_DOG_OFFSET_M in routes/path.ts) already concedes that much.
+  //
+  // jitterFloorM keeps the foreground case exactly as it was: segments
+  // under it skip the speed test and the catch-up both, so a 15s sync
+  // with a jumpy fix behaves today's way and cannot be newly refused.
+  // Only the long segments — which is to say, the resumes — are judged.
+  //
+  // maxSpeedMps 2.5 (9 km/h) covers a brisk walk and a jog with a dog
+  // on the lead, and excludes a bike and everything faster. A segment
+  // above it is not a walk and claims nothing.
+  walk: {
+    jitterFloorM: 150,
+    maxSpeedMps: envNum('WALK_MAX_SPEED_MPS', 2.5),
+    // Cost bound, not a game rule: each catch-up mark runs the full
+    // claim-and-contest machinery (hull, clip, raid), and a long gap
+    // could otherwise ask for thirty of them inside one request. Eight
+    // at the 40m spacing is ~320m of line, which is most of what a
+    // ten-minute pocket walk would have drawn anyway.
+    maxCatchUpMarks: envNum('WALK_MAX_CATCHUP_MARKS', 8),
+    // How long the last walked corridor stays readable by /quests/advance.
+    corridorTtlS: 15 * 60,
+  },
   // Search-zone slow-grow. Active lost pets get a wider walking
   // circle as days-since-last-seen grows — the post is older, the
   // pet has had more time to drift. Computed against last_seen_at,
