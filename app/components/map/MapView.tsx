@@ -50,7 +50,7 @@ import { petPhotoAt } from '../../utils/petPhoto';
 import { CARD_W } from '../ui/CardStack';
 import { DOG_MIN_Y, DOG_ROOM } from '../ui/AccountDoor';
 import { safeAreaTopPx } from '../../utils/safeArea';
-import { easeCamera } from './camera';
+import { easeCamera, frameTerritory } from './camera';
 import { OtherWalker } from './OtherWalker';
 import { PIN_START, stepPin, type PinLifecycle } from '../../utils/pinLifecycle';
 import { PokeToast } from './PokeToast';
@@ -2719,6 +2719,77 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (retire) setPinnedGuest(null);
   }, [pinnedGuest, viewportCenter, onMapScreen, setPinnedGuest]);
 
+  // TAPPING THE DOG ITSELF DOES WHAT TAPPING ITS ROW DOES.
+  //
+  // The map tap used to open the card and nothing else, so the same
+  // question — "who holds this, and how much" — got two different
+  // answers depending on where you asked it. One behaviour now, through
+  // the same frameTerritory.
+  //
+  // The ring comes from whatever is cheapest. If their ground is already
+  // drawn it is in rivalTerritory and costs nothing; their biggest drawn
+  // piece is the one to frame, for the same reason the standing draws
+  // the biggest. Only when it is NOT drawn — which is the interesting
+  // case, a dog standing on ground the view cap dropped — does this go
+  // to /players/:id, and that is the read the card is making anyway.
+  const openSeqRef = useRef(0);
+  const openPlayer = useCallback(
+    (player: NearbyPlayer) => {
+      setCardPlayer(player);
+      const map = mapRef.current;
+      if (!map) return;
+
+      const drawn = useGameStore
+        .getState()
+        .rivalTerritory.find((r) => r.ownerId === player.id);
+      const biggest = drawn?.shapes
+        .filter((sh) => sh.kind === 'area' && sh.points.length >= 3)
+        .reduce<{ lat: number; lng: number }[] | null>(
+          (best, sh) => (!best || sh.points.length > best.length ? sh.points : best),
+          null,
+        );
+      if (biggest) {
+        // Invalidate any read still in flight from an earlier tap, or it
+        // would land after this and move the camera off this dog.
+        openSeqRef.current += 1;
+        frameTerritory(map, biggest, player.position);
+        return;
+      }
+
+      // Not drawn: ask, then frame — but only if this is still the dog
+      // the user is looking at. A second tap while the first read is in
+      // flight must win; without this the earlier answer lands last and
+      // flies the camera to the dog they moved on from.
+      openSeqRef.current += 1;
+      const seq = openSeqRef.current;
+      void api
+        .playerCard(player.id)
+        .then((card) => {
+          if (seq !== openSeqRef.current) return;
+          if (!card.piece || card.piece.length < 3) return;
+          // Pinned as well as framed: their ground was NOT in the sync,
+          // which is why we had to ask — so without the pin the camera
+          // would frame an outline that is not drawn.
+          setPinnedGuest({
+            ownerId: player.id,
+            name: player.name,
+            owner: player.owner ?? null,
+            avatarUrl: player.avatarUrl ?? null,
+            bot: player.bot ?? false,
+            ring: card.piece,
+            at: player.position,
+            live: true,
+          });
+          frameTerritory(mapRef.current, card.piece, player.position);
+        })
+        .catch(() => {
+          // A dog with no ground, or a read that failed. The card is
+          // already open and says so; the camera simply stays put.
+        });
+    },
+    [setPinnedGuest],
+  );
+
   // Fly to a territory — tapping a row on the standing routes here with
   // the owner's largest piece in the store, and the camera frames it.
   // ONE-SHOT: consumed and cleared, deliberately unlike selectedSpotId.
@@ -2751,21 +2822,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         .getState()
         .nearbyPlayers.find((p) => p.id === focusedTerritory.ownerId)?.position;
       const dogAt = live ?? focusedTerritory.pos ?? focusedTerritory.mark ?? null;
-      const pts: Array<[number, number]> = ring.map((p) => [p.lng, p.lat]);
-      if (dogAt) pts.push([dogAt.lng, dogAt.lat]);
-      const bounds = pts.reduce(
-        (b, p) => b.extend(p),
-        new maplibregl.LngLatBounds(pts[0]!, pts[0]!),
-      );
-      // Bottom padding clears the player card this jump now opens; the
-      // top clears the HUD row. maxZoom so a tiny holding does not slam
-      // the camera into the pavement — a 0.02 km² patch framed tight is
-      // a street corner, not a district.
-      map.fitBounds(bounds, {
-        padding: { top: 110, bottom: 240, left: 40, right: 40 },
-        maxZoom: 16.5,
-        duration: 900,
-      });
+      frameTerritory(map, ring, dogAt);
       // AND THE CARD, because "who is this" is the other half of the
       // question the standing asks. It reads /players/:id, which is a
       // plain server read — so it works for an owner who is offline,
@@ -3532,7 +3589,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             Hidden in supersniff so the whole focus is the dog search. */}
         {DOG_CAM && dogCam
           ? null
-          : otherWalkers.map((p) => <OtherWalker key={p.id} player={p} onOpen={setCardPlayer} />)}
+          : otherWalkers.map((p) => <OtherWalker key={p.id} player={p} onOpen={openPlayer} />)}
 
         {/* No zone RING in the cinematic dog view — at the close zoom the
             circle cut across mid-screen and read as clutter. The blue

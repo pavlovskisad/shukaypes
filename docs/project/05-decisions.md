@@ -2415,3 +2415,35 @@ would sit there until the map screen was left. Retirement now measures
 the nearer of the dog and the ring's centroid. The rule itself is
 untouched — it still takes one distance — so `pnpm check` still covers
 it.
+
+### D-93 · Tapping the dog does what tapping its row does ✅
+*`components/map/camera.ts` → `frameTerritory`, `MapView.tsx`*
+
+The standing's jump frames an owner's district and opens their card
+(D-92). Tapping the same dog on the map opened the card and nothing
+else — so the same question, "who holds this and how much", got two
+different answers depending on where it was asked.
+
+One behaviour now, through one function. `frameTerritory` moved to
+`camera.ts` and both paths call it: they were one behaviour described
+twice, and the second copy is how the first one drifts.
+
+**The ring comes from whatever is cheapest.** If the owner's ground is
+already drawn it is in `rivalTerritory` and costs nothing — their
+biggest drawn piece, for the same reason the standing draws the biggest.
+Only when it is NOT drawn does this read `/players/:id`, and that is the
+read the card is making anyway. That case is the interesting one: a dog
+standing on ground the view cap dropped, which is exactly what D-90 was
+about. When the read is what supplied the ring, the owner is pinned too
+— otherwise the camera would frame an outline that is not on the map.
+
+**A sequence guard, because a tap can outrun a read.** Tap one dog, tap
+another before the first `/players/:id` lands, and without it the older
+answer arrives last and flies the camera to the dog you moved on from.
+Each open bumps a counter and a late answer that does not match it is
+dropped. The drawn-ground path bumps it too: it is synchronous, so an
+earlier read still in flight would otherwise land after it.
+
+Caught on an adversarial re-read of the diff rather than in testing —
+the first cut guarded on "is this still the pinned owner", which is not
+the same question and would have let the earlier tap win.

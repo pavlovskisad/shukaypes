@@ -45,6 +45,7 @@
 // `essential` flag below is therefore belt-and-braces rather than the
 // mechanism; the policy lives in this file and nowhere else.
 
+import maplibregl from 'maplibre-gl';
 import type { Map as MlMap, EaseToOptions } from 'maplibre-gl';
 import { prefersReducedMotion } from '../../utils/motion';
 
@@ -81,5 +82,37 @@ export function easeCamera(
     ...shaped,
     essential: true,
     ...(kind === 'cinematic' ? { duration: 0 } : {}),
+  });
+}
+
+// FRAMING A DISTRICT — the shape a jump to somebody's ground makes.
+//
+// Shared by the two ways of getting there: a row on the standing, and a
+// tap on the dog itself. They were one behaviour described twice, and
+// the second copy is how the first one drifts.
+//
+// The DOG goes in the bounds alongside the ring. A live owner can be out
+// walking well outside their own ground, and framing the ring alone puts
+// the sprite off screen at the moment somebody went looking for it.
+//
+// Padding clears the HUD above and the player card below; maxZoom keeps
+// a small holding from slamming the camera into the pavement — 0.02 km²
+// framed tight is a street corner, not a district.
+export function frameTerritory(
+  map: MlMap | null | undefined,
+  ring: { lat: number; lng: number }[],
+  dogAt?: { lat: number; lng: number } | null,
+): void {
+  if (!map || ring.length < 3) return;
+  const pts: Array<[number, number]> = ring.map((p) => [p.lng, p.lat]);
+  if (dogAt) pts.push([dogAt.lng, dogAt.lat]);
+  const bounds = pts.reduce(
+    (b, p) => b.extend(p),
+    new maplibregl.LngLatBounds(pts[0]!, pts[0]!),
+  );
+  map.fitBounds(bounds, {
+    padding: { top: 110, bottom: 240, left: 40, right: 40 },
+    maxZoom: 16.5,
+    duration: 900,
   });
 }
