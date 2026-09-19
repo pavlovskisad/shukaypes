@@ -196,6 +196,36 @@ export const balance = {
   walk: {
     jitterFloorM: 150,
     maxSpeedMps: envNum('WALK_MAX_SPEED_MPS', 2.5),
+    // AND THE GAP HAS TO BE A GAP IN A WALK, NOT A GAP IN A DAY.
+    //
+    // maxSpeedMps alone bounds a segment from above and nothing bounds
+    // it from below, which sounds harmless until you notice that a
+    // COMMUTE IS SLOW. Measured on a local stack: the app opened at
+    // home, opened again nine hours later three kilometres away, is
+    // 0.09 m/s — far under the ceiling — and it laid five marks in a
+    // line across the city. Nobody walked that. The same hole credited
+    // paws along a bus route and, worse, would have recorded that
+    // somebody SEARCHED a street they rode past, which is the half of
+    // this product where the data is supposed to mean something.
+    //
+    // So the walker has to come back. Thirty minutes is roughly where
+    // somebody who cares what their dog is doing looks at their phone,
+    // and it meets the speed ceiling neatly: half an hour at 2.5 m/s is
+    // 4.5 km, which is about where the absolute backstop already sits.
+    // The two bounds close the box between them.
+    //
+    // NOTHING IS TAKEN AWAY when it lapses — that is D-75's rule, the
+    // one that says a dog does not drain while its person is away
+    // rather than greeting them grumpy after every hour apart. Every
+    // paw and every mark already earned stays earned. What lapses is
+    // only the retroactive bridge: come back later than this and the
+    // next sync starts a fresh segment instead of drawing a line across
+    // the hours you were gone. The dog lost the thread; the walker was
+    // not punished.
+    //
+    // (The Redis anchor's own 24h TTL is left alone. Past this window it
+    // only ever serves to be refused and replaced, which costs nothing.)
+    maxGapMs: envNum('WALK_MAX_GAP_MS', 30 * 60 * 1000),
     // Cost bound, not a game rule: each catch-up mark runs the full
     // claim-and-contest machinery (hull, clip, raid), and a long gap
     // could otherwise ask for thirty of them inside one request. Eight

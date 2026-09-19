@@ -2157,3 +2157,61 @@ stop the screen locking mid-walk and are the *first* line of defence,
 this being the second — and the walk session with a visible pause, which
 is what makes the limitation legible to the walker rather than silent.
 Both were scoped and neither is in this change.
+
+### D-88 · A commute is slow, which is how it got past the speed gate ✅
+*`services/catchUp.ts`, `routes/path.ts`, `config/balance.ts` → `walk.maxGapMs`*
+
+D-87 shipped and deployed as v1012. An hour later, chasing an unrelated
+question from the owner about the wake lock, this fell out of it:
+**`maxSpeedMps` bounds a segment from above and nothing bounded it from
+below.** A commute is not fast. It is slow.
+
+Measured on a local stack before writing a line of the fix — the app
+opened at home, opened again nine hours later three kilometres away:
+
+```
+segM: 2995   gapS: 32400   speedMps: 0.09
+→ 5 territory marks laid in a line across the city
+```
+
+0.09 m/s sails under a 2.5 m/s ceiling. `MAX_SEGMENT_M` (5 km) was the
+only other bound, so any gap longer than about half an hour with a
+displacement under five kilometres qualified as a walk. The same hole
+credited paws along a bus route and would have recorded that somebody
+**searched** a street they rode past — which is the half of this product
+where the data is supposed to mean something.
+
+So the walker has to come back. `walk.maxGapMs`, 30 minutes,
+`WALK_MAX_GAP_MS`. It meets the speed ceiling neatly — half an hour at
+2.5 m/s is 4.5 km, about where the backstop already sits — and the two
+bounds close the box between them. It is checked **first**, and unlike
+the speed test it binds short segments too: a stale anchor is stale
+whatever the displacement, and somebody reopening the app nine hours
+later fifty metres from where they were did not walk fifty metres. The
+cost of that is one mark on the first sync after a long absence; the
+next sync, fifteen seconds later, works off a fresh anchor.
+
+**Nothing is taken away when the window lapses.** That is D-75's rule —
+a dog does not drain while its person is away rather than greeting them
+grumpy after every hour apart — and it applies here for the same reason.
+Every paw and every mark already earned stays earned. What lapses is only
+the retroactive bridge: come back later than the window and the next sync
+starts a fresh segment instead of drawing a line across the hours you
+were gone. The dog lost the thread; the walker was not punished.
+
+Verified on the stack: the nine-hour commute and a 45-minute one both
+claim **nothing**, a 700 m walk over ten minutes still lays its nine
+marks, a 50 m segment on a nine-hour-old anchor is refused, and a 20 m
+foreground sync still lays one. `check:catch-up` carries the commute as a
+named case, so the hole cannot reopen silently. Refusals log as
+`kind: "walk_refused"` with the reason and the measured gap, because 30
+minutes is a guess until real walkers produce a distribution — if `stale`
+fires often, the dial moves without a redeploy.
+
+**On the wake lock, which started this.** The owner's point was right and
+the earlier recommendation here was wrong: people press the power button
+before pocketing a phone, and a Screen Wake Lock is released the moment
+the document hides. It never survives into a pocket. Its only beneficiary
+is somebody holding the phone and not touching it. It is still worth
+having for that case, but it is not the answer to the pocket walk, and it
+should not have been ranked as the first line of defence.

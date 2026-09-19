@@ -163,6 +163,22 @@ const plugin: FastifyPluginAsync = async (app) => {
     const elapsedMs = Date.now() - last.ts;
     const verdict = judgeSegment(segLen, elapsedMs, MAX_SEGMENT_M);
     if (!verdict.ok) {
+      // Logged because the window is a guess until real walkers give us
+      // a gap distribution. `stale` firing often would mean 30 minutes
+      // is too short for how people actually use this, and the dial to
+      // move is WALK_MAX_GAP_MS — no redeploy.
+      req.log.info(
+        {
+          kind: 'walk_refused',
+          reason: verdict.reason,
+          segM: Math.round(segLen),
+          gapS: Math.round(elapsedMs / 1000),
+          speedMps: Number.isFinite(verdict.speedMps)
+            ? Number(verdict.speedMps.toFixed(2))
+            : null,
+        },
+        `walk: refused a ${Math.round(segLen)}m segment (${verdict.reason})`,
+      );
       await writeLastPos(userId, current);
       return {
         tokensCollected: 0,

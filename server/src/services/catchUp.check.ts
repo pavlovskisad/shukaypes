@@ -41,6 +41,27 @@ for (const [len, ms] of [
 const walk = judgeSegment(700, 10 * 60_000, MAX_SEGMENT_M);
 if (!walk.ok || walk.kind !== 'walked') fail(`700m/10min should be a walk, got ${JSON.stringify(walk)}`);
 
+// THE COMMUTE. The case a speed test alone cannot see, because a commute
+// is SLOW: 3km over nine hours is 0.09 m/s, far under the ceiling. On
+// the stack before this bound it laid five marks in a line across the
+// city. Nobody walked it.
+const commute = judgeSegment(3000, 9 * 60 * 60_000, MAX_SEGMENT_M);
+if (commute.ok) fail(`a nine-hour commute should be refused, got ${JSON.stringify(commute)}`);
+if (commute.reason !== 'stale') fail(`the commute should be stale, got ${commute.reason}`);
+if (planCatchUpMarks(KYIV, east(3000), Date.now(), 9 * 60 * 60_000).length !== 0) {
+  fail('a nine-hour commute should plan no marks even if the gate is skipped');
+}
+
+// The clock bound binds short segments too — a stale anchor is stale
+// whatever the displacement. Somebody reopening the app nine hours later
+// fifty metres away did not walk fifty metres.
+const staleShort = judgeSegment(50, 9 * 60 * 60_000, MAX_SEGMENT_M);
+if (staleShort.ok) fail(`a short segment on a nine-hour-old anchor should be refused, got ${JSON.stringify(staleShort)}`);
+
+// The window's own edge: inside it walks, a minute past it does not.
+if (!judgeSegment(700, W.maxGapMs - 1000, MAX_SEGMENT_M).ok) fail('just inside maxGapMs should pass');
+if (judgeSegment(700, W.maxGapMs + 1000, MAX_SEGMENT_M).ok) fail('just past maxGapMs should fail');
+
 // A car, and a bike. Both cover ground; neither is a walk.
 for (const [len, ms, what] of [
   [4000, 5 * 60_000, 'car at 13 m/s'],
@@ -57,8 +78,11 @@ for (const ms of [0, -5000]) {
   if (v.ok) fail(`700m over ${ms}ms should be refused`);
 }
 
-// The absolute backstop still bites, however long the walker was gone.
-const far = judgeSegment(MAX_SEGMENT_M + 1, 12 * 60 * 60_000, MAX_SEGMENT_M);
+// The absolute backstop still bites inside the window — checked before
+// the pace, so an enormous segment is refused as too-long rather than
+// as too-fast. (Outside the window `stale` gets there first, which is
+// the same answer by a shorter road.)
+const far = judgeSegment(MAX_SEGMENT_M + 1, W.maxGapMs - 1000, MAX_SEGMENT_M);
 if (far.ok || far.reason !== 'too-long') fail(`past the backstop should be too-long, got ${JSON.stringify(far)}`);
 
 // The boundary is walkable at exactly the limit, and not a hair above.

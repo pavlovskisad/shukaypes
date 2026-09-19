@@ -161,7 +161,9 @@ Fly does not allow reading a value back). **Set:** `ANTHROPIC_API_KEY`,
 (default 2.5 — the pace above which a segment stops counting as walked, so
 a bike and a car claim nothing) and `WALK_MAX_CATCHUP_MARKS` (default 8 —
 a cost bound on how many backdated marks one resumed walk may lay, not a
-game rule). Both take effect without a redeploy, like the territory pair
+game rule), and `WALK_MAX_GAP_MS` (D-88; default 1800000 — how long a
+walker may be away before the gap stops being a gap *in* a walk; a
+commute is slow, so the speed dial alone never caught one). Both take effect without a redeploy, like the territory pair
 above them, because finding the right value means walking around with it.
 
 So the door, the mail, the portrait step and the console are all **on in
