@@ -2514,3 +2514,71 @@ where it belongs. Left unfixed pending the owner's word, because it is a
 separate change from the spawn loop — but it is the instrument that makes
 "does the economy track walking" answerable at all, so it is worth doing
 soon.
+
+### D-96 · «ні, давай познайомимось!» opened the login screen ❗
+*`app/utils/doorScreen.ts`, `app/components/ui/AccountDoor.tsx`,
+`app/stores/accessStore.ts`*
+
+The owner: "often it drops you to sign in instead of registration."
+
+Not often — **always, for anybody who had logged out without reloading
+the page.** Reproduced by replaying the shipped `pickScreen` verbatim:
+
+```
+fresh visitor taps «ні, давай познайомимось!» -> register
+after a logout, same tap                      -> login
+```
+
+When the door was built (D-69) it was not a sheet anybody asked for: it
+opened by itself, and `doorPrefer` was how the app said "after a logout
+this person wants to log in, not register again", because nobody had
+been asked. Then the gate's two answers arrived, `requested` was
+threaded through — and the `prefer === 'login'` line was left sitting
+above `return requested`. From that point every open named a screen, so
+the preference no longer filled a gap; it only overrode the tap.
+
+The consequence is worse than a wrong screen. Registration became
+**unreachable** for exactly the person who needed it — the way out of a
+login screen is an account you do not have — and because the store is
+not persisted, a reload cleared it, which is what made it read as
+intermittent.
+
+`doorPrefer` is gone: the state it stood in for is now always supplied.
+The rule is one line — **the person's answer wins** — and only the
+server's own state may override it (a reset token in hand, an account
+waiting on its letter), because those are not preferences, they are
+where the account actually is.
+
+The decision moved into `utils/doorScreen.ts` as a pure function with a
+fixture check (`pnpm check` in `app/`, alongside the pin lifecycle), for
+the same reason the pin lifecycle lives there: every line of the old
+version read as defensible on its own, and the bug only appeared in a
+sequence. The check is mutation-tested — reintroducing an override of
+`register` fails it.
+
+### D-97 · The language switch at the gate
+*`app/components/ui/LangPill.tsx`, `app/app/(tabs)/index.tsx`*
+
+For the open beta: the first screen of the app was the one screen whose
+language could not be changed. The toggle lives in the profile, which is
+behind the door — so an English speaker met a Ukrainian dog asking a
+Ukrainian question with a Ukrainian registration form behind it, and the
+control that would have fixed that was on the far side of the thing they
+were stuck on. Both languages were already written and shipped; only the
+way to reach one of them was missing.
+
+The gate deliberately bubbles ALL of its chrome out — the logo included
+— so that nothing on screen can answer the dog behind the ring's back.
+The language switch is the one exception, and it earns it by answering
+nothing: it changes the language the question is asked in, not the
+answer. It shows only while the person is not through the door
+(`door !== 'open'`, or a door sheet up), since everyone else has the
+profile; `door === null` means the server has not answered yet and shows
+nothing, the same rule the ring itself uses, so a returning walker never
+sees the pill flash.
+
+The pill moved out of the profile into a shared component rather than
+being written twice — the second copy is how the first drifts (D-93).
+It sits outside the HUD row's flow on purpose: that row is a
+space-between pair, and a third child would shove the status pill
+sideways for the 360 ms it pops back in once the door opens.

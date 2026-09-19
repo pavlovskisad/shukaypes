@@ -23,6 +23,7 @@
 
 import { create } from 'zustand';
 import type { DoorState, Me } from '../services/api';
+import type { DoorScreen as PickedScreen, DoorSheet } from '../utils/doorScreen';
 
 interface AccessState {
   inviteRequired: boolean;
@@ -35,9 +36,6 @@ interface AccessState {
   // A password-reset token picked out of the URL at boot; the door
   // opens on the new-password screen while one is held.
   resetToken: string | null;
-  // Which screen the door should open on when it has a choice: after
-  // a logout the person wants to log in, not register again.
-  doorPrefer: 'login' | null;
   // A one-line notice for the door to show first (a strings.auth key),
   // e.g. that the link they arrived on has expired.
   doorNotice: string | null;
@@ -65,23 +63,22 @@ interface AccessState {
   setDoorSheetTop: (top: number | null) => void;
   setDoorBubbleHeight: (h: number | null) => void;
   setResetToken: (t: string | null) => void;
-  setDoorPrefer: (p: 'login' | null) => void;
   setDoorNotice: (n: string | null) => void;
 }
 
-export type DoorScreen =
-  | 'register'
-  | 'verify'
-  | 'login'
-  | 'forgot'
-  | 'forgotSent'
-  | 'reset'
-  | 'avatar'
-  | 'avatarDone';
+// What the sheet is SHOWING — the door's own screens plus
+// 'avatarDone', which is a stage of the portrait step rather than a
+// screen the sheet can be opened on. The dog on the map says the line
+// for whichever this is.
+export type DoorScreen = PickedScreen | 'avatarDone';
 
 // 'avatar' is the step after the door (D-72): the pet's portrait,
 // asked once, right after registering, and skippable.
-export type DoorSheet = 'register' | 'login' | 'verify' | 'reset' | 'avatar';
+//
+// Re-exported from the picker rather than written twice: which screens
+// the sheet can be opened ON, and which screen an open then lands on,
+// are the same question, and the answer lives in one place (D-96).
+export type { DoorSheet };
 
 // Whether the portrait step has anything to ask: the server can draw
 // one and none has been drawn. A pet is NOT required — the owner found
@@ -119,7 +116,6 @@ export const useAccessStore = create<AccessState>((set) => ({
   me: null,
   doorNudge: 0,
   resetToken: null,
-  doorPrefer: null,
   doorNotice: null,
   doorSheet: null,
   doorScreen: null,
@@ -141,7 +137,6 @@ export const useAccessStore = create<AccessState>((set) => ({
   setDoorBubbleHeight: (doorBubbleHeight) =>
     set((s) => (s.doorBubbleHeight === doorBubbleHeight ? {} : { doorBubbleHeight })),
   setResetToken: (resetToken) => set({ resetToken }),
-  setDoorPrefer: (doorPrefer) => set({ doorPrefer }),
   setDoorNotice: (doorNotice) => set({ doorNotice }),
 }));
 
