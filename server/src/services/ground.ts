@@ -72,12 +72,38 @@ const rowToPiece = (r: {
 // Every piece whose box overlaps the view. Boxes rather than true geometry:
 // a piece just outside the circle costs one polygon in the payload, and the
 // alternative is a geometry library on the request path.
+//
+// NEAREST FIRST, AND THAT ORDER IS THE WHOLE POINT OF THIS FUNCTION.
+//
+// It used to have none, and the constant's own comment said what that
+// would cost once the box held more pieces than the cap: "the overflow
+// dropped here is an ARBITRARY subset — the sort never sees it — and
+// ground would vanish in patches rather than by distance." That is
+// exactly what it did. Postgres is free to return a different arbitrary
+// LIMIT-many rows each time the same query runs, so the map was drawing
+// a different subset every sync: districts blinking in and out, the
+// walker's OWN paint among them, and a piece tapped from the standing
+// landing on bare map.
+//
+// The cap was sized when ~100-150 pieces existed, against 30 bots. There
+// are 120 bots now and 120+ owners holding ground, so the cap became
+// binding and the missing ordering became visible.
+//
+// Ordered by squared distance from the view centre, with longitude
+// scaled by cos(lat) so a degree of each counts for its real length.
+// Squared because a sort does not need the square root, and degrees
+// because the comparison is within one city.
 export async function groundIn(box: {
   minLat: number;
   maxLat: number;
   minLng: number;
   maxLng: number;
 }): Promise<GroundPiece[]> {
+  const cLat = (box.minLat + box.maxLat) / 2;
+  const cLng = (box.minLng + box.maxLng) / 2;
+  const lngScale = Math.cos((cLat * Math.PI) / 180);
+  const dLat = sql`((${schema.territoryGround.minLat} + ${schema.territoryGround.maxLat}) / 2 - ${cLat})`;
+  const dLng = sql`(((${schema.territoryGround.minLng} + ${schema.territoryGround.maxLng}) / 2 - ${cLng}) * ${lngScale})`;
   const rows = await db
     .select({
       id: schema.territoryGround.id,
@@ -95,6 +121,7 @@ export async function groundIn(box: {
         lte(schema.territoryGround.minLng, box.maxLng),
       ),
     )
+    .orderBy(sql`${dLat} * ${dLat} + ${dLng} * ${dLng}`)
     .limit(T.groundPiecesInView);
   return rows.map(rowToPiece);
 }

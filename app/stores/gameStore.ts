@@ -245,6 +245,37 @@ interface GameState {
   // the lists whose interplay is exactly what keeps biting the spot
   // modal.
   focusedTerritory: { ownerId: string; ring: LatLng[]; mark?: LatLng; pos?: LatLng } | null;
+  // THE DOG YOU WENT TO SEE, KEPT ON SCREEN UNTIL YOU LEAVE.
+  //
+  // focusedTerritory above is a camera command: it flies and clears. That
+  // was the whole of the jump, and it left you looking at a stranger's
+  // district with neither the district nor the stranger on it — their
+  // ground because the sync is centred on the WALKER and the far pieces
+  // are what the view cap drops, and the dog itself because presence only
+  // carries dogs that are online right now.
+  //
+  // So the jump pins what it went to see. Everything here comes off the
+  // board row that was tapped, so there is no second fetch; the ring is
+  // drawn if the sync did not supply that owner's ground, and the dog is
+  // shown at its freshest known spot whether or not it is walking.
+  //
+  // It is NOT a selection to be defended from every clear-list: one
+  // distance check retires it when the walker's view moves away, and
+  // leaving the map screen drops it too.
+  pinnedGuest: {
+    ownerId: string;
+    name: string;
+    owner?: string | null;
+    avatarUrl: string | null;
+    bot: boolean;
+    ring: LatLng[];
+    // Where to draw the dog: live presence if the board had it, else its
+    // freshest mark, else the middle of the ring.
+    at: LatLng;
+    // False when `at` is a last-known spot rather than a live one — the
+    // marker says so rather than implying the dog is standing there now.
+    live: boolean;
+  } | null;
   // The landmarks this walker hearted. Loaded once per session from
   // /lore/favourites; the heart on a bubble reads membership from here
   // and toggles optimistically.
@@ -442,6 +473,7 @@ interface GameState {
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
   setFocusedTerritory: (v: { ownerId: string; ring: LatLng[]; mark?: LatLng; pos?: LatLng } | null) => void;
+  setPinnedGuest: (v: GameState['pinnedGuest']) => void;
   loadLoreFavourites: () => Promise<void>;
   toggleLoreFavourite: (lore: LoreRef) => Promise<void>;
   setFocusedLore: (lore: LoreRef | null) => void;
@@ -587,6 +619,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   spotsLoaded: false,
   selectedSpotId: null,
   focusedTerritory: null,
+  pinnedGuest: null,
   loreFavourites: [],
   loreFavouritesLoaded: false,
   focusedLore: null,
@@ -1228,6 +1261,7 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
   setFocusedTerritory: (focusedTerritory) => set({ focusedTerritory }),
+  setPinnedGuest: (pinnedGuest) => set({ pinnedGuest }),
 
   loadLoreFavourites: async () => {
     try {

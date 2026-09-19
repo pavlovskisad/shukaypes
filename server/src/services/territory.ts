@@ -748,11 +748,28 @@ export async function fetchMapTerritory(
   // revalidate cache that existed only to stop it running every time. All
   // of that now happens once, when a dog marks, because the answer is
   // stored instead of derived.
-  const [pieces, all] = await Promise.all([
+  // YOUR OWN GROUND IS NEVER SUBJECT TO THE VIEW CAP.
+  //
+  // It used to come through groundIn like everyone else's, which meant
+  // the walker's own paint competed for the same 320 rows as the whole
+  // city's and could simply not be in the subset that came back — so a
+  // person's own territory took several syncs to appear, or appeared and
+  // then went again. Somebody else's district blinking is a bug; your
+  // own doing it is the app telling you that you did not walk where you
+  // walked.
+  //
+  // It is a second indexed read on an owner-keyed index, and it is
+  // bounded by your own play rather than by the city's, so it cannot be
+  // the thing that grows without limit.
+  const [pieces, mine, all] = await Promise.all([
     groundIn(box),
+    groundOf(userId),
     marksNear(pos, radius, { limit: T.partitionMarkLimit }),
   ]);
-  if (pieces.length === 0 && all.length === 0)
+  // `mine` counts here too: it is read outside the box, so a walker whose
+  // own ground is all off-screen and who has no marks nearby would
+  // otherwise get the empty answer and lose it again.
+  if (pieces.length === 0 && mine.length === 0 && all.length === 0)
     return { marks: [], shapes: [], rivalMarks: [], home: false, rivals: [] };
 
   const asShape = (piece: GroundPiece): TerritoryShape => ({
@@ -784,9 +801,17 @@ export async function fetchMapTerritory(
   // as a hole beside you. Nobody vanishes wholesale any more.
   const shapes: TerritoryShape[] = [];
   const rivalPieces: { ownerId: string; shape: TerritoryShape; d: number }[] = [];
+  // Own pieces come from the uncapped read above. Deduped by id because
+  // the in-view query returns them too whenever they are in the box, and
+  // drawing a polygon twice doubles its multiply stain.
+  const ownIds = new Set<string>();
+  for (const piece of mine) {
+    ownIds.add(piece.id);
+    shapes.push(asShape(piece));
+  }
   for (const piece of pieces) {
     if (piece.userId === userId) {
-      shapes.push(asShape(piece));
+      if (!ownIds.has(piece.id)) shapes.push(asShape(piece));
       continue;
     }
     // Nearest corner. A big piece whose centre is far can still have an

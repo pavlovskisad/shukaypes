@@ -234,14 +234,24 @@ export default function TasksScreen() {
   // board is a server read that may be a poll old, the account is live.
   const myAvatarUrl = useAccessStore((s) => s.me?.avatarUrl ?? null);
   const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
+  const setPinnedGuest = useGameStore((s) => s.setPinnedGuest);
   const setAppMode = useGameStore((s) => s.setAppMode);
+  // Your own row flies the camera and pins NOTHING: your dog is the one
+  // the map already draws, and your ground now comes through the
+  // uncapped own-ground read, so there is nothing a pin could add.
+  const onFocusOwnGround = useCallback(
+    (ring?: { lat: number; lng: number }[]) => {
+      if (!ring || ring.length < 3) return;
+      if (useGameStore.getState().appMode !== 'play') setAppMode('play');
+      setFocusedTerritory({ ownerId: 'you', ring });
+      router.push('/');
+    },
+    [setFocusedTerritory, setAppMode, router],
+  );
+
   const onPickOwner = useCallback(
-    (
-      ownerId: string,
-      ring?: { lat: number; lng: number }[],
-      mark?: { lat: number; lng: number },
-      pos?: { lat: number; lng: number },
-    ) => {
+    (row: TerritoryRanking) => {
+      const { userId: ownerId, mainPiece: ring, lastMark: mark, pos } = row;
       if (!ring || ring.length < 3) return;
       // INTO THE TERRITORY VIEW FIRST, then the flight.
       //
@@ -256,9 +266,36 @@ export default function TasksScreen() {
       // the mode you are already in would wipe the screen for nothing.
       if (useGameStore.getState().appMode !== 'play') setAppMode('play');
       setFocusedTerritory({ ownerId, ring, ...(mark ? { mark } : {}), ...(pos ? { pos } : {}) });
+      // PIN WHAT THE JUMP WENT TO SEE.
+      //
+      // The camera command above lands you there and clears. On its own
+      // that leaves a stranger's district with neither the district nor
+      // the stranger drawn: their ground because the map's sync is
+      // centred on the walker and far pieces are what the cap drops,
+      // their dog because presence only carries dogs that are online.
+      //
+      // Everything the pin needs is already in this row — the board drew
+      // the silhouette from `mainPiece` and the area from `areaM2` — so
+      // this costs no request. The dog stands at its live position when
+      // the board had one, otherwise at its freshest mark, and the
+      // marker says which.
+      const at = pos ?? mark ?? {
+        lat: ring.reduce((a, p) => a + p.lat, 0) / ring.length,
+        lng: ring.reduce((a, p) => a + p.lng, 0) / ring.length,
+      };
+      setPinnedGuest({
+        ownerId,
+        name: row.name,
+        owner: row.owner ?? null,
+        avatarUrl: row.avatarUrl ?? null,
+        bot: row.bot,
+        ring,
+        at,
+        live: !!pos,
+      });
       router.push('/');
     },
-    [setFocusedTerritory, setAppMode, router],
+    [setFocusedTerritory, setPinnedGuest, setAppMode, router],
   );
 
   useFocusEffect(
@@ -483,7 +520,7 @@ export default function TasksScreen() {
                 here is what you hold anyway. */}
             <View style={styles.boardYouRow}>
               <Pressable
-                onPress={() => onPickOwner('you', yourPiece)}
+                onPress={() => onFocusOwnGround(yourPiece)}
                 disabled={!yourPiece || yourPiece.length < 3}
                 style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
               >
@@ -513,7 +550,7 @@ export default function TasksScreen() {
                   return (
                     <Pressable
                       key={row.userId}
-                      onPress={() => onPickOwner(row.userId, row.mainPiece, row.lastMark, row.pos)}
+                      onPress={() => onPickOwner(row)}
                       disabled={!row.mainPiece || row.mainPiece.length < 3}
                       style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
                     >
@@ -756,7 +793,7 @@ export default function TasksScreen() {
         onClose={() => setBoardAll(null)}
         onPick={(row) => {
           setBoardAll(null);
-          onPickOwner(row.userId, row.mainPiece, row.lastMark, row.pos);
+          onPickOwner(row);
         }}
       />
       <LeaderboardModal
