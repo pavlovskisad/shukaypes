@@ -6,6 +6,8 @@ import { redis } from '../db/redis.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, pointToSegmentDistanceM, type LatLng } from '../utils/geo.js';
 import { markIfDue, type MarkResult } from '../services/territory.js';
+import { judgeSegment, planCatchUpMarks } from '../services/catchUp.js';
+import { writeCorridor } from '../services/walkCorridor.js';
 import { selfMeta } from '../services/presence.js';
 import { limitPolling } from '../lib/rateLimit.js';
 import { inKyivBbox } from '../lib/servedArea.js';
@@ -37,7 +39,9 @@ const PATH_FOOD_RADIUS_M = 130;
 
 // Two safety nets so a malicious / glitched client can't farm paws by
 // claiming a wide segment:
-//   - segments longer than this are treated as a teleport (skip).
+//   - a segment covered faster than a person walks is a teleport (skip);
+//     this ceiling is the backstop under that test, not the test itself.
+//     See services/catchUp.ts and balance.walk.
 //   - if Redis has no recorded "last position" for the user yet, this
 //     is the first sync ever — we just record it and skip the sweep.
 const MAX_SEGMENT_M = 5000;
@@ -145,18 +149,37 @@ const plugin: FastifyPluginAsync = async (app) => {
     const lastPos: LatLng = { lat: last.lat, lng: last.lng };
     const segLen = distanceMeters(lastPos, current);
 
-    // Looks like a teleport — skip the sweep AND the territory mark (the
-    // whole point of the anchor is that you can't claim ground you didn't
-    // walk to), but still bump the anchor so later syncs work from here.
-    if (segLen > MAX_SEGMENT_M) {
+    // WAS THIS WALKED? The anchor carries the clock it was written with,
+    // so the server can ask at what pace the displacement was covered
+    // rather than only how far it reached. A distance test alone passed
+    // five kilometres in ten seconds and refused six walked over two
+    // hours; speed separates a walk from a car ride, which is the thing
+    // actually being asked. Segments under the jitter floor skip the
+    // test entirely and behave exactly as they always did.
+    //
+    // Failing it skips the sweep AND the territory mark — the whole
+    // point of the anchor is that you can't claim ground you didn't walk
+    // to — but still bumps the anchor so later syncs work from here.
+    const elapsedMs = Date.now() - last.ts;
+    const verdict = judgeSegment(segLen, elapsedMs, MAX_SEGMENT_M);
+    if (!verdict.ok) {
       await writeLastPos(userId, current);
       return {
         tokensCollected: 0,
         foodConsumed: 0,
+        // Kept as the wire value the client already knows; the reason it
+        // was refused is in the log line, not the payload.
         reason: 'segment-too-long',
         marked: null,
       };
     }
+
+    // Remember the stretch for /quests/advance, which otherwise tests a
+    // single point and silently misses a waypoint strolled past with the
+    // screen off. One small Redis SET alongside the anchor write that
+    // already happens on this path, and only when the walker actually
+    // moved — a phone sitting on a table writes nothing.
+    if (segLen >= 5) await writeCorridor(userId, lastPos, current);
 
     // Territory: the dog decides whether to mark here. Runs on every
     // validated position — including standing still, since a dog marking
@@ -176,6 +199,57 @@ const plugin: FastifyPluginAsync = async (app) => {
         : null;
     const markPos =
       dogRaw && distanceMeters(dogRaw, current) <= MAX_DOG_OFFSET_M ? dogRaw : current;
+
+    // WHAT THE DOG MISSED WHILE THE PHONE WAS AWAY.
+    //
+    // On a long, speed-verified segment the walker covered ground the
+    // dog never got to mark, because nothing was running to ask it. Lay
+    // the marks it would have laid, backdated across the gap — capped by
+    // the same cooldown and spacing a live walk obeys, so this can never
+    // produce a denser claim than walking it with the screen on.
+    //
+    // Oldest first, and BEFORE the live mark below: each one stamps
+    // lastMarkAt, so running them in any other order would have the
+    // present block the past. The live mark then still lands — the plan
+    // leaves n+1 gaps between the two endpoints and every one of them
+    // clears the cooldown and the spacing, the last gap included, so
+    // the walk ends on a mark where the walker is actually standing.
+    //
+    // Never allowed to break the sweep, same as the live mark: a walk's
+    // paws and bones must not be lost to a territory failure.
+    let caughtUp = 0;
+    if (verdict.kind === 'walked') {
+      const planned = planCatchUpMarks(lastPos, current, last.ts, elapsedMs);
+      if (planned.length) {
+        const name = await selfMeta(userId)
+          .then((m) => m.name)
+          .catch(() => null);
+        if (name) {
+          for (const p of planned) {
+            try {
+              const r = await markIfDue(userId, p.pos, name, new Date(p.at));
+              if (r.marked) caughtUp++;
+            } catch (err) {
+              req.log.warn({ err }, '[territory] catch-up mark failed');
+              break;
+            }
+          }
+        }
+      }
+      if (caughtUp) {
+        req.log.info(
+          {
+            kind: 'walk_catchup',
+            marks: caughtUp,
+            planned: planned.length,
+            segM: Math.round(segLen),
+            gapS: Math.round(elapsedMs / 1000),
+            speedMps: Number(verdict.speedMps.toFixed(2)),
+          },
+          `walk: caught up ${caughtUp} mark(s) over ${Math.round(segLen)}m walked away from the screen`,
+        );
+      }
+    }
 
     // The raider's name is stamped onto any raid this mark causes, so the
     // victim's notification can say who. Same name the map labels them

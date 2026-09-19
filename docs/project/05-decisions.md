@@ -2085,3 +2085,75 @@ bluntness, are `tokensInUserArea` (20), `userAreaMovementThresholdM`
 (300) and `tokenExpireMinutes` (5, so a paw behind you dies before the
 next top-up can count it). Left for the owner with the numbers in hand,
 which is the whole reason the panel exists.
+
+### D-87 · A pocketed phone stops the clock, not the walk ✅
+*`services/catchUp.ts`, `services/walkCorridor.ts`, `routes/path.ts`,
+`routes/quests.ts`, `config/balance.ts` → `walk`*
+
+There is no background geolocation on the web. Not in the PWA, not in
+the Mini App — it is the same webview — and a Service Worker cannot
+reach the Geolocation API at all. A walker who locks their screen stops
+sending fixes, and the next one arrives minutes and hundreds of metres
+later. The open beta ships as a PWA (D-02 stands, and the owner's reason
+is that a beta needs to move fast), so this is a permanent condition of
+the product, not a bug to fix.
+
+Measured first, because the belief going in was wrong twice over. Paws
+and bones were never the problem: `/collect/path` already sweeps the
+whole segment and credits them. Nor did territory leave a hole — the
+mark still lands where the phone comes back out. What it loses is
+**density**: one mark where a live walk would have laid a dozen. And the
+thing nobody was looking at turned out to be worse than either.
+
+**The gate was a distance test with no clock in it.** `segLen > 5000m =
+teleport` passed five kilometres covered in ten seconds and refused six
+walked over two hours. Speed is the honest test, and the anchor already
+carried the timestamp to compute it. If a displacement was covered at a
+walking pace then the walker really did cover that ground on foot; the
+only thing in doubt is *which streets*, and the dog's own 160 m roam
+(`MAX_DOG_OFFSET_M`) already concedes exactly that much. Marks have
+never recorded where a person stood — they record where the dog was.
+
+That is the licence for the catch-up. On a speed-verified segment the
+server lays the marks the dog would have laid, backdated across the gap,
+with the count decided by **both gates the live mechanic already
+enforces** — one mark per `cooldownMs` of gap, one per `minDistanceM` of
+displacement, each dropped one below its ceiling so the *spacing between*
+the results still clears the rule. Nothing new is invented; a catch-up
+walk claims exactly what the same walk with the screen on would have
+claimed, and never more. `markIfDue` took an optional `at` to make it
+possible, because without backdating the first catch-up mark would stamp
+the present onto the cooldown and refuse every mark after it.
+
+Positions are a straight line, deliberately. Snapping to a route would
+assert one specific path out of several; the line asserts only the
+displacement, which is the part that can be proved. It also errs safely —
+walk a loop around one block and the endpoints sit close together, so the
+plan is short and *under*-claims.
+
+**The one nobody was looking at: quest waypoints.** `/quests/advance`
+tested a single point against the reach radius, so a walker who strolled
+straight through a stop with the screen off advanced nothing, silently.
+On a lost-pet search that is the half of the product with real stakes
+failing to record that somebody searched there. It now falls back to the
+corridor `/collect/path` last swept — the same speed-verified stretch it
+credited paws along, minutes old at most, both endpoints anchors the
+server wrote itself. Its own Redis record rather than the path anchor,
+because the anchor collapses onto the current position the moment the
+sync runs and the two calls are not ordered.
+
+Verified against a local stack, not reasoned: a 700 m walk over ten
+minutes laid **nine marks where the old code laid one** (eight catch-up
+at the cap, plus the live one), spaced 77.7 m and 66.7 s apart — both
+comfortably above the 40 m / 20 s rules. The same 700 m in sixty seconds,
+in two minutes (a bike), and 4 km in five minutes all claimed **nothing**.
+A 20 m foreground sync behaved exactly as before. A waypoint 30 m off the
+line was credited from 351 m away; one 477 m away and off the corridor
+was still refused. `pnpm check:catch-up` holds the spacing invariant
+across 10,908 generated plans.
+
+**Not done, deliberately.** The wake lock and its pocket mode — which
+stop the screen locking mid-walk and are the *first* line of defence,
+this being the second — and the walk session with a visible pause, which
+is what makes the limitation legible to the walker rather than silent.
+Both were scoped and neither is in this change.

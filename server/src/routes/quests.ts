@@ -2,12 +2,13 @@ import type { FastifyPluginAsync } from 'fastify';
 import { and, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema, type StoredWaypoint } from '../db/index.js';
-import { distanceMeters, type LatLng } from '../utils/geo.js';
+import { distanceMeters, pointToSegmentDistanceM, type LatLng } from '../utils/geo.js';
 import {
   generateDetectiveWaypoints,
   WAYPOINT_REACH_RADIUS_M,
 } from '../services/quest.js';
 import { snapWaypointsToPlaces } from '../services/questPlaces.js';
+import { readCorridor } from '../services/walkCorridor.js';
 import {
   narrateQuestStart,
   narrateWaypointReached,
@@ -242,12 +243,47 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { error: 'no waypoint at current index' };
     }
 
+    // REACHED IT, OR WALKED STRAIGHT PAST IT.
+    //
+    // The point test is the live case: you are standing at the stop and
+    // the app is watching. It is also the only test there used to be,
+    // which meant a walker whose screen locked between two stops
+    // advanced nothing — they passed within a few metres of the
+    // waypoint, the app was asleep, and by the time it woke they were a
+    // street away and too far to count. Nothing said so. On a lost-pet
+    // search, that is the half of the product with real stakes quietly
+    // failing to record that somebody searched there.
+    //
+    // So fall back to the corridor /collect/path last swept: the same
+    // stretch of street it credited paws and bones along, speed-verified
+    // as walked and minutes old at most. If the waypoint sits inside the
+    // reach radius OF THAT LINE, it was walked past, and the quest owes
+    // the walker the stop. Nothing here trusts the client for the
+    // corridor — both of its endpoints are anchors the server wrote.
     const userPos: LatLng = { lat, lng };
+    let viaCorridor = false;
     if (!force) {
       const dist = distanceMeters(userPos, waypoint.position);
       if (dist > WAYPOINT_REACH_RADIUS_M) {
-        reply.code(403);
-        return { error: 'too far from waypoint', distM: Math.round(dist) };
+        const corridor = await readCorridor(req.userId);
+        const alongPath = corridor
+          ? pointToSegmentDistanceM(waypoint.position, corridor.from, corridor.to)
+          : Infinity;
+        if (alongPath > WAYPOINT_REACH_RADIUS_M) {
+          reply.code(403);
+          return { error: 'too far from waypoint', distM: Math.round(dist) };
+        }
+        viaCorridor = true;
+        req.log.info(
+          {
+            kind: 'quest_corridor_advance',
+            questId,
+            index: row.currentIndex,
+            standingM: Math.round(dist),
+            alongPathM: Math.round(alongPath),
+          },
+          'quest: waypoint credited from the walked corridor, not the standing position',
+        );
       }
     }
 
@@ -332,7 +368,9 @@ const plugin: FastifyPluginAsync = async (app) => {
       }
     }
 
-    return { quest: rowToQuest(updated!), completed: done, narration };
+    // `viaCorridor` lets the client say the dog noticed on the way past
+    // rather than pretending the walker is standing there now.
+    return { quest: rowToQuest(updated!), completed: done, narration, viaCorridor };
   });
 
   app.post<{ Body: AbandonBody }>('/quests/abandon', limitInteractive, async (req, reply) => {

@@ -259,7 +259,11 @@ async function placeMark(
   userId: string,
   raiderName: string,
   pos: LatLng,
-  opts: { contest?: boolean } = {},
+  // `at` backdates both the mark's own createdAt and the lastMarkAt it
+  // leaves on companion_state — see the note on markIfDue. Without the
+  // second of those, a catch-up mark would stamp the present onto the
+  // cooldown and refuse its own successor.
+  opts: { contest?: boolean; at?: Date } = {},
 ): Promise<{ enclosed: boolean; renewed: boolean; stolen: number; captured: boolean }> {
   // Everything within the wider of the two radii, in one query.
   const scanM = Math.max(T.refreshM, T.contestM);
@@ -303,7 +307,7 @@ async function placeMark(
   const enclosed = cluster.length === T.shapeMinMarks;
   const hull = cluster.length >= T.shapeMinMarks ? concaveHull(cluster, T.shapeEdgeMaxM) : [];
 
-  const now = new Date();
+  const now = opts.at ?? new Date();
   await db.transaction(async (tx) => {
     await tx.insert(schema.territoryMarks).values({
       id: nanoid(),
@@ -450,10 +454,26 @@ async function standsOnHeldGround(userId: string, pos: LatLng): Promise<boolean>
   return (await ownerAt(pos)) === userId;
 }
 
+// `at` BACKDATES THE MARK, and exists for exactly one caller.
+//
+// A walk whose phone was in a pocket arrives as one long segment, and
+// /collect/path lays the marks the dog would have made along it
+// (services/catchUp.ts). Those marks did not happen now — they happened
+// spread across the minutes the walker was out of contact — and both
+// gates below read a clock: the cooldown, and the lastMarkAt this write
+// leaves behind for the next one. Passing the real time for each would
+// make the first catch-up mark block every mark after it.
+//
+// It cannot be used to claim anything a live walk could not. The caller
+// derives each timestamp from the gap the SERVER measured between two
+// anchors it wrote itself, and spaces them at no less than the cooldown;
+// everything else on the path — the spacing rule, water, own-ground, the
+// contest — is the same code a foreground mark runs.
 export async function markIfDue(
   userId: string,
   pos: LatLng,
   raiderName: string,
+  at?: Date,
 ): Promise<MarkResult> {
   const [state] = await db
     .select({
@@ -469,7 +489,7 @@ export async function markIfDue(
 
   if (!state) return { marked: false, reason: 'no-state' };
 
-  const now = Date.now();
+  const now = at ? at.getTime() : Date.now();
 
   // Cooldown + spacing first — they're the common case and cost nothing
   // to check, so a dog mid-cooldown never even reads as "grumpy".
@@ -498,7 +518,7 @@ export async function markIfDue(
     return { marked: false, reason: 'own-ground' };
   }
 
-  const outcome = await placeMark(userId, raiderName, pos);
+  const outcome = await placeMark(userId, raiderName, pos, { at });
 
   return {
     marked: true,
