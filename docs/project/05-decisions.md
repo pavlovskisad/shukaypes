@@ -2378,3 +2378,40 @@ the argument for taking it out of the effect.
 **Honest limit:** the fixture proves the RULE, on the sequence I believe
 the app produces. It does not prove that sequence. The feature still
 wants one tap on a real phone.
+
+### D-92 · The jump frames the district and opens the card ✅
+*`MapView.tsx` — the `focusedTerritory` effect*
+
+Two changes the owner asked for, and the first reverses a decision made
+in this file.
+
+**The camera surveys instead of landing.** The jump used to ease to a
+fixed zoom 16 on the dog — "down INTO the territory, not a survey of
+it". The survey is what the jump is for: the row you tapped shows a
+silhouette and an area, and arriving on a patch of street with that
+shape running off every edge does not show you the thing you went to
+see. It now fits the ring, with the same padding convention the quest
+framing already uses.
+
+The DOG is inside the bounds, not just the ring. A live owner can be out
+walking well off their own ground, and framing the ring alone would put
+the sprite off screen at the moment you went looking for it. `maxZoom`
+16.5 so a small holding is not slammed into the pavement — 0.02 km²
+framed tight is a street corner, not a district. Bottom padding clears
+the card below.
+
+**And the card opens**, because "who is this" is the other half of the
+question the standing asks. `PlayerCard` reads `/players/:id`, a plain
+server read, so it works for an owner who is offline — which is most of
+the ones worth jumping to.
+
+**One interaction that had to be fixed with it.** The pin's retirement
+(D-91) measured the viewport against the DOG. Now that the camera fits
+the district, it settles on the middle of that box, which on a big
+holding — or an owner walking far from their own ground — can be more
+than `PIN_KEEP_M` from the dog. The pin would never register as arrived,
+and a pin that never arrives can never be retired for going away: it
+would sit there until the map screen was left. Retirement now measures
+the nearer of the dog and the ring's centroid. The rule itself is
+untouched — it still takes one distance — so `pnpm check` still covers
+it.
