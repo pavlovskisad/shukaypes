@@ -2447,3 +2447,70 @@ earlier read still in flight would otherwise land after it.
 Caught on an adversarial re-read of the diff rather than in testing —
 the first cut guarded on "is this still the pinned owner", which is not
 the same question and would have let the earlier tap win.
+
+### D-94 · Standing still fed the dog ✅
+*`services/spawn.ts` → `dropInsideVacuum`*
+
+The owner, on an account he had only ever logged into to look at the UI:
+**168 paws collected and 90 bones eaten over 8 days.** About eleven
+bones a day without playing.
+
+**Auto-collect takes anything within 90 m (paws) or 130 m (bones) of the
+walker, and never asks whether they moved.** So any pool that tops up
+near where somebody is STANDING is a loop — spawn, vacuum, spawn,
+vacuum, on that pool's own cooldown. The counter climbs and nothing is
+walked.
+
+This was known and fixed once. `userAreaInnerRadiusM` exists precisely
+for it, and its comment says so: "the 15s topup keeps dropping new paws
+inside the 90m auto-collect radius and they get vacuumed instantly,
+ticking the counter up while the user is standing still." But the guard
+was written as a property of THAT pool, applied at one call site. The
+other three — dog-zone paws, park paws, park bones — scatter around
+their own anchor with no idea where the walker is.
+
+It is not a property of a pool. It is a property of spawning near a
+person, so it now sits at the last step every pool passes through.
+
+**Reproduced and fixed, on the same harness.** A walker standing still
+with a park 60 m away, six rounds with the pool cooldowns cleared
+between them the way real time would clear them:
+
+```
+BEFORE  pawsVacuumed=0  bonesVacuumed=6
+AFTER   pawsVacuumed=0  bonesVacuumed=0
+```
+
+One bone per cooldown, forever, for standing near a park. That is the
+eleven-a-day.
+
+**What is NOT explained, and should not be claimed:** the 168 paws. Park
+paws did not farm in the harness — the user-area pool keeps that zone at
+its ceiling, so the park pool never tops up — and the dog-zone path could
+not be exercised because a hand-seeded pet does not pass the placement
+confidence filter. The same guard now covers both by inspection, but no
+paw leak was demonstrated, so none is claimed fixed. `collect_events`
+records every pickup with its reason and position; grouping that account's
+rows by reason, and by distance from where it sits, would name the source
+exactly.
+
+### D-95 · The distance counter has never worked ❗
+*`users.total_distance_meters`*
+
+Found while checking whether "пройдено 0 m" on that same screen was
+evidence. It is not. `total_distance_meters` is read in four places
+(`mapData`, `profile`, `state`, `accounts`) and zeroed by `wipe-stats`.
+**Nothing in the codebase ever writes it.** It reads 0 for everybody and
+always has, including for somebody who walked fifty kilometres.
+
+So the screenshot did not show a walker who had not walked; it showed a
+dead counter next to a real one. The spawn finding above rests on the
+owner's own account of what he did and on the reproduction, not on that
+zero.
+
+`/collect/path` already computes `segLen` for every speed-verified
+segment (D-87/D-88), which is exactly the number this wants and exactly
+where it belongs. Left unfixed pending the owner's word, because it is a
+separate change from the spawn loop — but it is the instrument that makes
+"does the economy track walking" answerable at all, so it is worth doing
+soon.
