@@ -2335,3 +2335,46 @@ fix, on the same data.
 (180) themselves. The payload is ~1.7KB per piece, so raising them is a
 real trade rather than a free dial, and the territory panel (D-89) now
 reports the live piece count — which is the number that should decide it.
+
+### D-91 · The pin that retired before the camera arrived ✅
+*`utils/pinLifecycle.ts` (+ `.check.ts`), `MapView.tsx`*
+
+D-90's pinned guest worked on the second tap and often not the first:
+the dog appeared without its ground, or nothing appeared at all. Two
+faults, both of the same kind — **state read before it is true**, which
+is exactly the kind a static reading of the condition cannot see.
+
+**The pin retired mid-flight.** `viewportCenter` is derived from
+`mapBounds`, which only updates once the map settles. At the instant the
+pin is set it still holds the OLD centre, beside the walker and
+kilometres from the district being flown to — so the distance test fired
+at once and let the pin go before the camera got there. The second tap
+only appeared to work because the first had left the viewport near the
+dog. Replaying the shipped rule against the real sequence retires it at
+step 2 of a five-step tap.
+
+Arrival is now a precondition rather than an assumption: the viewport
+has to come within `PIN_KEEP_M` once before going back outside it can
+mean "you went away". Same shape as D-90's arrived-first guard for the
+screen — a latch has to be set before the condition reading it means
+anything.
+
+**And the dog was thrown away when nobody else was around.**
+`otherWalkers` opened with `if (!MULTIPLAYER || !onMapScreen ||
+!nearbyPlayers.length) return []`, and the pinned guest was appended
+after that. A dog worth jumping to is usually offline and across town,
+which is precisely when presence is empty — so the one marker that had
+to be drawn was discarded by a guard meant for a list it was not in.
+
+**The rule is now a pure function with a fixture check** (`pnpm check`,
+which `pnpm -r check` already aggregates; the app gained its first
+`check` script and `tsx` as a devDependency for it). It replays the real
+sequence — set on the tasks tab, router navigating, map focused with a
+stale viewport, bounds briefly null mid-ease, arrival — and asserts the
+pin survives all of it, then retires on panning home, on leaving the
+map, and never on missing bounds. Two shipped bugs in one small rule is
+the argument for taking it out of the effect.
+
+**Honest limit:** the fixture proves the RULE, on the sequence I believe
+the app produces. It does not prove that sequence. The feature still
+wants one tap on a real phone.
