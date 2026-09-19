@@ -59,6 +59,35 @@ function buildTokenRows(userId: string, positions: LatLng[]) {
 // the discs literally stack at the same point on screen.
 const MIN_SPACING_M = 18;
 
+// NOTHING SPAWNS INSIDE THE VACUUM.
+//
+// Auto-collect takes anything within 90m (paws) or 130m (bones) of the
+// walker, without asking whether they moved. So a pool that tops up
+// near where somebody is STANDING is a loop: spawn, vacuum, spawn,
+// vacuum, on whatever cooldown that pool runs. The counter climbs and
+// the distance walked does not.
+//
+// The user-area pool has been guarded against this since it was first
+// seen — `userAreaInnerRadiusM`, whose comment describes exactly this
+// failure. But the guard was written as a property of THAT pool, so the
+// other three never got it: dog-zone paws, park paws and park bones all
+// scatter around their own anchor with no idea where the walker is.
+// Stand within auto-collect range of a park and its bone comes back
+// every poolCooldownMs, forever.
+//
+// Measured on the owner's own account over 8 days: 0 m walked, 168 paws
+// collected, 90 bones eaten. Nobody played. The pools fed the dog.
+//
+// It is not a property of a pool. It is a property of spawning near a
+// person, so it belongs at the last step every pool passes through.
+// `userAreaInnerRadiusM` (130m) is the radius, already sized above both
+// collect radii.
+function dropInsideVacuum(positions: LatLng[], walker: LatLng): LatLng[] {
+  return positions.filter(
+    (p) => distanceMeters(p, walker) > balance.userAreaInnerRadiusM,
+  );
+}
+
 // Drop candidate positions that fall within MIN_SPACING_M of any
 // position in `existing`. Mutates `existing` to include the kept
 // candidates so within a single spawn pass we also don't cluster
@@ -217,7 +246,10 @@ export async function ensureTokensForUser(
     const zoneLive = zoneRows[0]?.live ?? 0;
     if (zoneLive >= balance.tokensPerDogArea) continue;
     const missing = balance.tokensPerDogArea - zoneLive;
-    const positions = scatterInRadius(dogPos, missing, d.zoneRadiusM);
+    const positions = dropInsideVacuum(
+      scatterInRadius(dogPos, missing, d.zoneRadiusM),
+      center,
+    );
     const kept = filterAntiCluster(positions, await loadExisting());
     const rows = buildTokenRows(userId, kept);
     if (rows.length) await db.insert(schema.tokens).values(rows);
@@ -249,7 +281,10 @@ export async function ensureTokensForUser(
     const parkLive = parkRows[0]?.live ?? 0;
     if (parkLive >= balance.tokensPerPark) continue;
     const missing = balance.tokensPerPark - parkLive;
-    const positions = scatterInRadius(park, missing, balance.parkPawRadiusM);
+    const positions = dropInsideVacuum(
+      scatterInRadius(park, missing, balance.parkPawRadiusM),
+      center,
+    );
     const kept = filterAntiCluster(positions, await loadExisting());
     const rows = buildTokenRows(userId, kept);
     if (rows.length) await db.insert(schema.tokens).values(rows);
@@ -328,7 +363,10 @@ export async function ensureFoodForUser(
       const zoneLive = zoneRows[0]?.live ?? 0;
       if (zoneLive >= balance.bonesPerPark) continue;
       const missing = balance.bonesPerPark - zoneLive;
-      const positions = scatterInRadius(park, missing, balance.parkScatterRadiusM);
+      const positions = dropInsideVacuum(
+        scatterInRadius(park, missing, balance.parkScatterRadiusM),
+        center,
+      );
       const kept = filterAntiCluster(positions, await loadExistingFood());
       const rows = kept.map((p) => ({
         id: nanoid(),
