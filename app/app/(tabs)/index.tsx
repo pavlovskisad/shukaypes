@@ -10,6 +10,9 @@ import { Z } from '../../constants/z';
 import { S } from '../../constants/spacing';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
+import { useAccessStore } from '../../stores/accessStore';
+import { LangPill } from '../../components/ui/LangPill';
+import { CHIP } from '../../constants/sizing';
 
 // Logo is the brand anchor in the top-left. Prototype has it roughly
 // pill-height; matching that so it reads as a peer of the status pill
@@ -43,6 +46,22 @@ export default function MapScreen() {
   // the other two rather than by a path of its own.
   const lostPinning = useGameStore((s) => s.lostPinning);
   const immersive = dogCam || gateOpen || lostPinning;
+  // THE ONE CONTROL THAT SURVIVES THE QUESTION — and the only one that
+  // may. Everything else in this row bubbles out at the gate precisely
+  // so that nothing can answer the dog behind the ring's back; the
+  // language switch answers nothing, it only changes the language the
+  // question is asked in. Without it the first screen of the app was
+  // the one screen whose language could not be changed, because the
+  // toggle lives in the profile, behind the door (D-96).
+  //
+  // Only for somebody who is not through that door yet — everyone else
+  // has the profile. `door === null` is "the server has not answered",
+  // NOT "shut": deciding on it would flash a pill at every returning
+  // walker for the length of one /auth/me. Same rule the ring itself
+  // uses in Companion.
+  const door = useAccessStore((s) => s.door);
+  const doorSheet = useAccessStore((s) => s.doorSheet);
+  const preDoor = (door !== null && door !== 'open') || doorSheet !== null;
   // When a logo-targeting hint is showing, pulse the logo so the spoken
   // line has a target: 'map:modes' is the first thing the dog says on an
   // idle screen and points at the control that changes what the screen
@@ -216,6 +235,11 @@ export default function MapScreen() {
             <StatusBar />
           </div>
         </View>
+        {/* Out of the row's flow on purpose: the row is a
+            space-between pair, and a third child would move the status
+            pill sideways for the 360 ms it pops back in once the door
+            opens. Sits on the logo's midline instead. */}
+        {preDoor ? <LangPill style={styles.gateLang} /> : null}
         {/* Quest banner bubbles out in immersive (search) mode too. */}
         <View
           style={styles.questRow}
@@ -274,6 +298,12 @@ const styles = StyleSheet.create({
     // header elements sit comfortably under the OS status bar without
     // crowding it.
     paddingTop: S.xxl,
+  },
+  // The gate's language switch, where the status pill would be.
+  gateLang: {
+    position: 'absolute',
+    right: S.m,
+    top: S.xxl + (HUD_ICON_SIZE - CHIP.height) / 2,
   },
   questRow: {
     flexDirection: 'row',

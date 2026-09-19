@@ -18,10 +18,10 @@ import { HERO, CHIP } from '../../constants/sizing';
 import { MeterPill, CounterPill } from '../../components/ui/StatusBar';
 import { useStrings } from '../../i18n/useStrings';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
-import { useLangStore } from '../../stores/langStore';
 import { CardStack, CARD_W } from '../../components/ui/CardStack';
 import { HandDrawnBar, HandDrawnFrame } from '../../components/ui/HandDrawn';
 import { AccountEditSheet } from '../../components/ui/AccountEditSheet';
+import { LangPill, pillStyles } from '../../components/ui/LangPill';
 
 // Basic stats card for v1 — no skins grid yet (deferred). Pulls
 // aggregate counts from /profile/me on focus, with the live game
@@ -119,11 +119,8 @@ const PORTRAIT_INSET = 0;
 
 export default function ProfileScreen() {
   const t = useStrings();
-  const lang = useLangStore((s) => s.lang);
-  const setLang = useLangStore((s) => s.setLang);
   const companionName = useGameStore((s) => s.companionName);
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
-  const setDoorPrefer = useAccessStore((s) => s.setDoorPrefer);
   const avatarUrl = useAccessStore((s) => s.me?.avatarUrl ?? null);
   const nudgeDoor = useAccessStore((s) => s.nudgeDoor);
   const setAppMode = useGameStore((s) => s.setAppMode);
@@ -136,11 +133,10 @@ export default function ProfileScreen() {
   // to log in (or register) before the map.
   const afterLogout = useCallback(() => {
     setEditOpen(false);
-    setDoorPrefer('login');
     nudgeDoor();
     setAppMode('gate');
     router.navigate('/');
-  }, [setDoorPrefer, nudgeDoor, setAppMode, router]);
+  }, [nudgeDoor, setAppMode, router]);
   const [data, setData] = useState<ProfileData | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Territory standing. Its own fetch rather than a field on /profile/me
@@ -419,22 +415,10 @@ export default function ProfileScreen() {
           />
         </View>
         <View style={styles.langPills}>
-          {/* ONE pill, not two. Two separate buttons for a two-state
-              choice spent a whole extra pill saying what the first one
-              already said — and with «?» beside them the corner was
-              three pills of chrome over the dog's sky. Tapping swaps the
-              language, and the pill reads as the one you are NOT in, the
-              way a language switch is labelled everywhere else. */}
-          <Pressable
-            onPress={() => setLang(lang === 'uk' ? 'en' : 'uk')}
-            onPressIn={popPressableEvent}
-            accessibilityRole="button"
-            accessibilityLabel={lang === 'uk' ? 'Switch to English' : 'Перемкнути на українську'}
-            style={({ pressed }) => [styles.langPill, pressed && { opacity: 0.7 }]}
-          >
-            <HandDrawnFrame radius={CHIP.height / 2} />
-            <Text style={styles.langPillText}>{lang === 'uk' ? 'EN' : 'UA'}</Text>
-          </Pressable>
+          {/* The switch itself is a component now — the gate shows the
+              same pill, and two copies is how the first one drifts
+              (D-96). Why it is one pill rather than two lives there. */}
+          <LangPill />
           {/* The about sheet lives here. It used to hang off the
               companion's ring as a «?», and when that ring was cut down
               to the three things you can do on a walk, «what is this
@@ -449,10 +433,10 @@ export default function ProfileScreen() {
             onPressIn={popPressableEvent}
             accessibilityRole="button"
             accessibilityLabel={t.modals.about.header}
-            style={({ pressed }) => [styles.langPill, pressed && { opacity: 0.7 }]}
+            style={({ pressed }) => [pillStyles.pill, pressed && { opacity: 0.7 }]}
           >
             <HandDrawnFrame radius={CHIP.height / 2} />
-            <Text style={styles.langPillText}>?</Text>
+            <Text style={pillStyles.text}>?</Text>
           </Pressable>
         </View>
       </View>
@@ -516,28 +500,11 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: S.s,
   },
+  // Just the row. The pill shape itself is pillStyles in LangPill.tsx,
+  // shared with the gate's switch so the two cannot drift.
   langPills: {
     flexDirection: 'row',
     gap: S.s,
-  },
-  // Lang pill — solid white, same shape + chat-style CHROME_SHADOW
-  // as the HUD MeterPill / CounterPill in solid mode. The dark
-  // night sky behind would tint a translucent pill, so plain white
-  // is cleaner.
-  langPill: {
-    height: CHIP.height,
-    minWidth: CHIP.height,
-    paddingHorizontal: S.m,
-    borderRadius: CHIP.height / 2,
-    backgroundColor: '#ffffff',
-    // Drawn edge — see HandDrawnFrame in the pills above.
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 6 },
-    shadowOpacity: 0.14,
-    shadowRadius: 20,
-    elevation: 6,
-    alignItems: 'center',
-    justifyContent: 'center',
   },
   editChip: {
     position: 'absolute',
@@ -556,16 +523,6 @@ const styles = StyleSheet.create({
     fontSize: TYPE.small,
     fontWeight: '700',
     color: colors.black,
-  },
-  langPillText: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.small,
-    fontWeight: '700',
-    color: colors.black,
-    letterSpacing: 0.5,
-  },
-  langPillTextActive: {
-    color: '#fff',
   },
   // Deck holder — absolute positioned over the lawn (lower
   // portion of the scene, below the horizon line). bottom

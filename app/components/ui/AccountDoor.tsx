@@ -30,6 +30,7 @@ import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 
 import { createPortal } from 'react-dom';
 import { ApiError, auth, type Me } from '../../services/api';
 import { useAccessStore, type DoorSheet } from '../../stores/accessStore';
+import { pickDoorScreen, type DoorScreen } from '../../utils/doorScreen';
 import { useStrings } from '../../i18n/useStrings';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { colors } from '../../constants/colors';
@@ -43,7 +44,8 @@ import { HandDrawnFrame } from './HandDrawn';
 import { AvatarStudio, type AvatarStage } from './AvatarStudio';
 import { safeAreaBottomPx, safeAreaTopPx } from '../../utils/safeArea';
 
-type Screen = 'register' | 'verify' | 'login' | 'forgot' | 'forgotSent' | 'reset' | 'avatar';
+// The screens the sheet can show, from the picker that chooses them.
+type Screen = DoorScreen;
 
 // The map stays as it is — no backdrop, no dimming, touches outside
 // the paper reach the map. The paper hangs from the bottom edge and is
@@ -280,22 +282,6 @@ export function Secondary({ label, seed, onClick }: { label: string; seed: strin
   );
 }
 
-function pickScreen(
-  requested: DoorSheet,
-  me: Me | null,
-  resetToken: string | null,
-  prefer: 'login' | null,
-): Screen {
-  if (resetToken) return 'reset';
-  if (me?.door === 'verify') return 'verify';
-  // The portrait is a step AFTER the door; asked for with the door
-  // still shut, it is the door that shows.
-  if (requested === 'avatar') return me?.door === 'open' ? 'avatar' : 'register';
-  if (requested === 'reset' || requested === 'verify') return 'register';
-  if (prefer === 'login') return 'login';
-  return requested;
-}
-
 // The placeholder a row gets on first contact is not a nickname anybody chose.
 function suggestedNickname(me: Me | null): string {
   const n = me?.nickname ?? '';
@@ -314,12 +300,10 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
   const setMe = useAccessStore((s) => s.setMe);
   const resetToken = useAccessStore((s) => s.resetToken);
   const setResetToken = useAccessStore((s) => s.setResetToken);
-  const prefer = useAccessStore((s) => s.doorPrefer);
-  const setDoorPrefer = useAccessStore((s) => s.setDoorPrefer);
   const notice = useAccessStore((s) => s.doorNotice);
   const setDoorNotice = useAccessStore((s) => s.setDoorNotice);
 
-  const [screen, setScreen] = useState<Screen>(() => pickScreen(requested, me, resetToken, prefer));
+  const [screen, setScreen] = useState<Screen>(() => pickDoorScreen(requested, me, resetToken));
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(notice ? (t[notice as keyof typeof t] as string) ?? null : null);
@@ -409,7 +393,6 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
   const login = () =>
     run(async () => {
       const m = await auth.login(email, password);
-      setDoorPrefer(null);
       setMe(m);
       if (m.door === 'verify') setScreen('verify');
     });
