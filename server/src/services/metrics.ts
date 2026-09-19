@@ -19,6 +19,11 @@
 // instrumentation, no event pipeline, nothing to keep in sync.
 
 import { pg } from '../db/index.js';
+import {
+  collectTerritoryHealth,
+  renderTerritoryHealth,
+  type TerritoryHealth,
+} from './territoryHealth.js';
 import { buildBotReport, type Cohort } from './botReport.js';
 import { happinessLeaderboard } from './happiness.js';
 
@@ -74,11 +79,7 @@ export interface Metrics {
     cacheReadTokensLast7d: number;
     byModel: { model: string; messages: number; inputTokens: number; outputTokens: number }[];
   };
-  territory: {
-    marks: number;
-    claimedShapes: number;
-    ownersWithGround: number;
-  };
+  territory: TerritoryHealth;
   // Everything below is the beta instrument (D-83): the systems built
   // since this console was written, which it had no way to see. The two
   // cohorts come from /admin/bots/report's own computation rather than a
@@ -214,11 +215,10 @@ export async function collectMetrics(): Promise<Metrics> {
     group by model
     order by count(*) desc`;
 
-  const [terr] = await pg`
-    select
-      (select count(*) from territory_marks)::int as marks,
-      (select count(*) from territory_ground)::int as shapes,
-      (select count(distinct user_id) from territory_ground)::int as owners`;
+  // Territory lives in its own service — the "marked but unclaimed"
+  // number needs a self-join and a paragraph of reasoning, neither of
+  // which belongs in the middle of this file. See territoryHealth.ts.
+  const terr = await collectTerritoryHealth();
 
   const pct = (cohort: number, returned: number): number | null =>
     // Under ten people a percentage is theatre, not a measurement.
@@ -302,11 +302,7 @@ export async function collectMetrics(): Promise<Metrics> {
         outputTokens: r.output_tokens as number,
       })),
     },
-    territory: {
-      marks: terr?.marks ?? 0,
-      claimedShapes: terr?.shapes ?? 0,
-      ownersWithGround: terr?.owners ?? 0,
-    },
+    territory: terr,
     bots: report.botsTotal,
     peopleLive: report.people,
     happiness: {
@@ -370,7 +366,7 @@ export function renderMetricsText(m: Metrics): string {
     L.push(`  ${b.model.padEnd(24)} ${String(b.messages).padStart(4)} msg  in ${b.inputTokens} out ${b.outputTokens}`);
   }
   L.push('');
-  L.push(`TERRITORY  ${m.territory.marks} marks, ${m.territory.claimedShapes} shapes, ${m.territory.ownersWithGround} owners`);
+  for (const line of renderTerritoryHealth(m.territory)) L.push(line);
 
   const pct = (a: number, b: number) => (b > 0 ? `${Math.round((a / b) * 100)}%` : '—');
   const rate = (n: number | null) => (n == null ? '—' : n.toFixed(1));

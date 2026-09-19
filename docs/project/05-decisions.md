@@ -2215,3 +2215,57 @@ the document hides. It never survives into a pocket. Its only beneficiary
 is somebody holding the phone and not touching it. It is still worth
 having for that case, but it is not the answer to the pocket walk, and it
 should not have been ranked as the first line of defence.
+
+### D-89 · The number that tells a white patch from an empty one ✅
+*`services/territoryHealth.ts`, `services/metrics.ts`, `routes/adminConsole.ts`*
+
+The owner opened territory view over central Kyiv and found a white
+patch ringed by colour. Two explanations fit it, and they point at
+opposite fixes:
+
+- **nothing walks there** — bot homes, stroll range, reach.
+- **plenty walks there and none of it holds** — the marks cannot make a
+  shape.
+
+The second is the counterintuitive one, and it is a real consequence of
+rules this project already chose. A mark claims ground only as part of a
+hull of at least `shapeMinMarks` (3) of its OWNER'S marks within
+`claimNeighbourM` (250 m) — otherwise `placeMark` builds an empty hull
+and the mark lands, costs hunger, draws a dot and holds nothing.
+Meanwhile every rival mark within `contestM` cuts ground away and can
+kill the marks under it. So **the ground fought over hardest is the
+ground where each owner's survivors are sparsest**, and an area can be
+the busiest on the map while holding nothing at all.
+
+`lonelyMarks` counts exactly that: marks with too few of their own kin
+near enough to ever be part of a shape. A high share means the shape
+rule is biting and the levers are `shapeMinMarks`, `claimNeighbourM`, or
+making raids less lethal. A low share means the hole is genuinely
+unwalked and the levers are the bots' homes and ranges. One number,
+two opposite conclusions, neither of them a guess.
+
+The panel also carries pieces, hectares, owners holding ground, owners
+marking and holding nothing, raids in 24h, and marks within a day of
+`markTtlDays` — the last because ground goes when its marks do, so a
+map can thin out on a schedule rather than a cause.
+
+It rides the two-minute `/admin/metrics` call, not the twenty-second
+live one: it is a self-join over `territory_marks`, bbox-prefiltered on
+the index that table already carries, over roughly 1,400 rows.
+
+**Verified by seeding the boundary rather than reading the SQL.** An
+owner with two marks 60 m apart has one peer where two are needed, so
+both marks count as lonely; an owner with three marks 60 m apart has two
+peers each and none do. Seeded exactly that: 5 marks, 2 lonely, 40%.
+The panel was then rendered in a real browser, which is the only reason
+two faults were caught — `row()` escapes its value, so the markup passed
+in for the percentage printed as literal `<span …>`; and an apostrophe
+written `\'` inside the page's TS template literal reaches the browser
+as a bare `'`, ending the JS string it sits in. **That second one is a
+syntax error that takes the WHOLE console down, not just this panel, and
+typecheck passes it happily.** There is now a comment in the file saying
+so, because the next person to write a possessive there will not guess.
+
+**Not done:** history. The snapshot table (D-84) would make `lonelyMarks`
+a trend rather than a reading, which is what it wants to be — but that
+is a migration, and migrations get asked about first.

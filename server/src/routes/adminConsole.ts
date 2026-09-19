@@ -252,10 +252,35 @@ const PAGE = `<!doctype html>
       row('cache reads', num(c.cacheReadTokensLast7d)) +
       models + '</div>');
 
+    // TERRITORY, AND THE ONE NUMBER THAT EXPLAINS A HOLE IN THE MAP.
+    //
+    // "marked but unclaimed" is marks that can never be part of a shape:
+    // too few of their own owner's marks near enough to make a hull
+    // (see services/territoryHealth.ts). It is the difference between
+    // "nothing walks there" and "plenty walks there and none of it
+    // holds", which look identical on the map and want opposite fixes.
+    // High share -> the shape rule is biting. Low share -> it is reach.
+    var t = m.territory;
+    var lonelyPct = t.marks > 0 ? Math.round((t.lonelyMarks / t.marks) * 100) : 0;
     out.push('<div class="panel"><h2>territory</h2>' +
-      row('marks', num(m.territory.marks)) +
-      row('claimed shapes', num(m.territory.claimedShapes)) +
-      row('owners holding ground', num(m.territory.ownersWithGround)) + '</div>');
+      '<div class="big">' + num(t.hectares) + ' <span style="font-size:13px;color:var(--dim)">ha held</span></div>' +
+      row('marks', num(t.marks)) +
+      row('pieces', num(t.pieces)) +
+      row('owners holding ground', num(t.ownersWithGround)) +
+      // Plain text, not markup: row() escapes its value (as it should —
+      // everything else flowing through it is data).
+      row('unclaimed marks', num(t.lonelyMarks) + '  ·  ' + lonelyPct + '%') +
+      row('owners with none', num(t.ownersMarkingNothingHeld)) +
+      row('raids 24h', num(t.raids24h)) +
+      row('expiring in a day', num(t.expiringSoon)) +
+      '<div class="note">a mark holds ground only inside a hull of ' +
+      // No apostrophe in this string, deliberately. The page is a TS
+      // template literal, so a \' written here reaches the browser as a
+      // bare ' and ends the JS string it sits inside — a syntax error
+      // that takes the WHOLE console down, not just this panel, and one
+      // typecheck cannot see. Caught by rendering the page.
+      t.shapeMinMarks + '+ marks from the same owner within ' + t.claimNeighbourM +
+      'm of it. the ones that cannot are the white patches on the map.</div></div>');
 
     // BOTS AND PEOPLE IN THE SAME TABLE, on purpose. Every figure here is
     // per ONLINE HOUR, which is the only way the two are comparable: the
