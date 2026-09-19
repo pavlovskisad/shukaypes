@@ -108,6 +108,9 @@ importers:
       fontnik:
         specifier: ^0.7.4
         version: 0.7.4
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
       typescript:
         specifier: ^5.6.3
         version: 5.9.3

@@ -52,6 +52,7 @@ import { DOG_MIN_Y, DOG_ROOM } from '../ui/AccountDoor';
 import { safeAreaTopPx } from '../../utils/safeArea';
 import { easeCamera } from './camera';
 import { OtherWalker } from './OtherWalker';
+import { PIN_START, stepPin, type PinLifecycle } from '../../utils/pinLifecycle';
 import { PokeToast } from './PokeToast';
 import { PlayerCard } from './PlayerCard';
 import { LostDogCardStack, LostDogCardView } from '../ui/LostDogCardStack';
@@ -2653,19 +2654,45 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // "clear when off the map" test fires instantly and the jump lands on
   // nothing. The pin therefore has to be SEEN on the map before leaving
   // the map can retire it.
-  const pinSeenRef = useRef<string | null>(null);
+  //
+  // AND THE DISTANCE TEST WAITS FOR THE CAMERA TO GET THERE.
+  //
+  // viewportCenter is derived from mapBounds, which only updates once the
+  // map settles — so at the instant the pin is set it still holds the
+  // OLD centre, next to the walker and a long way from the district being
+  // flown to. Testing it straight away retired the pin mid-flight, and
+  // the jump arrived at a dog with no ground, or at nothing at all. The
+  // second tap appeared to work only because the first had left the
+  // viewport near the dog.
+  //
+  // So arrival is a precondition, not an assumption: the viewport has to
+  // come within PIN_KEEP_M once before going back outside it can mean
+  // "you went away". The ease is 900ms and a settle publishes bounds, so
+  // arrival always happens; nothing here can strand a pin that the map
+  // never reached.
+  //
+  // The rule itself lives in utils/pinLifecycle.ts and is fixture-checked
+  // (`pnpm check`), because it shipped wrong twice and both times every
+  // static reading of the condition looked right — the faults were in the
+  // ORDER things become true. This effect only feeds it and acts on the
+  // answer.
+  const pinRef = useRef<{ id: string; life: PinLifecycle }>({ id: '', life: PIN_START });
   useEffect(() => {
     if (!pinnedGuest) {
-      pinSeenRef.current = null;
+      pinRef.current = { id: '', life: PIN_START };
       return;
     }
-    if (onMapScreen) pinSeenRef.current = pinnedGuest.ownerId;
-    else if (pinSeenRef.current === pinnedGuest.ownerId) {
-      setPinnedGuest(null);
-      return;
+    // A new pick starts its own life.
+    if (pinRef.current.id !== pinnedGuest.ownerId) {
+      pinRef.current = { id: pinnedGuest.ownerId, life: PIN_START };
     }
-    if (!onMapScreen || !viewportCenter) return;
-    if (distanceMeters(viewportCenter, pinnedGuest.at) > PIN_KEEP_M) setPinnedGuest(null);
+    const { next, retire } = stepPin(pinRef.current.life, {
+      onMapScreen,
+      distanceM: viewportCenter ? distanceMeters(viewportCenter, pinnedGuest.at) : null,
+      keepM: PIN_KEEP_M,
+    });
+    pinRef.current = { id: pinnedGuest.ownerId, life: next };
+    if (retire) setPinnedGuest(null);
   }, [pinnedGuest, viewportCenter, onMapScreen, setPinnedGuest]);
 
   // Fly to a territory — tapping a row on the standing routes here with
@@ -3231,7 +3258,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // capped to the nearest N for perf (each walker runs a glide loop + sprite).
   // MUST stay above the early `!userPos` return below (Rules of Hooks).
   const otherWalkers = useMemo(() => {
-    if (!MULTIPLAYER || !onMapScreen || !nearbyPlayers.length) return [];
+    // NOT `!nearbyPlayers.length` — that early return is why a pinned dog
+    // sometimes did not appear at all. The dog you jump to is usually
+    // offline and across town, which is exactly when presence is empty,
+    // so bailing on an empty list threw away the one marker that had to
+    // be drawn.
+    if (!MULTIPLAYER || !onMapScreen) return [];
     let list = nearbyPlayers;
     if (mapBounds) {
       const padLat = (mapBounds.n - mapBounds.s) * 0.15;
