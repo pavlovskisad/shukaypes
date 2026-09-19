@@ -105,6 +105,12 @@ const PRESENCE_MS = 3000;
 // floated in a ring (zone-outline feel) or collapsed behind a cluster
 // badge if the group is big enough to warrant the interaction cost.
 const PIN_CLUSTER_RADIUS_M = 250;
+// How far the camera may drift from a pinned district before the dog
+// you went to see is let go. Wide enough that a pan which keeps any of
+// the district on screen keeps the dog on it too; short enough that a
+// stranger is not still standing there once you have gone back to your
+// own streets.
+const PIN_KEEP_M = 1500;
 
 // At or above this group size we switch from "disperse in a ring" to
 // "show a cluster badge, tap to expand". Below it, the pets just float
@@ -576,6 +582,27 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // "somebody took your territory, dawg!" notice.
   const rivalTerritory = useGameStore((s) => s.rivalTerritory);
   const rivalMarks = useGameStore((s) => s.rivalMarks);
+  const pinnedGuest = useGameStore((s) => s.pinnedGuest);
+  const setPinnedGuest = useGameStore((s) => s.setPinnedGuest);
+  // THE PINNED DISTRICT, DRAWN WHEN THE SYNC DID NOT BRING IT.
+  //
+  // The sync is centred on the WALKER, and the piece budget drops the
+  // far ones — which is precisely the ground you just flew to. So the
+  // ring the board row already carried is merged in, and dropped again
+  // the moment the sync does carry that owner (their real pieces are
+  // better than this one: it is only their LARGEST, not all of them).
+  const rivalsWithPin = useMemo(() => {
+    if (!pinnedGuest || pinnedGuest.ring.length < 3) return rivalTerritory;
+    if (rivalTerritory.some((r) => r.ownerId === pinnedGuest.ownerId)) return rivalTerritory;
+    return [
+      ...rivalTerritory,
+      {
+        ownerId: pinnedGuest.ownerId,
+        ownerName: pinnedGuest.name,
+        shapes: [{ kind: 'area' as const, points: pinnedGuest.ring }],
+      },
+    ];
+  }, [rivalTerritory, pinnedGuest]);
   const lastRaid = useGameStore((s) => s.lastRaid);
   const onHomeGround = useGameStore((s) => s.onHomeGround);
   // Tracks the map's visible bounds so we can detect when the
@@ -777,6 +804,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   const syncPresence = useGameStore((s) => s.syncPresence);
   const syncSpots = useGameStore((s) => s.syncSpots);
   const setViewportCenter = useGameStore((s) => s.setViewportCenter);
+  const viewportCenter = useGameStore((s) => s.viewportCenter);
   const collectPath = useGameStore((s) => s.collectPath);
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const fetchLostDog = useGameStore((s) => s.fetchLostDog);
@@ -2603,6 +2631,43 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     });
   }, [selectedSpotId, spots]);
 
+  // RETIRING THE PIN — "you went away from it".
+  //
+  // Two ways to leave, and both count. Panning or walking far from the
+  // district means you are done looking at it; leaving the map screen
+  // means you are done with the map. Neither is a selection to defend:
+  // a pin is a courtesy that expires, not state to keep in sync.
+  //
+  // Measured against the VIEWPORT CENTRE rather than the GPS, because
+  // this jump is the one case where the two are deliberately far apart —
+  // you are standing at home looking at somebody else's district, and a
+  // GPS test would retire the pin the instant it was set.
+  //
+  // The radius is generous on purpose: a pan that keeps any part of the
+  // district on screen should keep the dog on it, and a walker whose
+  // camera drifts a block should not lose what they came to see.
+  //
+  // ARRIVED-FIRST, and this is not a detail. The pin is set on the TASKS
+  // tab, and MapView stays mounted behind the other tabs — so at the
+  // moment it is set, `currentScreen` is still 'tasks' and a naive
+  // "clear when off the map" test fires instantly and the jump lands on
+  // nothing. The pin therefore has to be SEEN on the map before leaving
+  // the map can retire it.
+  const pinSeenRef = useRef<string | null>(null);
+  useEffect(() => {
+    if (!pinnedGuest) {
+      pinSeenRef.current = null;
+      return;
+    }
+    if (onMapScreen) pinSeenRef.current = pinnedGuest.ownerId;
+    else if (pinSeenRef.current === pinnedGuest.ownerId) {
+      setPinnedGuest(null);
+      return;
+    }
+    if (!onMapScreen || !viewportCenter) return;
+    if (distanceMeters(viewportCenter, pinnedGuest.at) > PIN_KEEP_M) setPinnedGuest(null);
+  }, [pinnedGuest, viewportCenter, onMapScreen, setPinnedGuest]);
+
   // Fly to a territory — tapping a row on the standing routes here with
   // the owner's largest piece in the store, and the camera frames it.
   // ONE-SHOT: consumed and cleared, deliberately unlike selectedSpotId.
@@ -3188,12 +3253,31 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         )
         .slice(0, 24);
     }
+    // The dog you jumped to, appended AFTER the cap so the trip you
+    // deliberately took can never be the thing the budget drops. Skipped
+    // when presence already carries it — then it is a live sprite with a
+    // live position, and this would be a second, staler copy of the same
+    // dog standing a few metres off.
+    if (pinnedGuest && !list.some((p) => p.id === pinnedGuest.ownerId)) {
+      list = [
+        ...list,
+        {
+          id: pinnedGuest.ownerId,
+          position: pinnedGuest.at,
+          name: pinnedGuest.name,
+          owner: pinnedGuest.owner ?? null,
+          photoUrl: null,
+          avatarUrl: pinnedGuest.avatarUrl,
+          bot: pinnedGuest.bot,
+        },
+      ];
+    }
     // Nudge their shown dot out of building footprints (display only).
     const av = buildingAvoiderRef.current;
     if (av) list = list.map((p) => ({ ...p, position: av.nudge(p.position) }));
     return list;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos; version drives re-nudge
-  }, [nearbyPlayers, mapBounds, userPos?.lat, userPos?.lng, onMapScreen, buildingIndexVersion]);
+  }, [nearbyPlayers, mapBounds, userPos?.lat, userPos?.lng, onMapScreen, buildingIndexVersion, pinnedGuest]);
 
   if (!userPos) {
     return (
@@ -3657,7 +3741,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           <TerritoryLayer
             shapes={territoryShapes}
             marks={territoryMarks}
-            rivals={rivalTerritory}
+            rivals={rivalsWithPin}
             rivalMarks={rivalMarks}
           />
         ) : null}

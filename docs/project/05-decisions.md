@@ -2269,3 +2269,69 @@ so, because the next person to write a possessive there will not guess.
 **Not done:** history. The snapshot table (D-84) would make `lonelyMarks`
 a trend rather than a reading, which is what it wants to be — but that
 is a migration, and migrations get asked about first.
+
+### D-90 · Ground that blinked, and a jump that landed on nothing ✅
+*`services/ground.ts`, `services/territory.ts`, `stores/gameStore.ts`,
+`MapView.tsx`, `(tabs)/tasks.tsx`*
+
+Three symptoms from the owner, one cause underneath them: districts
+appearing and partly vanishing between syncs; his own territory taking
+several syncs to draw; and tapping a dog on the standing landing on bare
+map although the row's silhouette and area were right there.
+
+**`groundIn` had a `LIMIT` and no `ORDER BY`.** The constant's own
+comment had already written the epitaph: "this query has no ordering, so
+if the box ever holds more pieces than this, the overflow dropped here is
+an ARBITRARY subset — the sort never sees it — and ground would vanish in
+patches rather than by distance." Postgres may return a different
+arbitrary `LIMIT`-many rows for the same query on each run, so every sync
+drew a different subset.
+
+The caps were sized against a measurement that had gone stale.
+`rivalPiecesDrawn`'s comment says "the whole city's pieces fit under it
+today (~100-150 exist)" — that was 30 bots. There are 120 now, and the
+owner's own screenshot settles it: he ranks 120th, and rank is "owners
+holding strictly more, plus one", so 120+ owners hold ground.
+
+**Ordered nearest-first** from the view centre, longitude scaled by
+cos(lat), squared distance because a sort needs no square root. The cap
+now drops the FAR pieces, which reads as distance, instead of a random
+set, which reads as flicker.
+
+**Own ground no longer goes through the view query at all.** It was
+competing for the same 320 rows as the whole city's and could simply not
+be in the subset. A second, owner-keyed read, merged and deduped by id —
+bounded by the walker's own play rather than the city's. Somebody else's
+district blinking is a bug; your own doing it is the app telling you that
+you did not walk where you walked.
+
+**The jump now pins what it went to see.** `focusedTerritory` was a
+camera command that flew and cleared, which left a stranger's district
+with neither the district (the sync is centred on the WALKER, and far
+pieces are exactly what the cap drops) nor the stranger (presence only
+carries dogs that are online). The board row already holds the ring, the
+name, the portrait and the freshest position, so the pin costs no
+request: the ring is drawn when the sync did not bring that owner, and
+the dog stands at its live spot or, offline, its last known one.
+
+It retires on going away — the camera drifting past `PIN_KEEP_M` (1500m)
+or leaving the map — and is measured against the VIEWPORT rather than the
+GPS, because this jump is the one case where the two are deliberately far
+apart. **Arrived-first, or it would never work at all**: the pin is set on
+the tasks tab, MapView stays mounted behind the other tabs, so a naive
+"clear when off the map" test fires the instant it is set. The pin has to
+be seen on the map before leaving the map can retire it. That was caught
+by reading the mounting rules, not by running it.
+
+**Measured, not argued.** 400 pieces seeded in one box against a cap of
+320: `groundIn` returns the same 320 on three consecutive calls
+(`stable=true`), nearest first, dropping the farthest. And a piece owned
+by the walker, deliberately the farthest thing in a box of 401, is absent
+from `groundIn` (`containsMine=false`) yet present in
+`fetchMapTerritory` (`ownShapes=1`) — the before and after of the same
+fix, on the same data.
+
+**Not done:** re-sizing `groundPiecesInView` (320) and `rivalPiecesDrawn`
+(180) themselves. The payload is ~1.7KB per piece, so raising them is a
+real trade rather than a free dial, and the territory panel (D-89) now
+reports the live piece count — which is the number that should decide it.
