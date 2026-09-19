@@ -46,3 +46,6 @@ pnpm-debug.log*
 
 # Local permission overrides — not the project policy
 .claude/settings.local.json
+
+# local test redis snapshot (redis-server writes it into server/ when run there)
+dump.rdb
