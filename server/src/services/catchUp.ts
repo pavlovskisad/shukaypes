@@ -27,15 +27,23 @@ export type SegmentVerdict =
   | { ok: true; kind: 'walked'; speedMps: number }
   // Long and too fast to be a walk — a car, a jammed fix that slipped
   // the bbox test, a tampered client. Claims nothing.
-  | { ok: false; reason: 'too-fast' | 'too-long'; speedMps: number };
+  //
+  // `stale` is the other shape of the same refusal, and the one a speed
+  // test alone misses: the walker was gone longer than a walk lasts, so
+  // whatever happened in between, this endpoint pair is not evidence of
+  // it. A commute reads as SLOW, not fast, and would otherwise pass.
+  | { ok: false; reason: 'too-fast' | 'too-long' | 'stale'; speedMps: number };
 
 /**
  * Was this segment walked?
  *
- * `elapsedMs` is how long the walker was out of contact. A zero or
- * negative elapsed (clock skew, a replayed anchor) reads as infinite
- * speed, which fails the gate for anything above the floor — the safe
- * direction, since a segment we cannot time is one we cannot trust.
+ * `elapsedMs` is how long the walker was out of contact, and it is
+ * tested twice: once as a ceiling of its own (`maxGapMs` — a gap longer
+ * than a walk is not a gap IN a walk) and once as the denominator of
+ * the pace. A zero or negative elapsed (clock skew, a replayed anchor)
+ * reads as infinite speed, which fails the gate for anything above the
+ * floor — the safe direction, since a segment we cannot time is one we
+ * cannot trust.
  */
 export function judgeSegment(
   segLenM: number,
@@ -44,7 +52,16 @@ export function judgeSegment(
 ): SegmentVerdict {
   const speedMps = elapsedMs > 0 ? segLenM / (elapsedMs / 1000) : Infinity;
 
-  // The floor first, so a foreground sync is never judged on speed. GPS
+  // THE CLOCK BOUND COMES FIRST, and unlike the speed test it applies to
+  // short segments too. A stale anchor is stale whatever the
+  // displacement: somebody who reopens the app after nine hours fifty
+  // metres from where they were has not walked fifty metres, they have
+  // been somewhere else and come back. Refusing costs them one mark on
+  // the first sync — the next one, fifteen seconds later, works off a
+  // fresh anchor and behaves normally.
+  if (elapsedMs > W.maxGapMs) return { ok: false, reason: 'stale', speedMps };
+
+  // The floor next, so a foreground sync is never judged on speed. GPS
   // jitter of a few tens of metres between two 15s ticks reads as a
   // sprint, and refusing it would cost a standing walker their paws for
   // no gain.
@@ -97,6 +114,10 @@ export function planCatchUpMarks(
 ): PlannedMark[] {
   const segLenM = distanceMeters(from, to);
   if (segLenM <= W.jitterFloorM || elapsedMs <= 0) return [];
+  // Redundant with judgeSegment, which every caller runs first — kept so
+  // this function cannot draw a line across a commute on its own if a
+  // later caller forgets the gate.
+  if (elapsedMs > W.maxGapMs) return [];
 
   const byClock = Math.floor(elapsedMs / T.cooldownMs) - 1;
   const byGround = Math.floor(segLenM / T.minDistanceM) - 1;
