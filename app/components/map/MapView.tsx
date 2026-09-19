@@ -2686,9 +2686,33 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (pinRef.current.id !== pinnedGuest.ownerId) {
       pinRef.current = { id: pinnedGuest.ownerId, life: PIN_START };
     }
+    // NEAREST OF THE TWO THINGS THE JUMP FRAMED, not just the dog.
+    //
+    // The camera now fits the DISTRICT (plus the dog), so it settles on
+    // the middle of that box — which on a big holding, or an owner out
+    // walking well off their own ground, can be further from the dog
+    // than PIN_KEEP_M. Measuring to the dog alone, the pin would never
+    // register as arrived, and a pin that never arrives can never be
+    // retired for going away: it would sit there until the map screen
+    // was left. Either the dog or the ground being close is "here".
+    let distanceM: number | null = null;
+    if (viewportCenter) {
+      const ring = pinnedGuest.ring;
+      let clat = 0;
+      let clng = 0;
+      for (const p of ring) {
+        clat += p.lat;
+        clng += p.lng;
+      }
+      const centre = { lat: clat / ring.length, lng: clng / ring.length };
+      distanceM = Math.min(
+        distanceMeters(viewportCenter, pinnedGuest.at),
+        distanceMeters(viewportCenter, centre),
+      );
+    }
     const { next, retire } = stepPin(pinRef.current.life, {
       onMapScreen,
-      distanceM: viewportCenter ? distanceMeters(viewportCenter, pinnedGuest.at) : null,
+      distanceM,
       keepM: PIN_KEEP_M,
     });
     pinRef.current = { id: pinnedGuest.ownerId, life: next };
@@ -2709,33 +2733,55 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (!map || !focusedTerritory) return;
     const ring = focusedTerritory.ring;
     if (ring.length >= 3) {
-      // Down INTO the territory, not a survey of it — and onto the DOG,
-      // freshest source first. The nearby-players list refreshes every
-      // 15s and holds the live sprite position when the owner is inside
-      // presence range — landing anywhere else visibly disagrees with
-      // the sprite on screen. Next, the live presence position the board
-      // fetched (right for far owners who are online); then the owner's
-      // last mark (minutes stale — the dog kept walking); and only then
-      // the ground's geometric middle.
+      // THE WHOLE DISTRICT, NOT A DOORSTEP.
+      //
+      // This used to ease to a fixed zoom 16 centred on the dog —
+      // "down INTO the territory, not a survey of it". The survey is what
+      // the jump is actually for: the row you tapped shows a silhouette
+      // and an area, and arriving at a patch of street with the shape
+      // running off every edge does not show you what you went to see.
+      // So frame the ring, and let the dog be the thing standing in it.
+      //
+      // The DOG is still included in the bounds — a live owner can be
+      // out walking well outside their own ground, and framing the ring
+      // alone would put the sprite off screen at the moment you went
+      // looking for it. Freshest source first: the live presence sprite,
+      // then the position the board fetched, then their last mark.
       const live = useGameStore
         .getState()
         .nearbyPlayers.find((p) => p.id === focusedTerritory.ownerId)?.position;
-      let target = live ?? focusedTerritory.pos ?? focusedTerritory.mark ?? null;
-      if (!target) {
-        let clat = 0;
-        let clng = 0;
-        for (const p of ring) {
-          clat += p.lat;
-          clng += p.lng;
-        }
-        target = { lat: clat / ring.length, lng: clng / ring.length };
+      const dogAt = live ?? focusedTerritory.pos ?? focusedTerritory.mark ?? null;
+      const pts: Array<[number, number]> = ring.map((p) => [p.lng, p.lat]);
+      if (dogAt) pts.push([dogAt.lng, dogAt.lat]);
+      const bounds = pts.reduce(
+        (b, p) => b.extend(p),
+        new maplibregl.LngLatBounds(pts[0]!, pts[0]!),
+      );
+      // Bottom padding clears the player card this jump now opens; the
+      // top clears the HUD row. maxZoom so a tiny holding does not slam
+      // the camera into the pavement — a 0.02 km² patch framed tight is
+      // a street corner, not a district.
+      map.fitBounds(bounds, {
+        padding: { top: 110, bottom: 240, left: 40, right: 40 },
+        maxZoom: 16.5,
+        duration: 900,
+      });
+      // AND THE CARD, because "who is this" is the other half of the
+      // question the standing asks. It reads /players/:id, which is a
+      // plain server read — so it works for an owner who is offline,
+      // which is most of the ones worth jumping to.
+      const guest = useGameStore.getState().pinnedGuest;
+      if (guest && guest.ownerId === focusedTerritory.ownerId) {
+        setCardPlayer({
+          id: guest.ownerId,
+          position: guest.at,
+          name: guest.name,
+          owner: guest.owner ?? null,
+          photoUrl: null,
+          avatarUrl: guest.avatarUrl,
+          bot: guest.bot,
+        });
       }
-      // No marker at the landing spot. A scent ping lived here briefly,
-      // from the days when the jump aimed at a minutes-stale mark and
-      // needed something to point at — now the camera lands on the dog's
-      // live position (or its freshest trail), and a dropped dot next to
-      // the actual sprite just read as a second, wrong dog.
-      easeCamera(map, 'cinematic', { center: [target.lng, target.lat], zoom: 16, duration: 900 });
     }
     setFocusedTerritory(null);
   }, [focusedTerritory, setFocusedTerritory]);
