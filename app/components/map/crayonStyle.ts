@@ -946,3 +946,46 @@ export function installPaperOverlaySync(
     map.off('move', sync);
   };
 }
+
+
+// ── DRESSING THE MAP THE WAY THE WALK DOES ───────────────────────────
+//
+// These two live here rather than in MapView because the favourites
+// previews need them too (D-102): a preview is our map or it is a
+// picture of somebody else's, and the crayon override alone is not the
+// whole of our map — the three.js city on top of it is.
+
+// The id of the first symbol (label) layer, so the 3D buildings and the
+// ground fog go in BELOW the labels. Without it the custom layers append
+// on top and the buildings occlude place names — signs sitting under the
+// buildings.
+export function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
+  for (const l of map.getStyle().layers ?? []) {
+    if (l.type === 'symbol') return l.id;
+  }
+  return undefined;
+}
+
+// Hide EVERY MapLibre building layer so the three.js extruded city owns
+// the buildings outright. Called after every crayon override, which
+// re-shows and re-opacities them.
+//
+// Every layer, not just the fill-extrusions — and that distinction took
+// a live bug to learn. The flat `fill` footprints stayed visible, which
+// was harmless at street zoom where the 3D city stands on top of them —
+// but the vector tiles carry no `building` layer below ~z13, so on
+// zoom-out the 3D city simply has nothing to build and the flat paper
+// fills surfaced from under it: a city of white cutouts punched through
+// the territory field. (The first fix aimed at the buildings' distance
+// fog — wrong layer; the 3D city wasn't even there.)
+export function hideMapLibreBuildings(map: maplibregl.Map): void {
+  for (const l of map.getStyle().layers ?? []) {
+    if ((l as { 'source-layer'?: string })['source-layer'] === 'building') {
+      try {
+        map.setLayoutProperty(l.id, 'visibility', 'none');
+      } catch {
+        /* layer not ready — skip */
+      }
+    }
+  }
+}

@@ -23,6 +23,8 @@ import {
   LIGHT_PALETTE,
   applyCrayonOverride,
   setStreetLabelsVisible,
+  firstSymbolLayerId,
+  hideMapLibreBuildings,
   fetchCrayonStyleSpec,
 } from './crayonStyle';
 import type { Spot } from '../../services/places';
@@ -351,40 +353,10 @@ function mapPulseRing(delaySec: number): CSSProperties {
   };
 }
 
-// Experiment (GAME_RENDER): the id of the first symbol (label) layer, so we
-// can insert the 3D buildings + ground fog BELOW the labels. Without this the
-// custom layers append on top and the 3D buildings occlude place names
-// ("signs sitting under the buildings").
-function firstSymbolLayerId(map: maplibregl.Map): string | undefined {
-  for (const l of map.getStyle().layers ?? []) {
-    if (l.type === 'symbol') return l.id;
-  }
-  return undefined;
-}
-
-// Experiment (GAME_RENDER): hide EVERY MapLibre building layer so the
-// Three.js extruded city owns the buildings outright. Called after every
-// crayon override (which re-shows / re-opacities them).
-//
-// Every layer, not just the fill-extrusions — and that distinction took
-// a live bug to learn. The flat `fill` footprints stayed visible, which
-// was harmless at street zoom where the 3D city stands on top of them —
-// but the vector tiles carry no `building` layer below ~z13, so on
-// zoom-out the 3D city simply has nothing to build and the flat paper
-// fills surfaced from under it: a city of white cutouts punched through
-// the territory field. (The first fix aimed at the buildings' distance
-// fog — wrong layer; the 3D city wasn't even there.)
-function hideMapLibreBuildings(map: maplibregl.Map): void {
-  for (const l of map.getStyle().layers ?? []) {
-    if ((l as { 'source-layer'?: string })['source-layer'] === 'building') {
-      try {
-        map.setLayoutProperty(l.id, 'visibility', 'none');
-      } catch {
-        /* layer not ready — skip */
-      }
-    }
-  }
-}
+// firstSymbolLayerId and hideMapLibreBuildings moved to ./crayonStyle
+// (D-102) — the favourites previews dress their hidden map the same way
+// this one does, and two copies of "where do the buildings go" is how
+// the preview came to be a picture of a different city.
 
 // The game render (three.js buildings + ground fog) is a separate chunk —
 // see gameRender.ts. One promise for the life of the page: the chunk is

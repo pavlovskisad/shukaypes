@@ -2831,3 +2831,55 @@ Verified in the harness on a 390×844 screen with three hearted places
 and a seeded cafe deck: both decks measure 320×280, the snapshots come
 back 640×368 (PREVIEW_W×PREVIEW_H at dpr 2), and the cached set lands
 under the v2 key.
+
+### D-102 · The preview was our map minus the part that makes it ours
+*`app/services/mapPreview.ts`, `app/components/map/crayonStyle.ts`,
+`app/components/map/MapView.tsx`*
+
+D-101 put the favourites previews at the walking camera's pitch and
+zoom, and the owner, looking at the two side by side on a phone: *"map
+so sort shades etc and preview very harsh white kinda thing."* He was
+right, and the reason was structural rather than a colour being off.
+
+**The crayon override is not the whole of our map.** What a walker sees
+is the override *plus* the three.js city `MapView` adds on top of it —
+pale volumes, one low sun, a soft shadow each — with MapLibre's own
+building layers hidden underneath. The preview ran the override alone,
+so it drew MapLibre's flat footprints: the same streets as hard cutouts
+instead of a lit model. The preview now adds the same layer from the
+same factory, and `firstSymbolLayerId` / `hideMapLibreBuildings` moved
+out of `MapView` into `crayonStyle` so there is one copy of "where do
+the buildings go" rather than two that drift.
+
+**Not the ground fog**, which is the other half of `MapView`'s game
+render: it drives its own repaint loop for the god-rays, and a map that
+repaints forever never fires `idle` — the one event the snapshot waits
+on.
+
+**The city is built on the first idle, not before it.** The three.js
+layer re-extrudes what is in view on `idle` — the same event the
+snapshot wakes on — so the frame we were standing in held the *previous*
+place's city, or on the first card of a session none at all. The rebuild
+asks for one more frame when it is done; the snapshot waits for that one.
+
+**And the slabs were JPEG composited onto black.** `toDataURL('image/
+jpeg')` has no alpha, so every pixel the map left even slightly
+transparent was composited against the canvas's own black. On a map
+whose buildings are white, that is what turned building footprints into
+dark grey slabs. The canvas is now drawn through a 2D canvas painted
+`palette.paper` first, so the missing alpha lands on paper. This holds
+whether or not the three.js city loaded, which matters for a device that
+cannot run it.
+
+**A step further out than the walk.** `PREVIEW_ZOOM = WALK_ZOOM - 1`.
+The walk's distance is the street you are on and the next one, which is
+the right question when you are standing in it and the wrong one for a
+picture the size of a postage stamp. The tilt does not move — that was
+the dislocation D-101 set out to fix.
+
+`shukajpes.lorePreview.v2` → `v3`, for the same reason as last time:
+nothing else makes a cached picture redraw.
+
+Measured on one place (Ярославів Вал) at 390×844, before and after, over
+the rendered JPEG: **mean luminance 227 → 235, share of pixels below 150
+7.39% → 0.99%.** What is left dark is the lettering.
