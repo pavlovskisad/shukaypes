@@ -53,6 +53,7 @@ import { safeAreaTopPx } from '../../utils/safeArea';
 import { easeCamera, frameTerritory } from './camera';
 import { OtherWalker } from './OtherWalker';
 import { PIN_START, stepPin, type PinLifecycle } from '../../utils/pinLifecycle';
+import { isReading, type ReadingSurfaces } from '../../utils/cameraHold';
 import { PokeToast } from './PokeToast';
 import { PlayerCard } from './PlayerCard';
 import { LostDogCardStack, LostDogCardView } from '../ui/LostDogCardStack';
@@ -1571,16 +1572,27 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     const y = doorSheetTop != null ? doorSheetTop - (DOG_ROOM - DOG_MIN_Y) : DOG_MIN_Y;
     return [0, y - Math.round(h / 2)];
   };
-  const flatCamHeld =
-    !onMapScreen ||
-    !!selectedDogId ||
-    !!selectedSpotId ||
-    !!openWalkStopId ||
-    lostPinning ||
-    sniffActive ||
-    aboutOpen ||
-    lostFlowOpen ||
-    doorSheetUp;
+  // EVERYTHING THE WALKER COULD BE READING, in one place — the same
+  // record the hint gate reads below, so the two cannot drift apart
+  // again. Every field of ReadingSurfaces is required, so an overlay
+  // added later and not named here will not compile (D-98).
+  const readingSurfaces: ReadingSurfaces = {
+    lostPetCard: !!selectedDogId,
+    petAdvert: !!postDog,
+    spotCard: !!selectedSpotId,
+    walkStop: !!openWalkStopId,
+    loreDiscovery: sniffActive,
+    walkerCard: !!cardPlayer,
+    pinnedDistrict: !!pinnedGuest,
+    about: aboutOpen,
+    lostPetFlow: lostFlowOpen,
+    accountDoor: doorSheetUp,
+  };
+  const reading = isReading(readingSurfaces);
+  // Aiming a lost-pet pin is not reading — it is aiming, and the map
+  // under the thumb is the thing being aimed. It holds the camera for
+  // its own reason, so it stays beside the list rather than in it.
+  const flatCamHeld = !onMapScreen || lostPinning || reading;
   const flatCamHeldRef = useRef(flatCamHeld);
   flatCamHeldRef.current = flatCamHeld;
   // When the camera is next allowed to move itself. Pushed forward by every
@@ -2082,11 +2094,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // one only ever fires once per device.
     appMode !== 'gate' &&
     !mapMoving &&
-    !selectedDogId &&
-    !selectedSpotId &&
-    // Nothing the user is actively reading/doing on the map: no sniff
-    // discovery up, no walking route drawn.
-    !sniffActive &&
+    // Nothing the user is reading. This used to be its own shorter
+    // list — a card, a spot, a sniff — which is how a hint came to be
+    // able to fire over another walker's card and snap the camera off
+    // it (D-98). One list now, shared with the follow camera above.
+    !reading &&
     !walkRoute;
 
   const setHintsAllowed = useGameStore((s) => s.setHintsAllowed);
