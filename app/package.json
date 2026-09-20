@@ -11,7 +11,7 @@
     "build:web": "expo export --platform web --output-dir dist",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
-    "check": "tsx utils/pinLifecycle.check.ts && tsx utils/doorScreen.check.ts"
+    "check": "tsx utils/pinLifecycle.check.ts && tsx utils/doorScreen.check.ts && tsx utils/cameraHold.check.ts"
   },
   "dependencies": {
     "@shukajpes/shared": "workspace:*",

@@ -2582,3 +2582,66 @@ being written twice — the second copy is how the first drifts (D-93).
 It sits outside the HUD row's flow on purpose: that row is a
 space-between pair, and a third child would shove the status pill
 sideways for the 360 ms it pops back in once the door opens.
+
+### D-98 · The camera went home while you were reading ❗
+*`app/utils/cameraHold.ts`, `app/components/map/MapView.tsx`*
+
+The owner: "camera snaps back to dog when i have other dog from
+leaderboard tap opened and looking at it."
+
+**Measured, before and after, on a local stack.** Tap a holder's row on
+the standing, land on their district, then touch nothing:
+
+```
+BEFORE  the jump moved the camera 248px
+        t=+5s   moved 238px   (home is 248px away)
+        t=+25s  moved 224px
+AFTER   the jump moved the camera 137px
+        t=+5s   moved   5px
+        t=+25s  moved  42px
+```
+
+Within five seconds of arriving, the camera had gone all the way home.
+
+**Two mechanisms, one cause.** The map has two things that take the
+camera off what you are looking at, and both are right to exist: the
+FOLLOW (in explore and territory view the camera glides back to the
+dog, so a walk never strands you) and the HINTS (each chained map hint
+snaps to the dog so its bubble lands framed). Both were gated on a
+hand-written list of "is the user busy" — and there were **two** such
+lists, in two places, which had already drifted apart. The follow's
+held nine things. The hints' held seven. Neither held another walker's
+card (D-73) or a pet's advert.
+
+The advert is the worst of them: the handler that opens it does
+`setSelectedDog(null)` on the way in — deliberately, so two sheets do
+not stack — which releases the one flag that was holding the camera, at
+the exact moment it puts up the longest read in the app.
+
+What the grace windows do is not a fix for this. A gesture or a one-shot
+command (a planned route, a district jumped to) buys 8 seconds. Eight
+seconds is a timer, and a timer expires while somebody is still reading.
+
+**One list, in a shape that cannot quietly lose a member.**
+`ReadingSurfaces` names every surface as a REQUIRED field, so an overlay
+added later and not named there fails to compile at the call site rather
+than silently joining the ones the camera ignores. Adding the field is
+the whole of remembering. `isReading()` is pure and fixture-checked
+(`pnpm check` in `app/`), because both bugs were invisible to a careful
+reading of the condition: nothing looks wrong about a list, only about
+what is missing from it. The check walks the type — every key, on its
+own, must hold the camera — and is mutation-tested.
+
+Now held, beyond the nine that were: another walker's card, a pet's
+advert, and a pinned district (the jump from the standing opens no card
+at all, so without it the case the owner reported had nothing holding
+it). The pin retires itself on going away or leaving the map (D-91), and
+the off-screen chip recentres in one tap, so it cannot strand the camera.
+
+**The city lore was already covered, and this says how it was checked.**
+Both ways into a landmark — a long press on the map, and a saved place
+opened from the list — land in the same `sniffActive` discovery state,
+whose own comment says it exists to stop a hint "yanking the camera to
+the dog while the user is reading what they just found". A stop on a
+planned walk carries its story under `openWalkStopId`. Both were in the
+follow's list already; neither was in the hints' list, and both are now.
