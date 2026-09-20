@@ -232,8 +232,6 @@ export interface AppStrings {
     /** The all-six bonus row. */
     bonusLabel: string;
     bonusHint: (paws: number) => string;
-    /** The card's header line: what the whole day is worth. */
-    dayWorth: (paws: number) => string;
     lostPetsNearby: string;
     moreCount: (n: number) => string;
     showFewer: string;
@@ -800,7 +798,6 @@ const uk: AppStrings = {
     reward: (paws) => `+${paws} 🐾`,
     bonusLabel: 'усе за день',
     bonusHint: (paws) => `+${paws} 🐾 за всі шість`,
-    dayWorth: (paws) => `${paws} 🐾 за повний день`,
     lostPetsNearby: 'загублені',
     moreCount: (n) => `+ ще ${n}`,
     showFewer: 'показати менше',
@@ -1376,7 +1373,6 @@ const en: AppStrings = {
     reward: (paws) => `+${paws} 🐾`,
     bonusLabel: 'the whole day',
     bonusHint: (paws) => `+${paws} 🐾 for all six`,
-    dayWorth: (paws) => `${paws} 🐾 for a full day`,
     lostPetsNearby: 'lost pets',
     moreCount: (n) => `+ ${n} more`,
     showFewer: 'show fewer',

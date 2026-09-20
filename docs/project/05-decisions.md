@@ -2727,3 +2727,58 @@ crosses → paid, more ground after → nothing).
 **The ² does not render**, which `areaValue` had already found out and
 written down in the strings file, and which this walked into anyway. The
 label says «кв. км» / "sq km", like the standing.
+
+### D-100 · A card is a screenful, and it holds its content in the middle
+*`app/app/(tabs)/tasks.tsx`, `app/hooks/useVisibleHeight.ts`,
+`app/constants/sizing.ts`*
+
+For the fullscreen PWA. The tab is a stack of snap-cards, and they hung
+from the top of the screen: a short card (the standing, the quests)
+left a drift of empty page beneath it while its title sat up under the
+notch. Each card is now **at least a screenful tall and centres its own
+content**, so a flick lands with the block in the middle of the strip
+you can actually see.
+
+**Measured, not `100dvh`.** The visible height is the window's, the
+notch is consumed by the SafeAreaView above, and the floating tab bar
+covers the bottom — none of which a viewport unit knows about:
+
+```
+pageH = window.innerHeight − safe-area-top − safe-area-bottom − 82
+```
+
+82 is the strip the bar owns (its 58 px plus the `S.xxl` it floats
+above the edge by) and now lives in `constants/sizing` as
+`TAB_BAR_STRIP`. The same number was already written twice — the bar's
+own style and `TAB_BAR_HEIGHT` in `chat.tsx`, whose comment asks for
+them to be kept in sync. This is where a fourth copy would have gone.
+
+**`scrollSnapAlign` stays `start`.** A card taller than the screen — the
+six quests on a small phone — must land on its own top, or the first
+rows are scrolled past before you see them. Short cards centre inside
+the full-height box instead.
+
+**The tail pad is not decoration.** Full-height cards mean the scrollport
+is taller than a card by exactly the tab-bar strip, so the last card
+stopped that far short of the top: measured at 82 px, held with the
+previous card peeking and its own last row under the bar. The old
+layout padded the bottom by `calc(100vh - 200px)` for this same reason;
+the new one needs only the difference. Measured before and after — last
+card's top in the scrollport, scrolled fully down: **82 px → 0**.
+
+**Past searches moved onto the lost-pets page.** They were a card of
+their own one flick further down, which is further than anybody looking
+at a deck of lost pets goes — and the question they answer ("did I
+already look for that one?") is the question you have *while* looking
+at the deck. They are a section of that page now, which also means the
+set of snap-cards no longer changes when history arrives; the
+observer's dependency list says so.
+
+**The daily card's header is a label and a tally.** What the day is
+worth was a third number saying what the six rows below already say one
+at a time, and the summary bar was a seventh bar for progress the tally
+states exactly. The bonus row at the bottom carries the total.
+
+Centring verified by measurement rather than by eye: the padding above
+and below each card's content block, on a 390×844 screen —
+`top 198 / bottom 198, skew 0`.
