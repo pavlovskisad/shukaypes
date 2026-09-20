@@ -28,6 +28,9 @@ import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColor';
 import { BoardRow } from '../../components/ui/BoardRow';
+import { TAB_BAR_STRIP } from '../../constants/sizing';
+import { useVisibleHeight } from '../../hooks/useVisibleHeight';
+import { safeAreaBottomPx, safeAreaTopPx } from '../../utils/safeArea';
 import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
 import { useHint } from '../../hooks/useHint';
 import { useAccessStore } from '../../stores/accessStore';
@@ -395,6 +398,32 @@ export default function TasksScreen() {
   const yourPiece =
     board?.you.rank != null ? board.board[board.you.rank - 1]?.mainPiece : undefined;
 
+  // ONE CARD, ONE SCREEN, CONTENT IN THE MIDDLE OF IT.
+  //
+  // This tab is a stack of snap-cards, and they used to hang from the
+  // top of the screen: a short card (the standing, the quests) left a
+  // drift of empty page under it while its title sat under the notch.
+  // Each card is now at least a screenful tall and centres its own
+  // content, so a flick lands with the block in the middle of the
+  // strip you can actually see.
+  //
+  // Measured rather than `100dvh`: the visible height is the window's,
+  // the notch is consumed by the SafeAreaView above, and the floating
+  // tab bar covers the bottom strip — none of which a viewport unit
+  // knows about. Floor so a tiny window cannot produce a negative box.
+  const visibleH = useVisibleHeight();
+  const pageH = Math.max(
+    360,
+    visibleH - safeAreaTopPx() - safeAreaBottomPx() - TAB_BAR_STRIP,
+  );
+  // AND THE LAST CARD HAS TO REACH THE TOP. The scrollport is taller
+  // than a card by exactly the strip the tab bar covers, so without
+  // this the final card stops that far short — measured at 82 px, held
+  // with the previous card still peeking and its own last row under
+  // the bar. The old layout padded the bottom by `calc(100vh - 200px)`
+  // for the same reason; full-height cards need only the difference.
+  const tailPad = safeAreaBottomPx() + TAB_BAR_STRIP;
+
   const taskRows = dailyTasks.tasks;
   const doneCount = taskRows.filter((row) => row.done).length;
   const allDone = taskRows.length > 0 && doneCount === taskRows.length;
@@ -404,7 +433,6 @@ export default function TasksScreen() {
   // cannot check an expression written inline in a dependency array, and
   // getting this set wrong means the pop animation silently stops.
   const noLostDogs = lostDogsLoaded && sortedDogs.length === 0;
-  const hasHistory = history.length > 0;
   const hasBoard = board != null;
 
   // Pop the dominant snap-card when it changes. Uses
@@ -500,17 +528,22 @@ export default function TasksScreen() {
       clearTimeout(initTimer);
     };
     // Re-run only when the SET of rendered snap-cards changes —
-    // i.e. when a card frame disappears (lost-pets hidden after
-    // a load-with-zero, history collapsed) or reappears. The
-    // lost-pets card frame is now always rendered upfront via
-    // the skeleton placeholder, so the dogs fetch settling no
-    // longer flips this — the same DOM node carries the data
-    // swap without needing a fresh observer.
-  }, [noLostDogs, hasHistory, hasBoard]);
+    // i.e. when a card disappears (lost-pets hidden after a
+    // load-with-zero, the standing before its first fetch) or
+    // reappears. The lost-pets card is now always rendered upfront
+    // via the skeleton placeholder, so the dogs fetch settling no
+    // longer flips this — the same DOM node carries the data swap
+    // without needing a fresh observer. Past searches used to be on
+    // this list; they are a section of the lost-pets card now, so
+    // they change its height and never the set.
+  }, [noLostDogs, hasBoard]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} style={styles.scroller}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: tailPad }]}
+        style={styles.scroller}
+      >
         {/* Who holds the city. Territory is the one thing on the map
             that is directly competitive, and until now the only place
             you could see it was three summary rows on the profile tab
@@ -530,7 +563,7 @@ export default function TasksScreen() {
             they earned the ground; who is behind a name is not the
             board's business. */}
         {board ? (
-          <View nativeID="snap-card-board" style={styles.card}>
+          <View nativeID="snap-card-board" style={[styles.card, { minHeight: pageH }]}>
             <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
             {/* YOU, first and always.
                 The number used to sit small and grey in the header, which
@@ -616,7 +649,7 @@ export default function TasksScreen() {
             row first, unranked as a dash until the dog has ten minutes of
             counted life, then the top three and «показати всіх». */}
         {happy ? (
-          <View nativeID="snap-card-happy" style={styles.card}>
+          <View nativeID="snap-card-happy" style={[styles.card, { minHeight: pageH }]}>
             <Text style={styles.cardTitle}>{t.tasks.happinessBoard}</Text>
             <View style={styles.boardYouRow}>
               <BoardRow
@@ -679,7 +712,7 @@ export default function TasksScreen() {
             card is only hidden when the fetch settled with zero
             dogs in the user's area. */}
         {lostDogsLoaded && sortedDogs.length === 0 ? null : (
-          <View nativeID="snap-card-lost" style={styles.card}>
+          <View nativeID="snap-card-lost" style={[styles.card, { minHeight: pageH }]}>
             <Text style={styles.cardTitle}>{t.tasks.lostPetsNearby}</Text>
             {sortedDogs.length === 0 ? (
               <LostDogCardStackSkeleton />
@@ -699,6 +732,45 @@ export default function TasksScreen() {
                 ) : null}
               </View>
             )}
+            {/* THE SEARCHES THAT ALREADY HAPPENED, on the same page as
+                the pets still waiting. They were a card of their own
+                below this one, which is one flick further than anybody
+                looking at a deck of lost pets is going to go — and the
+                question they answer ("did I already look for that
+                one?") is the question you have while looking at the
+                deck. Only rendered when there is something to show, so
+                a new account sees no empty rail. */}
+            {history.length > 0 ? (
+              <View style={styles.historyBlock}>
+                <View style={styles.cardHeaderRow}>
+                  <Text style={styles.historyTitle}>{t.tasks.pastSearches}</Text>
+                  <Text style={styles.cardHeaderCount}>{history.length}</Text>
+                </View>
+                {history.map((q, i) => (
+                  <View
+                    key={q.id}
+                    style={[styles.historyRow, i > 0 && styles.taskDivider]}
+                  >
+                    <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
+                    <View style={styles.historyBody}>
+                      <Text style={styles.historyName} numberOfLines={1}>
+                        {q.dogName ?? t.tasks.unknownPet}
+                      </Text>
+                      <Text style={styles.historyMeta}>
+                        {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
+                        {relativeWhen(q.endedAt)}
+                        {q.status === 'completed' ? ` · +${q.rewardPoints}pts` : ''}
+                      </Text>
+                    </View>
+                    {q.status === 'completed' ? (
+                      <Text style={styles.historyTickDone}>✓</Text>
+                    ) : (
+                      <Text style={styles.historyTickAbandon}>×</Text>
+                    )}
+                  </View>
+                ))}
+              </View>
+            ) : null}
           </View>
         )}
 
@@ -708,7 +780,7 @@ export default function TasksScreen() {
             card above this one — collapsed in since the per-row
             bars already visualise progress and the duplication
             hurt vertical hierarchy. */}
-        <View nativeID="snap-card-daily" style={styles.card}>
+        <View nativeID="snap-card-daily" style={[styles.card, { minHeight: pageH }]}>
           <View style={styles.dailyHeader}>
             <Text style={[styles.cardTitle, styles.cardTitleInline]}>
               {t.tasks.dailyTasks}
@@ -717,22 +789,11 @@ export default function TasksScreen() {
               {doneCount} / {taskRows.length}
             </Text>
           </View>
-          {/* What the whole day is worth, under the title — the rows
-              below each say what they pay, and this is the number you
-              are actually deciding about when you look at the card. */}
-          {dailyTasks.fullDayPaws > 0 ? (
-            <Text style={styles.dayWorth}>{t.tasks.dayWorth(dailyTasks.fullDayPaws)}</Text>
-          ) : null}
-          {/* Slim summary bar under the header — the per-row bars still
-              drive the at-a-glance progress for each task, but a
-              single bar at the top makes "how done am I overall?"
-              readable without summing six row widths. */}
-          <View style={styles.summaryBarTrack}>
-            <HandDrawnBar
-              progress={taskRows.length ? doneCount / taskRows.length : 0}
-              seed="daily-summary"
-            />
-          </View>
+          {/* Nothing else up here. The header is a label and a tally;
+              what the day is worth was a third number saying what the
+              six rows below already say one at a time, and the summary
+              bar was a seventh bar for progress the tally states
+              exactly. The bonus row at the bottom carries the total. */}
           {taskRows.map((row) => {
             const value = Math.min(row.value, row.target);
             const progress = row.target > 0 ? Math.min(value / row.target, 1) : 0;
@@ -807,43 +868,6 @@ export default function TasksScreen() {
           ) : null}
         </View>
 
-        {/* Past searches — completed/abandoned quests, most recent
-            first. Only renders the card when there's something to
-            show so a brand-new account doesn't see an empty rail.
-            Always rendered expanded: a collapsing "+ / −" header
-            existed previously but was too easy to miss (people
-            scrolled hunting for the rows that were a tap away).  */}
-        {history.length > 0 ? (
-          <View nativeID="snap-card-history" style={styles.card}>
-            <View style={styles.cardHeaderRow}>
-              <Text style={styles.cardTitle}>{t.tasks.pastSearches}</Text>
-              <Text style={styles.cardHeaderCount}>{history.length}</Text>
-            </View>
-            {history.map((q, i) => (
-              <View
-                key={q.id}
-                style={[styles.historyRow, i > 0 && styles.taskDivider]}
-              >
-                <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
-                <View style={styles.historyBody}>
-                  <Text style={styles.historyName} numberOfLines={1}>
-                    {q.dogName ?? t.tasks.unknownPet}
-                  </Text>
-                  <Text style={styles.historyMeta}>
-                    {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
-                    {relativeWhen(q.endedAt)}
-                    {q.status === 'completed' ? ` · +${q.rewardPoints}pts` : ''}
-                  </Text>
-                </View>
-                {q.status === 'completed' ? (
-                  <Text style={styles.historyTickDone}>✓</Text>
-                ) : (
-                  <Text style={styles.historyTickAbandon}>×</Text>
-                )}
-              </View>
-            ))}
-          </View>
-        ) : null}
       </ScrollView>
 
       <LostDogsModal
@@ -904,7 +928,10 @@ const styles = StyleSheet.create({
     // room at the bottom for the next snap-card's title to peek
     // above the floating dashboard instead of getting clipped
     // by it.
-    scrollPaddingTop: 32,
+    // Zero, because a card is a screenful and centres itself: any
+    // padding here would push that centre off-centre by the same
+    // amount on every card.
+    scrollPaddingTop: 0,
   } as unknown as object,
   // Tighter top padding so the next card's title peeks above the tab
   // bar. The gap is the SEPARATION between sections and it is
@@ -915,21 +942,44 @@ const styles = StyleSheet.create({
   // with 2 history rows) have enough room beneath them to snap-scroll
   // all the way to the top — without this, a small last card was held
   // mid-screen because the page couldn't scroll any further.
+  // No padding and no gap: each card is a screenful that centres its
+  // own content (minHeight: pageH), so the separation between sections
+  // IS the empty part of each card. The old paddingBottom of
+  // `calc(100vh - 200px)` existed so a short last card could still
+  // scroll to the top — a full-height card needs nothing.
   content: {
     paddingHorizontal: S.l,
-    paddingTop: S.xxxl,
-    paddingBottom: 'calc(100vh - 200px)' as unknown as number,
-    gap: 112,
   },
   // Snap block — no white card frame anymore. Title + content
   // sit straight on the page bg. Just carries the scroll-snap
   // alignment + horizontal padding so the inner content has
   // breathing room from the screen edge.
+  // `start`, not `center`: a card taller than the screen (the six
+  // quests on a small phone) must land on its own top, or the first
+  // rows are scrolled off before you see them. Short cards centre
+  // their content within the full-height box instead.
   card: {
     paddingHorizontal: S.xs,
+    justifyContent: 'center',
     scrollSnapAlign: 'start',
     scrollSnapStop: 'always',
   } as unknown as object,
+  // Past searches, under the deck on the same page. Set apart by a gap
+  // rather than a rule — the same way everything else on this tab is —
+  // and its heading is a size down from the page's own title, because
+  // it is a section of that page rather than a second page.
+  historyBlock: {
+    marginTop: S.xxl,
+  },
+  historyTitle: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: TYPE.body,
+    fontWeight: '800',
+    color: colors.black,
+    marginBottom: S.s,
+    textTransform: 'lowercase',
+    letterSpacing: 0.2,
+  },
   // Relative wrapper so the swipe-hint callout can overlay the deck.
   deckWrap: {
     position: 'relative',
@@ -970,10 +1020,6 @@ const styles = StyleSheet.create({
   },
   // Slim summary bar under the daily-quests header — visually
   // anchors the X / Y tally to a quick "how done?" glance.
-  summaryBarTrack: {
-    height: 6,
-    marginBottom: S.s,
-  },
   // Roomier task row: padding 12 → 16, gap 10 → 14, icon column
   // 22 → 44 to actually fit the 34px pixel icon (was being clipped
   // by the narrow wrap). Label + count bumped a notch to match the
@@ -1016,13 +1062,6 @@ const styles = StyleSheet.create({
   // everywhere else rather than by a rule.
   bonusTask: { marginTop: S.s },
   // What the whole day is worth, under the card's title.
-  dayWorth: {
-    fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.small,
-    color: '#777',
-    marginTop: -S.xs,
-    marginBottom: S.s,
-  },
   // The standing's row styles live with BoardRow (components/ui) now,
   // shared with the fullscreen "see all" board. What stays here is the
   // card-only chrome.

@@ -43,6 +43,7 @@ import { Z } from '../../constants/z';
 import { HandDrawnFrame } from './HandDrawn';
 import { AvatarStudio, type AvatarStage } from './AvatarStudio';
 import { safeAreaBottomPx, safeAreaTopPx } from '../../utils/safeArea';
+import { useVisibleHeight } from '../../hooks/useVisibleHeight';
 
 // The screens the sheet can show, from the picker that chooses them.
 type Screen = DoorScreen;
@@ -149,16 +150,10 @@ export function doorPaperMaxHeight(
   return Math.max(120, visibleH - safeTop - safeBottom - 2 * S.m - bubbleH - BUBBLE_TO_DOG - DOG_TO_PAPER);
 }
 
-export function useVisibleHeight(): number {
-  const [h, setH] = useState(() => (typeof window !== 'undefined' ? window.innerHeight : 800));
-  useEffect(() => {
-    if (typeof window === 'undefined') return;
-    const on = () => setH(window.innerHeight);
-    window.addEventListener('orientationchange', on);
-    return () => window.removeEventListener('orientationchange', on);
-  }, []);
-  return h;
-}
+// Moved to hooks/useVisibleHeight when the tasks tab needed the same
+// measurement; re-exported here so this file's own callers, and the
+// note above about `vh` on iOS, stay where they were.
+export { useVisibleHeight };
 
 // NO overflow:hidden on the paper. It clips at the padding box, 2 px
 // inside the drawn line's own wobble, and cut the ink flat at every

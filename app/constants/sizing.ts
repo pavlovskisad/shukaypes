@@ -105,3 +105,16 @@ export const INLINE_ICON = {
 } as const;
 
 
+
+// THE STRIP THE FLOATING TAB BAR OWNS, from the bottom of the visible
+// area upward: the bar's own 58 px plus the S.xxl it floats above the
+// edge by. Not the bottom safe-area inset — that is measured separately
+// (utils/safeArea) and added by whoever needs it, because it is 0 in a
+// browser tab and in the Telegram Mini App.
+//
+// The same number is written in two other places: the bar's own style
+// in app/(tabs)/_layout.tsx (58 + bottom offset) and TAB_BAR_HEIGHT in
+// app/(tabs)/chat.tsx, whose comment already asks for them to be kept
+// in sync. This is where a fourth copy would have gone; anything new
+// should read it from here.
+export const TAB_BAR_STRIP = 82;
