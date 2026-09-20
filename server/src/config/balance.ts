@@ -52,6 +52,60 @@ export const balance = {
   // (owner, 14 Sep), and a bot's first session is shorter than that.
   happinessIndex: { onlineWindowMs: 90_000, minActiveS: 600 },
   bone: { hunger: 20, happiness: 18 },
+  // THE DAY'S SIX. What the dog asks of a walker between one Kyiv
+  // midnight and the next, and what it pays for them — in PAWS, the
+  // currency the walker can actually see (the HUD pill, the profile).
+  // Points exist on the users row and are shown nowhere, so paying in
+  // points would have paid into a number nobody reads.
+  //
+  // Every one of these is counted from an event the SERVER already
+  // sees, never from the client saying it happened: the tasks pay now,
+  // and a counter a browser console can post to is a mint (D-99).
+  //
+  // The land target is the one number with a measurement behind it. The
+  // claim radius note above records 34ha claimed in six minutes of
+  // walking at claimNeighbourM 250, so 0.1 km² is roughly two minutes
+  // of fresh ground — a short walk somewhere new, not a day's work.
+  // It counts ground GAINED (claimGround's gainedM2), so re-marking
+  // what you already hold does not move it.
+  dailyTasks: {
+    targets: {
+      searchQuests: 1,
+      bones: 3,
+      landmarks: 3,
+      landM2: 100_000,
+      maxHappiness: 1,
+      routedSpotVisits: 1,
+    },
+    // Paws per task, by what each one asks of the walker. The owner set
+    // the shape (15-25 each, 100 for the set); they live here so any
+    // one of them is a one-line change.
+    //
+    // WORTH WATCHING: a full set pays 215 paws. The one day of real
+    // collection anybody has measured is the owner's own account —
+    // 168 paws in 8 days, about 21 a day, and most of THOSE came from
+    // the spawn loop D-94 closed. So the set is worth roughly ten days
+    // of picking paws up off the ground. That may be exactly right for
+    // a daily that wants doing, and it may be far too much; nobody has
+    // walked a real day since the loop was fixed, so it is a first
+    // number, not a measured one.
+    rewards: {
+      searchQuests: 25,
+      bones: 15,
+      landmarks: 20,
+      landM2: 25,
+      maxHappiness: 15,
+      routedSpotVisits: 15,
+    },
+    // A planned walk only counts from a real distance away — "plan a
+    // route" to the bench you are on is not a walk — and counts as
+    // arrived within this much of the destination. The arrival radius
+    // matches what the app already treats as being at a place.
+    walkPlan: { minStartM: 300, arriveM: 60 },
+    // For all six in one day. Paid once, after the last one lands.
+    bonus: 100,
+  },
+
   // Paws are a treat, not a meal: pure happiness, no hunger effect.
   // Only bones feed the dog. (token.hunger stays in the schema as 0 so
   // the collect SQL's `hunger + token.hunger` is a clean no-op.)

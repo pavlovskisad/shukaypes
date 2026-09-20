@@ -7,6 +7,7 @@ import { distanceMeters, type LatLng } from '../utils/geo.js';
 import { ensureFoodForUser } from '../services/spawn.js';
 import { limitInteractive, limitPolling } from '../lib/rateLimit.js';
 import { eatFoodTx } from '../services/collect.js';
+import { tickTask } from '../services/dailyTasks.js';
 
 interface NearbyQuery {
   lat: string;
@@ -124,8 +125,13 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     // The meal, the same write a bot makes on its walk (services/collect.ts).
     await eatFoodTx(req.userId, foodId, { lat, lng });
+    // The day's bone count, from the server's own witness of the meal
+    // rather than the client saying it happened (D-99). Ticked HERE and
+    // not inside eatFoodTx, because bots eat through that same function
+    // and a bot has no day to earn.
+    const day = await tickTask(req.userId, 'bones', 1);
 
-    return { ok: true };
+    return { ok: true, earned: day.earned, bonus: day.bonus, paws: day.paws };
   });
 };
 

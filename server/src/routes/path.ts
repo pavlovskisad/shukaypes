@@ -6,6 +6,8 @@ import { redis } from '../db/redis.js';
 import { balance } from '../config/balance.js';
 import { distanceMeters, pointToSegmentDistanceM, type LatLng } from '../utils/geo.js';
 import { markIfDue, type MarkResult } from '../services/territory.js';
+import { noteWalkArrival, tickTask } from '../services/dailyTasks.js';
+import { readLastPos, writeLastPos } from '../services/walkAnchor.js';
 import { judgeSegment, planCatchUpMarks } from '../services/catchUp.js';
 import { writeCorridor } from '../services/walkCorridor.js';
 import { selfMeta } from '../services/presence.js';
@@ -45,18 +47,6 @@ const PATH_FOOD_RADIUS_M = 130;
 //   - if Redis has no recorded "last position" for the user yet, this
 //     is the first sync ever — we just record it and skip the sweep.
 const MAX_SEGMENT_M = 5000;
-const REDIS_LAST_POS_TTL_S = 24 * 60 * 60;
-
-interface RedisLastPos {
-  lat: number;
-  lng: number;
-  ts: number;
-}
-
-function lastPosKey(userId: string): string {
-  return `path:last:${userId}`;
-}
-
 // Wire shape for the territory outcome. Only a successful mark carries a
 // payload; the mood refusals surface as a reason so the companion can say
 // something about being hungry / not in the mood, and the boring ones
@@ -80,6 +70,23 @@ function markPayload(mark: MarkResult) {
   return null;
 }
 
+// What the day earned on this sync, for the two early returns that have
+// something to report. Null when nothing was earned, so the field stays
+// off the wire on the overwhelming majority of syncs.
+function mergeDay(
+  ...parts: ({ earned: readonly string[]; bonus: boolean; paws: number } | null)[]
+): { day?: { earned: string[]; bonus: boolean; paws: number } } {
+  const live = parts.filter((p): p is NonNullable<typeof p> => p != null);
+  if (!live.length) return {};
+  return {
+    day: {
+      earned: live.flatMap((p) => [...p.earned]),
+      bonus: live.some((p) => p.bonus),
+      paws: live.reduce((sum, p) => sum + p.paws, 0),
+    },
+  };
+}
+
 function markMood(mark: MarkResult): 'hungry' | 'grumpy' | 'own-ground' | null {
   if (mark.reason === 'hungry' || mark.reason === 'grumpy') return mark.reason;
   // Worth voicing, unlike cooldown / too-close. Once a range closes around
@@ -88,28 +95,6 @@ function markMood(mark: MarkResult): 'hungry' | 'grumpy' | 'own-ground' | null {
   // finished. The client throttles it to one line every few minutes.
   if (mark.reason === 'own-ground') return 'own-ground';
   return null;
-}
-
-async function readLastPos(userId: string): Promise<RedisLastPos | null> {
-  try {
-    if (redis.status !== 'ready') return null;
-    const raw = await redis.get(lastPosKey(userId));
-    if (!raw) return null;
-    return JSON.parse(raw) as RedisLastPos;
-  } catch {
-    return null;
-  }
-}
-
-async function writeLastPos(userId: string, pos: LatLng): Promise<void> {
-  try {
-    if (redis.status !== 'ready') return;
-    const value: RedisLastPos = { lat: pos.lat, lng: pos.lng, ts: Date.now() };
-    await redis.set(lastPosKey(userId), JSON.stringify(value), 'EX', REDIS_LAST_POS_TTL_S);
-  } catch {
-    // Path collection is best-effort; a Redis hiccup shouldn't 500
-    // the foreground sync.
-  }
 }
 
 const plugin: FastifyPluginAsync = async (app) => {
@@ -234,6 +219,9 @@ const plugin: FastifyPluginAsync = async (app) => {
     // Never allowed to break the sweep, same as the live mark: a walk's
     // paws and bones must not be lost to a territory failure.
     let caughtUp = 0;
+    // Ground GAINED by every mark this request lays — the catch-up ones
+    // and the live one — for the day's land task (D-99).
+    let gainedM2 = 0;
     if (verdict.kind === 'walked') {
       const planned = planCatchUpMarks(lastPos, current, last.ts, elapsedMs);
       if (planned.length) {
@@ -245,6 +233,7 @@ const plugin: FastifyPluginAsync = async (app) => {
             try {
               const r = await markIfDue(userId, p.pos, name, new Date(p.at));
               if (r.marked) caughtUp++;
+              gainedM2 += r.gainedM2 ?? 0;
             } catch (err) {
               req.log.warn({ err }, '[territory] catch-up mark failed');
               break;
@@ -276,8 +265,24 @@ const plugin: FastifyPluginAsync = async (app) => {
         req.log.warn({ err }, '[territory] mark failed');
         return { marked: false } as MarkResult;
       });
+    gainedM2 += mark.gainedM2 ?? 0;
+
+    // THE DAY'S LAND, ticked here and not at the bottom: three returns
+    // below this line leave the handler early (no movement, nothing
+    // swept), and the ground was claimed before any of them. A tick per
+    // exit is a tick somebody forgets on the fourth exit (D-99).
+    const landDay = gainedM2 > 0 ? await tickTask(userId, 'landM2', gainedM2) : null;
+
+    // ARRIVED AT THE WALK THEY PLANNED (D-99). Both ends of that walk
+    // are the server's own record — it wrote where the plan started
+    // from, and `current` is the position it has just accepted here —
+    // so neither end is the client asserting anything.
+    const arrivalDay = await noteWalkArrival(userId, current);
 
     // No real movement (GPS jitter etc) — refresh anchor, skip sweep.
+    // The mark above may still have claimed ground, so the day's land
+    // gets it: this return is a shortcut past the sweep, not past the
+    // walk.
     if (segLen < 5) {
       await writeLastPos(userId, current);
       return {
@@ -286,6 +291,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         reason: 'no-movement',
         marked: markPayload(mark),
         mood: markMood(mark),
+        ...mergeDay(landDay, arrivalDay),
       };
     }
 
@@ -347,6 +353,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         foodConsumed: 0,
         marked: markPayload(mark),
         mood: markMood(mark),
+        ...mergeDay(landDay, arrivalDay),
       };
     }
 
@@ -434,11 +441,28 @@ const plugin: FastifyPluginAsync = async (app) => {
     });
 
     await writeLastPos(userId, current);
+
+    // THE DAY'S SIX, from what the server just saw happen (D-99). Both
+    // of these are the walk itself: bones the dog ate on the path, and
+    // ground the marks actually GAINED — never the total held, so a
+    // lap of your own district earns nothing.
+    const day = { earned: [] as string[], bonus: false, paws: 0 };
+    const record = (r: { earned: readonly string[]; bonus: boolean; paws: number } | null) => {
+      if (!r) return;
+      day.earned.push(...r.earned);
+      day.bonus = day.bonus || r.bonus;
+      day.paws += r.paws;
+    };
+    record(landDay);
+    record(arrivalDay);
+    if (foodHits.length) record(await tickTask(userId, 'bones', foodHits.length));
+
     return {
       tokensCollected: tokenHits.length,
       foodConsumed: foodHits.length,
       marked: markPayload(mark),
       mood: markMood(mark),
+      day,
     };
   });
 };

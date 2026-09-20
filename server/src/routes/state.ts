@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { noteMaxHappiness } from '../services/dailyTasks.js';
 import { eq, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
 import { xpProgress, MAX_LEVEL } from '../lib/xp.js';
@@ -40,6 +41,21 @@ const plugin: FastifyPluginAsync = async (app) => {
     // curve can be tuned without DB writes.
     const { level, xpInLevel, xpForNextLevel } = xpProgress(companion.xp);
 
+    // THE DAY'S MAX HAPPINESS (D-99). Noticed on the poll rather than
+    // written at the moment the meter fills, because happiness is
+    // raised in four places (a bone, a paw, a mark, a waypoint) and a
+    // fifth would forget. This is the one place that sees the value
+    // itself, and it sees it every few seconds.
+    //
+    // Guarded in memory so a dog sitting at the ceiling does not write
+    // a row per poll: the DB rule is idempotent anyway — the counter is
+    // a ceiling of 1 and the reward pays once — so losing the guard on
+    // a restart costs one extra no-op write, not a second payment.
+    const day =
+      companion.happiness >= balance.happiness.max
+        ? await noteMaxHappiness(req.userId)
+        : null;
+
     return {
       user: {
         id: user.id,
@@ -60,6 +76,7 @@ const plugin: FastifyPluginAsync = async (app) => {
         happiness: companion.happiness,
         lastFedAt: companion.lastFedAt?.toISOString() ?? null,
       },
+      ...(day ? { day } : {}),
     };
   });
 };

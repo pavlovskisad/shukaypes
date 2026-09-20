@@ -1914,7 +1914,6 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // someone in a quest because a request failed is the worse outcome
         // — they just do not get told a number.
       }
-      if (seen) useGameStore.getState().tickDailyTask('sightings');
       // THE PAYOUT, ONE PAW AT A TIME.
       //
       // The counter could just jump by twenty, and it would be worth

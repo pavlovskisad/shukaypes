@@ -396,10 +396,28 @@ export const dailyTasks = pgTable(
   {
     userId: text('user_id').notNull().references(() => users.id, { onDelete: 'cascade' }),
     date: text('date').notNull(),
-    tokens: integer('tokens').notNull().default(0),
+    // The day's six (D-99). Every one is counted from an event the
+    // server sees; none is ticked by the client any more.
+    searchQuests: integer('search_quests').notNull().default(0),
     bones: integer('bones').notNull().default(0),
-    lostPetChecks: integer('lost_pet_checks').notNull().default(0),
+    landmarks: integer('landmarks').notNull().default(0),
+    // Ground GAINED today, in square metres — claimGround's gainedM2
+    // summed, so re-marking what you already hold does not move it.
+    landM2: doublePrecision('land_m2').notNull().default(0),
+    maxHappiness: integer('max_happiness').notNull().default(0),
+    // Which landmarks, not how many — the discover endpoint takes the
+    // seen-list from the client, so a bare counter would pay three
+    // times for one statue.
+    landmarkIds: text('landmark_ids').array().notNull().default(sql`'{}'`),
     spotVisits: integer('spot_visits').notNull().default(0),
+    // Which tasks have already paid. A counter keeps climbing past its
+    // target, so without this a fourth bone pays for the third again.
+    paid: text('paid').array().notNull().default(sql`'{}'`),
+    bonusPaidAt: timestamp('bonus_paid_at', { withTimezone: true }),
+    // Kept, not shown: every historical row carries these, and dropping
+    // a column to tidy a display loses the only record of what people did.
+    tokens: integer('tokens').notNull().default(0),
+    lostPetChecks: integer('lost_pet_checks').notNull().default(0),
     sightings: integer('sightings').notNull().default(0),
     updatedAt: timestamp('updated_at', { withTimezone: true }).notNull().defaultNow(),
   },
@@ -407,6 +425,26 @@ export const dailyTasks = pgTable(
     pk: primaryKey({ columns: [t.userId, t.date] }),
   }),
 );
+
+// The walk somebody said they were making (D-99).
+//
+// Routes are planned on the phone and the server never saw one, so the
+// day's "visit a spot" could only have been the client asserting it.
+// Recorded here when the route is built — only from a real distance
+// away — and marked arrived by /collect/path out of positions the
+// server wrote itself. One per walker; planning another replaces it.
+export const walkPlans = pgTable('walk_plans', {
+  userId: text('user_id')
+    .primaryKey()
+    .references(() => users.id, { onDelete: 'cascade' }),
+  lat: doublePrecision('lat').notNull(),
+  lng: doublePrecision('lng').notNull(),
+  name: text('name'),
+  // How far off it was when it was planned. Kept for the record: it is
+  // the thing that makes an arrival mean something.
+  startDistM: doublePrecision('start_dist_m').notNull(),
+  createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
+});
 
 // Kyiv lore — a curated geo-indexed corpus of stories the companion
 // can mention when the walker passes by. Built one-off by seed-lore.ts

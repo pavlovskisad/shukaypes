@@ -26,7 +26,9 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { and, inArray, sql } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
-import { limitRead } from '../lib/rateLimit.js';
+import { limitInteractive, limitRead } from '../lib/rateLimit.js';
+import { planWalk } from '../services/dailyTasks.js';
+import { lastPosOf } from '../services/walkAnchor.js';
 
 // Matches the far-walk budget with room to spare, so one fetch serves
 // every walk the planner can propose from a given standing position.
@@ -136,6 +138,32 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     return { destinations: merged };
   });
+
+  // THE WALK BEING STARTED (D-99). The route itself is planned on the
+  // phone; this is the phone telling the server where it is headed, so
+  // that arriving there can be noticed from positions the server wrote
+  // itself rather than taken on trust.
+  //
+  // Refused from close up — a route to where you already are is not a
+  // walk — and the refusal is not an error: the walk still happens, it
+  // just does not count toward the day.
+  app.post<{ Body: { lat?: unknown; lng?: unknown; name?: unknown } }>(
+    '/walk/plan',
+    limitInteractive,
+    async (req, reply) => {
+      const lat = Number(req.body?.lat);
+      const lng = Number(req.body?.lng);
+      if (!Number.isFinite(lat) || !Number.isFinite(lng)) {
+        reply.code(400);
+        return { error: 'lat + lng required' };
+      }
+      const from = await lastPosOf(req.userId);
+      const name = typeof req.body?.name === 'string' ? req.body.name.slice(0, 120) : null;
+      const r = await planWalk(req.userId, { lat, lng, name }, from);
+      return { counts: r.kept, startDistM: Math.round(r.startDistM) };
+    },
+  );
+
 };
 
 export default plugin;

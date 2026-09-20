@@ -5,6 +5,7 @@ import type { FoodItem, LatLng, NearbyPlayer, Quest, Token } from '@shukajpes/sh
 import {
   api,
   PET_RADIUS_M,
+  type DailyTaskKey,
   type LoreFavourite,
   type LoreRef,
   type NearbyLostDog,
@@ -54,16 +55,29 @@ const PLACES_REFRESH_THRESHOLD_M = 1500;
 // Mirrors the server's daily_tasks table (PR #161). Initial state is
 // blanks for today's local date; refreshDailyTasks() pulls authoritative
 // counts from /tasks/today on map focus + on store hydration. Each
-// tickDailyTask() applies the optimistic +N locally and POSTs to
-// /tasks/tick — server is source of truth, but the UI updates without
-// waiting for the round-trip.
+// The day's six are COUNTED BY THE SERVER now (D-99): they pay paws,
+// and a counter the client posts to is a mint. refreshDailyTasks() only
+// reads. Nothing here ticks anything.
+// The day's six, exactly as the server sends them (D-99). The client
+// keeps no targets and no rewards of its own: they live in the server's
+// balance file, and a second copy here is a second copy to drift.
+export interface DailyTaskRow {
+  key: DailyTaskKey;
+  value: number;
+  target: number;
+  /** Paws this one pays. */
+  reward: number;
+  done: boolean;
+  paid: boolean;
+}
+
 export interface DailyTasks {
-  date: string; // YYYY-MM-DD local
-  tokens: number;
-  bones: number;
-  lostPetChecks: number;
-  spotVisits: number;
-  sightings: number;
+  /** The Kyiv day the server is counting. */
+  date: string;
+  tasks: DailyTaskRow[];
+  bonus: { reward: number; paid: boolean };
+  /** Every task plus the bonus, for the card's header. */
+  fullDayPaws: number;
 }
 
 // What the current walking route IS, as opposed to where it goes.
@@ -78,14 +92,6 @@ export interface WalkRouteMeta {
   destinationName?: string;
 }
 
-const DAILY_TARGETS = {
-  tokens: 10,
-  bones: 3,
-  lostPetChecks: 2,
-  spotVisits: 1,
-  sightings: 1,
-};
-
 function todayLocal(): string {
   const d = new Date();
   const y = d.getFullYear();
@@ -94,15 +100,11 @@ function todayLocal(): string {
   return `${y}-${m}-${day}`;
 }
 
+// Nothing known yet. The card renders an empty state from this until
+// the first read lands; it carries no targets, because the server is
+// the only place they are written down.
 function blankTasks(): DailyTasks {
-  return {
-    date: todayLocal(),
-    tokens: 0,
-    bones: 0,
-    lostPetChecks: 0,
-    spotVisits: 0,
-    sightings: 0,
-  };
+  return { date: todayLocal(), tasks: [], bonus: { reward: 0, paid: false }, fullDayPaws: 0 };
 }
 
 // Best-effort cleanup of the previous localStorage cache. Old keys
@@ -117,8 +119,6 @@ function dropLegacyStorage(): void {
     // storage disabled — fine, nothing to clean.
   }
 }
-
-export { DAILY_TARGETS };
 
 interface GameState {
   hunger: number;
@@ -542,8 +542,6 @@ interface GameState {
     narration: string | null;
   }>;
   abandonActiveQuest: () => Promise<void>;
-  // Optimistic local +N, then fire-and-forget POST /tasks/tick.
-  tickDailyTask: (key: keyof Omit<DailyTasks, 'date'>, amount?: number) => void;
   // Authoritative pull from /tasks/today. Fired on first app load
   // and again when the map tab refocuses (catches midnight rollover
   // + cross-device updates). Replaces the previous client-side
@@ -695,7 +693,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
     try {
       await api.collectToken(id, userPosition, force);
-      get().tickDailyTask('tokens');
       // Pull fresh hunger/happiness so the meters reflect the +2/+5
       // bumps immediately rather than waiting for the 5s poll. Counter
       // can't go backwards: syncState's tokensCollected is Math.max
@@ -744,7 +741,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     });
     try {
       await api.feed(id, userPosition, force);
-      get().tickDailyTask('bones');
       // syncState pulls fresh hunger/happiness so the +20/+8 bumps
       // land immediately. tokensCollected stays monotonic via Math.max.
       void get().syncState();
@@ -1196,16 +1192,10 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setSelectedDog: (selectedDogId) => {
     set({ selectedDogId });
-    if (selectedDogId) get().tickDailyTask('lostPetChecks');
   },
 
   setSearchIntent: (searchIntentDogId) => {
     set({ searchIntentDogId });
-    // Same tick setSelectedDog does. Deciding to go and look for a pet
-    // is at least as much of a "check" as opening its card was, and the
-    // daily task should not quietly stop counting because the card in
-    // the middle went away.
-    if (searchIntentDogId) get().tickDailyTask('lostPetChecks');
   },
 
   syncSpots: async (pos) => {
@@ -1256,7 +1246,6 @@ export const useGameStore = create<GameState>((set, get) => ({
 
   setSelectedSpot: (selectedSpotId) => {
     set({ selectedSpotId });
-    if (selectedSpotId) get().tickDailyTask('spotVisits');
   },
 
   setSpotsVisible: (spotsVisible) => set({ spotsVisible }),
@@ -1463,7 +1452,7 @@ export const useGameStore = create<GameState>((set, get) => ({
         spotsCategoryFilter !== 'all' ? true : s.spotsVisible,
     })),
 
-  setWalkRoute: (walkRoute, walkRouteMeta, stops) =>
+  setWalkRoute: (walkRoute, walkRouteMeta, stops) => {
     set({
       walkRoute,
       walkRouteMeta,
@@ -1472,7 +1461,18 @@ export const useGameStore = create<GameState>((set, get) => ({
       // A new walk introduces itself. Clearing one (route null) leaves
       // nothing to show, and a walk through a district with no
       // landmarks has no list to open.
-    }),
+    });
+    // TELL THE SERVER WHERE WE ARE HEADED (D-99). Not so it can draw
+    // anything — the route is ours — but so that arriving there can be
+    // noticed from the positions the server writes itself, which is the
+    // only way "build a route and finish it" can be a task that pays.
+    // Fire-and-forget: a walk whose plan did not register is still a
+    // walk, it just does not count toward the day.
+    const end = walkRoute && walkRoute.length ? walkRoute[walkRoute.length - 1] : null;
+    if (end) {
+      void api.planWalk(end.lat, end.lng, walkRouteMeta?.destinationName ?? null).catch(() => {});
+    }
+  },
   setOpenWalkStop: (openWalkStopId) => set({ openWalkStopId }),
 
   reportSighting: async (dogId) => {
@@ -1485,7 +1485,6 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (isFallbackPosition(userPosition)) return { ok: false, reason: 'no-location' };
     try {
       const res = await api.reportSighting(dogId, userPosition);
-      get().tickDailyTask('sightings');
       // If the server accepted it as close-enough, the dog's last-seen
       // coord was refreshed — re-pull the nearby list so the pin moves
       // to match without waiting for the next 15s tick.
@@ -1497,32 +1496,13 @@ export const useGameStore = create<GameState>((set, get) => ({
     }
   },
 
-  tickDailyTask: (key, amount = 1) => {
-    const prev = get().dailyTasks;
-    const today = todayLocal();
-    // If we crossed midnight since the last tick, snap to a fresh
-    // row before applying the increment. Server upsert will create
-    // its own row at this date too.
-    const base: DailyTasks =
-      prev.date === today
-        ? prev
-        : { ...blankTasks(), date: today };
-    const next: DailyTasks = { ...base, [key]: base[key] + amount };
-    set({ dailyTasks: next });
-    // Fire-and-forget — server is authoritative but we don't block
-    // the UI on the round-trip. Failures show up only if the
-    // refresh-on-focus pulls a different value back.
-    void api.tickDailyTask(today, key, amount).catch(() => {});
-  },
-
   refreshDailyTasks: async () => {
-    const today = todayLocal();
     try {
-      const { tasks } = await api.getDailyTasks(today);
-      set({ dailyTasks: tasks });
+      const day = await api.getDailyTasks();
+      set({ dailyTasks: day });
     } catch {
-      // Network blip — keep the local optimistic counts. The next
-      // refresh-on-focus reconciles.
+      // Network blip — keep what we last read. The next refresh-on-
+      // focus reconciles.
     }
     // One-time legacy localStorage cleanup. Cheap, idempotent.
     dropLegacyStorage();

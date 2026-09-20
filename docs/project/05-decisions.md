@@ -2645,3 +2645,85 @@ whose own comment says it exists to stop a hint "yanking the camera to
 the dog while the user is reading what they just found". A stop on a
 planned walk carries its story under `openWalkStopId`. Both were in the
 follow's list already; neither was in the hints' list, and both are now.
+
+### D-99 · The day's six, and the first thing in the game that pays ❗
+*`server/src/services/dailyRewards.ts`, `dailyTasks.ts`, `walkAnchor.ts`,
+migration 0046, `app/app/(tabs)/tasks.tsx`*
+
+The owner asked for six dailies and for each to show what it pays, plus
+a bonus for the set:
+
+```
+finish 1 search quest   +25 🐾      mark 0.10 sq km     +25 🐾
+eat 3 bones             +15 🐾      reach max happiness +15 🐾
+sniff 3 landmarks       +20 🐾      build a route and finish it  +15 🐾
+                        the whole day  +100 🐾
+```
+
+**Paws, not points.** Asked, and the answer mattered more than a name:
+`users.points` is tracked, is in the dog's context prompt, and is
+**shown nowhere in the app**. Paying in points would have paid into a
+number nobody can see. Paws (`users.totalTokens`) are the HUD pill and
+the profile figure — the currency the walker actually has.
+
+**The moment a task pays, the client cannot be the one counting.**
+`/tasks/tick` was a POST the app made whenever it decided something had
+happened. That was fine while the tasks paid nothing; they were the
+app's own progress bars, kept server-side only so they survived a cache
+wipe. Attach paws to a crossed target and that endpoint is a mint: one
+fetch in a console, repeated. So the endpoint is **gone** — not kept as
+a no-op, because a route that exists is a route somebody wires back up
+— and all six are counted from events the server already witnesses:
+
+| task | counted at | verified end to end |
+|---|---|---|
+| bones | `eatFoodTx` via `/feed`, and the path sweep's `foodHits` | ✅ three bones, paid once |
+| landmarks | `/lore/discover` | ✅ three distinct, a repeat pays nothing |
+| max happiness | the `/state` poll, where the value is seen | ✅ noticed once, further polls pay nothing |
+| routed spot | arrival, from positions `/collect/path` accepted | ✅ refused close up, paid on arrival, plan spent |
+| land | `claimGround`'s `gainedM2`, threaded out through `MarkResult` | ⚠️ counter and payment verified in metres; the claim itself could not run on the dev stack (below) |
+| search quest | a quest completing in `/quests/advance` | ⚠️ not exercised — same `tickTask` as the four above |
+
+**Counted by identity where a count would lie.** `/lore/discover` is
+handed the already-seen list *by the app*, so three calls with an empty
+exclude list are three sniffs of one statue. The row keeps the landmark
+ids and the counter is how many distinct ones are in it.
+
+**"Build and finish the route" needed the server to see both ends.**
+Routes are planned on the phone; the server saw neither the planning nor
+the arrival, so that task could only ever have been the client asserting
+it. Now the plan is recorded when it is made (`walk_plans`) — and only
+from `minStartM` 300 m away, or a "route" to the bench you are sitting
+on finishes the task — and the arrival is noticed by the path sweep out
+of positions the server wrote itself. The last-position anchor moved
+from inside `routes/path.ts` into `services/walkAnchor.ts` so both
+readers share one owner of the key.
+
+**Paying twice is the whole risk, so the rule is pure and checked.** A
+counter does not stop at its target — the fourth bone arrives after the
+third has paid — so "what is owed" is "targets met that have not been
+paid for", and the row remembers in `paid`. The bonus rides on the
+counters rather than on `paid`, so the task that completes the set pays
+its own reward and the bonus in one breath. `pnpm check:daily`
+fixture-checks all of it and is mutation-tested: dropping the
+already-paid filter fails it.
+
+**The number to watch.** A full set is **215 paws**. The only day of
+real collection anybody has measured is the owner's own account — 168
+paws over 8 days, about 21 a day, and most of those came from the spawn
+loop D-94 closed. So the set is worth roughly ten days of picking paws
+off the ground. That may be right for a daily that wants doing and it
+may be far too much; nobody has walked a real day since the loop was
+fixed. Every number is in `balance.dailyTasks`, one line each.
+
+**What the dev stack could not run.** `claimGround` hands its geometry
+to a worker that loads `groundGeometry.js`, which only exists after a
+build — under `tsx` the worker fails and every claim returns
+`gainedM2: 0`. That is why 60 marks made 0 ground pieces locally, and it
+is not this change: the land counter and its payment were verified
+directly in metres instead (short of target → nothing, the metre that
+crosses → paid, more ground after → nothing).
+
+**The ² does not render**, which `areaValue` had already found out and
+written down in the strings file, and which this walked into anyway. The
+label says «кв. км» / "sq km", like the standing.
