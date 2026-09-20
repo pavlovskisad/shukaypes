@@ -50,7 +50,7 @@ import { petPhotoAt } from '../../utils/petPhoto';
 import { CARD_W } from '../ui/CardStack';
 import { DOG_MIN_Y, DOG_ROOM } from '../ui/AccountDoor';
 import { safeAreaTopPx } from '../../utils/safeArea';
-import { easeCamera, frameTerritory } from './camera';
+import { easeCamera, frameTerritory, FLAT_PITCH, WALK_ZOOM } from './camera';
 import { OtherWalker } from './OtherWalker';
 import { PIN_START, stepPin, type PinLifecycle } from '../../utils/pinLifecycle';
 import { isReading, type ReadingSurfaces } from '../../utils/cameraHold';
@@ -220,18 +220,13 @@ const CONTEXT_RESTORE_WAIT_MS = 4000;
 //
 // GAME_PITCH is the tilt you look ACROSS a city with, and it is the right
 // camera for supersniff — a chase view down the street you are being led
-// along. It is the wrong one for the two modes that are about GROUND. A
-// walk's route and its stop dots squash into ellipses toward the horizon,
-// small and awkward to hit; territory's filled hulls foreshorten into
-// slivers whose shape — the whole point of holding ground — cannot be read.
-// Both are plan-view things, so both modes go overhead and STAY there: the
-// pitch cap drops to zero, so there is no tilt gesture to fall out of it.
+// along. It is the wrong one for the two modes that are about GROUND, which
+// go overhead and stay there.
 //
-// Zero rather than CrayonRoute's near-overhead ROUTE_VIEW_PITCH (20). That
-// 20 is a moment inside a mode — a route arriving, keeping a little tilt so
-// the city still reads as a place. This is the mode itself, and a couple of
-// degrees of lean buys nothing once you are looking down on the roofs.
-const FLAT_PITCH = 0;
+// FLAT_PITCH and WALK_ZOOM themselves moved to ./camera (D-101), because
+// the favourites previews have to be rendered from the same place the
+// walking camera stands; everything below is how this file GETS there.
+//
 // THE CAMERA IS MOUNTED ON THE DOG. Same trick as the supersniff chase:
 // one easeTo per tick, each lasting exactly one tick with a linear curve,
 // so consecutive calls chain into continuous motion instead of a series of
@@ -271,19 +266,17 @@ const FLAT_ENTRY_MS = 600;
 // so the cap has to wait for the glide rather than run on a timer beside
 // it — a timer is what turned an interrupted glide into a visible snap.
 const FLAT_PITCH_SETTLED_DEG = 2;
-// HOW FAR OUT EACH MODE OPENS. balance.mapZoomDefault (15.6) is the map's
-// resting distance and what the gate asks its question from; these two are
-// the modes that want something else from the same city.
+// HOW FAR OUT TERRITORY OPENS. balance.mapZoomDefault (15.6) is the map's
+// resting distance and what the gate asks its question from; this mode
+// wants something else from the same city.
 //
 // Territory is about the SHAPE of who holds what, and a shape you can only
 // see two blocks of is not a shape. Pulling back a step and a half shows
 // roughly two and a half kilometres across — enough neighbours for the
 // borders between them to read as a map of a fight rather than as coloured
-// patches around the dog.
+// patches around the dog. (The walk's own distance is WALK_ZOOM, in
+// ./camera beside FLAT_PITCH.)
 const TERRITORY_ZOOM = 14.3;
-// A walk is about the street you are on and the next one, so it sits a
-// little closer in than the resting distance rather than further out.
-const WALK_ZOOM = 16.2;
 // Zoom is a smooth scale, so "arrived" needs a tolerance; a twentieth of a
 // zoom level is far below what an eye can see as a step.
 const FLAT_ZOOM_SETTLED = 0.05;
