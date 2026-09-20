@@ -116,3 +116,32 @@ export function frameTerritory(
     duration: 900,
   });
 }
+
+// ── WHERE THE WALKING CAMERA STANDS ──────────────────────────────────
+//
+// The two numbers that say what our map LOOKS LIKE while you are out
+// walking: straight down, a step closer in than the resting distance.
+// They lived in MapView alone until the favourites previews needed
+// them (D-101): a preview rendered at some other tilt and distance is a
+// picture of a different city than the one the card is a shortcut into.
+// Two copies would have drifted the first time either was tuned, so
+// there is one, here, and MapView reads it like everybody else.
+//
+// FLAT_PITCH is zero because the two modes it serves — the walk
+// ('explore') and territory ('play') — are about GROUND. A route's stop
+// dots squash into ellipses toward the horizon and a territory hull
+// foreshortens into a sliver whose shape, the whole point of holding it,
+// cannot be read. Both are plan-view things, so both go overhead and
+// STAY there: MapView drops the pitch cap to this, so there is no tilt
+// gesture left to fall out of it.
+//
+// Zero rather than CrayonRoute's near-overhead ROUTE_VIEW_PITCH (20).
+// That 20 is a moment INSIDE a mode — a route arriving, keeping a little
+// lean so the city still reads as a place. This is the mode itself, and
+// a couple of degrees buys nothing once you are looking down on roofs.
+export const FLAT_PITCH = 0;
+// A walk is about the street you are on and the next one, so it sits a
+// little closer in than balance.mapZoomDefault (15.6) rather than
+// further out — the opposite of territory, which pulls back to show the
+// shape of who holds what.
+export const WALK_ZOOM = 16.2;

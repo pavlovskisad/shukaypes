@@ -1,6 +1,7 @@
 import maplibregl from 'maplibre-gl';
 import type { LatLng } from '@shukajpes/shared';
 import { applyCrayonOverride, fetchCrayonStyleSpec, LIGHT_PALETTE } from '../components/map/crayonStyle';
+import { FLAT_PITCH, WALK_ZOOM } from '../components/map/camera';
 
 // A small picture of the map around a place, for the favourites cards.
 //
@@ -18,19 +19,39 @@ import { applyCrayonOverride, fetchCrayonStyleSpec, LIGHT_PALETTE } from '../com
 // map around a plaque does not change week to week.
 
 export const PREVIEW_W = 320;
-export const PREVIEW_H = 150;
-// Close enough to read the block the place is on, far enough to see the
-// street it is on. A little tilt so it reads as the same world as the
-// main map, not a flat print.
-const PREVIEW_ZOOM = 15.8;
-const PREVIEW_PITCH = 35;
+// NOT the height the picture is shown at — the card flexes that, so
+// the paper band under it is exactly as tall as one card's title and
+// story need (164 when both run to two lines, 204 when both are one).
+// This is what the hidden map is RENDERED at, and the middle of that
+// range is the size that crops least at either end.
+//
+// It is also the snapshot's shape, so changing it invalidates every
+// cached picture — which is what the store key's version is for.
+export const PREVIEW_H = 184;
+// SHOT FROM WHERE THE WALKING CAMERA STANDS (D-101). This used to be a
+// distance and a tilt of its own — 15.8 and 35° — picked to look nice in
+// isolation. It did, and that was the bug: the card is a shortcut into a
+// place you then walk to, and the walk shows you that place from
+// overhead. A tilted preview is a picture of a city you never see, so
+// tapping one is a small dislocation every time.
+//
+// Both numbers now come from components/map/camera, which is where the
+// walk itself reads them. If the walking camera is ever re-aimed, these
+// follow it without anybody remembering to.
+const PREVIEW_ZOOM = WALK_ZOOM;
+const PREVIEW_PITCH = FLAT_PITCH;
 // How long one snapshot may take before it is given up on — tiles on a
 // slow connection, mostly.
 const JOB_TIMEOUT_MS = 12_000;
 // Idle before the hidden map is torn down.
 const TEARDOWN_AFTER_MS = 20_000;
 
-const STORE_KEY = 'shukajpes.lorePreview.v1';
+// VERSIONED, and the version is the point. Snapshots are kept across
+// sessions because the map around a plaque does not change week to week
+// — which also means a phone that has already cached the tilted 15.8
+// previews would go on showing them forever. Bumping the key is how the
+// regeneration actually happens; the old entries fall out with the cap.
+const STORE_KEY = 'shukajpes.lorePreview.v2';
 const STORE_MAX = 40;
 
 type Job = { id: string; position: LatLng; resolve: (url: string | null) => void };

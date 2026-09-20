@@ -2782,3 +2782,52 @@ states exactly. The bonus row at the bottom carries the total.
 Centring verified by measurement rather than by eye: the padding above
 and below each card's content block, on a 390×844 screen —
 `top 198 / bottom 198, skew 0`.
+
+### D-101 · Two carousels on one tab were two different cards
+*`app/components/ui/LoreFavouriteCard.tsx`, `app/services/mapPreview.ts`,
+`app/components/map/camera.ts`, `app/app/(tabs)/spots.tsx`*
+
+The spots tab stacks decks: hearted places first, then a deck per
+category. They were drawn as if they had nothing to do with each other.
+
+**The slot was a different size.** `FAVOURITE_CARD_H = 262` against
+`CardStack`'s own `CARD_H = 280` — eighteen pixels, set because "the
+favourites cards are a picture plus two lines of text, so they sit a
+little shorter", which is a reason for a card to be shorter and not a
+reason for a *deck* to be. One flick apart, two carousels disagreed
+about how big a card is. The override is gone; both decks are the
+`CardStack` slot. Measured after: `fav 320×280, cafe 320×280`.
+
+**The distance was a white pill on the map.** A chip is what you use
+when the background underneath is unknowable — which is true of a photo
+and was true here while the label floated on the preview. It sits on
+the paper band now, bare beside its pin, which is the move the lost-pet
+card already made and wrote down its reasons for. The card also had its
+own private copy of `formatDistance`; it uses `utils/geo`'s.
+
+**The picture takes what the words do not.** It was a fixed 150 px in a
+262 px card, so a one-line story left a slab of blank paper under it
+while the spot card beside it had none. The preview flexes now: the
+band is exactly as tall as that card's title and story need, and the
+map runs down to meet it.
+
+**Shot from where the walking camera stands.** The previews were
+rendered at zoom 15.8 and **35° of tilt**, picked to look good on their
+own — and they did, which was the bug. A favourite card is a shortcut
+into a place you then walk to, and the walk shows that place from
+overhead (`FLAT_PITCH = 0`, `WALK_ZOOM = 16.2`). A tilted preview is a
+picture of a city you never actually see. Both numbers moved out of
+`MapView` into `components/map/camera`, so the preview reads the same
+copy the walk does rather than a second one that drifts the first time
+either is tuned.
+
+**The store key is the regeneration.** Snapshots are kept in
+`localStorage` across sessions, because the map around a plaque does not
+change week to week — which also means a phone that already cached the
+tilted ones would show them forever. `shukajpes.lorePreview.v1` →
+`v2`. Nothing else makes the previews actually redraw.
+
+Verified in the harness on a 390×844 screen with three hearted places
+and a seeded cafe deck: both decks measure 320×280, the snapshots come
+back 640×368 (PREVIEW_W×PREVIEW_H at dpr 2), and the cached set lands
+under the v2 key.

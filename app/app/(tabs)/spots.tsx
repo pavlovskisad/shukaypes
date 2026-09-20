@@ -19,10 +19,6 @@ import type { LoreFavourite } from '../../services/api';
 import { CardStack } from '../../components/ui/CardStack';
 import { LoreFavouriteCard } from '../../components/ui/LoreFavouriteCard';
 
-// The favourites cards are a picture of the map plus two lines of
-// text, so they sit a little shorter than the spot cards' 280.
-const FAVOURITE_CARD_H = 262;
-
 // Fixed display order — matches the FILTERS chip order from the
 // previous tab layout so users coming from older sessions land on
 // familiar category sequencing. Each non-empty category becomes a
@@ -251,7 +247,6 @@ export default function SpotsScreen() {
                 getId={(f) => f.id}
                 onTap={onPickFavourite}
                 renderCard={renderFavourite}
-                cardHeight={FAVOURITE_CARD_H}
               />
             </View>
           ) : null}
