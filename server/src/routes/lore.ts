@@ -20,6 +20,7 @@
 //     it.
 
 import type { FastifyPluginAsync } from 'fastify';
+import { tickLandmark } from '../services/dailyTasks.js';
 import { and, desc, eq, inArray, notInArray, sql } from 'drizzle-orm';
 import type { LatLng } from '../utils/geo.js';
 import { db, schema } from '../db/index.js';
@@ -175,7 +176,12 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { lore: null };
     }
     const pick = pool[Math.floor(Math.random() * pool.length)]!;
+    // The day's landmarks (D-99). By identity, not by call count: the
+    // exclude list above comes from the app, so three calls with an
+    // empty one are three sniffs of the same statue.
+    const day = await tickLandmark(req.userId, pick.id);
     return {
+      day,
       lore: {
         id: pick.id,
         name: pick.name,

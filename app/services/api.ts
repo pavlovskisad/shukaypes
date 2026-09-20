@@ -576,6 +576,19 @@ export const auth = {
   },
 };
 
+/**
+ * The day's six, named the same on both sides of the wire. The server
+ * is where the list, the targets and the rewards live (D-99); this is
+ * only what the card needs to key its rows and its labels by.
+ */
+export type DailyTaskKey =
+  | 'searchQuests'
+  | 'bones'
+  | 'landmarks'
+  | 'landM2'
+  | 'maxHappiness'
+  | 'spotVisits';
+
 export const api = {
   getState: () => req<StateResponse>('/state'),
 
@@ -999,27 +1012,33 @@ export const api = {
       body: JSON.stringify({ questId }),
     }),
 
-  // Daily-task progress — server-backed since PR #161.
-  getDailyTasks: (date: string) =>
+  // The day's six (D-99). Read only: the counters are the server's
+  // now, ticked from the events it witnesses, because they pay paws
+  // and a counter the client can post to is a mint. The date is the
+  // server's too — the Kyiv day — so nothing is sent.
+  getDailyTasks: () =>
     req<{
+      date: string;
       tasks: {
-        date: string;
-        tokens: number;
-        bones: number;
-        lostPetChecks: number;
-        spotVisits: number;
-        sightings: number;
-      };
-    }>(`/tasks/today?date=${encodeURIComponent(date)}`),
+        key: DailyTaskKey;
+        value: number;
+        target: number;
+        reward: number;
+        done: boolean;
+        paid: boolean;
+      }[];
+      bonus: { reward: number; paid: boolean };
+      fullDayPaws: number;
+    }>('/tasks/today'),
 
-  tickDailyTask: (
-    date: string,
-    key: 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings',
-    amount = 1,
-  ) =>
-    req<{ ok: true }>('/tasks/tick', {
+  // Where the walker is setting off to, so arriving there can be
+  // noticed from positions the server wrote itself. `counts` is false
+  // when the destination is too close to be a walk — the walk still
+  // happens, it just does not count toward the day.
+  planWalk: (lat: number, lng: number, name?: string | null) =>
+    req<{ counts: boolean; startDistM: number }>('/walk/plan', {
       method: 'POST',
-      body: JSON.stringify({ date, key, amount }),
+      body: JSON.stringify({ lat, lng, name: name ?? null }),
     }),
 
   // Long-press "sniff this area" — pick one nearby kyiv_lore entry the

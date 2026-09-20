@@ -165,6 +165,10 @@ export interface MarkResult {
   // "that corner is ours now".
   stolen?: number;
   captured?: boolean;
+  // Ground GAINED by this mark, in square metres (claimGround's own
+  // number). The day's land task counts this and not the total held, so
+  // re-marking what you already hold moves nothing (D-99).
+  gainedM2?: number;
 }
 
 export interface TerritoryShape {
@@ -264,7 +268,13 @@ async function placeMark(
   // second of those, a catch-up mark would stamp the present onto the
   // cooldown and refuse its own successor.
   opts: { contest?: boolean; at?: Date } = {},
-): Promise<{ enclosed: boolean; renewed: boolean; stolen: number; captured: boolean }> {
+): Promise<{
+  enclosed: boolean;
+  renewed: boolean;
+  stolen: number;
+  captured: boolean;
+  gainedM2: number;
+}> {
   // Everything within the wider of the two radii, in one query.
   const scanM = Math.max(T.refreshM, T.contestM);
   const near = await marksNear(pos, scanM);
@@ -419,6 +429,7 @@ async function placeMark(
     // How many neighbours this took ground off, and whether it took any.
     stolen: claimed.victims.size,
     captured: claimed.victims.size > 0,
+    gainedM2: claimed.gainedM2,
   };
 }
 

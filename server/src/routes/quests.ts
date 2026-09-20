@@ -1,4 +1,5 @@
 import type { FastifyPluginAsync } from 'fastify';
+import { tickTask } from '../services/dailyTasks.js';
 import { and, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema, type StoredWaypoint } from '../db/index.js';
@@ -370,7 +371,19 @@ const plugin: FastifyPluginAsync = async (app) => {
 
     // `viaCorridor` lets the client say the dog noticed on the way past
     // rather than pretending the walker is standing there now.
-    return { quest: rowToQuest(updated!), completed: done, narration, viaCorridor };
+    // The day's search quest (D-99). After the transaction, so a task
+    // counter can never roll back the quest it is counting — and only
+    // on the waypoint that finishes it, which is a thing the server
+    // decided a few lines above and the client cannot assert.
+    const day = done ? await tickTask(req.userId, 'searchQuests', 1) : null;
+
+    return {
+      quest: rowToQuest(updated!),
+      completed: done,
+      narration,
+      viaCorridor,
+      ...(day ? { day } : {}),
+    };
   });
 
   app.post<{ Body: AbandonBody }>('/quests/abandon', limitInteractive, async (req, reply) => {

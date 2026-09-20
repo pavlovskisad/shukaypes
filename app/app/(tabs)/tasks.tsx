@@ -3,12 +3,18 @@ import { useFocusEffect, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
-import { useGameStore, DAILY_TARGETS } from '../../stores/gameStore';
+import { useGameStore, type DailyTaskRow } from '../../stores/gameStore';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK } from '../../constants/surface';
-import { api, type HappinessRanking, type NearbyLostDog, type TerritoryRanking } from '../../services/api';
+import {
+  api,
+  type DailyTaskKey,
+  type HappinessRanking,
+  type NearbyLostDog,
+  type TerritoryRanking,
+} from '../../services/api';
 import { distanceMeters } from '../../utils/geo';
 import {
   LostDogCardStack,
@@ -19,6 +25,7 @@ import { SwipeHintCallout } from '../../components/ui/SwipeHintCallout';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
+import type { AppStrings } from '../../i18n/strings';
 import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColor';
 import { BoardRow } from '../../components/ui/BoardRow';
 import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
@@ -62,19 +69,53 @@ function relativeWhen(iso: string): string {
 // "these ones don't matter" about players who very much do. The number
 // and the bar length carry position perfectly well on their own.
 
-type TaskKey = 'tokens' | 'bones' | 'lostPetChecks' | 'spotVisits' | 'sightings';
-
-interface TaskRow {
-  key: TaskKey;
-  // Either iconName (renders as a pixel <Icon>) or icon (an emoji
-  // string fallback for tasks we haven't drawn yet).
-  iconName?: IconName;
-  icon?: string;
-  // Key into t.tasks.items so the row label is localised at render
-  // time without dragging the strings table into a top-level const.
-  labelKey: 'collectTokens' | 'feedBones' | 'checkLostPets' | 'visitSpot' | 'reportSighting';
-  target: number;
+// The day's six arrive from the server with their targets and their
+// rewards (D-99), so all this side owns is which drawing goes with
+// which one.
+// The label for a row. The target comes from the server, so the words
+// take it rather than carrying their own copy — "eat 3 bones" cannot
+// end up beside a bar that fills at four.
+function taskLabel(t: AppStrings, row: DailyTaskRow): string {
+  const items = t.tasks.items;
+  switch (row.key) {
+    case 'searchQuests':
+      return items.searchQuests(row.target);
+    case 'bones':
+      return items.bones(row.target);
+    case 'landmarks':
+      return items.landmarks(row.target);
+    case 'landM2':
+      return items.landM2(km2(row.target));
+    case 'maxHappiness':
+      return items.maxHappiness;
+    case 'spotVisits':
+      return items.spotVisits;
+  }
 }
+
+// Square metres are how the server counts ground and not how anybody
+// reads it. Two decimals, because the target is 0.10 and one would
+// round every partial day to nothing.
+function km2(m2: number): string {
+  return (m2 / 1_000_000).toFixed(2);
+}
+
+// The number beside the bar. Land is the one row that is not a count of
+// things, so it reads in the same unit as its label instead of as
+// 43718/100000.
+function countLabel(row: DailyTaskRow): string {
+  if (row.key === 'landM2') return `${km2(row.value)}/${km2(row.target)}`;
+  return `${Math.min(row.value, row.target)}/${row.target}`;
+}
+
+const TASK_ICON: Record<DailyTaskKey, IconName> = {
+  searchQuests: 'search',
+  bones: 'bone',
+  landmarks: 'pin',
+  landM2: 'paws',
+  maxHappiness: 'sun',
+  spotVisits: 'cafe',
+};
 
 // How many neighbours the STANDING CARD shows. Not a display
 // preference — it is what keeps the card a screenful, and a card that
@@ -97,24 +138,6 @@ interface TaskRow {
 // own row sits above them, so it reads as you against the podium — and
 // the rest of the city is one tap away in the fullscreen board.
 const BOARD_CARD_ROWS = 3;
-
-const TASKS: TaskRow[] = [
-  { key: 'tokens', iconName: 'paws', labelKey: 'collectTokens', target: DAILY_TARGETS.tokens },
-  { key: 'bones', iconName: 'bone', labelKey: 'feedBones', target: DAILY_TARGETS.bones },
-  {
-    key: 'lostPetChecks',
-    iconName: 'search',
-    labelKey: 'checkLostPets',
-    target: DAILY_TARGETS.lostPetChecks,
-  },
-  { key: 'spotVisits', iconName: 'cafe', labelKey: 'visitSpot', target: DAILY_TARGETS.spotVisits },
-  {
-    key: 'sightings',
-    iconName: 'eyes',
-    labelKey: 'reportSighting',
-    target: DAILY_TARGETS.sightings,
-  },
-];
 
 // One bar on the standing: the owner's colour, a length, and the shine.
 //
@@ -372,7 +395,9 @@ export default function TasksScreen() {
   const yourPiece =
     board?.you.rank != null ? board.board[board.you.rank - 1]?.mainPiece : undefined;
 
-  const doneCount = TASKS.filter((row) => dailyTasks[row.key] >= row.target).length;
+  const taskRows = dailyTasks.tasks;
+  const doneCount = taskRows.filter((row) => row.done).length;
+  const allDone = taskRows.length > 0 && doneCount === taskRows.length;
 
   // Which snap-cards are on screen at all. The observer below re-arms on
   // this and nothing else — hoisted into named flags because the linter
@@ -689,39 +714,52 @@ export default function TasksScreen() {
               {t.tasks.dailyTasks}
             </Text>
             <Text style={styles.dailyCount}>
-              {doneCount} / {TASKS.length}
+              {doneCount} / {taskRows.length}
             </Text>
           </View>
+          {/* What the whole day is worth, under the title — the rows
+              below each say what they pay, and this is the number you
+              are actually deciding about when you look at the card. */}
+          {dailyTasks.fullDayPaws > 0 ? (
+            <Text style={styles.dayWorth}>{t.tasks.dayWorth(dailyTasks.fullDayPaws)}</Text>
+          ) : null}
           {/* Slim summary bar under the header — the per-row bars still
               drive the at-a-glance progress for each task, but a
               single bar at the top makes "how done am I overall?"
-              readable without summing five row widths. */}
+              readable without summing six row widths. */}
           <View style={styles.summaryBarTrack}>
-            <HandDrawnBar progress={doneCount / TASKS.length} seed="daily-summary" />
+            <HandDrawnBar
+              progress={taskRows.length ? doneCount / taskRows.length : 0}
+              seed="daily-summary"
+            />
           </View>
-          {TASKS.map((row, i) => {
-            const value = Math.min(dailyTasks[row.key], row.target);
-            const progress = Math.min(value / row.target, 1);
-            const complete = value >= row.target;
+          {taskRows.map((row) => {
+            const value = Math.min(row.value, row.target);
+            const progress = row.target > 0 ? Math.min(value / row.target, 1) : 0;
             return (
               // No rule between rows — same as the standing. Each row
               // ends in its own progress bar, which separates it from the
               // next one without a second line above it saying so.
               <View key={row.key} style={styles.task}>
                 <View style={styles.row}>
-                  {row.iconName ? (
-                    <View style={styles.iconWrap}>
-                      <Icon name={row.iconName} size={34} />
-                    </View>
-                  ) : (
-                    <Text style={styles.icon}>{row.icon}</Text>
-                  )}
-                  <Text style={[styles.label, complete && styles.labelDone]}>
-                    {t.tasks.items[row.labelKey]}
+                  <View style={styles.iconWrap}>
+                    <Icon name={TASK_ICON[row.key]} size={34} />
+                  </View>
+                  <Text style={[styles.label, row.done && styles.labelDone]}>
+                    {taskLabel(t, row)}
                   </Text>
-                  <Text style={[styles.count, complete && styles.countDone]}>
-                    {value}/{row.target}
-                    {complete ? ' ✓' : ''}
+                  {/* WHAT IT PAYS, beside what is left of it. A reward
+                      the walker cannot see before they do the work is
+                      not an incentive, it is a surprise — and once it
+                      is paid the row says so instead, because a number
+                      still offering itself after it has landed reads as
+                      a second one waiting. */}
+                  <Text style={[styles.reward, row.paid && styles.rewardPaid]}>
+                    {t.tasks.reward(row.reward)}
+                  </Text>
+                  <Text style={[styles.count, row.done && styles.countDone]}>
+                    {countLabel(row)}
+                    {row.done ? ' ✓' : ''}
                   </Text>
                 </View>
                 {/* Ink, done or not. The bar used to be blue while you
@@ -737,6 +775,36 @@ export default function TasksScreen() {
               </View>
             );
           })}
+          {/* THE BONUS, as its own row rather than a line of small
+              print: it is worth more than any single task, and a walker
+              deciding whether to go out for the last one is deciding
+              about this number. Its bar is the same summary progress —
+              the bonus IS the set. */}
+          {taskRows.length > 0 ? (
+            <View style={[styles.task, styles.bonusTask]}>
+              <View style={styles.row}>
+                {/* The tab bar's own tick. There is no star in the set
+                    and this is not the place to invent one: the check
+                    is what "the whole list" already looks like here. */}
+                <View style={styles.iconWrap}>
+                  <Icon name="task" size={34} />
+                </View>
+                <Text style={[styles.label, allDone && styles.labelDone]}>
+                  {t.tasks.bonusLabel}
+                </Text>
+                <Text style={[styles.reward, dailyTasks.bonus.paid && styles.rewardPaid]}>
+                  {t.tasks.reward(dailyTasks.bonus.reward)}
+                </Text>
+                <Text style={[styles.count, allDone && styles.countDone]}>
+                  {doneCount}/{taskRows.length}
+                  {allDone ? ' ✓' : ''}
+                </Text>
+              </View>
+              <View style={styles.barTrack}>
+                <HandDrawnBar progress={doneCount / taskRows.length} seed="daily-bonus" />
+              </View>
+            </View>
+          ) : null}
         </View>
 
         {/* Past searches — completed/abandoned quests, most recent
@@ -932,6 +1000,29 @@ const styles = StyleSheet.create({
   labelDone: { color: '#aaa', textDecorationLine: 'line-through' },
   count: { fontSize: TYPE.small, color: '#777', fontWeight: '700' },
   countDone: { color: '#666' },
+  // WHAT IT PAYS. Sits between the label and the count, quieter than
+  // either: it is the reason to do the row, not the state of it.
+  reward: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: TYPE.small,
+    fontWeight: '700',
+    color: colors.black,
+    marginRight: S.s,
+  },
+  // Already banked. Faded rather than hidden — a row that drops its
+  // number once paid reads as though the reward was withdrawn.
+  rewardPaid: { color: '#9a9a9a' },
+  // The bonus row, set off from the six by the same gap the tab uses
+  // everywhere else rather than by a rule.
+  bonusTask: { marginTop: S.s },
+  // What the whole day is worth, under the card's title.
+  dayWorth: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: TYPE.small,
+    color: '#777',
+    marginTop: -S.xs,
+    marginBottom: S.s,
+  },
   // The standing's row styles live with BoardRow (components/ui) now,
   // shared with the fullscreen "see all" board. What stays here is the
   // card-only chrome.

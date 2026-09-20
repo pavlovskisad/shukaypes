@@ -215,13 +215,25 @@ export interface AppStrings {
   };
   tasks: {
     dailyTasks: string;
+    // The day's six (D-99). Each takes its own target, because the
+    // numbers live in the server's balance file and the label must not
+    // be able to disagree with the bar beside it.
     items: {
-      collectTokens: string;
-      feedBones: string;
-      checkLostPets: string;
-      visitSpot: string;
-      reportSighting: string;
+      searchQuests: (n: number) => string;
+      bones: (n: number) => string;
+      landmarks: (n: number) => string;
+      /** Takes square kilometres, already converted and formatted. */
+      landM2: (km2: string) => string;
+      maxHappiness: string;
+      spotVisits: string;
     };
+    /** Paws a task pays, shown on its row. */
+    reward: (paws: number) => string;
+    /** The all-six bonus row. */
+    bonusLabel: string;
+    bonusHint: (paws: number) => string;
+    /** The card's header line: what the whole day is worth. */
+    dayWorth: (paws: number) => string;
     lostPetsNearby: string;
     moreCount: (n: number) => string;
     showFewer: string;
@@ -774,12 +786,21 @@ const uk: AppStrings = {
   tasks: {
     dailyTasks: 'щоденні квести',
     items: {
-      collectTokens: 'збери 10 лапок',
-      feedBones: 'погодуй 3 кістки',
-      checkLostPets: 'переглянь 2 загублених',
-      visitSpot: 'зайди в якесь місце',
-      reportSighting: 'повідом, що бачив пса',
+      searchQuests: (n) => `заверши ${n} пошук`,
+      bones: (n) => `з'їж ${n} кістки`,
+      landmarks: (n) => `обнюхай ${n} місця`,
+      // «кв. км», not «км²» — the superscript does not render in
+      // this font, which the standing's areaValue already found out.
+      landM2: (km2) => `познач ${km2} кв. км`,
+      maxHappiness: 'щастя на максимум',
+      // «ти», like the other five — the dog does not switch to the
+      // formal plural for one line.
+      spotVisits: 'проклади маршрут і дійди',
     },
+    reward: (paws) => `+${paws} 🐾`,
+    bonusLabel: 'усе за день',
+    bonusHint: (paws) => `+${paws} 🐾 за всі шість`,
+    dayWorth: (paws) => `${paws} 🐾 за повний день`,
     lostPetsNearby: 'загублені',
     moreCount: (n) => `+ ще ${n}`,
     showFewer: 'показати менше',
@@ -1345,12 +1366,17 @@ const en: AppStrings = {
   tasks: {
     dailyTasks: 'daily tasks',
     items: {
-      collectTokens: 'collect 10 tokens',
-      feedBones: 'feed 3 bones',
-      checkLostPets: 'check 2 lost pets',
-      visitSpot: 'visit a spot',
-      reportSighting: "report you've seen a pet",
+      searchQuests: (n) => `finish ${n} search quest`,
+      bones: (n) => `eat ${n} bones`,
+      landmarks: (n) => `sniff ${n} landmarks`,
+      landM2: (km2) => `mark ${km2} sq km`,
+      maxHappiness: 'reach max happiness',
+      spotVisits: 'build a route and finish it',
     },
+    reward: (paws) => `+${paws} 🐾`,
+    bonusLabel: 'the whole day',
+    bonusHint: (paws) => `+${paws} 🐾 for all six`,
+    dayWorth: (paws) => `${paws} 🐾 for a full day`,
     lostPetsNearby: 'lost pets',
     moreCount: (n) => `+ ${n} more`,
     showFewer: 'show fewer',
