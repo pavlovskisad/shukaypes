@@ -8,7 +8,12 @@ import { distanceMeters, pointToSegmentDistanceM, type LatLng } from '../utils/g
 import { markIfDue, type MarkResult } from '../services/territory.js';
 import { noteWalkArrival, tickTask } from '../services/dailyTasks.js';
 import { readLastPos, writeLastPos } from '../services/walkAnchor.js';
-import { judgeSegment, planCatchUpMarks } from '../services/catchUp.js';
+import {
+  judgeSegment,
+  planCatchUpMarks,
+  walkedMeters,
+  WALK_CREDIT_FLOOR_M,
+} from '../services/catchUp.js';
 import { writeCorridor } from '../services/walkCorridor.js';
 import { selfMeta } from '../services/presence.js';
 import { limitPolling } from '../lib/rateLimit.js';
@@ -175,12 +180,48 @@ const plugin: FastifyPluginAsync = async (app) => {
       };
     }
 
-    // Remember the stretch for /quests/advance, which otherwise tests a
-    // single point and silently misses a waypoint strolled past with the
-    // screen off. One small Redis SET alongside the anchor write that
-    // already happens on this path, and only when the walker actually
-    // moved — a phone sitting on a table writes nothing.
-    if (segLen >= 5) await writeCorridor(userId, lastPos, current);
+    // THE WALKER ACTUALLY MOVED. Both writes below hang off that one
+    // fact, so they share one floor rather than testing it twice: a
+    // phone on a table drifts a couple of metres per fix, and at one
+    // sync every fifteen seconds that jitter alone would draw a corridor
+    // across the neighbourhood and walk a marathon a week. Two copies of
+    // the floor is how one of them later becomes 3.
+    if (segLen >= WALK_CREDIT_FLOOR_M) {
+      // Remember the stretch for /quests/advance, which otherwise tests
+      // a single point and silently misses a waypoint strolled past with
+      // the screen off. One small Redis SET alongside the anchor write
+      // that already happens on this path.
+      await writeCorridor(userId, lastPos, current);
+
+      // HOW FAR THEY HAVE WALKED (D-95). `users.total_distance_meters`
+      // is read on the profile, in /state, in the map payload and in the
+      // account list, and until now NOTHING in the codebase ever wrote
+      // it: it read 0 for everybody, including somebody who had walked
+      // fifty kilometres. This is the write.
+      //
+      // HERE and nowhere else, because this is the one place in the app
+      // that knows a displacement was WALKED. `segLen` is measured
+      // between two positions the SERVER recorded, and `verdict.ok`
+      // above has already thrown out the car rides (too fast), the
+      // commutes (stale) and the teleports. Crediting whatever the
+      // client reported having moved would make this a claim rather than
+      // a measurement, and a claim is what a leaderboard gets farmed on.
+      //
+      // AND CAPPED AT WALKING PACE — `verdict.ok` is not the guard it
+      // looks like here, because the speed test is skipped below the
+      // jitter floor. walkedMeters() in services/catchUp.ts holds that
+      // rule and its reasons, next to the gate it compensates for, and
+      // pnpm check fixture-checks it.
+      const creditedM = walkedMeters(segLen, elapsedMs);
+      if (creditedM > 0) {
+        await db
+          .update(schema.users)
+          .set({
+            totalDistanceMeters: sql`${schema.users.totalDistanceMeters} + ${creditedM}`,
+          })
+          .where(eq(schema.users.id, userId));
+      }
+    }
 
     // Territory: the dog decides whether to mark here. Runs on every
     // validated position — including standing still, since a dog marking
@@ -283,7 +324,7 @@ const plugin: FastifyPluginAsync = async (app) => {
     // The mark above may still have claimed ground, so the day's land
     // gets it: this return is a shortcut past the sweep, not past the
     // walk.
-    if (segLen < 5) {
+    if (segLen < WALK_CREDIT_FLOOR_M) {
       await writeLastPos(userId, current);
       return {
         tokensCollected: 0,
