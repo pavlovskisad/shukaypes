@@ -140,6 +140,17 @@ Other read surfaces:
 | `/stats` | bearer | Active counts, per-source breakdown, last 30 scrape-log rows. **No longer public** — it was leaking bot-ingested users' DM text. |
 | `/admin/lost-dogs/scrape-log` | admin | The same, with auth and filters. |
 
+**When the answer is not on an admin endpoint** — the paws-per-day
+question in D-103 needed `collect_events` grouped by day, by reason and
+by the spread of pickup positions, which no endpoint exposes — the shape
+that worked was: write the SELECTs into one file locally, `flyctl ssh
+sftp put` it to `/app` on the machine (not `/tmp`: Node resolves
+`postgres` from `/app/node_modules`), run it with `flyctl ssh console -C
+"node /app/<file>"`, then delete it. Both `fly ssh` calls prompt, which
+is the permission file working, and what is approved is a readable file
+that can be shown first rather than an encoded blob. Every statement in
+it was a SELECT, and it said so on its first line.
+
 **Why Fly's own health check stays on `/health`:** `/health/deep` fails on
 Redis too, Redis is free-tier and flaky, and the app degrades gracefully
 without it — so a Redis blip would mark a *serving* machine unhealthy and

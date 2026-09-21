@@ -137,3 +137,38 @@ export function planCatchUpMarks(
   }
   return out;
 }
+
+/**
+ * How many metres of this segment count as WALKED, for the counter that
+ * says how far somebody has gone (D-103).
+ *
+ * Not simply `segLenM`, and the reason is `judgeSegment` above: it skips
+ * the speed test entirely below the jitter floor, because GPS noise
+ * between two foreground ticks reads as a sprint and refusing it would
+ * cost a standing walker their paws. That is the right call for the
+ * sweep, which can only collect paws that exist. It is the wrong call
+ * for a distance counter, where every claimed metre counts and a client
+ * reporting 149 m every fifteen seconds would be walking 36 km/h.
+ *
+ * So the credit is the smaller of what moved and what a person could
+ * have walked in the time since the last anchor. A real walker at
+ * 1.4 m/s never meets the cap; a GPS jump across a courtyard meets it a
+ * little, in the honest direction; a tampered client meets nothing else.
+ *
+ * Below the jitter of a phone on a table (the same 5 m the walk corridor
+ * uses) it is zero — at one sync every fifteen seconds, a couple of
+ * metres of drift per fix is a marathon a week.
+ *
+ * A zero or negative elapsed (clock skew, a replayed anchor) caps at
+ * zero, the same safe direction judgeSegment takes.
+ */
+export const WALK_CREDIT_FLOOR_M = 5;
+
+export function walkedMeters(segLenM: number, elapsedMs: number): number {
+  if (!Number.isFinite(segLenM) || segLenM < WALK_CREDIT_FLOOR_M) return 0;
+  const walkable = elapsedMs > 0 ? (elapsedMs / 1000) * W.maxSpeedMps : 0;
+  // Rounded because the column is an integer, and Math.round is unbiased
+  // — the error cancels over a walk instead of accumulating the way a
+  // floor would.
+  return Math.round(Math.min(segLenM, walkable));
+}

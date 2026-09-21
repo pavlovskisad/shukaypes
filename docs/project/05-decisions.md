@@ -2883,3 +2883,98 @@ nothing else makes a cached picture redraw.
 Measured on one place (Ярославів Вал) at 390×844, before and after, over
 the rendered JPEG: **mean luminance 227 → 235, share of pixels below 150
 7.39% → 0.99%.** What is left dark is the lettering.
+
+### D-103 · What the paws actually came from, counted ✅
+*read-only query against production, 21 Sep 2026*
+
+"So we measure average as 21 paws per day on current settings, am I
+right?" — no, and it took one query to say why. `collect_events` records
+every pickup with its reason and position, and it had never been asked.
+
+**The 21/day was one account, before the fix, and not playing.** D-94
+reported 168 paws over 8 days on an account its owner "had only ever
+logged into to look at the UI". The table now says that account has
+collected **185 paws lifetime over 8 active days**, of which **17 came
+after the D-94 spawn fix, over 2 days**. So the 168 was exactly the
+pre-fix total — about 21 a day — and the post-fix rate is **about 8.5 a
+day**, on one account, over two days, one of which was spent taking
+screenshots rather than walking. That is not an average. It is the only
+number that exists.
+
+**The HUD is not the collection counter.** 255 paws showing against 185
+collected: the other 70 came from sightings and, since 20 Sep, the day's
+six. Three task completions have been paid so far, none of them a full
+set. Any "paws per day" question has to say which of the four sources it
+means — `collect_events` covers two of them (the tap and the path
+sweep); sightings and daily tasks are not in it.
+
+**And the paw leak D-94 could not demonstrate is in the data.** That
+entry closed with "no paw leak was demonstrated, so none is claimed
+fixed", and named the query that would settle it. Grouped by the spread
+of pickup positions, four of eight accounts collected **everything they
+ever collected inside a single 111 m cell** — one of them 65 paws and 34
+bones across 3 separate days without the walker's recorded position ever
+moving a block. On the foreground path `collect_events.lat/lng` is the
+WALKER's position, not the token's, so that is not a dense park: it is
+somebody standing still while the counter climbed. The owner's own
+account, by contrast, spans 4.8 × 4.4 km across 49 distinct spots.
+
+**Every account reads `total_distance_meters = 0`,** which is D-95 in the
+data rather than in the source — see D-104.
+
+The instrument for the general question already exists and was not
+reachable from here: `/admin/bots/report` carries per-online-hour paw
+rates for the bot and human cohorts, and needs `REPORT_TOKEN` (unset) or
+`ADMIN_TOKEN` (a Fly secret, unreadable). The shell was the available
+path, not the preferred one.
+
+### D-104 · The distance counter now counts ✅
+*`server/src/routes/path.ts`, `server/src/services/catchUp.ts`*
+
+D-95 found that `users.total_distance_meters` is read in four places,
+zeroed by `wipe-stats`, and **written nowhere** — 0 for everybody since
+the column existed. This is the write, and D-103 confirms the symptom was
+still live on every account in production this morning.
+
+**In `/collect/path`, because that is the only place that knows a
+displacement was walked.** `segLen` is measured between two positions the
+SERVER recorded — the Redis anchor and the fix it has just accepted — and
+`judgeSegment` has already thrown out the car rides (too fast), the
+commutes (stale) and the teleports. Crediting what the client reported
+having moved would make this a claim rather than a measurement, and a
+claim is what a leaderboard gets farmed on.
+
+**`verdict.ok` is not the guard it looks like.** The speed test is
+skipped entirely below the jitter floor — 150 m, because GPS noise
+between two foreground ticks reads as a sprint and refusing it would cost
+a standing walker their paws. Right for the sweep, which can only collect
+paws that exist; wrong for a counter where every claimed metre counts. A
+client reporting 149 m every fifteen seconds is judged `short` and waved
+straight through, at 36 km/h.
+
+So the credit is `min(what moved, what a person could have walked since
+the anchor)` — `walkedMeters()` in `services/catchUp.ts`, next to the
+gate it compensates for. A real walker at 1.4 m/s never meets the cap; a
+GPS jump across a courtyard meets it a little, in the honest direction; a
+tampered client meets nothing else. Under 5 m is zero, the same floor the
+walk corridor uses and now the same constant, because a phone on a table
+drifting two metres a fix would walk a marathon a week.
+
+Fixture-checked in `catchUp.check.ts` (70 walking paces credited whole,
+the jitter cases, the 149 m sub-floor jump, clock skew) and mutation
+tested: removing the cap fails on the 149 m case, removing the floor
+fails on the 2 m case.
+
+Verified end to end over real HTTP with real elapsed time between syncs —
+a harness firing its syncs milliseconds apart would prove nothing about a
+metres-per-second cap:
+
+```
+new walker                                       0 m
+first sync (anchor only)                        +0
+25 m walked in 20 s                            +25
+3 m of jitter                                   +0
+149 m jump in 20 s (under the speed gate)      +50   (not 149)
+3 km in an instant                              +0   segment-too-long
+                                          total 75 m
+```

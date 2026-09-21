@@ -7,7 +7,12 @@
 
 import { balance } from '../config/balance.js';
 import { distanceMeters, type LatLng } from '../utils/geo.js';
-import { judgeSegment, planCatchUpMarks } from './catchUp.js';
+import {
+  judgeSegment,
+  planCatchUpMarks,
+  walkedMeters,
+  WALK_CREDIT_FLOOR_M,
+} from './catchUp.js';
 
 const T = balance.territory;
 const W = balance.walk;
@@ -161,6 +166,77 @@ if (ten.length !== W.maxCatchUpMarks) {
   fail(`700m over 10min should plan the full ${W.maxCatchUpMarks}, got ${ten.length}`);
 }
 
+
+// ── walkedMeters: what the distance counter is allowed to believe ────
+//
+// The rule exists because judgeSegment SKIPS the speed test below the
+// jitter floor, so `ok` alone would let a client walk 36 km/h. These
+// cases are the ones that would have let it.
+
+// A real walk at a real pace, credited whole.
+{
+  const m = walkedMeters(21, 15_000); // 1.4 m/s over one foreground tick
+  if (m !== 21) fail(`a 21m walk over 15s should credit 21, got ${m}`);
+}
+
+// The phone on the table. Anything under the floor is nothing, however
+// long it sat there — the drift is not a walk at any pace.
+for (const [len, gap] of [
+  [0, 15_000],
+  [2, 15_000],
+  [4.9, 15_000],
+  [3, 600_000],
+] as const) {
+  const m = walkedMeters(len, gap);
+  if (m !== 0) fail(`${len}m over ${gap}ms is jitter, should credit 0, got ${m}`);
+}
+
+// THE CASE THE CAP EXISTS FOR. 149m is under the 150m jitter floor, so
+// judgeSegment waves it through as `short` — and at one sync every
+// fifteen seconds, crediting it whole is 36 km/h of walking.
+{
+  const v = judgeSegment(149, 15_000, MAX_SEGMENT_M);
+  if (!v.ok || v.kind !== 'short') fail('149m/15s should still be judged `short` — the premise changed');
+  const m = walkedMeters(149, 15_000);
+  const cap = Math.round(15 * W.maxSpeedMps);
+  if (m !== cap) fail(`149m over 15s should cap at ${cap}, got ${m}`);
+  if (m >= 149) fail('the cap did not bind on the case it exists for');
+}
+
+// The cap never binds on anybody walking. Swept across the plausible
+// range of paces and tick lengths: a stroll to a brisk 1.9 m/s, one
+// foreground tick to five minutes backgrounded.
+let creditedWhole = 0;
+for (let paceCms = 60; paceCms <= 190; paceCms += 10) {
+  for (const gapS of [15, 30, 60, 120, 300]) {
+    const len = (paceCms / 100) * gapS;
+    if (len < WALK_CREDIT_FLOOR_M) continue;
+    const m = walkedMeters(len, gapS * 1000);
+    if (m !== Math.round(len)) {
+      fail(`a walker at ${paceCms}cm/s over ${gapS}s was capped: ${m} of ${len.toFixed(1)}`);
+    }
+    creditedWhole++;
+  }
+}
+if (creditedWhole < 50) fail(`only ${creditedWhole} walking paces exercised`);
+
+// A segment we cannot time is a segment we cannot trust. Clock skew and
+// a replayed anchor both land here, and both credit nothing.
+for (const gap of [0, -1, -60_000]) {
+  const m = walkedMeters(500, gap);
+  if (m !== 0) fail(`a ${gap}ms gap should credit 0, got ${m}`);
+}
+
+// Nonsense in, zero out.
+for (const len of [NaN, Infinity, -10]) {
+  const m = walkedMeters(len, 15_000);
+  if (m !== 0 && Number.isFinite(len)) fail(`${len}m should credit 0, got ${m}`);
+  if (!Number.isFinite(len) && m !== 0) fail(`${len}m should credit 0, got ${m}`);
+}
+
 console.log(
   `✓ catch-up: gate holds (walk in, bike and car out), ${planned} plans clear both spacing rules, ${capped} at the cap`,
+);
+console.log(
+  `✓ walked-metres: ${creditedWhole} walking paces credited whole, jitter and the 149m sub-floor jump both capped`,
 );
