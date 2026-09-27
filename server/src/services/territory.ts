@@ -111,6 +111,7 @@ import { isOnWater } from '../data/kyivWater.js';
 import { presencePositions } from './presence.js';
 import { buildPhotoUrl } from './photoUrl.js';
 import { botAvatarUrl, botIndex } from './botAvatars.js';
+import { applyOffset, offsetFor } from '../lib/geoJitter.js';
 
 const T = balance.territory;
 const DAY_MS = 24 * 60 * 60 * 1000;
@@ -876,18 +877,29 @@ export async function fetchMapTerritory(
   }
 
   return {
-    rivalMarks: rivalIds.flatMap((id) =>
-      (byOwnerMarks.get(id) ?? [])
+    rivalMarks: rivalIds.flatMap((id) => {
+      // Another walker's marks are their real GPS trail, trimmed only to
+      // ~0.1m — exact enough to read off their doorstep. Shift each owner's
+      // marks by a stable, secret-keyed ~25m offset (lib/geoJitter) so the
+      // ZONE SHAPE still renders (all of one owner's points move together,
+      // the polygon stays congruent) but the absolute position is obscured
+      // and cannot be recomputed. Server-side contest math runs on the raw
+      // marks above; only what rivals are shown is offset.
+      const off = offsetFor(id);
+      return (byOwnerMarks.get(id) ?? [])
         .slice()
         .sort((a, b) => b.at.getTime() - a.at.getTime())
         .slice(0, T.rivalMarksPerOwner)
-        .map((m) => ({
-          lat: trim(m.lat),
-          lng: trim(m.lng),
-          ownerId: m.userId,
-          at: m.at.toISOString(),
-        })),
-    ),
+        .map((m) => {
+          const j = applyOffset({ lat: m.lat, lng: m.lng }, off);
+          return {
+            lat: trim(j.lat),
+            lng: trim(j.lng),
+            ownerId: m.userId,
+            at: m.at.toISOString(),
+          };
+        });
+    }),
     marks: all
       .filter((m) => m.userId === userId)
       .map((m) => ({

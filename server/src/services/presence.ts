@@ -19,6 +19,7 @@ import { db, schema } from '../db/index.js';
 import { buildPhotoUrl } from './photoUrl.js';
 import { eq } from 'drizzle-orm';
 import type { LatLng } from '../utils/geo.js';
+import { jitteredPos } from '../lib/geoJitter.js';
 
 // Local shape (matches @shukajpes/shared NearbyPlayer). Defined here rather
 // than imported so the server never resolves the shared TS package at runtime.
@@ -46,26 +47,17 @@ export const PRESENCE_TTL_MS = 45_000;
 // the city.
 const RADIUS_M = 8000;
 const MAX_NEARBY = 60;
-const JITTER_M = 25;
 // Pending pokes live briefly (delivered on the target's next ~15s poll).
 const POKE_TTL_S = 120;
 const MAX_POKES = 10;
 
 // Stable per-id positional offset (privacy). Deterministic so a player's dog
 // doesn't jitter around each poll — it's their real movement + a fixed ~25m
-// offset, obscuring the exact point without the marker jumping.
+// offset — but keyed on a server secret (lib/geoJitter) so it cannot be
+// recomputed and subtracted from the shown point, which the old public-id
+// hash allowed.
 function jitter(id: string, pos: LatLng): LatLng {
-  let h = 2166136261;
-  for (let i = 0; i < id.length; i++) {
-    h ^= id.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  const ang = ((h >>> 0) % 3600) / 10 * (Math.PI / 180);
-  const r = (((h >>> 9) % 1000) / 1000) * JITTER_M;
-  const dLat = (r * Math.cos(ang)) / 110540;
-  const dLng =
-    (r * Math.sin(ang)) / (111320 * Math.cos((pos.lat * Math.PI) / 180));
-  return { lat: pos.lat + dLat, lng: pos.lng + dLng };
+  return jitteredPos(id, pos);
 }
 
 // In-memory name/photo cache so we don't hit Postgres on every poll — a
