@@ -12,6 +12,7 @@
 import type { FastifyPluginAsync } from 'fastify';
 import { eq } from 'drizzle-orm';
 import { db, schema } from '../db/index.js';
+import { escapeHtml } from '../utils/html.js';
 import {
   looksLikeLostPet as looksLikeLostPetShared,
   looksLikeRehoming as looksLikeRehomingShared,
@@ -254,7 +255,10 @@ async function handleDmLostPet(
 ): Promise<void> {
   const m = messages[lang];
   if (outcome?.kind === 'inserted') {
-    const { name, emoji } = outcome.parsed;
+    // Escaped: name/emoji come from the parser (attacker-authorable post
+    // text) and are sent with parse_mode: 'HTML'. See utils/html.
+    const name = escapeHtml(outcome.parsed.name);
+    const emoji = escapeHtml(outcome.parsed.emoji);
     const link = miniAppDeepLink(`lost-${outcome.dogId}`);
     await sendMessage(chatId, m.dmInserted({ name, emoji, link }), {
       reply_markup: openAppKeyboard(lang),
@@ -262,7 +266,8 @@ async function handleDmLostPet(
     return;
   }
   if (outcome?.kind === 'updated') {
-    const { name, emoji } = outcome.parsed;
+    const name = escapeHtml(outcome.parsed.name);
+    const emoji = escapeHtml(outcome.parsed.emoji);
     const link = miniAppDeepLink(`lost-${outcome.dogId}`);
     await sendMessage(chatId, m.dmUpdated({ name, emoji, link }), {
       reply_markup: openAppKeyboard(lang),
@@ -273,7 +278,7 @@ async function handleDmLostPet(
     const link = outcome.dogId
       ? miniAppDeepLink(`lost-${outcome.dogId}`)
       : miniAppDeepLink('lostpet');
-    const name = outcome.kind === 'duplicate' ? outcome.parsed.name : undefined;
+    const name = outcome.kind === 'duplicate' ? escapeHtml(outcome.parsed.name) : undefined;
     await sendMessage(chatId, m.dmDuplicate({ name, link }), {
       reply_markup: openAppKeyboard(lang),
     });
@@ -317,7 +322,10 @@ function buildGroupReply(
   switch (outcome.kind) {
     case 'inserted': {
       return {
-        text: m.groupInserted({ name: outcome.parsed.name, emoji: outcome.parsed.emoji }),
+        text: m.groupInserted({
+          name: escapeHtml(outcome.parsed.name),
+          emoji: escapeHtml(outcome.parsed.emoji),
+        }),
         startParam: `lost-${outcome.dogId}`,
       };
     }
