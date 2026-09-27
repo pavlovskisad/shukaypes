@@ -9,6 +9,14 @@ concurrency:
   group: deploy-${{ github.ref }}
   cancel-in-progress: false
 
+# Least privilege for the workflow token. This pipeline only reads the repo
+# and deploys to Fly with its own secret; it never writes back to GitHub, so
+# the default broad GITHUB_TOKEN scopes are unnecessary — and the deploy job
+# below holds FLY_API_TOKEN, so a narrow token limits the blast radius if a
+# step is ever compromised.
+permissions:
+  contents: read
+
 jobs:
   # Gate the deploy on typecheck + lint so a broken push to main can't ship.
   # (react-hooks/rules-of-hooks is an error here — the class of bug that
@@ -37,6 +45,12 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # NOTE: this action is pinned to the mutable @master ref, so a
+      # compromise of it runs in the job that holds FLY_API_TOKEN. Fly's
+      # docs use @master, but for supply-chain safety pin this to a specific
+      # release tag or commit SHA once you've picked one you trust
+      # (e.g. superfly/flyctl-actions/setup-flyctl@<sha>). Left as-is here
+      # rather than guessing a SHA that could break the deploy.
       - uses: superfly/flyctl-actions/setup-flyctl@master
       - run: flyctl deploy --remote-only
         env:

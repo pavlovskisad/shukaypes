@@ -59,6 +59,10 @@ export const users = pgTable('users', {
   // A generated avatar, stored as a Telegram file_id like every other
   // photo in this app and served through /photos/:fileId.
   avatarFileId: text('avatar_file_id'),
+  // Multiplayer privacy: when true, this walker's live position is never
+  // published to the presence set, so others don't see them on the map.
+  // They still see everyone else — "hide me", not "leave multiplayer".
+  presenceHidden: boolean('presence_hidden').notNull().default(false),
   createdAt: timestamp('created_at', { withTimezone: true }).notNull().defaultNow(),
   lastSeenAt: timestamp('last_seen_at', { withTimezone: true }).notNull().defaultNow(),
 });

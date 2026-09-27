@@ -23,6 +23,21 @@
 
 import type { FastifyRequest } from 'fastify';
 
+// The caller's real IP, as Fly reports it.
+//
+// Fly sets `Fly-Client-IP` to the peer address seen at its edge and
+// overwrites any value the caller sent, so it cannot be spoofed. `req.ip`
+// cannot be trusted for this: under `trustProxy` it is derived from the
+// `X-Forwarded-For` chain, which the caller can write — so an attacker
+// rotates that header to get a fresh rate-limit bucket per request and
+// every per-IP limit becomes a no-op. Every IP-keyed limiter keys on this
+// instead, and falls back to `req.ip` only off-Fly (local/dev).
+export function clientIp(req: FastifyRequest): string {
+  const raw = req.headers['fly-client-ip'];
+  const v = Array.isArray(raw) ? raw[0] : raw;
+  return (v && v.trim()) || req.ip;
+}
+
 interface RouteConfig {
   config: {
     rateLimit: {
@@ -64,5 +79,15 @@ export const limitMedia = perMinute(120);
  * because a human logs in once and a script does not.
  */
 export const limitAuth: RouteConfig = {
-  config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: (req) => req.ip } },
+  config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: clientIp } },
+};
+
+/**
+ * Account creation. Keyed on the real IP, NOT the userId — the auth hook
+ * mints a fresh userId for every new device id, so a userId-keyed limit
+ * here resets on every attempt and bounds nothing. A person registers
+ * once; a script does not.
+ */
+export const limitCreate: RouteConfig = {
+  config: { rateLimit: { max: 10, timeWindow: '1 minute', keyGenerator: clientIp } },
 };

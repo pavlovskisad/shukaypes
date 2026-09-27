@@ -45,7 +45,7 @@ should be corrected so later work isn't planned on false premises:
 
 ### 1.1 — P0 · Compromised Google Maps key still committed in-tree
 - **Where:** `docs/TECHNICAL.md:236`, `reference/shukajpes-demo.html:147`
-  (`AIzaSyBpqM8DobD-CRDYkK_IwbMI1VSmvRWMaPM`).
+  (`AIza…[REDACTED — see AUDIT_2026-09-21.md; rotate in GCloud]`).
 - **Evidence:** Present at HEAD in two tracked files; also in history
   (`git log -S` finds it). The Anthropic key alongside it in TECHNICAL.md was
   already redacted/revoked — the Maps key was not.

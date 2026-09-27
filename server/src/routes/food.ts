@@ -124,7 +124,14 @@ const plugin: FastifyPluginAsync = async (app) => {
     }
 
     // The meal, the same write a bot makes on its walk (services/collect.ts).
-    await eatFoodTx(req.userId, foodId, { lat, lng });
+    // Conditional claim: a lost race returns false and pays nothing — no
+    // stat bump and, below, no daily-task tick either.
+    const eaten = await eatFoodTx(req.userId, foodId, { lat, lng });
+    if (!eaten) {
+      await logReject('already_consumed');
+      reply.code(409);
+      return { error: 'already consumed' };
+    }
     // The day's bone count, from the server's own witness of the meal
     // rather than the client saying it happened (D-99). Ticked HERE and
     // not inside eatFoodTx, because bots eat through that same function

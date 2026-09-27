@@ -143,8 +143,16 @@ const plugin: FastifyPluginAsync = async (app) => {
     }
 
     // Mark collected + credit points + bump companion stats, atomically —
-    // the same write a bot makes on its walk (services/collect.ts).
-    await collectTokenTx(req.userId, tokenId, token.value, { lat, lng });
+    // the same write a bot makes on its walk (services/collect.ts). The
+    // claim is conditional on collected_at still being NULL, so a burst of
+    // concurrent taps on one token credits exactly once; a lost race
+    // returns false and is a 409, not a second payout.
+    const collected = await collectTokenTx(req.userId, tokenId, token.value, { lat, lng });
+    if (!collected) {
+      await logReject('already_collected');
+      reply.code(409);
+      return { error: 'already collected' };
+    }
 
     return { ok: true, value: token.value };
   });

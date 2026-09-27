@@ -28,6 +28,20 @@ export const pg = postgres(url, {
   prepare: false,
   max: poolMax(),
   connect_timeout: 10,
+  // Bound how long any single statement, or an idle-in-transaction
+  // connection, may hold one of the (few) pool slots. Without these a
+  // single wedged query — a lock wait, a runaway scan, a stuck external
+  // dependency mid-transaction — pins its connection indefinitely; ten of
+  // them exhaust the pool and every subsequent request hangs while
+  // /health, which runs no query, keeps reporting the machine healthy.
+  // 30s is ~100x a normal query here, so it never trips legitimate work
+  // (request handlers are sub-second; the migrator runs on its own
+  // connection); it exists only to break a true wedge. A killed statement
+  // surfaces as a normal query error, is logged, and frees the slot.
+  connection: {
+    statement_timeout: 30_000,
+    idle_in_transaction_session_timeout: 30_000,
+  },
 });
 export const db = drizzle(pg, { schema });
 export { schema };

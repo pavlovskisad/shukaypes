@@ -233,7 +233,7 @@ Walker avatar, stats (distance, tokens, quests), companion skins grid (6 skins, 
 ---
 
 ## API Keys (Demo Only)
-- Google Maps: `AIzaSyBpqM8DobD-CRDYkK_IwbMI1VSmvRWMaPM`
+- Google Maps: `<REDACTED — compromised key removed from tree; rotate + referrer-restrict in Google Cloud and keep only in env. Still present in git history: purge separately.>`
 - Anthropic: `<REDACTED — old key was pushed to a public repo and has been revoked. New key goes into server/.env only.>`
 
 These were demo-only keys exposed in client-side code. Production app uses the backend proxy in `server/` — no client-side Anthropic key, ever.

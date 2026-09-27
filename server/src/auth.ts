@@ -1,10 +1,12 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { nanoid } from 'nanoid';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db, schema } from './db/index.js';
 import { validateInitData, type TelegramUser } from './services/telegramAuth.js';
 import { claimInvite, mustPresentInvite, normaliseCode, recordRedemption } from './services/invites.js';
+import { AccountCreateLimitError, guardAccountCreation } from './lib/accountCreateGuard.js';
+import { clientIp } from './lib/rateLimit.js';
 import {
   SESSION_HEADER,
   SESSION_ISSUE_HEADER,
@@ -68,6 +70,7 @@ const ACCOUNT_FACTS = {
 async function resolveByDeviceId(
   deviceId: string,
   invite: string | null,
+  ip: string,
   log: Log,
 ): Promise<Resolved> {
   const [existing] = await db
@@ -87,6 +90,12 @@ async function resolveByDeviceId(
   // the closed beta actually needs to control. `mustPresentInvite` is a
   // pure predicate with its own fixture check asserting that an existing
   // account is never gated under any configuration.
+  //
+  // Bound creation per IP FIRST, before the insert. This runs only here, on
+  // the creation path — an existing account already returned above — so it
+  // never gates a returning user; it stops one address minting rows by
+  // rotating device ids (open beta has no invite gate to lean on).
+  await guardAccountCreation(ip, log);
   let claimedCode: string | null = null;
   if (mustPresentInvite({ hasExistingAccount: false })) {
     const code = normaliseCode(invite);
@@ -141,6 +150,7 @@ async function resolveExistingDeviceId(deviceId: string): Promise<string | null>
 async function resolveByTelegram(
   tgUser: TelegramUser,
   invite: string | null,
+  ip: string,
   log: Log,
 ): Promise<Resolved> {
   const [existing] = await db
@@ -164,7 +174,9 @@ async function resolveByTelegram(
   }
   // Creation, so the same gate applies. Telegram gives a signed
   // identity, which is a stronger claim about WHO somebody is — but not
-  // a claim that they were invited, and the bot is discoverable.
+  // a claim that they were invited, and the bot is discoverable. Bound
+  // per IP first, as on the device path (only reached for a new account).
+  await guardAccountCreation(ip, log);
   let claimedCode: string | null = null;
   if (mustPresentInvite({ hasExistingAccount: false })) {
     const code = normaliseCode(invite);
@@ -188,7 +200,13 @@ async function resolveByTelegram(
       telegramFirstName: tgUser.first_name ?? null,
       telegramPhotoUrl: tgUser.photo_url ?? null,
     })
-    .onConflictDoNothing({ target: schema.users.telegramId })
+    // telegram_id's unique index is PARTIAL (WHERE telegram_id IS NOT NULL),
+    // so ON CONFLICT must carry the same predicate or Postgres cannot infer
+    // the index and raises 42P10 — which failed every Mini App signup.
+    .onConflictDoNothing({
+      target: schema.users.telegramId,
+      where: sql`${schema.users.telegramId} is not null`,
+    })
     .returning({ id: schema.users.id });
 
   let userId = inserted[0]?.id ?? null;
@@ -323,11 +341,15 @@ const plugin: FastifyPluginAsync = async (app) => {
         req.deviceId = `tg:${validated.user.id}`;
         req.authVia = 'telegram';
         try {
-          const account = await resolveByTelegram(validated.user, invite, req.log);
+          const account = await resolveByTelegram(validated.user, invite, clientIp(req), req.log);
           req.userId = account.id;
           issueSession(reply, req.userId, req.deviceId, 'telegram', account.registered);
           passDoor(path, account.registered);
         } catch (err) {
+          if (err instanceof AccountCreateLimitError) {
+            reply.code(429);
+            throw new Error('too many new accounts from this address');
+          }
           if (err instanceof InviteRequiredError) {
             reply.code(403);
             throw new Error('invite required');
@@ -351,14 +373,28 @@ const plugin: FastifyPluginAsync = async (app) => {
       reply.code(401);
       throw new Error('missing or invalid x-device-id header');
     }
+    // The 'tg:<telegram_id>' shape is the synthetic device id we mint for
+    // Telegram accounts (resolveByTelegram). A Telegram user id is public,
+    // so accepting it here would let anyone present `x-device-id: tg:<id>`
+    // and be resolved as that Telegram user — an account takeover with no
+    // signature. That identity may only be established by validated
+    // initData, never by this header.
+    if (/^tg:/i.test(deviceId)) {
+      reply.code(401);
+      throw new Error('missing or invalid x-device-id header');
+    }
     req.deviceId = deviceId;
     req.authVia = 'device';
     try {
-      const account = await resolveByDeviceId(deviceId, invite, req.log);
+      const account = await resolveByDeviceId(deviceId, invite, clientIp(req), req.log);
       req.userId = account.id;
       issueSession(reply, req.userId, deviceId, 'device', account.registered);
       passDoor(path, account.registered);
     } catch (err) {
+      if (err instanceof AccountCreateLimitError) {
+        reply.code(429);
+        throw new Error('too many new accounts from this address');
+      }
       if (err instanceof RegistrationRequiredError) {
         reply.code(403);
         throw new Error('registration required');

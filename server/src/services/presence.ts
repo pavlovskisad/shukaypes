@@ -19,6 +19,7 @@ import { db, schema } from '../db/index.js';
 import { buildPhotoUrl } from './photoUrl.js';
 import { eq } from 'drizzle-orm';
 import type { LatLng } from '../utils/geo.js';
+import { jitteredPos } from '../lib/geoJitter.js';
 
 // Local shape (matches @shukajpes/shared NearbyPlayer). Defined here rather
 // than imported so the server never resolves the shared TS package at runtime.
@@ -46,43 +47,42 @@ export const PRESENCE_TTL_MS = 45_000;
 // the city.
 const RADIUS_M = 8000;
 const MAX_NEARBY = 60;
-const JITTER_M = 25;
 // Pending pokes live briefly (delivered on the target's next ~15s poll).
 const POKE_TTL_S = 120;
 const MAX_POKES = 10;
 
 // Stable per-id positional offset (privacy). Deterministic so a player's dog
 // doesn't jitter around each poll — it's their real movement + a fixed ~25m
-// offset, obscuring the exact point without the marker jumping.
+// offset — but keyed on a server secret (lib/geoJitter) so it cannot be
+// recomputed and subtracted from the shown point, which the old public-id
+// hash allowed.
 function jitter(id: string, pos: LatLng): LatLng {
-  let h = 2166136261;
-  for (let i = 0; i < id.length; i++) {
-    h ^= id.charCodeAt(i);
-    h = Math.imul(h, 16777619);
-  }
-  const ang = ((h >>> 0) % 3600) / 10 * (Math.PI / 180);
-  const r = (((h >>> 9) % 1000) / 1000) * JITTER_M;
-  const dLat = (r * Math.cos(ang)) / 110540;
-  const dLng =
-    (r * Math.sin(ang)) / (111320 * Math.cos((pos.lat * Math.PI) / 180));
-  return { lat: pos.lat + dLat, lng: pos.lng + dLng };
+  return jitteredPos(id, pos);
 }
 
 // In-memory name/photo cache so we don't hit Postgres on every poll — a
 // user's display identity barely changes. 1h TTL per user.
 const metaCache = new Map<
   string,
-  { name: string; owner: string | null; photo: string | null; avatar: string | null; exp: number }
+  {
+    name: string;
+    owner: string | null;
+    photo: string | null;
+    avatar: string | null;
+    hidden: boolean;
+    exp: number;
+  }
 >();
 export async function selfMeta(
   userId: string,
-): Promise<{ name: string; owner: string | null; photo: string | null; avatar: string | null }> {
+): Promise<{ name: string; owner: string | null; photo: string | null; avatar: string | null; hidden: boolean }> {
   const cached = metaCache.get(userId);
   if (cached && cached.exp > Date.now()) return cached;
   let name = 'walker';
   let owner: string | null = null;
   let photo: string | null = null;
   let avatar: string | null = null;
+  let hidden = false;
   try {
     const [u] = await db
       .select({
@@ -91,11 +91,13 @@ export async function selfMeta(
         d: schema.users.petName,
         p: schema.users.telegramPhotoUrl,
         a: schema.users.avatarFileId,
+        h: schema.users.presenceHidden,
       })
       .from(schema.users)
       .where(eq(schema.users.id, userId))
       .limit(1);
     if (u) {
+      hidden = u.h ?? false;
       // The dog's name is what the map shows (D-73: an animal world);
       // the person's nickname rides along as `owner` so a friend can
       // still find them. No pet: the nickname is the name.
@@ -108,7 +110,7 @@ export async function selfMeta(
   } catch {
     /* fall back to defaults */
   }
-  const rec = { name, owner, photo, avatar, exp: Date.now() + 3_600_000 };
+  const rec = { name, owner, photo, avatar, hidden, exp: Date.now() + 3_600_000 };
   metaCache.set(userId, rec);
   return rec;
 }
@@ -206,7 +208,13 @@ export async function syncPresence(userId: string, pos: LatLng): Promise<NearbyP
   if (redis.status !== 'ready') return [];
   const now = Date.now();
   const meta = await selfMeta(userId);
-  await writePresence(userId, jitter(userId, pos), meta.name, meta.photo, now, false, meta.avatar, meta.owner);
+  // "Hide me": publish nothing, so no one sees this walker on the map — but
+  // still fall through to the search below so they keep seeing others.
+  // forgetMeta() on the toggle makes this take effect on the next poll
+  // rather than after the 1h meta cache.
+  if (!meta.hidden) {
+    await writePresence(userId, jitter(userId, pos), meta.name, meta.photo, now, false, meta.avatar, meta.owner);
+  }
 
   let raw: unknown;
   try {

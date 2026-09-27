@@ -5,6 +5,7 @@ import type { FastifyError } from 'fastify';
 import cors from '@fastify/cors';
 import compress from '@fastify/compress';
 import rateLimit from '@fastify/rate-limit';
+import { clientIp } from './lib/rateLimit.js';
 import authPlugin from './auth.js';
 import stateRoute from './routes/state.js';
 import authRoute from './routes/auth.js';
@@ -144,7 +145,10 @@ export async function buildServer(observe?: RouteObserver) {
     // each other, and one abuser could lock everybody out. Moving the
     // hook is what makes every per-route number below mean what it says.
     hook: 'preHandler',
-    keyGenerator: (req) => req.userId || req.ip,
+    // Authed requests key on the userId; unidentified ones on the real
+    // client IP (Fly-Client-IP, unspoofable — see clientIp), never the
+    // X-Forwarded-For-derived req.ip a caller can rotate for a fresh bucket.
+    keyGenerator: (req) => req.userId || clientIp(req),
   });
 
   app.get('/health', async () => ({ ok: true, ts: new Date().toISOString() }));

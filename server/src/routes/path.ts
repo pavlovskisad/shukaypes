@@ -399,35 +399,69 @@ const plugin: FastifyPluginAsync = async (app) => {
     }
 
     const now = new Date();
-    const totalValue = tokenHits.reduce((s, t) => s + t.value, 0);
-    const tokenHungerBump = tokenHits.length * balance.token.hunger;
-    const tokenHappyBump = tokenHits.length * balance.token.happiness;
-    const foodHungerBump = foodHits.length * balance.bone.hunger;
-    const foodHappyBump = foodHits.length * balance.bone.happiness;
-    const totalHungerBump = tokenHungerBump + foodHungerBump;
-    const totalHappyBump = tokenHappyBump + foodHappyBump;
+    // What THIS call actually claimed — filled inside the tx by the
+    // conditional UPDATEs. Everything downstream (crediting, the day's
+    // bone tick, the response counts) is driven by these, never by the
+    // pre-read hits: two concurrent /collect/path calls with overlapping
+    // hits would otherwise each credit the full batch.
+    let claimedTokens: typeof tokenHits = [];
+    let claimedFood: typeof foodHits = [];
 
     await db.transaction(async (tx) => {
       if (tokenHits.length) {
-        await tx
+        // Claim only the ones still unspent; the returned ids are the
+        // subset this call won.
+        const claimed = await tx
           .update(schema.tokens)
           .set({ collectedAt: now })
           .where(
-            inArray(
-              schema.tokens.id,
-              tokenHits.map((t) => t.id),
+            and(
+              inArray(
+                schema.tokens.id,
+                tokenHits.map((t) => t.id),
+              ),
+              isNull(schema.tokens.collectedAt),
             ),
-          );
+          )
+          .returning({ id: schema.tokens.id });
+        const ids = new Set(claimed.map((c) => c.id));
+        claimedTokens = tokenHits.filter((t) => ids.has(t.id));
+      }
+      if (foodHits.length) {
+        const claimed = await tx
+          .update(schema.foodItems)
+          .set({ consumedAt: now })
+          .where(
+            and(
+              inArray(
+                schema.foodItems.id,
+                foodHits.map((f) => f.id),
+              ),
+              isNull(schema.foodItems.consumedAt),
+            ),
+          )
+          .returning({ id: schema.foodItems.id });
+        const ids = new Set(claimed.map((c) => c.id));
+        claimedFood = foodHits.filter((f) => ids.has(f.id));
+      }
+
+      const totalValue = claimedTokens.reduce((s, t) => s + t.value, 0);
+      const totalHungerBump =
+        claimedTokens.length * balance.token.hunger + claimedFood.length * balance.bone.hunger;
+      const totalHappyBump =
+        claimedTokens.length * balance.token.happiness + claimedFood.length * balance.bone.happiness;
+
+      if (claimedTokens.length) {
         await tx
           .update(schema.users)
           .set({
             points: sql`${schema.users.points} + ${totalValue}`,
-            totalTokens: sql`${schema.users.totalTokens} + ${tokenHits.length}`,
+            totalTokens: sql`${schema.users.totalTokens} + ${claimedTokens.length}`,
             lastSeenAt: now,
           })
           .where(eq(schema.users.id, userId));
         await tx.insert(schema.collectEvents).values(
-          tokenHits.map((t) => ({
+          claimedTokens.map((t) => ({
             id: nanoid(),
             userId,
             kind: 'token' as const,
@@ -439,18 +473,9 @@ const plugin: FastifyPluginAsync = async (app) => {
           })),
         );
       }
-      if (foodHits.length) {
-        await tx
-          .update(schema.foodItems)
-          .set({ consumedAt: now })
-          .where(
-            inArray(
-              schema.foodItems.id,
-              foodHits.map((f) => f.id),
-            ),
-          );
+      if (claimedFood.length) {
         await tx.insert(schema.collectEvents).values(
-          foodHits.map((f) => ({
+          claimedFood.map((f) => ({
             id: nanoid(),
             userId,
             kind: 'food' as const,
@@ -474,7 +499,7 @@ const plugin: FastifyPluginAsync = async (app) => {
             hunger: sql`LEAST(${balance.hunger.max}, ${schema.companionState.hunger} + ${totalHungerBump})`,
             happiness: sql`LEAST(${balance.happiness.max}, ${schema.companionState.happiness} + ${totalHappyBump})`,
             xp: sql`${schema.companionState.xp} + ${xpGain}`,
-            lastFedAt: foodHits.length ? now : schema.companionState.lastFedAt,
+            lastFedAt: claimedFood.length ? now : schema.companionState.lastFedAt,
             lastDecayAt: now,
           })
           .where(eq(schema.companionState.userId, userId));
@@ -496,11 +521,11 @@ const plugin: FastifyPluginAsync = async (app) => {
     };
     record(landDay);
     record(arrivalDay);
-    if (foodHits.length) record(await tickTask(userId, 'bones', foodHits.length));
+    if (claimedFood.length) record(await tickTask(userId, 'bones', claimedFood.length));
 
     return {
-      tokensCollected: tokenHits.length,
-      foodConsumed: foodHits.length,
+      tokensCollected: claimedTokens.length,
+      foodConsumed: claimedFood.length,
       marked: markPayload(mark),
       mood: markMood(mark),
       day,

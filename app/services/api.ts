@@ -469,6 +469,8 @@ export interface Me {
   // The server can draw one (its model key is set). Off, the step is
   // never shown.
   avatarConfigured: boolean;
+  // Multiplayer privacy: true = hidden from other walkers' maps.
+  presenceHidden: boolean;
 }
 
 export interface RegisterInput {
@@ -510,6 +512,13 @@ export const auth = {
   // From the profile: the door's fields, changed later.
   updateProfile: (input: ProfileInput) =>
     req<{ ok: true; me: Me }>('/auth/profile', { method: 'POST', body: JSON.stringify(input) }),
+  // Multiplayer visibility. Any signed-in walker can hide (no registration
+  // needed), so this is its own call rather than part of the profile save.
+  setPresenceHidden: (hidden: boolean) =>
+    req<{ ok: true; me: Me }>('/auth/presence-visibility', {
+      method: 'POST',
+      body: JSON.stringify({ hidden }),
+    }),
   // The pet's portrait: a photo up (a data URL, downscaled by
   // services/photoFile.ts), the drawing kept on the account. The photo
   // itself is not stored anywhere — see the note in the sheet.

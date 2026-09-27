@@ -38,7 +38,7 @@ import type { FastifyBaseLogger, FastifyPluginAsync, FastifyReply } from 'fastif
 import { and, eq, gt, gte, isNull, ne, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
-import { limitAuth, limitExpensive, limitPolling } from '../lib/rateLimit.js';
+import { limitAuth, limitCreate, limitExpensive, limitPolling } from '../lib/rateLimit.js';
 import {
   BREED_MAX,
   PET_NAME_MAX,
@@ -106,6 +106,8 @@ export interface Me {
   // FAL_KEY is set: the portrait step exists. Off, the client never
   // mentions it.
   avatarConfigured: boolean;
+  // Multiplayer privacy: true = this walker is hidden from others' maps.
+  presenceHidden: boolean;
 }
 
 function buildMe(user: UserRow, via: SessionVia | null): Me {
@@ -127,6 +129,7 @@ function buildMe(user: UserRow, via: SessionVia | null): Me {
     telegram: user.telegramId != null,
     avatarUrl: buildPhotoUrl(user.avatarFileId, null),
     avatarConfigured: avatarConfigured(),
+    presenceHidden: user.presenceHidden,
   };
 }
 
@@ -282,7 +285,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       password?: unknown;
       consent?: unknown;
     };
-  }>('/auth/register', limitExpensive, async (req, reply) => {
+  }>('/auth/register', limitCreate, async (req, reply) => {
     const user = await loadUser(req.userId);
     if (!user) return fail(reply, 404, 'not_found');
     // Already through: nothing to do, and no way to quietly change a
@@ -407,6 +410,28 @@ const plugin: FastifyPluginAsync = async (app) => {
       return { ok: true, me: buildMe(updated, viaOf(req)) };
     },
   );
+
+  // Multiplayer visibility toggle. Any identified walker — device-id or
+  // registered — can hide, so it is NOT behind the registration gate the
+  // profile edit uses; the edit-account sheet flips it on change. When
+  // hidden, presence.syncPresence stops publishing this walker's position
+  // (they still see everyone else). forgetMeta drops the presence meta
+  // cache so the change lands on the next ~15s poll, not an hour later.
+  app.post<{ Body: { hidden?: unknown } }>('/auth/presence-visibility', limitAuth, async (req, reply) => {
+    const user = await loadUser(req.userId);
+    if (!user) return fail(reply, 404, 'not_found');
+    if (typeof req.body?.hidden !== 'boolean') return fail(reply, 400, 'hidden_boolean_required');
+    const hidden = req.body.hidden;
+    const [updated] = await db
+      .update(schema.users)
+      .set({ presenceHidden: hidden })
+      .where(eq(schema.users.id, user.id))
+      .returning();
+    if (!updated) return fail(reply, 500, 'update_failed');
+    forgetMeta(user.id);
+    req.log.info({ kind: 'auth_presence_visibility', user: user.id, hidden }, '[auth] presence visibility set');
+    return { ok: true, me: buildMe(updated, viaOf(req)) };
+  });
 
   // A new password needs the current one. Every other login of the
   // account is revoked; the one that asked (its refresh token in the
