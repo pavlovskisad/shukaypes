@@ -38,7 +38,7 @@ import type { FastifyBaseLogger, FastifyPluginAsync, FastifyReply } from 'fastif
 import { and, eq, gt, gte, isNull, ne, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
-import { limitAuth, limitExpensive, limitPolling } from '../lib/rateLimit.js';
+import { limitAuth, limitCreate, limitExpensive, limitPolling } from '../lib/rateLimit.js';
 import {
   BREED_MAX,
   PET_NAME_MAX,
@@ -282,7 +282,7 @@ const plugin: FastifyPluginAsync = async (app) => {
       password?: unknown;
       consent?: unknown;
     };
-  }>('/auth/register', limitExpensive, async (req, reply) => {
+  }>('/auth/register', limitCreate, async (req, reply) => {
     const user = await loadUser(req.userId);
     if (!user) return fail(reply, 404, 'not_found');
     // Already through: nothing to do, and no way to quietly change a

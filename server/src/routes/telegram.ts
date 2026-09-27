@@ -363,8 +363,9 @@ const plugin: FastifyPluginAsync = async (app) => {
   // entirely, at which point this is an open endpoint that spends money
   // per request. Telegram's real traffic is far below this ceiling.
   //
-  // Keyed on req.ip here rather than a user, since there is no user —
-  // which is fine now that trustProxy is on and req.ip is the caller.
+  // No user here, so this falls through to the global keyGenerator, which
+  // keys unidentified callers on the unspoofable Fly-Client-IP (see
+  // lib/rateLimit clientIp) rather than the caller-writable X-Forwarded-For.
   app.post<{ Body: TgUpdate }>('/telegram/webhook', limitPolling, async (req, reply) => {
     // Verify Telegram's secret token if we set one. Without this
     // anyone who guesses the webhook URL could spam our bot via us.
