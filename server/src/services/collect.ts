@@ -7,7 +7,7 @@
 // collect_events row. The routes keep their validation and rejection
 // logging; the write is here.
 
-import { eq, sql } from 'drizzle-orm';
+import { and, eq, isNull, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { balance } from '../config/balance.js';
@@ -18,19 +18,30 @@ import type { LatLng } from '../utils/geo.js';
 // Dice roll and multiplier happen in SQL so they are atomic with the
 // bump. The ::int casts matter: postgres-js binds JS numbers untyped,
 // and CASE branches default to TEXT without them.
+// Returns true if THIS call collected the token, false if it was already
+// collected (a lost race or a replayed request). The caller credits nothing
+// on false. The claim is the conditional UPDATE below: only the request that
+// flips collected_at from NULL proceeds, so N concurrent taps on one token
+// credit exactly once — the route's earlier collected_at read is a fast
+// path, not the guard (two requests can both pass it before either writes).
 export async function collectTokenTx(
   userId: string,
   tokenId: string,
   value: number,
   pos: LatLng,
-): Promise<void> {
+): Promise<boolean> {
   const now = new Date();
   const base = balance.xp.perPaw;
   const luckyXp = base * balance.xp.luckyPawMultiplier;
   const threshold = balance.xp.luckyPawHappinessThreshold;
   const chance = balance.xp.luckyPawChance;
-  await db.transaction(async (tx) => {
-    await tx.update(schema.tokens).set({ collectedAt: now }).where(eq(schema.tokens.id, tokenId));
+  return db.transaction(async (tx) => {
+    const claimed = await tx
+      .update(schema.tokens)
+      .set({ collectedAt: now })
+      .where(and(eq(schema.tokens.id, tokenId), isNull(schema.tokens.collectedAt)))
+      .returning({ id: schema.tokens.id });
+    if (claimed.length === 0) return false;
     await tx
       .update(schema.users)
       .set({
@@ -60,15 +71,24 @@ export async function collectTokenTx(
       lng: pos.lng,
       accepted: true,
     });
+    return true;
   });
 }
 
 // A bone: the meal. Bones are scarcer than paws, so they are worth
 // more XP — feeding the dog at parks is the small daily ritual.
-export async function eatFoodTx(userId: string, foodId: string, pos: LatLng): Promise<void> {
+// Same contract as collectTokenTx: true if this call ate the bone, false if
+// it was already consumed. The conditional claim makes concurrent /feed
+// calls on one bone credit exactly once.
+export async function eatFoodTx(userId: string, foodId: string, pos: LatLng): Promise<boolean> {
   const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx.update(schema.foodItems).set({ consumedAt: now }).where(eq(schema.foodItems.id, foodId));
+  return db.transaction(async (tx) => {
+    const claimed = await tx
+      .update(schema.foodItems)
+      .set({ consumedAt: now })
+      .where(and(eq(schema.foodItems.id, foodId), isNull(schema.foodItems.consumedAt)))
+      .returning({ id: schema.foodItems.id });
+    if (claimed.length === 0) return false;
     await tx
       .update(schema.companionState)
       .set({
@@ -88,5 +108,6 @@ export async function eatFoodTx(userId: string, foodId: string, pos: LatLng): Pr
       lng: pos.lng,
       accepted: true,
     });
+    return true;
   });
 }

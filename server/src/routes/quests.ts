@@ -295,6 +295,11 @@ const plugin: FastifyPluginAsync = async (app) => {
     const done = nextIndex >= nextWaypoints.length;
 
     const [updated] = await db.transaction(async (tx) => {
+      // Optimistic-concurrency claim: only advance if the row is STILL at
+      // the index we read and still active. Two concurrent /advance calls
+      // both pass the status check above, but only one matches
+      // current_index here — the other claims 0 rows and credits nothing,
+      // so a completion reward can never be paid twice.
       const res = await tx
         .update(schema.quests)
         .set({
@@ -303,8 +308,15 @@ const plugin: FastifyPluginAsync = async (app) => {
           status: done ? 'completed' : 'active',
           completedAt: done ? new Date() : null,
         })
-        .where(eq(schema.quests.id, questId))
+        .where(
+          and(
+            eq(schema.quests.id, questId),
+            eq(schema.quests.currentIndex, row.currentIndex),
+            eq(schema.quests.status, 'active'),
+          ),
+        )
         .returning();
+      if (res.length === 0) return res; // lost the race — no reward, no stat bump
       if (done) {
         await tx
           .update(schema.users)
@@ -337,6 +349,13 @@ const plugin: FastifyPluginAsync = async (app) => {
       }
       return res;
     });
+
+    // The claim matched no row — a concurrent /advance already moved this
+    // quest past the index we read. Nothing was credited; say so.
+    if (!updated) {
+      reply.code(409);
+      return { error: 'quest already advanced' };
+    }
 
     // Pull the pet for narration context. Cheap lookup (1 row) and only
     // happens on waypoint arrivals, not the 100ms poll — client gates
