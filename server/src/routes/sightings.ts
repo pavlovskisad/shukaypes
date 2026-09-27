@@ -14,9 +14,22 @@ import { and, desc, eq, sql } from 'drizzle-orm';
 import { nanoid } from 'nanoid';
 import { db, schema } from '../db/index.js';
 import { limitRead } from '../lib/rateLimit.js';
+import { inKyivBbox } from '../lib/servedArea.js';
 
 const MAX_NOTE_CHARS = 200;
 const TRUST_MULTIPLIER = 2; // 2x search radius = "close enough" to move the pin
+
+// A reported coordinate we are willing to store or move a pin to.
+//
+// `typeof lat === 'number'` is not enough: Infinity and NaN are numbers,
+// and the trust test (haversineM) converts degrees to radians and is
+// therefore periodic in 360deg — so lat+360 lands ~0m from the real point
+// and would be "trusted", overwriting a real pet's last-seen with an
+// off-map coordinate. Finite + inside the served area is the same guard
+// every other write path already uses (routes/path, routes/syncMap).
+function isValidReportCoord(lat: number, lng: number): boolean {
+  return Number.isFinite(lat) && Number.isFinite(lng) && inKyivBbox(lat, lng);
+}
 
 // A COORDINATE NOBODY STOOD ON.
 //
@@ -77,6 +90,10 @@ const plugin: FastifyPluginAsync = async (app) => {
       if (!dogId || typeof lat !== 'number' || typeof lng !== 'number') {
         reply.code(400);
         return { error: 'dogId + lat + lng required' };
+      }
+      if (!isValidReportCoord(lat, lng)) {
+        reply.code(400);
+        return { error: 'lat/lng out of range' };
       }
       // Refused rather than recorded: a sighting whose position was
       // invented is not a weak report, it is not a report. The client
@@ -253,10 +270,15 @@ const plugin: FastifyPluginAsync = async (app) => {
       // for it. Only the coordinate is dropped, because only the
       // coordinate is fiction — recording it would file a report nobody
       // made, and moving the pin to it would take the pet off the map.
-      if (seen && typeof lat === 'number' && typeof lng === 'number' && isSyntheticPosition(lat, lng)) {
+      if (
+        seen &&
+        typeof lat === 'number' &&
+        typeof lng === 'number' &&
+        (isSyntheticPosition(lat, lng) || !isValidReportCoord(lat, lng))
+      ) {
         req.log.warn(
           { kind: 'sighting_synthetic_position', dogId, user: req.userId, via: 'walk' },
-          '[sightings] walk reported a sighting with the client fallback position',
+          '[sightings] walk reported a sighting with the client fallback or out-of-range position',
         );
       } else if (seen && typeof lat === 'number' && typeof lng === 'number') {
         sightingId = nanoid();
