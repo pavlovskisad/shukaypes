@@ -1,7 +1,7 @@
 import type { FastifyPluginAsync, FastifyRequest } from 'fastify';
 import fp from 'fastify-plugin';
 import { nanoid } from 'nanoid';
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import { db, schema } from './db/index.js';
 import { validateInitData, type TelegramUser } from './services/telegramAuth.js';
 import { claimInvite, mustPresentInvite, normaliseCode, recordRedemption } from './services/invites.js';
@@ -188,7 +188,13 @@ async function resolveByTelegram(
       telegramFirstName: tgUser.first_name ?? null,
       telegramPhotoUrl: tgUser.photo_url ?? null,
     })
-    .onConflictDoNothing({ target: schema.users.telegramId })
+    // telegram_id's unique index is PARTIAL (WHERE telegram_id IS NOT NULL),
+    // so ON CONFLICT must carry the same predicate or Postgres cannot infer
+    // the index and raises 42P10 — which failed every Mini App signup.
+    .onConflictDoNothing({
+      target: schema.users.telegramId,
+      where: sql`${schema.users.telegramId} is not null`,
+    })
     .returning({ id: schema.users.id });
 
   let userId = inserted[0]?.id ?? null;
@@ -348,6 +354,16 @@ const plugin: FastifyPluginAsync = async (app) => {
     const header = req.headers[DEVICE_ID_HEADER];
     const deviceId = Array.isArray(header) ? header[0] : header;
     if (!deviceId || deviceId.length < 8 || deviceId.length > 128) {
+      reply.code(401);
+      throw new Error('missing or invalid x-device-id header');
+    }
+    // The 'tg:<telegram_id>' shape is the synthetic device id we mint for
+    // Telegram accounts (resolveByTelegram). A Telegram user id is public,
+    // so accepting it here would let anyone present `x-device-id: tg:<id>`
+    // and be resolved as that Telegram user — an account takeover with no
+    // signature. That identity may only be established by validated
+    // initData, never by this header.
+    if (/^tg:/i.test(deviceId)) {
       reply.code(401);
       throw new Error('missing or invalid x-device-id header');
     }
