@@ -9,6 +9,7 @@ import {
   WAYPOINT_REACH_RADIUS_M,
 } from '../services/quest.js';
 import { snapWaypointsToPlaces } from '../services/questPlaces.js';
+import { chargeChatBudget } from '../services/chatBudget.js';
 import { readCorridor } from '../services/walkCorridor.js';
 import {
   narrateQuestStart,
@@ -125,15 +126,20 @@ const plugin: FastifyPluginAsync = async (app) => {
     // the trail lands on named spots; placeNames feeds the clue narration.
     const { waypoints, placeNames } = await snapWaypointsToPlaces(rawWaypoints);
 
+    // Quest narration is Haiku, and until now it ran outside the model
+    // budget entirely — uncapped calls a scripted client could drive at
+    // the route's rate limit. Charge the same ambient budget /chat/ambient
+    // uses; when it's exhausted, narration falls back to the hardcoded
+    // bubbles (null), exactly as an API error already does.
+    const canNarrate = (await chargeChatBudget(req.userId, 'ambient', req.log)).allowed;
+
     // One Haiku call up-front fills clue strings per waypoint so we
     // don't burn a model call on every /advance. Fail-soft → clues
     // stay null, client falls back to the generic arrival narration.
     const dogCtx = { name: dog.name, species: dog.species, breed: dog.breed };
-    const clues = await narrateWaypointClues(
-      dogCtx,
-      waypoints.length,
-      placeNames,
-    );
+    const clues = canNarrate
+      ? await narrateWaypointClues(dogCtx, waypoints.length, placeNames)
+      : null;
     const waypointsWithClues: StoredWaypoint[] = waypoints.map((w, i) => ({
       ...w,
       clue: clues?.[i] ?? null,
@@ -154,10 +160,9 @@ const plugin: FastifyPluginAsync = async (app) => {
       })
       .returning();
 
-    const narration = await narrateQuestStart(
-      dogCtx,
-      waypointsWithClues.length,
-    );
+    const narration = canNarrate
+      ? await narrateQuestStart(dogCtx, waypointsWithClues.length)
+      : null;
 
     return { quest: rowToQuest(inserted!), narration };
   });
@@ -372,17 +377,17 @@ const plugin: FastifyPluginAsync = async (app) => {
         .where(eq(schema.lostDogs.id, row.dogId))
         .limit(1);
       if (dog) {
-        if (done) {
-          narration = await narrateQuestComplete(dog, nextWaypoints.length);
-        } else {
-          // Prefer the clue we generated at quest start (zero extra
-          // Haiku call), fall back to the live waypoint-reached
-          // narration if no clue was stored or the index is somehow
-          // off. The clue describes what we notice at the waypoint
-          // we just reached.
-          const reachedClue = nextWaypoints[row.currentIndex]?.clue;
-          narration = reachedClue
-            ? `*sniff* ${reachedClue}`
+        // Prefer the clue generated at quest start — it makes no model
+        // call, so it needs no budget. Only the completion line and the
+        // live waypoint-reached fallback hit Haiku; charge the ambient
+        // budget for those and fall back to a hardcoded bubble (null)
+        // when it's exhausted.
+        const reachedClue = done ? null : nextWaypoints[row.currentIndex]?.clue;
+        if (reachedClue) {
+          narration = `*sniff* ${reachedClue}`;
+        } else if ((await chargeChatBudget(req.userId, 'ambient', req.log)).allowed) {
+          narration = done
+            ? await narrateQuestComplete(dog, nextWaypoints.length)
             : await narrateWaypointReached(dog, row.currentIndex, nextWaypoints.length);
         }
       }

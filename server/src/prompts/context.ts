@@ -99,8 +99,18 @@ export async function buildContextBlock({ userId, pos, viewport, spots }: Contex
   // the companion can actually emit walk_to_spot for them.
   let nearbySpots: string[] = [];
   if (spots && spots.length > 0) {
+    // These fields come straight from the caller's request body and are
+    // concatenated verbatim into the Opus system prompt. Clamp each: eight
+    // spots with megabyte-long names would be a large uncounted token bill
+    // per turn (the body limit alone permits it), and the clamp also caps
+    // the free text an attacker can smuggle into the prompt.
+    const clamp = (v: unknown, n: number): string => (typeof v === 'string' ? v.slice(0, n) : '');
     nearbySpots = spots.slice(0, 8).map((s) => {
-      return `  - ${s.name} (${s.category}), ~${Math.round(s.distM)}m away [id:${s.id}]`;
+      const name = clamp(s.name, 80);
+      const category = clamp(s.category, 40);
+      const id = clamp(s.id, 64);
+      const dist = Number.isFinite(s.distM) ? Math.round(s.distM) : 0;
+      return `  - ${name} (${category}), ~${dist}m away [id:${id}]`;
     });
   }
 
