@@ -84,6 +84,7 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
+  const [hidden, setHidden] = useState(me?.presenceHidden ?? false);
 
   const describe = (err: unknown): string => {
     if (err instanceof ApiError && err.code && t.errors[err.code]) return t.errors[err.code]!;
@@ -127,6 +128,15 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
       }
       onSaved();
       setInfo(t.saved);
+    });
+
+  // Persist on its own call — visibility is available to any signed-in
+  // walker, not only a registered one, so it does not ride the profile save.
+  const togglePresence = () =>
+    run(async () => {
+      const r = await auth.setPresenceHidden(!hidden);
+      setHidden(r.me.presenceHidden);
+      setMe(r.me);
     });
 
   const logout = () =>
@@ -273,6 +283,25 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
                 </div>
               </>
             ) : null}
+
+            <div style={LABEL}>{t.presenceSection}</div>
+            <div style={{ display: 'flex', gap: S.s, marginTop: 4 }}>
+              {([false, true] as const).map((hv) => (
+                <button
+                  key={String(hv)}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => {
+                    if (hidden !== hv) togglePresence();
+                  }}
+                  style={hidden === hv ? MODAL_PILL_DARK : MODAL_PILL_LIGHT}
+                >
+                  {hidden === hv ? null : <HandDrawnFrame seed={`edit-presence-${hv}`} radius={R.button} />}
+                  {hv ? t.presenceHiddenOption : t.presenceVisibleOption}
+                </button>
+              ))}
+            </div>
+            <div style={{ ...LABEL, color: colors.grey, marginTop: 4 }}>{t.presenceHint}</div>
 
             {me?.hasPassword ? (
               passwordOpen ? (

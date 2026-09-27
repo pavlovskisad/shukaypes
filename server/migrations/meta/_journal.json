@@ -330,6 +330,13 @@
       "when": 1786530681909,
       "tag": "0046_daily_tasks_six",
       "breakpoints": true
+    },
+    {
+      "idx": 47,
+      "version": "7",
+      "when": 1790535935696,
+      "tag": "0047_presence_hidden",
+      "breakpoints": true
     }
   ]
 }

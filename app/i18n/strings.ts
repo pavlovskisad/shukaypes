@@ -107,6 +107,10 @@ export interface AppStrings {
     avatarEditDraw: string;
     avatarEditRedraw: string;
     avatarEditRemove: string;
+    presenceSection: string;
+    presenceVisibleOption: string;
+    presenceHiddenOption: string;
+    presenceHint: string;
     // Server error codes → sentences.
     errors: Record<string, string> & { generic: string };
   };
@@ -593,6 +597,10 @@ const uk: AppStrings = {
     avatarEditDraw: 'намалювати портрет',
     avatarEditRedraw: 'перемалювати',
     avatarEditRemove: 'прибрати',
+    presenceSection: 'видимість на мапі',
+    presenceVisibleOption: 'видно іншим',
+    presenceHiddenOption: 'приховано',
+    presenceHint: 'коли приховано — інші не бачать тебе на мапі, а ти бачиш усіх.',
     errors: {
       generic: 'щось пішло не так. спробуй ще раз.',
       nickname_invalid: 'нік: від 2 до 24 символів, літери й цифри.',
@@ -1172,6 +1180,10 @@ const en: AppStrings = {
     avatarEditDraw: 'draw a portrait',
     avatarEditRedraw: 'redraw',
     avatarEditRemove: 'remove',
+    presenceSection: 'visibility on the map',
+    presenceVisibleOption: 'visible to others',
+    presenceHiddenOption: 'hidden',
+    presenceHint: 'when hidden, others can\'t see you on the map — you still see everyone.',
     errors: {
       generic: 'something went wrong. try again.',
       nickname_invalid: 'nickname: 2 to 24 characters, letters and digits.',
