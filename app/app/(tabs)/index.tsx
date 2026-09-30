@@ -46,6 +46,12 @@ export default function MapScreen() {
   // the other two rather than by a path of its own.
   const lostPinning = useGameStore((s) => s.lostPinning);
   const immersive = dogCam || gateOpen || lostPinning;
+  // The logo leaves for the gate AND for the pin step (UX-2.3). It is a
+  // mode switch, and a mode switch mid-aim ran setAppMode, whose clean
+  // slate closes the lost-pet sheet — the owner's half-written report
+  // was discarded with no word, and the mode flipped under them. It is
+  // still NOT keyed on supersniff: there the logo is the way back out.
+  const logoHidden = gateOpen || lostPinning;
   // THE ONE CONTROL THAT SURVIVES THE QUESTION — and the only one that
   // may. Everything else in this row bubbles out at the gate precisely
   // so that nothing can answer the dog behind the ring's back; the
@@ -95,7 +101,7 @@ export default function MapScreen() {
 
   // The logo needs its OWN window, not `sniffJustChanged`. It stays put
   // through a mode change — it IS the mode switch — and only bubbles for
-  // the gate, so keying it on `immersive` would animate it out and back
+  // the gate and the pin step, so keying it on `immersive` would animate it out and back
   // every time somebody tapped it.
   const [gateJustChanged, setGateJustChanged] = useState(false);
   const gateInitRef = useRef(true);
@@ -107,7 +113,7 @@ export default function MapScreen() {
     setGateJustChanged(true);
     const t = setTimeout(() => setGateJustChanged(false), 700);
     return () => clearTimeout(t);
-  }, [gateOpen]);
+  }, [logoHidden]);
 
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('map');
@@ -153,14 +159,14 @@ export default function MapScreen() {
           <div
             style={{
               transformOrigin: 'left center',
-              opacity: gateOpen ? 0 : 1,
-              transform: gateOpen ? 'scale(0)' : 'scale(1)',
+              opacity: logoHidden ? 0 : 1,
+              transform: logoHidden ? 'scale(0)' : 'scale(1)',
               animation: gateJustChanged
-                ? gateOpen
+                ? logoHidden
                   ? `pop-out 320ms ease-in forwards`
                   : `pop-in 360ms ${POP_IN} 200ms both`
                 : 'none',
-              pointerEvents: gateOpen ? 'none' : 'auto',
+              pointerEvents: logoHidden ? 'none' : 'auto',
             }}
           >
           <Pressable

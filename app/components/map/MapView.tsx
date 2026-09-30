@@ -16,7 +16,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { DEV_TOOLS } from '../../constants/devTools';
-import { useGameStore } from '../../stores/gameStore';
+import { setScreenCenterReader, useGameStore } from '../../stores/gameStore';
 import { useAccessStore } from '../../stores/accessStore';
 import { useConnectionStore } from '../../stores/connectionStore';
 import { MapContext } from './MapContext';
@@ -1305,6 +1305,29 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     syncSpots,
   ]);
 
+  // The EXACT point under the middle of the window, for the lost-pet pin
+  // step (UX-1.4). The bounds midpoint above is not it: every mode tilts
+  // the camera at some point, and at game pitch that midpoint lands a
+  // street or more up-screen of the crosshair — which is where a real
+  // owner's report was being saved. The crosshair is drawn at 50%/50% of
+  // the WINDOW, so this unprojects that pixel, translated into the map
+  // container's own coordinates (the container is not guaranteed to
+  // start at the window's corner). Read at the moment of confirm, not on
+  // idle, so a pan that has not settled yet still counts.
+  useEffect(() => {
+    if (!mapInstance) return;
+    setScreenCenterReader(() => {
+      if (typeof window === 'undefined') return null;
+      const rect = mapInstance.getContainer().getBoundingClientRect();
+      const ll = mapInstance.unproject([
+        window.innerWidth / 2 - rect.left,
+        window.innerHeight / 2 - rect.top,
+      ]);
+      return { lat: ll.lat, lng: ll.lng };
+    });
+    return () => setScreenCenterReader(null);
+  }, [mapInstance]);
+
   // Pull the active quest (if any) on mount so a refreshed tab sees the
   // quest the user started earlier. No polling — quest state only changes
   // on explicit user actions (start / advance / abandon).
@@ -1444,6 +1467,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       if (Date.now() - lastUserRotateAt < DOGCAM_TICK) return;
       // A swipe's or the entry swing's own move is still easing → let it land.
       if (Date.now() < cameraHoldUntilRef.current) return;
+      // The owner is aiming the map at where their pet was last seen
+      // (UX-1.4). A chase tick would snap the dog back to the middle and
+      // throw the aim away every 250 ms — the loop stands down entirely
+      // until the pin is confirmed or abandoned, then picks up again.
+      if (useGameStore.getState().lostPinning) return;
       // Preview → stay TIED to the dog but zoomed out, facing the fragment we're
       // eyeing (so the blue beacon sits up-screen). Committed → tight chase cam
       // with heading-up. Either way the camera is glued to the dog, so it never
@@ -1509,6 +1537,29 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       }
     };
   }, [dogCam]);
+
+  // AIM FLAT. Supersniff's chase camera sits at a steep tilt, and aiming a
+  // pin into a tilted city means aiming at a street seen edge-on, with the
+  // horizon a thumb's width above the crosshair. For as long as the pin
+  // step is up the camera lies flat; on the way out the pitch it had goes
+  // back (and in supersniff the chase loop above re-asserts its own on
+  // its next tick anyway). The flat modes are already at FLAT_PITCH, so
+  // this is a no-op there.
+  useEffect(() => {
+    if (!lostPinning) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const before = map.getPitch();
+    if (before <= FLAT_PITCH_SETTLED_DEG) return;
+    easeCamera(map, 'cinematic', { pitch: FLAT_PITCH, duration: 400 });
+    return () => {
+      try {
+        easeCamera(map, 'cinematic', { pitch: before, duration: 400 });
+      } catch {
+        /* map tearing down */
+      }
+    };
+  }, [lostPinning]);
 
   // ── The flat ground camera: walks ('explore') and territory ('play') ─────
   //
@@ -1591,6 +1642,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // under the thumb is the thing being aimed. It holds the camera for
   // its own reason, so it stays beside the list rather than in it.
   const flatCamHeld = !onMapScreen || lostPinning || reading;
+  // MARKERS THAT MUST NOT ANSWER A TAP (UX-2.3). Two states where the map
+  // is on screen but is not the thing being used: the lost-pet pin step
+  // (the map is being aimed, and a pet's or a walker's sheet opening
+  // under the pin card undoes that) and the account sheet (the dog is
+  // framed above the paper, and a marker tap opened a second sheet under
+  // the first). Pets and walkers step out of the frame; spots stay drawn
+  // — a walk's destination is part of the picture — but go inert.
+  const markersInert = lostPinning || doorSheetUp;
   const flatCamHeldRef = useRef(flatCamHeld);
   flatCamHeldRef.current = flatCamHeld;
   // When the camera is next allowed to move itself. Pushed forward by every
@@ -3498,6 +3557,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // the star of this view (it's leading you), and the camera keeps it framed.
     // Recentring on each new route (below) keeps it on-screen.
     if (DOG_CAM && dogCam) return null;
+    // Aiming a lost-pet pin: the dog has stepped out of frame on purpose,
+    // and this chip's tap recentres on it — which would undo the aim.
+    if (lostPinning) return null;
     if (!mapBounds || !companionPos) return null;
     const { n, s, e, w } = mapBounds;
     if (
@@ -3622,8 +3684,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
 
         {/* Other players' dogs (real + bots) — multiplayer presence. Glide
             between the ~15s presence updates so they read as people walking.
-            Hidden in supersniff so the whole focus is the dog search. */}
-        {DOG_CAM && dogCam
+            Hidden in supersniff so the whole focus is the dog search.
+            Also while a lost-pet pin is being aimed and under the account
+            sheet (see markersInert): a walker's card would open over
+            either. */}
+        {(DOG_CAM && dogCam) || markersInert
           ? null
           : otherWalkers.map((p) => <OtherWalker key={p.id} player={p} onOpen={openPlayer} />)}
 
@@ -3638,7 +3703,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             while the cinematic dog view is open (a pet selected): only the
             selected pet's BIG pin shows (below), so the framed zone isn't
             cluttered by neighbours. */}
-        {(!LOST_DOG_PINS || (DOG_CAM && dogCam) || selectedDogId ? [] : clusters).flatMap((c) => {
+        {(!LOST_DOG_PINS || (DOG_CAM && dogCam) || selectedDogId || markersInert ? [] : clusters).flatMap((c) => {
           if (c.items.length === 1) {
             const d = c.items[0]!.dog;
             const pos = displayPositions.get(d.id) ?? d.lastSeen.position;
@@ -3781,7 +3846,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                 category={s.category}
                 name={s.name}
                 selected={s.id === selectedSpotId}
-                onTap={() => setSelectedSpot(s.id === selectedSpotId ? null : s.id)}
+                onTap={() => {
+                  if (markersInert) return;
+                  setSelectedSpot(s.id === selectedSpotId ? null : s.id);
+                }}
               />
             ));
           }
@@ -3792,13 +3860,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               category={c.category}
               emoji={c.items[0]?.icon ?? '📍'}
               count={c.items.length}
-              onTap={() =>
+              onTap={() => {
+                if (markersInert) return;
                 setExpandedSpotKeys((prev) => {
                   const next = new Set(prev);
                   next.add(c.key);
                   return next;
-                })
-              }
+                });
+              }}
             />,
           ];
         })}
@@ -4336,8 +4405,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           other. Don't add a z-index here. */}
       {/* Not under the account sheet either: the HUD is already gone
           there, and a pill at top:100 landed between the dog's line and
-          the dog. */}
-      {(walkRoute || activeQuest || gpsHeld || noLocation) && !(DOG_CAM && dogCam) && !doorSheetUp ? (
+          the dog. Nor while a lost-pet pin is being aimed — the rest of
+          the chrome has bubbled out for that, and this pill is chrome. */}
+      {(walkRoute || activeQuest || gpsHeld || noLocation) && !(DOG_CAM && dogCam) && !doorSheetUp && !lostPinning ? (
         <div
           style={{
             position: 'absolute',

@@ -128,8 +128,15 @@ export default function TabsLayout() {
   const appMode = useGameStore((s) => s.appMode);
   const currentScreen = useGameStore((s) => s.currentScreen);
   const mapBlocked = useGameStore((s) => s.mapBlocked);
+  // …and while a lost-pet pin is being aimed (UX-2.2). The pin card sits
+  // right above the bar, and a live bar let the owner walk off to chat
+  // or tasks mid-aim with the crosshair and card following them there —
+  // where "confirm" saved the hidden map's stale centre. Back and
+  // confirm on the card are the two ways out of the step, as the four
+  // answers are for the gate.
+  const lostPinning = useGameStore((s) => s.lostPinning);
   const hidden =
-    currentScreen === 'map' && !mapBlocked && (dogCam || appMode === 'gate');
+    currentScreen === 'map' && !mapBlocked && (dogCam || appMode === 'gate' || lostPinning);
 
   // THE BAR USED TO JUST VANISH. `display: none` is not animatable, so
   // for as long as this bar has existed it cut out instantly while the

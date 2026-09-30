@@ -583,6 +583,28 @@ let spotsSeq = 0;
 // Pet ids with a sighting POST on the wire — see reportSighting.
 const sightingsInFlight = new Set<string>();
 
+// THE POINT UNDER THE MIDDLE OF THE SCREEN, read on demand (UX-1.4).
+// `viewportCenter` above is the midpoint of the map's BOUNDS, which on a
+// tilted camera sits far up-screen of the middle — fine for "roughly
+// which area is being browsed", wrong for "the place the crosshair is
+// on". The lost-pet pin step needs the second, and needs it at the
+// moment of confirm rather than as of the last idle, so MapView
+// registers a reader here (it owns the map) and the sheet calls it.
+// A slot rather than store state: it is a function, never rendered,
+// and nothing should re-render when it is swapped.
+let screenCenterReader: (() => LatLng | null) | null = null;
+export function setScreenCenterReader(fn: (() => LatLng | null) | null) {
+  screenCenterReader = fn;
+}
+export function readScreenCenter(): LatLng | null {
+  try {
+    return screenCenterReader?.() ?? null;
+  } catch {
+    // Map mid-teardown or style not ready — the caller falls back.
+    return null;
+  }
+}
+
 export const useGameStore = create<GameState>((set, get) => ({
   hunger: balance.hunger.start,
   happiness: balance.happiness.start,

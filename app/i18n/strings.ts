@@ -497,6 +497,8 @@ export interface AppStrings {
       // place button gets the real `pin`.
       photoLabel: string;
       photoChange: string;
+      // Takes the attached photo off the report again (UX-5.12).
+      photoRemove: string;
       // The pin step: button that enters it, the instruction while the
       // map is being aimed, and the two bar actions.
       pickPin: string;
@@ -1110,6 +1112,7 @@ const uk: AppStrings = {
       phonePlaceholder: 'для тих, хто побачить',
       photoLabel: 'додати фото',
       photoChange: 'інше фото',
+      photoRemove: 'прибрати фото',
       pickPin: 'вказати місце',
       pinPicked: 'місце вибрано',
       pinHint: 'наведи центр мапи на місце, де востаннє бачили',
@@ -1672,6 +1675,7 @@ const en: AppStrings = {
       phonePlaceholder: 'for whoever spots them',
       photoLabel: 'add a photo',
       photoChange: 'different photo',
+      photoRemove: 'remove photo',
       pickPin: 'point on the map',
       pinPicked: 'spot picked',
       pinHint: 'aim the map centre at where they were last seen',
