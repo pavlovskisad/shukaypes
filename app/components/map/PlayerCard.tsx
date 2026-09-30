@@ -81,6 +81,10 @@ export function PlayerCard({ player, onClose }: Props) {
   const isBot = card?.bot ?? !!player.bot;
 
   const poke = () => {
+    // Each poke is a notification on a real person's phone. The label
+    // already says "poked" for the cooldown; the button has to mean it,
+    // or a thumb drumming on it sends one per tap.
+    if (poked) return;
     haptic('medium');
     setPoked(true);
     setTimeout(() => setPoked(false), 1500);
@@ -164,7 +168,7 @@ export function PlayerCard({ player, onClose }: Props) {
               ) : null}
             </div>
           </div>
-          <Primary label={poked ? t.poked : t.poke} onClick={poke} />
+          <Primary label={poked ? t.poked : t.poke} disabled={poked} onClick={poke} />
           <button type="button" style={{ ...LINK, alignSelf: 'center', marginTop: S.m }} onClick={onClose}>
             {t.close}
           </button>

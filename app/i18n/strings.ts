@@ -149,11 +149,19 @@ export interface AppStrings {
     confirmGo: string;
     confirmBack: string;
     leaveAsk: string;
+    // The way back out of the leave question: the ✕ was brushed, the
+    // search goes on.
+    keepGoing: string;
     arrivedAsk: (name: string) => string;
     yes: string;
     no: string;
     thanksSeen: (paws: number) => string;
     thanksMissed: (paws: number) => string;
+    // The sighting did not reach the server (offline, 5xx). Said
+    // plainly, with a retry, rather than a "logged it" the owner never
+    // receives.
+    sendFailed: string;
+    retry: string;
     contactAsk: string;
     contactOpen: string;
     contactLater: string;
@@ -358,6 +366,12 @@ export interface AppStrings {
       lastSeen: (rel: string) => string;
       questCta: (points: number) => string;
       iveSeen: string;
+      // "I've seen" asks once before it files anything: the report is
+      // a real person's sighting of their pet, at the walker's GPS
+      // position, and it can move the pet's public pin.
+      seenConfirm: (name: string) => string;
+      seenConfirmYes: string;
+      seenConfirmNo: string;
       startSearch: string;
       searchingCta: string;
       previousPet: string;
@@ -669,11 +683,14 @@ const uk: AppStrings = {
     confirmGo: 'го, шукати →',
     confirmBack: 'ще подивлюсь',
     leaveAsk: 'закінчуємо пошук. бачив когось схожого?',
+    keepGoing: 'шукаємо далі',
     arrivedAsk: (name) => `ми на місці! бачив ${name} десь тут?`,
     yes: 'так, бачив',
     no: 'ні, нікого',
     thanksSeen: (paws) => `записав! +${paws} лапок 🐾`,
     thanksMissed: (paws) => `теж важливо — тепер знаємо, що тут порожньо. +${paws} лапок 🐾`,
+    sendFailed: 'не вийшло надіслати — власник поки нічого не отримав',
+    retry: 'ще раз',
     contactAsk: 'показати оголошення? там усе, що написав власник',
     contactOpen: 'відкрити оголошення',
     contactLater: 'пізніше',
@@ -949,6 +966,9 @@ const uk: AppStrings = {
       questCta: (points) =>
         `виконай квест пошуку — отримай ${points} бонусних балів`,
       iveSeen: 'я його бачив',
+      seenConfirm: (name) => `бачив ${name} тут, щойно?`,
+      seenConfirmYes: 'так, щойно',
+      seenConfirmNo: 'ні',
       startSearch: 'почати пошук',
       searchingCta: 'шукаємо…',
       previousPet: 'попередній',
@@ -1256,11 +1276,14 @@ const en: AppStrings = {
     confirmGo: "let's go →",
     confirmBack: 'still browsing',
     leaveAsk: 'wrapping up. did you see anyone like them?',
+    keepGoing: 'keep searching',
     arrivedAsk: (name) => `we're here! did you see ${name} around?`,
     yes: 'yes, I did',
     no: 'no, nobody',
     thanksSeen: (paws) => `logged it! +${paws} paws 🐾`,
     thanksMissed: (paws) => `still useful — now we know this patch is empty. +${paws} paws 🐾`,
+    sendFailed: "couldn't send it — the owner hasn't got anything yet",
+    retry: 'try again',
     contactAsk: "show the post? everything the owner wrote is in it",
     contactOpen: 'open the post',
     contactLater: 'later',
@@ -1510,6 +1533,9 @@ const en: AppStrings = {
       lastSeen: (rel) => `last seen ${rel}`,
       questCta: (points) => `complete search quest for ${points} bonus pts`,
       iveSeen: "i've seen them",
+      seenConfirm: (name) => `saw ${name} here, just now?`,
+      seenConfirmYes: 'yes, just now',
+      seenConfirmNo: 'no',
       startSearch: 'start search',
       searchingCta: 'searching…',
       previousPet: 'previous pet',

@@ -48,7 +48,16 @@ export interface PromptAction {
   primary?: boolean;
 }
 
-export function DogPrompt({ actions }: { actions: PromptAction[] }) {
+export function DogPrompt({
+  actions,
+  disabled,
+}: {
+  actions: PromptAction[];
+  // The answer already given is on the wire. Every button goes dead and
+  // dims, so a second tap cannot file a second sighting and the walker
+  // can see the first one landed.
+  disabled?: boolean;
+}) {
   return (
     <div
       style={{
@@ -79,7 +88,8 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
       {actions.map((a, i) => (
         <button
           key={a.label}
-          onClick={a.onPress}
+          onClick={disabled ? undefined : a.onPress}
+          disabled={disabled}
           aria-label={a.label}
           // A close button carries its glyph, not the sentence — the
           // label stays as the accessible name so it is still readable
@@ -110,7 +120,10 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
             // a square of this size.
             ...(a.close ? { fontSize: 24, lineHeight: 1 } : null),
             borderRadius: R.button,
-            cursor: 'pointer',
+            cursor: disabled ? 'default' : 'pointer',
+            // A filter, not `opacity`: the pop-in keyframe fills
+            // `both` and owns opacity, so an inline value would lose.
+            filter: disabled ? 'opacity(0.5)' : undefined,
             // Past the 44px tap target — these are pressed outdoors,
             // one-handed, usually while walking — and matched to the
             // corner logo's height so the strip reads as one HUD line.

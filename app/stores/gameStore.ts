@@ -580,6 +580,8 @@ let playersSeq = 0;
 // they had just flown the map to, drop the tapped spot from the array,
 // and silently kill its pin and open modal.
 let spotsSeq = 0;
+// Pet ids with a sighting POST on the wire — see reportSighting.
+const sightingsInFlight = new Set<string>();
 
 export const useGameStore = create<GameState>((set, get) => ({
   hunger: balance.hunger.start,
@@ -1500,6 +1502,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     // it files a report nobody made, and the server would move the pet
     // onto the one coordinate the map filters out.
     if (isFallbackPosition(userPosition)) return { ok: false, reason: 'no-location' };
+    // One report per pet at a time. The server does not dedupe, so a
+    // double tap on a slow connection would file two real sightings for
+    // someone's lost animal; the second call is dropped here instead.
+    if (sightingsInFlight.has(dogId)) return { ok: false, reason: 'in-flight' };
+    sightingsInFlight.add(dogId);
     try {
       const res = await api.reportSighting(dogId, userPosition);
       // If the server accepted it as close-enough, the dog's last-seen
@@ -1510,6 +1517,8 @@ export const useGameStore = create<GameState>((set, get) => ({
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
       return { ok: false };
+    } finally {
+      sightingsInFlight.delete(dogId);
     }
   },
 

@@ -493,7 +493,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // is what unlocks the owner's contact, and the server checks it
     // again before sending anything.
     | { kind: 'done'; text: string; dog: NearbyLostDog; canSeePost: boolean }
+    // "I saw it" did not reach the server. Its own kind rather than a
+    // 'done' with different words, because it has different answers:
+    // try again, or let it go — never the owner's contact, which only a
+    // sighting the server actually holds can unlock.
+    | { kind: 'failed'; dog: NearbyLostDog }
   >(null);
+  // True while a finishSearch request is on the wire. The ref is the
+  // guard (a second tap lands before React re-renders); the state is
+  // what greys the answers out so the walker can see the first one took.
+  const finishingRef = useRef(false);
+  const [finishing, setFinishing] = useState(false);
   // The pet whose post is open, if any. Its own state rather than a
   // prompt variant, because it is reached from two unrelated places —
   // the pet card mid-search and the end-of-search prompt.
@@ -550,7 +560,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           ? t.search.leaveAsk
           : prompt.kind === 'arrived'
             ? t.search.arrivedAsk(prompt.dog.name)
-            : prompt.text;
+            : prompt.kind === 'failed'
+              ? t.search.sendFailed
+              : prompt.text;
   const setSearchTarget = useGameStore((s) => s.setSearchTarget);
   const searchRoute = useGameStore((s) => s.searchRoute);
   const setSearchRoute = useGameStore((s) => s.setSearchRoute);
@@ -1885,12 +1897,21 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // the client only reports what happened.
   const finishSearch = useCallback(
     async (dog: NearbyLostDog, seen: boolean) => {
+      // One answer per question. Each call writes a real sighting and
+      // pays paws, and on a slow connection the pills stay up for the
+      // whole request — so "yes" twice, or "yes" then "no", would file
+      // two rows (or two contradictory ones).
+      if (finishingRef.current) return;
+      finishingRef.current = true;
+      setFinishing(true);
       setSearchTarget(null);
       setSearchRoute(null);
       let paws = 0;
+      let ok = false;
       try {
         const res = await api.finishSearch(dog.id, seen, userPosRef.current);
         paws = res.paws;
+        ok = true;
         // `res.sourceUrl` is deliberately ignored now. It was the OLX
         // link this prompt used to open; /dogs/:id/post carries its own
         // copy, gated by the same sighting check, so reading it from two
@@ -1899,6 +1920,16 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // Offline or the server said no. The search still ends — stranding
         // someone in a quest because a request failed is the worse outcome
         // — they just do not get told a number.
+      } finally {
+        finishingRef.current = false;
+        setFinishing(false);
+      }
+      // A sighting that never arrived is not "logged". Say so and offer
+      // the retry; a "no, nobody" that failed is only a lost count, and
+      // falls through to the ordinary thanks.
+      if (!ok && seen) {
+        setPrompt({ kind: 'failed', dog });
+        return;
       }
       // THE PAYOUT, ONE PAW AT A TIME.
       //
@@ -3817,8 +3848,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                   // server's 60m check (force=true) so we can walk
                   // through the flow from a desk. Passive pins (reached
                   // / future) don't get a handler — nothing to do on tap.
+                  // DEV_TOOLS only: for anyone else a tap would complete
+                  // the step, or the whole search, without walking there.
                   onTap={
-                    state === 'active'
+                    DEV_TOOLS && state === 'active'
                       ? async () => {
                           const { advanced, completed, narration } =
                             await forceAdvanceActiveWaypoint();
@@ -4103,6 +4136,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           pointerEvents="box-none"
         >
           <DogPrompt
+            disabled={finishing}
             actions={
               prompt.kind === 'confirm'
                 ? [
@@ -4123,6 +4157,19 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                   ]
                 : prompt.kind === 'leave' || prompt.kind === 'arrived'
                   ? [
+                      // The ✕ that raised "leave" is easy to brush, and
+                      // both answers end the search — one of them by
+                      // filing a sighting. So leaving has a way back.
+                      // Not on "arrived": there the walk is over.
+                      ...(prompt.kind === 'leave'
+                        ? [
+                            {
+                              label: t.search.keepGoing,
+                              close: true,
+                              onPress: () => setPrompt(null),
+                            },
+                          ]
+                        : []),
                       {
                         label: t.search.no,
                         onPress: () => {
@@ -4142,6 +4189,18 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                       },
                       {
                         label: t.search.yes,
+                        primary: true,
+                        onPress: () => void finishSearch(prompt.dog, true),
+                      },
+                    ]
+                : prompt.kind === 'failed'
+                  ? [
+                      {
+                        label: t.search.close,
+                        onPress: () => setPrompt(null),
+                      },
+                      {
+                        label: t.search.retry,
                         primary: true,
                         onPress: () => void finishSearch(prompt.dog, true),
                       },
@@ -4637,6 +4696,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         onReportSighting={async (d) => {
           setSelectedDog(null);
           const res = await useGameStore.getState().reportSighting(d.id);
+          // The first tap's report is still on the wire; it will say
+          // its own thanks.
+          if (res?.reason === 'in-flight') return;
           if (res?.ok && res.trusted) {
             showBubble(`thanks — moved ${d.name}'s pin 📍`, 5000);
           } else if (res?.ok) {

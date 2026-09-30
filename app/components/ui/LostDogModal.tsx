@@ -148,6 +148,15 @@ export function LostDogModal({
   // animation doesn't compose with a horizontal slide.
   const [slideDir, setSlideDir] = useState<'left' | 'right' | null>(null);
   const touchStartXRef = useRef<number | null>(null);
+  // "I've seen" is two taps on purpose: the first asks, the second
+  // files. A sighting is a real report on someone's lost pet, placed at
+  // wherever the walker is standing, and it can move the pet's public
+  // pin — one stray tap on a card is not enough to say that.
+  const [confirmingSeen, setConfirmingSeen] = useState(false);
+  // Latched by the confirming tap, so the ~360 ms between it and the
+  // card being gone (pop delay + close animation) cannot fire a second
+  // report. Cleared when the card moves to another pet.
+  const firedRef = useRef(false);
 
   // Three transitions matter:
   //   prop dog: A   →  prop dog: B    (swap content, slide animation)
@@ -158,6 +167,12 @@ export function LostDogModal({
       // Only clear slideDir on a fresh open (renderDog was null). For
       // A → B cycle swaps, leave it set so the new track mount slides.
       if (!renderDog) setSlideDir(null);
+      // A new pet, or the same one reopened mid-fade: either way a
+      // fresh card, so the question and the latch start over.
+      if (dog.id !== renderDog?.id || closing) {
+        setConfirmingSeen(false);
+        firedRef.current = false;
+      }
       setRenderDog(dog);
       setClosing(false);
       return;
@@ -237,7 +252,10 @@ export function LostDogModal({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          pointerEvents: 'auto',
+          // Dead while it fades out: the pills are still painted for
+          // the close animation, and a tap on them then would act on a
+          // card that is already going.
+          pointerEvents: closing ? 'none' : 'auto',
           animation: `dog-bubble-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.34, 1.2, 0.64, 1) forwards`,
         }}
       >
@@ -342,32 +360,59 @@ export function LostDogModal({
                 {t.modals.lostDog.readPost}
               </button>
             ) : null}
+            {confirmingSeen ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: TYPE.small,
+                  fontWeight: 800,
+                }}
+              >
+                {t.modals.lostDog.seenConfirm(renderDog.name)}
+              </div>
+            ) : null}
           </div>
 
           {/* Action pills — ink primary (start search), white secondary
-              (i've seen), side by side under the bubble. */}
-          <div style={{ display: 'flex', gap: S.s }}>
-            <button
-              onClick={(e) =>
-                playPopThen(e.currentTarget, () => onReportSighting?.(renderDog))
-              }
-              style={PILL_SECONDARY}
-            >
-              <HandDrawnFrame radius={R.button} />
-              {t.modals.lostDog.iveSeen}
-            </button>
-            <button
-              onClick={(e) =>
-                playPopThen(e.currentTarget, () => onStartSearch?.(renderDog))
-              }
-              disabled={searchActive}
-              style={searchActive ? PILL_DISABLED : PILL_PRIMARY}
-            >
-              {searchActive
-                ? t.modals.lostDog.searchingCta
-                : `${t.modals.lostDog.startSearch} →`}
-            </button>
-          </div>
+              (i've seen), side by side under the bubble. While "i've
+              seen" is being confirmed the pair becomes no / yes, just
+              now, and the question sits at the foot of the bubble. */}
+          {confirmingSeen ? (
+            <div style={{ display: 'flex', gap: S.s }}>
+              <button onClick={() => setConfirmingSeen(false)} style={PILL_SECONDARY}>
+                <HandDrawnFrame radius={R.button} />
+                {t.modals.lostDog.seenConfirmNo}
+              </button>
+              <button
+                onClick={(e) => {
+                  if (firedRef.current) return;
+                  firedRef.current = true;
+                  playPopThen(e.currentTarget, () => onReportSighting?.(renderDog));
+                }}
+                style={PILL_PRIMARY}
+              >
+                {t.modals.lostDog.seenConfirmYes}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: S.s }}>
+              <button onClick={() => setConfirmingSeen(true)} style={PILL_SECONDARY}>
+                <HandDrawnFrame radius={R.button} />
+                {t.modals.lostDog.iveSeen}
+              </button>
+              <button
+                onClick={(e) =>
+                  playPopThen(e.currentTarget, () => onStartSearch?.(renderDog))
+                }
+                disabled={searchActive}
+                style={searchActive ? PILL_DISABLED : PILL_PRIMARY}
+              >
+                {searchActive
+                  ? t.modals.lostDog.searchingCta
+                  : `${t.modals.lostDog.startSearch} →`}
+              </button>
+            </div>
+          )}
         </div>
         {/* end content track */}
 
