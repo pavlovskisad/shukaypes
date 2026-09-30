@@ -402,7 +402,15 @@ export default function MapViewWeb() {
   // fallback IS a position), so a person with location off was shown
   // Maidan with no hint why. A jammed GPS has its own pill and says
   // enough on its own.
-  const noLocation = location.usingFallback && !gpsHeld;
+  //
+  // Tap to put it away (owner's call): it is information, not a task,
+  // and once read it only takes room from the pill row. Put away until a
+  // real fix arrives, so losing location AGAIN later says so again.
+  const [noLocationDismissed, setNoLocationDismissed] = useState(false);
+  useEffect(() => {
+    if (!location.usingFallback) setNoLocationDismissed(false);
+  }, [location.usingFallback]);
+  const noLocation = location.usingFallback && !gpsHeld && !noLocationDismissed;
   // A top-edge chip has to clear the iOS status bar (clock, signal,
   // battery) — taps inside that strip are intercepted by the system
   // (scroll-to-top), so a chip overlapping it feels dead. The HUD
@@ -4619,16 +4627,23 @@ const DECK_ANIM_MS = MOTION.sheetMs;
                 📡 {t.hud.gpsHeld}
               </div>
             ) : null}
-            {/* Same slot and recipe as the jammed pill: a status, not a
-                button. The fix is in the browser's settings, which a web
-                page cannot open for anyone. */}
+            {/* Same slot and recipe as the jammed pill. Nothing here can
+                fix it — that is in the browser's settings, which a web
+                page cannot open for anyone — so the tap only puts the
+                notice away, with the × the finish-walk pill uses. */}
             {noLocation ? (
               <div
-                role="status"
-                style={{ ...HUD_OVERLAY_PILL, cursor: 'default', pointerEvents: 'none' }}
+                role="button"
+                tabIndex={0}
+                onKeyDown={clickOnKey}
+                aria-label={t.hud.noLocation}
+                onClick={(e) =>
+                  playPopThen(e.currentTarget, () => setNoLocationDismissed(true))
+                }
+                style={HUD_OVERLAY_PILL}
               >
                 <HandDrawnFrame radius={R.pill} />
-                📍 {t.hud.noLocation}
+                × 📍 {t.hud.noLocation}
               </div>
             ) : null}
             {walkRoute ? (
