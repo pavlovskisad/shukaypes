@@ -80,12 +80,13 @@ export function QuestPill() {
             void abandon();
           }}
           onPressIn={popPressableEvent}
-          hitSlop={8}
           accessibilityLabel={armed ? t.hud.abandonSearchArmed : t.hud.abandonSearch}
-          style={armed ? styles.closeArmed : styles.close}
+          style={styles.closeHit}
         >
           {armed ? (
-            <Text style={styles.closeArmedTxt}>{t.hud.abandonSearchArmed}</Text>
+            <View style={styles.closeArmed}>
+              <Text style={styles.closeArmedTxt}>{t.hud.abandonSearchArmed}</Text>
+            </View>
           ) : (
             <Text style={styles.closeTxt}>×</Text>
           )}
@@ -154,13 +155,17 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginLeft: 2,
   },
-  close: {
-    width: 26,
-    height: 26,
-    borderRadius: R.pill,
+  // The hit box is 44 tall and at least 44 wide; the drawn × and the
+  // armed capsule inside it stay 26. hitSlop used to do this job and
+  // does nothing on react-native-web 0.19 (UX-9.1), so the box is real
+  // and the negative vertical margin (44 - 26 = 18, half each side)
+  // keeps it from growing the pill.
+  closeHit: {
+    minWidth: 44,
+    height: 44,
+    marginVertical: -9,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: S.xs,
   },
   closeTxt: {
     color: '#666',
@@ -176,7 +181,6 @@ const styles = StyleSheet.create({
     borderRadius: R.pill,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: S.xs,
     backgroundColor: INK,
   },
   closeArmedTxt: {

@@ -40,7 +40,7 @@ import {
   pointAheadOnRoute,
   remainingRouteMeters,
 } from '../../utils/geo';
-import { playPop } from '../../utils/popOnTap';
+import { playPop, playPopThen } from '../../utils/popOnTap';
 import { MOTION } from '../../utils/motion';
 import { Companion } from './Companion';
 import { CrayonRoute } from './CrayonRoute';
@@ -4522,6 +4522,10 @@ const DECK_ANIM_MS = MOTION.sheetMs;
                 role="status"
                 style={{ ...HUD_OVERLAY_PILL, cursor: 'default', pointerEvents: 'none' }}
               >
+                {/* The drawn edge the recipe reserves 2px for (UX-9.7):
+                    without it these were the only white pills on the map
+                    with no line round them. */}
+                <HandDrawnFrame radius={R.pill} />
                 📡 {t.hud.gpsHeld}
               </div>
             ) : null}
@@ -4533,6 +4537,7 @@ const DECK_ANIM_MS = MOTION.sheetMs;
                 role="status"
                 style={{ ...HUD_OVERLAY_PILL, cursor: 'default', pointerEvents: 'none' }}
               >
+                <HandDrawnFrame radius={R.pill} />
                 📍 {t.hud.noLocation}
               </div>
             ) : null}
@@ -4540,9 +4545,12 @@ const DECK_ANIM_MS = MOTION.sheetMs;
               <div
                 role="button"
                 aria-label={t.hud.finishWalk}
-                onClick={() => setWalkRoute(null, null)}
+                // The pop every other button in the app gives, then the
+                // walk ends (UX-9.7).
+                onClick={(e) => playPopThen(e.currentTarget, () => setWalkRoute(null, null))}
                 style={HUD_OVERLAY_PILL}
               >
+                <HandDrawnFrame radius={R.pill} />
                 × {t.hud.finishWalk}
               </div>
             ) : null}

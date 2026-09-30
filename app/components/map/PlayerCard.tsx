@@ -173,7 +173,8 @@ export function PlayerCard({ player, onClose }: Props) {
             </div>
           </div>
           <Primary label={poked ? t.poked : t.poke} disabled={poked} onClick={poke} />
-          <button type="button" style={{ ...LINK, alignSelf: 'center', marginTop: S.m }} onClick={onClose}>
+          {/* marginTop 0: LINK's own S.m of padding is the gap now. */}
+          <button type="button" style={{ ...LINK, alignSelf: 'center', marginTop: 0 }} onClick={onClose}>
             {t.close}
           </button>
         </div>

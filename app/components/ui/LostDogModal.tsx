@@ -10,12 +10,14 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK, SURFACE } from '../../constants/surface';
+import { MODAL_PILL_DISABLED } from '../../constants/buttons';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
 import { playPopThen } from '../../utils/popOnTap';
 import { HandDrawnFrame } from './HandDrawn';
+import { Icon } from './Icon';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
 
@@ -92,15 +94,18 @@ const PILL_SECONDARY: CSSProperties = {
   boxShadow: SURFACE.onPhoto,
 };
 
+// The shared disabled colours (grey paper, grey text, grey edge) at
+// this card's pill size, with the on-photo shadow the other two wear.
+// It used to be white-on-translucent, a ghost meant for a dark bubble:
+// over the pale basemap "searching…" could not be read at all (UX-9.2).
+// The grey edge rather than the ink one still says "not a button".
 const PILL_DISABLED: CSSProperties = {
   ...PILL_BASE,
-  background: 'rgba(255,255,255,0.25)',
-  color: 'rgba(255,255,255,0.8)',
-  // Its own translucent edge rather than the ink one — a solid black
-  // outline around a ghosted pill reads as enabled.
-  border: '2px solid rgba(255,255,255,0.45)',
+  background: MODAL_PILL_DISABLED.background,
+  color: MODAL_PILL_DISABLED.color,
+  border: MODAL_PILL_DISABLED.border,
   cursor: 'default',
-  boxShadow: 'none',
+  boxShadow: SURFACE.onPhoto,
 };
 
 // Status tint. This was '#8fb0ff' — brand blue lightened to survive on
@@ -280,7 +285,9 @@ export function LostDogModal({
               line, reward. */}
           <div
             style={{
-              padding: '14px 18px',
+              // Wider at the sides than the top so a long name, centred,
+              // never runs under the close disc on the corner.
+              padding: '14px 30px',
               background: SURFACE.fill,
               color: INK,
               borderRadius: R.card,
@@ -289,8 +296,40 @@ export function LostDogModal({
               border: VOICE.border,
               textAlign: 'center',
               maxWidth: 300,
+              // Anchors the close disc on the corner.
+              position: 'relative',
             }}
           >
+            {/* A VISIBLE CLOSE (UX-9.21). Tapping the map around the card
+                always closed it, but nothing said so — people looking at
+                a lost pet's card had no drawn way out. The app's close
+                shape (D9): a 44px drawn circle with the close icon, sat
+                on the bubble's corner like a badge so it takes no room
+                from the text. */}
+            <button
+              onClick={(e) => playPopThen(e.currentTarget, onClose)}
+              aria-label={t.modals.common.close}
+              style={{
+                position: 'absolute',
+                top: -S.l,
+                right: -S.l,
+                width: 44,
+                height: 44,
+                boxSizing: 'border-box',
+                borderRadius: R.pill,
+                border: '2px solid transparent',
+                background: '#ffffff',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: SURFACE.chip,
+              }}
+            >
+              <HandDrawnFrame radius={R.pill} />
+              <Icon name="close" size={18} />
+            </button>
             <div
               style={{
                 fontSize: 19,
@@ -347,13 +386,23 @@ export function LostDogModal({
               <button
                 onClick={() => onOpenPost(renderDog)}
                 style={{
-                  marginTop: 8,
-                  padding: 0,
+                  // The padding is the tap target (~40px tall) and the
+                  // negative margin hands it back, so the line sits where
+                  // the old 11px bare-text link did (UX-9.6). In ink:
+                  // blue here means the map, not "tap me" — the same
+                  // rule as the deck counter.
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  marginTop: 8 - S.m,
+                  marginBottom: -S.m,
+                  marginLeft: -S.l,
+                  marginRight: -S.l,
+                  padding: `${S.m}px ${S.l}px`,
                   border: 'none',
                   background: 'none',
-                  color: BADGE_TINT,
+                  color: INK,
                   fontFamily: SYSTEM_FONT,
-                  fontSize: TYPE.caption,
+                  fontSize: TYPE.small,
                   fontWeight: 700,
                   textDecoration: 'underline',
                   cursor: 'pointer',

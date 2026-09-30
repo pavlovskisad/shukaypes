@@ -181,7 +181,8 @@ export default function MapScreen() {
                   ? strings.hud.logoPlay
                   : strings.hud.logoBack
             }
-            hitSlop={8}
+            // No hitSlop: react-native-web 0.19 ignores it (UX-9.1), and
+            // the logo is HUD_ICON_SIZE (59) square, target enough.
             style={{ position: 'relative' }}
           >
             {/* Super-sniff hint cue — the same blooming ring the HUD pills

@@ -350,7 +350,14 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
                   onClick={() => {
                     if (hidden !== hv) togglePresence();
                   }}
-                  style={hidden === hv ? MODAL_PILL_DARK : MODAL_PILL_LIGHT}
+                  // Dimmed while a call is out (UX-9.3): the toggle saves on
+                  // the tap, and a pill that looked live during that save
+                  // got tapped again and did nothing.
+                  style={{
+                    ...(hidden === hv ? MODAL_PILL_DARK : MODAL_PILL_LIGHT),
+                    opacity: busy ? 0.5 : 1,
+                    cursor: busy ? 'default' : 'pointer',
+                  }}
                 >
                   {hidden === hv ? null : <HandDrawnFrame seed={`edit-presence-${hv}`} radius={R.button} />}
                   {hv ? t.presenceHiddenOption : t.presenceVisibleOption}

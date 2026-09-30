@@ -676,7 +676,7 @@ export default function TasksScreen() {
                     "show all" over a board that already fits opened a
                     sheet repeating the same rows (UX-12.20). */}
                 {board.board.length > BOARD_CARD_ROWS ? (
-                  <Pressable onPress={openFullBoard} hitSlop={8}>
+                  <Pressable onPress={openFullBoard}>
                     {({ pressed }) => (
                       <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
                         {t.tasks.boardSeeAll}
@@ -738,7 +738,7 @@ export default function TasksScreen() {
               })
             )}
             {happy.board.length > BOARD_CARD_ROWS ? (
-              <Pressable onPress={openFullHappy} hitSlop={8}>
+              <Pressable onPress={openFullHappy}>
                 {({ pressed }) => (
                   <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
                     {t.tasks.boardSeeAll}
@@ -1136,6 +1136,9 @@ const styles = StyleSheet.create({
     color: INK,
     textDecorationLine: 'underline',
     textAlign: 'center',
+    // The padding IS the tap target (~41px, full card width). These
+    // links used to lean on hitSlop as well, which react-native-web
+    // 0.19 ignores (UX-9.1).
     paddingVertical: S.m,
   },
   boardSeeAllPressed: { opacity: 0.55 },

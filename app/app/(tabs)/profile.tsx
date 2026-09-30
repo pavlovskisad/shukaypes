@@ -109,6 +109,8 @@ function StatRow({ label, value }: { label: string; value: string | number | und
 // The «змінити» chip on the dog card: smaller than the HUD pills, it
 // is a corner affordance and not a control row.
 const EDIT_CHIP_H = 28;
+// (44 - 28) / 2 — grows the chip's tap target to 44 without moving it.
+const EDIT_CHIP_PAD = (44 - EDIT_CHIP_H) / 2;
 // The pet's portrait beside its name: as tall as the name and level
 // lines together. No drawn ring — the drawing's own marker line is the
 // edge (the owner asked for the border dropped, 14 Sep); the same rule
@@ -235,10 +237,12 @@ export default function ProfileScreen() {
               onPressIn={popPressableEvent}
               accessibilityRole="button"
               accessibilityLabel={t.auth.editChip}
-              style={({ pressed }) => [styles.editChip, pressed && { opacity: 0.7 }]}
+              style={({ pressed }) => [styles.editChipHit, pressed && { opacity: 0.7 }]}
             >
-              <HandDrawnFrame radius={EDIT_CHIP_H / 2} />
-              <Text style={styles.editChipText}>{t.auth.editChip}</Text>
+              <View style={styles.editChip}>
+                <HandDrawnFrame radius={EDIT_CHIP_H / 2} />
+                <Text style={styles.editChipText}>{t.auth.editChip}</Text>
+              </View>
             </Pressable>
             <Text style={styles.sectionTitle}>{t.profile.stats.companionStats}</Text>
             <View style={styles.companionRow}>
@@ -518,17 +522,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: S.s,
   },
-  editChip: {
+  // The chip is 28 tall; the Pressable around it is the 44px tap
+  // target. The pad is taken back out of the corner offset so the chip
+  // itself lands exactly where it always did. (hitSlop was the obvious
+  // tool and does nothing on react-native-web 0.19 — UX-9.1.)
+  editChipHit: {
     position: 'absolute',
-    top: S.m,
-    right: S.m,
+    top: S.m - EDIT_CHIP_PAD,
+    right: S.m - EDIT_CHIP_PAD,
+    padding: EDIT_CHIP_PAD,
+    zIndex: 1,
+  },
+  editChip: {
     height: EDIT_CHIP_H,
     paddingHorizontal: S.m,
     borderRadius: EDIT_CHIP_H / 2,
     backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1,
   },
   editChipText: {
     fontFamily: SYSTEM_FONT,

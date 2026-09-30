@@ -30,7 +30,7 @@ import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
-import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
+import { MODAL_PILL_DARK, MODAL_PILL_DISABLED, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { env } from '../../constants/env';
 import { openTelegramChat, setTelegramClosingConfirmation } from '../../services/telegram';
 import { useSheetBack } from '../../hooks/useSheetBack';
@@ -670,7 +670,9 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             </>
           ) : (
             <>
-              <button onClick={() => void submit()} disabled={sending} style={{ ...MODAL_PILL_DARK, opacity: sending ? 0.6 : 1 }}>
+              {/* The shared disabled pill while it sends (UX-9.3), not the
+                  dark one faded — that still read as pressable. */}
+              <button onClick={() => void submit()} disabled={sending} style={sending ? MODAL_PILL_DISABLED : MODAL_PILL_DARK}>
                 {sending ? s.submitting : s.submit}
               </button>
               <button onClick={close} disabled={sending} style={{ ...MODAL_PILL_LIGHT, opacity: sending ? 0.6 : 1 }}>

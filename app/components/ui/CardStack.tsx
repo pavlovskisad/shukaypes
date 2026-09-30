@@ -403,9 +403,8 @@ export function CardStack<T>({
   }, [onTap, topItem, popPhase]);
 
   // Deck-level gestures — pan drives the carousel, tap fires for
-  // any low-travel release. Peek taps also route to onTap(topItem);
-  // simpler than per-slot hit-testing and matches carousel
-  // expectations ("the centre card is what you interact with").
+  // any low-travel release. A tap on the centre card routes to
+  // onTap(topItem); a tap on a peek steps the deck (see peekDelta).
   // NEITHER FREEZES WHILE FOCUSED, and the pan used to.
   //
   // The reasoning for freezing it was that a deck swiping under the
@@ -421,8 +420,38 @@ export function CardStack<T>({
   // hears onSwipe and drops the prompt, so there is never a question
   // hanging over a pet it was not asked about. A tap moves nothing and
   // never needed freezing either — the caller decides what it means.
+  // A PEEK TAP STEPS THE DECK (UX-9.19). The note above says peek taps
+  // route to the centre card, and that was the bug: tapping the pet you
+  // can see on the right opened the one in the middle. The deck View is
+  // exactly one card wide and the peeks overflow it, so `x` (relative to
+  // that View) outside 0..cardWidth can only be a neighbour — step one
+  // card towards it, the same commit a short swipe makes.
+  const peekDelta = (x: number): number => {
+    'worklet';
+    if (N < 2) return 0;
+    if (x < 0) return -1;
+    if (x > cardWidth) return 1;
+    return 0;
+  };
+  const stepBy = (delta: number) => {
+    'worklet';
+    const target = virtualBaseSV.value + delta;
+    virtualBaseSV.value = target;
+    runOnJS(advance)(delta);
+    currentPos.value = withTiming(target, {
+      duration: SETTLE_MS,
+      easing: SETTLE_EASE,
+      reduceMotion: ReduceMotion.Never,
+    });
+  };
+
   const tap = Gesture.Tap()
-    .onEnd(() => {
+    .onEnd((e) => {
+      const d = peekDelta(e.x);
+      if (d !== 0) {
+        stepBy(d);
+        return;
+      }
       runOnJS(handleTap)();
     });
 
@@ -533,6 +562,11 @@ export function CardStack<T>({
       // on the centre card. Spring whatever drift currentPos
       // picked up back to rest.
       if (travel < TAP_TRAVEL_MAX) {
+        const d = peekDelta(e.x);
+        if (d !== 0) {
+          stepBy(d);
+          return;
+        }
         runOnJS(handleTap)();
         currentPos.value = withSpring(virtualBaseSV.value, { reduceMotion: ReduceMotion.Never });
         return;
@@ -576,7 +610,7 @@ export function CardStack<T>({
           <Pressable
             onPress={onCounterTap}
             onPressIn={popPressableEvent}
-            hitSlop={12}
+            style={styles.counterHit}
           >
             {({ pressed }) => (
               <Text style={[styles.counter, styles.counterLink, pressed && styles.counterPressed]}>
@@ -719,5 +753,15 @@ const styles = StyleSheet.create({
   },
   counterPressed: {
     opacity: 0.55,
+  },
+  // The counter is the only way into "see all", and as bare text it was
+  // a ~17px target. hitSlop would have fixed that on native but does
+  // nothing on react-native-web 0.19 (UX-9.1), so the target is grown
+  // with padding and the negative margin hands the space back: the hit
+  // box is ~41px tall and the deck's layout does not move.
+  counterHit: {
+    paddingVertical: S.m,
+    paddingHorizontal: S.l,
+    marginVertical: -S.m,
   },
 });

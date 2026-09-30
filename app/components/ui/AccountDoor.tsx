@@ -34,7 +34,7 @@ import { useAccessStore, type DoorSheet } from '../../stores/accessStore';
 import { useGameStore } from '../../stores/gameStore';
 import { pickDoorScreen, type DoorScreen } from '../../utils/doorScreen';
 import { useStrings } from '../../i18n/useStrings';
-import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
+import { MODAL_PILL_DARK, MODAL_PILL_DISABLED, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
@@ -214,11 +214,23 @@ export const LABEL: CSSProperties = {
   margin: `${S.s}px 0 0`,
 };
 
+// The padding is the tap target (~40px tall) and the negative margins
+// hand the room back, so a link sits exactly where the bare text did.
+// These are the only way to several real actions (log in, forgot
+// password, change the portrait) and a 16px line of text is not a
+// target (UX-9.6). Longhands, not `margin`, so a caller can override
+// one side without React mixing shorthand and longhand.
 export const LINK: CSSProperties = {
   appearance: 'none',
   background: 'none',
   border: 'none',
-  padding: 0,
+  display: 'inline-flex',
+  alignItems: 'center',
+  padding: `${S.m}px ${S.s}px`,
+  marginTop: -S.m,
+  marginBottom: -S.m,
+  marginLeft: -S.s,
+  marginRight: -S.s,
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.small,
   fontWeight: 700,
@@ -259,7 +271,9 @@ export function Primary({ label, disabled, onClick }: { label: string; disabled?
         e.preventDefault();
         if (!disabled) onClick();
       }}
-      style={{ ...MODAL_PILL_DARK, width: '100%', marginTop: S.m, opacity: disabled ? 0.5 : 1, fontSize: TYPE.body }}
+      // The shared disabled pill, not a half-faded dark one (UX-9.3): at
+      // 0.5 the ink pill still read as a button you could press.
+      style={{ ...(disabled ? MODAL_PILL_DISABLED : MODAL_PILL_DARK), width: '100%', marginTop: S.m, fontSize: TYPE.body }}
     >
       {label}
     </button>
@@ -661,7 +675,10 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               {error ? <div style={ERROR}>{error}</div> : null}
               <Primary label={busy ? t.working : t.verifyCheck} disabled={busy} onClick={checkVerified} />
               <Secondary label={t.verifyResend} seed="resend" onClick={resend} />
-              <div style={{ ...NOTE, display: 'flex', flexDirection: 'column', gap: S.s, alignItems: 'center' }}>
+              {/* gap S.m, not S.s: each LINK's hit box reaches S.m past its
+                  text, so at S.s the lower link («other account», which
+                  logs out) covered the bottom of the upper one's words. */}
+              <div style={{ ...NOTE, display: 'flex', flexDirection: 'column', gap: S.m, alignItems: 'center' }}>
                 <button type="button" style={LINK} onClick={() => go('register')}>
                   {t.verifyFixEmail}
                 </button>

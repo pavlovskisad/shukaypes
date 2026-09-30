@@ -402,19 +402,40 @@ export function LoreMore({
           ) : null}
         </div>
       ) : null}
+      {/* A ~40px target (UX-9.6): the padding is the hit box and the
+          negative margins give the room back, so the bubble — which is
+          measured around this line — keeps its height. It was an 11px
+          line at 0.7, the smallest and faintest thing on the bubble for
+          the one control that opens it. Reachable by keyboard too, and
+          it says whether it is open. */}
       <div
         ref={toggleRef}
         role="button"
+        tabIndex={0}
+        aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation();
           playPop(e.currentTarget);
           setOpen((v) => !v);
         }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          e.stopPropagation();
+          playPop(e.currentTarget);
+          setOpen((v) => !v);
+        }}
         style={{
-          marginTop: S.s,
-          fontSize: TYPE.caption,
+          display: 'inline-flex',
+          alignItems: 'center',
+          padding: `${S.m}px ${S.l}px`,
+          marginTop: S.s - S.m,
+          marginBottom: -S.m,
+          marginLeft: -S.l,
+          marginRight: -S.l,
+          fontSize: TYPE.small,
           fontWeight: 700,
-          opacity: 0.7,
+          opacity: 0.85,
           textTransform: 'lowercase',
           cursor: 'pointer',
           userSelect: 'none',
@@ -452,10 +473,12 @@ export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
       }}
       style={{
         position: 'absolute',
-        top: 6,
-        right: 8,
-        // A ~40 px target around an 18 px glyph.
-        padding: 8,
+        // A 40 px target around an 18 px glyph (18 + 2 × 11). It was
+        // padding 8 — 34 px, under its own comment (UX-9.6). The corner
+        // offsets drop by the same 3 so the glyph has not moved.
+        top: 3,
+        right: 5,
+        padding: 11,
         fontSize: 18,
         lineHeight: 1,
         cursor: 'pointer',
