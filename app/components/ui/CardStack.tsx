@@ -742,7 +742,7 @@ const styles = StyleSheet.create({
   counter: {
     fontSize: TYPE.small,
     color: '#777',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   // Underlined, in ink. It used to be web-hyperlink blue, which made
   // it the only blue control left once the CTA pills went black and

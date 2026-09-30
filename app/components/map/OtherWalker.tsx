@@ -307,7 +307,7 @@ export function OtherWalker({ player, onOpen }: Props) {
           style={{
             // Caption size, and the ink picked per owner colour: white
             // on the pale tones and the yellows was ~1.2:1 (UX-8.8).
-            font: `600 ${TYPE.caption}px ${SYSTEM_FONT}`,
+            font: `700 ${TYPE.caption}px ${SYSTEM_FONT}`,
             color: territoryVisible ? ownerTextColor(player.id) : INK,
             background: territoryVisible ? ownerColorCss(player.id) : SURFACE.fill,
             borderRadius: R.label,

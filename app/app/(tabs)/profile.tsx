@@ -109,12 +109,14 @@ function StatRow({
       <Text style={styles.statLabel}>{label}</Text>
       {value === undefined || value === null ? (
         failed ? (
-          <Text style={styles.statValue}>—</Text>
+          <Text style={styles.statValue} numberOfLines={1}>—</Text>
         ) : (
           <ShimmerBar width={50} />
         )
       ) : (
-        <Text style={styles.statValue}>{value}</Text>
+        <Text style={styles.statValue} numberOfLines={1}>
+          {value}
+        </Text>
       )}
     </View>
   );
@@ -621,13 +623,15 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 6,
   },
-  // Section titles bumped to match the tasks / spots tabs —
-  // 13 → 16, weight 800, colours.black. Were too quiet for the
-  // smaller 150-tall section cards.
+  // Section titles on the same token as the tasks / spots card
+  // titles (TYPE.title, 700, colours.black) — the comment always said
+  // they matched and the size was 15 (UX-11.5). Measured in Annex: the
+  // title's line is 20 (was 18), so the tallest card, the companion one
+  // with a portrait, comes to 147 of its 150; the stat cards to 134.
   sectionTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.body,
-    fontWeight: '800',
+    fontSize: TYPE.title,
+    fontWeight: '700',
     color: colors.black,
     marginBottom: S.m,
     textTransform: 'lowercase',
@@ -659,7 +663,7 @@ const styles = StyleSheet.create({
   companionNameBig: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.title,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.black,
     marginBottom: 1,
   },
@@ -681,14 +685,22 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: S.xs,
   },
+  // The label keeps its width and the value gives way: a long value
+  // (the territory leader's name + area) ellipsizes on one line instead
+  // of spilling out of the fixed-height card (UX-11.7).
   statLabel: {
     fontSize: TYPE.small,
     color: colors.grey,
+    flexShrink: 0,
   },
   statValue: {
     fontSize: TYPE.body,
     fontWeight: '700',
     color: colors.black,
+    flexShrink: 1,
+    minWidth: 0,
+    marginLeft: S.s,
+    textAlign: 'right',
   },
   error: {
     ...ERROR_TEXT,

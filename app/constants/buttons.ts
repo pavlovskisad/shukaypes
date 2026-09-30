@@ -111,10 +111,13 @@ export const MODAL_PILL_DISABLED: CSSProperties = {
 //
 // A separate recipe from the modal pills on purpose: these sit on the
 // MAP rather than inside a card, so they are white with a slightly
-// stronger shadow to lift off the basemap, and a touch quieter in
-// weight because they are ways OUT of a state rather than the primary
-// action in it. `pointerEvents: auto` because the row they live in is
-// pass-through, so the map underneath stays draggable between them.
+// stronger shadow to lift off the basemap, and white rather than ink
+// because they are ways OUT of a state rather than the primary action
+// in it. (They used to be quieter in weight too, at 600, but with only
+// Annex Regular shipped 600 and 700 fake to the same stroke; see the
+// weight note in constants/type.ts.) `pointerEvents: auto` because the
+// row they live in is pass-through, so the map underneath stays
+// draggable between them.
 export const HUD_OVERLAY_PILL: CSSProperties = {
   pointerEvents: 'auto',
   cursor: 'pointer',
@@ -124,7 +127,7 @@ export const HUD_OVERLAY_PILL: CSSProperties = {
   borderRadius: R.pill,
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.small,
-  fontWeight: 600,
+  fontWeight: 700,
   boxShadow: SURFACE.chip,
   // Drawn, like the modal pills — see MODAL_PILL_LIGHT.
   border: '2px solid transparent',

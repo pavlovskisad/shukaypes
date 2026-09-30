@@ -126,13 +126,15 @@ const styles = StyleSheet.create({
   },
   boardName: {
     fontSize: TYPE.body,
-    fontWeight: '600',
+    fontWeight: '700',
     color: colors.black,
   },
+  // Regular weight: the meta line under a name must not out-shout the
+  // name it belongs to — it was bolder than the name (UX-11.18).
   boardArea: {
     fontSize: TYPE.small,
     color: colors.grey,
-    fontWeight: '700',
+    fontWeight: '400',
   },
   boardYouText: {
     color: colors.blue,

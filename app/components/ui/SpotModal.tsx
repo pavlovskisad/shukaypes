@@ -23,6 +23,7 @@ import { HandDrawnFrame } from './HandDrawn';
 import { CloseButton } from './CloseButton';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
+import { Glyph } from './Glyph';
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -201,7 +202,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 left: CLOSE_INSET,
                 color: INK,
                 fontSize: TYPE.body,
-                fontWeight: 800,
+                fontWeight: 700,
                 letterSpacing: 0.3,
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -210,7 +211,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 gap: 4,
               }}
             >
-              <span style={{ color: colors.amber }}>★</span>
+              <Glyph name="star" color={colors.amber} />
               {renderSpot.rating!.toFixed(1)}
             </span>
           ) : null}
@@ -237,7 +238,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             style={{
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.display,
-              fontWeight: 800,
+              fontWeight: 700,
               lineHeight: 1.15,
               color: INK,
             }}

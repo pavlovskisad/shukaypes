@@ -22,7 +22,7 @@
 // earlier placements both lost to the card: mid-screen they covered
 // the photo the question was about, and at the bottom they fought the
 // deck for its ground. The buttons are sized to the strip — pill
-// height matching the nav HUD's, weight 800 — and they POP in with a
+// height matching the nav HUD's, weight 700 — and they POP in with a
 // stagger, so a question appearing reads as the interface stepping
 // forward rather than two pills quietly materialising.
 
@@ -125,7 +125,7 @@ export function DogPrompt({
                   padding: '14px 22px',
                   borderRadius: R.button,
                   fontSize: TYPE.body,
-                  fontWeight: 800,
+                  fontWeight: 700,
                   // Past the 44px tap target — these are pressed
                   // outdoors, one-handed, usually while walking — and
                   // matched to the corner logo's height so the strip

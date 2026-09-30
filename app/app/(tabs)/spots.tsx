@@ -409,11 +409,11 @@ const styles = StyleSheet.create({
     position: 'relative',
   },
   // Card titles bumped to match the tasks-tab cardTitle — 17pt,
-  // weight 800, colours.black. Were too quiet at 14/grey.
+  // weight 700, colours.black. Were too quiet at 14/grey.
   cardTitle: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.title,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.black,
     marginBottom: S.m,
     textTransform: 'lowercase',

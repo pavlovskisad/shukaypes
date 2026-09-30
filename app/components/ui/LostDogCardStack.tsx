@@ -337,10 +337,13 @@ const styles = StyleSheet.create({
     color: INK,
     flexShrink: 0,
   },
+  // TYPE.hero, the card-name size type.ts assigns: the spot and
+  // favourite cards in the same decks already used it and this one was
+  // at display, so swiping between tabs changed the name size (UX-11.3).
   cardName: {
     fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.display,
-    fontWeight: '800',
+    fontSize: TYPE.hero,
+    fontWeight: '700',
     color: INK,
   },
   cardMeta: {

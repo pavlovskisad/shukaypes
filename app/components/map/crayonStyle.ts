@@ -870,7 +870,8 @@ export function setStreetLabelsVisible(
 
 // ---------------------------------------------------------------------
 // Style fetcher — fetch liberty's style.json, swap its glyphs URL to
-// our locally-hosted Caveat PBFs, hand the mutated style to MapLibre.
+// our locally-hosted PBFs (the MAP_FONT directory above), hand the
+// mutated style to MapLibre.
 // Returns the style ready to pass to `new maplibregl.Map({ style })`.
 // ---------------------------------------------------------------------
 

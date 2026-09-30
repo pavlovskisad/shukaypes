@@ -397,8 +397,10 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
           <div
             style={{
               fontFamily: SYSTEM_FONT,
-              fontSize: TYPE.title,
-              fontWeight: 800,
+              // A hero top sheet like About and Spot, so it leads at
+              // display (D16a, UX-11.4); it was the one at 17.
+              fontSize: TYPE.display,
+              fontWeight: 700,
               color: colors.black,
             }}
           >
@@ -595,7 +597,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                     fontFamily: SYSTEM_FONT,
                     fontSize: TYPE.small,
                     color: colors.red,
-                    fontWeight: 600,
+                    fontWeight: 700,
                   }}
                 >
                   {error}

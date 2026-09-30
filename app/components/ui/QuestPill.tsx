@@ -147,7 +147,7 @@ const styles = StyleSheet.create({
   label: {
     color: colors.black,
     fontSize: TYPE.small,
-    fontWeight: '600',
+    fontWeight: '700',
     // flexShrink + minWidth 0 is the standard "let me
     // ellipsize inside a flex row" trick. Without minWidth 0
     // the label refuses to shrink below its content's
@@ -158,7 +158,7 @@ const styles = StyleSheet.create({
   progress: {
     color: colors.black,
     fontSize: TYPE.small,
-    fontWeight: '800',
+    fontWeight: '700',
     marginLeft: 2,
   },
   // The hit box is 44 tall and at least 44 wide; the drawn × and the
@@ -192,6 +192,6 @@ const styles = StyleSheet.create({
   closeArmedTxt: {
     color: '#ffffff',
     fontSize: TYPE.small,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

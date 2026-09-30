@@ -62,7 +62,7 @@ function CollectBurstImpl({
             left: 0,
             top: 0,
             fontSize: 14,
-            fontWeight: 800,
+            fontWeight: 700,
             color: kind === 'paw' ? '#5fa92e' : '#d99327',
             textShadow: '0 1px 2px rgba(0,0,0,0.25)',
             whiteSpace: 'nowrap',

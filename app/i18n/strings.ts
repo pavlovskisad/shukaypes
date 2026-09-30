@@ -971,8 +971,8 @@ const uk: AppStrings = {
   sniff: {
     sniffing: 'нюхаю…',
     opening: 'відкриваю…',
-    more: 'ще ▾',
-    less: 'менше ▴',
+    more: 'ще',
+    less: 'менше',
     nothingMore: '*чухає за вухом* більше не пригадую — тільки те, що сказав.',
     wikipedia: 'вікіпедія ↗',
     save: 'зберегти місце',
@@ -1032,7 +1032,7 @@ const uk: AppStrings = {
     emptyFiltered: (category) => `${category} поряд немає — спробуй інший фільтр`,
     favourites: 'улюблені місця',
     favouritesEmpty:
-      'поки порожньо. натисни ♡ на місці, яке я винюхав, — і воно чекатиме тут.',
+      'поки порожньо. натисни сердечко на місці, яке я винюхав, — і воно чекатиме тут.',
     filters: {
       all: 'усі',
       cafe: "кав'ярні",
@@ -1649,8 +1649,8 @@ const en: AppStrings = {
   sniff: {
     sniffing: 'sniffing…',
     opening: 'opening…',
-    more: 'more ▾',
-    less: 'less ▴',
+    more: 'more',
+    less: 'less',
     nothingMore: "*scratches behind the ear* that's all I remember — just what I said.",
     wikipedia: 'wikipedia ↗',
     save: 'save this place',
@@ -1705,7 +1705,7 @@ const en: AppStrings = {
     emptyAll: "nothing nearby yet — pan the map somewhere new and i'll sniff again",
     emptyFiltered: (category) => `no ${category} nearby — try another filter`,
     favourites: 'favourite places',
-    favouritesEmpty: "empty so far. tap ♡ on a place i've sniffed out and it'll wait for you here.",
+    favouritesEmpty: "empty so far. tap the heart on a place i've sniffed out and it'll wait for you here.",
     filters: {
       all: 'all',
       cafe: 'cafe',

@@ -39,10 +39,14 @@ const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // An ad body is the longest continuous prose anywhere in this app, so it
 // gets a reading line-height rather than the tighter one the cards use.
+// overflowWrap: anywhere because ads paste bare links and phone runs
+// with no space in them, and one unbroken URL pushed the whole sheet
+// sideways (UX-11.6).
 const BODY_TEXT: CSSProperties = {
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.body,
   lineHeight: 1.5,
+  overflowWrap: 'anywhere',
 };
 
 interface PostModalProps {
@@ -211,7 +215,7 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
             style={{
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.title,
-              fontWeight: 800,
+              fontWeight: 700,
               color: INK,
             }}
           >
@@ -228,6 +232,9 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
           style={{
             padding: `0 ${S.l}px ${S.m}px`,
             overflowY: 'auto',
+            // Belt and braces for anything that still will not wrap:
+            // it clips rather than scrolling the sheet sideways.
+            overflowX: 'hidden',
             flex: 1,
             minHeight: 0,
           }}
@@ -305,7 +312,7 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
             >
               {t.modals.post.contactsAfterSighting}
               {confirmingSeen && dogName ? (
-                <div style={{ marginTop: S.s, fontWeight: 800, color: INK }}>
+                <div style={{ marginTop: S.s, fontWeight: 700, color: INK }}>
                   {t.modals.lostDog.seenConfirm(dogName)}
                 </div>
               ) : null}

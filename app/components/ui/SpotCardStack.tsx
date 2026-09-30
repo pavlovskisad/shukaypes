@@ -23,6 +23,7 @@ import { useStrings } from '../../i18n/useStrings';
 import { Icon, iconForCategory } from './Icon';
 import { CardStack, CardStackSkeleton } from './CardStack';
 import { HandDrawnFrame } from './HandDrawn';
+import { Glyph } from './Glyph';
 
 interface Props {
   spots: Spot[];
@@ -85,7 +86,9 @@ export function SpotCardView({
       </View>
       {typeof spot.rating === 'number' ? (
         <View style={styles.ratingRow}>
-          <Text style={styles.ratingStar}>★</Text>
+          <Text style={styles.ratingStar}>
+            <Glyph name="star" />
+          </Text>
           <Text style={styles.ratingText}>{spot.rating.toFixed(1)}</Text>
         </View>
       ) : null}
@@ -171,7 +174,7 @@ const styles = StyleSheet.create({
   ratingText: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.body,
-    fontWeight: '800',
+    fontWeight: '700',
     color: INK,
   },
   distRow: {
@@ -197,7 +200,7 @@ const styles = StyleSheet.create({
   cardName: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.hero,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.black,
   },
   cardMeta: {

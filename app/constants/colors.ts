@@ -1,6 +1,11 @@
 export const colors = {
   black: '#1a1a1a',
   grey: '#777',
+  // greyDark — secondary text that runs to a sentence or more (the
+  // tasks board's explainer). #777 is 4.48:1 on white, just under AA,
+  // which a three-word meta line gets away with and a paragraph does
+  // not (UX-11.8). #555 is 7.5:1 and still reads as "aside".
+  greyDark: '#555',
   greyLight: '#aaa',
   greyPale: '#ddd',
   greyBg: '#f0f0f0',

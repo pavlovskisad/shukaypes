@@ -398,16 +398,19 @@ export function LostDogModal({
                 ›
               </button>
             ) : null}
+            {/* The pet's name at TYPE.hero, the size its card in the
+                deck uses (UX-11.4): it was 19, a size on no scale. The
+                breed stays inline and quieter — regular weight, grey. */}
             <div
               style={{
-                fontSize: 19,
-                fontWeight: 800,
+                fontSize: TYPE.hero,
+                fontWeight: 700,
                 lineHeight: 1.2,
               }}
             >
               {renderDog.name}
               {renderDog.breed ? (
-                <span style={{ fontWeight: 600, color: '#777' }}>
+                <span style={{ fontWeight: 400, color: colors.grey }}>
                   {' '}
                   · {renderDog.breed}
                 </span>
@@ -440,11 +443,15 @@ export function LostDogModal({
                 wrong streets and conclude the app is broken. One line,
                 and the post is one tap below it. */}
             {renderDog.approximate ? (
+              // Small in ink, not caption grey: it is the one line on
+              // the card that changes where somebody walks, and it was
+              // the least readable one (UX-11.17).
               <div
                 style={{
                   marginTop: 4,
-                  fontSize: TYPE.caption,
-                  color: '#777',
+                  fontSize: TYPE.small,
+                  lineHeight: 1.4,
+                  color: INK,
                 }}
               >
                 {t.modals.lostDog.approximate}
@@ -484,7 +491,7 @@ export function LostDogModal({
                 style={{
                   marginTop: 8,
                   fontSize: TYPE.small,
-                  fontWeight: 800,
+                  fontWeight: 700,
                 }}
               >
                 {t.modals.lostDog.seenConfirm(renderDog.name)}

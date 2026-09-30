@@ -4,6 +4,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { MapLibreMarker } from './MapLibreMarker';
+import { Glyph } from '../ui/Glyph';
 
 // Numbered waypoint pin for detective quests. Three states:
 //   - active:  blue glow, full opacity, the current target
@@ -52,7 +53,8 @@ function WaypointMarkerImpl({ position, index, state, onTap }: WaypointMarkerPro
           animation: active ? 'wp-pulse 1.8s ease-in-out infinite' : undefined,
         }}
       >
-        {reached ? '✓' : index + 1}
+        {/* Drawn, not the ✓ character: Annex has no tick (UX-11.11). */}
+        {reached ? <Glyph name="check" size={TYPE.small} /> : index + 1}
         {active ? (
           <style>{`
             @keyframes wp-pulse {

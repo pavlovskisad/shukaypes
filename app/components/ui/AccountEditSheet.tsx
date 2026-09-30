@@ -204,10 +204,12 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
     if (!studioOpen) requestClose();
   });
 
+  // Form-sheet heading: TYPE.title, like the post reader (D16a,
+  // UX-11.4). It was body size, so the sheet had no heading at all.
   const title: CSSProperties = {
     fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.body,
-    fontWeight: 800,
+    fontSize: TYPE.title,
+    fontWeight: 700,
     color: colors.black,
     margin: `${S.xs}px 0 0`,
   };

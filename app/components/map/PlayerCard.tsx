@@ -172,7 +172,7 @@ export function PlayerCard({ player, onClose }: Props) {
               >
                 {name}
               </div>
-              <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
+              <div style={{ font: `400 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
                 {card ? (card.level === null ? t.levelUnknown : tp.level(card.level)) : failed ? t.levelUnknown : '…'}
                 {isBot ? ` · ${t.bot}` : owner ? ` · ${t.owner(owner)}` : ''}
               </div>
@@ -194,11 +194,11 @@ export function PlayerCard({ player, onClose }: Props) {
                 >
                   {piece ? <TerritoryMini points={piece} color={ownerColorCss(player.id)} size={MINI} /> : null}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ font: `600 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK }}>
+                    <div style={{ font: `700 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK }}>
                       {card.areaM2 > 0 ? t.territory : t.noTerritory}
                     </div>
                     {card.areaM2 > 0 ? (
-                      <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
+                      <div style={{ font: `400 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
                         {tp.areaValue(card.areaM2)}
                       </div>
                     ) : null}

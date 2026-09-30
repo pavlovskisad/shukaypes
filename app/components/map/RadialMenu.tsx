@@ -274,9 +274,9 @@ export function RadialMenu({
         // one line on screen not in Annex.
         fontFamily: SYSTEM_FONT,
         fontSize: isText ? TYPE.body : TYPE.hero,
-        // 800, the weight the same answers carry when they sit under
+        // 700, the weight the same answers carry when they sit under
         // the dog in DogPrompt (UX-9.11) — one voice, one recipe.
-        fontWeight: isText ? 800 : undefined,
+        fontWeight: isText ? 700 : undefined,
         lineHeight: isText ? 1.25 : undefined,
         cursor: 'pointer',
         // The card shadow, named — DogPrompt's answers wear the same

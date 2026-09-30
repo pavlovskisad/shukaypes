@@ -32,6 +32,7 @@ import { useVisibleHeight } from '../../hooks/useVisibleHeight';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 import { safeAreaTopPx } from '../../utils/safeArea';
 import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
+import { Glyph } from '../../components/ui/Glyph';
 import { useHint } from '../../hooks/useHint';
 import { useAccessStore } from '../../stores/accessStore';
 import { HandDrawnBar } from '../../components/ui/HandDrawn';
@@ -888,7 +889,9 @@ export default function TasksScreen() {
                       </Text>
                     </View>
                     {q.status === 'completed' ? (
-                      <Text style={styles.historyTickDone}>✓</Text>
+                      <Text style={styles.historyTickDone}>
+                        <Glyph name="check" />
+                      </Text>
                     ) : (
                       <Text style={styles.historyTickAbandon}>×</Text>
                     )}
@@ -910,11 +913,12 @@ export default function TasksScreen() {
             <Text style={[styles.cardTitle, styles.cardTitleInline]}>
               {t.tasks.dailyTasks}
             </Text>
-            {/* No tally over no rows: "0 / 0" read as a day with nothing
-                in it, when the day had not loaded. */}
+            {/* No tally over no rows: "0/0" read as a day with nothing
+                in it, when the day had not loaded. Unspaced, like every
+                row's count and the bonus under it (UX-11.14). */}
             {taskRows.length > 0 ? (
               <Text style={styles.dailyCount}>
-                {doneCount} / {taskRows.length}
+                {doneCount}/{taskRows.length}
               </Text>
             ) : null}
           </View>
@@ -957,7 +961,12 @@ export default function TasksScreen() {
                   </Text>
                   <Text style={[styles.count, row.done && styles.countDone]}>
                     {countLabel(row)}
-                    {row.done ? ' ✓' : ''}
+                    {row.done ? (
+                      <>
+                        {' '}
+                        <Glyph name="check" />
+                      </>
+                    ) : null}
                   </Text>
                 </View>
                 {/* Ink, done or not. The bar used to be blue while you
@@ -995,7 +1004,12 @@ export default function TasksScreen() {
                 </Text>
                 <Text style={[styles.count, allDone && styles.countDone]}>
                   {doneCount}/{taskRows.length}
-                  {allDone ? ' ✓' : ''}
+                  {allDone ? (
+                    <>
+                      {' '}
+                      <Glyph name="check" />
+                    </>
+                  ) : null}
                 </Text>
               </View>
               <View style={styles.barTrack}>
@@ -1113,7 +1127,7 @@ const styles = StyleSheet.create({
   historyTitle: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.body,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.black,
     marginBottom: S.s,
     textTransform: 'lowercase',
@@ -1130,7 +1144,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.title,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.black,
     marginBottom: S.m,
     textTransform: 'lowercase',
@@ -1244,14 +1258,18 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.display,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.black,
   },
   // Your row's ink, the same blue BoardRow uses for «ти».
   happyIndexYou: { color: colors.blue },
+  // The longest explanatory text on the tab, so it is set for reading:
+  // small, not caption, with a reading line height and the darker grey
+  // (UX-11.8). It was 11px #777.
   boardHint: {
-    fontSize: TYPE.caption,
-    color: colors.grey,
+    fontSize: TYPE.small,
+    lineHeight: 18,
+    color: colors.greyDark,
     marginTop: S.s,
   },
   boardEmpty: {

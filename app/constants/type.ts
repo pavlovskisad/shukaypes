@@ -11,6 +11,16 @@
 // the codebase. If you find yourself reaching for a 7th size, first
 // check whether one of these adapted with a one-line override would
 // do the job.
+//
+// WEIGHTS: two, 400 and 700. Only Annex Regular ships, so anything
+// from 600 up is the browser's synthetic bold and 600 / 700 / 800
+// all render as the same smeared stroke (UX-11.2). The code used to
+// ask for all three as if they differed; it now asks for 700 only,
+// so what the style says is what the screen shows. Below 600 the
+// browser draws the regular face, so 500 is just 400 spelled
+// differently — use 400. If a real Annex Bold file is ever added
+// (a weight-700 @font-face in public/index.html), every bold in
+// the app picks it up without a call-site pass.
 
 import { colors } from './colors';
 
@@ -24,13 +34,17 @@ export const TYPE = {
   // copy, status pills.
   body: 15,
   // Card and section titles ("кав'ярні", "щоденні квести"),
-  // chat header pill.
+  // chat header pill, and the heading of a FORM sheet (account
+  // edit, the post reader) — a sheet you fill in or read through
+  // leads with the task, not with a name.
   title: 17,
-  // Big card names — spot name on a SpotCardView, dog name on
-  // the LostDog card, marker name pop.
+  // Big card names — spot name on a SpotCardView, pet name on the
+  // LostDog card and its map bubble, a favourite's title, marker
+  // name pop.
   hero: 22,
-  // Modal hero — the giant name at the top of LostDogModal /
-  // SpotModal info section.
+  // Hero-sheet heading — the top sheets that open ON a thing and
+  // are about it: SpotModal's name, About, the lost-pet report's
+  // opener (D16a, UX-11.4).
   display: 26,
 } as const;
 

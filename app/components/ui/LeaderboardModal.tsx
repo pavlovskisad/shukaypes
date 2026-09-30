@@ -2,20 +2,25 @@
 // D-75, for the happiness index too (`kind`): the same portrait rows,
 // the silhouette for one and the big number for the other. Opened by
 // the "see all" link under the card's rows on the tasks tab.
-// Floating X in the top-right corner closes; no header bar (the user
-// just came from the card titled "who holds the city" — no need to
-// repeat the label). Same sheet mechanics as LostDogsModal: nullable
-// data doubles as the open flag, opacity-only fade, portal to body.
+// Floating X in the top-right corner closes. No drawn header bar, but a
+// title sits level with the close: the two boards share one layout, so
+// without it a full screen of portraits and numbers never said whether
+// it was the territory standing or the happiness index (UX-11.9). Same
+// sheet mechanics as LostDogsModal: nullable data doubles as the open
+// flag, opacity-only fade, portal to body.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { HappinessRanking, TerritoryRanking } from '../../services/api';
 import { Z } from '../../constants/z';
 import { TYPE } from '../../constants/type';
+import { SYSTEM_FONT } from '../../constants/fonts';
+import { INK } from '../../constants/surface';
+import { S } from '../../constants/spacing';
 import { playPopThen } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import { CloseButton } from './CloseButton';
-import { CLOSE_INSET } from '../../constants/buttons';
+import { CLOSE_SIZE, CLOSE_INSET } from '../../constants/buttons';
 import { OWN_COLOR_CSS, ownerColorCss } from '../map/territoryColor';
 import { BoardRow } from './BoardRow';
 import { useSheetBack } from '../../hooks/useSheetBack';
@@ -30,7 +35,7 @@ const INDEX: React.CSSProperties = {
   width: 92,
   textAlign: 'center',
   fontSize: TYPE.display,
-  fontWeight: 800,
+  fontWeight: 700,
   flex: 'none',
 };
 
@@ -55,6 +60,7 @@ interface Props {
 
 export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, onPick }: Props) {
   const t = useStrings();
+  const titleId = useId();
   const [renderBoard, setRenderBoard] = useState<Row[] | null>(board);
   const [closing, setClosing] = useState(false);
 
@@ -87,6 +93,7 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
     <div
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
       style={{
         position: 'fixed',
         inset: 0,
@@ -159,6 +166,39 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
             </div>
           );
         })}
+      </div>
+
+      {/* The board's name, on the close's line: same top, same height,
+          centred on it, and stopping short of it so a long name
+          ellipsizes instead of running under the disc. It sits on a
+          white band from the top edge down to the close's bottom, the
+          sheet's own paper: bare text over a scroller, the rows
+          scrolled up through the title and the two read as one line. */}
+      <div
+        id={titleId}
+        style={{
+          position: 'absolute',
+          top: 0,
+          left: 0,
+          right: 0,
+          boxSizing: 'border-box',
+          height: `calc(env(safe-area-inset-top, 0px) + ${CLOSE_INSET + CLOSE_SIZE}px)`,
+          paddingTop: `calc(env(safe-area-inset-top, 0px) + ${CLOSE_INSET}px)`,
+          paddingLeft: 20,
+          paddingRight: CLOSE_INSET + CLOSE_SIZE + S.s,
+          background: '#ffffff',
+          display: 'flex',
+          alignItems: 'center',
+          fontFamily: SYSTEM_FONT,
+          fontSize: TYPE.title,
+          fontWeight: 700,
+          color: INK,
+          zIndex: 1,
+        }}
+      >
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {kind === 'happiness' ? t.tasks.happinessBoard : t.tasks.territoryBoard}
+        </span>
       </div>
 
       <CloseButton

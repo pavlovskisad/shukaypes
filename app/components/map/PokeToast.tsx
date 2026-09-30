@@ -117,7 +117,7 @@ export function PokeToast({ onGoTo, top }: Props) {
           </span>
           <span style={{ flexShrink: 0 }}>{t.poke.verb}</span>
         </div>
-        <div style={{ fontSize: TYPE.small, fontWeight: 500, opacity: 0.75, marginTop: 1 }}>
+        <div style={{ fontSize: TYPE.small, fontWeight: 400, opacity: 0.75, marginTop: 1 }}>
           {canGoTo ? t.poke.nearby : t.poke.wasNearby}
         </div>
       </div>

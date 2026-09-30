@@ -4504,7 +4504,7 @@ const DECK_ANIM_MS = MOTION.sheetMs;
               // that one is a control.
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.body,
-              fontWeight: 800,
+              fontWeight: 700,
               letterSpacing: 0.3,
               boxShadow: SURFACE.chip,
             }}

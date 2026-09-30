@@ -191,7 +191,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             style={{ position: 'absolute', top: CLOSE_INSET, right: CLOSE_INSET }}
           />
 
-          <div style={{ fontFamily: SYSTEM_FONT, fontSize: TYPE.display, fontWeight: 800 }}>
+          <div style={{ fontFamily: SYSTEM_FONT, fontSize: TYPE.display, fontWeight: 700 }}>
             {t.modals.about.header}
           </div>
           <div

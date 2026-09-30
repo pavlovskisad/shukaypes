@@ -149,7 +149,7 @@ function LostDogClusterImpl({
               textAlign: 'center',
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.small,
-              fontWeight: 600,
+              fontWeight: 700,
               color: '#1a1a1a',
               textShadow: '0 1px 4px rgba(255,255,255,0.95)',
               whiteSpace: 'nowrap',

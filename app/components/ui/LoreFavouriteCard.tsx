@@ -194,13 +194,16 @@ const styles = StyleSheet.create({
     paddingBottom: S.l,
     gap: 4,
   },
+  // Card-name size (TYPE.hero), like the spot cards below it on the same
+  // tab and the lost-pet cards (UX-11.3). lineHeight 26 keeps the
+  // two-line wrap from touching; the band flexes to fit it.
   title: {
     flex: 1,
     fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.title,
-    fontWeight: '800',
+    fontSize: TYPE.hero,
+    fontWeight: '700',
     color: colors.black,
-    lineHeight: 22,
+    lineHeight: 26,
   },
   story: {
     fontFamily: SYSTEM_FONT,
