@@ -145,6 +145,7 @@ export default function ChatScreen() {
                 shape: 'roundtrip',
                 spotId: null,
                 destinationName: walk.primary.name,
+                destination: walk.primary.position,
               },
               walk.stops,
             );
@@ -172,6 +173,7 @@ export default function ChatScreen() {
             useGameStore.getState().setWalkRoute(route, {
               shape: action.args.shape,
               spotId: target.id,
+              destination: target.position,
             });
             recordRecentDestination(target.id);
             goToMapIfStillHere(router);

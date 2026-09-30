@@ -47,7 +47,9 @@ interface Props {
   onClose: () => void;
   // Tap a row → the parent jumps the map to that owner's ground. Rows
   // without geometry aren't tappable.
-  onPick?: (row: TerritoryRanking) => void;
+  // `isYou` so the caller can send your own row to your ground rather
+  // than pinning you as a guest on your own map (UX-1.9).
+  onPick?: (row: TerritoryRanking, isYou: boolean) => void;
 }
 
 export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, onPick }: Props) {
@@ -133,7 +135,7 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
               key={r.userId}
               onClick={
                 pickable
-                  ? (e) => playPopThen(e.currentTarget, () => onPick(r))
+                  ? (e) => playPopThen(e.currentTarget, () => onPick(r, isYou))
                   : undefined
               }
               style={{ cursor: pickable ? 'pointer' : 'default' }}

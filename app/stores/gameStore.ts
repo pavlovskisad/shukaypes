@@ -90,6 +90,31 @@ export interface WalkRouteMeta {
   // flow sets it; the "walk me to this one place" paths don't need it,
   // since the thing they route to is already on screen and named.
   destinationName?: string;
+  // The point the walk goes OUT to. A roundtrip's polyline ends back at
+  // the origin, so its last point is the one place the walk is not
+  // "to" — and the server's daily task refuses a plan under 300 m from
+  // where we stand, so sending that endpoint made every roundtrip
+  // count for nothing. Every creator sets it; the endpoint is only the
+  // fallback for one that does not.
+  destination?: LatLng;
+}
+
+// Pets a lost-dog sync must not drop even when the server's nearby list
+// leaves them out. The syncs replace the list wholesale, and a pet
+// reached by deep link can sit well outside their radius: the one open
+// in its modal, and the one a search is running on or previewing
+// (UX-2.16). Selection was the only carve-out, but starting a search
+// closes the modal and clears it — so the pet you were now walking to
+// vanished on the next tick, and the search card went with it.
+function keepPinnedDogs(
+  s: Pick<GameState, 'lostDogs' | 'selectedDogId' | 'searchTarget' | 'searchPreview'>,
+  dogs: NearbyLostDog[],
+): NearbyLostDog[] {
+  const ids = [s.selectedDogId, s.searchTarget?.dogId, s.searchPreview?.dogId];
+  const missing = s.lostDogs.filter(
+    (d) => ids.includes(d.id) && !dogs.some((x) => x.id === d.id),
+  );
+  return missing.length ? [...dogs, ...missing] : dogs;
 }
 
 function todayLocal(): string {
@@ -1042,18 +1067,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   syncLostDogs: async (pos) => {
     try {
       const { dogs } = await api.getLostDogsNearby(pos);
-      // Preserve the currently-selected dog across the sync — if the
+      // Preserve the selected / searched-for dog across the sync — if the
       // user opened a deep-link to a pet outside the synced radius
       // (e.g. Lukianivka pin while GPS sits on Maidan), wholesale
       // replacement would drop it from lostDogs and the marker would
       // disappear mid-session. Carve it back in if missing.
-      set((s) => {
-        if (!s.selectedDogId || dogs.find((d) => d.id === s.selectedDogId)) {
-          return { lostDogs: dogs };
-        }
-        const stillThere = s.lostDogs.find((d) => d.id === s.selectedDogId);
-        return { lostDogs: stillThere ? [...dogs, stillThere] : dogs };
-      });
+      set((s) => ({ lostDogs: keepPinnedDogs(s, dogs) }));
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
     } finally {
@@ -1146,7 +1165,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       // pass. Previously the four parallel sync* calls each fired
       // their own set, producing up to four re-renders per tick.
       set((prev) => {
-        // Same selectedDogId carve-out as syncLostDogs — a deep-
+        // Same keepPinnedDogs carve-out as syncLostDogs — a deep-
         // linked pin outside this sync's radius must survive the
         // wholesale replacement, otherwise the marker vanishes on
         // the next 15s tick.
@@ -1157,14 +1176,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         // empty list would clear every pin on the map on the first
         // unchanged tick.
         const dogs = res.dogs ?? prev.lostDogs;
-        const keepSelected =
-          prev.selectedDogId && !dogs.find((d) => d.id === prev.selectedDogId)
-            ? prev.lostDogs.find((d) => d.id === prev.selectedDogId)
-            : null;
         return {
           tokens: filteredTokens,
           foodItems: res.food,
-          lostDogs: keepSelected ? [...dogs, keepSelected] : dogs,
+          lostDogs: keepPinnedDogs(prev, dogs),
           // Only advance on a tag we were actually given. An older server
           // sends none, which must leave the stored one untouched rather
           // than wiping it to null and re-requesting the full list forever.
@@ -1509,7 +1524,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     // only way "build a route and finish it" can be a task that pays.
     // Fire-and-forget: a walk whose plan did not register is still a
     // walk, it just does not count toward the day.
-    const end = walkRoute && walkRoute.length ? walkRoute[walkRoute.length - 1] : null;
+    const end =
+      walkRoute && walkRoute.length
+        ? walkRouteMeta?.destination ?? walkRoute[walkRoute.length - 1]
+        : null;
     if (end) {
       void api.planWalk(end.lat, end.lng, walkRouteMeta?.destinationName ?? null).catch(() => {});
     }

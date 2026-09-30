@@ -4559,11 +4559,11 @@ const DECK_ANIM_MS = 280;
             {walkRoute ? (
               <div
                 role="button"
-                aria-label={t.hud.cancelWalk}
+                aria-label={t.hud.finishWalk}
                 onClick={() => setWalkRoute(null, null)}
                 style={HUD_OVERLAY_PILL}
               >
-                × {t.hud.cancelWalk}
+                × {t.hud.finishWalk}
               </div>
             ) : null}
           </div>
@@ -4911,7 +4911,9 @@ const DECK_ANIM_MS = 280;
             shape === 'roundtrip' ? [spot.position, userPos] : [spot.position];
           const route = await fetchWalkingRoute(userPos, waypoints);
           if (route) {
-            useGameStore.getState().setWalkRoute(route, { shape, spotId: spot.id });
+            useGameStore
+              .getState()
+              .setWalkRoute(route, { shape, spotId: spot.id, destination: spot.position });
           }
           setSelectedSpot(null);
         }}

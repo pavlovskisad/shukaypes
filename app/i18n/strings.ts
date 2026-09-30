@@ -131,7 +131,10 @@ export interface AppStrings {
     // The quest pill's × after one tap: a second tap within a few
     // seconds is what actually abandons the search (UX-7.1).
     abandonSearchArmed: string;
-    cancelWalk: string;
+    // The walk pill. Walks have no arrival detection, so this is the
+    // only way one ends — and ending a walk you completed is finishing
+    // it, not cancelling it (UX-2.15).
+    finishWalk: string;
     recenterOnCompanion: string;
     locating: string;
     usingKyivFallback: string;
@@ -491,6 +494,9 @@ export interface AppStrings {
     // The leaf that draws a different three spots.
     visitRegenerate: string;
     visitCategoryAsk: string;
+    // Said at the category level when the picked category has nothing
+    // nearby; the ring stays on the categories (UX-2.17).
+    visitCategoryEmpty: string;
     visitSpotAsk: string;
     // Said on entering the territory view, because nothing else explains
     // it: the mechanic is deliberately nameless and passive everywhere
@@ -696,7 +702,7 @@ const uk: AppStrings = {
     findingPet: (name) => `шукаємо ${name}`,
     abandonSearch: 'припинити пошук',
     abandonSearchArmed: 'точно? ще раз',
-    cancelWalk: 'припинити прогулянку',
+    finishWalk: 'завершити прогулянку',
     recenterOnCompanion: 'повернутись до пса',
     locating: 'шукаю себе…',
     usingKyivFallback: 'опускаюсь на Київ',
@@ -1128,6 +1134,7 @@ const uk: AppStrings = {
     meetDistanceAsk: 'пошукати поруч чи далі?',
     visitRegenerate: 'інші',
     visitCategoryAsk: 'кава, поїсти, бар, зоомагазин чи ветеринар?',
+    visitCategoryEmpty: 'такого поруч немає — обери інше',
     visitSpotAsk: 'ось що поруч — куди йдемо?',
     playIntro: [
       'ось наша земля. я мічу її сам, поки ми йдемо — просто гуляй, і її більшатиме 🐾',
@@ -1301,7 +1308,7 @@ const en: AppStrings = {
     findingPet: (name) => `finding ${name}`,
     abandonSearch: 'abandon search',
     abandonSearchArmed: 'sure? tap again',
-    cancelWalk: 'cancel walk',
+    finishWalk: 'finish walk',
     recenterOnCompanion: 'recenter on companion',
     locating: 'locating…',
     usingKyivFallback: 'using kyiv fallback',
@@ -1702,6 +1709,7 @@ const en: AppStrings = {
     meetDistanceAsk: 'look nearby, or further out?',
     visitRegenerate: 'others',
     visitCategoryAsk: 'coffee, food, a bar, a pet shop, or the vet?',
+    visitCategoryEmpty: 'nothing like that nearby — pick another',
     visitSpotAsk: "here's what's nearby — where are we headed?",
     playIntro: [
       "this is our ground. i mark it myself as we walk — just walk, and it grows 🐾",

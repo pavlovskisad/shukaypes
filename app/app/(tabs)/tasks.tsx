@@ -262,17 +262,37 @@ export default function TasksScreen() {
   const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
   const setPinnedGuest = useGameStore((s) => s.setPinnedGuest);
   const setAppMode = useGameStore((s) => s.setAppMode);
+  const setTerritoryVisible = useGameStore((s) => s.setTerritoryVisible);
+  // INTO THE TERRITORY VIEW, WITHOUT THROWING A WALK AWAY (UX-6.13).
+  //
+  // setAppMode is the clear-slate reducer, and a planned walk is part of
+  // the slate it clears — so a glance at somebody's ground from the
+  // standing used to cost you the route you were on. Mid-walk, only the
+  // territory lens comes on; the walk stays drawn and you stay in the
+  // mode you were in. Search mode is left out: it hides territory
+  // outright, so there the switch is the only way to see any.
+  //
+  // Guarded because re-entering the mode you are already in would wipe
+  // the screen for nothing.
+  const enterTerritoryView = useCallback(() => {
+    const { appMode, walkRoute, territoryVisible } = useGameStore.getState();
+    if (walkRoute && appMode !== 'search') {
+      if (!territoryVisible) setTerritoryVisible(true);
+      return;
+    }
+    if (appMode !== 'play') setAppMode('play');
+  }, [setAppMode, setTerritoryVisible]);
   // Your own row flies the camera and pins NOTHING: your dog is the one
   // the map already draws, and your ground now comes through the
   // uncapped own-ground read, so there is nothing a pin could add.
   const onFocusOwnGround = useCallback(
     (ring?: { lat: number; lng: number }[]) => {
       if (!ring || ring.length < 3) return;
-      if (useGameStore.getState().appMode !== 'play') setAppMode('play');
+      enterTerritoryView();
       setFocusedTerritory({ ownerId: 'you', ring });
       router.push('/');
     },
-    [setFocusedTerritory, setAppMode, router],
+    [setFocusedTerritory, enterTerritoryView, router],
   );
 
   const onPickOwner = useCallback(
@@ -286,11 +306,9 @@ export default function TasksScreen() {
       // in the territory view. Flying somebody to a piece of ground they
       // then cannot see is the same as not going. Switching first also
       // hands them the dog's line explaining the mechanic, which is the
-      // right thing to hear on the way to a stranger's district.
-      //
-      // Guarded because setAppMode is the clear-slate reducer: re-entering
-      // the mode you are already in would wipe the screen for nothing.
-      if (useGameStore.getState().appMode !== 'play') setAppMode('play');
+      // right thing to hear on the way to a stranger's district. See
+      // enterTerritoryView for what happens mid-walk.
+      enterTerritoryView();
       setFocusedTerritory({ ownerId, ring, ...(mark ? { mark } : {}), ...(pos ? { pos } : {}) });
       // PIN WHAT THE JUMP WENT TO SEE.
       //
@@ -321,7 +339,7 @@ export default function TasksScreen() {
       });
       router.push('/');
     },
-    [setFocusedTerritory, setPinnedGuest, setAppMode, router],
+    [setFocusedTerritory, setPinnedGuest, enterTerritoryView, router],
   );
 
   useFocusEffect(
@@ -611,7 +629,13 @@ export default function TasksScreen() {
                   return (
                     <Pressable
                       key={row.userId}
-                      onPress={() => onPickOwner(row)}
+                      // Your own row, wherever it ranks, does what the
+                      // pinned "you" row above does. Picking it as an
+                      // owner pinned a second dog with your nickname and
+                      // repainted your ground in a rival's hue (UX-1.9).
+                      onPress={() =>
+                        isYou ? onFocusOwnGround(row.mainPiece) : onPickOwner(row)
+                      }
                       disabled={!row.mainPiece || row.mainPiece.length < 3}
                       style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
                     >
@@ -632,14 +656,19 @@ export default function TasksScreen() {
                     affordance as the carousel counter. It carries real
                     weight now that the card shows a handful: the board
                     is the district's shape, the sheet is its full
-                    census. */}
-                <Pressable onPress={openFullBoard} hitSlop={8}>
-                  {({ pressed }) => (
-                    <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
-                      {t.tasks.boardSeeAll}
-                    </Text>
-                  )}
-                </Pressable>
+                    census. Only when there IS more than the card
+                    shows, same guard as the happiness card below:
+                    "show all" over a board that already fits opened a
+                    sheet repeating the same rows (UX-12.20). */}
+                {board.board.length > BOARD_CARD_ROWS ? (
+                  <Pressable onPress={openFullBoard} hitSlop={8}>
+                    {({ pressed }) => (
+                      <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
+                        {t.tasks.boardSeeAll}
+                      </Text>
+                    )}
+                  </Pressable>
+                ) : null}
               </>
             )}
           </View>
@@ -886,9 +915,11 @@ export default function TasksScreen() {
         board={boardAll}
         youRank={board?.you.rank ?? null}
         onClose={() => setBoardAll(null)}
-        onPick={(row) => {
+        onPick={(row, isYou) => {
           setBoardAll(null);
-          onPickOwner(row);
+          // Same split as the card's rows (UX-1.9).
+          if (isYou) onFocusOwnGround(row.mainPiece);
+          else onPickOwner(row);
         }}
       />
       <LeaderboardModal

@@ -504,7 +504,11 @@ export function SniffPress() {
         alongM,
         offRouteM: 0,
       };
-      setWalkRoute(line, { shape: 'oneway', spotId: null }, [stop]);
+      setWalkRoute(
+        line,
+        { shape: 'oneway', spotId: null, destination: discovered.position },
+        [stop],
+      );
       setDiscovered(null);
     } finally {
       setRouting(false);

@@ -32,6 +32,16 @@ import { DogSprite, type DogAnim } from './DogSprite';
 
 const VISIT_LEAVES_PER_CATEGORY = 3;
 
+// True only when we KNOW a visit category has nothing in it: spots have
+// loaded and none carry that category. Before the first load an empty
+// list is "not yet", not "none", so the drill goes ahead and fills in
+// when the spots land (UX-2.17).
+function visitCategoryEmpty(categoryId: string, spots: Spot[], loaded: boolean): boolean {
+  if (!loaded) return false;
+  const category = categoryId.replace('visit:', '');
+  return !spots.some((s) => s.category === category);
+}
+
 // Builds the visit-leaf actions for the current category. Pulled out
 // so it can be memoised + cached separately from the rest of the menu
 // (the `spots` reference flips on every /sync/map tick — without
@@ -129,6 +139,7 @@ export function Companion({
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   const spots = useGameStore((s) => s.spots);
+  const spotsLoaded = useGameStore((s) => s.spotsLoaded);
   const userPosition = useGameStore((s) => s.userPosition);
   // Supersniff (dog-cam search) mode — used to fire the one-time "how it works"
   // intro hint on entry.
@@ -209,6 +220,10 @@ export function Companion({
   // root from any depth (matches user expectation: "essentials are
   // always one tap away on the dog").
   const [menuPath, setMenuPath] = useState<string[]>([]);
+  // The visit category the user just picked that has nothing nearby.
+  // The ring stays on the category level and the dog says so, rather
+  // than drilling into a level holding nothing but the re-roll disc.
+  const [emptyVisit, setEmptyVisit] = useState<string | null>(null);
   // Track the "coming soon" bubble timeout so rapid menu taps don't
   // accumulate dangling timers — each new tap cancels the previous one.
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -367,6 +382,7 @@ export function Companion({
     if (!menuOpen) {
       setMenuPath([]);
       setAtModes(false);
+      setEmptyVisit(null);
     }
   }, [menuOpen]);
 
@@ -552,6 +568,7 @@ export function Companion({
                   shape,
                   spotId: null,
                   destinationName: walk.primary.name,
+                  destination: walk.primary.position,
                 },
                 walk.stops,
               );
@@ -658,6 +675,7 @@ export function Companion({
       if (menuPath.length === 0) {
         if (id === 'walk' || id === 'meet' || id === 'visit') {
           setMenuPath([id]);
+          setEmptyVisit(null);
           // Both branches need spots populated for their leaves. Lazy-
           // fetch here so the user doesn't have to manually visit the
           // Spots tab first. No-op if already loaded.
@@ -684,6 +702,12 @@ export function Companion({
           setMenuOpen(false);
           return;
         }
+        const { spots: ctxSpots, spotsLoaded: ctxLoaded } = useGameStore.getState();
+        if (visitCategoryEmpty(id, ctxSpots, ctxLoaded)) {
+          setEmptyVisit(id);
+          return;
+        }
+        setEmptyVisit(null);
         setMenuPath([...menuPath, id]);
         return;
       }
@@ -715,6 +739,16 @@ export function Companion({
   useEffect(() => {
     if (!menuOpen) visitLeavesCacheRef.current = null;
   }, [menuOpen]);
+  // A category drilled into before the spots had loaded can turn out
+  // empty once they land. Step back up to the categories and say so,
+  // the same as a tap on an already-known empty one.
+  useEffect(() => {
+    const [head, second] = menuPath;
+    if (head !== 'visit' || !second) return;
+    if (!visitCategoryEmpty(second, spots, spotsLoaded)) return;
+    setMenuPath(['visit']);
+    setEmptyVisit(second);
+  }, [menuPath, spots, spotsLoaded]);
 
   // The four intents, labelled from i18n. Built here rather than in
   // RadialMenu because only the ids are static — the words are Ukrainian
@@ -755,8 +789,13 @@ export function Companion({
     const cached = visitLeavesCacheRef.current;
     if (cached && cached.key === visitKey) return cached.leaves;
     const category = menuPath[1]!.replace('visit:', '') as SpotCategory;
+    const picks = buildVisitLeaves(category, spots, userPosition);
+    // Nothing to pick (the spots are still loading): no re-roll disc on
+    // its own, and no caching, so the level fills in when they arrive
+    // instead of staying empty until the menu is reopened (UX-2.17).
+    if (picks.length === 0) return [];
     const leaves = [
-      ...buildVisitLeaves(category, spots, userPosition),
+      ...picks,
       // Last, so re-rolling never moves the spots out from under a
       // thumb already on its way to one.
       {
@@ -939,10 +978,11 @@ export function Companion({
     if (head === 'walk') return t.modes.walkDistanceAsk;
     if (head === 'meet') return t.modes.meetDistanceAsk;
     if (head === 'visit') {
-      return second ? t.modes.visitSpotAsk : t.modes.visitCategoryAsk;
+      if (second) return t.modes.visitSpotAsk;
+      return emptyVisit ? t.modes.visitCategoryEmpty : t.modes.visitCategoryAsk;
     }
     return null;
-  }, [menuOpen, showModes, menuPath, t]);
+  }, [menuOpen, showModes, menuPath, emptyVisit, t]);
   // Supersniff intro bubble — shown over ambient/real barks for its window.
   const supersniffIntro =
     dogCam && supersniffIntroHint.visible ? t.hints.supersniffIntro : null;
