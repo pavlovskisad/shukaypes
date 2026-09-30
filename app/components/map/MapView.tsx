@@ -100,6 +100,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { INK, SURFACE } from '../../constants/surface';
 import { HandDrawnFrame } from '../ui/HandDrawn';
 import { CloseButton } from '../ui/CloseButton';
+import { clickOnKey } from '../../utils/keyActivate';
 
 const TOKEN_REFRESH_MS = 15000;
 // Extra syncs while actually walking, so a fast mover isn't looking at a
@@ -4633,6 +4634,8 @@ const DECK_ANIM_MS = MOTION.sheetMs;
             {walkRoute ? (
               <div
                 role="button"
+                tabIndex={0}
+                onKeyDown={clickOnKey}
                 aria-label={t.hud.finishWalk}
                 // The pop every other button in the app gives, then the
                 // walk ends (UX-9.7).
@@ -4679,6 +4682,8 @@ const DECK_ANIM_MS = MOTION.sheetMs;
             recenterOnCompanion();
           }}
           role="button"
+          tabIndex={0}
+          onKeyDown={clickOnKey}
           aria-label={t.hud.recenterOnCompanion}
           style={{
             position: 'fixed',
@@ -4856,6 +4861,8 @@ const DECK_ANIM_MS = MOTION.sheetMs;
         <div
           onClick={() => setExpandedSpotKeys(new Set())}
           role="button"
+          tabIndex={0}
+          onKeyDown={clickOnKey}
           aria-label={t.hud.restack}
           style={{
             position: 'absolute',

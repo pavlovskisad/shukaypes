@@ -173,6 +173,9 @@ export function OtherWalker({ player, onOpen }: Props) {
       >
         <div
           role="button"
+          // Reachable by keyboard; MapLibreMarker turns Enter and Space
+          // into the tap (UX-14.2).
+          tabIndex={0}
           aria-label={player.name}
           style={{
             position: 'relative',
@@ -265,7 +268,12 @@ export function OtherWalker({ player, onOpen }: Props) {
       zIndex={Z.MARKER_DEFAULT}
       onClick={onTap}
     >
+      {/* A button like the chip above (UX-14.2): its name is the
+          walker's, and MapLibreMarker gives it Enter and Space. */}
       <div
+        role="button"
+        tabIndex={0}
+        aria-label={player.name}
         style={{
           position: 'relative',
           display: 'flex',

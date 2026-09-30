@@ -14,6 +14,7 @@ import { VOICE } from '../../constants/voice';
 import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import { Glyph } from '../ui/Glyph';
+import { clickOnKey } from '../../utils/keyActivate';
 
 // The "read more" under a landmark's one-line story, and the heart in
 // the corner above it. One component for both places a kyiv_lore row is
@@ -491,6 +492,8 @@ export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
     <>
     <div
       role="button"
+      tabIndex={0}
+      onKeyDown={clickOnKey}
       aria-label={saved ? t.sniff.saved : t.sniff.save}
       aria-pressed={saved}
       onClick={(e) => {

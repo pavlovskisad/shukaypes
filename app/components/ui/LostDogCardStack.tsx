@@ -84,6 +84,7 @@ export function LostDogCardStack({
       getId={(d) => d.id}
       onTap={onTap}
       onCounterTap={onCounterTap}
+      counterA11yLabel={t.tasks.boardSeeAll}
       onSwipe={onSwipe}
       // Card-sized, not the ad's 1200px render — utils/petPhoto.ts.
       getPhotoUrl={(d) => petPhotoAt(d.photoUrl, CARD_W)}

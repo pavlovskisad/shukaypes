@@ -18,7 +18,7 @@ import { playPopThen } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { SpotCardView } from './SpotCardStack';
 import { CloseButton } from './CloseButton';
-import { CLOSE_INSET, FULLSCREEN_LIST_TOP } from '../../constants/buttons';
+import { CLOSE_INSET, FULLSCREEN_LIST_TOP, ROW_BUTTON } from '../../constants/buttons';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
 
@@ -101,18 +101,20 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
         }
       >
         {renderSpots.map((spot) => (
-          <div
+          // A button named for the place (UX-14.11) — see LostDogsModal.
+          <button
+            type="button"
             key={spot.id}
+            aria-label={spot.name}
             onClick={(e) => playPopThen(e.currentTarget, () => onPick(spot))}
             style={{
-              width: '100%',
+              ...ROW_BUTTON,
               height: 320,
               flexShrink: 0,
-              cursor: 'pointer',
             }}
           >
             <SpotCardView spot={spot} userPos={userPos} />
-          </div>
+          </button>
         ))}
       </div>
 

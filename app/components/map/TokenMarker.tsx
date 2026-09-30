@@ -2,6 +2,7 @@ import { memo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { MapLibreMarker } from './MapLibreMarker';
 import { PICKUP_HIT_PAD } from '../../constants/sizing';
+import { useStrings } from '../../i18n/useStrings';
 
 // Deterministic 0..1 phase from the item's position so every collectible
 // bobs on its own offset instead of the whole field pulsing in unison.
@@ -23,6 +24,7 @@ function TokenMarkerImpl({
   onTap: () => void;
 }) {
   // A lime glow + faint drop shadow give it the "pickup" sheen.
+  const t = useStrings();
   const filter =
     'drop-shadow(0 1px 1.5px rgba(0,0,0,0.3)) drop-shadow(0 0 4px rgba(150,220,70,0.75))';
   return (
@@ -32,7 +34,7 @@ function TokenMarkerImpl({
       <div
         role="button"
         tabIndex={0}
-        aria-label="paw token"
+        aria-label={t.map.pawA11y}
         style={{ padding: PICKUP_HIT_PAD, cursor: 'pointer', userSelect: 'none' }}
       >
         <div style={{ position: 'relative', width: 22, height: 22 }}>

@@ -33,6 +33,9 @@ interface TelegramWebApp {
   // Opens a t.me link in the Telegram client itself rather than in a
   // browser tab. Present since SDK 6.1; feature-detected below.
   openTelegramLink?: (url: string) => void;
+  // Opens any other URL in the device's browser (or Telegram's in-app
+  // one), outside the Mini App's webview. SDK 6.1; feature-detected.
+  openLink?: (url: string) => void;
   // The header's back arrow, which is also what Android's hardware back
   // fires while it is shown. Hidden, back closes the whole Mini App.
   // Present since SDK 6.1; feature-detected below.
@@ -192,6 +195,34 @@ export function openTelegramChat(url: string): void {
   if (wa?.openTelegramLink) {
     try {
       wa.openTelegramLink(url);
+      return;
+    } catch {
+      /* fall through to the browser path */
+    }
+  }
+  if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
+}
+
+// Open a link that leaves the app: an ad's original, a URL the dog put
+// in a chat reply (UX-14.8).
+//
+// window.open from inside the Mini App's webview is unreliable — some
+// clients drop it silently, others open it inside the webview with no
+// way back — so each kind of URL takes Telegram's own bridge: t.me goes
+// through openTelegramChat (the real chat, not a web view of it) and
+// everything else through openLink. Outside Telegram, or on an SDK
+// without the bridge, a new tab. Call it inside the tap itself: on the
+// plain web the popup blocker only lets window.open through there.
+const TELEGRAM_LINK_RE = /^https?:\/\/(www\.)?(t\.me|telegram\.me)\//i;
+export function openExternal(url: string): void {
+  if (TELEGRAM_LINK_RE.test(url)) {
+    openTelegramChat(url);
+    return;
+  }
+  const wa = isInTelegram() ? getTelegramWebApp() : null;
+  if (wa?.openLink) {
+    try {
+      wa.openLink(url);
       return;
     } catch {
       /* fall through to the browser path */

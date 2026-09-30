@@ -5,6 +5,7 @@ import { HORIZON_FRACTION, ProfileSceneBackdrop, type SceneMode } from './Profil
 import { ProfileSceneBirds } from './ProfileSceneBirds';
 import { useStrings } from '../../i18n/useStrings';
 import { playPop } from '../../utils/popOnTap';
+import { clickOnKey } from '../../utils/keyActivate';
 
 // Ambient dog scene for the profile hero — replaces the 🐶 emoji
 // with the live pixel-art companion. Runs a small state machine that
@@ -388,12 +389,6 @@ export function ProfileDogScene({
   return (
     <div
       ref={containerRef}
-      // No tap handler any more — the background used to flip day/night
-      // and there is nothing behind it to flip to. role="img" rather
-      // than "button" so a screen reader stops offering an action that
-      // no longer exists, while the scene keeps its description.
-      role="img"
-      aria-label={t.profile.sceneA11y(mode)}
       style={{
         position: 'relative',
         // Fill the parent — the profile tab mounts the scene as a
@@ -413,22 +408,39 @@ export function ProfileDogScene({
           dog's motion at increasing rates for depth. The transition
           duration matches the dog's, so layers slide in lockstep
           with the dog instead of lagging. */}
-      <ProfileSceneBackdrop
-        dogCenterX={x + SPRITE_PX / 2}
-        cardWidth={width}
-        transitionMs={transitionMs}
-        mode={mode}
-      />
-      {/* Random ambient flyovers — birds in day, bat at night, plus
-          occasional falling leaves / fireflies. Sits above the
-          backdrop so it parallaxes naturally with the far layer. */}
-      <ProfileSceneBirds cardWidth={width} mode={mode} />
+      {/* THE PICTURE AND THE DOG ARE TWO THINGS (UX-14.15). role="img"
+          sat on the whole scene, and an img has no children to a
+          screen reader — so the dog, the one thing here that does
+          something when tapped, was hidden inside a picture. The
+          description now sits on the scenery alone (the backdrop and
+          the flyovers, filling the scene exactly as before), and the
+          dog below is a button of its own. */}
+      <div
+        role="img"
+        aria-label={t.profile.sceneA11y(mode)}
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'none' }}
+      >
+        <ProfileSceneBackdrop
+          dogCenterX={x + SPRITE_PX / 2}
+          cardWidth={width}
+          transitionMs={transitionMs}
+          mode={mode}
+        />
+        {/* Random ambient flyovers — birds in day, bat at night, plus
+            occasional falling leaves / fireflies. Sits above the
+            backdrop so it parallaxes naturally with the far layer. */}
+        <ProfileSceneBirds cardWidth={width} mode={mode} />
+      </div>
       <div
         ref={dogWrapperRef}
         // No pop on the dog itself — the wrapper's transform is
         // its position along the lawn, and the SpeechBubble that
         // appears on bark is the feedback the user already gets.
         onClick={handleBark}
+        role="button"
+        tabIndex={0}
+        aria-label={t.profile.barkA11y}
+        onKeyDown={clickOnKey}
         style={{
           position: 'absolute',
           left: 0,

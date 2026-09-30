@@ -18,7 +18,7 @@
 //
 // Built on react-native-reanimated v3 + gesture-handler v2.
 
-import { useState, useEffect, useMemo, useCallback, useRef, memo, type ReactNode } from 'react';
+import { useState, useEffect, useMemo, useCallback, useRef, memo, type KeyboardEvent, type ReactNode } from 'react';
 import { View, Text, StyleSheet, Image, Pressable, useWindowDimensions } from 'react-native';
 import Animated, {
   useSharedValue,
@@ -29,6 +29,7 @@ import Animated, {
   ReduceMotion,
   cancelAnimation,
   runOnJS,
+  runOnUI,
   interpolate,
   Extrapolation,
   Easing,
@@ -41,6 +42,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { LOOP_VIEW_PROPS } from '../../utils/motion';
+import { useStrings } from '../../i18n/useStrings';
 
 export const CARD_W = 320;
 export const CARD_H = 280;
@@ -117,6 +119,10 @@ interface Props<T> {
   // category in big-card form. When provided, the counter renders
   // as a Pressable with a chevron hint; otherwise it's plain text.
   onCounterTap?: () => void;
+  // What that counter opens, for its accessible name (UX-14.14) — it
+  // is read with the position after it. Without it the counter is
+  // named by its bare "N / M".
+  counterA11yLabel?: string;
   // Fired on each committed swipe (the carousel advances ±1) with the item
   // now centred (the new top card). Used to dismiss the swipe hint, and by the
   // search carousel to switch which lost dog is being tracked.
@@ -230,10 +236,12 @@ export function CardStack<T>({
   cardHeight = CARD_H,
   peekScale = 1,
   onCounterTap,
+  counterA11yLabel,
   onSwipe,
   initialId,
   focused = false,
 }: Props<T>) {
+  const t = useStrings();
   // Mount-time anchor: index of initialId in the CURRENT items, or 0.
   // useState initializer (not an effect) so the first paint already has
   // the right card on top — no flash of items[0].
@@ -603,6 +611,23 @@ export function CardStack<T>({
     [cardWidth, cardHeight],
   );
 
+  // KEYBOARD (UX-14.6). The deck only knew pointers: a swipe, a tap.
+  // Focused, the arrows step it the way a peek tap does and Enter or
+  // Space is the tap on the centre card. Only for keys on the deck
+  // itself — a control inside a card keeps its own. stepBy is a
+  // worklet, so it runs where the gestures run it.
+  const onDeckKey = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      if (N < 2) return;
+      e.preventDefault();
+      runOnUI(stepBy)(e.key === 'ArrowRight' ? 1 : -1);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleTap();
+    }
+  };
+
   if (!topItem) return null;
 
   const counterIndex = topItemIndex + 1;
@@ -610,7 +635,15 @@ export function CardStack<T>({
   return (
     <View style={styles.wrap}>
       <GestureDetector gesture={Gesture.Race(tap, pan)}>
-        <View style={[styles.deck, slotSize, { marginBottom: DECK_MARGIN * peekScale }]}>
+        <View
+          style={[styles.deck, slotSize, { marginBottom: DECK_MARGIN * peekScale }]}
+          focusable
+          role="group"
+          accessibilityLabel={t.modals.common.deckA11y(counterIndex, items.length)}
+          // react-native-web forwards onKeyDown to the div; RN's own
+          // View types do not list it.
+          {...({ onKeyDown: onDeckKey } as object)}
+        >
           {slotWindow.map(({ virtualIdx, item }) => (
             <ItemSlot
               key={virtualIdx}
@@ -632,6 +665,12 @@ export function CardStack<T>({
             onPress={onCounterTap}
             onPressIn={popPressableEvent}
             style={styles.counterHit}
+            accessibilityRole="button"
+            accessibilityLabel={
+              counterA11yLabel
+                ? t.modals.common.deckCounterA11y(counterA11yLabel, counterIndex, items.length)
+                : undefined
+            }
           >
             {({ pressed }) => (
               <Text style={[styles.counter, styles.counterLink, pressed && styles.counterPressed]}>

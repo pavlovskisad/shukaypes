@@ -16,7 +16,7 @@ import { playPopThen } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { useStrings } from '../../i18n/useStrings';
 import { CloseButton } from './CloseButton';
-import { CLOSE_INSET, FULLSCREEN_LIST_TOP } from '../../constants/buttons';
+import { CLOSE_INSET, FULLSCREEN_LIST_TOP, ROW_BUTTON } from '../../constants/buttons';
 import { LostDogCardView } from './LostDogCardStack';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
@@ -89,18 +89,21 @@ export function LostDogsModal({ dogs, onClose, onPick }: Props) {
         }
       >
         {renderDogs.map((dog) => (
-          <div
+          // A button, not a bare div (UX-14.11): reachable and pressable
+          // from a keyboard, and named for the pet it opens.
+          <button
+            type="button"
             key={dog.id}
+            aria-label={dog.name}
             onClick={(e) => playPopThen(e.currentTarget, () => onPick(dog))}
             style={{
-              width: '100%',
+              ...ROW_BUTTON,
               height: 320,
               flexShrink: 0,
-              cursor: 'pointer',
             }}
           >
             <LostDogCardView dog={dog} t={t} userPos={userPos} />
-          </div>
+          </button>
         ))}
       </div>
 

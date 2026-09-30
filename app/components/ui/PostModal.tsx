@@ -30,6 +30,8 @@ import { colors } from '../../constants/colors';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { INK, SURFACE } from '../../constants/surface';
 import { api } from '../../services/api';
+import { openExternal } from '../../services/telegram';
+import { splitPhones } from '../../utils/phoneLinks';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { useSheetBack } from '../../hooks/useSheetBack';
@@ -49,6 +51,15 @@ const BODY_TEXT: CSSProperties = {
   fontSize: TYPE.body,
   lineHeight: 1.5,
   overflowWrap: 'anywhere',
+};
+
+// The ad's text can be selected and copied (UX-14.7): an address, a
+// name, a number in a shape the phone links below do not recognise.
+// Said outright because a tap-first app tends to inherit
+// user-select: none from somewhere up the tree.
+const SELECTABLE: CSSProperties = {
+  userSelect: 'text',
+  WebkitUserSelect: 'text',
 };
 
 interface PostModalProps {
@@ -257,8 +268,24 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
             </button>
           ) : null}
 
+          {/* Phone numbers are tel: links (UX-14.7): the number is what
+              the walker came for, and one tap dials it. */}
           {post?.body ? (
-            <div style={{ ...BODY_TEXT, color: INK, whiteSpace: 'pre-wrap' }}>{post.body}</div>
+            <div style={{ ...BODY_TEXT, ...SELECTABLE, color: INK, whiteSpace: 'pre-wrap' }}>
+              {splitPhones(post.body).map((p, i) =>
+                p.kind === 'phone' ? (
+                  <a
+                    key={i}
+                    href={p.tel}
+                    style={{ color: INK, fontWeight: 700, textDecoration: 'underline' }}
+                  >
+                    {p.value}
+                  </a>
+                ) : (
+                  p.value
+                ),
+              )}
+            </div>
           ) : null}
 
           {post && !post.body ? (
@@ -402,10 +429,12 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
           {post?.sourceUrl ? (
             <button
               onClick={(e) => {
-                // Pop without the defer: window.open has to run inside
-                // the tap itself or a popup blocker eats it.
+                // Pop without the defer: the open has to run inside the
+                // tap itself or a popup blocker eats it. openExternal,
+                // not window.open, so inside Telegram it goes through
+                // the Mini App's own bridge (UX-14.8).
                 playPop(e.currentTarget);
-                window.open(post.sourceUrl!, '_blank', 'noopener');
+                openExternal(post.sourceUrl!);
               }}
               style={MODAL_PILL_DARK}
             >

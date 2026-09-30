@@ -17,6 +17,7 @@ import type { WalkStop } from '../../utils/walk';
 import { useMaplibreMap } from './MapContext';
 import { ROUTE_DRAW_MS } from './CrayonRoute';
 import { distanceMeters } from '../../utils/geo';
+import { clickOnKey } from '../../utils/keyActivate';
 
 // The landmarks a planned walk goes through, on the map.
 //
@@ -219,6 +220,8 @@ function StopMarker({
             transparent pad that does the catching. */}
         <div
           role="button"
+          tabIndex={0}
+          onKeyDown={clickOnKey}
           aria-label={stop.title ?? stop.name}
           onClick={(e) => {
             e.stopPropagation();

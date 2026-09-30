@@ -21,7 +21,7 @@ import { S } from '../../constants/spacing';
 import { playPopThen } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import { CloseButton } from './CloseButton';
-import { CLOSE_SIZE, CLOSE_INSET, FULLSCREEN_LIST_TOP } from '../../constants/buttons';
+import { CLOSE_SIZE, CLOSE_INSET, FULLSCREEN_LIST_TOP, ROW_BUTTON } from '../../constants/buttons';
 import { OWN_COLOR_CSS, ownerColorCss } from '../map/territoryColor';
 import { BoardRow, useBoardRowSize } from './BoardRow';
 import { useSheetBack } from '../../hooks/useSheetBack';
@@ -144,27 +144,33 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
           }
           const r = row as TerritoryRanking;
           const pickable = onPick && r.mainPiece && r.mainPiece.length >= 3;
-          return (
-            <div
+          const boardRow = (
+            <BoardRow
+              rank={String(i + 1)}
+              name={isYou ? t.tasks.boardYou : r.name}
+              areaLabel={t.profile.areaValue(r.areaM2)}
+              piece={r.mainPiece}
+              color={isYou ? OWN_COLOR_CSS : ownerColorCss(r.userId)}
+              you={isYou}
+              avatarUrl={r.avatarUrl}
+              owner={isYou ? null : r.owner}
+            />
+          );
+          // A row that opens the walker's ground on the map is a
+          // button (UX-14.11), named by rank, name and area; one with
+          // no ground to show stays a plain row.
+          return pickable ? (
+            <button
+              type="button"
               key={r.userId}
-              onClick={
-                pickable
-                  ? (e) => playPopThen(e.currentTarget, () => onPick(r, isYou))
-                  : undefined
-              }
-              style={{ cursor: pickable ? 'pointer' : 'default' }}
+              aria-label={`${i + 1}. ${isYou ? t.tasks.boardYou : r.name}, ${t.profile.areaValue(r.areaM2)}`}
+              onClick={(e) => playPopThen(e.currentTarget, () => onPick(r, isYou))}
+              style={ROW_BUTTON}
             >
-              <BoardRow
-                rank={String(i + 1)}
-                name={isYou ? t.tasks.boardYou : r.name}
-                areaLabel={t.profile.areaValue(r.areaM2)}
-                piece={r.mainPiece}
-                color={isYou ? OWN_COLOR_CSS : ownerColorCss(r.userId)}
-                you={isYou}
-                avatarUrl={r.avatarUrl}
-                owner={isYou ? null : r.owner}
-              />
-            </div>
+              {boardRow}
+            </button>
+          ) : (
+            <div key={r.userId}>{boardRow}</div>
           );
         })}
       </div>

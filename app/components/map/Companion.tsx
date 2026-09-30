@@ -30,6 +30,7 @@ import {
   type WalkShape,
 } from '../../utils/walk';
 import { DogSprite, type DogAnim } from './DogSprite';
+import { clickOnKey } from '../../utils/keyActivate';
 
 const VISIT_LEAVES_PER_CATEGORY = 3;
 
@@ -1084,9 +1085,13 @@ export function Companion({
           gestures on the edges. 140px + touchAction:manipulation + stop
           propagation on pointerDown make the tap land reliably without
           Google Maps' 'greedy' gesture handler hijacking it as a pan. */}
+      {/* NOT a role=button any more (UX-14.4): the bubble and the menu
+          live in here, and a button's contents are read as its name,
+          so the menu's own buttons were nested inside another. This
+          box stays the pointer target and the gesture shield; the
+          button a keyboard or screen reader reaches is the sprite's
+          wrapper below. */}
       <div
-        role="button"
-        tabIndex={0}
         onClick={handleTap}
         onPointerDown={(e) => e.stopPropagation()}
         onTouchStart={(e) => e.stopPropagation()}
@@ -1114,7 +1119,20 @@ export function Companion({
             so we flip horizontally based on movement direction.
             pointer-events:none so the tap lands on the outer container
             instead of the sprite div. */}
-        <DogSprite anim={anim} facingLeft={facingLeft} />
+        {/* The dog, as a control (UX-14.2, UX-14.4). Its click bubbles
+            to the box above, which is what handles it; clickOnKey turns
+            Enter and Space into that click. Out of the tab order while
+            the dog is off-screen. */}
+        <div
+          role="button"
+          tabIndex={offscreenHidden ? -1 : 0}
+          aria-label={t.modes.dogA11y}
+          aria-expanded={menuOpen}
+          onKeyDown={clickOnKey}
+          style={{ display: 'flex' }}
+        >
+          <DogSprite anim={anim} facingLeft={facingLeft} />
+        </div>
 
         {/* No offset any more, in any state. Both menus the dog speaks
             over hang BELOW it now, so there is nothing at twelve

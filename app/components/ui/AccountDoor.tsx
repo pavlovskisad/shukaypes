@@ -258,9 +258,12 @@ export const NOTE: CSSProperties = {
   lineHeight: 1.4,
 };
 
+// data-field is what index.html's focus ring hangs on (UX-14.13): the
+// control inside is stripped of its own outline, so the paper shows
+// where the typing goes.
 export function Field({ seed, children }: { seed: string; children: ReactNode }) {
   return (
-    <div style={FIELD_PAPER}>
+    <div style={FIELD_PAPER} data-field="">
       <HandDrawnFrame seed={seed} radius={R.button} />
       {children}
     </div>
@@ -570,6 +573,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.nicknameLabel}</div>
               <Field seed="nick">
                 <input
+                  aria-label={t.nicknameLabel}
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   placeholder={t.nicknamePlaceholder}
@@ -585,6 +589,10 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
                   <button
                     key={sp}
                     type="button"
+                    // Selected is the ink pill; this says so to a screen reader
+                    // (UX-14.12). A second tap still clears it — the only way
+                    // to say "no pet".
+                    aria-pressed={species === sp}
                     onClick={() => setSpecies(species === sp ? null : sp)}
                     style={species === sp ? MODAL_PILL_DARK : MODAL_PILL_LIGHT}
                   >
@@ -601,6 +609,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
                     <div style={LABEL}>{t.petNameLabel}</div>
                     <Field seed="petname">
                       <input
+                        aria-label={t.petNameLabel}
                         value={petName}
                         onChange={(e) => setPetName(e.target.value)}
                         placeholder={t.petNamePlaceholder}
@@ -613,6 +622,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
                     <div style={LABEL}>{t.breedLabel}</div>
                     <Field seed="breed">
                       <input
+                        aria-label={t.breedLabel}
                         value={breed}
                         onChange={(e) => setBreed(e.target.value)}
                         placeholder={t.breedPlaceholder}
@@ -627,6 +637,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.emailLabel}</div>
               <Field seed="email">
                 <input
+                  aria-label={t.emailLabel}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t.emailPlaceholder}
@@ -642,6 +653,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.passwordLabel}</div>
               <Field seed="password">
                 <input
+                  aria-label={t.passwordLabel}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={t.passwordPlaceholder}
@@ -702,6 +714,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.emailLabel}</div>
               <Field seed="login-email">
                 <input
+                  aria-label={t.emailLabel}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t.emailPlaceholder}
@@ -716,6 +729,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.passwordLabel}</div>
               <Field seed="login-password">
                 <input
+                  aria-label={t.passwordLabel}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   type="password"
@@ -750,6 +764,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.emailLabel}</div>
               <Field seed="forgot-email">
                 <input
+                  aria-label={t.emailLabel}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t.emailPlaceholder}
@@ -787,6 +802,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.newPasswordLabel}</div>
               <Field seed="reset-password">
                 <input
+                  aria-label={t.newPasswordLabel}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={t.passwordPlaceholder}

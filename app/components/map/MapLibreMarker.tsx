@@ -197,8 +197,25 @@ export function MapLibreMarker({
       playPop(el.firstElementChild as HTMLElement | null);
       onClick();
     };
+    // Keyboard (UX-14.2). The markers draw a role="button" with
+    // tabIndex 0 as their root, which a keyboard can reach but a <div>
+    // never activates: Enter and Space do nothing unless someone says
+    // so. Said here, once, for every tappable marker — and only for a
+    // key on that root itself, so anything focusable nested inside
+    // keeps its own keys. Space's default is a page scroll, so it is
+    // cancelled.
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key !== 'Enter' && e.key !== ' ') return;
+      if (e.target !== el.firstElementChild) return;
+      e.preventDefault();
+      handler();
+    };
     el.addEventListener('click', handler);
-    return () => el.removeEventListener('click', handler);
+    el.addEventListener('keydown', onKey);
+    return () => {
+      el.removeEventListener('click', handler);
+      el.removeEventListener('keydown', onKey);
+    };
   }, [el, onClick]);
 
   if (!el) return null;

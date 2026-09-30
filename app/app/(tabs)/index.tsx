@@ -164,7 +164,9 @@ export default function MapScreen() {
               ring's back. It pops out and back on the same clock as the
               status pill, one leg of the same stagger. */}
           <div
+            aria-hidden={logoHidden || undefined}
             style={{
+              ...goneWhen(logoHidden),
               transformOrigin: 'left center',
               opacity: logoHidden ? 0 : 1,
               transform: logoHidden ? 'scale(0)' : 'scale(1)',
@@ -231,7 +233,9 @@ export default function MapScreen() {
               transform to the right edge so it collapses toward the
               edge of the screen rather than the centre. */}
           <div
+            aria-hidden={immersive || undefined}
             style={{
+              ...goneWhen(immersive),
               transformOrigin: 'right center',
               // Gives way before the row does (UX-12.2): the pills
               // shrink inside the gap left beside the logo instead of
@@ -267,7 +271,9 @@ export default function MapScreen() {
           pointerEvents={immersive ? 'none' : 'box-none'}
         >
           <div
+            aria-hidden={immersive || undefined}
             style={{
+              ...goneWhen(immersive),
               opacity: immersive ? 0 : 1,
               transform: immersive ? 'scale(0)' : 'scale(1)',
               animation: sniffJustChanged
@@ -287,6 +293,20 @@ export default function MapScreen() {
       <LostFlowModal open={lostFlowOpen} onClose={handleLostFlowClose} />
     </View>
   );
+}
+
+// HIDDEN CHROME IS GONE CHROME (UX-14.3). The logo, the status pills and
+// the quest pill pop out to scale(0) and opacity 0 — invisible, but still
+// in the tab order and still read out, so a keyboard or screen-reader
+// user could press a control nobody could see. visibility: hidden takes
+// them out of both, once the 320 ms pop-out has played (the delay); on
+// the way back it flips at once and the pop-in's own delay covers it.
+const HUD_POP_OUT_MS = 320;
+function goneWhen(hidden: boolean): CSSProperties {
+  return {
+    visibility: hidden ? 'hidden' : 'visible',
+    transition: `visibility 0s linear ${hidden ? HUD_POP_OUT_MS : 0}ms`,
+  };
 }
 
 // The flex column is what the View gave for free, and MapView's own

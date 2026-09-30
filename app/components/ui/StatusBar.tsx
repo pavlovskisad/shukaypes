@@ -183,14 +183,20 @@ export function MeterPill({
   return (
     <div ref={popRef} style={{ display: 'inline-flex' }}>
       <PulseWrap active={!!pulse}>
-        <View style={[styles.pill, styles.meterPill, solid && styles.pillSolid, narrow && styles.pillNarrow]}>
+        {/* The pill itself is the meter to a screen reader (UX-14.5):
+            a progressbar with its name and level. On the pill rather
+            than the number because profile hides the number
+            (showValue false) and the meter went nameless there. */}
+        <View
+          style={[styles.pill, styles.meterPill, solid && styles.pillSolid, narrow && styles.pillNarrow]}
+          accessibilityRole="progressbar"
+          accessibilityLabel={t.hud.meterA11y(label, fillPct)}
+          accessibilityValue={{ min: 0, max: 100, now: fillPct }}
+        >
           <View style={[styles.fill, { width: `${fillPct}%` as unknown as number }]} />
           <Icon name={icon} size={iconSize} />
           {showValue ? (
-            <Text
-              style={styles.value}
-              accessibilityLabel={t.hud.meterA11y(label, fillPct)}
-            >
+            <Text style={styles.value} aria-hidden>
               {fillPct}%
             </Text>
           ) : null}

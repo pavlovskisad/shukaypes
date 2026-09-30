@@ -9,6 +9,7 @@ import { Z } from '../../constants/z';
 import { playPopThen } from '../../utils/popOnTap';
 import { petPhotoAt } from '../../utils/petPhoto';
 import { useStrings } from '../../i18n/useStrings';
+import { clickOnKey } from '../../utils/keyActivate';
 
 // Dominant-urgency wins the glow color. Urgent beats medium beats resolved
 // so the cluster reads "there's an urgent pet in here" at a glance.
@@ -98,6 +99,7 @@ function LostDogClusterImpl({
         <div
           role="button"
           tabIndex={0}
+          onKeyDown={clickOnKey}
           // The badge is an emoji and a bare number; this is what it
           // means, and whether the ring is out (UX-4.4).
           aria-label={t.map.lostPetsCount(count)}

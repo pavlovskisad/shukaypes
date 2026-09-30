@@ -218,3 +218,23 @@ export const CLOSE_CHIP: CSSProperties = {
   fontWeight: 400,
   lineHeight: 1,
 };
+
+// A whole row or card that is one tap target — the rows of the "see all"
+// sheets (UX-14.11). A real <button>, so a keyboard reaches it and Enter
+// and Space press it, with every piece of the UA's button chrome taken
+// off: the card inside draws itself, and the button is only the hit box
+// and the name. Put an aria-label on it; the card's contents are too
+// much to read out as a name.
+export const ROW_BUTTON: CSSProperties = {
+  appearance: 'none',
+  display: 'block',
+  width: '100%',
+  margin: 0,
+  padding: 0,
+  border: 'none',
+  background: 'none',
+  font: 'inherit',
+  color: 'inherit',
+  textAlign: 'inherit',
+  cursor: 'pointer',
+};

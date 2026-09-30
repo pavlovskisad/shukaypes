@@ -33,6 +33,7 @@ interface Props {
 }
 
 export function SpotCardStack({ spots, onTap, onCounterTap, onSwipe }: Props) {
+  const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
   // useCallback-stable so CardStack's memoed ItemSlot doesn't see
   // a "new" renderCard prop on every parent render.
@@ -46,6 +47,7 @@ export function SpotCardStack({ spots, onTap, onCounterTap, onSwipe }: Props) {
       getId={(s) => s.id}
       onTap={onTap}
       onCounterTap={onCounterTap}
+      counterA11yLabel={t.spots.seeAll}
       onSwipe={onSwipe}
       renderCard={renderCard}
     />

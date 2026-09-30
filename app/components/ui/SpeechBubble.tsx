@@ -94,6 +94,11 @@ export function SpeechBubble({ text, bottom = '85%', onHeight }: SpeechBubblePro
   return (
     <div
       ref={ref}
+      // The dog's lines — its questions included — read out as they
+      // change (UX-14.4). It was silent to a screen reader: the words
+      // were there, but nothing said when new ones arrived.
+      role="status"
+      aria-live="polite"
       style={{
         position: 'absolute',
         left: '50%',

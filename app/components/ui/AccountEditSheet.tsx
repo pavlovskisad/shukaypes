@@ -259,6 +259,7 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
             <div style={LABEL}>{t.nicknameLabel}</div>
             <Field seed="edit-nick">
               <input
+                aria-label={t.nicknameLabel}
                 value={nickname}
                 onChange={(e) => setNickname(e.target.value)}
                 placeholder={t.nicknamePlaceholder}
@@ -274,6 +275,10 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
                 <button
                   key={sp}
                   type="button"
+                  // Selected is the ink pill; this says so to a screen reader
+                  // (UX-14.12). A second tap still clears it — the only way
+                  // to say "no pet".
+                  aria-pressed={species === sp}
                   onClick={() => setSpecies(species === sp ? null : sp)}
                   style={species === sp ? MODAL_PILL_DARK : MODAL_PILL_LIGHT}
                 >
@@ -288,6 +293,7 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
                   <div style={LABEL}>{t.petNameLabel}</div>
                   <Field seed="edit-petname">
                     <input
+                      aria-label={t.petNameLabel}
                       value={petName}
                       onChange={(e) => setPetName(e.target.value)}
                       placeholder={t.petNamePlaceholder}
@@ -300,6 +306,7 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
                   <div style={LABEL}>{t.breedLabel}</div>
                   <Field seed="edit-breed">
                     <input
+                      aria-label={t.breedLabel}
                       value={breed}
                       onChange={(e) => setBreed(e.target.value)}
                       placeholder={t.breedPlaceholder}
@@ -376,6 +383,7 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
                     <div style={LABEL}>{t.currentPasswordLabel}</div>
                     <Field seed="edit-current">
                       <input
+                        aria-label={t.currentPasswordLabel}
                         value={current}
                         onChange={(e) => setCurrent(e.target.value)}
                         type="password"
@@ -389,6 +397,7 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
                     <div style={LABEL}>{t.newPasswordLabel}</div>
                     <Field seed="edit-next">
                       <input
+                        aria-label={t.newPasswordLabel}
                         value={next}
                         onChange={(e) => setNext(e.target.value)}
                         placeholder={t.passwordPlaceholder}

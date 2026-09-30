@@ -312,10 +312,17 @@ export function RadialMenu({
   // Shared so text pills and icon discs arrive identically — see the
   // keyframe note in public/index.html for why it is an animation and
   // not only a transition.
+  //
+  // CLOSED MEANS GONE, not just see-through (UX-14.3). At opacity 0 the
+  // buttons were still in the tab order and in the screen reader's
+  // list, answering a question nobody could see. visibility: hidden
+  // takes them out of both; its transition is delayed until the fade
+  // out has played, and on the way in it flips at once.
   const entrance = (i: number) => ({
     opacity: open ? 1 : 0,
     transform: open ? 'scale(1)' : 'scale(0.4)',
-    transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
+    visibility: (open ? 'visible' : 'hidden') as 'visible' | 'hidden',
+    transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms, visibility 0s linear ${open ? 0 : 220 + i * 40}ms`,
     animation: open ? `radial-item-in 220ms ease ${i * 40}ms both` : undefined,
     pointerEvents: (open ? 'auto' : 'none') as 'auto' | 'none',
   });
@@ -334,6 +341,7 @@ export function RadialMenu({
     colGap: number = gap,
   ) => (
     <div
+      aria-hidden={!open || undefined}
       style={{
         position: 'absolute',
         left: '50%',
@@ -439,6 +447,7 @@ export function RadialMenu({
 
   return (
     <div
+      aria-hidden={!open || undefined}
       style={{
         position: 'absolute',
         left: '50%',

@@ -130,6 +130,9 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
       <div
         role="button"
         tabIndex={0}
+        // Named for the pet it opens (UX-14.9); the photo's alt and the
+        // label under it are inside the button and not its name.
+        aria-label={name}
         style={{
           position: 'relative',
           display: 'flex',

@@ -8,6 +8,8 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK } from '../../constants/surface';
+import { clickOnKey } from '../../utils/keyActivate';
+import { useStrings } from '../../i18n/useStrings';
 
 // Stacked badge shown when 2+ spots of the same category sit close
 // enough that rendering each one as its own pin makes the map a
@@ -30,17 +32,19 @@ interface PoiClusterProps {
 }
 
 function PoiClusterImpl({ position, category, emoji, count, onTap }: PoiClusterProps) {
+  const t = useStrings();
   const slot = iconForCategory(category);
   return (
     <MapLibreMarker position={position} cullNearHorizon>
       <div
         role="button"
         tabIndex={0}
+        onKeyDown={clickOnKey}
         onClick={(e) => {
           e.stopPropagation();
           onTap();
         }}
-        aria-label={`${count} ${category} nearby — tap to expand`}
+        aria-label={t.map.placesCount(count)}
         style={{
           position: 'relative',
           width: 54,

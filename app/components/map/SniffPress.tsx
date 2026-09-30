@@ -21,6 +21,7 @@ import { VOICE } from '../../constants/voice';
 import { INK, SURFACE } from '../../constants/surface';
 import { HandDrawnFrame } from '../ui/HandDrawn';
 import { MODAL_PILL_DARK } from '../../constants/buttons';
+import { clickOnKey } from '../../utils/keyActivate';
 
 // Long-press "sniff this place" gesture.
 //
@@ -620,6 +621,8 @@ export function SniffPress() {
         {discovered.id !== '__none__' ? (
           <div
             role="button"
+            tabIndex={0}
+            onKeyDown={clickOnKey}
             // The lowest thing in the bubble that has to stay clear of
             // the tab bar — LoreMore measures it when it pans the map.
             data-lore-foot=""

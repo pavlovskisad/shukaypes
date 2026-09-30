@@ -432,6 +432,9 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                       playPop(e.currentTarget);
                       setSpecies(sp);
                     }}
+                    // Ink says it to the eye; this says it to a screen
+                    // reader (UX-14.12).
+                    aria-pressed={species === sp}
                     style={species === sp ? MODAL_PILL_DARK : MODAL_PILL_LIGHT}
                   >
                     {species === sp ? null : (
@@ -445,6 +448,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
               <div style={LABEL_STYLE}>{s.nameLabel}</div>
               <Field seed="name">
                 <input
+                  aria-label={s.nameLabel}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder={s.namePlaceholder}
@@ -456,6 +460,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
               <div style={LABEL_STYLE}>{s.descLabel}</div>
               <Field seed="desc">
                 <textarea
+                  aria-label={s.descLabel}
                   value={desc}
                   onChange={(e) => setDesc(e.target.value)}
                   placeholder={s.descPlaceholder}
@@ -468,6 +473,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
               <div style={LABEL_STYLE}>{s.phoneLabel}</div>
               <Field seed="phone">
                 <input
+                  aria-label={s.phoneLabel}
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder={s.phonePlaceholder}

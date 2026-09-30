@@ -150,6 +150,16 @@
       select {
         font-family: inherit;
       }
+      /* Where the typing goes (UX-14.13). Every text field is a stripped
+         <input> inside drawn paper (AccountDoor's Field, the chat
+         composer), and the stripped control has no outline of its own —
+         so the paper carries one while anything inside it has focus.
+         Ink, like every other line in the app; outline follows the
+         paper's border-radius. */
+      [data-field]:focus-within {
+        outline: 2px solid #1a1a1a;
+        outline-offset: 2px;
+      }
       /* These styles make the root element full-height */
       #root {
         display: flex;
