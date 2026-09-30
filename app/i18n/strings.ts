@@ -547,6 +547,9 @@ export interface AppStrings {
     // "start search" and never touched the logo.
     supersniffExit: string;
     swipeCards: string;
+    // The quests and spots tabs are stacks of full-page cards; the first
+    // page gives no sign that more sits under it.
+    scrollMore: string;
     radialMenu: string;
     spotsToggle: string;
     hudMeters: string;
@@ -1287,6 +1290,7 @@ const uk: AppStrings = {
     supersniffIntro: 'супернюх увімкнено! гортай — наступний пес, тисни — беру слід 🐾',
     supersniffExit: 'щоб повернутись до прогулянок — тисни лого вгорі ліворуч ↖️',
     swipeCards: 'гортай вбік — там ще',
+    scrollMore: 'гортай вниз — там ще',
     radialMenu: 'тут усе наше: знайти пса, погуляти, зайти кудись, привітатись, побалакати 🐾',
     spotsToggle: 'шпилька вгорі — показати чи сховати місця 📍',
     hudMeters: 'вгорі: сонце — мій настрій, кістка — голод, лапки — скільки назбирали 🐾',
@@ -1947,6 +1951,7 @@ const en: AppStrings = {
     supersniffIntro: 'supersniff on! swipe for the next dog, tap to pick up the trail 🐾',
     supersniffExit: 'to get back to walks — tap the logo top-left ↖️',
     swipeCards: 'swipe sideways — there\'s more',
+    scrollMore: 'scroll down — there\'s more',
     radialMenu: 'this is all of us: find a pet, take a walk, drop by a place, say hi, or chat 🐾',
     spotsToggle: 'the pin up top — show or hide places 📍',
     hudMeters: "up top: sun's my mood, bone's hunger, paws are what we've found 🐾",

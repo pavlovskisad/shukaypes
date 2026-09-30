@@ -1,6 +1,14 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
+import {
+  View,
+  Text,
+  StyleSheet,
+  ScrollView,
+  Pressable,
+  ActivityIndicator,
+  type LayoutChangeEvent,
+} from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore, type DailyTaskRow } from '../../stores/gameStore';
@@ -22,6 +30,7 @@ import {
 } from '../../components/ui/LostDogCardStack';
 import { LostDogsModal } from '../../components/ui/LostDogsModal';
 import { SwipeHintCallout } from '../../components/ui/SwipeHintCallout';
+import { ScrollHintCallout } from '../../components/ui/ScrollHintCallout';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
@@ -145,7 +154,49 @@ const TASK_ICON: Record<DailyTaskKey, IconName> = {
 // scroll before; N=3 fits with room to spare on the small end too. Your
 // own row sits above them, so it reads as you against the podium — and
 // the rest of the city is one tap away in the fullscreen board.
+//
+// THREE IS THE FLOOR, NOT THE COUNT. On anything taller than the small
+// end, three rows left the lower third of the card empty (an iPhone 14
+// showed a quarter of a screen of white under «показати всіх»). So the
+// card measures itself — the height of everything that is not a row,
+// and the pitch of one row — and shows as many neighbours as fit the
+// page, three at the least and BOARD_CARD_MAX at the most. Measured,
+// not estimated, for the same reason the 104 above was measured: the
+// row's height moves with the compact portrait size and the font.
 const BOARD_CARD_ROWS = 3;
+const BOARD_CARD_MAX = 7;
+// Kept clear under the fitted rows, so a row that fits by a pixel does
+// not push the card a pixel past its page and break the snap.
+const BOARD_FIT_MARGIN = 16;
+
+// How many rows a board card can hold. `onContent` goes on a wrapper
+// around everything in the card, `onList` on a wrapper around the rows
+// alone. Everything that is not a row is content − list and does not
+// depend on how many rows are showing, so the answer is stable: adding
+// the rows it asks for grows the list and the content by the same
+// amount, and the next measurement asks for the same number.
+function useFitRows(pageH: number, total: number) {
+  const [m, setM] = useState({ content: 0, list: 0, shown: 0 });
+  const shownRef = useRef(0);
+  const onContent = useCallback((e: LayoutChangeEvent) => {
+    const content = e.nativeEvent.layout.height;
+    setM((p) => (p.content === content ? p : { ...p, content }));
+  }, []);
+  const onList = useCallback((e: LayoutChangeEvent) => {
+    const list = e.nativeEvent.layout.height;
+    const shown = shownRef.current;
+    setM((p) => (p.list === list && p.shown === shown ? p : { ...p, list, shown }));
+  }, []);
+  let rows = BOARD_CARD_ROWS;
+  if (m.shown > 0 && m.list > 0 && m.content > 0) {
+    const pitch = m.list / m.shown;
+    const fixed = m.content - m.list;
+    const fit = Math.floor((pageH - BOARD_FIT_MARGIN - fixed) / pitch);
+    rows = Math.max(BOARD_CARD_ROWS, Math.min(BOARD_CARD_MAX, fit));
+  }
+  shownRef.current = Math.min(rows, total);
+  return { rows, onContent, onList };
+}
 // About a BoardRow's height, so the skeleton holds the card's shape.
 const BOARD_SKELETON_ROW_H = 44;
 
@@ -273,6 +324,27 @@ export default function TasksScreen() {
     autoDismissMs: 5000,
     persist: false,
   });
+
+  // «гортай вниз» — the first page is a full screen with nothing peeking
+  // up from under it, so nothing says the tab goes on. Never over the
+  // sideways hint (two voices at once is noise): its later delay lets
+  // that one speak first, and a pending show is cancelled while it is
+  // up and restarts once it is down. Goes on the first scroll — that
+  // scroll is what it was asking for.
+  const scrollHint = useHint('tasks:scroll-down', {
+    ready: currentScreen === 'tasks' && !swipeHint.visible,
+    showDelayMs: 1200,
+    autoDismissMs: 6000,
+    persist: false,
+  });
+  const onScrollPage = useCallback(
+    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+      if (e.nativeEvent.contentOffset.y > 24) scrollHint.dismiss();
+    },
+    // dismiss is a fresh closure each render but only flips state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
 
   // Tapping a dog (card or "see all" row) jumps to the map and puts the
   // dog's own «ходімо?» question up about that pet, in supersniff.
@@ -524,6 +596,11 @@ export default function TasksScreen() {
   // the deck, so on a short phone there is room for one row under it
   // before the card outgrows the screen; three otherwise.
   const historyCardRows = pageH < 600 ? 1 : 3;
+  // The two boards fill their page with as many rows as fit (see
+  // useFitRows). Each measures itself: the happiness card carries an
+  // explainer the standing does not, so the two can differ by a row.
+  const boardFit = useFitRows(pageH, board?.board.length ?? 0);
+  const happyFit = useFitRows(pageH, happy?.board.length ?? 0);
   // One past search. Drawn on the card and, all of them, in the
   // fullscreen list behind «показати всі» (UX-12.7).
   const renderHistoryRow = (q: QuestHistoryRow, i: number) => (
@@ -668,6 +745,8 @@ export default function TasksScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView
+        onScroll={onScrollPage}
+        scrollEventThrottle={64}
         contentContainerStyle={[styles.content, { paddingBottom: tailPad }]}
         style={styles.scroller}
       >
@@ -691,95 +770,99 @@ export default function TasksScreen() {
             board's business. */}
         {board ? (
           <View nativeID="snap-card-board" style={[styles.card, { minHeight: pageH }]}>
-            <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
-            {/* YOU, first and always.
-                The number used to sit small and grey in the header, which
-                put the one figure a player came to read in the least
-                readable place on the card — and left you hunting the list
-                for your own row, or finding you were not in it at all.
-                It is now literally the same row as the ones below it —
-                same columns, same bar drawn against the same leader's
-                area, same shine — separated by a gap and a rule instead
-                of by being a different kind of object. Unranked reads as
-                a dash, which is honest: you are not on the board, and
-                here is what you hold anyway. */}
-            <View style={styles.boardYouRow}>
-              <Pressable
-                onPress={() => onFocusOwnGround(yourPiece)}
-                // The pop every other tappable row gives (UX-9.15).
-                onPressIn={popPressableEvent}
-                disabled={!yourPiece || yourPiece.length < 3}
-                style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
-              >
-                <BoardRow
-                  rank={String(board.you.rank ?? t.profile.unranked)}
-                  name={t.tasks.boardYou}
-                  areaLabel={t.profile.areaValue(board.you.areaM2)}
-                  piece={yourPiece}
-                  color={OWN_COLOR_CSS}
-                  you
-                  avatarUrl={myAvatarUrl}
-                />
-              </Pressable>
-            </View>
-            {board.board.length === 0 ? (
-              <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
-            ) : (
-              <>
-                {board.board.slice(0, BOARD_CARD_ROWS).map((row, i) => {
-                  // The viewer is whoever sits at their own rank — the
-                  // board carries no id for you, and it doesn't need to.
-                  const isYou = board.you.rank === i + 1;
-                  // Yours in the brand blue the map paints your ground
-                  // with; everyone else in the hue theirs is painted —
-                  // the silhouette is the same shape their claim has on
-                  // the map, so colour and outline identify together.
-                  return (
-                    <Pressable
-                      key={row.userId}
-                      // Your own row, wherever it ranks, does what the
-                      // pinned "you" row above does. Picking it as an
-                      // owner pinned a second dog with your nickname and
-                      // repainted your ground in a rival's hue (UX-1.9).
-                      onPress={() =>
-                        isYou ? onFocusOwnGround(row.mainPiece) : onPickOwner(row)
-                      }
-                      onPressIn={popPressableEvent}
-                      disabled={!row.mainPiece || row.mainPiece.length < 3}
-                      style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
-                    >
-                      <BoardRow
-                        rank={String(i + 1)}
-                        name={isYou ? t.tasks.boardYou : row.name}
-                        areaLabel={t.profile.areaValue(row.areaM2)}
-                        piece={row.mainPiece}
-                        color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
-                        you={isYou}
-                        avatarUrl={row.avatarUrl}
-                        owner={isYou ? null : row.owner}
-                      />
+            <View onLayout={boardFit.onContent}>
+              <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
+              {/* YOU, first and always.
+                  The number used to sit small and grey in the header, which
+                  put the one figure a player came to read in the least
+                  readable place on the card — and left you hunting the list
+                  for your own row, or finding you were not in it at all.
+                  It is now literally the same row as the ones below it —
+                  same columns, same bar drawn against the same leader's
+                  area, same shine — separated by a gap and a rule instead
+                  of by being a different kind of object. Unranked reads as
+                  a dash, which is honest: you are not on the board, and
+                  here is what you hold anyway. */}
+              <View style={styles.boardYouRow}>
+                <Pressable
+                  onPress={() => onFocusOwnGround(yourPiece)}
+                  // The pop every other tappable row gives (UX-9.15).
+                  onPressIn={popPressableEvent}
+                  disabled={!yourPiece || yourPiece.length < 3}
+                  style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
+                >
+                  <BoardRow
+                    rank={String(board.you.rank ?? t.profile.unranked)}
+                    name={t.tasks.boardYou}
+                    areaLabel={t.profile.areaValue(board.you.areaM2)}
+                    piece={yourPiece}
+                    color={OWN_COLOR_CSS}
+                    you
+                    avatarUrl={myAvatarUrl}
+                  />
+                </Pressable>
+              </View>
+              {board.board.length === 0 ? (
+                <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
+              ) : (
+                <>
+                  <View onLayout={boardFit.onList}>
+                    {board.board.slice(0, boardFit.rows).map((row, i) => {
+                      // The viewer is whoever sits at their own rank — the
+                      // board carries no id for you, and it doesn't need to.
+                      const isYou = board.you.rank === i + 1;
+                      // Yours in the brand blue the map paints your ground
+                      // with; everyone else in the hue theirs is painted —
+                      // the silhouette is the same shape their claim has on
+                      // the map, so colour and outline identify together.
+                      return (
+                        <Pressable
+                          key={row.userId}
+                          // Your own row, wherever it ranks, does what the
+                          // pinned "you" row above does. Picking it as an
+                          // owner pinned a second dog with your nickname and
+                          // repainted your ground in a rival's hue (UX-1.9).
+                          onPress={() =>
+                            isYou ? onFocusOwnGround(row.mainPiece) : onPickOwner(row)
+                          }
+                          onPressIn={popPressableEvent}
+                          disabled={!row.mainPiece || row.mainPiece.length < 3}
+                          style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
+                        >
+                          <BoardRow
+                            rank={String(i + 1)}
+                            name={isYou ? t.tasks.boardYou : row.name}
+                            areaLabel={t.profile.areaValue(row.areaM2)}
+                            piece={row.mainPiece}
+                            color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
+                            you={isYou}
+                            avatarUrl={row.avatarUrl}
+                            owner={isYou ? null : row.owner}
+                          />
+                        </Pressable>
+                      );
+                    })}
+                  </View>
+                  {/* The rest of the city — same underlined-link
+                      affordance as the carousel counter. It carries real
+                      weight now that the card shows a handful: the board
+                      is the district's shape, the sheet is its full
+                      census. Only when there IS more than the card
+                      shows, same guard as the happiness card below:
+                      "show all" over a board that already fits opened a
+                      sheet repeating the same rows (UX-12.20). */}
+                  {board.board.length > boardFit.rows ? (
+                    <Pressable onPress={openFullBoard} onPressIn={popPressableEvent}>
+                      {({ pressed }) => (
+                        <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
+                          {t.tasks.boardSeeAll}
+                        </Text>
+                      )}
                     </Pressable>
-                  );
-                })}
-                {/* The rest of the city — same underlined-link
-                    affordance as the carousel counter. It carries real
-                    weight now that the card shows a handful: the board
-                    is the district's shape, the sheet is its full
-                    census. Only when there IS more than the card
-                    shows, same guard as the happiness card below:
-                    "show all" over a board that already fits opened a
-                    sheet repeating the same rows (UX-12.20). */}
-                {board.board.length > BOARD_CARD_ROWS ? (
-                  <Pressable onPress={openFullBoard} onPressIn={popPressableEvent}>
-                    {({ pressed }) => (
-                      <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
-                        {t.tasks.boardSeeAll}
-                      </Text>
-                    )}
-                  </Pressable>
-                ) : null}
-              </>
-            )}
+                  ) : null}
+                </>
+              )}
+            </View>
           </View>
         ) : (
           <View nativeID="snap-card-board" style={[styles.card, { minHeight: pageH }]}>
@@ -802,56 +885,60 @@ export default function TasksScreen() {
             counted life, then the top three and «показати всіх». */}
         {happy ? (
           <View nativeID="snap-card-happy" style={[styles.card, { minHeight: pageH }]}>
-            <Text style={styles.cardTitle}>{t.tasks.happinessBoard}</Text>
-            <View style={styles.boardYouRow}>
-              <BoardRow
-                rank={String(happy.you.rank ?? t.profile.unranked)}
-                name={t.tasks.boardYou}
-                areaLabel={t.profile.timeTogether(happy.you.activeS)}
-                piece={undefined}
-                color={OWN_COLOR_CSS}
-                you
-                avatarUrl={myAvatarUrl}
-                trailing={
-                  <Text style={[styles.happyIndex, { width: boardRowSize.trailing }, styles.happyIndexYou]}>
-                    {happy.you.index === null ? t.profile.unranked : String(happy.you.index)}
-                  </Text>
-                }
-              />
+            <View onLayout={happyFit.onContent}>
+              <Text style={styles.cardTitle}>{t.tasks.happinessBoard}</Text>
+              <View style={styles.boardYouRow}>
+                <BoardRow
+                  rank={String(happy.you.rank ?? t.profile.unranked)}
+                  name={t.tasks.boardYou}
+                  areaLabel={t.profile.timeTogether(happy.you.activeS)}
+                  piece={undefined}
+                  color={OWN_COLOR_CSS}
+                  you
+                  avatarUrl={myAvatarUrl}
+                  trailing={
+                    <Text style={[styles.happyIndex, { width: boardRowSize.trailing }, styles.happyIndexYou]}>
+                      {happy.you.index === null ? t.profile.unranked : String(happy.you.index)}
+                    </Text>
+                  }
+                />
+              </View>
+              {happy.board.length === 0 ? (
+                <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
+              ) : (
+                <View onLayout={happyFit.onList}>
+                  {happy.board.slice(0, happyFit.rows).map((row, i) => {
+                    const isYou = happy.you.rank === i + 1;
+                    return (
+                      <BoardRow
+                        key={row.userId}
+                        rank={String(i + 1)}
+                        name={isYou ? t.tasks.boardYou : row.name}
+                        areaLabel={t.profile.timeTogether(row.activeS)}
+                        piece={undefined}
+                        color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
+                        you={isYou}
+                        avatarUrl={row.avatarUrl}
+                        owner={isYou ? null : row.owner}
+                        trailing={
+                          <Text style={[styles.happyIndex, { width: boardRowSize.trailing }, isYou && styles.happyIndexYou]}>{String(row.index)}</Text>
+                        }
+                      />
+                    );
+                  })}
+                </View>
+              )}
+              {happy.board.length > happyFit.rows ? (
+                <Pressable onPress={openFullHappy} onPressIn={popPressableEvent}>
+                  {({ pressed }) => (
+                    <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
+                      {t.tasks.boardSeeAll}
+                    </Text>
+                  )}
+                </Pressable>
+              ) : null}
+              <Text style={styles.boardHint}>{t.tasks.happinessHint}</Text>
             </View>
-            {happy.board.length === 0 ? (
-              <Text style={styles.boardEmpty}>{t.tasks.boardEmpty}</Text>
-            ) : (
-              happy.board.slice(0, BOARD_CARD_ROWS).map((row, i) => {
-                const isYou = happy.you.rank === i + 1;
-                return (
-                  <BoardRow
-                    key={row.userId}
-                    rank={String(i + 1)}
-                    name={isYou ? t.tasks.boardYou : row.name}
-                    areaLabel={t.profile.timeTogether(row.activeS)}
-                    piece={undefined}
-                    color={isYou ? OWN_COLOR_CSS : ownerColorCss(row.userId)}
-                    you={isYou}
-                    avatarUrl={row.avatarUrl}
-                    owner={isYou ? null : row.owner}
-                    trailing={
-                      <Text style={[styles.happyIndex, { width: boardRowSize.trailing }, isYou && styles.happyIndexYou]}>{String(row.index)}</Text>
-                    }
-                  />
-                );
-              })
-            )}
-            {happy.board.length > BOARD_CARD_ROWS ? (
-              <Pressable onPress={openFullHappy} onPressIn={popPressableEvent}>
-                {({ pressed }) => (
-                  <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
-                    {t.tasks.boardSeeAll}
-                  </Text>
-                )}
-              </Pressable>
-            ) : null}
-            <Text style={styles.boardHint}>{t.tasks.happinessHint}</Text>
           </View>
         ) : (
           <View nativeID="snap-card-happy" style={[styles.card, { minHeight: pageH }]}>
@@ -1046,6 +1133,9 @@ export default function TasksScreen() {
         </View>
 
       </ScrollView>
+      {scrollHint.visible ? (
+        <ScrollHintCallout text={t.hints.scrollMore} bottom={tabClearance} />
+      ) : null}
 
       <LostDogsModal
         dogs={seeAllDogsOpen ? sortedDogs : null}
