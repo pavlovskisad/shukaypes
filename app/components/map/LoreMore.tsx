@@ -316,6 +316,13 @@ export function LoreMore({
     };
   }, [open, hasWiki, extract, failed, lore.sourceLang, lore.wikipediaTitle]);
 
+  // A failed lead is forgotten when the block closes, so reopening asks
+  // again. It used to latch for the life of the bubble: one dropped
+  // request and "read more" could never fetch the lead again.
+  useEffect(() => {
+    if (!open) setFailed(false);
+  }, [open]);
+
   const paper = tone === 'paper';
   const hairline = paper ? '1px solid rgba(0,0,0,0.12)' : '1px solid rgba(255,255,255,0.12)';
   const fadeTo = paper ? '#ffffff' : VOICE.background;
@@ -363,7 +370,9 @@ export function LoreMore({
               </div>
             ) : null}
             {empty ? <div>{t.sniff.nothingMore}</div> : null}
-            {hasWiki && !failed ? (
+            {/* Whenever there is an article, lead or no lead: when the
+                fetch failed the link is the one way left to the text. */}
+            {hasWiki ? (
               <a
                 href={wikipediaArticleUrl(lore.sourceLang!, lore.wikipediaTitle!)}
                 target="_blank"
@@ -457,11 +466,26 @@ export function LoreMore({
 // so a long name wraps clear of it instead of underneath it.
 export const HEART_INSET = 26;
 
+// How long "couldn't save" stays under the heart after a refused toggle.
+const SAVE_FAILED_MS = 2500;
+
 export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
   const t = useStrings();
   const saved = useGameStore((s) => s.loreFavourites.some((f) => f.id === lore.id));
   const toggle = useGameStore((s) => s.toggleLoreFavourite);
+  // The toggle is optimistic, so a refused one flips the heart back on
+  // its own — which, unexplained, read as the tap not having counted.
+  // A short line under the heart says it did, and did not go through.
+  const [saveFailed, setSaveFailed] = useState(false);
+  const failTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (failTimer.current) clearTimeout(failTimer.current);
+    },
+    [],
+  );
   return (
+    <>
     <div
       role="button"
       aria-label={saved ? t.sniff.saved : t.sniff.save}
@@ -469,7 +493,13 @@ export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
       onClick={(e) => {
         e.stopPropagation();
         playPop(e.currentTarget);
-        void toggle(lore);
+        setSaveFailed(false);
+        void toggle(lore).then((ok) => {
+          if (ok) return;
+          setSaveFailed(true);
+          if (failTimer.current) clearTimeout(failTimer.current);
+          failTimer.current = setTimeout(() => setSaveFailed(false), SAVE_FAILED_MS);
+        });
       }}
       style={{
         position: 'absolute',
@@ -489,5 +519,30 @@ export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
     >
       {saved ? '♥' : '♡'}
     </div>
+    {saveFailed ? (
+      <div
+        role="status"
+        style={{
+          position: 'absolute',
+          // Just under the heart's 40 px target, right-aligned to it.
+          top: 42,
+          right: 8,
+          fontSize: TYPE.caption,
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          color: 'inherit',
+          // The bubble's own ground, so the line reads over the title
+          // it may overlap for its moment on screen.
+          background: tone === 'paper' ? '#ffffff' : VOICE.background,
+          padding: `2px ${S.xs}px`,
+          borderRadius: 6,
+          zIndex: 1,
+        }}
+      >
+        {t.sniff.saveFailed}
+      </div>
+    ) : null}
+    </>
   );
 }

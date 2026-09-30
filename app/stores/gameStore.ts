@@ -261,6 +261,10 @@ interface GameState {
   // from "fetched but zero nearby" so the per-category snap cards can
   // render skeletons up-front instead of popping in and reordering.
   spotsLoaded: boolean;
+  // The last syncSpots call failed. Settled is not the same as empty:
+  // with this set and no spots, the tab says "couldn't load" rather
+  // than "nothing nearby", which offline is a claim nobody checked.
+  spotsError: boolean;
   selectedSpotId: string | null;
   // A territory the map should fly to and frame — set by tapping a row
   // on the standing (the owner's largest piece rides along from the
@@ -315,6 +319,9 @@ interface GameState {
   // and toggles optimistically.
   loreFavourites: LoreFavourite[];
   loreFavouritesLoaded: boolean;
+  // Same split for the hearted list: the last load failed, so an empty
+  // list is unknown rather than "nothing saved yet".
+  loreFavouritesError: boolean;
   // A saved place to put back on the map. ONE-SHOT, like
   // focusedTerritory: the spots tab sets it and routes to the map, the
   // sniff bubble shows it and clears it.
@@ -454,6 +461,13 @@ interface GameState {
   // reopened from the pill under the HUD — closing it must never be a
   // one-way door, which is what "seen" used to make it.
   dailyTasks: DailyTasks;
+  // Whether dailyTasks is the server's answer yet. The blank day it
+  // starts as has no rows, so without this the card could not tell
+  // "still asking" or "the call failed" from a day with nothing in it,
+  // and showed a bare "0 / 0" for all three. Once a read has landed a
+  // later failure keeps it 'ready' — the rows on screen are still
+  // today's, just not the freshest.
+  dailyTasksStatus: 'loading' | 'ready' | 'error';
   syncing: boolean;
   lastSyncError: string | null;
   // Bumped every time a paw or bone gets collected (auto OR forced).
@@ -506,7 +520,9 @@ interface GameState {
   // every few seconds, while the territory in the other 94% changes every
   // few minutes and is expensive to compute.
   syncPresence: (pos: LatLng) => Promise<void>;
-  pokePlayer: (targetId: string) => Promise<void>;
+  // Resolves true when the server took the wave, false when it did not,
+  // so the button only says "waved!" about a wave that went out.
+  pokePlayer: (targetId: string) => Promise<boolean>;
   setSelectedDog: (id: string | null) => void;
   // See searchIntentDogId. Pass null to drop an intent unacted on.
   setSearchIntent: (id: string | null) => void;
@@ -516,7 +532,9 @@ interface GameState {
   setFocusedTerritory: (v: GameState['focusedTerritory']) => void;
   setPinnedGuest: (v: GameState['pinnedGuest']) => void;
   loadLoreFavourites: () => Promise<void>;
-  toggleLoreFavourite: (lore: LoreRef) => Promise<void>;
+  // Resolves false when the server refused and the heart was put back,
+  // so the heart can say so instead of silently undoing itself.
+  toggleLoreFavourite: (lore: LoreRef) => Promise<boolean>;
   setFocusedLore: (lore: LoreRef | null) => void;
   // The one mode switch. Every entry into a mode goes through here so the
   // clear-slate rules below are applied exactly once, in one place.
@@ -681,11 +699,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   lastSpotsFetchPos: null,
   spotsLoading: false,
   spotsLoaded: false,
+  spotsError: false,
   selectedSpotId: null,
   focusedTerritory: null,
   pinnedGuest: null,
   loreFavourites: [],
   loreFavouritesLoaded: false,
+  loreFavouritesError: false,
   focusedLore: null,
   // Default OFF — the app opens on a clean 3D city view; users turn the
   // spots layer on via the HUD pin toggle (there's a one-shot hint for it).
@@ -717,6 +737,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Initial state is empty for today's date; refreshDailyTasks() pulls
   // from the server on first app load and again on map-tab refocus.
   dailyTasks: blankTasks(),
+  dailyTasksStatus: 'loading',
   syncing: false,
   lastSyncError: null,
   collectPulse: 0,
@@ -1249,8 +1270,11 @@ export const useGameStore = create<GameState>((set, get) => ({
   pokePlayer: async (targetId) => {
     try {
       await api.poke(targetId);
+      return true;
     } catch {
-      // Best-effort — a failed poke is a no-op.
+      // Nothing to undo — a failed poke is a no-op — but the caller
+      // must not tell the walker it was sent.
+      return false;
     }
   },
 
@@ -1274,7 +1298,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (get().spots.length > 0 && !movedFar) {
       // Cache hit — still mark loaded so the spots tab knows it can
       // stop showing skeletons.
-      set({ spotsLoaded: true });
+      set({ spotsLoaded: true, spotsError: false });
       return;
     }
     set({ spotsLoading: true });
@@ -1296,13 +1320,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         const kept = s.selectedSpotId ? s.spots.find((x) => x.id === s.selectedSpotId) : null;
         const next =
           kept && !spots.some((x) => x.id === kept.id) ? [...spots, kept] : spots;
-        return { spots: next, lastSpotsFetchPos: pos, spotsLoading: false, spotsLoaded: true };
+        return {
+          spots: next,
+          lastSpotsFetchPos: pos,
+          spotsLoading: false,
+          spotsLoaded: true,
+          spotsError: false,
+        };
       });
     } catch (err) {
       if (seq !== spotsSeq) return;
       set({
         spotsLoading: false,
         spotsLoaded: true,
+        spotsError: true,
         lastSyncError: (err as Error).message,
       });
     }
@@ -1319,12 +1350,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   loadLoreFavourites: async () => {
     try {
       const { favourites } = await api.loreFavourites();
-      set({ loreFavourites: favourites, loreFavouritesLoaded: true });
+      set({ loreFavourites: favourites, loreFavouritesLoaded: true, loreFavouritesError: false });
     } catch {
       // Offline or a 5xx: the hearts simply read as unsaved until the
-      // next load. Marked loaded so the list shows its empty state
-      // rather than a skeleton forever.
-      set({ loreFavouritesLoaded: true });
+      // next load. Marked loaded so the list leaves its skeleton, and
+      // flagged so it says the load failed rather than "nothing saved".
+      set({ loreFavouritesLoaded: true, loreFavouritesError: true });
     }
   },
 
@@ -1337,10 +1368,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ loreFavourites: was.filter((f) => f.id !== lore.id) });
       try {
         await api.unsaveLore(lore.id);
+        return true;
       } catch {
         set({ loreFavourites: was });
+        return false;
       }
-      return;
     }
     const entry: LoreFavourite = {
       id: lore.id,
@@ -1357,8 +1389,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ loreFavourites: [entry, ...was] });
     try {
       await api.saveLore(lore.id);
+      return true;
     } catch {
       set({ loreFavourites: was });
+      return false;
     }
   },
 
@@ -1572,12 +1606,16 @@ export const useGameStore = create<GameState>((set, get) => ({
   },
 
   refreshDailyTasks: async () => {
+    // A retry after a failure shows the skeleton again while it asks,
+    // so the tap visibly did something.
+    if (get().dailyTasksStatus === 'error') set({ dailyTasksStatus: 'loading' });
     try {
       const day = await api.getDailyTasks();
-      set({ dailyTasks: day });
+      set({ dailyTasks: day, dailyTasksStatus: 'ready' });
     } catch {
       // Network blip — keep what we last read. The next refresh-on-
-      // focus reconciles.
+      // focus reconciles. With nothing read yet, the card says so.
+      if (get().dailyTasksStatus !== 'ready') set({ dailyTasksStatus: 'error' });
     }
     // One-time legacy localStorage cleanup. Cheap, idempotent.
     dropLegacyStorage();

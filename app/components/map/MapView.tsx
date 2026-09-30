@@ -939,6 +939,36 @@ const DECK_ANIM_MS = MOTION.sheetMs;
 
   useGameLoop(showBubble);
 
+  // "I've seen them", after its confirm — from the pet card, and from
+  // the ad reader's contacts note (UX-5.5). One place for the report and
+  // the thanks it says, so the two cannot drift. `ok` is whether the
+  // server took the report; `refusal` is the line said when it did not
+  // (null for a tap whose first report is still on the wire), so the
+  // reader — which sits above the map, over the bubble — can say it too.
+  const reportSeen = useCallback(
+    async (d: { id: string; name: string }): Promise<{ ok: boolean; refusal: string | null }> => {
+      const res = await useGameStore.getState().reportSighting(d.id);
+      // The first tap's report is still on the wire; it will say
+      // its own thanks.
+      if (res?.reason === 'in-flight') return { ok: false, refusal: null };
+      if (res?.ok && res.trusted) {
+        showBubble(t.bubbles.sightingMoved(d.name), 5000);
+      } else if (res?.ok) {
+        showBubble(t.bubbles.sightingLogged, 5000);
+      } else if (res?.reason === 'no-location') {
+        // Not a failure to send — a refusal to invent. Say which,
+        // or the walker retries a thing that cannot work.
+        showBubble(t.bubbles.sightingNoLocation, 6000);
+        return { ok: false, refusal: t.bubbles.sightingNoLocation };
+      } else {
+        showBubble(t.bubbles.sightingFailed, 5000);
+        return { ok: false, refusal: t.bubbles.sightingFailed };
+      }
+      return { ok: true, refusal: null };
+    },
+    [showBubble, t],
+  );
+
   // Dev affordance: `?terrReset=1` wipes YOUR territory once on load, so
   // the mechanic can be re-tested from a clean slate without hunting rows
   // in the database. Ref-guarded so a re-render can't fire it twice, and
@@ -4886,23 +4916,9 @@ const DECK_ANIM_MS = MOTION.sheetMs;
           setSelectedDog(null);
           setPostDog({ id: d.id, name: d.name });
         }}
-        onReportSighting={async (d) => {
+        onReportSighting={(d) => {
           setSelectedDog(null);
-          const res = await useGameStore.getState().reportSighting(d.id);
-          // The first tap's report is still on the wire; it will say
-          // its own thanks.
-          if (res?.reason === 'in-flight') return;
-          if (res?.ok && res.trusted) {
-            showBubble(t.bubbles.sightingMoved(d.name), 5000);
-          } else if (res?.ok) {
-            showBubble(t.bubbles.sightingLogged, 5000);
-          } else if (res?.reason === 'no-location') {
-            // Not a failure to send — a refusal to invent. Say which,
-            // or the walker retries a thing that cannot work.
-            showBubble(t.bubbles.sightingNoLocation, 6000);
-          } else {
-            showBubble(t.bubbles.sightingFailed, 5000);
-          }
+          void reportSeen(d);
         }}
         onStartSearch={(d) => {
           // The generated 4-step quest is retired here for now (chat can
@@ -4924,6 +4940,11 @@ const DECK_ANIM_MS = MOTION.sheetMs;
         dogId={postDog?.id ?? null}
         dogName={postDog?.name}
         onClose={() => setPostDog(null)}
+        // The reader's "i've seen them" under its contacts note (UX-5.5).
+        // Same report and same thanks as the pet card's; the reader
+        // stays open and reloads, since a sighting is what opens the
+        // rest of the ad.
+        onReportSighting={postDog ? () => reportSeen(postDog) : undefined}
       />
 
       <SpotModal

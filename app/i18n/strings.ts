@@ -276,6 +276,9 @@ export interface AppStrings {
     // Accessible names of the heart on a landmark's bubble.
     save: string;
     saved: string;
+    // Under the heart when the save (or the unsave) did not go through
+    // and the heart has flipped back.
+    saveFailed: string;
     sniffingRoute: string;
     letsGoHere: string;
     // The card a long-press leaves when there is nothing to tell here,
@@ -395,6 +398,8 @@ export interface AppStrings {
     noTerritory: string;
     poke: string;
     poked: string;
+    // The wave did not reach the server — said instead of "waved!".
+    pokeFailed: string;
     close: string;
     owner: (nick: string) => string;
   };
@@ -434,6 +439,10 @@ export interface AppStrings {
   connection: {
     offline: string;
     slow: string;
+    // A card whose fetch failed, in place of its content. Not the card's
+    // empty state: "nothing nearby" said offline is a claim about the
+    // city that the app never checked. The whole line is the retry.
+    loadFailed: string;
   };
   modals: {
     common: { close: string };
@@ -464,8 +473,8 @@ export interface AppStrings {
       title: string;
       titleNamed: (name: string) => string;
       loading: string;
-      // The request failed — "try again", which is NOT the same thing as
-      // an ad we never stored.
+      // The request failed — the retry button under it asks again, which
+      // is NOT the same thing as an ad we never stored.
       failed: string;
       // We have no body for this pet: everything ingested before 17 Aug,
       // which is most of the base for weeks yet. Must read as "it lives
@@ -482,6 +491,8 @@ export interface AppStrings {
       contactsMaskedBySource: string;
       // Why the text has holes in it.
       contactsAfterSighting: string;
+      // Under a failed load: asks again.
+      retry: string;
     };
     spot: {
       walkHere: string;
@@ -966,6 +977,7 @@ const uk: AppStrings = {
     wikipedia: 'вікіпедія ↗',
     save: 'зберегти місце',
     saved: 'збережено — натисни, щоб прибрати',
+    saveFailed: 'не вийшло — спробуй ще',
     sniffingRoute: 'нюхаю шлях…',
     letsGoHere: 'ходімо сюди →',
     nothingTitle: 'тут поки тиша',
@@ -1089,6 +1101,7 @@ const uk: AppStrings = {
     noTerritory: 'ще без території',
     poke: 'помахати 👋',
     poked: 'помахали!',
+    pokeFailed: 'не вийшло помахати',
     close: 'закрити',
     owner: (nick) => `господар ${nick}`,
   },
@@ -1123,6 +1136,7 @@ const uk: AppStrings = {
   connection: {
     offline: 'звʼязку немає — наздоженемо, щойно зʼявиться',
     slow: 'звʼязок повільний…',
+    loadFailed: 'не вдалося завантажити — натисни, щоб спробувати ще',
   },
   modals: {
     common: { close: 'закрити' },
@@ -1150,7 +1164,7 @@ const uk: AppStrings = {
       // which way. A separator sidesteps the case entirely.
       titleNamed: (name) => `${name} · оголошення`,
       loading: 'відкриваю…',
-      failed: 'не вдалося завантажити. спробуй ще раз.',
+      failed: 'не вдалося завантажити.',
       notStored:
         'повного тексту цього оголошення в нас немає — воно з’явилось раніше, ніж ми почали їх зберігати.',
       originalAfterSighting:
@@ -1160,6 +1174,7 @@ const uk: AppStrings = {
         'позначиш, що бачив цю тваринку — покажу оголошення повністю і відкрию оригінал.',
       contactsMaskedBySource:
         'номер сховала сама olx — вона показує його лише після натискання. відкрий оригінал і тисни «показати телефон».',
+      retry: 'спробувати ще',
     },
     spot: {
       walkHere: 'ходімо сюди',
@@ -1640,6 +1655,7 @@ const en: AppStrings = {
     wikipedia: 'wikipedia ↗',
     save: 'save this place',
     saved: 'saved — tap to remove',
+    saveFailed: "didn't go through — try again",
     sniffingRoute: 'sniffing route…',
     letsGoHere: "let's go here →",
     nothingTitle: 'quiet here for now',
@@ -1743,6 +1759,7 @@ const en: AppStrings = {
     noTerritory: 'no territory yet',
     poke: 'wave 👋',
     poked: 'waved!',
+    pokeFailed: "couldn't wave",
     close: 'close',
     owner: (nick) => `owner ${nick}`,
   },
@@ -1772,6 +1789,7 @@ const en: AppStrings = {
   connection: {
     offline: "no connection — we'll catch up when it's back",
     slow: 'connection is slow…',
+    loadFailed: "couldn't load — tap to try again",
   },
   modals: {
     common: { close: 'close' },
@@ -1795,7 +1813,7 @@ const en: AppStrings = {
       title: 'the post',
       titleNamed: (name) => `${name} · the post`,
       loading: 'opening…',
-      failed: "couldn't load that. try again.",
+      failed: "couldn't load that.",
       notStored:
         "we don't have the full text of this one — it was posted before we started keeping them.",
       originalAfterSighting:
@@ -1805,6 +1823,7 @@ const en: AppStrings = {
         "mark that you've seen this pet and i'll show the whole post and open the original.",
       contactsMaskedBySource:
         'olx hid the number itself — it only shows in full after a tap. open the original and tap "show phone".',
+      retry: 'try again',
     },
     spot: {
       walkHere: 'walk here',

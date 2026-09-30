@@ -93,12 +93,26 @@ function ShimmerBar({ width = 56 }: { width?: number }) {
   );
 }
 
-function StatRow({ label, value }: { label: string; value: string | number | undefined }) {
+// `failed`: the fetch behind this value gave up, so the row settles on a
+// dash instead of shimmering for as long as the tab is open.
+function StatRow({
+  label,
+  value,
+  failed = false,
+}: {
+  label: string;
+  value: string | number | undefined;
+  failed?: boolean;
+}) {
   return (
     <View style={styles.statRow}>
       <Text style={styles.statLabel}>{label}</Text>
       {value === undefined || value === null ? (
-        <ShimmerBar width={50} />
+        failed ? (
+          <Text style={styles.statValue}>—</Text>
+        ) : (
+          <ShimmerBar width={50} />
+        )
       ) : (
         <Text style={styles.statValue}>{value}</Text>
       )}
@@ -121,6 +135,11 @@ const PORTRAIT_INSET = 0;
 export default function ProfileScreen() {
   const t = useStrings();
   const companionName = useGameStore((s) => s.companionName);
+  // The HUD's own live values, for the meters until /profile/me lands —
+  // a 0 there read as a starving, miserable dog on every visit.
+  const liveHappiness = useGameStore((s) => s.happiness);
+  const liveHunger = useGameStore((s) => s.hunger);
+  const livePaws = useGameStore((s) => s.tokensCollected);
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const avatarUrl = useAccessStore((s) => s.me?.avatarUrl ?? null);
   // The account sheet — nickname, the pet, a new password, and the way
@@ -136,11 +155,16 @@ export default function ProfileScreen() {
     window.location.replace('/');
   }, []);
   const [data, setData] = useState<ProfileData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // The last /profile/me read failed. A flag, not the message: the raw
+  // exception text ("Failed to fetch", a server string) used to be
+  // printed under the deck, untranslated. It goes to the console now,
+  // and the page says the translated thing.
+  const [failed, setFailed] = useState(false);
   // Territory standing. Its own fetch rather than a field on /profile/me
   // because the board is cached server-side on a different clock — and
   // a failure here should cost the territory card, not the whole page.
   const [board, setBoard] = useState<TerritoryBoard | null>(null);
+  const [boardFailed, setBoardFailed] = useState(false);
 
   // Mount the dog scene only when this tab is BOTH the focused screen
   // AND the document is visible. Without this, the scene runs forever
@@ -188,21 +212,24 @@ export default function ProfileScreen() {
     try {
       const fresh = (await api.getProfile()) as ProfileData | { error: string };
       if ('error' in fresh) {
-        setError(fresh.error);
+        console.warn('[profile] load failed:', fresh.error);
+        setFailed(true);
         return;
       }
       setData(fresh);
-      setError(null);
+      setFailed(false);
     } catch (err) {
-      setError((err as Error).message);
+      console.warn('[profile] load failed:', err);
+      setFailed(true);
     }
     // Territory is a separate trip and a separate failure: if the board
     // is unreachable the card just shows dashes, and the rest of the
-    // profile is unaffected.
+    // profile is unaffected. A board already read stays up.
     try {
       setBoard(await api.territoryLeaderboard());
+      setBoardFailed(false);
     } catch {
-      setBoard(null);
+      setBoardFailed(true);
     }
   }, []);
 
@@ -285,7 +312,7 @@ export default function ProfileScreen() {
                 />
               </View>
             ) : null}
-            <StatRow label={t.profile.stats.daysPlayed} value={data?.stats.daysPlayed} />
+            <StatRow label={t.profile.stats.daysPlayed} value={data?.stats.daysPlayed} failed={failed} />
           </View>
         ),
       },
@@ -298,9 +325,10 @@ export default function ProfileScreen() {
             <StatRow
               label={t.profile.stats.distanceWalked}
               value={data ? formatDistance(data.user.totalDistanceMeters, t.units, { snap: false }) : undefined}
+              failed={failed}
             />
-            <StatRow label={t.profile.stats.pawsCollected} value={data?.stats.pawsCollected} />
-            <StatRow label={t.profile.stats.bonesEaten} value={data?.stats.bonesEaten} />
+            <StatRow label={t.profile.stats.pawsCollected} value={data?.stats.pawsCollected} failed={failed} />
+            <StatRow label={t.profile.stats.bonesEaten} value={data?.stats.bonesEaten} failed={failed} />
           </View>
         ),
       },
@@ -313,6 +341,7 @@ export default function ProfileScreen() {
             <StatRow
               label={t.profile.stats.territoryArea}
               value={board ? t.profile.areaValue(board.you.areaM2) : undefined}
+              failed={boardFailed}
             />
             <StatRow
               label={t.profile.stats.territoryRank}
@@ -323,6 +352,7 @@ export default function ProfileScreen() {
                     : t.profile.unranked
                   : undefined
               }
+              failed={boardFailed}
             />
             {/* Who's ahead. One name is enough on a card this size — the
                 point is "someone holds more than you", not a full board. */}
@@ -335,6 +365,7 @@ export default function ProfileScreen() {
                     : t.profile.unranked
                   : undefined
               }
+              failed={boardFailed}
             />
           </View>
         ),
@@ -345,20 +376,22 @@ export default function ProfileScreen() {
           <View style={styles.sectionCard}>
             <HandDrawnFrame radius={R.card} />
             <Text style={styles.sectionTitle}>{t.profile.stats.helpingPets}</Text>
-            <StatRow label={t.profile.stats.petsSearched} value={data?.stats.petsSearched} />
+            <StatRow label={t.profile.stats.petsSearched} value={data?.stats.petsSearched} failed={failed} />
             <StatRow
               label={t.profile.stats.searchesCompleted}
               value={data?.stats.questsCompleted}
+              failed={failed}
             />
             <StatRow
               label={t.profile.stats.sightingsReported}
               value={data?.stats.sightingsReported}
+              failed={failed}
             />
           </View>
         ),
       },
     ],
-    [t, data, board, companionName, avatarUrl],
+    [t, data, failed, board, boardFailed, companionName, avatarUrl],
   );
 
   const skyColor = SCENE_SKY[sceneMode];
@@ -411,21 +444,21 @@ export default function ProfileScreen() {
         <View style={styles.hudPills}>
           <MeterPill
             icon="sun"
-            value={data?.companion.happiness ?? 0}
+            value={data?.companion.happiness ?? liveHappiness}
             label={t.hud.happiness}
             solid
             showValue={false}
           />
           <MeterPill
             icon="bone"
-            value={data?.companion.hunger ?? 0}
+            value={data?.companion.hunger ?? liveHunger}
             label={t.hud.hunger}
             solid
             showValue={false}
           />
           <CounterPill
             icon="paws"
-            value={data?.stats.pawsCollected ?? 0}
+            value={data?.stats.pawsCollected ?? livePaws}
             label={t.hud.paws}
             solid
           />
@@ -472,7 +505,15 @@ export default function ProfileScreen() {
         />
       </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {/* Only when there is nothing to show: with an earlier read on
+          screen, a failed refresh changes nothing the page says, and the
+          connection banner already covers being offline. The line is
+          the retry. */}
+      {failed && !data ? (
+        <Pressable onPress={() => void refetch()} accessibilityRole="button">
+          <Text style={styles.error}>{t.connection.loadFailed}</Text>
+        </Pressable>
+      ) : null}
       {editOpen ? (
         <AccountEditSheet onClose={() => setEditOpen(false)} onSaved={() => void refetch()} onLoggedOut={afterLogout} />
       ) : null}

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -35,6 +35,7 @@ import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
 import { useHint } from '../../hooks/useHint';
 import { useAccessStore } from '../../stores/accessStore';
 import { HandDrawnBar } from '../../components/ui/HandDrawn';
+import { LOOP_VIEW_PROPS } from '../../utils/motion';
 
 interface QuestHistoryRow {
   id: string;
@@ -142,6 +143,37 @@ const TASK_ICON: Record<DailyTaskKey, IconName> = {
 // own row sits above them, so it reads as you against the podium — and
 // the rest of the city is one tap away in the fullscreen board.
 const BOARD_CARD_ROWS = 3;
+// About a BoardRow's height, so the skeleton holds the card's shape.
+const BOARD_SKELETON_ROW_H = 44;
+
+// Grey shimmer rows standing in for a card's list while it loads, so a
+// card is there, titled, from the first paint instead of popping in and
+// shoving the deck down. The `shimmer` keyframe is global
+// (public/index.html), the same one the profile's stat bars use.
+function SkeletonRows({ count, height }: { count: number; height: number }) {
+  return (
+    <View style={{ gap: S.m }}>
+      {Array.from({ length: count }, (_, i) => (
+        <View
+          key={i}
+          {...LOOP_VIEW_PROPS}
+          style={
+            {
+              height,
+              borderRadius: 8,
+              backgroundColor: '#eeeeee',
+              backgroundImage:
+                'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.75) 50%, transparent 70%)',
+              backgroundSize: '200% 100%',
+              backgroundRepeat: 'no-repeat',
+              animation: 'shimmer 1.8s ease-in-out infinite',
+            } as unknown as object
+          }
+        />
+      ))}
+    </View>
+  );
+}
 
 // One bar on the standing: the owner's colour, a length, and the shine.
 //
@@ -149,6 +181,7 @@ export default function TasksScreen() {
   const t = useStrings();
   const router = useRouter();
   const dailyTasks = useGameStore((s) => s.dailyTasks);
+  const dailyTasksStatus = useGameStore((s) => s.dailyTasksStatus);
   const refresh = useGameStore((s) => s.refreshDailyTasks);
   const lostDogs = useGameStore((s) => s.lostDogs);
   const lostDogsLoaded = useGameStore((s) => s.lostDogsLoaded);
@@ -156,19 +189,22 @@ export default function TasksScreen() {
   const setSearchIntent = useGameStore((s) => s.setSearchIntent);
   const currentScreen = useGameStore((s) => s.currentScreen);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
-  // The territory standing. Null until the first fetch settles; a
-  // failed fetch leaves it null and the card simply doesn't render,
-  // same as the quest history above.
+  // The territory standing. Null until the first fetch lands; until
+  // then the card shows its title over skeleton rows, and if the fetch
+  // failed, a retry line (boardFailed) — it used to not render at all,
+  // which offline read as "there is no standing".
   const [board, setBoard] = useState<{
     board: TerritoryRanking[];
     you: { areaM2: number; rank: number | null };
   } | null>(null);
   // The happiness index board (D-75), same lifecycle as the standing:
-  // null until fetched, and a failed fetch leaves the card unrendered.
+  // null until fetched, skeleton meanwhile, retry line on failure.
   const [happy, setHappy] = useState<{
     board: HappinessRanking[];
     you: { index: number | null; activeS: number; rank: number | null };
   } | null>(null);
+  const [boardFailed, setBoardFailed] = useState(false);
+  const [happyFailed, setHappyFailed] = useState(false);
   // Open the "see all" fullscreen list when truthy.
   const [seeAllDogsOpen, setSeeAllDogsOpen] = useState(false);
   // The full standing — nullable data doubles as the modal's open flag,
@@ -404,29 +440,40 @@ export default function TasksScreen() {
   // The territory standing, refetched on focus. Its own trip and its
   // own failure: the board lives behind a different query from the
   // quest history, and one being down should not blank the other.
+  // A ticket rather than a closure flag so the retry line can call it
+  // too; leaving the tab bumps it, and anything still in flight lands
+  // on nothing.
+  const boardsSeq = useRef(0);
+  const loadBoards = useCallback(() => {
+    const seq = ++boardsSeq.current;
+    setBoardFailed(false);
+    setHappyFailed(false);
+    api
+      .territoryLeaderboard()
+      .then((res) => {
+        if (seq === boardsSeq.current) setBoard(res);
+      })
+      .catch(() => {
+        // A board already on screen stays up; only an empty card says
+        // it failed.
+        if (seq === boardsSeq.current) setBoardFailed(true);
+      });
+    api
+      .happinessLeaderboard()
+      .then((res) => {
+        if (seq === boardsSeq.current) setHappy(res);
+      })
+      .catch(() => {
+        if (seq === boardsSeq.current) setHappyFailed(true);
+      });
+  }, []);
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      api
-        .territoryLeaderboard()
-        .then((res) => {
-          if (!cancelled) setBoard(res);
-        })
-        .catch(() => {
-          /* fail silent — the card just doesn't render */
-        });
-      api
-        .happinessLeaderboard()
-        .then((res) => {
-          if (!cancelled) setHappy(res);
-        })
-        .catch(() => {
-          /* same: no card */
-        });
+      loadBoards();
       return () => {
-        cancelled = true;
+        boardsSeq.current++;
       };
-    }, []),
+    }, [loadBoards]),
   );
 
   // Your own silhouette, when the board already carries it: if you sit in
@@ -475,7 +522,6 @@ export default function TasksScreen() {
   // cannot check an expression written inline in a dependency array, and
   // getting this set wrong means the pop animation silently stops.
   const noLostDogs = lostDogsLoaded && sortedDogs.length === 0;
-  const hasBoard = board != null;
 
   // Pop the dominant snap-card when it changes. Uses
   // IntersectionObserver against the cards' stable nativeIDs to
@@ -571,14 +617,14 @@ export default function TasksScreen() {
     };
     // Re-run only when the SET of rendered snap-cards changes —
     // i.e. when a card disappears (lost-pets hidden after a
-    // load-with-zero, the standing before its first fetch) or
-    // reappears. The lost-pets card is now always rendered upfront
+    // load-with-zero) or reappears. The two boards are always
+    // rendered now, skeleton first, so they no longer flip it. The lost-pets card is now always rendered upfront
     // via the skeleton placeholder, so the dogs fetch settling no
     // longer flips this — the same DOM node carries the data swap
     // without needing a fresh observer. Past searches used to be on
     // this list; they are a section of the lost-pets card now, so
     // they change its height and never the set.
-  }, [noLostDogs, hasBoard]);
+  }, [noLostDogs]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -693,7 +739,18 @@ export default function TasksScreen() {
               </>
             )}
           </View>
-        ) : null}
+        ) : (
+          <View nativeID="snap-card-board" style={[styles.card, { minHeight: pageH }]}>
+            <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
+            {boardFailed ? (
+              <Pressable onPress={loadBoards} accessibilityRole="button">
+                <Text style={styles.boardEmpty}>{t.connection.loadFailed}</Text>
+              </Pressable>
+            ) : (
+              <SkeletonRows count={BOARD_CARD_ROWS + 1} height={BOARD_SKELETON_ROW_H} />
+            )}
+          </View>
+        )}
 
         {/* The happiness index (D-75): whose dog lives the happiest
             life — an all-time, time-weighted average of the meter over
@@ -754,7 +811,18 @@ export default function TasksScreen() {
             ) : null}
             <Text style={styles.boardHint}>{t.tasks.happinessHint}</Text>
           </View>
-        ) : null}
+        ) : (
+          <View nativeID="snap-card-happy" style={[styles.card, { minHeight: pageH }]}>
+            <Text style={styles.cardTitle}>{t.tasks.happinessBoard}</Text>
+            {happyFailed ? (
+              <Pressable onPress={loadBoards} accessibilityRole="button">
+                <Text style={styles.boardEmpty}>{t.connection.loadFailed}</Text>
+              </Pressable>
+            ) : (
+              <SkeletonRows count={BOARD_CARD_ROWS + 1} height={BOARD_SKELETON_ROW_H} />
+            )}
+          </View>
+        )}
 
         {/* Lost pets nearby — the most actionable thing on the screen,
             under the standing. Always rendered (even while the dogs
@@ -838,10 +906,22 @@ export default function TasksScreen() {
             <Text style={[styles.cardTitle, styles.cardTitleInline]}>
               {t.tasks.dailyTasks}
             </Text>
-            <Text style={styles.dailyCount}>
-              {doneCount} / {taskRows.length}
-            </Text>
+            {/* No tally over no rows: "0 / 0" read as a day with nothing
+                in it, when the day had not loaded. */}
+            {taskRows.length > 0 ? (
+              <Text style={styles.dailyCount}>
+                {doneCount} / {taskRows.length}
+              </Text>
+            ) : null}
           </View>
+          {taskRows.length === 0 && dailyTasksStatus === 'error' ? (
+            <Pressable onPress={() => void refresh()} accessibilityRole="button">
+              <Text style={styles.boardEmpty}>{t.connection.loadFailed}</Text>
+            </Pressable>
+          ) : null}
+          {taskRows.length === 0 && dailyTasksStatus === 'loading' ? (
+            <SkeletonRows count={6} height={48} />
+          ) : null}
           {/* Nothing else up here. The header is a label and a tally;
               what the day is worth was a third number saying what the
               six rows below already say one at a time, and the summary
