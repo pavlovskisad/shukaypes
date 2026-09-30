@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -122,21 +122,18 @@ export default function ProfileScreen() {
   const companionName = useGameStore((s) => s.companionName);
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const avatarUrl = useAccessStore((s) => s.me?.avatarUrl ?? null);
-  const nudgeDoor = useAccessStore((s) => s.nudgeDoor);
-  const setAppMode = useGameStore((s) => s.setAppMode);
-  const router = useRouter();
   // The account sheet — nickname, the pet, a new password, and the way
   // out — opens from the small «змінити» chip on the dog card.
   const [editOpen, setEditOpen] = useState(false);
   // After «вийти з акаунта» in that sheet: back to the gate, where the
   // dog asks «ми знайомі?» again and, with the door up, asks the person
-  // to log in (or register) before the map.
+  // to log in (or register) before the map. A full reload rather than
+  // a navigate (UX-2.11, D4): the chat transcript and the paw total in
+  // memory are the account that just left, and on a shared phone the
+  // next one saw both. A reload is the reset that cannot miss a store.
   const afterLogout = useCallback(() => {
-    setEditOpen(false);
-    nudgeDoor();
-    setAppMode('gate');
-    router.navigate('/');
-  }, [nudgeDoor, setAppMode, router]);
+    window.location.replace('/');
+  }, []);
   const [data, setData] = useState<ProfileData | null>(null);
   const [error, setError] = useState<string | null>(null);
   // Territory standing. Its own fetch rather than a field on /profile/me
@@ -162,6 +159,15 @@ export default function ProfileScreen() {
     return () => document.removeEventListener('visibilitychange', onChange);
   }, []);
   const sceneActive = isFocused && docVisible;
+  // The edit sheet is portaled to the body, so it outlives the tab.
+  // The tap-out layer keeps the bar from being tapped under it, but the
+  // app can still leave the profile on its own — the door closing
+  // mid-session sends it to the gate (UX-2.7), a verify sheet to the
+  // map (UX-2.13) — and the sheet then floated over whatever came next.
+  // Leaving the tab closes it.
+  useEffect(() => {
+    if (!isFocused) setEditOpen(false);
+  }, [isFocused]);
 
   // Mirror the dog scene's day / night mode so the page bg colour
   // matches its sky — gives the full-bleed look where the scene's

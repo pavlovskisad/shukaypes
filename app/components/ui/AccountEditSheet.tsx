@@ -86,6 +86,32 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
   const [info, setInfo] = useState<string | null>(null);
   const [hidden, setHidden] = useState(me?.presenceHidden ?? false);
 
+  // What the fields held when the sheet opened, or at the last save:
+  // «done» and a tap outside the paper both close, and with unsaved
+  // edits a close used to drop them without a word (UX-7.10). The
+  // presence toggle is not in it — that one saves on the tap.
+  const savedRef = useRef({ nickname, species, petName, breed });
+  const sv = savedRef.current;
+  const dirty =
+    nickname !== sv.nickname ||
+    species !== sv.species ||
+    (species != null && (petName !== sv.petName || breed !== sv.breed)) ||
+    current.length > 0 ||
+    next.length > 0;
+  // The first close with unsaved edits warns instead; the second one
+  // means it. Any further edit re-arms the warning.
+  const [discardArmed, setDiscardArmed] = useState(false);
+  useEffect(() => {
+    setDiscardArmed(false);
+  }, [nickname, species, petName, breed, current, next]);
+  // Logging out of an account that never registered is final: the
+  // device id is rotated and nothing can log back into that row, so
+  // its paws and history go with it (UX-1.13, D3). The first tap says
+  // so; the second logs out. A registered account logs out on one tap
+  // — the e-mail and password bring it back.
+  const [logoutArmed, setLogoutArmed] = useState(false);
+  const anonymous = !!me && !me.registered;
+
   const describe = (err: unknown): string => {
     if (err instanceof ApiError && err.code && t.errors[err.code]) return t.errors[err.code]!;
     if (err instanceof Error && (err.name === 'TimeoutError' || err.message.includes('Failed to fetch'))) {
@@ -116,10 +142,13 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
       const r = await auth.updateProfile({
         nickname,
         petSpecies: species ?? undefined,
-        petName: petName.trim() || undefined,
-        petBreed: breed.trim() || undefined,
+        // Unticking the species removes the pet: the name and breed
+        // left in the hidden fields are not sent with it (UX-1.12).
+        petName: species ? petName.trim() || undefined : undefined,
+        petBreed: species ? breed.trim() || undefined : undefined,
       });
       setMe(r.me);
+      savedRef.current = { nickname, species, petName, breed };
       if (wantsPassword) {
         await auth.changePassword(current, next);
         setCurrent('');
@@ -139,11 +168,16 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
       setMe(r.me);
     });
 
-  const logout = () =>
-    run(async () => {
+  const logout = () => {
+    if (anonymous && !logoutArmed) {
+      setLogoutArmed(true);
+      return;
+    }
+    return run(async () => {
       await auth.logout();
       onLoggedOut();
     });
+  };
 
   const removeAvatar = () =>
     run(async () => {
@@ -152,9 +186,18 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
       onSaved();
     });
 
-  // Escape closes, like every sheet in the app.
-  const closeRef = useRef(onClose);
-  closeRef.current = onClose;
+  const requestClose = () => {
+    if (dirty && !discardArmed) {
+      setDiscardArmed(true);
+      return;
+    }
+    onClose();
+  };
+
+  // Escape closes, like every sheet in the app — through the same
+  // unsaved-edits check as «done».
+  const closeRef = useRef(requestClose);
+  closeRef.current = requestClose;
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (e.key === 'Escape') closeRef.current();
@@ -173,11 +216,26 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
 
   return createPortal(
     <div style={OVERLAY}>
+      {/* Tap outside the paper: close, as PlayerCard does (UX-7.10).
+          Without it the profile stayed live behind the sheet. Inert
+          while the portrait studio is open — it has its own ways out,
+          and a drawing may be on its way. */}
+      <div
+        style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }}
+        onClick={() => {
+          if (!studioOpen) requestClose();
+        }}
+      />
       <div
         style={{
           ...COLUMN,
           bottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.m}px)`,
-          maxHeight: visibleH - DOG_ROOM - S.m,
+          // The measured height is taken at mount and does not follow
+          // the keyboard; on Android and in Telegram the keyboard
+          // shrinks the viewport instead of covering it, and a sheet
+          // hung from the bottom at the old height went off the top
+          // (UX-12.9). 100% is the overlay, which does shrink with it.
+          maxHeight: `min(${visibleH - DOG_ROOM - S.m}px, calc(100% - ${DOG_ROOM + S.m}px - env(safe-area-inset-bottom, 0px)))`,
         }}
       >
         <div style={PAPER}>
@@ -345,14 +403,16 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
 
             {error ? <div style={ERROR}>{error}</div> : null}
             {info ? <div style={NOTE}>{info}</div> : null}
+            {discardArmed && dirty ? <div style={ERROR}>{t.unsavedWarn}</div> : null}
+            {logoutArmed ? <div style={ERROR}>{t.logoutAnonWarn}</div> : null}
             <Primary label={busy ? t.working : t.saveCta} disabled={busy || !canSave} onClick={save} />
             <div style={{ ...NOTE, display: 'flex', justifyContent: 'space-between', gap: S.m }}>
-              <button type="button" style={LINK} onClick={onClose}>
+              <button type="button" style={LINK} onClick={requestClose}>
                 {t.done}
               </button>
               {isInTelegram() ? null : (
-                <button type="button" style={{ ...LINK, color: colors.grey }} onClick={logout}>
-                  {t.logout}
+                <button type="button" style={{ ...LINK, color: colors.grey }} onClick={() => void logout()}>
+                  {logoutArmed ? t.logoutConfirm : t.logout}
                 </button>
               )}
             </div>

@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
@@ -94,6 +94,31 @@ function useDoorKeeper(): void {
     // `nudge` is the trigger: a 403 from any route re-reads /auth/me.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [nudge]);
+
+  // The door closing MID-SESSION (UX-2.7). The server could not be
+  // asked at boot, so the door was assumed open and the person went
+  // through the gate; a later refusal re-read /auth/me and the answer
+  // is 'register'. Every request is refused from here on, and without
+  // this the app just went quiet — no gate, no sheet. Back to the gate
+  // on the map, where the dog asks «ми знайомі?». ('verify' needs
+  // nothing here: the store opens the sheet on it, and the sheet takes
+  // the person to the map.)
+  //
+  // A store subscription rather than a selector: the root layout must
+  // not re-render with every mode change (see AboutSheetHost below).
+  const door = useAccessStore((s) => s.door);
+  useEffect(() => {
+    if (door !== 'register') return;
+    const toGate = (mode: string) => {
+      if (mode === 'gate') return;
+      useGameStore.getState().setAppMode('gate');
+      router.navigate('/');
+    };
+    toGate(useGameStore.getState().appMode);
+    return useGameStore.subscribe((s, prev) => {
+      if (s.appMode !== prev.appMode) toGate(s.appMode);
+    });
+  }, [door]);
 }
 // Reads the one flag and renders the one sheet. Split out so the root
 // layout itself does not subscribe to the game store and re-render the

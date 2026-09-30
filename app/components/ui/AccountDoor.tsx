@@ -28,8 +28,10 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { router } from 'expo-router';
 import { ApiError, auth, type Me } from '../../services/api';
 import { useAccessStore, type DoorSheet } from '../../stores/accessStore';
+import { useGameStore } from '../../stores/gameStore';
 import { pickDoorScreen, type DoorScreen } from '../../utils/doorScreen';
 import { useStrings } from '../../i18n/useStrings';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
@@ -264,12 +266,23 @@ export function Primary({ label, disabled, onClick }: { label: string; disabled?
   );
 }
 
-export function Secondary({ label, seed, onClick }: { label: string; seed: string; onClick: () => void }) {
+export function Secondary({
+  label,
+  seed,
+  disabled,
+  onClick,
+}: {
+  label: string;
+  seed: string;
+  disabled?: boolean;
+  onClick: () => void;
+}) {
   return (
     <button
       type="button"
+      disabled={disabled}
       onClick={onClick}
-      style={{ ...MODAL_PILL_LIGHT, width: '100%', marginTop: S.s, fontSize: TYPE.body }}
+      style={{ ...MODAL_PILL_LIGHT, width: '100%', marginTop: S.s, fontSize: TYPE.body, opacity: disabled ? 0.5 : 1 }}
     >
       <HandDrawnFrame seed={seed} radius={R.button} />
       {label}
@@ -285,7 +298,18 @@ function suggestedNickname(me: Me | null): string {
 
 export function AccountDoor() {
   const sheet = useAccessStore((s) => s.doorSheet);
-  if (!sheet) return null;
+  // The sheet belongs to the map: the dog above it says its line and
+  // the camera frames the dog over the paper (UX-2.13). Opened while
+  // another tab is showing — the verify screen after a nudge, a reset
+  // link landing on /spots, the door closing mid-session — it takes
+  // the person to the map rather than floating over chat or profile,
+  // and it draws nothing until it gets there.
+  const onMap = useGameStore((s) => s.currentScreen === 'map');
+  const up = sheet != null;
+  useEffect(() => {
+    if (up && !onMap) router.navigate('/');
+  }, [up, onMap]);
+  if (!sheet || !onMap) return null;
   return <AccountSheet requested={sheet} />;
 }
 
@@ -367,16 +391,36 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
     setScreen(next);
   };
 
-  const register = () =>
-    run(async () => {
+  // Which rule the form breaks first, as the server's own error code
+  // so the sentence is the one the server would have sent (UX-2.18).
+  // The button used to sit greyed out with no reason given; now it is
+  // live and a tap names the one thing to fix.
+  const registerProblem = (): string | null => {
+    if (nickname.trim().length < 2) return 'nickname_invalid';
+    if (!email.includes('@')) return 'email_invalid';
+    if (password.length < 8) return 'password_short';
+    if (!consent) return 'consent_required';
+    return null;
+  };
+
+  const register = () => {
+    const problem = registerProblem();
+    if (problem) {
+      setInfo(null);
+      setError(t.errors[problem] ?? t.errors.generic);
+      return;
+    }
+    return run(async () => {
       const r = await auth.register({
         nickname,
         email,
         password,
         consent: true,
         petSpecies: species ?? undefined,
-        petName: petName.trim() || undefined,
-        petBreed: breed.trim() || undefined,
+        // No species, no pet: a name typed before the species was
+        // unticked is not sent along with it (UX-1.12).
+        petName: species ? petName.trim() || undefined : undefined,
+        petBreed: species ? breed.trim() || undefined : undefined,
       });
       setMe(r.me);
       if (r.me.door === 'verify') {
@@ -384,6 +428,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
         if (!r.emailSent) setInfo(t.verifyNotSent);
       }
     });
+  };
 
   const login = () =>
     run(async () => {
@@ -419,16 +464,15 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
       setInfo(r.emailSent ? t.verifyResent : t.verifyNotSent);
     });
 
+  // A full reload after logging out, not a re-read (UX-2.11, D4): the
+  // chat transcript and the paw total in memory belong to the account
+  // that just left, and a reload is the one reset that cannot miss a
+  // store. The person lands on the gate and answers «ми знайомі?» again.
   const logoutToLogin = () =>
     run(async () => {
       await auth.logout();
-      const m = await auth.me().catch(() => null);
-      setMe(m);
-      setScreen('login');
+      window.location.replace('/');
     });
-
-  const consentOk = consent;
-  const canRegister = nickname.trim().length >= 2 && email.includes('@') && password.length >= 8 && consentOk;
 
   const visibleH = useVisibleHeight();
   const safeTop = safeAreaTopPx();
@@ -596,8 +640,11 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
                 <span style={{ fontSize: TYPE.small, lineHeight: 1.4, color: colors.grey }}>{t.consent}</span>
               </label>
 
+              {/* The notice the sheet opened with (an expired link lands
+                  here when the account never registered) — UX-2.19. */}
+              {info ? <div style={NOTE}>{info}</div> : null}
               {error ? <div style={ERROR}>{error}</div> : null}
-              <Primary label={busy ? t.working : t.registerCta} disabled={busy || !canRegister} onClick={register} />
+              <Primary label={busy ? t.working : t.registerCta} disabled={busy} onClick={() => void register()} />
               <div style={{ ...NOTE, textAlign: 'center' }}>
                 {t.haveAccount}{' '}
                 <button type="button" style={LINK} onClick={() => go('login')}>

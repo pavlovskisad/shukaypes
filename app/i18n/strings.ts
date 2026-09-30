@@ -78,6 +78,12 @@ export interface AppStrings {
     working: string;
     // Profile.
     logout: string;
+    // Logging out of an account that never registered loses it: the
+    // first tap shows the warning and turns the link into the confirm.
+    logoutAnonWarn: string;
+    logoutConfirm: string;
+    // «done» or a tap outside with unsaved edits: the second one closes.
+    unsavedWarn: string;
     // The account sheet on the profile.
     editChip: string;
     editTitle: string;
@@ -606,6 +612,9 @@ const uk: AppStrings = {
     linkExpired: 'це посилання вже не діє. попроси нове.',
     working: 'секунду…',
     logout: 'вийти з акаунта',
+    logoutAnonWarn: 'ти не зареєстрований: після виходу лапки й історія цього акаунта пропадуть назавжди.',
+    logoutConfirm: 'все одно вийти',
+    unsavedWarn: 'зміни не збережено. натисни «зберегти» або ще раз «готово», щоб їх скинути.',
     editChip: 'змінити',
     editTitle: 'про тебе і твого улюбленця',
     saveCta: 'зберегти',
@@ -637,7 +646,7 @@ const uk: AppStrings = {
     presenceSection: 'видимість на мапі',
     presenceVisibleOption: 'видно іншим',
     presenceHiddenOption: 'приховано',
-    presenceHint: 'коли приховано — інші не бачать тебе на мапі, а ти бачиш усіх.',
+    presenceHint: 'діє одразу. коли приховано — інші не бачать тебе на мапі, а ти бачиш усіх.',
     errors: {
       generic: 'щось пішло не так. спробуй ще раз.',
       nickname_invalid: 'нік: від 2 до 24 символів, літери й цифри.',
@@ -1203,6 +1212,9 @@ const en: AppStrings = {
     linkExpired: 'this link no longer works. ask for a new one.',
     working: 'one second…',
     logout: 'log out',
+    logoutAnonWarn: 'you are not registered: after logging out, this account\'s paws and history are gone for good.',
+    logoutConfirm: 'log out anyway',
+    unsavedWarn: 'changes not saved. tap "save", or "done" again to drop them.',
     editChip: 'edit',
     editTitle: 'about you and your pet',
     saveCta: 'save',
@@ -1234,7 +1246,7 @@ const en: AppStrings = {
     presenceSection: 'visibility on the map',
     presenceVisibleOption: 'visible to others',
     presenceHiddenOption: 'hidden',
-    presenceHint: 'when hidden, others can\'t see you on the map — you still see everyone.',
+    presenceHint: 'applies right away. when hidden, others can\'t see you on the map — you still see everyone.',
     errors: {
       generic: 'something went wrong. try again.',
       nickname_invalid: 'nickname: 2 to 24 characters, letters and digits.',
