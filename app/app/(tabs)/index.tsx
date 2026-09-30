@@ -12,6 +12,7 @@ import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { useAccessStore } from '../../stores/accessStore';
 import { LangPill } from '../../components/ui/LangPill';
+import { useStrings } from '../../i18n/useStrings';
 import { CHIP, HUD_ICON_SIZE } from '../../constants/sizing';
 
 // Easing for the HUD pills as the mode changes. A decelerating curve
@@ -23,6 +24,8 @@ import { CHIP, HUD_ICON_SIZE } from '../../constants/sizing';
 const POP_IN = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
 export default function MapScreen() {
+  // `strings`, not `t`: `t` is the timer's name in the effects below.
+  const strings = useStrings();
   // Supersniff is one of the three the corner logo rotates through.
   const dogCam = useGameStore((s) => s.dogCam);
   const cycleAppMode = useGameStore((s) => s.cycleAppMode);
@@ -173,10 +176,10 @@ export default function MapScreen() {
             // button's whole job is the thing it is about to do.
             accessibilityLabel={
               appMode === 'explore'
-                ? 'show the district'
+                ? strings.hud.logoExplore
                 : appMode === 'play'
-                  ? 'turn supersniff on'
-                  : 'back to walking'
+                  ? strings.hud.logoPlay
+                  : strings.hud.logoBack
             }
             hitSlop={8}
             style={{ position: 'relative' }}

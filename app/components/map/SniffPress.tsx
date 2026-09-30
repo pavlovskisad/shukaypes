@@ -17,7 +17,7 @@ import { Z } from '../../constants/z';
 import { playPop } from '../../utils/popOnTap';
 import { distanceMeters } from '../../utils/geo';
 import type { WalkStop } from '../../utils/walk';
-import { useStrings } from '../../i18n/useStrings';
+import { getStrings, useStrings } from '../../i18n/useStrings';
 import { VOICE } from '../../constants/voice';
 import { INK, SURFACE } from '../../constants/surface';
 import { HandDrawnFrame } from '../ui/HandDrawn';
@@ -87,6 +87,24 @@ interface DiscoveredLore {
   sourceLang: string | null;
   position: LatLng;
   distM: number;
+}
+
+// A card with no place behind it: "nothing here", or "the sniff
+// failed". The '__none__' id is what hides the heart and the walk
+// button — there is nowhere to save or go.
+function emptyCard(position: LatLng, name: string, story: string): DiscoveredLore {
+  return {
+    id: '__none__',
+    name,
+    title: null,
+    category: 'none',
+    story,
+    detail: null,
+    wikipediaTitle: null,
+    sourceLang: null,
+    position,
+    distM: 0,
+  };
 }
 
 export function SniffPress() {
@@ -340,21 +358,16 @@ export function SniffPress() {
         } else {
           // Nothing within range — give a tiny prompt so the gesture
           // doesn't read as broken.
-          setDiscovered({
-            id: '__none__',
-            name: 'тут поки тиша',
-            title: null,
-            category: 'none',
-            story: '*ніс у землю* нічого знайомого. далі від цього кутка є щось — спробуй там.',
-            detail: null,
-            wikipediaTitle: null,
-            sourceLang: null,
-            position: ll,
-            distM: 0,
-          });
+          const s = getStrings().sniff;
+          setDiscovered(emptyCard(ll, s.nothingTitle, s.nothingStory));
         }
       } catch {
-        /* swallow — gesture is best-effort */
+        // The request failed. Said as that, not as "nothing here" — and
+        // not as silence, which after a three-second hold reads as the
+        // gesture being broken (UX-5.7). getStrings, not `t`: this
+        // closure lives as long as the map listeners do.
+        const s = getStrings().sniff;
+        setDiscovered(emptyCard(ll, s.failedTitle, s.failedStory));
       } finally {
         setSniffingAt(null);
       }

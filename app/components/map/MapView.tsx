@@ -78,7 +78,7 @@ import { LostDogModal } from '../ui/LostDogModal';
 import { SpotModal } from '../ui/SpotModal';
 import { PostModal } from '../ui/PostModal';
 import { getDeepLinkDogId } from '../../services/telegram';
-import { useStrings } from '../../i18n/useStrings';
+import { getStrings, useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
 import { fetchWalkingRoute } from '../../services/directions';
 import { api, type NearbyLostDog } from '../../services/api';
@@ -711,6 +711,7 @@ const DECK_ANIM_MS = 280;
       ? formatDistance(
           remainingRouteMeters(searchRoute, userPos) ??
             distanceMeters(userPos, searchTarget.spot),
+          t.units,
         )
       : null;
   // Whether the map tab is the active screen. The offscreen companion
@@ -1892,13 +1893,9 @@ const DECK_ANIM_MS = 280;
         });
       }
       if (announce) {
-        const leadLines = [
-          `беремо слід ${dog.name}! ходімо 🐾`,
-          `шукаємо ${dog.name} — за мною!`,
-          `${dog.name} десь тут… чую запах 🐽`,
-          `на пошук ${dog.name}, тримайся поруч!`,
-          `on the trail of ${dog.name} — this way! 🐾`,
-        ];
+        // getStrings, not `t`: this callback is memoised without it,
+        // and the pools are per language now (UX-4.3).
+        const leadLines = getStrings().bubbles.searchLead(dog.name);
         showBubble(leadLines[Math.floor(Math.random() * leadLines.length)]!, 3500);
       }
     },
@@ -2112,29 +2109,9 @@ const DECK_ANIM_MS = 280;
       return;
     }
     const NUDGE_MS = 9000;
-    // Generic "keep following me" barks (mix of uk + en, matching the app).
-    const generic = [
-      'сюди! 🐾',
-      'ходімо, ніс не бреше!',
-      'this way — I caught a scent!',
-      'давай, за мною!',
-      'нюхом чую, туди!',
-      'майже там, не відставай! 🐕',
-      'слід свіжий, швидше!',
-      'keep up — the trail is warm! 🐾',
-      'туди-туди, ще трохи!',
-      'не зупиняйся, я веду!',
-      'almost there — stay with me!',
-      'ще пару кроків, ходімо 🐽',
-    ];
-    // Name-aware barks — only usable when we can resolve the active dog.
-    const named = (name: string) => [
-      `${name} десь поруч — за мною! 🐾`,
-      `нюхаю ${name}, сюди!`,
-      `не губи слід ${name}!`,
-      `${name} чекає — ходімо!`,
-      `closing in on ${name} — this way!`,
-    ];
+    // "Keep following me" barks, generic and name-aware. Read from
+    // getStrings() on each tick rather than captured here, so a
+    // language switch mid-search takes on the next bark (UX-4.3).
     const id = setInterval(() => {
       const st = useGameStore.getState().searchTarget;
       const up = userPosRef.current;
@@ -2145,8 +2122,9 @@ const DECK_ANIM_MS = 280;
       // Only bark if you haven't meaningfully closed the gap since last check.
       if (prev === null || prev - dist < 12) {
         const name = lostDogsRef.current.find((d) => d.id === st.dogId)?.name;
+        const b = getStrings().bubbles;
         // Weave name-aware lines in when we know who we're after.
-        const pool = name ? [...generic, ...named(name)] : generic;
+        const pool = name ? [...b.searchNudge, ...b.searchNudgeNamed(name)] : b.searchNudge;
         showBubble(pool[Math.floor(Math.random() * pool.length)]!, 3200);
       }
       lastNudgeDistRef.current = dist;
@@ -4775,7 +4753,7 @@ const DECK_ANIM_MS = 280;
         <div
           onClick={() => setExpandedSpotKeys(new Set())}
           role="button"
-          aria-label="restack all expanded spot clusters"
+          aria-label={t.hud.restack}
           style={{
             position: 'absolute',
             // Stepped off the off-screen companion chip while that is
@@ -4856,15 +4834,15 @@ const DECK_ANIM_MS = 280;
           // its own thanks.
           if (res?.reason === 'in-flight') return;
           if (res?.ok && res.trusted) {
-            showBubble(`thanks — moved ${d.name}'s pin 📍`, 5000);
+            showBubble(t.bubbles.sightingMoved(d.name), 5000);
           } else if (res?.ok) {
-            showBubble(`thanks — sighting logged 👀`, 5000);
+            showBubble(t.bubbles.sightingLogged, 5000);
           } else if (res?.reason === 'no-location') {
             // Not a failure to send — a refusal to invent. Say which,
             // or the walker retries a thing that cannot work.
-            showBubble(`i can't see where you are — turn location on 📍`, 6000);
+            showBubble(t.bubbles.sightingNoLocation, 6000);
           } else {
-            showBubble(`couldn't report that one — try again`, 5000);
+            showBubble(t.bubbles.sightingFailed, 5000);
           }
         }}
         onStartSearch={(d) => {
@@ -4894,7 +4872,7 @@ const DECK_ANIM_MS = 280;
         onClose={() => setSelectedSpot(null)}
         onWalkHere={async (spot, shape) => {
           if (!userPos) {
-            showBubble("can't walk without knowing where we are", 5000);
+            showBubble(t.bubbles.walkNoLocation, 5000);
             return;
           }
           // Generate the walking polyline first, then close the modal
@@ -4903,8 +4881,8 @@ const DECK_ANIM_MS = 280;
           // user has feedback while Directions fetches.
           showBubble(
             shape === 'roundtrip'
-              ? `roundtrip to ${spot.name} 🚶`
-              : `walking to ${spot.name} 🚶`,
+              ? t.bubbles.roundtripTo(spot.name)
+              : t.bubbles.walkingTo(spot.name),
             3000,
           );
           const waypoints =

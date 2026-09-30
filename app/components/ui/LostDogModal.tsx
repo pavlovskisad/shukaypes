@@ -13,15 +13,10 @@ import { INK, SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { useGameStore } from '../../stores/gameStore';
-import { distanceMeters } from '../../utils/geo';
+import { distanceMeters, formatDistance } from '../../utils/geo';
 import { playPopThen } from '../../utils/popOnTap';
 import { HandDrawnFrame } from './HandDrawn';
 import { useSheetBack } from '../../hooks/useSheetBack';
-
-function formatDistance(m: number): string {
-  if (m < 1000) return `${Math.round(m / 50) * 50} m`;
-  return `${(m / 1000).toFixed(1)} km`;
-}
 
 interface LostDogModalProps {
   dog: NearbyLostDog | null;
@@ -225,7 +220,7 @@ export function LostDogModal({
   const badgeText = urgent ? t.modals.lostDog.badgeUrgent : t.modals.lostDog.badgeSearching;
   const badgeFg = BADGE_TINT;
   const distLabel = userPos
-    ? formatDistance(distanceMeters(userPos, renderDog.lastSeen.position))
+    ? formatDistance(distanceMeters(userPos, renderDog.lastSeen.position), t.units)
     : null;
 
   // Portal to document.body so the stack escapes the MapView / tab-page

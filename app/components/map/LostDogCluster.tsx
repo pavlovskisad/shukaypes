@@ -8,6 +8,7 @@ import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { playPopThen } from '../../utils/popOnTap';
 import { petPhotoAt } from '../../utils/petPhoto';
+import { useStrings } from '../../i18n/useStrings';
 
 // Dominant-urgency wins the glow color. Urgent beats medium beats resolved
 // so the cluster reads "there's an urgent pet in here" at a glance.
@@ -69,6 +70,7 @@ function LostDogClusterImpl({
   onToggle,
   onSelectItem,
 }: LostDogClusterProps) {
+  const t = useStrings();
   const count = items.length;
   return (
     <MapLibreMarker
@@ -96,6 +98,10 @@ function LostDogClusterImpl({
         <div
           role="button"
           tabIndex={0}
+          // The badge is an emoji and a bare number; this is what it
+          // means, and whether the ring is out (UX-4.4).
+          aria-label={t.map.lostPetsCount(count)}
+          aria-expanded={expanded}
           onClick={(e) => {
             e.stopPropagation();
             onToggle();
@@ -150,7 +156,7 @@ function LostDogClusterImpl({
               pointerEvents: 'none',
             }}
           >
-            {count} lost pets
+            {t.map.lostPetsCount(count)}
           </div>
         )}
 
@@ -195,6 +201,11 @@ function LostDogClusterImpl({
                 zIndex: Z.MARKER_DEFAULT,
               }}
               aria-label={d.name}
+              // Collapsed, the ring is still in the DOM (it animates out
+              // of the badge) but invisible: keep it out of the tab order
+              // and away from screen readers until it is open.
+              tabIndex={expanded ? 0 : -1}
+              aria-hidden={!expanded}
             >
               {/* Same layering as LostDogMarker: the emoji sits behind
                   the photo, so a slow or failed image still shows it.

@@ -527,7 +527,15 @@ export default function ChatScreen() {
                 }}
               />
             </View>
-            <Pressable style={styles.sendBtn} onPress={send} onPressIn={popPressableEvent} disabled={sending}>
+            <Pressable
+              style={styles.sendBtn}
+              onPress={send}
+              onPressIn={popPressableEvent}
+              disabled={sending}
+              // The face is a bare → (or a spinner); this is its name.
+              accessibilityRole="button"
+              accessibilityLabel={t.chat.send}
+            >
               <HandDrawnFrame radius={R.pill} />
               {sending ? (
                 // Ink: the button is white paper, and a white spinner on

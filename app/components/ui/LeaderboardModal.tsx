@@ -163,7 +163,7 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
 
       <button
         onClick={(e) => playPopThen(e.currentTarget, onClose)}
-        aria-label="Close"
+        aria-label={t.modals.common.close}
         style={{
           position: 'absolute',
           top: 'calc(env(safe-area-inset-top, 0px) + 14px)',

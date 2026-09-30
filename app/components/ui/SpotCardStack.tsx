@@ -18,7 +18,8 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK } from '../../constants/surface';
 import { useGameStore } from '../../stores/gameStore';
-import { distanceMeters } from '../../utils/geo';
+import { distanceMeters, formatDistance } from '../../utils/geo';
+import { useStrings } from '../../i18n/useStrings';
 import { Icon, iconForCategory } from './Icon';
 import { CardStack, CardStackSkeleton } from './CardStack';
 import { HandDrawnFrame } from './HandDrawn';
@@ -52,14 +53,6 @@ export function SpotCardStack({ spots, onTap, onCounterTap, onSwipe }: Props) {
 
 export const SpotCardStackSkeleton = CardStackSkeleton;
 
-// "X m" for sub-1km, "X.X km" beyond. Snapped to 50 m below 1 km
-// so the chip doesn't jitter on small GPS drift — matches the
-// lost-dog card's distance formatting.
-function formatDistance(m: number): string {
-  if (m < 1000) return `${Math.round(m / 50) * 50} m`;
-  return `${(m / 1000).toFixed(1)} km`;
-}
-
 // White card, big category icon as the centred hero, name +
 // address at the bottom on dark text. Rating top-left, distance
 // top-right, both bare. No category chip — the spots
@@ -73,9 +66,10 @@ export function SpotCardView({
   spot: Spot;
   userPos: LatLng | null;
 }) {
+  const t = useStrings();
   const iconSlot = iconForCategory(spot.category);
   const distLabel = userPos
-    ? formatDistance(distanceMeters(userPos, spot.position))
+    ? formatDistance(distanceMeters(userPos, spot.position), t.units)
     : null;
 
   return (

@@ -104,7 +104,7 @@ export function LostDogsModal({ dogs, onClose, onPick }: Props) {
 
       <button
         onClick={(e) => playPopThen(e.currentTarget, onClose)}
-        aria-label="Close"
+        aria-label={t.modals.common.close}
         style={{
           position: 'absolute',
           top: 'calc(env(safe-area-inset-top, 0px) + 14px)',

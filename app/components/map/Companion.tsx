@@ -9,6 +9,7 @@ import { iconForCategory } from '../ui/Icon';
 import { SpeechBubble } from '../ui/SpeechBubble';
 import { useHint } from '../../hooks/useHint';
 import { useStrings } from '../../i18n/useStrings';
+import type { AppStrings } from '../../i18n/strings';
 import {
   RadialMenu,
   EXPLORE_ACTIONS,
@@ -68,25 +69,45 @@ function buildVisitLeaves(
   }));
 }
 
+// The ring's static levels carry English words in RadialMenu.tsx; they
+// are only ever read as accessible names (the icon discs show no text),
+// but a screen reader in uk still read "walk", "far", "pet store"
+// (UX-4.8). Swapped for the strings here, keyed on the action id.
+function localizeRing(actions: RadialAction[], t: AppStrings): RadialAction[] {
+  const labels: Record<string, string> = {
+    walk: t.modes.ring.walk,
+    visit: t.modes.ring.visit,
+    meet: t.modes.ring.meet,
+    ':close': t.modes.ring.close,
+    ':far': t.modes.ring.far,
+    'visit:cafe': t.modals.spot.categories.cafe,
+    'visit:restaurant': t.modals.spot.categories.restaurant,
+    'visit:bar': t.modals.spot.categories.bar,
+    'visit:pet_store': t.modals.spot.categories.pet_store,
+    'visit:veterinary_care': t.modals.spot.categories.veterinary_care,
+  };
+  return actions.map((a) => ({ ...a, label: labels[a.id] ?? a.label }));
+}
+
 // Resolves the actions for the non-leaf menu levels. Visit leaves are
 // computed separately in the component so they can be ref-cached.
-function getNonVisitActions(path: string[]): RadialAction[] | null {
+function getNonVisitActions(path: string[], t: AppStrings): RadialAction[] | null {
   const head = path[0];
-  if (!head) return EXPLORE_ACTIONS;
+  if (!head) return localizeRing(EXPLORE_ACTIONS, t);
   if (head === 'walk' || head === 'meet') {
     // One level, not two: the shape question is gone (see
     // WALK_DISTANCE_ACTIONS). Every walk from here is a roundtrip, so all
     // that is left to ask is how far — and «meet» asks exactly the same
     // thing, because it is the same walk to a different kind of place.
-    return WALK_DISTANCE_ACTIONS.map((a) => ({
+    return localizeRing(WALK_DISTANCE_ACTIONS, t).map((a) => ({
       ...a,
       id: `${head}${a.id}`, // a.id starts with ':', e.g. ':close'
     }));
   }
-  if (head === 'visit' && path.length === 1) return VISIT_CATEGORY_ACTIONS;
+  if (head === 'visit' && path.length === 1) return localizeRing(VISIT_CATEGORY_ACTIONS, t);
   // null = caller falls through to visit-leaf logic
   if (head === 'visit') return null;
-  return EXPLORE_ACTIONS;
+  return localizeRing(EXPLORE_ACTIONS, t);
 }
 
 
@@ -471,7 +492,7 @@ export function Companion({
       switch (id) {
         case 'search': {
           if (!ctxPos || lostDogs.length === 0) {
-            flash('no lost pets in range yet');
+            flash(t.modes.noLostPetsYet);
             return;
           }
           const closest = lostDogs.reduce((best, d) => {
@@ -480,7 +501,7 @@ export function Companion({
             return dd < bd ? d : best;
           }, lostDogs[0]!);
           setSelectedDog(closest.id);
-          flash(`sniffed out ${closest.name} 🔍`);
+          flash(t.modes.sniffedOut(closest.name));
           return;
         }
         case 'chat': {
@@ -529,7 +550,7 @@ export function Companion({
         const shape: WalkShape = 'roundtrip';
         const distance = (parts[1] ?? 'close') as WalkDistance;
         if (!ctxPos) {
-          flash("can't walk without knowing where we are");
+          flash(t.bubbles.walkNoLocation);
           return;
         }
         const ctxParks = useGameStore.getState().parks;
@@ -538,11 +559,7 @@ export function Companion({
         // The landmark step is a round-trip to the server, so say
         // something now rather than leaving the tap unanswered; the
         // real label lands when the route does.
-        flash(
-          kind === 'meet'
-            ? 'sniffing out where the dogs are 🐕'
-            : `${distance === 'far' ? 'long' : 'short'} walk, sniffing the way 🚶`,
-        );
+        flash(kind === 'meet' ? t.modes.meetSniffing : t.modes.walkSniffing(distance === 'far'));
         void startExplorationWalk({ origin: ctxPos, parks: ctxParks, shape, distance, kind }).then(
           (walk) => {
             if (!walk) {
@@ -553,7 +570,7 @@ export function Companion({
               flash(
                 kind === 'meet'
                   ? t.modes.noWalkers
-                  : 'nothing worth walking to at that distance — try the other one',
+                  : t.modes.walkNothing,
               );
               return;
             }
@@ -574,20 +591,11 @@ export function Companion({
               );
             // No shape in the line any more: every walk is a roundtrip,
             // and naming the only option it could have been is noise.
-            const distLabel = distance === 'far' ? 'long' : 'short';
             const n = walk.stops.length;
-            if (kind === 'meet') {
-              flash(
-                n
-                  ? `${walk.primary.name} — dogs walk there. ${n} ${n === 1 ? 'stop' : 'stops'} on the way 🐾`
-                  : `${walk.primary.name} — dogs walk there 🐕`,
-              );
-              return;
-            }
             flash(
-              n
-                ? `${distLabel} walk to ${walk.primary.name} — ${n} ${n === 1 ? 'stop' : 'stops'} on the way 🐾`
-                : `${distLabel} walk to ${walk.primary.name} 🚶`,
+              kind === 'meet'
+                ? t.modes.meetTo(walk.primary.name, n)
+                : t.modes.walkTo(distance === 'far', walk.primary.name, n),
             );
           },
         );
@@ -599,7 +607,7 @@ export function Companion({
         const spotId = id.replace('visit:spot:', '');
         const spot = ctxSpots.find((s) => s.id === spotId);
         if (!spot) {
-          flash("can't find that one anymore");
+          flash(t.modes.spotGone);
           return;
         }
         // Feed the recent-visit list so next time the user opens the
@@ -607,16 +615,16 @@ export function Companion({
         // ranking and other names surface.
         recordRecentVisit(spot.id);
         setSelectedSpot(spot.id);
-        flash(`let's check out ${spot.name} ${spot.icon ?? '📍'}`);
+        flash(t.modes.visitSpot(spot.name, spot.icon ?? '📍'));
         return;
       }
 
-      const label = EXPLORE_ACTIONS.find((a) => a.id === id)?.label ?? id;
-      flash(`${label}! coming soon 🐾`);
+      const label = localizeRing(EXPLORE_ACTIONS, t).find((a) => a.id === id)?.label ?? id;
+      flash(t.modes.comingSoon(label));
     },
-    // `t` joined the list when the "nobody around" line stopped being a
-    // hardcoded English string. It only changes when the user switches
-    // language, so it costs one rebuild of this callback per toggle.
+    // `t` is in the list because every line this says comes from it
+    // (UX-4.2). It only changes when the user switches language, so it
+    // costs one rebuild of this callback per toggle.
     [router, setSelectedDog, setSelectedSpot, flash, t]
   );
 
@@ -780,7 +788,7 @@ export function Companion({
   const currentActions = useMemo(() => {
     if (authGate) return authActions;
     if (showModes) return modeActions;
-    const nonVisit = getNonVisitActions(menuPath);
+    const nonVisit = getNonVisitActions(menuPath, t);
     if (nonVisit) return nonVisit;
     // We're at visit:<category>. Use the cached picks if the category
     // hasn't changed; otherwise compute + cache.

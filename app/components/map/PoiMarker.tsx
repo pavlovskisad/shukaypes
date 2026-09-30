@@ -63,6 +63,8 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
         ref={wrapRef}
         role="button"
         tabIndex={0}
+        // The disc is an icon; the place's own name is what it opens.
+        aria-label={name}
         style={{
           display: 'flex',
           flexDirection: 'column',

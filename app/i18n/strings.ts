@@ -152,6 +152,27 @@ export interface AppStrings {
     // — so the map is standing on the Kyiv fallback. A status chip in the
     // HUD, with the one thing that fixes it.
     noLocation: string;
+    // The logo's accessible name. Names where the NEXT tap goes, not
+    // where you are — the button's whole job is the thing it is about
+    // to do.
+    logoExplore: string;
+    logoPlay: string;
+    logoBack: string;
+    // A meter pill read aloud: its name and how full it is.
+    meterA11y: (label: string, pct: number) => string;
+    // The pill that folds every opened spot cluster back up.
+    restack: string;
+  };
+  // Distance units, for utils/geo formatDistance. Cyrillic in uk: a
+  // Latin "m" in a Ukrainian sentence reads as a typo.
+  units: {
+    m: string;
+    km: string;
+  };
+  // Words drawn on the map itself, next to the markers.
+  map: {
+    // Under a collapsed lost-pet cluster, and its accessible name.
+    lostPetsCount: (n: number) => string;
   };
   // The dog's questions during a search, and the answers under them.
   // Every decision point in supersniff is one of these.
@@ -220,6 +241,24 @@ export interface AppStrings {
     homeGround: string[];
     questComplete: string;
     questAdvance: string;
+    // What the dog says back after "I've seen": the pin moved (a
+    // trusted report), a plain sighting, no GPS to put it at, or the
+    // request failed.
+    sightingMoved: (name: string) => string;
+    sightingLogged: string;
+    sightingNoLocation: string;
+    sightingFailed: string;
+    // Walk-here / roundtrip from a spot card.
+    walkNoLocation: string;
+    walkingTo: (name: string) => string;
+    roundtripTo: (name: string) => string;
+    // Supersniff: the line as the dog takes a pet's trail, and the
+    // barks when you are not closing the gap. One pool per language —
+    // these used to be one mixed pool, so a uk user got English lines
+    // at random.
+    searchLead: (name: string) => string[];
+    searchNudge: string[];
+    searchNudgeNamed: (name: string) => string[];
     simpleWoof: string;
     // Random ambient barks the companion mutters on focus / tap.
     woofs: string[];
@@ -239,6 +278,13 @@ export interface AppStrings {
     saved: string;
     sniffingRoute: string;
     letsGoHere: string;
+    // The card a long-press leaves when there is nothing to tell here,
+    // and when the request itself failed — the second is not the first,
+    // or an offline walker learns the city is empty.
+    nothingTitle: string;
+    nothingStory: string;
+    failedTitle: string;
+    failedStory: string;
   };
   time: {
     // Compact relative-time label for "last seen": "5хв тому", "3h ago".
@@ -260,14 +306,16 @@ export interface AppStrings {
     };
     /** Paws a task pays, shown on its row. */
     reward: (paws: number) => string;
+    /** Points a finished search quest paid, in the history. Not paws:
+     *  a quest's reward goes to the points column, so it cannot borrow
+     *  the 🐾 of `reward` above. */
+    questPoints: (points: number) => string;
     /** The all-six bonus row. */
     bonusLabel: string;
     bonusHint: (paws: number) => string;
     lostPetsNearby: string;
     moreCount: (n: number) => string;
     showFewer: string;
-    badgeSearching: string;
-    badgeUrgent: string;
     pastSearches: string;
     finished: string;
     abandoned: string;
@@ -379,6 +427,8 @@ export interface AppStrings {
     // Under the boot failure bubble: runs the history load again.
     retry: string;
     inputPlaceholder: string;
+    // Accessible name of the → button.
+    send: string;
   };
   // Shown by the connection banner when calls stop getting through.
   connection: {
@@ -507,6 +557,26 @@ export interface AppStrings {
     // Shown when the user picks "meet" in explore and there is nobody
     // around. Was hardcoded English in Companion.tsx.
     noWalkers: string;
+    // Accessible names of the icon buttons under the dog.
+    ring: {
+      walk: string;
+      visit: string;
+      meet: string;
+      close: string;
+      far: string;
+    };
+    // What the dog says as a ring leaf fires. Also hardcoded English
+    // in Companion.tsx until the i18n sweep.
+    noLostPetsYet: string;
+    sniffedOut: (name: string) => string;
+    meetSniffing: string;
+    walkSniffing: (far: boolean) => string;
+    walkNothing: string;
+    meetTo: (name: string, stops: number) => string;
+    walkTo: (far: boolean, name: string, stops: number) => string;
+    spotGone: string;
+    visitSpot: (name: string, icon: string) => string;
+    comingSoon: (label: string) => string;
     // The "I lost a pet" sheet. Points at a DM with our bot, which is
     // the one path that actually puts a pet on the map today.
     lostSheet: {
@@ -565,12 +635,18 @@ export interface AppStrings {
 // singular; 2–4 the paucal; everything else (including the 11–14 band,
 // which is why the mod-100 test comes first) the genitive plural.
 function ukStops(n: number): string {
+  return ukPlural(n, 'зупинка', 'зупинки', 'зупинок');
+}
+
+// The same three-way rule for any noun: `one` for 1/21/31, `few` for
+// 2–4, `many` for the rest.
+function ukPlural(n: number, one: string, few: string, many: string): string {
   const mod100 = n % 100;
   const mod10 = n % 10;
-  if (mod100 >= 11 && mod100 <= 14) return 'зупинок';
-  if (mod10 === 1) return 'зупинка';
-  if (mod10 >= 2 && mod10 <= 4) return 'зупинки';
-  return 'зупинок';
+  if (mod100 >= 11 && mod100 <= 14) return many;
+  if (mod10 === 1) return one;
+  if (mod10 >= 2 && mod10 <= 4) return few;
+  return many;
 }
 
 const uk: AppStrings = {
@@ -712,6 +788,18 @@ const uk: AppStrings = {
     mapLoadFailed: 'мапа не довантажилась. перевір звʼязок',
     retry: 'спробувати ще',
     noLocation: 'не бачу, де ти — увімкни геолокацію',
+    logoExplore: 'показати район',
+    logoPlay: 'увімкнути супернюх',
+    logoBack: 'назад до прогулянок',
+    meterA11y: (label, pct) => `${label}: ${pct}%`,
+    restack: 'згорнути всі розкриті купки місць',
+  },
+  units: {
+    m: 'м',
+    km: 'км',
+  },
+  map: {
+    lostPetsCount: (n) => `${n} ${ukPlural(n, 'загублений', 'загублені', 'загублених')}`,
   },
   search: {
     confirm: (name) => `йдемо шукати ${name}?`,
@@ -815,6 +903,38 @@ const uk: AppStrings = {
     ],
     questComplete: 'знайшли! квест виконано 🎉',
     questAdvance: 'слід тут — рухаємось далі 🐾',
+    // Name after a colon: pet names decline every which way, and
+    // «пін Мухтара» would need the genitive of a name we cannot decline.
+    sightingMoved: (name) => `дякую — пін перенесено: ${name} 📍`,
+    sightingLogged: 'дякую — записав 👀',
+    sightingNoLocation: 'не бачу, де ти — увімкни геолокацію 📍',
+    sightingFailed: 'не вийшло надіслати — спробуй ще раз',
+    walkNoLocation: 'не знаю, де ми — так не погуляємо',
+    walkingTo: (name) => `йдемо: ${name} 🚶`,
+    roundtripTo: (name) => `туди й назад: ${name} 🚶`,
+    searchLead: (name) => [
+      `беремо слід ${name}! ходімо 🐾`,
+      `шукаємо ${name} — за мною!`,
+      `${name} десь тут… чую запах 🐽`,
+      `на пошук ${name}, тримайся поруч!`,
+    ],
+    searchNudge: [
+      'сюди! 🐾',
+      'ходімо, ніс не бреше!',
+      'давай, за мною!',
+      'нюхом чую, туди!',
+      'майже там, не відставай! 🐕',
+      'слід свіжий, швидше!',
+      'туди-туди, ще трохи!',
+      'не зупиняйся, я веду!',
+      'ще пару кроків, ходімо 🐽',
+    ],
+    searchNudgeNamed: (name) => [
+      `${name} десь поруч — за мною! 🐾`,
+      `нюхаю ${name}, сюди!`,
+      `не губи слід ${name}!`,
+      `${name} чекає — ходімо!`,
+    ],
     simpleWoof: 'гав 🐾',
     woofs: [
       'гав 🐾',
@@ -848,6 +968,10 @@ const uk: AppStrings = {
     saved: 'збережено — натисни, щоб прибрати',
     sniffingRoute: 'нюхаю шлях…',
     letsGoHere: 'ходімо сюди →',
+    nothingTitle: 'тут поки тиша',
+    nothingStory: '*ніс у землю* нічого знайомого. далі від цього кутка є щось — спробуй там.',
+    failedTitle: 'нюх збився',
+    failedStory: '*чхає* не вийшло понюхати — звʼязок підвів. затисни ще раз.',
   },
   time: {
     ago: (value, unit) => {
@@ -871,13 +995,12 @@ const uk: AppStrings = {
       spotVisits: 'проклади маршрут і дійди',
     },
     reward: (paws) => `+${paws} 🐾`,
+    questPoints: (points) => `+${points} ${ukPlural(points, 'бал', 'бали', 'балів')}`,
     bonusLabel: 'усе за день',
     bonusHint: (paws) => `+${paws} 🐾 за всі шість`,
     lostPetsNearby: 'загублені',
     moreCount: (n) => `+ ще ${n}`,
     showFewer: 'показати менше',
-    badgeSearching: 'шукаємо',
-    badgeUrgent: 'терміново',
     pastSearches: 'минулі пошуки',
     finished: 'завершено',
     abandoned: 'припинено',
@@ -995,6 +1118,7 @@ const uk: AppStrings = {
     couldntStartSearch: 'не вийшло почати пошук — спробуй ще раз',
     retry: 'ще раз',
     inputPlaceholder: 'скажи що хочеш…',
+    send: 'надіслати',
   },
   connection: {
     offline: 'звʼязку немає — наздоженемо, щойно зʼявиться',
@@ -1003,7 +1127,7 @@ const uk: AppStrings = {
   modals: {
     common: { close: 'закрити' },
     lostDog: {
-      badgeUrgent: 'ТЕРМІНОВО',
+      badgeUrgent: 'терміново',
       badgeSearching: 'шукаємо',
       lastSeen: (rel) => `востаннє бачили ${rel}`,
       questCta: (points) =>
@@ -1142,6 +1266,29 @@ const uk: AppStrings = {
       'що більше тримаємо, то густіші тут лапки. і мені спокійніше на своєму',
     ],
     noWalkers: 'поки нікого поруч 👥',
+    ring: {
+      walk: 'погуляти',
+      visit: 'зайти кудись',
+      meet: 'познайомитись',
+      close: 'поруч',
+      far: 'далі',
+    },
+    noLostPetsYet: 'поряд поки ніхто не загубився',
+    sniffedOut: (name) => `винюхав: ${name} 🔍`,
+    meetSniffing: 'нюхаю, де гуляють пси 🐕',
+    walkSniffing: (far) => `${far ? 'довга' : 'коротка'} прогулянка, нюхаю шлях 🚶`,
+    walkNothing: 'на такій відстані нема куди йти — спробуй іншу',
+    meetTo: (name, stops) =>
+      stops
+        ? `${name} — там гуляють пси. ${stops} ${ukStops(stops)} по дорозі 🐾`
+        : `${name} — там гуляють пси 🐕`,
+    walkTo: (far, name, stops) =>
+      stops
+        ? `${far ? 'довга' : 'коротка'} прогулянка: ${name} — ${stops} ${ukStops(stops)} по дорозі 🐾`
+        : `${far ? 'довга' : 'коротка'} прогулянка: ${name} 🚶`,
+    spotGone: 'не знаходжу це місце — його вже нема',
+    visitSpot: (name, icon) => `зазирнемо: ${name} ${icon}`,
+    comingSoon: (label) => `${label} — скоро буде 🐾`,
     lostSheet: {
       title: 'загубився друг?',
       speciesDog: 'пес',
@@ -1318,6 +1465,18 @@ const en: AppStrings = {
     mapLoadFailed: 'the map did not load. check your connection',
     retry: 'try again',
     noLocation: "can't see where you are — turn on location",
+    logoExplore: 'show the district',
+    logoPlay: 'turn supersniff on',
+    logoBack: 'back to walking',
+    meterA11y: (label, pct) => `${label} ${pct} percent`,
+    restack: 'restack all expanded spot clusters',
+  },
+  units: {
+    m: 'm',
+    km: 'km',
+  },
+  map: {
+    lostPetsCount: (n) => `${n} lost ${n === 1 ? 'pet' : 'pets'}`,
   },
   search: {
     confirm: (name) => `go looking for ${name}?`,
@@ -1421,6 +1580,35 @@ const en: AppStrings = {
     ],
     questComplete: 'found something! quest complete 🎉',
     questAdvance: "paw print here — let's keep going 🐾",
+    sightingMoved: (name) => `thanks — moved ${name}'s pin 📍`,
+    sightingLogged: 'thanks — sighting logged 👀',
+    sightingNoLocation: "i can't see where you are — turn location on 📍",
+    sightingFailed: "couldn't report that one — try again",
+    walkNoLocation: "can't walk without knowing where we are",
+    walkingTo: (name) => `walking to ${name} 🚶`,
+    roundtripTo: (name) => `roundtrip to ${name} 🚶`,
+    searchLead: (name) => [
+      `on the trail of ${name} — this way! 🐾`,
+      `looking for ${name} — follow me!`,
+      `${name} is around here… i can smell it 🐽`,
+      `off to find ${name}, stay close!`,
+    ],
+    searchNudge: [
+      'this way! 🐾',
+      'come on, the nose never lies!',
+      'this way — I caught a scent!',
+      'keep up — the trail is warm! 🐾',
+      'almost there — stay with me!',
+      'the trail is fresh, faster!',
+      "don't stop, i'm leading!",
+      'a few more steps, come on 🐽',
+    ],
+    searchNudgeNamed: (name) => [
+      `${name} is close — follow me! 🐾`,
+      `i can smell ${name}, this way!`,
+      `closing in on ${name} — this way!`,
+      `${name} is waiting — let's go!`,
+    ],
     simpleWoof: 'woof 🐾',
     woofs: [
       'woof 🐾',
@@ -1454,6 +1642,10 @@ const en: AppStrings = {
     saved: 'saved — tap to remove',
     sniffingRoute: 'sniffing route…',
     letsGoHere: "let's go here →",
+    nothingTitle: 'quiet here for now',
+    nothingStory: "*nose to the ground* nothing i know. there's something further from this corner — try there.",
+    failedTitle: 'lost the scent',
+    failedStory: "*sneezes* couldn't sniff that — the connection let us down. press and hold again.",
   },
   time: {
     ago: (value, unit) => {
@@ -1473,13 +1665,12 @@ const en: AppStrings = {
       spotVisits: 'build a route and finish it',
     },
     reward: (paws) => `+${paws} 🐾`,
+    questPoints: (points) => `+${points} pts`,
     bonusLabel: 'the whole day',
     bonusHint: (paws) => `+${paws} 🐾 for all six`,
     lostPetsNearby: 'lost pets',
     moreCount: (n) => `+ ${n} more`,
     showFewer: 'show fewer',
-    badgeSearching: 'searching',
-    badgeUrgent: 'urgent',
     pastSearches: 'past searches',
     finished: 'finished',
     abandoned: 'abandoned',
@@ -1576,6 +1767,7 @@ const en: AppStrings = {
     couldntStartSearch: "couldn't start the search — try again",
     retry: 'try again',
     inputPlaceholder: 'say anything…',
+    send: 'send',
   },
   connection: {
     offline: "no connection — we'll catch up when it's back",
@@ -1584,7 +1776,7 @@ const en: AppStrings = {
   modals: {
     common: { close: 'close' },
     lostDog: {
-      badgeUrgent: 'URGENT',
+      badgeUrgent: 'urgent',
       badgeSearching: 'searching',
       lastSeen: (rel) => `last seen ${rel}`,
       questCta: (points) => `complete search quest for ${points} bonus pts`,
@@ -1717,6 +1909,29 @@ const en: AppStrings = {
       'the more we hold, the thicker the paws here. and i rest easier on our own',
     ],
     noWalkers: 'nobody around just yet 👥',
+    ring: {
+      walk: 'walk',
+      visit: 'visit',
+      meet: 'meet',
+      close: 'close by',
+      far: 'far',
+    },
+    noLostPetsYet: 'no lost pets in range yet',
+    sniffedOut: (name) => `sniffed out ${name} 🔍`,
+    meetSniffing: 'sniffing out where the dogs are 🐕',
+    walkSniffing: (far) => `${far ? 'long' : 'short'} walk, sniffing the way 🚶`,
+    walkNothing: 'nothing worth walking to at that distance — try the other one',
+    meetTo: (name, stops) =>
+      stops
+        ? `${name} — dogs walk there. ${stops} ${stops === 1 ? 'stop' : 'stops'} on the way 🐾`
+        : `${name} — dogs walk there 🐕`,
+    walkTo: (far, name, stops) =>
+      stops
+        ? `${far ? 'long' : 'short'} walk to ${name} — ${stops} ${stops === 1 ? 'stop' : 'stops'} on the way 🐾`
+        : `${far ? 'long' : 'short'} walk to ${name} 🚶`,
+    spotGone: "can't find that one anymore",
+    visitSpot: (name, icon) => `let's check out ${name} ${icon}`,
+    comingSoon: (label) => `${label}! coming soon 🐾`,
     lostSheet: {
       title: 'lost a friend?',
       speciesDog: 'dog',

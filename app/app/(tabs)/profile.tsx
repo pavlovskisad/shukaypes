@@ -9,6 +9,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
+import { formatDistance } from '../../utils/geo';
 import { useGameStore } from '../../stores/gameStore';
 import { api, type TerritoryRanking } from '../../services/api';
 import { useAccessStore } from '../../stores/accessStore';
@@ -64,11 +65,6 @@ interface ProfileData {
 interface TerritoryBoard {
   board: TerritoryRanking[];
   you: { areaM2: number; rank: number | null };
-}
-
-function formatDistance(m: number): string {
-  if (m < 1000) return `${Math.round(m)} m`;
-  return `${(m / 1000).toFixed(1)} km`;
 }
 
 // Small shimmer bar used in place of a stat value while the
@@ -295,7 +291,7 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>{t.profile.stats.walksTogether}</Text>
             <StatRow
               label={t.profile.stats.distanceWalked}
-              value={data ? formatDistance(data.user.totalDistanceMeters) : undefined}
+              value={data ? formatDistance(data.user.totalDistanceMeters, t.units, { snap: false }) : undefined}
             />
             <StatRow label={t.profile.stats.pawsCollected} value={data?.stats.pawsCollected} />
             <StatRow label={t.profile.stats.bonesEaten} value={data?.stats.bonesEaten} />

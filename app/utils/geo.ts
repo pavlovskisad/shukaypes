@@ -20,9 +20,22 @@ function toRad(deg: number): number {
 // "X m" for sub-1km, "X.X km" beyond. Snapped to 50m below 1km so a
 // label doesn't jitter on small GPS drift — which matters more now
 // that one of these sits in the nav HUD and is read while walking.
-export function formatDistance(m: number): string {
-  if (m < 1000) return `${Math.round(m / 50) * 50} m`;
-  return `${(m / 1000).toFixed(1)} km`;
+// `snap: false` is for totals (the profile's distance walked), where
+// the exact figure is the point and nothing is drifting.
+//
+// The ONE copy. Three screens used to carry their own, all with Latin
+// units; the units come in from the strings now (t.units) so uk reads
+// «м»/«км» (UX-4.7).
+export function formatDistance(
+  m: number,
+  units: { m: string; km: string },
+  opts: { snap?: boolean } = {},
+): string {
+  if (m < 1000) {
+    const v = opts.snap === false ? Math.round(m) : Math.round(m / 50) * 50;
+    return `${v} ${units.m}`;
+  }
+  return `${(m / 1000).toFixed(1)} ${units.km}`;
 }
 
 // How much of `route` is still ahead of `from`: the distance to the

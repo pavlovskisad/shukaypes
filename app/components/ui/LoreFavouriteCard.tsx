@@ -12,6 +12,7 @@ import { INK } from '../../constants/surface';
 import { INLINE_ICON } from '../../constants/sizing';
 import { Icon } from './Icon';
 import { distanceMeters, formatDistance } from '../../utils/geo';
+import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame, HandDrawnPaperTop, PICTURE_INSET } from './HandDrawn';
 
 // One hearted place as a card in the favourites carousel: a picture of
@@ -33,6 +34,7 @@ export function LoreFavouriteCard({
   place: LoreFavourite;
   userPos: LatLng | null;
 }) {
+  const t = useStrings();
   const [preview, setPreview] = useState<string | null>(() => cachedLorePreview(place.id));
   useEffect(() => {
     if (preview) return;
@@ -45,7 +47,9 @@ export function LoreFavouriteCard({
     };
   }, [place.id, place.position, preview]);
 
-  const distLabel = userPos ? formatDistance(distanceMeters(userPos, place.position)) : null;
+  const distLabel = userPos
+    ? formatDistance(distanceMeters(userPos, place.position), t.units)
+    : null;
 
   return (
     <View style={styles.card}>

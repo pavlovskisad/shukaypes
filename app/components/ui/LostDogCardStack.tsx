@@ -148,7 +148,7 @@ export function LostDogCardView({
     document.head.appendChild(el);
   }, []);
   const distLabel = userPos
-    ? formatDistance(distanceMeters(userPos, dog.lastSeen.position))
+    ? formatDistance(distanceMeters(userPos, dog.lastSeen.position), t.units)
     : null;
   return (
     <View

@@ -45,14 +45,15 @@ interface QuestHistoryRow {
   rewardPoints: number;
 }
 
-function relativeWhen(iso: string): string {
+// The words come from t.time.ago, so a uk row reads «5хв тому» rather
+// than "5m ago" (UX-4.6).
+function relativeWhen(iso: string, ago: AppStrings['time']['ago']): string {
   const then = new Date(iso).getTime();
   const diffM = Math.max(0, Math.round((Date.now() - then) / 60000));
-  if (diffM < 60) return `${diffM}m ago`;
+  if (diffM < 60) return ago(diffM, 'm');
   const diffH = Math.round(diffM / 60);
-  if (diffH < 24) return `${diffH}h ago`;
-  const diffD = Math.round(diffH / 24);
-  return `${diffD}d ago`;
+  if (diffH < 24) return ago(diffH, 'h');
+  return ago(Math.round(diffH / 24), 'd');
 }
 
 // THE BOARD IS COLOURED LIKE THE MAP.
@@ -804,8 +805,8 @@ export default function TasksScreen() {
                       </Text>
                       <Text style={styles.historyMeta}>
                         {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
-                        {relativeWhen(q.endedAt)}
-                        {q.status === 'completed' ? ` · +${q.rewardPoints}pts` : ''}
+                        {relativeWhen(q.endedAt, t.time.ago)}
+                        {q.status === 'completed' ? ` · ${t.tasks.questPoints(q.rewardPoints)}` : ''}
                       </Text>
                     </View>
                     {q.status === 'completed' ? (
