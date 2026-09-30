@@ -33,14 +33,25 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { INK, SURFACE } from '../../constants/surface';
 import { HandDrawnFrame } from '../ui/HandDrawn';
 
+// The nav HUD's ✕ chip, same number. See `close` below.
+const CLOSE_SIZE = 44;
+
 export interface PromptAction {
   label: string;
   onPress: () => void;
-  // Draw it as the house close button — a square × — instead of a pill
-  // with a sentence in it. For the way OUT of a question whose answer is
-  // "not now": «ще подивлюсь» read as a second thing to consider rather
-  // than as the dismissal it is, and it sat the same size as the answer
-  // while being the opposite of one.
+  // Draw it as the house close button — the round ✕ chip — instead of a
+  // pill with a sentence in it. For the way OUT of a question whose
+  // answer is "not now": «ще подивлюсь» read as a second thing to
+  // consider rather than as the dismissal it is, and it sat the same
+  // size as the answer while being the opposite of one.
+  //
+  // The chip is not invented here. It is the nav HUD's own ✕ (MapView,
+  // the distance-and-exit row) down to the number: 44 round, drawn ring,
+  // chip shadow, 20px glyph at weight 700. That row and this one are the
+  // same strip and never show together — a question replaces the running
+  // search's HUD — so the way out must not change shape between them.
+  // The modals' close is the same chip one step smaller (36, ×); this
+  // one takes the HUD size because it is pressed outdoors while walking.
   close?: boolean;
   // The one that carries the conversation forward. Solid ink; everything
   // else is white with the same edge, so there is never a question about
@@ -104,31 +115,44 @@ export function DogPrompt({
             // invisible anyway, and it is only kept for the heights.
             border: '2px solid transparent',
             position: 'relative',
-            background: a.primary ? INK : '#ffffff',
+            background: a.primary ? INK : SURFACE.fill,
             color: a.primary ? '#ffffff' : INK,
             fontFamily: SYSTEM_FONT,
-            fontSize: TYPE.body,
-            fontWeight: 800,
-            // Square when it is a ×, so it reads as the close affordance
-            // the rest of the app uses rather than as a short answer.
-            padding: a.close ? 0 : '14px 22px',
-            width: a.close ? 52 : undefined,
-            display: a.close ? 'flex' : undefined,
-            alignItems: a.close ? 'center' : undefined,
-            justifyContent: a.close ? 'center' : undefined,
-            // The glyph wants to be bigger than body text to sit right in
-            // a square of this size.
-            ...(a.close ? { fontSize: 24, lineHeight: 1 } : null),
-            borderRadius: R.button,
+            // A circle of this size — pill radius on a square box — with
+            // the HUD's glyph and weight. Everything below that differs
+            // from the answer pills is the chip recipe, not a variation
+            // on the pill.
+            ...(a.close
+              ? {
+                  padding: 0,
+                  width: CLOSE_SIZE,
+                  height: CLOSE_SIZE,
+                  minHeight: CLOSE_SIZE,
+                  boxSizing: 'border-box' as const,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  borderRadius: R.pill,
+                  fontSize: 20,
+                  fontWeight: 700,
+                  boxShadow: SURFACE.chip,
+                }
+              : {
+                  padding: '14px 22px',
+                  borderRadius: R.button,
+                  fontSize: TYPE.body,
+                  fontWeight: 800,
+                  // Past the 44px tap target — these are pressed
+                  // outdoors, one-handed, usually while walking — and
+                  // matched to the corner logo's height so the strip
+                  // reads as one HUD line.
+                  minHeight: 52,
+                  boxShadow: SURFACE.shadow,
+                }),
             cursor: disabled ? 'default' : 'pointer',
             // A filter, not `opacity`: the pop-in keyframe fills
             // `both` and owns opacity, so an inline value would lose.
             filter: disabled ? 'opacity(0.5)' : undefined,
-            // Past the 44px tap target — these are pressed outdoors,
-            // one-handed, usually while walking — and matched to the
-            // corner logo's height so the strip reads as one HUD line.
-            minHeight: 52,
-            boxShadow: SURFACE.shadow,
             // Staggered pop-in, the way-out first and the answer landing
             // on top of it a beat later.
             animation: `dog-prompt-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 70}ms both`,
@@ -137,8 +161,10 @@ export function DogPrompt({
           {/* Drawn edge. Not on the primary: an ink line on an ink
               button is nothing, and drawing it would only cost a
               measurement. */}
-          {a.primary ? null : <HandDrawnFrame radius={R.button} />}
-          {a.close ? '×' : a.label}
+          {a.primary ? null : (
+            <HandDrawnFrame radius={a.close ? R.pill : R.button} />
+          )}
+          {a.close ? '✕' : a.label}
         </button>
       ))}
     </div>
