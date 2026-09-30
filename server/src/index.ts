@@ -27,6 +27,7 @@ import dailyTasksRoute from './routes/dailyTasks.js';
 import loreRoute from './routes/lore.js';
 import placesRoute from './routes/places.js';
 import walkDestinationsRoute from './routes/walkDestinations.js';
+import socialRoute from './routes/social.js';
 import photosRoute from './routes/photos.js';
 import clientErrorsRoute from './routes/clientErrors.js';
 import devRoute from './routes/dev.js';
@@ -232,6 +233,7 @@ export async function buildServer(observe?: RouteObserver) {
   await app.register(loreRoute);
   await app.register(placesRoute);
   await app.register(walkDestinationsRoute);
+  await app.register(socialRoute);
   await app.register(photosRoute);
   await app.register(clientErrorsRoute);
   await app.register(devRoute);

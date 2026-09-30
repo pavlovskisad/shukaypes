@@ -82,6 +82,8 @@ const MAX_STOPS = 3;
 // margin can never be picked.
 const DESTINATION_RADIUS_M = WALK_FAR_M + 500;
 
+export type WalkKind = 'tour' | 'meet';
+
 export interface ExplorationWalk {
   // The drawn polyline, routed through the stops.
   route: LatLng[];
@@ -174,6 +176,22 @@ async function poolFor(
   }
 }
 
+// The MEET pool: where other dogs have actually been, clustered server-
+// side out of the marks walkers left. Nothing is merged into it and
+// nothing stands in for it — a walk to meet somebody has to go where
+// somebody is, and padding the list with parks nobody has used this
+// fortnight would answer the question with the wrong data while looking
+// like it had answered it. An empty pool means the dog says so.
+async function meetPoolFor(origin: LatLng): Promise<WalkCandidate[]> {
+  const { gatherings } = await api.gatheringSpots(origin, DESTINATION_RADIUS_M);
+  return gatherings.map((g) => ({
+    id: g.id,
+    name: g.name,
+    position: g.position,
+    category: g.category,
+  }));
+}
+
 export async function startExplorationWalk(args: {
   origin: LatLng;
   // Google Places parks, which the store already holds for bone
@@ -183,10 +201,18 @@ export async function startExplorationWalk(args: {
   parks: Park[];
   shape: WalkShape;
   distance: WalkDistance;
+  // 'tour' — the everyday walk, out to a park or a landmark.
+  // 'meet'  — out to where other walkers have been. Same routing, same
+  //           landmark stops, same fallbacks; only the pool differs,
+  //           which is the whole reason this is a parameter and not a
+  //           second copy of the function.
+  kind?: WalkKind;
 }): Promise<ExplorationWalk | null> {
-  const { origin, parks, shape, distance } = args;
+  const { origin, parks, shape, distance, kind = 'tour' } = args;
+  const candidates =
+    kind === 'meet' ? await meetPoolFor(origin) : await poolFor(origin, parks);
   const plans = planWalkOptions({
-    candidates: await poolFor(origin, parks),
+    candidates,
     origin,
     shape,
     distance,

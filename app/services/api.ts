@@ -1114,6 +1114,29 @@ export const api = {
       }).toString()}`,
     ),
 
+  // Where other dogs have actually been this fortnight — the pool behind
+  // the walk menu's «meet» leaf. Unlike walkDestinations this has no list
+  // behind it: the server clusters the marks walkers left and names the
+  // clusters, so the answer moves as people play. An empty array is a
+  // real answer, not a failure — see routes/social.ts.
+  gatheringSpots: (center: LatLng, radiusM: number) =>
+    req<{
+      gatherings: Array<{
+        id: string;
+        name: string;
+        category: string;
+        position: LatLng;
+        distM: number;
+        walkers: number;
+      }>;
+    }>(
+      `/social/gathering?${new URLSearchParams({
+        lat: String(center.lat),
+        lng: String(center.lng),
+        radius: String(Math.round(radiusM)),
+      }).toString()}`,
+    ),
+
   // The landmarks each candidate walk passes. Several candidates go in
   // one call because the client picks the walk with the most to see and
   // can only know which that is after asking — see
