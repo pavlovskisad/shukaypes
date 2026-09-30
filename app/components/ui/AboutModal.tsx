@@ -5,7 +5,8 @@ import { INLINE_ICON } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
-import { SURFACE } from '../../constants/surface';
+import { INK, SURFACE } from '../../constants/surface';
+import { colors } from '../../constants/colors';
 import { Z } from '../../constants/z';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
@@ -100,7 +101,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.3)',
+        background: SURFACE.scrim,
         display: 'flex',
         alignItems: 'flex-start',
         // THE SHEET HANGS, IT DOES NOT GROW OUT OF THE BEZEL.
@@ -127,7 +128,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: '#ffffff',
+          background: SURFACE.fill,
           borderRadius: R.card,
           padding: 0,
           width: '100%',
@@ -157,8 +158,9 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           style={{
             position: 'relative',
             paddingTop: HEADER_TOP,
-            paddingLeft: S.xxl,
-            paddingRight: S.xxl,
+            // S.l, the gutter every sibling top sheet uses (UX-10.5).
+            paddingLeft: S.l,
+            paddingRight: S.l,
             paddingBottom: S.s,
             flexShrink: 0,
           }}
@@ -167,9 +169,10 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             style={{
               position: 'absolute',
               top: SAFE_TOP,
-              left: 14,
-              background: '#ffffff',
-              color: '#555',
+              // Mirrors the close circle's inset on the other side.
+              left: CLOSE_INSET,
+              background: SURFACE.fill,
+              color: colors.grey,
               borderRadius: R.label,
               padding: '6px 12px',
               fontSize: TYPE.small,
@@ -192,7 +195,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             {t.modals.about.header}
           </div>
           <div
-            style={{ fontSize: TYPE.small, color: '#444', marginTop: 6, lineHeight: 1.45 }}
+            style={{ fontSize: TYPE.small, color: colors.grey, marginTop: 6, lineHeight: 1.45 }}
             // Intro contains a <strong> tag for the bot name; render the
             // i18n string as HTML so the markup survives translation.
             dangerouslySetInnerHTML={{ __html: t.modals.about.intro }}
@@ -206,13 +209,13 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             display: 'flex',
             flexDirection: 'column',
             gap: S.l,
-            padding: '14px 22px 22px',
+            padding: `${S.m}px ${S.l}px ${S.l}px`,
             flexGrow: 1,
             minHeight: 0,
           }}
         >
           {t.modals.about.rows.map((r, i) => (
-            <div key={r.title} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            <div key={r.title} style={{ display: 'flex', gap: S.m, alignItems: 'flex-start' }}>
               <div
                 style={{
                   width: INLINE_ICON.about,
@@ -231,7 +234,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                     fontFamily: SYSTEM_FONT,
                     fontSize: TYPE.body,
                     fontWeight: 700,
-                    color: '#1a1a1a',
+                    color: INK,
                   }}
                 >
                   {r.title}
@@ -239,7 +242,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                 <div
                   style={{
                     fontSize: TYPE.small,
-                    color: '#555',
+                    color: colors.grey,
                     marginTop: S.xs,
                     lineHeight: 1.5,
                   }}
@@ -252,7 +255,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           <div
             style={{
               fontSize: TYPE.small,
-              color: '#777',
+              color: colors.grey,
               textAlign: 'center',
               marginTop: S.s,
               marginBottom: S.xs,

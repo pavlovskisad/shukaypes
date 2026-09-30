@@ -63,22 +63,24 @@ export function SpeechBubble({ text, bottom = '85%', onHeight }: SpeechBubblePro
         transform: 'translateX(-50%)',
         background: VOICE.background,
         color: VOICE.color,
-        // Fatter bubble — padding 12 vertical for breathing
-        // room, but only 10 horizontal so wrapping multi-line
-        // remarks (greeting, sniff-on / sniff-off lines) hug
-        // their longest line instead of carrying a wide dead
-        // strip on either side. Cap maxWidth at 60vw.
-        // Tighter horizontal padding — 14 → 10 — so wrapping
-        // multi-line bubbles hug their longest line cleanly.
-        padding: '12px 10px',
+        // VOICE.padding — see voice.ts for why 10 horizontal.
+        padding: VOICE.padding,
+        // Drawn edge in the bubble's own colour, like every other
+        // voice bubble (UX-10.9): it was the one without it, and came
+        // out 4px narrower and shorter than its mirror at the edge chip.
+        border: VOICE.border,
         // Uniform full radius — matches the chat bubble + chip
         // family. No more "tail" corner; the bubble's position
         // above the dog is enough direction cue on its own.
         borderRadius: R.chip,
         fontSize: TYPE.body,
-        lineHeight: 1.4,
+        lineHeight: VOICE.lineHeight,
         fontFamily: VOICE.fontFamily,
         whiteSpace: 'pre-line',
+        // A long unbroken token (a URL, a street name run together)
+        // wraps at maxWidth instead of running out of the bubble
+        // (UX-11.19).
+        overflowWrap: 'anywhere',
         width: 'max-content',
         maxWidth: 'min(60vw, 320px)',
         textAlign: 'center',

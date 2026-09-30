@@ -4735,14 +4735,18 @@ const DECK_ANIM_MS = MOTION.sheetMs;
                 // shrinks to its containing block otherwise.
                 width: 'max-content',
                 zIndex: Z.HUD_CHIP_BUBBLE,
-                // Same dimensions / type as the in-map SpeechBubble.
-                padding: '12px 10px',
+                // Same dimensions / type as the in-map SpeechBubble,
+                // centred like it too: the mirror left-aligned its lines,
+                // so the same remark set differently here (UX-10.9).
+                padding: VOICE.padding,
                 background: VOICE.background,
                 color: VOICE.color,
                 borderRadius: R.chip,
                 fontFamily: VOICE.fontFamily,
                 fontSize: TYPE.body,
-                lineHeight: 1.4,
+                lineHeight: VOICE.lineHeight,
+                textAlign: 'center',
+                overflowWrap: 'anywhere',
                 boxShadow: VOICE.shadow,
                 border: VOICE.border,
                 pointerEvents: 'none',

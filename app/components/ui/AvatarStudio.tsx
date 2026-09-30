@@ -119,7 +119,9 @@ export function AvatarStudio({ seed, onStage, onClose }: Props) {
     height: MOUNT,
     margin: `${S.s}px auto 0`,
     background: SURFACE.fill,
-    borderRadius: R.chip,
+    // Round, because the portrait is round everywhere it is shown
+    // (D14): the preview should crop the way the result will.
+    borderRadius: R.pill,
     border: '2px solid transparent',
   };
 
@@ -127,7 +129,7 @@ export function AvatarStudio({ seed, onStage, onClose }: Props) {
     <>
       {shown ? (
         <div style={mount}>
-          <HandDrawnFrame seed={`${seed}-portrait`} radius={R.chip} />
+          <HandDrawnFrame seed={`${seed}-portrait`} radius={R.pill} />
           {/* A div with a background, not an <img>: see LostFlowModal's
               photo mount for why an <img> bursts out of a sized box. */}
           <div
@@ -136,7 +138,7 @@ export function AvatarStudio({ seed, onStage, onClose }: Props) {
             style={{
               position: 'absolute',
               inset: PICTURE_INSET,
-              borderRadius: Math.max(0, R.chip - PICTURE_INSET),
+              borderRadius: R.pill,
               backgroundImage: `url("${shown}")`,
               backgroundSize: 'cover',
               backgroundPosition: 'center center',

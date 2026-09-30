@@ -122,7 +122,11 @@ export function PlayerCard({ player, onClose }: Props) {
     width: PORTRAIT,
     height: PORTRAIT,
     flex: 'none',
-    borderRadius: R.chip,
+    // A circle, like every portrait in the app (D14). And a blank fill
+    // underneath, so a walker who never drew one leaves a slot rather
+    // than a 128px hole in the paper (UX-10.13).
+    borderRadius: R.pill,
+    backgroundColor: colors.portraitBlank,
     backgroundImage: avatar ? `url("${avatar}")` : undefined,
     backgroundSize: 'cover',
     backgroundPosition: 'center center',

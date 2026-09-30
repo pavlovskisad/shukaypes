@@ -95,7 +95,7 @@ const styles = StyleSheet.create({
     width: PORTRAIT,
     height: PORTRAIT,
     borderRadius: PORTRAIT / 2,
-    backgroundColor: '#f4f4f4',
+    backgroundColor: colors.portraitBlank,
     flexShrink: 0,
   },
   portraitImage: {
@@ -112,7 +112,7 @@ const styles = StyleSheet.create({
     width: 30,
     fontSize: TYPE.small,
     fontWeight: '700',
-    color: '#999',
+    color: colors.grey,
   },
   // The digit gets weight, not colour — the silhouette beside it is
   // already carrying the owner's hue and two colours competing in one
@@ -131,11 +131,11 @@ const styles = StyleSheet.create({
   },
   boardArea: {
     fontSize: TYPE.small,
-    color: '#777',
+    color: colors.grey,
     fontWeight: '700',
   },
   boardYouText: {
-    color: 'rgba(0,60,255,0.85)',
+    color: colors.blue,
     fontWeight: '700',
   },
 });

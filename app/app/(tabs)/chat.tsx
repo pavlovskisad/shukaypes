@@ -17,6 +17,7 @@ import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
+import { VOICE } from '../../constants/voice';
 import { TYPE } from '../../constants/type';
 import { INK, SURFACE } from '../../constants/surface';
 import { popPressableEvent } from '../../utils/popOnTap';
@@ -704,11 +705,15 @@ const styles = StyleSheet.create({
     paddingVertical: S.l,
     paddingHorizontal: S.xl,
     borderRadius: R.card,
+    // Both sides carry the same 2px: ink on the dog's, transparent on
+    // yours (the drawn frame sits in it). The user bubble had none, so
+    // the same line of text made a bubble 4px smaller (UX-10.9).
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   assistantBubble: {
     alignSelf: 'flex-start',
     backgroundColor: INK,
-    borderWidth: 2,
     borderColor: INK,
     ...CARD_SHADOW,
   },
@@ -721,7 +726,9 @@ const styles = StyleSheet.create({
   bubbleText: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.body,
-    lineHeight: 24,
+    // The voice bubbles' line spacing (15 × 1.4 = 21), not a looser 24
+    // of its own: it is the same dog talking (UX-10.9).
+    lineHeight: Math.round(TYPE.body * VOICE.lineHeight),
   },
   assistantText: {
     color: '#ffffff',

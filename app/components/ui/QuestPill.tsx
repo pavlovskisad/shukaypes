@@ -174,7 +174,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   closeTxt: {
-    color: '#666',
+    color: colors.grey,
     fontSize: TYPE.hero,
     lineHeight: 22,
     fontWeight: '400',

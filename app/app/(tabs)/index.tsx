@@ -313,7 +313,9 @@ const styles = StyleSheet.create({
     // inset (we want map + HUD to reach the very top of the screen),
     // so this is the only top-spacing the HUD has.
     alignItems: 'center',
-    paddingHorizontal: S.m,
+    // S.l, the side gutter the quest pill and the tab bar use too:
+    // the three sat at 12 / 28 / 16 and no edge lined up (UX-10.16).
+    paddingHorizontal: S.l,
     // Middle ground between the original 32 and the brought-up 12 —
     // header elements sit comfortably under the OS status bar without
     // crowding it.
@@ -322,13 +324,14 @@ const styles = StyleSheet.create({
   // The gate's language switch, where the status pill would be.
   gateLang: {
     position: 'absolute',
-    right: S.m,
+    right: S.l,
     top: S.xxl + (HUD_ICON_SIZE - CHIP.height) / 2,
   },
   questRow: {
     flexDirection: 'row',
     justifyContent: 'center',
     marginTop: S.s,
-    paddingHorizontal: S.m,
+    // No gutter of its own: QuestPill's wrapper carries the S.l. Two
+    // layers of padding stacked up to 28 (UX-10.16).
   },
 });

@@ -40,7 +40,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { SURFACE } from '../../constants/surface';
-import { TYPE } from '../../constants/type';
+import { ERROR_TEXT, TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { HandDrawnFrame } from './HandDrawn';
 import { AvatarStudio, type AvatarStage } from './AvatarStudio';
@@ -184,10 +184,16 @@ export const SCROLL: CSSProperties = {
   padding: `${S.s}px ${S.l}px ${S.m}px`,
 };
 
+// A field is paper nested inside a sheet, so it turns R.button, one
+// step tighter than the sheet's R.card (the nested-corner rule in
+// radius.ts). It used to reuse the card's own 18 (UX-10.6).
+//
+// THE one field recipe: LostFlowModal imports Field and FIELD_INPUT
+// from here rather than keeping a copy (UX-10.7).
 const FIELD_PAPER: CSSProperties = {
   position: 'relative',
   background: SURFACE.fill,
-  borderRadius: R.chip,
+  borderRadius: R.button,
   border: '2px solid transparent',
   marginTop: 4,
 };
@@ -202,7 +208,7 @@ export const FIELD_INPUT: CSSProperties = {
   background: 'transparent',
   border: 'none',
   outline: 'none',
-  padding: `6px ${S.m}px`,
+  padding: `${S.s}px ${S.m}px`,
   display: 'block',
 };
 
@@ -240,10 +246,8 @@ export const LINK: CSSProperties = {
 };
 
 export const ERROR: CSSProperties = {
+  ...ERROR_TEXT,
   marginTop: S.m,
-  fontSize: TYPE.small,
-  fontWeight: 700,
-  color: colors.red,
 };
 
 export const NOTE: CSSProperties = {
@@ -256,7 +260,7 @@ export const NOTE: CSSProperties = {
 export function Field({ seed, children }: { seed: string; children: ReactNode }) {
   return (
     <div style={FIELD_PAPER}>
-      <HandDrawnFrame seed={seed} radius={R.chip} />
+      <HandDrawnFrame seed={seed} radius={R.button} />
       {children}
     </div>
   );

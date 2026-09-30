@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   },
   previewImage: { width: '100%', height: '100%' },
   // While the snapshot renders: the same paper the map draws on.
-  previewEmpty: { flex: 1, backgroundColor: '#eeece6' },
+  previewEmpty: { flex: 1, backgroundColor: colors.photoBlank },
   dotRing: {
     position: 'absolute',
     left: '50%',
@@ -205,7 +205,7 @@ const styles = StyleSheet.create({
   story: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.small,
-    color: '#666',
+    color: colors.grey,
     lineHeight: 18,
   },
 });

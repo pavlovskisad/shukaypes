@@ -40,6 +40,7 @@ import { readScreenCenter, useGameStore } from '../../stores/gameStore';
 import { SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame, PAPER_EDGE } from './HandDrawn';
+import { Field, FIELD_INPUT } from './AccountDoor';
 import { Icon } from './Icon';
 import { colors } from '../../constants/colors';
 import { INLINE_ICON } from '../../constants/sizing';
@@ -77,35 +78,10 @@ interface LostFlowModalProps {
 // the paper is a wrapper and the control sits inside it stripped of its
 // own chrome. Same recipe as the chat composer, which is white card and
 // a borderless input.
-const FIELD_PAPER: React.CSSProperties = {
-  position: 'relative',
-  background: SURFACE.fill,
-  borderRadius: R.chip,
-  // Transparent, and reserved: the ink is the HandDrawnFrame child, but
-  // the 2px still has to be here or the field loses 4px of height
-  // against the pills it sits above. Same reason MODAL_PILL_LIGHT keeps
-  // one it cannot show.
-  border: '2px solid transparent',
-  marginTop: 4,
-};
-
-// The control itself: no fill, no border, no focus ring. The paper
-// around it is the field.
-const FIELD_INPUT: React.CSSProperties = {
-  width: '100%',
-  boxSizing: 'border-box',
-  fontFamily: SYSTEM_FONT,
-  // 16px, not TYPE.body. Anything under 16 makes iOS Safari zoom the
-  // viewport on focus and never zoom cleanly back — the same off-scale
-  // value, for the same reason, as the chat composer's input.
-  fontSize: 16,
-  color: colors.black,
-  background: 'transparent',
-  border: 'none',
-  outline: 'none',
-  padding: `${S.s}px ${S.m}px`,
-  display: 'block',
-};
+//
+// The paper and the stripped control are AccountDoor's Field and
+// FIELD_INPUT, imported rather than copied: the two copies had already
+// drifted apart on padding (UX-10.7), and a field is a field.
 
 const LABEL_STYLE: React.CSSProperties = {
   fontFamily: SYSTEM_FONT,
@@ -114,18 +90,6 @@ const LABEL_STYLE: React.CSSProperties = {
   color: colors.grey,
   margin: `${S.m}px 0 0`,
 };
-
-// One field: the paper, its drawn edge, and whatever control is inside.
-// `seed` keeps a given field's wobble stable across re-renders — a line
-// that redraws itself on every keystroke is a line that twitches.
-function Field({ seed, children }: { seed: string; children: React.ReactNode }) {
-  return (
-    <div style={FIELD_PAPER}>
-      <HandDrawnFrame seed={seed} radius={R.chip} />
-      {children}
-    </div>
-  );
-}
 
 export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
   const t = useStrings();
@@ -399,7 +363,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(20,20,15,0.45)',
+        background: SURFACE.scrim,
         display: 'flex',
         alignItems: 'flex-start',
         // See the geometry note in HandDrawn.tsx: the sheet hangs under
@@ -562,12 +526,14 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                     position: 'relative',
                     marginTop: S.s,
                     background: SURFACE.fill,
-                    borderRadius: R.chip,
+                    // R.button, not the card's R.chip: a thing nested in a
+                    // sheet turns a tighter corner than the sheet (radius.ts).
+                    borderRadius: R.button,
                     border: '2px solid transparent',
                     height: 148,
                   }}
                 >
-                  <HandDrawnFrame seed="photo-preview" radius={R.chip} />
+                  <HandDrawnFrame seed="photo-preview" radius={R.button} />
                   {/* A DIV WITH A BACKGROUND, not an <img> — the same
                       construction the pet card uses, and for a reason
                       worth writing down: an <img> is a replaced element,
@@ -583,7 +549,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                     style={{
                       position: 'absolute',
                       inset: PHOTO_INSET,
-                      borderRadius: Math.max(0, R.chip - PHOTO_INSET),
+                      borderRadius: Math.max(0, R.button - PHOTO_INSET),
                       backgroundImage: `url("${photoDataUrl}")`,
                       backgroundSize: 'cover',
                       backgroundPosition: 'center center',

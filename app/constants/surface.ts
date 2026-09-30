@@ -57,6 +57,14 @@ export const SURFACE = {
   // they are what happens when a recipe is copied rather than named.
   chip: '0 4px 12px rgba(0,0,0,0.16)',
 
+  // The dimmed layer behind a sheet that takes the whole screen (About,
+  // the ad reader, the lost-pet report). Three siblings used three
+  // values (0.45 warm, 0.3 black, 0.4); owner picked the warm 0.45 the
+  // majority already used (D13, UX-10.4). SpotModal and LostDogModal
+  // are transparent on purpose — the map behind them is the content —
+  // and do not use this.
+  scrim: 'rgba(20,20,15,0.45)',
+
   // For a chip lying on top of a photo, where the ink edge alone can
   // land on a dark patch and vanish.
   onPhoto: '0 4px 14px rgba(0,0,0,0.28)',

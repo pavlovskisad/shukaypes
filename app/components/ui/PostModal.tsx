@@ -24,9 +24,10 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
-import { TYPE } from '../../constants/type';
+import { ERROR_TEXT, TYPE } from '../../constants/type';
+import { colors } from '../../constants/colors';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
-import { SURFACE } from '../../constants/surface';
+import { INK, SURFACE } from '../../constants/surface';
 import { api } from '../../services/api';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
@@ -148,7 +149,7 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(20,20,15,0.45)',
+        background: SURFACE.scrim,
         display: 'flex',
         alignItems: 'flex-start',
         // THE SHEET HANGS, IT DOES NOT GROW OUT OF THE BEZEL.
@@ -180,7 +181,7 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: '#ffffff',
+          background: SURFACE.fill,
           borderRadius: R.card,
           width: '100%',
           maxWidth: 460,
@@ -211,7 +212,7 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.title,
               fontWeight: 800,
-              color: '#2B2B26',
+              color: INK,
             }}
           >
             {dogName ? t.modals.post.titleNamed(dogName) : t.modals.post.title}
@@ -232,11 +233,11 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
           }}
         >
           {loading ? (
-            <div style={{ ...BODY_TEXT, color: '#8A867C' }}>{t.modals.post.loading}</div>
+            <div style={{ ...BODY_TEXT, color: colors.grey }}>{t.modals.post.loading}</div>
           ) : null}
 
           {failed ? (
-            <div style={{ ...BODY_TEXT, color: '#A2452F' }}>{t.modals.post.failed}</div>
+            <div style={{ ...BODY_TEXT, ...ERROR_TEXT }}>{t.modals.post.failed}</div>
           ) : null}
           {failed ? (
             <button
@@ -248,11 +249,11 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
           ) : null}
 
           {post?.body ? (
-            <div style={{ ...BODY_TEXT, color: '#2B2B26', whiteSpace: 'pre-wrap' }}>{post.body}</div>
+            <div style={{ ...BODY_TEXT, color: INK, whiteSpace: 'pre-wrap' }}>{post.body}</div>
           ) : null}
 
           {post && !post.body ? (
-            <div style={{ ...BODY_TEXT, color: '#5A5750' }}>
+            <div style={{ ...BODY_TEXT, color: colors.grey }}>
               {t.modals.post.notStored}
               {/* No body AND no link means the walker has not reported a
                   sighting yet — the original is behind the same gate the
@@ -278,11 +279,11 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
                 marginTop: S.m,
                 padding: S.s,
                 borderRadius: R.chip,
-                background: '#F3F0E7',
+                background: colors.greyBg,
                 fontFamily: SYSTEM_FONT,
                 fontSize: TYPE.small,
                 lineHeight: 1.45,
-                color: '#5A5750',
+                color: colors.grey,
               }}
             >
               {t.modals.post.contactsMaskedBySource}
@@ -295,21 +296,21 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
                 marginTop: S.m,
                 padding: S.s,
                 borderRadius: R.chip,
-                background: '#F3F0E7',
+                background: colors.greyBg,
                 fontFamily: SYSTEM_FONT,
                 fontSize: TYPE.small,
                 lineHeight: 1.45,
-                color: '#5A5750',
+                color: colors.grey,
               }}
             >
               {t.modals.post.contactsAfterSighting}
               {confirmingSeen && dogName ? (
-                <div style={{ marginTop: S.s, fontWeight: 800, color: '#2B2B26' }}>
+                <div style={{ marginTop: S.s, fontWeight: 800, color: INK }}>
                   {t.modals.lostDog.seenConfirm(dogName)}
                 </div>
               ) : null}
               {seenRefusal ? (
-                <div role="status" style={{ marginTop: S.s, fontWeight: 700, color: '#A2452F' }}>
+                <div role="status" style={{ ...ERROR_TEXT, marginTop: S.s }}>
                   {seenRefusal}
                 </div>
               ) : null}

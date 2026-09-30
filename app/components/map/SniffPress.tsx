@@ -698,14 +698,15 @@ function SniffingBubble({ position }: { position: LatLng }) {
     >
       <div
         style={{
-          // Sniffing indicator — same family as the discovery
-          // bubble above (12/14 padding, 22 radius, 16 type).
-          padding: '12px 14px',
+          // Sniffing indicator — the dog's voice, so the voice
+          // bubble's own padding and line spacing (voice.ts).
+          padding: VOICE.padding,
           background: VOICE.background,
           color: VOICE.color,
           borderRadius: R.chip,
           fontFamily: VOICE.fontFamily,
           fontSize: TYPE.body,
+          lineHeight: VOICE.lineHeight,
           // Upright, like every other voice bubble: Annex has no italic,
           // so `fontStyle: italic` was only the browser shearing it.
           boxShadow: VOICE.shadow,

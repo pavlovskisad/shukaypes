@@ -7,7 +7,7 @@ import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
-import { TYPE } from '../../constants/type';
+import { ERROR_TEXT, TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { formatDistance } from '../../utils/geo';
 import { LOOP_VIEW_PROPS } from '../../utils/motion';
@@ -267,7 +267,7 @@ export default function ProfileScreen() {
               style={({ pressed }) => [styles.editChipHit, pressed && { opacity: 0.7 }]}
             >
               <View style={styles.editChip}>
-                <HandDrawnFrame radius={EDIT_CHIP_H / 2} />
+                <HandDrawnFrame radius={R.label} />
                 <Text style={styles.editChipText}>{t.auth.editChip}</Text>
               </View>
             </Pressable>
@@ -577,7 +577,9 @@ const styles = StyleSheet.create({
   editChip: {
     height: EDIT_CHIP_H,
     paddingHorizontal: S.m,
-    borderRadius: EDIT_CHIP_H / 2,
+    // R.label, not a capsule: it sits ON the card, so it is a small
+    // piece of the same paper with a tighter corner (radius.ts, UX-10.6).
+    borderRadius: R.label,
     backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
@@ -663,7 +665,7 @@ const styles = StyleSheet.create({
   },
   companionLevel: {
     fontSize: TYPE.small,
-    color: '#555',
+    color: colors.grey,
     marginBottom: S.s,
   },
   // Just the row the bar is drawn into — track and fill are both
@@ -681,7 +683,7 @@ const styles = StyleSheet.create({
   },
   statLabel: {
     fontSize: TYPE.small,
-    color: '#555',
+    color: colors.grey,
   },
   statValue: {
     fontSize: TYPE.body,
@@ -689,8 +691,7 @@ const styles = StyleSheet.create({
     color: colors.black,
   },
   error: {
-    fontSize: TYPE.small,
-    color: '#a33',
+    ...ERROR_TEXT,
     textAlign: 'center',
     marginTop: S.s,
   },

@@ -11,6 +11,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK } from '../../constants/surface';
+import { colors } from '../../constants/colors';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
@@ -268,7 +269,10 @@ const styles = StyleSheet.create({
     bottom: PICTURE_INSET,
     borderRadius: Math.max(0, R.card - PICTURE_INSET),
   },
+  // A pet with no photo gets the map's paper behind its emoji, not a
+  // blank white card that reads as a failed load (UX-10.14).
   photoFallback: {
+    backgroundColor: colors.photoBlank,
     alignItems: 'center',
     justifyContent: 'center',
   },

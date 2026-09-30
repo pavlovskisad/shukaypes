@@ -331,9 +331,9 @@ export function LostDogModal({
               : undefined,
           }}
         >
-          {/* Dark story bubble — same voice family as the sniff
-              discovery bubble. Minimum info: name, breed, one meta
-              line, reward. */}
+          {/* Story card — white paper like the sniff discovery card,
+              with the same drawn edge. Minimum info: name, breed, one
+              meta line, reward. */}
           <div
             style={{
               // Wider at the sides than the top so a long name, centred,
@@ -344,7 +344,10 @@ export function LostDogModal({
               borderRadius: R.card,
               fontFamily: VOICE.fontFamily,
               boxShadow: VOICE.shadow,
-              border: VOICE.border,
+              // Reserved, not painted: the ink is the HandDrawnFrame
+              // below. It was a ruler-straight CSS line, the one paper
+              // surface in the app whose edge was not drawn (UX-10.11).
+              border: '2px solid transparent',
               textAlign: 'center',
               // Capped to the screen with room for the close disc's
               // S.l overhang: at a flat 300 on a 320px phone the disc
@@ -354,6 +357,8 @@ export function LostDogModal({
               position: 'relative',
             }}
           >
+            {/* Drawn edge — see HandDrawn.tsx. */}
+            <HandDrawnFrame radius={R.card} />
             {/* A VISIBLE CLOSE (UX-9.21). Tapping the map around the card
                 always closed it, but nothing said so — people looking at
                 a lost pet's card had no drawn way out. The app's one

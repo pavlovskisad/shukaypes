@@ -1153,7 +1153,7 @@ const styles = StyleSheet.create({
   dailyCount: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.small,
-    color: '#777',
+    color: colors.grey,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
@@ -1182,9 +1182,12 @@ const styles = StyleSheet.create({
   icon: { fontSize: TYPE.display },
   iconWrap: { width: 44, alignItems: 'center' },
   label: { flex: 1, fontSize: TYPE.body, color: colors.black },
-  labelDone: { color: '#aaa', textDecorationLine: 'line-through' },
-  count: { fontSize: TYPE.small, color: '#777', fontWeight: '700' },
-  countDone: { color: '#666' },
+  labelDone: { color: colors.greyLight, textDecorationLine: 'line-through' },
+  count: { fontSize: TYPE.small, color: colors.grey, fontWeight: '700' },
+  // Done fades, like the label beside it. It used to go DARKER than
+  // an open row's count, so a finished task read as the loud one
+  // (UX-10.3).
+  countDone: { color: colors.greyLight },
   // WHAT IT PAYS. Sits between the label and the count, quieter than
   // either: it is the reason to do the row, not the state of it.
   reward: {
@@ -1196,7 +1199,7 @@ const styles = StyleSheet.create({
   },
   // Already banked. Faded rather than hidden — a row that drops its
   // number once paid reads as though the reward was withdrawn.
-  rewardPaid: { color: '#9a9a9a' },
+  rewardPaid: { color: colors.greyLight },
   // The bonus row, set off from the six by the same gap the tab uses
   // everywhere else rather than by a rule.
   bonusTask: { marginTop: S.s },
@@ -1245,15 +1248,15 @@ const styles = StyleSheet.create({
     color: colors.black,
   },
   // Your row's ink, the same blue BoardRow uses for «ти».
-  happyIndexYou: { color: 'rgba(0,60,255,0.85)' },
+  happyIndexYou: { color: colors.blue },
   boardHint: {
     fontSize: TYPE.caption,
-    color: '#777',
+    color: colors.grey,
     marginTop: S.s,
   },
   boardEmpty: {
     fontSize: TYPE.small,
-    color: '#777',
+    color: colors.grey,
     paddingVertical: S.m,
   },
   // The daily tasks' progress bars. The standing used to share these —
@@ -1272,7 +1275,7 @@ const styles = StyleSheet.create({
   cardHeaderCount: {
     fontSize: TYPE.small,
     fontWeight: '700',
-    color: '#999',
+    color: colors.grey,
     marginBottom: S.m, // align with cardTitle's marginBottom
   },
   historyRow: {
@@ -1289,17 +1292,17 @@ const styles = StyleSheet.create({
   },
   historyMeta: {
     fontSize: TYPE.small,
-    color: '#777',
+    color: colors.grey,
     marginTop: 2,
   },
   historyTickDone: {
     fontSize: TYPE.body,
-    color: 'rgba(0,60,255,0.85)',
+    color: colors.blue,
     fontWeight: '700',
   },
   historyTickAbandon: {
     fontSize: TYPE.title,
-    color: '#bbb',
+    color: colors.greyLight,
     fontWeight: '700',
   },
 });

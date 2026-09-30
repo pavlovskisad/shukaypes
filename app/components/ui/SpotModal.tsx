@@ -198,7 +198,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               style={{
                 position: 'absolute',
                 top: SAFE_TOP,
-                left: 14,
+                left: CLOSE_INSET,
                 color: INK,
                 fontSize: TYPE.body,
                 fontWeight: 800,
@@ -226,7 +226,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         {/* Info section — name + address. Scrolls if needed. */}
         <div
           style={{
-            padding: '20px 22px 8px',
+            // S.l side gutter, shared by every sibling top sheet (UX-10.5).
+            padding: `${S.xl}px ${S.l}px ${S.s}px`,
             overflowY: 'auto',
             flexGrow: 1,
             minHeight: 0,
@@ -238,7 +239,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               fontSize: TYPE.display,
               fontWeight: 800,
               lineHeight: 1.15,
-              color: '#1a1a1a',
+              color: INK,
             }}
           >
             {renderSpot.name}
@@ -247,7 +248,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             <div
               style={{
                 fontSize: TYPE.small,
-                color: '#777',
+                color: colors.grey,
                 marginTop: S.s,
               }}
             >
@@ -262,7 +263,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           style={{
             display: 'flex',
             gap: S.s,
-            padding: '12px 22px 20px',
+            padding: `${S.m}px ${S.l}px ${S.xl}px`,
             flexShrink: 0,
           }}
         >

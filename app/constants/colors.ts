@@ -8,6 +8,13 @@ export const colors = {
   accent: '#c8ff00',
   red: '#e84040',
   redBg: '#fde8e8',
+  // BLANKS. What sits where a picture will go, so an empty slot reads
+  // as a slot and not as a hole in the paper (UX-10.13, UX-10.14).
+  // portraitBlank — an undrawn walker portrait (board rows, PlayerCard).
+  // photoBlank — a lost pet with no photo, or a map snapshot still
+  // rendering; warmer, the map's own paper.
+  portraitBlank: '#f4f4f4',
+  photoBlank: '#eeece6',
   amber: '#d9a030',
   amberBg: '#fdf3e0',
   // THE BLUES, which the app had for a long time and never named.

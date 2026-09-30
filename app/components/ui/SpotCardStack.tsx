@@ -155,8 +155,11 @@ const styles = StyleSheet.create({
   // fighting the hero icon between them.
   ratingRow: {
     position: 'absolute',
-    top: 14,
-    left: 14,
+    // One inset for every corner readout and the name block (UX-10.15):
+    // the badges sat at 14 while the name sat at 20, so nothing on the
+    // card shared an edge.
+    top: S.l,
+    left: S.l,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 4,
@@ -173,8 +176,8 @@ const styles = StyleSheet.create({
   },
   distRow: {
     position: 'absolute',
-    top: 14,
-    right: 14,
+    top: S.l,
+    right: S.l,
     flexDirection: 'row',
     alignItems: 'center',
     gap: 2,
@@ -187,9 +190,9 @@ const styles = StyleSheet.create({
   },
   cardBody: {
     position: 'absolute',
-    left: 20,
-    right: 20,
-    bottom: 18,
+    left: S.l,
+    right: S.l,
+    bottom: S.l,
   },
   cardName: {
     fontFamily: SYSTEM_FONT,
@@ -200,7 +203,7 @@ const styles = StyleSheet.create({
   cardMeta: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.small,
-    color: '#777',
+    color: colors.grey,
     marginTop: S.xs,
   },
 });

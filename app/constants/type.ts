@@ -12,6 +12,8 @@
 // check whether one of these adapted with a one-line override would
 // do the job.
 
+import { colors } from './colors';
+
 export const TYPE = {
   // Chip labels, badges, distance pills, small counts.
   caption: 11,
@@ -30,4 +32,21 @@ export const TYPE = {
   // Modal hero — the giant name at the top of LostDogModal /
   // SpotModal info section.
   display: 26,
+} as const;
+
+// THE ERROR LINE. A bare "that didn't work" under a form or a screen
+// was styled four ways (#a33, #A2452F, colors.red at 700, colors.red at
+// 800), so the same failure looked like a different kind of problem on
+// each screen (UX-10.2). One colour, one size, one weight. Spread it
+// and add only the margin the call site needs.
+//
+// fontWeight is the string '700' so the same object works in an RN
+// StyleSheet and in an inline web style alike.
+//
+// Form errors that sit in a box (LostFlowModal's redBg callout) keep
+// their box: that is a different element, not a different error text.
+export const ERROR_TEXT = {
+  color: colors.red,
+  fontSize: TYPE.small,
+  fontWeight: '700',
 } as const;

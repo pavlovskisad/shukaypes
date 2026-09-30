@@ -15,6 +15,9 @@
 
 import { View, Text, StyleSheet } from 'react-native';
 import { useLangStore } from '../../stores/langStore';
+import { colors } from '../../constants/colors';
+import { INK, SURFACE } from '../../constants/surface';
+import { TYPE } from '../../constants/type';
 
 export function InviteGate() {
   const lang = useLangStore((s) => s.lang);
@@ -42,25 +45,26 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 36,
-    backgroundColor: '#F3F0E7',
+    backgroundColor: SURFACE.fill,
   },
   emoji: { fontSize: 56, marginBottom: 18 },
   title: {
-    fontSize: 22,
+    fontSize: TYPE.hero,
+    fontWeight: '700',
     textAlign: 'center',
     marginBottom: 12,
-    color: '#2B2B26',
+    color: INK,
   },
   body: {
-    fontSize: 15,
+    fontSize: TYPE.body,
     lineHeight: 22,
     textAlign: 'center',
-    color: '#5A5750',
+    color: colors.grey,
   },
   hint: {
-    fontSize: 13,
+    fontSize: TYPE.small,
     textAlign: 'center',
     marginTop: 20,
-    color: '#8A867C',
+    color: colors.grey,
   },
 });
