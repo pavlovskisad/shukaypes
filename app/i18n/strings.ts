@@ -137,6 +137,10 @@ export interface AppStrings {
     // The map's style never arrived (network), or construction threw.
     mapLoadFailed: string;
     retry: string;
+    // No real GPS fix — permission denied, or the browser never answered
+    // — so the map is standing on the Kyiv fallback. A status chip in the
+    // HUD, with the one thing that fixes it.
+    noLocation: string;
   };
   // The dog's questions during a search, and the answers under them.
   // Every decision point in supersniff is one of these.
@@ -154,6 +158,10 @@ export interface AppStrings {
     contactOpen: string;
     contactLater: string;
     close: string;
+    // Supersniff's deck with nothing in it: no pets within walking range,
+    // or no connection to fetch them. Stands where the cards would be.
+    emptyDeck: string;
+    emptyDeckOffline: string;
   };
   bubbles: {
     greeting: string;
@@ -654,6 +662,7 @@ const uk: AppStrings = {
       'цей браузер не вміє малювати мапу. онови систему або відкрий шукайпес у свіжому Chrome чи Safari',
     mapLoadFailed: 'мапа не довантажилась. перевір звʼязок',
     retry: 'спробувати ще',
+    noLocation: 'не бачу, де ти — увімкни геолокацію',
   },
   search: {
     confirm: (name) => `йдемо шукати ${name}?`,
@@ -669,6 +678,8 @@ const uk: AppStrings = {
     contactOpen: 'відкрити оголошення',
     contactLater: 'пізніше',
     close: 'завершити',
+    emptyDeck: 'поряд ніхто не загубився. добре 🐾',
+    emptyDeckOffline: 'звʼязку немає — не бачу, хто загубився',
   },
   bubbles: {
     greeting: 'гав! натисни на мене — розкажу, що до чого 🐾',
@@ -1238,6 +1249,7 @@ const en: AppStrings = {
       'this browser cannot draw the map. update your system, or open шукайпес in a recent Chrome or Safari',
     mapLoadFailed: 'the map did not load. check your connection',
     retry: 'try again',
+    noLocation: "can't see where you are — turn on location",
   },
   search: {
     confirm: (name) => `go looking for ${name}?`,
@@ -1253,6 +1265,8 @@ const en: AppStrings = {
     contactOpen: 'open the post',
     contactLater: 'later',
     close: 'finish',
+    emptyDeck: 'nobody lost nearby. good 🐾',
+    emptyDeckOffline: "no connection — can't see who's lost",
   },
   bubbles: {
     greeting: "woof! tap me to learn what's what 🐾",

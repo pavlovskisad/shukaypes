@@ -101,6 +101,11 @@ interface CompanionProps {
   // beyond-horizon position projects up into the sky, so the sprite must
   // be hidden or it floats in the air.
   hidden?: boolean;
+  // Supersniff's deck has at least one pet in it. The intro hint teaches
+  // swiping that deck, and waits for one — "swipe for the next dog" over
+  // an empty map (a quiet area, or no connection) is a line about
+  // nothing. Defaults true so any other caller keeps the old behaviour.
+  hasSearchDogs?: boolean;
   onTapCompanion?: () => void;
   // Fires on EVERY tap (open and close), before the menu state changes.
   // Parent uses it to record a timestamp and suppress the map-level
@@ -119,6 +124,7 @@ export function Companion({
   question,
   hideBubble,
   hidden,
+  hasSearchDogs = true,
   onTapCompanion,
   onTap,
 }: CompanionProps) {
@@ -847,7 +853,7 @@ export function Companion({
   // per-swipe bubble. Fires right away and takes priority over any bark that
   // happens to be up (see activeBubble below).
   const supersniffIntroHint = useHint('map:supersniff-intro', {
-    ready: dogCam,
+    ready: dogCam && hasSearchDogs,
     showDelayMs: 150,
     autoDismissMs: 6500,
     // FIXME(hints): persist:false while iterating — fires once per session

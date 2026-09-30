@@ -359,6 +359,13 @@ interface GameState {
   // person marking where they lost their pet does it over a sprite
   // asking whether they would like to go for a coffee.
   lostPinning: boolean;
+  // The map could not be drawn (no WebGL2, or the style never arrived)
+  // and MapView is showing its problem screen instead. Published so the
+  // dashboard can stop deferring to the gate: the gate's ring lives on
+  // the map, and with no map there is no ring — hiding the tab bar then
+  // left a retry button (or, on an unsupported browser, nothing at all)
+  // as the whole app.
+  mapBlocked: boolean;
   // Currently-visible one-shot hint id (or null). Published by the
   // component that owns the hint's primary surface (the companion's
   // speech bubble) so OTHER components can render a matching visual
@@ -495,6 +502,7 @@ interface GameState {
   setAboutOpen: (open: boolean) => void;
   setLostFlowOpen: (open: boolean) => void;
   setLostPinning: (pinning: boolean) => void;
+  setMapBlocked: (blocked: boolean) => void;
   // Credit paws won somewhere other than the pavement (finishing a
   // search). The server has already banked them; this is the HUD
   // catching up, one pickup pulse at a time so it reads as a run of
@@ -637,6 +645,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   aboutOpen: false,
   lostFlowOpen: false,
   lostPinning: false,
+  mapBlocked: false,
   activeHint: null,
   menuCamera: null,
   hintsAllowed: false,
@@ -1174,11 +1183,18 @@ export const useGameStore = create<GameState>((set, get) => ({
                 }
               : prev.lastRaid,
           lastSyncError: null,
+          // This loop is the one that actually delivers pets now —
+          // syncLostDogs only runs after a sighting — so it has to say
+          // the first answer is in. Without it the quests tab could not
+          // tell "no pets nearby" from "not asked yet" and showed its
+          // skeleton forever in a quiet area.
+          lostDogsLoaded: true,
         };
       });
     } catch (err) {
       if (seq !== syncMapSeq) return;
-      set({ lastSyncError: (err as Error).message });
+      // Settled, if badly — same rule syncLostDogs follows.
+      set({ lastSyncError: (err as Error).message, lostDogsLoaded: true });
     }
   },
 
@@ -1423,6 +1439,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   // you get a coffee question on top of a lost-pet report.
   setLostPinning: (lostPinning) =>
     set(lostPinning ? { lostPinning, menuOpen: false } : { lostPinning }),
+  setMapBlocked: (mapBlocked) => set({ mapBlocked }),
   awardPaws: (n) => {
     const step = (left: number) => {
       if (left <= 0) return;

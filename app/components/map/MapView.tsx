@@ -18,6 +18,7 @@ import { TYPE } from '../../constants/type';
 import { DEV_TOOLS } from '../../constants/devTools';
 import { useGameStore } from '../../stores/gameStore';
 import { useAccessStore } from '../../stores/accessStore';
+import { useConnectionStore } from '../../stores/connectionStore';
 import { MapContext } from './MapContext';
 import {
   LIGHT_PALETTE,
@@ -386,6 +387,13 @@ export default function MapViewWeb() {
   // needs to know, because `location.position` is already the position
   // to act on.
   const gpsHeld = location.held === 'jammed';
+  // No real fix at all — the browser refused or never answered, and the
+  // map is standing on the Kyiv fallback. Before this chip the only word
+  // about it lived on the "locating…" screen, which by then is gone (the
+  // fallback IS a position), so a person with location off was shown
+  // Maidan with no hint why. A jammed GPS has its own pill and says
+  // enough on its own.
+  const noLocation = location.usingFallback && !gpsHeld;
   // A top-edge chip has to clear the iOS status bar (clock, signal,
   // battery) — taps inside that strip are intercepted by the system
   // (scroll-to-top), so a chip overlapping it feels dead. The HUD
@@ -433,6 +441,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   const [mapProblem, setMapProblem] = useState<'unsupported' | 'failed' | null>(null);
   // Bumped by the retry button; a dep of the construction effect.
   const [mapAttempt, setMapAttempt] = useState(0);
+  // Tell the dashboard, which otherwise hides for the gate's ring — a
+  // ring this map cannot draw. Cleared on unmount so a stale "blocked"
+  // never outlives the screen that said it.
+  const setMapBlocked = useGameStore((s) => s.setMapBlocked);
+  useEffect(() => {
+    setMapBlocked(mapProblem != null);
+  }, [mapProblem, setMapBlocked]);
+  useEffect(() => () => setMapBlocked(false), [setMapBlocked]);
   const userPos = location.position;
   // Map intervals (companion lerp, auto-collect, /sync/map poll) all
   // gate on this — when the user is on Profile/Chat/Quests we stop
@@ -451,6 +467,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   const menuOpen = useGameStore((s) => s.menuOpen);
   // The lost-pet sheet has stepped aside so the owner can aim the map.
   const lostPinning = useGameStore((s) => s.lostPinning);
+  // Whether the first pets answer is in, and whether calls are getting
+  // through — together they tell an empty supersniff deck apart from a
+  // loading one, and a quiet area from a dead connection.
+  const lostDogsLoaded = useGameStore((s) => s.lostDogsLoaded);
+  const connection = useConnectionStore((s) => s.status);
   // Sniff-and-lead search mode assignment (which lost dog + spot). Set by the
   // search controller below while dogCam is on.
   const searchTarget = useGameStore((s) => s.searchTarget);
@@ -3882,6 +3903,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // subject.
             hideBubble={offscreenIndicator != null || lostPinning}
             hidden={offscreenIndicator != null || lostPinning}
+            hasSearchDogs={searchDogs.length > 0}
             onTap={() => {
               companionTappedAtRef.current = Date.now();
             }}
@@ -3998,6 +4020,31 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                   chips={false}
                 />
               </Pressable>
+            </View>
+          ) : searchDogs.length === 0 && lostDogsLoaded ? (
+            // NOTHING TO SWIPE. An empty deck used to render as nothing at
+            // all, under a dog saying "swipe for the next dog" — over an
+            // empty map. Stands in the card's own box and says which kind
+            // of empty this is: a quiet area, or a connection that is not
+            // bringing anyone back. Not shown before the first answer, so
+            // a loading deck does not claim there is nobody.
+            <View
+              accessibilityRole="text"
+              style={{
+                width: 288,
+                height: 252,
+                marginBottom: 30,
+                borderRadius: R.card,
+                backgroundColor: '#ffffff',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: S.xl,
+                boxShadow: '0 3px 8px rgba(0,0,0,0.24), 0 14px 32px rgba(0,0,0,0.30)',
+              } as unknown as object}
+            >
+              <Text style={[styles.t, styles.problem]}>
+                {connection === 'offline' ? t.search.emptyDeckOffline : t.search.emptyDeck}
+              </Text>
             </View>
           ) : (
             // The deck STAYS MOUNTED through the confirm prompt — tapping
@@ -4231,7 +4278,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       {/* Not under the account sheet either: the HUD is already gone
           there, and a pill at top:100 landed between the dog's line and
           the dog. */}
-      {(walkRoute || activeQuest || gpsHeld) && !(DOG_CAM && dogCam) && !doorSheetUp ? (
+      {(walkRoute || activeQuest || gpsHeld || noLocation) && !(DOG_CAM && dogCam) && !doorSheetUp ? (
         <div
           style={{
             position: 'absolute',
@@ -4274,6 +4321,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                 style={{ ...HUD_OVERLAY_PILL, cursor: 'default', pointerEvents: 'none' }}
               >
                 📡 {t.hud.gpsHeld}
+              </div>
+            ) : null}
+            {/* Same slot and recipe as the jammed pill: a status, not a
+                button. The fix is in the browser's settings, which a web
+                page cannot open for anyone. */}
+            {noLocation ? (
+              <div
+                role="status"
+                style={{ ...HUD_OVERLAY_PILL, cursor: 'default', pointerEvents: 'none' }}
+              >
+                📍 {t.hud.noLocation}
               </div>
             ) : null}
             {walkRoute ? (
