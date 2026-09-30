@@ -1180,6 +1180,21 @@ Batches are ordered by highest severity first, then grouped by file to keep merg
 | D16 | UX-11.3 / 11.4: heading scale | card names hero 22 (LoreFavourite too?); sheet headings: (a) hero sheets at display, form sheets at title; (b) all at title |
 | D17 | UX-12.11: desktop column | (a) shared `#portal-root`; (b) per-component caps; also decide whether to move the breakpoint from 900 to 600 |
 
+### Owner answers (2026-09-30)
+
+Owner accepted every recommendation, and picked circles for portraits:
+D1 (a) confirm before "I've seen" · D2 (b) client-only gate for now ·
+D3 (b) logout behind a warning · D4 (a) full reload after logout ·
+D5 (b) relabel to "finish walk" · D6 (a) keep the walk · D7 (a) banner at
+the bottom above the tab bar · D8 (a) another marker tap closes the open
+ring/cluster · D9 (b) 44px circle with the `close` Icon · D10 (a) primary
+on the left · D11 (a) keep filled dark · D12 (b) keep 0.32 · D13 (a)
+`rgba(20,20,15,0.45)` · D14 (a) circles · D15 (b) one bold weight (700) ·
+D16 (a) hero sheets at display, form sheets at title · D17 (a) shared
+portal root inside the column; breakpoint unchanged.
+
+Scope of the first fix PR: B1-B14.
+
 ---
 
 ## 4. Appendix
