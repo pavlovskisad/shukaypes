@@ -14,6 +14,7 @@ import { playPopThen } from '../../utils/popOnTap';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
+import { useSheetBack } from '../../hooks/useSheetBack';
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -58,6 +59,9 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
     }
   }, [spot]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!spot, onClose);
+
   if (!renderSpot) return null;
   if (typeof document === 'undefined') return null;
 
@@ -67,6 +71,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   // Portal to document.body — see LostDogModal for the rationale.
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
       style={{
         position: 'fixed',

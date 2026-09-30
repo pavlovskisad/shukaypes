@@ -30,6 +30,7 @@ import { SURFACE } from '../../constants/surface';
 import { api } from '../../services/api';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
+import { useSheetBack } from '../../hooks/useSheetBack';
 
 const SHEET_ANIM_MS = 280;
 
@@ -108,6 +109,9 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
     };
   }, [dogId]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!dogId, onClose);
+
   if (!renderId) return null;
   if (typeof document === 'undefined') return null;
 
@@ -115,6 +119,8 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
 
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
       style={{
         position: 'fixed',

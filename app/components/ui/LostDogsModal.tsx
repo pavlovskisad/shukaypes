@@ -18,6 +18,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { LostDogCardView } from './LostDogCardStack';
+import { useSheetBack } from '../../hooks/useSheetBack';
 
 const SHEET_ANIM_MS = 240;
 
@@ -50,11 +51,16 @@ export function LostDogsModal({ dogs, onClose, onPick }: Props) {
     }
   }, [dogs]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!dogs, onClose);
+
   if (!renderDogs) return null;
   if (typeof document === 'undefined') return null;
 
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       style={{
         position: 'fixed',
         inset: 0,

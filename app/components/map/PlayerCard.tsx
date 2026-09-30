@@ -28,6 +28,7 @@ import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { colors } from '../../constants/colors';
+import { useSheetBack } from '../../hooks/useSheetBack';
 
 interface Props {
   player: NearbyPlayer;
@@ -73,6 +74,9 @@ export function PlayerCard({ player, onClose }: Props) {
     };
   }, [player.id]);
 
+  // Back and Escape close it, like the tap outside (UX-2.5, UX-14.1).
+  useSheetBack(true, onClose);
+
   const avatar = card?.avatarUrl ?? player.avatarUrl ?? null;
   const name = card?.name ?? player.name;
   // The person behind the dog's name (D-73): the nickname on the small
@@ -117,7 +121,7 @@ export function PlayerCard({ player, onClose }: Props) {
   };
 
   return createPortal(
-    <div style={OVERLAY}>
+    <div style={OVERLAY} role="dialog" aria-modal="true">
       {/* Tap outside the paper: close. */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }} onClick={onClose} />
       <div style={{ ...COLUMN, bottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.m}px)` }}>

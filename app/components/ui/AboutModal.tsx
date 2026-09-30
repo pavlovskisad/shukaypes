@@ -11,6 +11,7 @@ import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { playPopThen } from '../../utils/popOnTap';
+import { useSheetBack } from '../../hooks/useSheetBack';
 
 interface AboutModalProps {
   open: boolean;
@@ -78,6 +79,9 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
     }
   }, [open]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(open, onClose);
+
   if (!rendered) return null;
   if (typeof document === 'undefined') return null;
 
@@ -88,6 +92,8 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
   // slides down from off-screen-top.
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
       style={{
         position: 'fixed',

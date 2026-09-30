@@ -19,6 +19,7 @@ import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { OWN_COLOR_CSS, ownerColorCss } from '../map/territoryColor';
 import { BoardRow } from './BoardRow';
+import { useSheetBack } from '../../hooks/useSheetBack';
 
 const SHEET_ANIM_MS = 240;
 
@@ -76,11 +77,16 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!board, onClose);
+
   if (!renderBoard) return null;
   if (typeof document === 'undefined') return null;
 
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       style={{
         position: 'fixed',
         inset: 0,

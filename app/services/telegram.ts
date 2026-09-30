@@ -33,6 +33,18 @@ interface TelegramWebApp {
   // Opens a t.me link in the Telegram client itself rather than in a
   // browser tab. Present since SDK 6.1; feature-detected below.
   openTelegramLink?: (url: string) => void;
+  // The header's back arrow, which is also what Android's hardware back
+  // fires while it is shown. Hidden, back closes the whole Mini App.
+  // Present since SDK 6.1; feature-detected below.
+  BackButton?: {
+    show: () => void;
+    hide: () => void;
+    onClick: (cb: () => void) => void;
+    offClick: (cb: () => void) => void;
+  };
+  // Makes Telegram ask "close anyway?" before the Mini App goes. SDK 6.2.
+  enableClosingConfirmation?: () => void;
+  disableClosingConfirmation?: () => void;
 }
 
 declare global {
@@ -166,6 +178,45 @@ export function openTelegramChat(url: string): void {
     }
   }
   if (typeof window !== 'undefined') window.open(url, '_blank', 'noopener');
+}
+
+// Show or hide Telegram's back arrow and route its presses to `onBack`.
+// Returns false outside Telegram (or on an SDK without BackButton), so
+// the caller knows to fall back to the browser's own history.
+//
+// Gated on isInTelegram() for the reason pickBottomInset gives: the SDK
+// is loaded on every page, and outside Telegram its BackButton exists
+// and does nothing, which would swallow the web's back handling.
+let telegramBackHandler: (() => void) | null = null;
+export function setTelegramBackButton(onBack: (() => void) | null): boolean {
+  if (!isInTelegram()) return false;
+  const bb = getTelegramWebApp()?.BackButton;
+  if (!bb) return false;
+  try {
+    if (telegramBackHandler) bb.offClick(telegramBackHandler);
+    telegramBackHandler = onBack;
+    if (onBack) {
+      bb.onClick(onBack);
+      bb.show();
+    } else {
+      bb.hide();
+    }
+  } catch {
+    /* best-effort: an old client without the bridge keeps its close */
+  }
+  return true;
+}
+
+// Ask before the Mini App closes while something typed would be lost.
+export function setTelegramClosingConfirmation(on: boolean): void {
+  if (!isInTelegram()) return;
+  const wa = getTelegramWebApp();
+  try {
+    if (on) wa?.enableClosingConfirmation?.();
+    else wa?.disableClosingConfirmation?.();
+  } catch {
+    /* best-effort */
+  }
 }
 
 // Configure Mini App chrome to match our brand + smooth the seam.

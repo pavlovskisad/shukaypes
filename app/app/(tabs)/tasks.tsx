@@ -351,6 +351,20 @@ export default function TasksScreen() {
     }, [refresh])
   );
 
+  // The full-screen boards are portalled over everything, so they would
+  // stay painted over whichever tab the user left for. Leaving the tab
+  // closes them (UX-2.5).
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        setSeeAllDogsOpen(false);
+        setBoardAll(null);
+        setHappyAll(null);
+      },
+      [],
+    ),
+  );
+
   // Refetch quest history on focus so a freshly completed quest shows
   // up immediately. Errors fail silent — the card just stays empty.
   useFocusEffect(

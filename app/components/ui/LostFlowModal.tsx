@@ -32,7 +32,8 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { env } from '../../constants/env';
-import { openTelegramChat } from '../../services/telegram';
+import { openTelegramChat, setTelegramClosingConfirmation } from '../../services/telegram';
+import { useSheetBack } from '../../hooks/useSheetBack';
 import { api } from '../../services/api';
 import { fileToJpegBase64 } from '../../services/photoFile';
 import { readScreenCenter, useGameStore } from '../../stores/gameStore';
@@ -194,6 +195,25 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
   // And never leave it set: an unmount mid-flow (tab change, a mode
   // flip) would otherwise strand the map with no HUD and no dog.
   useEffect(() => () => setLostPinning(false), [setLostPinning]);
+
+  // Back and Escape step out the way the pills do (UX-2.5, UX-14.1): off
+  // the pin step to the form, off the form to the map. Refused while a
+  // report is on the wire, for the reason `close` gives below.
+  useSheetBack(open, () => {
+    if (sending) return;
+    if (step === 'pin') setStep('form');
+    else onClose();
+  });
+
+  // A draft outlives the sheet (see the close effect) but not the Mini
+  // App: while one is typed, Telegram asks before it closes, so a back
+  // press too many does not throw somebody's description away.
+  const hasDraft =
+    name.trim().length > 0 || desc.trim().length > 0 || phone.trim().length > 0 || !!photoDataUrl || !!pin;
+  useEffect(() => {
+    setTelegramClosingConfirmation(hasDraft);
+  }, [hasDraft]);
+  useEffect(() => () => setTelegramClosingConfirmation(false), []);
 
   if (!rendered) return null;
   if (typeof document === 'undefined') return null;
@@ -364,6 +384,8 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
 
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={close}
       style={{
         position: 'fixed',

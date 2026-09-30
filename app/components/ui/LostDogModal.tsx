@@ -16,6 +16,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters } from '../../utils/geo';
 import { playPopThen } from '../../utils/popOnTap';
 import { HandDrawnFrame } from './HandDrawn';
+import { useSheetBack } from '../../hooks/useSheetBack';
 
 function formatDistance(m: number): string {
   if (m < 1000) return `${Math.round(m / 50) * 50} m`;
@@ -188,6 +189,9 @@ export function LostDogModal({
     }
   }, [dog]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!dog, onClose);
+
   if (!renderDog) return null;
   if (typeof document === 'undefined') return null;
 
@@ -228,6 +232,8 @@ export function LostDogModal({
   // stacking context (the HUD pills would otherwise paint over it).
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
       style={{
         position: 'fixed',

@@ -16,6 +16,7 @@ import { ApiError, auth } from '../../services/api';
 import { isInTelegram } from '../../services/telegram';
 import { useAccessStore } from '../../stores/accessStore';
 import { useStrings } from '../../i18n/useStrings';
+import { useSheetBack } from '../../hooks/useSheetBack';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { colors } from '../../constants/colors';
 import { R } from '../../constants/radius';
@@ -194,17 +195,14 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
     onClose();
   };
 
-  // Escape closes, like every sheet in the app — through the same
-  // unsaved-edits check as «done».
-  const closeRef = useRef(requestClose);
-  closeRef.current = requestClose;
-  useEffect(() => {
-    const onKey = (e: KeyboardEvent) => {
-      if (e.key === 'Escape') closeRef.current();
-    };
-    window.addEventListener('keydown', onKey);
-    return () => window.removeEventListener('keydown', onKey);
-  }, []);
+  // Back and Escape close it, as they now do every sheet (UX-2.5,
+  // UX-14.1) — through the same unsaved-edits check as «done», so a
+  // press with edits in the fields arms the discard line instead. Inert
+  // while the portrait studio is open, like the backdrop below: a drawing
+  // may be on its way, and the studio holds its own «later» for that.
+  useSheetBack(true, () => {
+    if (!studioOpen) requestClose();
+  });
 
   const title: CSSProperties = {
     fontFamily: SYSTEM_FONT,
@@ -215,7 +213,7 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
   };
 
   return createPortal(
-    <div style={OVERLAY}>
+    <div style={OVERLAY} role="dialog" aria-modal="true">
       {/* Tap outside the paper: close, as PlayerCard does (UX-7.10).
           Without it the profile stayed live behind the sheet. Inert
           while the portrait studio is open — it has its own ways out,

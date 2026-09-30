@@ -71,6 +71,11 @@ export default function SpotsScreen() {
     void useGameStore.getState().loadLoreFavourites();
   }, []));
 
+  // The "see all" sheet is portalled over everything, so it would stay
+  // painted over whichever tab the user left for. Leaving the tab closes
+  // it (UX-2.5).
+  useFocusEffect(useCallback(() => () => setExpandedCategory(null), []));
+
   // The hearted landmarks, newest first, at the top of the tab. Tapping
   // one hands it to the map as a one-shot focus and switches tabs; the
   // sniff bubble shows it as if the dog had just found it.

@@ -19,6 +19,7 @@ import { playPopThen } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { SpotCardView } from './SpotCardStack';
 import { HandDrawnFrame } from './HandDrawn';
+import { useSheetBack } from '../../hooks/useSheetBack';
 
 const SHEET_ANIM_MS = 240;
 
@@ -54,11 +55,16 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
     }
   }, [spots]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!spots, onClose);
+
   if (!renderSpots) return null;
   if (typeof document === 'undefined') return null;
 
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       style={{
         position: 'fixed',
         inset: 0,
