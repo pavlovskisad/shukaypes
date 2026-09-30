@@ -15,6 +15,7 @@ import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { useSheetBack } from '../../hooks/useSheetBack';
+import { MOTION } from '../../utils/motion';
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -26,7 +27,7 @@ interface SpotModalProps {
   onWalkHere?: (spot: Spot, shape: 'roundtrip' | 'oneway') => void;
 }
 
-const SHEET_ANIM_MS = 280;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 const HERO_HEIGHT_PX = 220;
 // Top-anchored modal — bump the badge / close button down by the
 // safe-area inset so they clear the iPhone notch / status bar.
@@ -296,17 +297,6 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             <span>{t.modals.spot.roundtrip}</span>
           </button>
         </div>
-
-        <style>{`
-          @keyframes top-sheet-in {
-            from { transform: translateY(-100%); }
-            to { transform: translateY(0); }
-          }
-          @keyframes top-sheet-out {
-            from { transform: translateY(0); }
-            to { transform: translateY(-100%); }
-          }
-        `}</style>
       </div>
     </div>,
     document.body,

@@ -195,6 +195,7 @@ export default function MapScreen() {
                 potrace-traced from the original PNG for crisp
                 scaling. */}
             <div
+              data-loop
               style={{
                 width: HUD_ICON_SIZE,
                 height: HUD_ICON_SIZE,

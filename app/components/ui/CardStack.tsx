@@ -40,6 +40,7 @@ import { INK } from '../../constants/surface';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
+import { LOOP_VIEW_PROPS } from '../../utils/motion';
 
 export const CARD_W = 320;
 export const CARD_H = 280;
@@ -605,20 +606,6 @@ export function CardStackSkeleton({
   cardHeight?: number;
   peekScale?: number;
 }) {
-  useEffect(() => {
-    if (typeof document === 'undefined') return;
-    if (document.getElementById('card-stack-shimmer-style')) return;
-    const el = document.createElement('style');
-    el.id = 'card-stack-shimmer-style';
-    el.textContent = `
-      @keyframes card-stack-shimmer {
-        0%   { background-position: -150% 0; }
-        100% { background-position: 250% 0;  }
-      }
-    `;
-    document.head.appendChild(el);
-  }, []);
-
   const slotSize = { width: CARD_W, height: cardHeight };
   const STEP = 290 * peekScale;
 
@@ -642,6 +629,7 @@ export function CardStackSkeleton({
           ]}
         />
         <View
+          {...LOOP_VIEW_PROPS}
           style={
             {
               ...styles.cardSlot,
@@ -651,7 +639,8 @@ export function CardStackSkeleton({
                 'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.75) 50%, transparent 70%)',
               backgroundSize: '200% 100%',
               backgroundRepeat: 'no-repeat',
-              animation: 'card-stack-shimmer 1.8s ease-in-out infinite',
+              // `shimmer` is global (public/index.html).
+              animation: 'shimmer 1.8s ease-in-out infinite',
               borderRadius: R.card,
               borderWidth: 2,
               borderColor: INK,

@@ -679,13 +679,18 @@ function SniffingBubble({ position }: { position: LatLng }) {
           borderRadius: R.chip,
           fontFamily: VOICE.fontFamily,
           fontSize: TYPE.body,
-          fontStyle: 'italic',
+          // Upright, like every other voice bubble: Annex has no italic,
+          // so `fontStyle: italic` was only the browser shearing it.
           boxShadow: VOICE.shadow,
           border: VOICE.border,
           pointerEvents: 'none',
         }}
       >
         {sniffingBase}{dots}
+        {/* The dots not yet shown, kept in the line but invisible, so
+            the bubble holds the width of "..." on every tick instead of
+            growing and snapping back. */}
+        <span style={{ visibility: 'hidden' }}>{'.'.repeat(3 - dots.length)}</span>
       </div>
     </MapLibreMarker>
   );

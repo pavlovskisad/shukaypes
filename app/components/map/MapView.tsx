@@ -41,6 +41,7 @@ import {
   remainingRouteMeters,
 } from '../../utils/geo';
 import { playPop } from '../../utils/popOnTap';
+import { MOTION } from '../../utils/motion';
 import { Companion } from './Companion';
 import { CrayonRoute } from './CrayonRoute';
 import logoNose from '../../assets/logo-nose.png';
@@ -422,7 +423,7 @@ export default function MapViewWeb() {
   // How long the lost-pet deck takes to slide out of the menu's way, and
 // back. Matches the modal family's 280ms so the whole app moves on one
 // clock.
-const DECK_ANIM_MS = 280;
+const DECK_ANIM_MS = MOTION.sheetMs;
   // Which cluster is currently "spiderified" — tapping a cluster pops its
   // pets out around the center. Tapping elsewhere (the map background or
   // another cluster) collapses it. Lives locally because nothing else in
@@ -3718,10 +3719,11 @@ const DECK_ANIM_MS = 280;
             pointerEvents: 'none',
           }}
         >
-          <div style={mapPulseRing(0)} />
-          <div style={mapPulseRing(0.9)} />
+          <div data-loop style={mapPulseRing(0)} />
+          <div data-loop style={mapPulseRing(0.9)} />
           {/* Fingertip dot pressing in the centre. */}
           <div
+            data-loop
             style={{
               position: 'absolute',
               left: '50%',

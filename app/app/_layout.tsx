@@ -142,11 +142,11 @@ export default function RootLayout() {
     notifyTelegramReady();
   }, []);
 
-  // Take down the shell's CSS-only splash (public/index.html, #splash)
+  // Take down the shell's pre-React splash (public/index.html, #splash)
   // now that React is drawing. It exists for the seconds before this
   // bundle had downloaded and parsed; from here the React <Splash>
   // underneath owns the hand-off. Runs on both branches below, so the
-  // invite door is not left under a wordmark. A no-op everywhere but
+  // invite door is not left under the shell's logo. A no-op everywhere but
   // web, and on a page that never had one.
   useEffect(() => {
     if (typeof document === 'undefined') return;

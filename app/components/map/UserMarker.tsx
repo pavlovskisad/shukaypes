@@ -10,6 +10,7 @@ function UserMarkerImpl({ position }: { position: LatLng }) {
     <MapLibreMarker position={position}>
       <div style={{ position: 'relative', width: 12, height: 12 }}>
         <div
+          data-loop
           style={{
             position: 'absolute',
             left: -54,

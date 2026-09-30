@@ -12,13 +12,14 @@ import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { playPopThen } from '../../utils/popOnTap';
 import { useSheetBack } from '../../hooks/useSheetBack';
+import { MOTION } from '../../utils/motion';
 
 interface AboutModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-const SHEET_ANIM_MS = 280;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 // Top-anchored modal — bump the badge / close button down by the
 // safe-area inset so they clear the iPhone notch / status bar.
 // The overlay holds the sheet clear of the notch now, so this is
@@ -277,23 +278,13 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               textAlign: 'center',
               marginTop: S.s,
               marginBottom: S.xs,
-              fontStyle: 'italic',
+              // No italic: Annex has none, so the browser would slant
+              // the upright glyphs. The grey is the de-emphasis.
             }}
           >
             {t.modals.about.footer}
           </div>
         </div>
-
-        <style>{`
-          @keyframes top-sheet-in {
-            from { transform: translateY(-100%); }
-            to { transform: translateY(0); }
-          }
-          @keyframes top-sheet-out {
-            from { transform: translateY(0); }
-            to { transform: translateY(-100%); }
-          }
-        `}</style>
       </div>
     </div>,
     document.body,

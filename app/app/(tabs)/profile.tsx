@@ -10,6 +10,7 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { formatDistance } from '../../utils/geo';
+import { LOOP_VIEW_PROPS } from '../../utils/motion';
 import { useGameStore } from '../../stores/gameStore';
 import { api, type TerritoryRanking } from '../../services/api';
 import { useAccessStore } from '../../stores/accessStore';
@@ -68,12 +69,13 @@ interface TerritoryBoard {
 }
 
 // Small shimmer bar used in place of a stat value while the
-// profile fetch is in flight. Reuses the same lost-dog-shimmer
-// keyframe injected once on mount below so only one stylesheet
-// is in <head> regardless of which tab the user lands on first.
+// profile fetch is in flight. The `shimmer` keyframe is global, in
+// public/index.html. It used to name `lost-dog-shimmer`, which
+// nothing defined, so the bars sat still.
 function ShimmerBar({ width = 56 }: { width?: number }) {
   return (
     <View
+      {...LOOP_VIEW_PROPS}
       style={
         {
           width,
@@ -84,7 +86,7 @@ function ShimmerBar({ width = 56 }: { width?: number }) {
             'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.75) 50%, transparent 70%)',
           backgroundSize: '200% 100%',
           backgroundRepeat: 'no-repeat',
-          animation: 'lost-dog-shimmer 1.8s ease-in-out infinite',
+          animation: 'shimmer 1.8s ease-in-out infinite',
         } as unknown as object
       }
     />

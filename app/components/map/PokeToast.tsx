@@ -96,7 +96,7 @@ export function PokeToast({ onGoTo, top }: Props) {
         maxWidth: '86vw',
       }}
     >
-      <div style={{ animation: 'poke-dog-bounce 0.6s ease-in-out infinite', flexShrink: 0 }}>
+      <div data-loop style={{ animation: 'poke-dog-bounce 0.6s ease-in-out infinite', flexShrink: 0 }}>
         <DogSprite anim="jumping" facingLeft={false} scale={1.15} />
       </div>
       <div style={{ display: 'flex', flexDirection: 'column', minWidth: 0 }}>

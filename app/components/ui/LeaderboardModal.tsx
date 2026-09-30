@@ -20,8 +20,9 @@ import { HandDrawnFrame } from './HandDrawn';
 import { OWN_COLOR_CSS, ownerColorCss } from '../map/territoryColor';
 import { BoardRow } from './BoardRow';
 import { useSheetBack } from '../../hooks/useSheetBack';
+import { MOTION } from '../../utils/motion';
 
-const SHEET_ANIM_MS = 240;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // The happiness index at the row's end, the same width as the
 // territory silhouette so the two boards' rows line up.

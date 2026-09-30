@@ -27,6 +27,7 @@ function WaypointMarkerImpl({ position, index, state, onTap }: WaypointMarkerPro
   return (
     <MapLibreMarker position={position} onClick={onTap}>
       <div
+        data-loop
         role={onTap ? 'button' : undefined}
         tabIndex={onTap ? 0 : -1}
         style={{

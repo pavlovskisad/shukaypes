@@ -13,6 +13,8 @@
 // Web-only. Returns silently on native or if the element doesn't
 // support .animate (very old browsers).
 
+import { prefersReducedMotion } from './motion';
+
 const POP_KEYFRAMES = [
   { transform: 'scale(0.92)', offset: 0, easing: 'cubic-bezier(0.22, 0.61, 0.36, 1)' },
   { transform: 'scale(1.15)', offset: 0.4, easing: 'cubic-bezier(0.33, 1, 0.68, 1)' },
@@ -34,8 +36,12 @@ const POP_OPTIONS: KeyframeAnimationOptions = {
 // unmount, short enough to still feel instant.
 const POP_DEFER_MS = 120;
 
+// Under the OS "reduce motion" setting the pop is skipped — it is a
+// flourish, and a flourish is exactly what that setting asks us to
+// drop. Whatever the tap DOES still happens (see playPopThen).
 export function playPop(el: HTMLElement | null | undefined): void {
   if (!el || typeof el.animate !== 'function') return;
+  if (prefersReducedMotion()) return;
   el.animate(POP_KEYFRAMES, POP_OPTIONS);
 }
 
@@ -53,7 +59,10 @@ export function playPopThen(
   action: () => void,
 ): void {
   playPop(el);
-  setTimeout(action, POP_DEFER_MS);
+  // No pop to wait for under reduce motion, so no defer — but still a
+  // task later rather than inline, so the action lands in the same
+  // order relative to the click it always did.
+  setTimeout(action, prefersReducedMotion() ? 0 : POP_DEFER_MS);
 }
 
 // Convenience for RN's Pressable — its onPressIn receives a

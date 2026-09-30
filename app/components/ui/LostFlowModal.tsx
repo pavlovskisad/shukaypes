@@ -43,10 +43,11 @@ import { HandDrawnFrame, PAPER_EDGE } from './HandDrawn';
 import { Icon } from './Icon';
 import { colors } from '../../constants/colors';
 import { INLINE_ICON } from '../../constants/sizing';
+import { MOTION } from '../../utils/motion';
 
 // Same figure PostModal / SpotModal / LostDogModal use, so all four sheets
 // open and close on one clock.
-const SHEET_ANIM_MS = 280;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // How far the picture sits inside its mount: the paper margin the drawn
 // line is measured from, plus the line. Same figure, same name, as the

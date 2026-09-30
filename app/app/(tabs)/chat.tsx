@@ -603,7 +603,13 @@ function TypingIndicator() {
   }, []);
   return (
     <View style={[styles.bubble, styles.assistantBubble, styles.typing]}>
-      <Text style={[styles.bubbleText, styles.assistantText]}>{word}{dots}</Text>
+      <Text style={[styles.bubbleText, styles.assistantText]}>
+        {word}{dots}
+        {/* The dots still to come, present but see-through, so the
+            bubble keeps the width of "..." instead of changing on
+            every tick. */}
+        <Text style={{ opacity: 0 }}>{'.'.repeat(3 - dots.length)}</Text>
+      </Text>
     </View>
   );
 }

@@ -355,7 +355,7 @@ export function LoreMore({
           >
             {lore.detail ? <div>{lore.detail}</div> : null}
             {hasWiki && loading ? (
-              <div style={{ opacity: 0.6, fontStyle: 'italic' }}>{t.sniff.opening}</div>
+              <div style={{ opacity: 0.6 }}>{t.sniff.opening}</div>
             ) : null}
             {extract ? (
               <div style={lore.detail ? { opacity: 0.8, borderTop: hairline, paddingTop: S.xs } : undefined}>

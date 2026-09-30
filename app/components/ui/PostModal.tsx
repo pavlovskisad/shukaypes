@@ -31,8 +31,9 @@ import { api } from '../../services/api';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { useSheetBack } from '../../hooks/useSheetBack';
+import { MOTION } from '../../utils/motion';
 
-const SHEET_ANIM_MS = 280;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // An ad body is the longest continuous prose anywhere in this app, so it
 // gets a reading line-height rather than the tighter one the cards use.

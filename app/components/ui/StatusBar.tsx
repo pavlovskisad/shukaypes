@@ -56,6 +56,7 @@ export function PillPulseRing() {
     <>
       <div
         aria-hidden
+        data-loop
         style={{
           position: 'absolute',
           left: '50%',

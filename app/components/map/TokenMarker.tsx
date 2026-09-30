@@ -51,6 +51,7 @@ function TokenMarkerImpl({
           }}
         />
         <div
+          data-loop
           style={{
             width: 22,
             height: 22,

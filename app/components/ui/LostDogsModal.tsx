@@ -19,8 +19,9 @@ import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { LostDogCardView } from './LostDogCardStack';
 import { useSheetBack } from '../../hooks/useSheetBack';
+import { MOTION } from '../../utils/motion';
 
-const SHEET_ANIM_MS = 240;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 
 interface Props {
   // null = closed. Non-null array = open showing those dogs.

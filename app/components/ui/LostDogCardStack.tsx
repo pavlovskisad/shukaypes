@@ -15,6 +15,7 @@ import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
 import { petPhotoAt } from '../../utils/petPhoto';
+import { LOOP_VIEW_PROPS } from '../../utils/motion';
 import type { LatLng } from '@shukajpes/shared';
 import { CARD_W, CardStack, CardStackSkeleton } from './CardStack';
 import { HandDrawnFrame, HandDrawnPaperTop, PICTURE_INSET } from './HandDrawn';
@@ -152,6 +153,8 @@ export function LostDogCardView({
     : null;
   return (
     <View
+      // The active glow is a loop, stilled under reduce motion.
+      {...(active ? LOOP_VIEW_PROPS : null)}
       style={[
         styles.card,
         // Heavier shadow first so the active blue glow (below) still wins when

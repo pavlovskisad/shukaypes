@@ -38,7 +38,7 @@ export function SwipeHintCallout({ text }: { text: string }) {
         }}
       >
         <span>{text}</span>
-        <span style={{ animation: 'hint-swipe-arrow 1s ease-in-out infinite' }}>
+        <span data-loop style={{ animation: 'hint-swipe-arrow 1s ease-in-out infinite' }}>
           👉
         </span>
       </div>

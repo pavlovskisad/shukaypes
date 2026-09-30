@@ -182,12 +182,14 @@ function BirdGlyph({ size = 1, flapDelayMs = 0 }: { size?: number; flapDelayMs?:
         d={WING_UP}
         {...PEN}
         strokeWidth={1.4}
+        data-loop
         style={{ animation: `bird-flap-up 320ms steps(1) ${flapDelayMs}ms infinite` }}
       />
       <path
         d={WING_DOWN}
         {...PEN}
         strokeWidth={1.4}
+        data-loop="alt"
         style={{ animation: `bird-flap-down 320ms steps(1) ${flapDelayMs}ms infinite` }}
       />
     </svg>
@@ -263,7 +265,7 @@ function Butterfly({ event, cardWidth }: { event: ActiveEvent; cardWidth: number
           animation: `${animName} ${event.durMs}ms linear forwards`,
         }}
       >
-        <div style={{ animation: `${bobName} 700ms ease-in-out infinite` }}>
+        <div data-loop style={{ animation: `${bobName} 700ms ease-in-out infinite` }}>
           {/* Two wing loops off a single body stroke. The orange it
               used to be was the last saturated colour anywhere in the
               scene once the park went to pure line. */}
@@ -271,6 +273,7 @@ function Butterfly({ event, cardWidth }: { event: ActiveEvent; cardWidth: number
             width={14}
             height={11}
             viewBox="0 0 14 11"
+            data-loop
             style={{
               display: 'block',
               overflow: 'visible',
@@ -310,7 +313,7 @@ function Leaf({ event, cardWidth }: { event: ActiveEvent; cardWidth: number }) {
           animation: `${fallName} ${event.durMs}ms linear forwards`,
         }}
       >
-        <div style={{ animation: `${swayName} 1200ms ease-in-out infinite` }}>
+        <div data-loop style={{ animation: `${swayName} 1200ms ease-in-out infinite` }}>
           {/* A pointed oval with a midrib — the shape of a leaf rather
               than three stacked brown pixels. */}
           <svg
@@ -349,7 +352,7 @@ function Bat({ event, cardWidth }: { event: ActiveEvent; cardWidth: number }) {
           animation: `${animName} ${event.durMs}ms linear forwards`,
         }}
       >
-        <div style={{ animation: `${zigName} 600ms ease-in-out infinite` }}>
+        <div data-loop style={{ animation: `${zigName} 600ms ease-in-out infinite` }}>
           {/* Scalloped wings and a small body. Drawn in the night ink
               (see ProfileSceneBackdrop's palette) rather than the app's
               black, which is invisible against a midnight sky. */}
@@ -403,6 +406,7 @@ function Firefly({ event, cardWidth }: { event: ActiveEvent; cardWidth: number }
         }}
       >
         <div
+          data-loop
           style={{
             width: 3,
             height: 3,
