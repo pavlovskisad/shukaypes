@@ -12,15 +12,12 @@ import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { Spot } from '../../services/places';
 import { Z } from '../../constants/z';
-import { R } from '../../constants/radius';
-import { TYPE } from '../../constants/type';
-import { SURFACE } from '../../constants/surface';
 import { playPopThen } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { SpotCardView } from './SpotCardStack';
-import { HandDrawnFrame } from './HandDrawn';
+import { CloseButton } from './CloseButton';
+import { CLOSE_INSET } from '../../constants/buttons';
 import { useSheetBack } from '../../hooks/useSheetBack';
-import { useStrings } from '../../i18n/useStrings';
 import { MOTION } from '../../utils/motion';
 
 const SHEET_ANIM_MS = MOTION.sheetMs;
@@ -35,7 +32,6 @@ interface Props {
 }
 
 export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
-  const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
   // Mount/unmount split so the close animation plays before the
   // node disappears. Cached spots persist through the fade-out.
@@ -118,37 +114,17 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
       </div>
 
       {/* Floating close — sits above the scroll content, anchored
-          to the top-right with safe-area inset. Same white pill
-          + lifted shadow family as the in-card chips. */}
-      <button
-        onClick={(e) => playPopThen(e.currentTarget, onClose)}
-        aria-label={t.modals.common.close}
+          to the top-right with safe-area inset. The app's one close
+          (D9). */}
+      <CloseButton
+        onPress={onClose}
         style={{
           position: 'absolute',
-          top: 'calc(env(safe-area-inset-top, 0px) + 14px)',
-          right: 18,
-          width: 36,
-          height: 36,
-          borderRadius: R.pill,
-          // Drawn ring — see the HandDrawnFrame child. The 2px stays
-          // so the button keeps the size it had.
-          border: '2px solid transparent',
-          background: '#ffffff',
-          color: '#1a1a1a',
-          padding: 0,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: SURFACE.chip,
-          fontSize: TYPE.display,
-          lineHeight: 1,
+          top: `calc(env(safe-area-inset-top, 0px) + ${CLOSE_INSET}px)`,
+          right: CLOSE_INSET,
           zIndex: 1,
         }}
-      >
-        <HandDrawnFrame radius={R.pill} />
-        ×
-      </button>
+      />
     </div>,
     document.body,
   );

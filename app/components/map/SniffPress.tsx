@@ -9,7 +9,6 @@ import { fetchWalkingRouteOrLine } from '../../services/directions';
 import { HEART_INSET, LoreHeart, LoreMore } from './LoreMore';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
-import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
@@ -21,6 +20,7 @@ import { getStrings, useStrings } from '../../i18n/useStrings';
 import { VOICE } from '../../constants/voice';
 import { INK, SURFACE } from '../../constants/surface';
 import { HandDrawnFrame } from '../ui/HandDrawn';
+import { MODAL_PILL_DARK } from '../../constants/buttons';
 
 // Long-press "sniff this place" gesture.
 //
@@ -629,24 +629,20 @@ export function SniffPress() {
               void goHere();
             }}
             style={{
-              cursor: 'pointer',
-              // Bigger CTA pill to match the rest of the action
-              // buttons across the app — padding 6/14 → 10/18,
-              // type 12 → 14.
+              // The house dark pill (UX-9.12) — ink, R.button, the
+              // ink-on-ink edge that keeps it the light pill's height,
+              // the 44 floor. Ink, not sniff-blue: blue here means the
+              // circle and the dot below it — the place being pointed at
+              // — not the thing you tap.
+              ...MODAL_PILL_DARK,
+              // It stands alone in a column, not in a two-button row,
+              // so it hugs its words instead of taking a flex share.
+              flex: 'none',
+              // Roomier than a modal pill: this one has no icon to give
+              // it weight, and it sits on a marker out on the map.
               padding: '10px 18px',
-              // Ink, not sniff-blue. This one survived the first pass
-              // because it lives on a map marker rather than in a modal,
-              // but it is a button, and blue here means the circle and
-              // the dot below it — the place being pointed at — not the
-              // thing you tap.
-              background: INK,
-              color: '#ffffff',
-              borderRadius: R.button,
-              // Ink on ink — kept for the height, never seen.
-              border: SURFACE.hair,
-              fontFamily: SYSTEM_FONT,
-              fontSize: TYPE.small,
-              fontWeight: 700,
+              // The card shadow of the bubble it hangs under, not the
+              // chip one — out on the map it has to lift off the tiles.
               boxShadow: SURFACE.shadow,
               userSelect: 'none',
               opacity: routing ? 0.6 : 1,

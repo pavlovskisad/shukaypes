@@ -41,6 +41,7 @@ import {
   remainingRouteMeters,
 } from '../../utils/geo';
 import { playPop, playPopThen } from '../../utils/popOnTap';
+import { haptic } from '../../utils/haptics';
 import { MOTION } from '../../utils/motion';
 import { Companion } from './Companion';
 import { CrayonRoute } from './CrayonRoute';
@@ -97,6 +98,7 @@ import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { INK, SURFACE } from '../../constants/surface';
 import { HandDrawnFrame } from '../ui/HandDrawn';
+import { CloseButton } from '../ui/CloseButton';
 
 const TOKEN_REFRESH_MS = 15000;
 // Extra syncs while actually walking, so a fast mover isn't looking at a
@@ -951,6 +953,10 @@ const DECK_ANIM_MS = MOTION.sheetMs;
       // The first tap's report is still on the wire; it will say
       // its own thanks.
       if (res?.reason === 'in-flight') return { ok: false, refusal: null };
+      // The report landed: the success buzz (UX-9.16). After the await,
+      // so outside the tap on iOS Safari, where only the Telegram and
+      // Android paths can still fire — a nicety, and no worse than none.
+      if (res?.ok) haptic('success');
       if (res?.ok && res.trusted) {
         showBubble(t.bubbles.sightingMoved(d.name), 5000);
       } else if (res?.ok) {
@@ -4369,6 +4375,9 @@ const DECK_ANIM_MS = MOTION.sheetMs;
                       onPress: () => {
                         const d = prompt.dog;
                         setPrompt(null);
+                        // The same buzz as the card's «start search» —
+                        // the two are one action (UX-9.16).
+                        haptic('medium');
                         assignSearch(d);
                       },
                     },
@@ -4491,7 +4500,7 @@ const DECK_ANIM_MS = MOTION.sheetMs;
               borderRadius: R.pill,
               // No edge. This is a readout — it tells you how far, you
               // never press it — and readouts lost their ink with the
-              // HUD meters. The ✕ beside it keeps its edge, because
+              // HUD meters. The close beside it keeps its edge, because
               // that one is a control.
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.body,
@@ -4502,10 +4511,12 @@ const DECK_ANIM_MS = MOTION.sheetMs;
           >
             {navDistance ?? '…'}
           </div>
-          <div
-            role="button"
-            aria-label={t.search.close}
-            onClick={() => {
+          {/* The app's one close button (D9) — the same circle as the
+              sheets', and as the dog's «not now» answer that stands in
+              this spot while a question is up. */}
+          <CloseButton
+            label={t.search.close}
+            onPress={() => {
               const d = lostDogs.find((x) => x.id === searchTarget.dogId);
               if (d) setPrompt({ kind: 'leave', dog: d });
               else {
@@ -4513,31 +4524,8 @@ const DECK_ANIM_MS = MOTION.sheetMs;
                 setSearchRoute(null);
               }
             }}
-            style={{
-              position: 'absolute',
-              right: 0,
-              pointerEvents: 'auto',
-              cursor: 'pointer',
-              width: 44,
-              height: 44,
-              borderRadius: R.pill,
-              background: SURFACE.fill,
-              // Drawn ring — see the HandDrawnFrame child below.
-              border: '2px solid transparent',
-              boxSizing: 'border-box',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: SYSTEM_FONT,
-              fontSize: 20,
-              fontWeight: 700,
-              color: '#1a1a1a',
-              boxShadow: SURFACE.chip,
-            }}
-          >
-            <HandDrawnFrame radius={R.pill} />
-            ✕
-          </div>
+            style={{ position: 'absolute', right: 0, pointerEvents: 'auto' }}
+          />
         </div>
       ) : null}
 
@@ -4926,6 +4914,10 @@ const DECK_ANIM_MS = MOTION.sheetMs;
           // supersniff locked on this dog: mode on, its card front-and-
           // centre in the carousel, the dog leading immediately.
           setSelectedDog(null);
+          // A search starting is the biggest thing a tap does in this
+          // app; it buzzes like one (UX-9.16). Haptics used to fire only
+          // in multiplayer — a poke got a buzz and a search did not.
+          haptic('medium');
           if (!useGameStore.getState().dogCam) {
             useGameStore.getState().toggleDogCam();
             // Arrived without touching the logo — lets the Companion

@@ -7,13 +7,20 @@ import { INLINE_ICON, ICON_HERO, EMOJI_HERO } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
-import { MODAL_PILL_DARK, MODAL_PILL_DISABLED, MODAL_PILL_LIGHT } from '../../constants/buttons';
+import {
+  CLOSE_INSET,
+  CLOSE_SIZE,
+  MODAL_PILL_DARK,
+  MODAL_PILL_DISABLED,
+  MODAL_PILL_LIGHT,
+} from '../../constants/buttons';
 import { INK, SURFACE } from '../../constants/surface';
 import { colors } from '../../constants/colors';
 import { playPopThen } from '../../utils/popOnTap';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
+import { CloseButton } from './CloseButton';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
 
@@ -198,6 +205,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
                 letterSpacing: 0.3,
                 display: 'inline-flex',
                 alignItems: 'center',
+                // The close circle's height, so the two share a midline.
+                height: CLOSE_SIZE,
                 gap: 4,
               }}
             >
@@ -208,42 +217,10 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           {/* The close button keeps the right corner to itself, and
               stays full-round: it is a circle and a control, not a
               readout. */}
-          <div
-            style={{
-              position: 'absolute',
-              top: SAFE_TOP,
-              right: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: S.s,
-            }}
-          >
-            <button
-              onClick={(e) => playPopThen(e.currentTarget, onClose)}
-              aria-label={t.modals.common.close}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: R.pill,
-                // Drawn ring — see the HandDrawnFrame child.
-                border: '2px solid transparent',
-                position: 'relative',
-                background: '#ffffff',
-                color: '#1a1a1a',
-                padding: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                boxShadow: SURFACE.chip,
-                fontSize: TYPE.display,
-                lineHeight: 1,
-              }}
-            >
-              <HandDrawnFrame radius={R.pill} />
-              ×
-            </button>
-          </div>
+          <CloseButton
+            onPress={onClose}
+            style={{ position: 'absolute', top: CLOSE_INSET, right: CLOSE_INSET }}
+          />
         </div>
 
         {/* Info section — name + address. Scrolls if needed. */}

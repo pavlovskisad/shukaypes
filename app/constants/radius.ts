@@ -29,8 +29,11 @@
 // one is 10. Each step down is a step further inside.
 //
 // Capsules are for elements that float on their own with nothing
-// containing them — HUD pills, the dog's answer pills, the cancel-walk
-// row, the tab bar. Nothing nests them, so nothing sets their corner.
+// containing them — HUD pills, the cancel-walk row, the tab bar.
+// Nothing nests them, so nothing sets their corner. (The dog's answer
+// pills — DogPrompt and the radial menu's text answers — are NOT
+// capsules: they turn R.button like every other button that carries a
+// sentence.)
 //
 // And a pill radius on a SQUARE box is a circle, not a capsule — close
 // buttons, the send arrow, map pins, the radial discs. Those never

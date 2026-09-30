@@ -252,7 +252,7 @@ export function RadialMenu({
         padding: isText ? `0 ${TEXT_ITEM.padX}px` : undefined,
         minHeight: isText ? TEXT_ITEM.height : BUTTON.size,
         height: isText ? undefined : BUTTON.size,
-        // Text pills are capsules; icon buttons are circles. Same
+        // Text pills are rounded rects; icon buttons are circles. Same
         // family, and at 60 tall against the disc's 68 they read as
         // siblings rather than as a chip clipped onto a button.
         // R.button for the text answers — the same corner every other
@@ -274,10 +274,14 @@ export function RadialMenu({
         // one line on screen not in Annex.
         fontFamily: SYSTEM_FONT,
         fontSize: isText ? TYPE.body : TYPE.hero,
-        fontWeight: isText ? 700 : undefined,
+        // 800, the weight the same answers carry when they sit under
+        // the dog in DogPrompt (UX-9.11) — one voice, one recipe.
+        fontWeight: isText ? 800 : undefined,
         lineHeight: isText ? 1.25 : undefined,
         cursor: 'pointer',
-        boxShadow: '0 6px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
+        // The card shadow, named — DogPrompt's answers wear the same
+        // one. This was a hand-written two-layer copy of nearly it.
+        boxShadow: SURFACE.shadow,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',

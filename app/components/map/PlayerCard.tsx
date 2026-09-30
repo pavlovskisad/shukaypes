@@ -19,7 +19,9 @@ import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 import { haptic } from '../../utils/haptics';
 import { HandDrawnFrame } from '../ui/HandDrawn';
-import { COLUMN, LINK, OVERLAY, PAPER, Primary } from '../ui/AccountDoor';
+import { COLUMN, OVERLAY, PAPER, Primary } from '../ui/AccountDoor';
+import { CloseButton } from '../ui/CloseButton';
+import { CLOSE_INSET, CLOSE_SIZE } from '../../constants/buttons';
 import { ownerColorCss } from './territoryColor';
 import { TerritoryMini } from '../ui/TerritoryMini';
 import { INK } from '../../constants/surface';
@@ -134,9 +136,27 @@ export function PlayerCard({ player, onClose }: Props) {
       <div style={{ ...COLUMN, bottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.m}px)` }}>
         <div style={{ ...PAPER, padding: S.l }}>
           <HandDrawnFrame seed={`card-${player.id}`} radius={R.card} />
+          {/* The app's one close (D9), in the corner like every sheet's.
+              It was a text link under the wave button — the only card
+              whose way out was a word. */}
+          <CloseButton
+            label={t.close}
+            onPress={onClose}
+            style={{ position: 'absolute', top: CLOSE_INSET, right: CLOSE_INSET, zIndex: 1 }}
+          />
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: S.m }}>
             <div style={portrait} role="img" aria-label={name} />
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Right padding keeps the name's ellipsis clear of the
+                close circle in the corner. */}
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                paddingRight: CLOSE_SIZE - S.xs,
+              }}
+            >
               <div
                 style={{
                   font: `700 ${TYPE.hero}px ${SYSTEM_FONT}`,
@@ -184,10 +204,6 @@ export function PlayerCard({ player, onClose }: Props) {
             </div>
           </div>
           <Primary label={pokeLabel} disabled={pokeState !== 'idle'} onClick={poke} />
-          {/* marginTop 0: LINK's own S.m of padding is the gap now. */}
-          <button type="button" style={{ ...LINK, alignSelf: 'center', marginTop: 0 }} onClick={onClose}>
-            {t.close}
-          </button>
         </div>
       </div>
     </div>,

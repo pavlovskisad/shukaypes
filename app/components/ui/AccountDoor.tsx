@@ -273,7 +273,10 @@ export function Primary({ label, disabled, onClick }: { label: string; disabled?
       }}
       // The shared disabled pill, not a half-faded dark one (UX-9.3): at
       // 0.5 the ink pill still read as a button you could press.
-      style={{ ...(disabled ? MODAL_PILL_DISABLED : MODAL_PILL_DARK), width: '100%', marginTop: S.m, fontSize: TYPE.body }}
+      //
+      // The pill's own 13px label, not 15 (UX-9.10) — the account forms
+      // were the one place a modal pill spoke up a size.
+      style={{ ...(disabled ? MODAL_PILL_DISABLED : MODAL_PILL_DARK), width: '100%', marginTop: S.m }}
     >
       {label}
     </button>
@@ -296,7 +299,7 @@ export function Secondary({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      style={{ ...MODAL_PILL_LIGHT, width: '100%', marginTop: S.s, fontSize: TYPE.body, opacity: disabled ? 0.5 : 1 }}
+      style={{ ...MODAL_PILL_LIGHT, width: '100%', marginTop: S.s, opacity: disabled ? 0.5 : 1 }}
     >
       <HandDrawnFrame seed={seed} radius={R.button} />
       {label}

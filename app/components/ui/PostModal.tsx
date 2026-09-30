@@ -32,6 +32,7 @@ import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
+import { playPop, playPopThen } from '../../utils/popOnTap';
 
 const SHEET_ANIM_MS = MOTION.sheetMs;
 
@@ -316,14 +317,11 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
                 <div style={{ display: 'flex', gap: S.s, marginTop: S.s }}>
                   {confirmingSeen ? (
                     <>
-                      <button onClick={() => setConfirmingSeen(false)} style={MODAL_PILL_LIGHT}>
-                        <HandDrawnFrame radius={R.button} />
-                        {t.modals.lostDog.seenConfirmNo}
-                      </button>
                       <button
                         disabled={sendingSeen}
-                        onClick={() => {
+                        onClick={(e) => {
                           if (sendingSeen) return;
+                          playPop(e.currentTarget);
                           setSendingSeen(true);
                           setSeenRefusal(null);
                           void onReportSighting().then(({ ok, refusal }) => {
@@ -339,9 +337,28 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
                       >
                         {t.modals.lostDog.seenConfirmYes}
                       </button>
+                      {/* Dark answer on the left, like every action row
+                          (D10) — the pet card asks this same question
+                          in the same order. */}
+                      <button
+                        onClick={(e) => {
+                          playPop(e.currentTarget);
+                          setConfirmingSeen(false);
+                        }}
+                        style={MODAL_PILL_LIGHT}
+                      >
+                        <HandDrawnFrame radius={R.button} />
+                        {t.modals.lostDog.seenConfirmNo}
+                      </button>
                     </>
                   ) : (
-                    <button onClick={() => setConfirmingSeen(true)} style={MODAL_PILL_LIGHT}>
+                    <button
+                      onClick={(e) => {
+                        playPop(e.currentTarget);
+                        setConfirmingSeen(true);
+                      }}
+                      style={MODAL_PILL_LIGHT}
+                    >
                       <HandDrawnFrame radius={R.button} />
                       {t.modals.lostDog.iveSeen}
                     </button>
@@ -370,13 +387,21 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
               recipe LostDogModal and SpotModal use. */}
           {post?.sourceUrl ? (
             <button
-              onClick={() => window.open(post.sourceUrl!, '_blank', 'noopener')}
+              onClick={(e) => {
+                // Pop without the defer: window.open has to run inside
+                // the tap itself or a popup blocker eats it.
+                playPop(e.currentTarget);
+                window.open(post.sourceUrl!, '_blank', 'noopener');
+              }}
               style={MODAL_PILL_DARK}
             >
               {t.modals.post.openOriginal}
             </button>
           ) : null}
-          <button onClick={onClose} style={MODAL_PILL_LIGHT}>
+          <button
+            onClick={(e) => playPopThen(e.currentTarget, onClose)}
+            style={MODAL_PILL_LIGHT}
+          >
             <HandDrawnFrame radius={R.button} />
             {t.modals.common.close}
           </button>

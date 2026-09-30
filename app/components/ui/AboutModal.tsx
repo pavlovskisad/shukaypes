@@ -10,7 +10,8 @@ import { Z } from '../../constants/z';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
-import { playPopThen } from '../../utils/popOnTap';
+import { CloseButton } from './CloseButton';
+import { CLOSE_INSET, CLOSE_SIZE } from '../../constants/buttons';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
 
@@ -27,11 +28,11 @@ const SHEET_ANIM_MS = MOTION.sheetMs;
 const SAFE_TOP = 12;
 // Close button, and the gap under it. The header strip has to reserve
 // SAFE_TOP + CLOSE_SIZE + CLOSE_GAP of room or the title runs under the
-// badge and the ✕ — which is exactly what happened while this was a
+// badge and the close — which is exactly what happened while this was a
 // `calc()` with an unitless term in it: one bad operand invalidates the
 // whole expression, the declaration is dropped, and the padding silently
 // becomes 0. Plain arithmetic can't fail that way.
-const CLOSE_SIZE = 36;
+// CLOSE_SIZE is the shared close circle's (constants/buttons.ts).
 const CLOSE_GAP = 8;
 const HEADER_TOP = SAFE_TOP + CLOSE_SIZE + CLOSE_GAP;
 
@@ -182,33 +183,10 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             <HandDrawnFrame radius={R.label} />
             {t.modals.about.badge}
           </span>
-          <button
-            onClick={(e) => playPopThen(e.currentTarget, onClose)}
-            aria-label={t.modals.common.close}
-            style={{
-              position: 'absolute',
-              top: SAFE_TOP,
-              right: 12,
-              width: CLOSE_SIZE,
-              height: CLOSE_SIZE,
-              borderRadius: R.pill,
-              // Drawn ring — see the HandDrawnFrame child.
-              border: '2px solid transparent',
-              background: '#ffffff',
-              color: '#1a1a1a',
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: SURFACE.chip,
-              fontSize: TYPE.display,
-              lineHeight: 1,
-            }}
-          >
-            <HandDrawnFrame radius={R.pill} />
-            ×
-          </button>
+          <CloseButton
+            onPress={onClose}
+            style={{ position: 'absolute', top: CLOSE_INSET, right: CLOSE_INSET }}
+          />
 
           <div style={{ fontFamily: SYSTEM_FONT, fontSize: TYPE.display, fontWeight: 800 }}>
             {t.modals.about.header}

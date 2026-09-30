@@ -44,6 +44,7 @@ import { Icon } from './Icon';
 import { colors } from '../../constants/colors';
 import { INLINE_ICON } from '../../constants/sizing';
 import { MOTION } from '../../utils/motion';
+import { playPop, playPopThen } from '../../utils/popOnTap';
 
 // Same figure PostModal / SpotModal / LostDogModal use, so all four sheets
 // open and close on one clock.
@@ -355,12 +356,12 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             {s.pinHint}
           </div>
           <div style={{ display: 'flex', gap: S.s }}>
-            <button onClick={() => setStep('form')} style={MODAL_PILL_LIGHT}>
-              <HandDrawnFrame radius={R.button} />
-              {s.pinBack}
-            </button>
+            {/* Dark primary on the left, as on the form this step
+                returns to (D10). It used to sit on the right here and
+                on the left one step later. */}
             <button
-              onClick={() => {
+              onClick={(e) => {
+                playPop(e.currentTarget);
                 // The point under the crosshair, read now. The bounds
                 // midpoint and then GPS only if the map cannot answer —
                 // no map means nothing was aimed at anyway.
@@ -375,6 +376,13 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
               style={MODAL_PILL_DARK}
             >
               {s.pinConfirm}
+            </button>
+            <button
+              onClick={(e) => playPopThen(e.currentTarget, () => setStep('form'))}
+              style={MODAL_PILL_LIGHT}
+            >
+              <HandDrawnFrame radius={R.button} />
+              {s.pinBack}
             </button>
           </div>
         </div>
@@ -453,7 +461,10 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                 {(['dog', 'cat'] as const).map((sp) => (
                   <button
                     key={sp}
-                    onClick={() => setSpecies(sp)}
+                    onClick={(e) => {
+                      playPop(e.currentTarget);
+                      setSpecies(sp);
+                    }}
                     style={species === sp ? MODAL_PILL_DARK : MODAL_PILL_LIGHT}
                   >
                     {species === sp ? null : (
@@ -505,11 +516,22 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                   the dark pill is the primary action and there is only
                   one of those on a sheet, at the bottom. */}
               <div style={{ display: 'flex', gap: S.s, marginTop: S.m }}>
-                <button onClick={() => fileInputRef.current?.click()} style={MODAL_PILL_LIGHT}>
+                <button
+                  onClick={(e) => {
+                    // No defer: the file picker only opens from inside
+                    // the tap itself.
+                    playPop(e.currentTarget);
+                    fileInputRef.current?.click();
+                  }}
+                  style={MODAL_PILL_LIGHT}
+                >
                   <HandDrawnFrame seed="photo-btn" radius={R.button} />
                   {photoDataUrl ? s.photoChange : s.photoLabel}
                 </button>
-                <button onClick={() => setStep('pin')} style={MODAL_PILL_LIGHT}>
+                <button
+                  onClick={(e) => playPopThen(e.currentTarget, () => setStep('pin'))}
+                  style={MODAL_PILL_LIGHT}
+                >
                   <HandDrawnFrame seed="pin-btn" radius={R.button} />
                   {/* The drawn pin, at the secondary size: this is not
                       the sheet's primary action, and INLINE_ICON.cta is
@@ -653,17 +675,21 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             <>
               {result.channelPostUrl ? (
                 <button
-                  onClick={() =>
+                  onClick={(e) => {
+                    playPop(e.currentTarget);
                     openTelegramChat(
                       `https://t.me/share/url?url=${encodeURIComponent(result.channelPostUrl!)}`,
-                    )
-                  }
+                    );
+                  }}
                   style={MODAL_PILL_DARK}
                 >
                   {s.doneShare}
                 </button>
               ) : null}
-              <button onClick={onClose} style={MODAL_PILL_LIGHT}>
+              <button
+                onClick={(e) => playPopThen(e.currentTarget, onClose)}
+                style={MODAL_PILL_LIGHT}
+              >
                 <HandDrawnFrame radius={R.button} />
                 {s.doneClose}
               </button>
@@ -672,10 +698,22 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             <>
               {/* The shared disabled pill while it sends (UX-9.3), not the
                   dark one faded — that still read as pressable. */}
-              <button onClick={() => void submit()} disabled={sending} style={sending ? MODAL_PILL_DISABLED : MODAL_PILL_DARK}>
+              <button
+                onClick={(e) => {
+                  playPop(e.currentTarget);
+                  void submit();
+                }}
+                disabled={sending}
+                style={sending ? MODAL_PILL_DISABLED : MODAL_PILL_DARK}
+              >
                 {sending ? s.submitting : s.submit}
               </button>
-              <button onClick={close} disabled={sending} style={{ ...MODAL_PILL_LIGHT, opacity: sending ? 0.6 : 1 }}>
+              <button
+                // Disabled while sending, so this is only ever onClose.
+                onClick={(e) => playPopThen(e.currentTarget, onClose)}
+                disabled={sending}
+                style={{ ...MODAL_PILL_LIGHT, opacity: sending ? 0.6 : 1 }}
+              >
                 <HandDrawnFrame radius={R.button} />
                 {s.close}
               </button>

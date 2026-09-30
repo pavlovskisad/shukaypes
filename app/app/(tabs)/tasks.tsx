@@ -36,6 +36,7 @@ import { useHint } from '../../hooks/useHint';
 import { useAccessStore } from '../../stores/accessStore';
 import { HandDrawnBar } from '../../components/ui/HandDrawn';
 import { LOOP_VIEW_PROPS } from '../../utils/motion';
+import { popPressableEvent } from '../../utils/popOnTap';
 
 interface QuestHistoryRow {
   id: string;
@@ -667,6 +668,8 @@ export default function TasksScreen() {
             <View style={styles.boardYouRow}>
               <Pressable
                 onPress={() => onFocusOwnGround(yourPiece)}
+                // The pop every other tappable row gives (UX-9.15).
+                onPressIn={popPressableEvent}
                 disabled={!yourPiece || yourPiece.length < 3}
                 style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
               >
@@ -703,6 +706,7 @@ export default function TasksScreen() {
                       onPress={() =>
                         isYou ? onFocusOwnGround(row.mainPiece) : onPickOwner(row)
                       }
+                      onPressIn={popPressableEvent}
                       disabled={!row.mainPiece || row.mainPiece.length < 3}
                       style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
                     >
@@ -728,7 +732,7 @@ export default function TasksScreen() {
                     "show all" over a board that already fits opened a
                     sheet repeating the same rows (UX-12.20). */}
                 {board.board.length > BOARD_CARD_ROWS ? (
-                  <Pressable onPress={openFullBoard}>
+                  <Pressable onPress={openFullBoard} onPressIn={popPressableEvent}>
                     {({ pressed }) => (
                       <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
                         {t.tasks.boardSeeAll}
@@ -801,7 +805,7 @@ export default function TasksScreen() {
               })
             )}
             {happy.board.length > BOARD_CARD_ROWS ? (
-              <Pressable onPress={openFullHappy}>
+              <Pressable onPress={openFullHappy} onPressIn={popPressableEvent}>
                 {({ pressed }) => (
                   <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
                     {t.tasks.boardSeeAll}

@@ -1,4 +1,4 @@
-import type { CSSProperties, TouchEvent as ReactTouchEvent } from 'react';
+import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import type { NearbyLostDog } from '../../services/api';
@@ -10,14 +10,20 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK, SURFACE } from '../../constants/surface';
-import { MODAL_PILL_DISABLED } from '../../constants/buttons';
+import {
+  MODAL_PILL_DARK,
+  MODAL_PILL_DISABLED,
+  MODAL_PILL_LIGHT,
+} from '../../constants/buttons';
+import { INLINE_ICON } from '../../constants/sizing';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
-import { playPopThen } from '../../utils/popOnTap';
+import { playPop, playPopThen } from '../../utils/popOnTap';
 import { HandDrawnFrame } from './HandDrawn';
 import { Icon } from './Icon';
+import { CloseButton } from './CloseButton';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
 
@@ -55,57 +61,61 @@ const SHEET_ANIM_MS = MOTION.sheetMs;
 // Keep in sync with DOG_VIEW_* in MapView if retuned.
 const STACK_TOP = 'calc(env(safe-area-inset-top, 0px) + 122px)';
 
-// These pills sit ON the pet's photo, which is the hardest surface in
-// the app to put a button on: it can be any colour, light or dark, and
-// it changes with every pet. Ink edge on both, and a deeper shadow than
-// the paper elsewhere, so the pair holds its shape over a bright sky or
-// a dark doorway alike.
-const PILL_BASE: CSSProperties = {
-  padding: '10px 18px',
-  borderRadius: R.button,
-  // 2px kept so both pills are the same size; the light one shows a
-  // DRAWN edge instead (its call site puts a HandDrawnFrame inside),
-  // and on the ink pill the line would be invisible anyway.
-  border: '2px solid transparent',
-  position: 'relative',
-  fontFamily: SYSTEM_FONT,
-  fontSize: TYPE.small,
-  fontWeight: 700,
-  cursor: 'pointer',
-  whiteSpace: 'nowrap',
-  display: 'inline-flex',
-  alignItems: 'center',
-  justifyContent: 'center',
-  gap: S.xs,
-  userSelect: 'none',
-};
-
+// The house pill recipe (UX-9.9) — these used to fork their own
+// (10×18, no flex share, a different gap). What stays their own is the
+// deeper shadow: the pair hangs under the bubble straight over the lit
+// search zone and the big photo pin, which can be any colour, and the
+// chip shadow alone lost them against a busy zone shot.
 const PILL_PRIMARY: CSSProperties = {
-  ...PILL_BASE,
-  background: INK,
-  color: '#ffffff',
+  ...MODAL_PILL_DARK,
   boxShadow: SURFACE.onPhoto,
 };
 
 const PILL_SECONDARY: CSSProperties = {
-  ...PILL_BASE,
-  background: '#ffffff',
-  color: INK,
+  ...MODAL_PILL_LIGHT,
   boxShadow: SURFACE.onPhoto,
 };
 
-// The shared disabled colours (grey paper, grey text, grey edge) at
-// this card's pill size, with the on-photo shadow the other two wear.
-// It used to be white-on-translucent, a ghost meant for a dark bubble:
-// over the pale basemap "searching…" could not be read at all (UX-9.2).
-// The grey edge rather than the ink one still says "not a button".
+// The shared disabled pill with the same deeper shadow. It used to be
+// white-on-translucent, a ghost meant for a dark bubble: over the pale
+// basemap "searching…" could not be read at all (UX-9.2). The grey edge
+// rather than the ink one still says "not a button".
 const PILL_DISABLED: CSSProperties = {
-  ...PILL_BASE,
-  background: MODAL_PILL_DISABLED.background,
-  color: MODAL_PILL_DISABLED.color,
-  border: MODAL_PILL_DISABLED.border,
-  cursor: 'default',
+  ...MODAL_PILL_DISABLED,
   boxShadow: SURFACE.onPhoto,
+};
+
+// The action row has a fixed width, so the two pills split it evenly
+// the way every other two-button row in the app does, capped to the
+// screen with the usual side gutter.
+const ROW_STYLE: CSSProperties = {
+  display: 'flex',
+  gap: S.s,
+  width: `min(340px, calc(100vw - ${2 * S.l}px))`,
+};
+
+// On a 320px phone a label plus its icon runs a few px past half the
+// row; let it take a second line there rather than push the row off
+// centre. At 360 and up they stay on one.
+const WRAP: CSSProperties = { whiteSpace: 'normal', minWidth: 0, lineHeight: 1.15 };
+
+// Prev / next chevrons: 44 tall to hit, as wide as the bubble's side
+// padding so they never sit over the text, vertically centred.
+const CHEVRON: CSSProperties = {
+  position: 'absolute',
+  top: '50%',
+  transform: 'translateY(-50%)',
+  // The bubble's 30px side padding.
+  width: 30,
+  height: 44,
+  padding: 0,
+  border: 'none',
+  background: 'none',
+  color: colors.grey,
+  fontFamily: SYSTEM_FONT,
+  fontSize: TYPE.display,
+  lineHeight: 1,
+  cursor: 'pointer',
 };
 
 // Status tint. This was '#8fb0ff' — brand blue lightened to survive on
@@ -193,6 +203,36 @@ export function LostDogModal({
   // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
   useSheetBack(!!dog, onClose);
 
+  // Left / right arrow keys step through the nearby pets, the keyboard's
+  // version of the swipe (UX-9.20). The handlers are read through a ref:
+  // MapView passes fresh arrows on every render, and it renders ~10×/s,
+  // so depending on them would re-bind the listener at that rate.
+  const cycleRef = useRef({ onPrev, onNext });
+  cycleRef.current = { onPrev, onNext };
+  const open = !!dog;
+  const canCycle = !!onPrev || !!onNext;
+  useEffect(() => {
+    if (!open || !canCycle) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.defaultPrevented || e.altKey || e.ctrlKey || e.metaKey) return;
+      // An arrow in a text field moves the caret; it never flips pets.
+      const el = e.target as HTMLElement | null;
+      if (el && (el.isContentEditable || /^(INPUT|TEXTAREA|SELECT)$/.test(el.tagName))) return;
+      const { onPrev: prev, onNext: next } = cycleRef.current;
+      if (e.key === 'ArrowLeft' && prev) {
+        e.preventDefault();
+        setSlideDir('left');
+        prev();
+      } else if (e.key === 'ArrowRight' && next) {
+        e.preventDefault();
+        setSlideDir('right');
+        next();
+      }
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [open, canCycle]);
+
   if (!renderDog) return null;
   if (typeof document === 'undefined') return null;
 
@@ -208,14 +248,16 @@ export function LostDogModal({
     setSlideDir('right');
     onNext();
   };
-  const handleTouchStart = (e: ReactTouchEvent) => {
-    touchStartXRef.current = e.touches[0]?.clientX ?? null;
+  // Pointer events, not touch (UX-9.20): the same flick now works with a
+  // mouse or a pen, not only a finger.
+  const handlePointerDown = (e: ReactPointerEvent) => {
+    touchStartXRef.current = e.clientX;
   };
-  const handleTouchEnd = (e: ReactTouchEvent) => {
+  const handlePointerUp = (e: ReactPointerEvent) => {
     const start = touchStartXRef.current;
     touchStartXRef.current = null;
     if (start == null || (!onPrev && !onNext)) return;
-    const end = e.changedTouches[0]?.clientX ?? start;
+    const end = e.clientX;
     const delta = end - start;
     if (Math.abs(delta) < SWIPE_THRESHOLD_PX) return;
     if (delta > 0) handlePrev();
@@ -249,8 +291,11 @@ export function LostDogModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        onTouchStart={handleTouchStart}
-        onTouchEnd={handleTouchEnd}
+        onPointerDown={handlePointerDown}
+        onPointerUp={handlePointerUp}
+        onPointerCancel={() => {
+          touchStartXRef.current = null;
+        }}
         style={{
           position: 'absolute',
           left: 0,
@@ -263,6 +308,12 @@ export function LostDogModal({
           // the close animation, and a tap on them then would act on a
           // card that is already going.
           pointerEvents: closing ? 'none' : 'auto',
+          // Vertical pans stay the browser's; horizontal ones are ours.
+          // Without this a phone treats the flick as the start of a pan
+          // and sends pointercancel instead of pointerup, and the swipe
+          // never lands — the touch handlers this replaced never had
+          // that problem, pointer events do.
+          touchAction: 'pan-y',
           animation: `dog-bubble-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.34, 1.2, 0.64, 1) forwards`,
         }}
       >
@@ -295,41 +346,53 @@ export function LostDogModal({
               boxShadow: VOICE.shadow,
               border: VOICE.border,
               textAlign: 'center',
-              maxWidth: 300,
+              // Capped to the screen with room for the close disc's
+              // S.l overhang: at a flat 300 on a 320px phone the disc
+              // hung 6px off the right edge.
+              maxWidth: `min(300px, calc(100vw - ${2 * (S.l + S.s)}px))`,
               // Anchors the close disc on the corner.
               position: 'relative',
             }}
           >
             {/* A VISIBLE CLOSE (UX-9.21). Tapping the map around the card
                 always closed it, but nothing said so — people looking at
-                a lost pet's card had no drawn way out. The app's close
-                shape (D9): a 44px drawn circle with the close icon, sat
-                on the bubble's corner like a badge so it takes no room
-                from the text. */}
-            <button
-              onClick={(e) => playPopThen(e.currentTarget, onClose)}
-              aria-label={t.modals.common.close}
-              style={{
-                position: 'absolute',
-                top: -S.l,
-                right: -S.l,
-                width: 44,
-                height: 44,
-                boxSizing: 'border-box',
-                borderRadius: R.pill,
-                border: '2px solid transparent',
-                background: '#ffffff',
-                padding: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                boxShadow: SURFACE.chip,
-              }}
-            >
-              <HandDrawnFrame radius={R.pill} />
-              <Icon name="close" size={18} />
-            </button>
+                a lost pet's card had no drawn way out. The app's one
+                close (D9), sat on the bubble's corner like a badge so it
+                takes no room from the text. */}
+            <CloseButton
+              onPress={onClose}
+              style={{ position: 'absolute', top: -S.l, right: -S.l }}
+            />
+            {/* Prev / next, for anyone without a thumb to swipe with
+                (UX-9.20): the swipe was touch-only, so on a desktop, or
+                with a keyboard, the other nearby pets were unreachable
+                and nothing hinted they were there. Quiet chevrons in the
+                bubble's own side padding, so they take no room from the
+                text and read as "there is more this way" first. */}
+            {onPrev ? (
+              <button
+                onClick={(e) => {
+                  playPop(e.currentTarget);
+                  handlePrev();
+                }}
+                aria-label={t.modals.lostDog.previousPet}
+                style={{ ...CHEVRON, left: 0 }}
+              >
+                ‹
+              </button>
+            ) : null}
+            {onNext ? (
+              <button
+                onClick={(e) => {
+                  playPop(e.currentTarget);
+                  handleNext();
+                }}
+                aria-label={t.modals.lostDog.nextPet}
+                style={{ ...CHEVRON, right: 0 }}
+              >
+                ›
+              </button>
+            ) : null}
             <div
               style={{
                 fontSize: 19,
@@ -424,43 +487,61 @@ export function LostDogModal({
             ) : null}
           </div>
 
-          {/* Action pills — ink primary (start search), white secondary
-              (i've seen), side by side under the bubble. While "i've
-              seen" is being confirmed the pair becomes no / yes, just
-              now, and the question sits at the foot of the bubble. */}
+          {/* Action pills — ink primary (start search) on the LEFT, white
+              secondary (i've seen) on the right: dark-left is the rule
+              on every sheet (D10), and this card was the one that had
+              it the other way round. The drawn eyes and magnifier give
+              it the same icon-and-label anatomy as the spot sheet's
+              pills (UX-9.17). While "i've seen" is being confirmed the
+              pair becomes yes, just now / no, and the question sits at
+              the foot of the bubble. */}
           {confirmingSeen ? (
-            <div style={{ display: 'flex', gap: S.s }}>
-              <button onClick={() => setConfirmingSeen(false)} style={PILL_SECONDARY}>
-                <HandDrawnFrame radius={R.button} />
-                {t.modals.lostDog.seenConfirmNo}
-              </button>
+            <div style={ROW_STYLE}>
               <button
                 onClick={(e) => {
                   if (firedRef.current) return;
                   firedRef.current = true;
                   playPopThen(e.currentTarget, () => onReportSighting?.(renderDog));
                 }}
-                style={PILL_PRIMARY}
+                style={{ ...PILL_PRIMARY, ...WRAP }}
               >
                 {t.modals.lostDog.seenConfirmYes}
               </button>
+              <button
+                onClick={(e) => {
+                  playPop(e.currentTarget);
+                  setConfirmingSeen(false);
+                }}
+                style={{ ...PILL_SECONDARY, ...WRAP }}
+              >
+                <HandDrawnFrame radius={R.button} />
+                {t.modals.lostDog.seenConfirmNo}
+              </button>
             </div>
           ) : (
-            <div style={{ display: 'flex', gap: S.s }}>
-              <button onClick={() => setConfirmingSeen(true)} style={PILL_SECONDARY}>
-                <HandDrawnFrame radius={R.button} />
-                {t.modals.lostDog.iveSeen}
-              </button>
+            <div style={ROW_STYLE}>
               <button
                 onClick={(e) =>
                   playPopThen(e.currentTarget, () => onStartSearch?.(renderDog))
                 }
                 disabled={searchActive}
-                style={searchActive ? PILL_DISABLED : PILL_PRIMARY}
+                style={{ ...(searchActive ? PILL_DISABLED : PILL_PRIMARY), ...WRAP }}
               >
-                {searchActive
-                  ? t.modals.lostDog.searchingCta
-                  : `${t.modals.lostDog.startSearch} →`}
+                <Icon name="search" size={INLINE_ICON.secondary} inverted={!searchActive} />
+                <span>
+                  {searchActive ? t.modals.lostDog.searchingCta : t.modals.lostDog.startSearch}
+                </span>
+              </button>
+              <button
+                onClick={(e) => {
+                  playPop(e.currentTarget);
+                  setConfirmingSeen(true);
+                }}
+                style={{ ...PILL_SECONDARY, ...WRAP }}
+              >
+                <HandDrawnFrame radius={R.button} />
+                <Icon name="eyes" size={INLINE_ICON.secondary} />
+                <span>{t.modals.lostDog.iveSeen}</span>
               </button>
             </div>
           )}

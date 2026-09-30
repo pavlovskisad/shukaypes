@@ -1,7 +1,7 @@
 // Shared button styles for modal CTAs. Two flavours (dark / light) +
 // a disabled state, all on the same tight pill recipe:
 //   - 10×18 padding, 13px text, 999 radius
-//   - subtle drop shadow
+//   - the chip shadow (SURFACE.chip), the same on dark and light
 //   - icon on the left at INLINE_ICON.cta sized to land ~1.6× the
 //     label height
 // The styles are flex-row friendly (flex:1) so two side-by-side
@@ -11,6 +11,18 @@
 //
 // One file so a future tweak (radius, colour, shadow) ships to
 // every modal in one diff.
+//
+// ORDER (D10): in a two-button row the dark primary is on the LEFT,
+// the light one on the right — on every sheet, and on every step of a
+// multi-step sheet. That was already the majority (SpotModal, PostModal,
+// the report form); the pet card and the report flow's pin step had it
+// the other way round, so the same thumb found the opposite answer
+// depending on which sheet was open.
+//
+// SEGMENTED TOGGLES (D11) reuse these two as well: selected is the
+// filled dark pill, unselected the light one. Deliberately no third
+// "segment" style — filled-for-selected is the pattern people already
+// read, and a toggle row never shares a line with an action row.
 
 import type { CSSProperties } from 'react';
 import { SYSTEM_FONT } from './fonts';
@@ -42,7 +54,11 @@ export const MODAL_PILL_BASE: CSSProperties = {
   alignItems: 'center',
   justifyContent: 'center',
   gap: S.s,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
+  // The chip shadow, on dark and light alike (UX-9.14). The two used to
+  // be written out separately — 0.10 here, 0.22 on the light pill — so
+  // the white half of every action row cast twice the shadow of the
+  // dark half sat beside it.
+  boxShadow: SURFACE.chip,
 };
 
 export const MODAL_PILL_DARK: CSSProperties = {
@@ -71,7 +87,6 @@ export const MODAL_PILL_LIGHT: CSSProperties = {
   // carries an ink-on-ink border it cannot show.
   border: '2px solid transparent',
   position: 'relative',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.22)',
 };
 
 // There is no third colour. A blue pill used to be the "primary" for
@@ -123,4 +138,62 @@ export const HUD_OVERLAY_PILL: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
+};
+
+// THE CLOSE BUTTON (D9). One shape for every "close this" in the app:
+// a 44px white circle with the drawn ink ring and a × in Annex, on the
+// chip shadow. It used to come in five-plus versions — a 36px circle
+// with a × on the sheets, a 44px one with ✕ (a glyph Annex doesn't
+// have, so it fell back to whatever the phone had) on the nav HUD, a
+// 52px rounded square on the dog's answers, a text link on the player
+// card — and a way out that changes shape between screens is one people
+// have to look for.
+//
+// THE GLYPH IS × AND NOT <Icon name="close">, although D9 picked the
+// icon. `close.svg` is not a cross: it is the radial menu's "walk
+// somewhere CLOSE BY" pin (a dotted line into a map pin, the short twin
+// of `far.svg`). Checked by rendering it, not by its name. Shipping it
+// here would put a map pin where every close button is. × is in
+// Annex's own character set (checked against the font's cmap; ✕ is
+// not), so it renders in the brand face everywhere. If the icon set
+// gains a real cross, swap it in inside CloseButton and DogPrompt.
+//
+// 44 rather than the sheets' old 36 because that is the touch floor,
+// and the nav HUD's copy is pressed outdoors while walking. The
+// component is `components/ui/CloseButton.tsx`; DogPrompt spreads the
+// recipe directly because its answers carry their own pop-in and
+// disabled handling.
+export const CLOSE_SIZE = 44;
+export const CLOSE_GLYPH = '×';
+// Distance from a sheet's top and right edges to the button. The
+// sheets had drifted to two pairs (12/12 and 14/18); one number now.
+export const CLOSE_INSET = 12;
+
+export const CLOSE_CHIP: CSSProperties = {
+  appearance: 'none',
+  width: CLOSE_SIZE,
+  height: CLOSE_SIZE,
+  minHeight: CLOSE_SIZE,
+  flexShrink: 0,
+  boxSizing: 'border-box',
+  padding: 0,
+  borderRadius: R.pill,
+  // Drawn, like MODAL_PILL_LIGHT: the call site puts a HandDrawnFrame
+  // inside, and the transparent 2px keeps the box the same size either
+  // way.
+  border: '2px solid transparent',
+  position: 'relative',
+  background: SURFACE.fill,
+  color: INK,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  boxShadow: SURFACE.chip,
+  // The glyph: Annex named outright (a <button> takes the UA font
+  // otherwise), at the size the sheets' × already had.
+  fontFamily: SYSTEM_FONT,
+  fontSize: TYPE.display,
+  fontWeight: 400,
+  lineHeight: 1,
 };
