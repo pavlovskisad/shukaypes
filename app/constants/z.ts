@@ -18,7 +18,7 @@
 // (UX-7.4): every marker and in-map pill below sat under the HUD at 30
 // regardless of its tier. It is a plain <div> now, so the tiers below
 // really are compared against each other — which means the companion
-// (42), the lost-pet deck (35) and the sniff bubble (45) DO paint over
+// (42), the lost-pet deck (35) and the sniff bubble (52) DO paint over
 // the corner logo and the status pills, as this file always said.
 
 export const Z = {
@@ -30,6 +30,12 @@ export const Z = {
   // set; this explicit value gives every marker the same floor so
   // we can lift specific ones above the rest.
   MARKER_DEFAULT: 10,
+  // Every lost-pet pin and collapsed cluster. One notch over the floor
+  // so the other walkers (which sit ON the floor) can never paint over
+  // a pet: the pets are what the map is for, the walkers are company
+  // (UX-8.2). It has to be set on every pin, not just some — a marker
+  // with no z-index stacks at 0, under anything that has one.
+  MARKER_LOST_PET: 12,
   // The dog. Sits above other markers in dense areas — when the
   // map's covered in POI clusters the companion should still be
   // the visual anchor. Bumped 15 → 42 so it (and the SpeechBubble
@@ -37,6 +43,10 @@ export const Z = {
   // (HUD_CHIPS = 35) when the dog speaks near the viewport edge.
   // Still well below MODAL_MAP (60).
   MARKER_COMPANION: 42,
+  // The one thing the person has picked on the map — the lost pet whose
+  // close-up is open, the spot the Spots tab sent them to. One step over
+  // the dog, so the chosen pin is never under anything (UX-8.6).
+  MARKER_SELECTED: 43,
   // Spiderified children of an expanded cluster — local to the
   // cluster's stacking context, but bumped here so they paint
   // above other map markers while expanded.
@@ -90,9 +100,13 @@ export const Z = {
   // map the person could not see (UX-7.3).
   TOAST: 56,
   // Sniff "sniffing…" indicator + discovered-place story bubble.
-  // Top of the HUD tier so it dominates marker re-renders during
-  // viewport refetches.
-  HUD_SNIFF_BUBBLE: 45,
+  // Above the walk stops (46/50), so a story you just sniffed up is not
+  // covered by the dots of a walk that happens to pass it — it was 45
+  // and called itself "top of the tier" while sitting under both
+  // (UX-8.5). It YIELDS to the dog's menu the way the stops do: while
+  // the ring is open SniffPress drops to MARKER_DEFAULT (UX-8.4),
+  // because the menu cannot climb out of the companion's own context.
+  HUD_SNIFF_BUBBLE: 52,
   //
   // NB the walk-stop numbers above only clear this tier because the
   // container they live in sets no z-index of its own. A positioned

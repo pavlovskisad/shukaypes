@@ -72,6 +72,7 @@ import {
   FLAT_GROUND_CAM,
 } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
+import { MARKER_CLASS } from './MapLibreMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { LostDogModal } from '../ui/LostDogModal';
 import { SpotModal } from '../ui/SpotModal';
@@ -418,19 +419,10 @@ export default function MapViewWeb() {
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
   // The dog whose card is open (D-73), from a tap on its chip.
   const [cardPlayer, setCardPlayer] = useState<NearbyPlayer | null>(null);
-  // Map fires its own click on the canvas independently of DOM event
-  // propagation from markers — `stopPropagation` inside a marker
-  // child doesn't reach it. At low zoom the companion overlaps the
-  // map surface enough that opening the radial menu also triggers a
-  // "background click" that closes it ~1 frame later. Record every
-  // companion tap and suppress the map click for a short window.
-  const companionTappedAtRef = useRef<number>(0);
   // How long the lost-pet deck takes to slide out of the menu's way, and
 // back. Matches the modal family's 280ms so the whole app moves on one
 // clock.
 const DECK_ANIM_MS = 280;
-
-const SUPPRESS_MAP_CLICK_MS = 300;
   // Which cluster is currently "spiderified" — tapping a cluster pops its
   // pets out around the center. Tapping elsewhere (the map background or
   // another cluster) collapses it. Lives locally because nothing else in
@@ -3359,17 +3351,48 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // settles (sniff jumps, snaps, pans all fire move start/end).
         map.on('movestart', () => setMapMoving(true));
         map.on('moveend', () => setMapMoving(false));
-        map.on('click', () => {
+        map.on('click', (e) => {
           // While the dog is asking, a tap on the map is not a dismiss.
           // The ring closes by being answered and by nothing else — this
           // is the "tap-to-discard blocked" half of the gate, and it has
           // to sit here rather than under an overlay, because the ring
           // and the dog are themselves children of the map.
           if (useGameStore.getState().appMode === 'gate') return;
+          // A TAP ON A MARKER IS THE MARKER'S, NOT THE MAP'S (UX-8.1).
+          //
+          // MapLibre hears every click on its canvas container natively,
+          // before React's root listener dispatches the marker's own
+          // onClick — so a marker's `stopPropagation` never reached this.
+          // Every marker tap was ALSO a background tap: the cluster badge
+          // was collapsed here and re-opened by its own toggle a moment
+          // later, so it could not be closed from the badge, and a tap on
+          // any drill-down of the dog's menu closed the menu it was in.
+          // (A 300ms timestamp stamped by the dog papered over the dog's
+          // own tap and nothing else.)
+          //
+          // So a marker tap stops here, and only closes what it does not
+          // own. Owner decision D8: tapping ANOTHER marker still closes an
+          // open menu or cluster — done explicitly, by asking which marker
+          // it was. An open walk-stop story is left alone: the story is
+          // itself a marker full of buttons (the heart, "more").
+          //
+          // "Inside" means on something the marker drew, or on a wrapper
+          // that listens itself. A bare wrapper hit is empty map: the open
+          // cluster's wrapper spans its whole 240px ring box, and a tap in
+          // the gaps between its discs has to still close it.
+          const target = e.originalEvent?.target;
+          const marker =
+            target instanceof Element ? target.closest('.maplibregl-marker') : null;
           if (
-            Date.now() - companionTappedAtRef.current <
-            SUPPRESS_MAP_CLICK_MS
+            marker &&
+            (marker !== target || marker.classList.contains(MARKER_CLASS.tappable))
           ) {
+            if (!marker.classList.contains(MARKER_CLASS.companion)) {
+              useGameStore.getState().setMenuOpen(false);
+            }
+            if (!marker.classList.contains(MARKER_CLASS.openCluster)) {
+              setExpandedClusterKey(null);
+            }
             return;
           }
           setExpandedClusterKey(null);
@@ -4020,7 +4043,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             on the line, each expanding into the dog's sentence about
             the place and, under that, its Wikipedia summary. Empty for
             a walk through a district kyiv_lore has nothing near. */}
-        <WalkStops />
+        {/* Not over the lost-pet close-up: the selected pet is the one
+            subject of that view, and the walk's dots and open stories sat
+            on top of it (UX-8.7). The walk itself is untouched — they
+            come back when the card closes. */}
+        {selectedDogId ? null : <WalkStops />}
 
 
         {/* Long-press anywhere on the bare map → dog sniffs the area
@@ -4071,9 +4098,6 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             hideBubble={offscreenIndicator != null || lostPinning}
             hidden={offscreenIndicator != null || lostPinning}
             hasSearchDogs={searchDogs.length > 0}
-            onTap={() => {
-              companionTappedAtRef.current = Date.now();
-            }}
             onTapCompanion={() => {
               showBubble(t.bubbles.simpleWoof, 4000);
               // Snap the camera back to the dog whenever the user

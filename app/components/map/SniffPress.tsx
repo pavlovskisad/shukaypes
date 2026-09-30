@@ -161,6 +161,21 @@ export function SniffPress() {
   }, [discovered, sniffingAt, setSniffActive]);
   useEffect(() => () => setSniffActive(false), [setSniffActive]);
 
+  // The lost-pet close-up is the one subject on screen while it is open,
+  // so a story left up from a sniff goes away with it rather than
+  // painting over the selected pet (UX-8.7). Cleared, not unmounted —
+  // the press gesture lives in this component and has to keep working.
+  const selectedDogId = useGameStore((s) => s.selectedDogId);
+  useEffect(() => {
+    if (selectedDogId) setDiscovered(null);
+  }, [selectedDogId]);
+
+  // The dog's menu outranks the sniff card the way it outranks the walk
+  // stops (WalkStops): the ring cannot paint out of the companion's own
+  // stacking context, so the card steps down to the floor while it is
+  // open (UX-8.4).
+  const menuOpen = useGameStore((s) => s.menuOpen);
+
   // A discovery belongs to the mode it was sniffed in. Flipping to
   // supersniff (or back) used to leave the story bubble and its ring
   // hanging over the new view — the press was over, but nothing ever
@@ -501,7 +516,11 @@ export function SniffPress() {
   }
   if (!discovered) return null;
   return (
-    <MapLibreMarker position={discovered.position} anchor="bottom" zIndex={Z.HUD_SNIFF_BUBBLE}>
+    <MapLibreMarker
+      position={discovered.position}
+      anchor="bottom"
+      zIndex={menuOpen ? Z.MARKER_DEFAULT : Z.HUD_SNIFF_BUBBLE}
+    >
       <div
         style={{
           display: 'flex',
@@ -614,6 +633,8 @@ function SniffingBubble({ position }: { position: LatLng }) {
   // Strip any static trailing ellipsis from the i18n label so the
   // animated "." → ".." → "..." cycle doesn't double up.
   const sniffingBase = t.sniff.sniffing.replace(/[.…]+$/, '');
+  // Yields to the dog's menu like the discovery card above.
+  const menuOpen = useGameStore((s) => s.menuOpen);
   useEffect(() => {
     const id = setInterval(() => {
       setDots((d) => (d.length >= 3 ? '.' : d + '.'));
@@ -629,7 +650,7 @@ function SniffingBubble({ position }: { position: LatLng }) {
       // anchors the gesture visually; the small dot we used to render
       // here was redundant once that fill is in.
       offset={[0, -60]}
-      zIndex={Z.HUD_SNIFF_BUBBLE}
+      zIndex={menuOpen ? Z.MARKER_DEFAULT : Z.HUD_SNIFF_BUBBLE}
     >
       <div
         style={{

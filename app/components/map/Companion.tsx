@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { MapLibreMarker } from './MapLibreMarker';
+import { MapLibreMarker, MARKER_CLASS } from './MapLibreMarker';
 import { useMaplibreMap } from './MapContext';
 import { useGameStore } from '../../stores/gameStore';
 import { useAccessStore } from '../../stores/accessStore';
@@ -107,11 +107,6 @@ interface CompanionProps {
   // nothing. Defaults true so any other caller keeps the old behaviour.
   hasSearchDogs?: boolean;
   onTapCompanion?: () => void;
-  // Fires on EVERY tap (open and close), before the menu state changes.
-  // Parent uses it to record a timestamp and suppress the map-level
-  // onClick that Google Maps fires independently of DOM event flow —
-  // without this, low-zoom taps open the menu and immediately close it.
-  onTap?: () => void;
 }
 
 // Companion overlay — float keyframe, tap-to-open radial menu. All children
@@ -126,7 +121,6 @@ export function Companion({
   hidden,
   hasSearchDogs = true,
   onTapCompanion,
-  onTap,
 }: CompanionProps) {
   const t = useStrings();
   const router = useRouter();
@@ -393,10 +387,10 @@ export function Companion({
   const handleTap = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      // Fire the parent-side suppress hook BEFORE we mutate menu state —
-      // Google's map-level onClick can race against ours at low zoom and
-      // would otherwise close the menu we just opened.
-      onTap?.();
+      // The map's own click also sees this tap (it listens natively,
+      // below React), and it leaves the menu alone because the tap
+      // landed inside this marker — see MARKER_CLASS. That replaced a
+      // 300ms "ignore the map" timestamp this handler used to stamp.
       // The gate is a question, and a question you can tap away is not a
       // question. The dog does not react, does not woof, does not close
       // the ring — the only way out is one of the four answers.
@@ -451,7 +445,7 @@ export function Companion({
     },
     // `t` and `flash` left with the supersniff woof — the bubble carries
     // the question now, so this handler no longer says anything.
-    [menuOpen, atModes, setMenuOpen, onTapCompanion, onTap]
+    [menuOpen, atModes, setMenuOpen, onTapCompanion]
   );
 
   const fireLeafAction = useCallback(
@@ -1019,7 +1013,13 @@ export function Companion({
   useEffect(() => () => setMenuCamera(null), [setMenuCamera]);
 
   return (
-    <MapLibreMarker position={position} zIndex={Z.MARKER_COMPANION}>
+    <MapLibreMarker
+      position={position}
+      zIndex={Z.MARKER_COMPANION}
+      // A tap anywhere in here — the dog, its bubble, any level of the
+      // menu — is not a tap on the map, so it never closes the menu.
+      className={MARKER_CLASS.companion}
+    >
       {/* Outer container is 140×140 — the entire box is the tap target
           even though the visible nose glyph is only 55×55 centered.
           At map-zoomed-out the companion sits on top of the UserMarker's

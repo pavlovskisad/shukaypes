@@ -10,6 +10,8 @@
 // first job is answering "is this mine", and that answer must never depend
 // on remembering which of twelve colours you were given today.
 
+import { INK } from '../../constants/surface';
+
 // Brand blue, rgb(0,60,255) — the CTA pill blue.
 export const OWN_COLOR_CSS = 'rgb(0,60,255)';
 export const OWN_COLOR_RGB: [number, number, number] = [0, 60 / 255, 1];
@@ -156,6 +158,30 @@ export function lineColorCss(css: string): string {
   const m = HSL_CSS.exec(css);
   if (!m) return css;
   return `hsl(${m[1]}, ${m[2]}%, ${Math.round(Number(m[3]) * LINE_DARKEN)}%)`;
+}
+
+// WHICH INK GOES ON A TAG PAINTED IN THIS OWNER'S COLOUR.
+//
+// The walker name tags in the territory view are filled with the owner
+// colour and carried white text — fine on the deep tone, and about 1.2:1
+// on the pale one and on the yellows and limes, which is a name nobody can
+// read (UX-8.8). Rather than listing which hues are "light", this asks the
+// colour: WCAG contrast of white and of INK against the fill, whichever is
+// higher wins. Measured over all 32 slots, the worst pick is 4.4:1.
+const INK_RGB: [number, number, number] = [1, 3, 5].map(
+  (i) => parseInt(INK.slice(i, i + 2), 16) / 255,
+) as [number, number, number];
+
+function luminance([r, g, b]: [number, number, number]): number {
+  const lin = (c: number) => (c <= 0.03928 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4);
+  return 0.2126 * lin(r) + 0.7152 * lin(g) + 0.0722 * lin(b);
+}
+
+export function ownerTextColor(id: string): string {
+  const fill = luminance(hsl(paintFor(id)));
+  const onWhite = 1.05 / (fill + 0.05);
+  const onInk = (fill + 0.05) / (luminance(INK_RGB) + 0.05);
+  return onInk >= onWhite ? INK : '#ffffff';
 }
 
 // Even-odd ray cast in raw degrees — the projection cancels out of an

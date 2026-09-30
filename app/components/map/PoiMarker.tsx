@@ -5,6 +5,7 @@ import { ICON_HERO } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { INK } from '../../constants/surface';
+import { Z } from '../../constants/z';
 import { Icon, iconForCategory } from '../ui/Icon';
 import { MapLibreMarker } from './MapLibreMarker';
 
@@ -48,7 +49,16 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
     );
   }, [selected]);
   return (
-    <MapLibreMarker position={position} anchor="bottom" onClick={onTap} cullNearHorizon>
+    <MapLibreMarker
+      position={position}
+      anchor="bottom"
+      onClick={onTap}
+      cullNearHorizon
+      // The chosen spot is lifted over its neighbours — scaled up 1.25
+      // but left at the floor, it painted under whichever pin came later
+      // in the DOM (UX-8.6).
+      zIndex={selected ? Z.MARKER_SELECTED : undefined}
+    >
       <div
         ref={wrapRef}
         role="button"
@@ -100,6 +110,11 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
                 color: '#1a1a1a',
                 textShadow: '0 1px 4px rgba(255,255,255,0.95)',
                 whiteSpace: 'nowrap',
+                // Capped like the lost-pet label: a long Places name
+                // otherwise runs across the map (UX-8.9).
+                maxWidth: 150,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
               }}
             >
               {name}
