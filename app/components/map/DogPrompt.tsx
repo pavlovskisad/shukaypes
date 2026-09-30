@@ -36,6 +36,12 @@ import { HandDrawnFrame } from '../ui/HandDrawn';
 export interface PromptAction {
   label: string;
   onPress: () => void;
+  // Draw it as the house close button — a square × — instead of a pill
+  // with a sentence in it. For the way OUT of a question whose answer is
+  // "not now": «ще подивлюсь» read as a second thing to consider rather
+  // than as the dismissal it is, and it sat the same size as the answer
+  // while being the opposite of one.
+  close?: boolean;
   // The one that carries the conversation forward. Solid ink; everything
   // else is white with the same edge, so there is never a question about
   // which button is the answer and which is the way out.
@@ -74,6 +80,11 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
         <button
           key={a.label}
           onClick={a.onPress}
+          aria-label={a.label}
+          // A close button carries its glyph, not the sentence — the
+          // label stays as the accessible name so it is still readable
+          // by anything that is not looking at it.
+          title={a.close ? a.label : undefined}
           style={{
             appearance: 'none',
             // The house edge — same 2px on both, so the two buttons are
@@ -88,7 +99,16 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
             fontFamily: SYSTEM_FONT,
             fontSize: TYPE.body,
             fontWeight: 800,
-            padding: '14px 22px',
+            // Square when it is a ×, so it reads as the close affordance
+            // the rest of the app uses rather than as a short answer.
+            padding: a.close ? 0 : '14px 22px',
+            width: a.close ? 52 : undefined,
+            display: a.close ? 'flex' : undefined,
+            alignItems: a.close ? 'center' : undefined,
+            justifyContent: a.close ? 'center' : undefined,
+            // The glyph wants to be bigger than body text to sit right in
+            // a square of this size.
+            ...(a.close ? { fontSize: 24, lineHeight: 1 } : null),
             borderRadius: R.button,
             cursor: 'pointer',
             // Past the 44px tap target — these are pressed outdoors,
@@ -105,7 +125,7 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
               button is nothing, and drawing it would only cost a
               measurement. */}
           {a.primary ? null : <HandDrawnFrame radius={R.button} />}
-          {a.label}
+          {a.close ? '×' : a.label}
         </button>
       ))}
     </div>

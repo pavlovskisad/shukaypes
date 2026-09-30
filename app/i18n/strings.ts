@@ -438,8 +438,12 @@ export interface AppStrings {
     // …and one for every level below it, so the icons are never a
     // guessing game and the whole descent reads as one conversation
     // rather than a menu that stops talking once you commit.
-    walkShapeAsk: string;
     walkDistanceAsk: string;
+    // …and the same question for «meet», which is the same walk to a
+    // different kind of place.
+    meetDistanceAsk: string;
+    // The leaf that draws a different three spots.
+    visitRegenerate: string;
     visitCategoryAsk: string;
     visitSpotAsk: string;
     // Said on entering the territory view, because nothing else explains
@@ -1052,8 +1056,9 @@ const uk: AppStrings = {
     // Shown while the walking verbs are on the ring — three icons that
     // do not explain themselves, so the dog names them.
     exploreAsk: 'просто пройтись, заскочити по каву чи в зоомагазин, чи з кимось познайомитись?',
-    walkShapeAsk: 'туди й назад чи в один бік?',
     walkDistanceAsk: 'тут поруч чи заберемось далі?',
+    meetDistanceAsk: 'пошукати поруч чи далі?',
+    visitRegenerate: 'інші',
     visitCategoryAsk: 'кава, поїсти, бар, зоомагазин чи ветеринар?',
     visitSpotAsk: 'ось що поруч — куди йдемо?',
     playIntro: [
@@ -1604,8 +1609,9 @@ const en: AppStrings = {
     explore: 'i want a walk',
     play: 'who holds this district?',
     exploreAsk: 'just a stroll, a coffee or a pet shop, or shall we go and meet somebody?',
-    walkShapeAsk: 'there and back, or one way?',
     walkDistanceAsk: 'close by, or shall we go further?',
+    meetDistanceAsk: 'look nearby, or further out?',
+    visitRegenerate: 'others',
     visitCategoryAsk: 'coffee, food, a bar, a pet shop, or the vet?',
     visitSpotAsk: "here's what's nearby — where are we headed?",
     playIntro: [

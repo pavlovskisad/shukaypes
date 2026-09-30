@@ -87,6 +87,20 @@ export function WalkStops() {
   }, [route]);
   const openId = useGameStore((s) => s.openWalkStopId);
   const setOpenWalkStop = useGameStore((s) => s.setOpenWalkStop);
+  // THE DOG'S MENU OUTRANKS THE DOTS WHILE IT IS OPEN.
+  //
+  // The stops sit above the companion (MARKER_WALK_STOP 46 vs
+  // MARKER_COMPANION 42) so that a dot is always hittable while a walk
+  // is on the map — that is deliberate and worth keeping. But the radial
+  // menu is a CHILD of the companion's marker, and that marker sets a
+  // z-index, so the menu cannot paint above its own container: tapping
+  // the dog during a walk put green dots over «хочу погуляти».
+  //
+  // Lowering the dots is the fix rather than raising the menu, because
+  // raising it is not possible from inside that stacking context. While
+  // the ring is up the dots are scenery anyway — the walker is answering
+  // a question, not reading a landmark.
+  const menuOpen = useGameStore((s) => s.menuOpen);
 
   if (stops.length === 0) return null;
   return (
@@ -96,6 +110,7 @@ export function WalkStops() {
           key={stop.id}
           stop={stop}
           open={openId === stop.id}
+          yieldToMenu={menuOpen}
           popDelayMs={
             routeLenM > 0
               ? Math.min(ROUTE_DRAW_MS, (stop.alongM / routeLenM) * ROUTE_DRAW_MS)
@@ -123,11 +138,15 @@ export function WalkStops() {
 function StopMarker({
   stop,
   open,
+  yieldToMenu,
   popDelayMs,
   onToggle,
 }: {
   stop: WalkStop;
   open: boolean;
+  // The dog is being talked to — drop under the companion so the ring
+  // it opens is not covered by dots. See WalkStops.
+  yieldToMenu: boolean;
   popDelayMs: number;
   onToggle: () => void;
 }) {
@@ -139,7 +158,13 @@ function StopMarker({
       position={stop.position}
       anchor="bottom"
       // An open stop's bubble has to clear the other stops' discs.
-      zIndex={open ? Z.MARKER_WALK_STOP_OPEN : Z.MARKER_WALK_STOP}
+      zIndex={
+        yieldToMenu
+          ? Z.MARKER_DEFAULT
+          : open
+            ? Z.MARKER_WALK_STOP_OPEN
+            : Z.MARKER_WALK_STOP
+      }
       // Cancels the hit-area padding under the dot — see
       // STOP_DOT_HIT_PAD.
       offset={[0, STOP_DOT_HIT_PAD]}

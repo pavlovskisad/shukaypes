@@ -1907,6 +1907,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // it (assignSearch above) and reuses this exact spot.
   const previewSearch = useCallback(
     (dog: NearbyLostDog) => {
+      // A SWIPE TAKES THE QUESTION WITH IT. The deck stays swipeable
+      // while the dog's «ходімо шукати X?» is up (see CardStack), so the
+      // pet the question is about can now change under it — and a
+      // question about the pet you just swiped past is worse than no
+      // question. Asking to see the next one is not an answer to this
+      // one, so the prompt goes and the dog can ask again about whoever
+      // you settle on.
+      setPrompt(null);
       const from = userPosRef.current;
       // Aim the fragment for a comfortable middle distance (~PREVIEW_TARGET_DIST):
       // pick the in-zone sample closest to that target. Keeps the beacon out on
@@ -4051,7 +4059,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             actions={
               prompt.kind === 'confirm'
                 ? [
-                    { label: t.search.confirmBack, onPress: () => setPrompt(null) },
+                    {
+                      label: t.search.confirmBack,
+                      close: true,
+                      onPress: () => setPrompt(null),
+                    },
                     {
                       label: t.search.confirmGo,
                       primary: true,
@@ -4223,7 +4235,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         <div
           style={{
             position: 'absolute',
-            top: 100,
+            // 100 BELOW THE SAFE AREA, not 100 below the viewport. The
+            // HUD this sits under is wrapped in SafeAreaView
+            // edges={['top']}, so on a notched phone it starts an inset
+            // down — and a bare top:100 left this pill where the HUD now
+            // is. Invisible in a browser tab, where Safari's chrome is
+            // outside the viewport and the inset is 0; only the INSTALLED
+            // PWA has a notch to clear, which is exactly where it showed.
+            top: insets.top + 100,
             left: 0,
             right: 0,
             display: 'flex',
