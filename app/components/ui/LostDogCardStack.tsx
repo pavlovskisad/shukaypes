@@ -11,6 +11,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK } from '../../constants/surface';
+import { colors } from '../../constants/colors';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 import { distanceMeters, formatDistance } from '../../utils/geo';
@@ -83,6 +84,7 @@ export function LostDogCardStack({
       getId={(d) => d.id}
       onTap={onTap}
       onCounterTap={onCounterTap}
+      counterA11yLabel={t.tasks.boardSeeAll}
       onSwipe={onSwipe}
       // Card-sized, not the ad's 1200px render — utils/petPhoto.ts.
       getPhotoUrl={(d) => petPhotoAt(d.photoUrl, CARD_W)}
@@ -268,7 +270,10 @@ const styles = StyleSheet.create({
     bottom: PICTURE_INSET,
     borderRadius: Math.max(0, R.card - PICTURE_INSET),
   },
+  // A pet with no photo gets the map's paper behind its emoji, not a
+  // blank white card that reads as a failed load (UX-10.14).
   photoFallback: {
+    backgroundColor: colors.photoBlank,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -333,10 +338,13 @@ const styles = StyleSheet.create({
     color: INK,
     flexShrink: 0,
   },
+  // TYPE.hero, the card-name size type.ts assigns: the spot and
+  // favourite cards in the same decks already used it and this one was
+  // at display, so swiping between tabs changed the name size (UX-11.3).
   cardName: {
     fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.display,
-    fontWeight: '800',
+    fontSize: TYPE.hero,
+    fontWeight: '700',
     color: INK,
   },
   cardMeta: {

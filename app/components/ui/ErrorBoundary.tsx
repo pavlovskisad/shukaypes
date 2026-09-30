@@ -13,12 +13,18 @@
 // store, or any store — the thing that just crashed may well be the
 // store, and a fallback that throws while rendering the fallback gives
 // you a blank page with extra steps. Language comes straight from
-// localStorage with a default, and the styles are literals.
+// localStorage with a default. The styles read only the plain constant
+// objects in constants/ (no hooks, no stores), so the crash screen wears
+// the same paper-and-ink palette as the rest of the app instead of the
+// legacy beige one it was written in.
 
 import { Component, type ErrorInfo, type ReactNode } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { reportCrash } from '../../services/crashReport';
 import { R } from '../../constants/radius';
+import { colors } from '../../constants/colors';
+import { INK, SURFACE } from '../../constants/surface';
+import { TYPE } from '../../constants/type';
 
 interface Props {
   children: ReactNode;
@@ -88,17 +94,23 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
     paddingHorizontal: 36,
-    backgroundColor: '#F3F0E7',
+    backgroundColor: SURFACE.fill,
   },
   emoji: { fontSize: 56, marginBottom: 18 },
-  title: { fontSize: 22, textAlign: 'center', marginBottom: 12, color: '#2B2B26' },
-  body: { fontSize: 15, lineHeight: 22, textAlign: 'center', color: '#5A5750' },
+  title: {
+    fontSize: TYPE.hero,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 12,
+    color: INK,
+  },
+  body: { fontSize: TYPE.body, lineHeight: 22, textAlign: 'center', color: colors.grey },
   button: {
     marginTop: 26,
     paddingVertical: 12,
     paddingHorizontal: 28,
     borderRadius: R.button,
-    backgroundColor: '#2B2B26',
+    backgroundColor: INK,
   },
-  buttonText: { color: '#F3F0E7', fontSize: 15 },
+  buttonText: { color: colors.white, fontSize: TYPE.body, fontWeight: '700' },
 });

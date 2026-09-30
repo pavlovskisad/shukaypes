@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -41,6 +42,7 @@ import {
   remainingRouteMeters,
 } from '../../utils/geo';
 import { playPop, playPopThen } from '../../utils/popOnTap';
+import { haptic } from '../../utils/haptics';
 import { MOTION } from '../../utils/motion';
 import { Companion } from './Companion';
 import { CrayonRoute } from './CrayonRoute';
@@ -97,6 +99,8 @@ import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { INK, SURFACE } from '../../constants/surface';
 import { HandDrawnFrame } from '../ui/HandDrawn';
+import { CloseButton } from '../ui/CloseButton';
+import { clickOnKey } from '../../utils/keyActivate';
 
 const TOKEN_REFRESH_MS = 15000;
 // Extra syncs while actually walking, so a fast mover isn't looking at a
@@ -951,6 +955,10 @@ const DECK_ANIM_MS = MOTION.sheetMs;
       // The first tap's report is still on the wire; it will say
       // its own thanks.
       if (res?.reason === 'in-flight') return { ok: false, refusal: null };
+      // The report landed: the success buzz (UX-9.16). After the await,
+      // so outside the tap on iOS Safari, where only the Telegram and
+      // Android paths can still fire — a nicety, and no worse than none.
+      if (res?.ok) haptic('success');
       if (res?.ok && res.trusted) {
         showBubble(t.bubbles.sightingMoved(d.name), 5000);
       } else if (res?.ok) {
@@ -2756,10 +2764,21 @@ const DECK_ANIM_MS = MOTION.sheetMs;
     const spot = spots.find((s) => s.id === selectedSpotId);
     if (!spot) return;
     const current = map.getZoom() ?? balance.mapZoomDefault;
+    // SCALED TO THE SCREEN (UX-8.16). 460 is the sheet's cover on a
+    // tall phone; on a short one the sheet's hero gives way (SpotModal,
+    // UX-12.12) and a fixed 460 + 110 left the spot a sliver of map —
+    // or, under ~600 px, more padding than map, which MapLibre answers
+    // by ignoring the padding altogether. So: never more than 60% of
+    // the map, and always a strip of SPOT_MIN_STRIP left to land in.
+    const mapH = map.getContainer().clientHeight;
+    const padTop = Math.max(
+      0,
+      Math.min(SPOT_SHEET_COVER, Math.round(mapH * 0.6), mapH - SPOT_TAB_PAD - SPOT_MIN_STRIP),
+    );
     easeCamera(map, 'short', {
       center: [spot.position.lng, spot.position.lat],
       zoom: Math.max(current, 17),
-      padding: { top: 460, bottom: 110, left: 20, right: 20 },
+      padding: { top: padTop, bottom: SPOT_TAB_PAD, left: 20, right: 20 },
       duration: 500,
     });
   }, [selectedSpotId, spots]);
@@ -3637,8 +3656,9 @@ const DECK_ANIM_MS = MOTION.sheetMs;
               setMapAttempt((n) => n + 1);
             }}
             style={styles.retry}
+            accessibilityRole="button"
           >
-            <Text style={styles.t}>{t.hud.retry}</Text>
+            <Text style={styles.retryText}>{t.hud.retry}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -4369,6 +4389,9 @@ const DECK_ANIM_MS = MOTION.sheetMs;
                       onPress: () => {
                         const d = prompt.dog;
                         setPrompt(null);
+                        // The same buzz as the card's «start search» —
+                        // the two are one action (UX-9.16).
+                        haptic('medium');
                         assignSearch(d);
                       },
                     },
@@ -4491,21 +4514,32 @@ const DECK_ANIM_MS = MOTION.sheetMs;
               borderRadius: R.pill,
               // No edge. This is a readout — it tells you how far, you
               // never press it — and readouts lost their ink with the
-              // HUD meters. The ✕ beside it keeps its edge, because
+              // HUD meters. The close beside it keeps its edge, because
               // that one is a control.
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.body,
-              fontWeight: 800,
+              fontWeight: 700,
               letterSpacing: 0.3,
               boxShadow: SURFACE.chip,
+              // Holds its width across GPS ticks (UX-8.18): "95 m" →
+              // "105 m" → "1.1 km" re-sized the pill every few seconds,
+              // and the close beside it — centred as a pair — jumped
+              // sideways with it. Tabular figures keep the digits still
+              // inside the floor.
+              minWidth: 72,
+              boxSizing: 'border-box',
+              textAlign: 'center',
+              fontVariantNumeric: 'tabular-nums',
             }}
           >
             {navDistance ?? '…'}
           </div>
-          <div
-            role="button"
-            aria-label={t.search.close}
-            onClick={() => {
+          {/* The app's one close button (D9) — the same circle as the
+              sheets', and as the dog's «not now» answer that stands in
+              this spot while a question is up. */}
+          <CloseButton
+            label={t.search.close}
+            onPress={() => {
               const d = lostDogs.find((x) => x.id === searchTarget.dogId);
               if (d) setPrompt({ kind: 'leave', dog: d });
               else {
@@ -4513,31 +4547,8 @@ const DECK_ANIM_MS = MOTION.sheetMs;
                 setSearchRoute(null);
               }
             }}
-            style={{
-              position: 'absolute',
-              right: 0,
-              pointerEvents: 'auto',
-              cursor: 'pointer',
-              width: 44,
-              height: 44,
-              borderRadius: R.pill,
-              background: SURFACE.fill,
-              // Drawn ring — see the HandDrawnFrame child below.
-              border: '2px solid transparent',
-              boxSizing: 'border-box',
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              fontFamily: SYSTEM_FONT,
-              fontSize: 20,
-              fontWeight: 700,
-              color: '#1a1a1a',
-              boxShadow: SURFACE.chip,
-            }}
-          >
-            <HandDrawnFrame radius={R.pill} />
-            ✕
-          </div>
+            style={{ position: 'absolute', right: 0, pointerEvents: 'auto' }}
+          />
         </div>
       ) : null}
 
@@ -4623,6 +4634,8 @@ const DECK_ANIM_MS = MOTION.sheetMs;
             {walkRoute ? (
               <div
                 role="button"
+                tabIndex={0}
+                onKeyDown={clickOnKey}
                 aria-label={t.hud.finishWalk}
                 // The pop every other button in the app gives, then the
                 // walk ends (UX-9.7).
@@ -4647,7 +4660,7 @@ const DECK_ANIM_MS = MOTION.sheetMs;
           the chip's edge-side to the screen edge so dropping
           topReserve to 0 doesn't clip half the chip. */}
       {offscreenIndicator && typeof document !== 'undefined' ? createPortal(
-        // Portaled to document.body so the chip's z-index lives
+        // Portaled out (utils/portalRoot) so the chip's z-index lives
         // at the page root. Setting zIndex on the chip inside
         // MapView wasn't enough — the parent stacking contexts
         // (mapLayer, possibly MapLibre's canvas wrapper) trapped
@@ -4669,6 +4682,8 @@ const DECK_ANIM_MS = MOTION.sheetMs;
             recenterOnCompanion();
           }}
           role="button"
+          tabIndex={0}
+          onKeyDown={clickOnKey}
           aria-label={t.hud.recenterOnCompanion}
           style={{
             position: 'fixed',
@@ -4747,14 +4762,18 @@ const DECK_ANIM_MS = MOTION.sheetMs;
                 // shrinks to its containing block otherwise.
                 width: 'max-content',
                 zIndex: Z.HUD_CHIP_BUBBLE,
-                // Same dimensions / type as the in-map SpeechBubble.
-                padding: '12px 10px',
+                // Same dimensions / type as the in-map SpeechBubble,
+                // centred like it too: the mirror left-aligned its lines,
+                // so the same remark set differently here (UX-10.9).
+                padding: VOICE.padding,
                 background: VOICE.background,
                 color: VOICE.color,
                 borderRadius: R.chip,
                 fontFamily: VOICE.fontFamily,
                 fontSize: TYPE.body,
-                lineHeight: 1.4,
+                lineHeight: VOICE.lineHeight,
+                textAlign: 'center',
+                overflowWrap: 'anywhere',
                 boxShadow: VOICE.shadow,
                 border: VOICE.border,
                 pointerEvents: 'none',
@@ -4767,7 +4786,7 @@ const DECK_ANIM_MS = MOTION.sheetMs;
             </div>
           ) : null}
         </div>,
-        document.body,
+        portalRoot(),
       ) : null}
 
       {/* Keyframes for things only the map draws. The shell's shared
@@ -4842,6 +4861,8 @@ const DECK_ANIM_MS = MOTION.sheetMs;
         <div
           onClick={() => setExpandedSpotKeys(new Set())}
           role="button"
+          tabIndex={0}
+          onKeyDown={clickOnKey}
           aria-label={t.hud.restack}
           style={{
             position: 'absolute',
@@ -4926,6 +4947,10 @@ const DECK_ANIM_MS = MOTION.sheetMs;
           // supersniff locked on this dog: mode on, its card front-and-
           // centre in the carousel, the dog leading immediately.
           setSelectedDog(null);
+          // A search starting is the biggest thing a tap does in this
+          // app; it buzzes like one (UX-9.16). Haptics used to fire only
+          // in multiplayer — a poke got a buzz and a search did not.
+          haptic('medium');
           if (!useGameStore.getState().dogCam) {
             useGameStore.getState().toggleDogCam();
             // Arrived without touching the logo — lets the Companion
@@ -4989,6 +5014,13 @@ const DECK_ANIM_MS = MOTION.sheetMs;
   );
 }
 
+// Spot-select camera padding (see the selectedSpotId effect): the top
+// sheet's cover on a tall phone, the tab bar's strip, and the least map
+// the chosen spot is allowed to land in.
+const SPOT_SHEET_COVER = 460;
+const SPOT_TAB_PAD = 110;
+const SPOT_MIN_STRIP = 120;
+
 const styles = StyleSheet.create({
   msg: {
     flex: 1,
@@ -5000,12 +5032,20 @@ const styles = StyleSheet.create({
   t: { fontSize: TYPE.body, color: colors.black },
   s: { fontSize: TYPE.small, color: colors.grey, marginTop: 6, textAlign: 'center' },
   problem: { textAlign: 'center', maxWidth: 320, lineHeight: 22 },
+  // The one button on a screen that has nothing else (UX-8.15): a
+  // 1.5px edge (drawn at 1 in Chrome) and a regular-weight label made
+  // it the faintest control in the app. The app's 2px ink edge, a 44px
+  // floor, and a label at the pills' 13/700.
   retry: {
     marginTop: S.xl,
-    paddingVertical: S.m,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingVertical: S.s,
     paddingHorizontal: S.xl,
     borderRadius: R.pill,
-    borderWidth: 1.5,
-    borderColor: colors.black,
+    borderWidth: 2,
+    borderColor: INK,
+    backgroundColor: colors.white,
   },
+  retryText: { fontSize: TYPE.small, fontWeight: '700', color: INK },
 });

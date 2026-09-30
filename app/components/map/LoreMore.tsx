@@ -13,6 +13,8 @@ import { TYPE } from '../../constants/type';
 import { VOICE } from '../../constants/voice';
 import { playPop } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
+import { Glyph } from '../ui/Glyph';
+import { clickOnKey } from '../../utils/keyActivate';
 
 // The "read more" under a landmark's one-line story, and the heart in
 // the corner above it. One component for both places a kyiv_lore row is
@@ -459,8 +461,10 @@ export function LoreMore({
 // The heart. Sits in the top-right corner of the bubble (the bubble
 // has to be position: relative), fills when the place is saved, and
 // toggles the store optimistically. A glyph rather than an icon: the
-// bubble's other affordances are glyphs too ("ще ▾", "ходімо сюди →"),
-// and a heart in the app's ink reads as drawn on, like the frame.
+// bubble's other affordances are text too ("ще", "ходімо сюди →"), and
+// a heart in the app's ink reads as drawn on, like the frame. Drawn by
+// Glyph, not typed: Annex has no ♥ / ♡, so the character came out of a
+// system font (UX-11.11).
 //
 // Room for it comes from the title's side padding — see HEART_INSET —
 // so a long name wraps clear of it instead of underneath it.
@@ -488,6 +492,8 @@ export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
     <>
     <div
       role="button"
+      tabIndex={0}
+      onKeyDown={clickOnKey}
       aria-label={saved ? t.sniff.saved : t.sniff.save}
       aria-pressed={saved}
       onClick={(e) => {
@@ -517,7 +523,7 @@ export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
         opacity: saved ? 1 : tone === 'paper' ? 0.35 : 0.5,
       }}
     >
-      {saved ? '♥' : '♡'}
+      <Glyph name={saved ? 'heart' : 'heartOutline'} size={18} style={{ display: 'block' }} />
     </div>
     {saveFailed ? (
       <div

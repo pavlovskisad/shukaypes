@@ -27,15 +27,18 @@ import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColor';
-import { BoardRow } from '../../components/ui/BoardRow';
+import { BoardRow, useBoardRowSize } from '../../components/ui/BoardRow';
 import { useVisibleHeight } from '../../hooks/useVisibleHeight';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 import { safeAreaTopPx } from '../../utils/safeArea';
 import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
+import { FullscreenListModal } from '../../components/ui/FullscreenListModal';
+import { Glyph } from '../../components/ui/Glyph';
 import { useHint } from '../../hooks/useHint';
 import { useAccessStore } from '../../stores/accessStore';
 import { HandDrawnBar } from '../../components/ui/HandDrawn';
 import { LOOP_VIEW_PROPS } from '../../utils/motion';
+import { popPressableEvent } from '../../utils/popOnTap';
 
 interface QuestHistoryRow {
   id: string;
@@ -189,6 +192,7 @@ export default function TasksScreen() {
   const setSearchIntent = useGameStore((s) => s.setSearchIntent);
   const currentScreen = useGameStore((s) => s.currentScreen);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
+  const [historyAllOpen, setHistoryAllOpen] = useState(false);
   // The territory standing. Null until the first fetch lands; until
   // then the card shows its title over skeleton rows, and if the fetch
   // failed, a retry line (boardFailed) — it used to not render at all,
@@ -403,6 +407,7 @@ export default function TasksScreen() {
         setSeeAllDogsOpen(false);
         setBoardAll(null);
         setHappyAll(null);
+        setHistoryAllOpen(false);
       },
       [],
     ),
@@ -512,6 +517,40 @@ export default function TasksScreen() {
   // the bar. The old layout padded the bottom by `calc(100vh - 200px)`
   // for the same reason; full-height cards need only the difference.
   const tailPad = tabClearance;
+  // The happiness index stands where a standing row's silhouette would,
+  // at the same width — which narrows on a small phone (UX-12.6).
+  const boardRowSize = useBoardRowSize();
+  // Past searches shown on the lost-pets card. That card already holds
+  // the deck, so on a short phone there is room for one row under it
+  // before the card outgrows the screen; three otherwise.
+  const historyCardRows = pageH < 600 ? 1 : 3;
+  // One past search. Drawn on the card and, all of them, in the
+  // fullscreen list behind «показати всі» (UX-12.7).
+  const renderHistoryRow = (q: QuestHistoryRow, i: number) => (
+    <View
+      key={q.id}
+      style={[styles.historyRow, i > 0 && styles.taskDivider]}
+    >
+      <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
+      <View style={styles.historyBody}>
+        <Text style={styles.historyName} numberOfLines={1}>
+          {q.dogName ?? t.tasks.unknownPet}
+        </Text>
+        <Text style={styles.historyMeta}>
+          {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
+          {relativeWhen(q.endedAt, t.time.ago)}
+          {q.status === 'completed' ? ` · ${t.tasks.questPoints(q.rewardPoints)}` : ''}
+        </Text>
+      </View>
+      {q.status === 'completed' ? (
+        <Text style={styles.historyTickDone}>
+          <Glyph name="check" />
+        </Text>
+      ) : (
+        <Text style={styles.historyTickAbandon}>×</Text>
+      )}
+    </View>
+  );
 
   const taskRows = dailyTasks.tasks;
   const doneCount = taskRows.filter((row) => row.done).length;
@@ -667,6 +706,8 @@ export default function TasksScreen() {
             <View style={styles.boardYouRow}>
               <Pressable
                 onPress={() => onFocusOwnGround(yourPiece)}
+                // The pop every other tappable row gives (UX-9.15).
+                onPressIn={popPressableEvent}
                 disabled={!yourPiece || yourPiece.length < 3}
                 style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
               >
@@ -703,6 +744,7 @@ export default function TasksScreen() {
                       onPress={() =>
                         isYou ? onFocusOwnGround(row.mainPiece) : onPickOwner(row)
                       }
+                      onPressIn={popPressableEvent}
                       disabled={!row.mainPiece || row.mainPiece.length < 3}
                       style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
                     >
@@ -728,7 +770,7 @@ export default function TasksScreen() {
                     "show all" over a board that already fits opened a
                     sheet repeating the same rows (UX-12.20). */}
                 {board.board.length > BOARD_CARD_ROWS ? (
-                  <Pressable onPress={openFullBoard}>
+                  <Pressable onPress={openFullBoard} onPressIn={popPressableEvent}>
                     {({ pressed }) => (
                       <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
                         {t.tasks.boardSeeAll}
@@ -771,7 +813,7 @@ export default function TasksScreen() {
                 you
                 avatarUrl={myAvatarUrl}
                 trailing={
-                  <Text style={[styles.happyIndex, styles.happyIndexYou]}>
+                  <Text style={[styles.happyIndex, { width: boardRowSize.trailing }, styles.happyIndexYou]}>
                     {happy.you.index === null ? t.profile.unranked : String(happy.you.index)}
                   </Text>
                 }
@@ -794,14 +836,14 @@ export default function TasksScreen() {
                     avatarUrl={row.avatarUrl}
                     owner={isYou ? null : row.owner}
                     trailing={
-                      <Text style={[styles.happyIndex, isYou && styles.happyIndexYou]}>{String(row.index)}</Text>
+                      <Text style={[styles.happyIndex, { width: boardRowSize.trailing }, isYou && styles.happyIndexYou]}>{String(row.index)}</Text>
                     }
                   />
                 );
               })
             )}
             {happy.board.length > BOARD_CARD_ROWS ? (
-              <Pressable onPress={openFullHappy}>
+              <Pressable onPress={openFullHappy} onPressIn={popPressableEvent}>
                 {({ pressed }) => (
                   <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
                     {t.tasks.boardSeeAll}
@@ -867,29 +909,20 @@ export default function TasksScreen() {
                   <Text style={styles.historyTitle}>{t.tasks.pastSearches}</Text>
                   <Text style={styles.cardHeaderCount}>{history.length}</Text>
                 </View>
-                {history.map((q, i) => (
-                  <View
-                    key={q.id}
-                    style={[styles.historyRow, i > 0 && styles.taskDivider]}
-                  >
-                    <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
-                    <View style={styles.historyBody}>
-                      <Text style={styles.historyName} numberOfLines={1}>
-                        {q.dogName ?? t.tasks.unknownPet}
+                {history.slice(0, historyCardRows).map(renderHistoryRow)}
+                {/* A snap-card taller than the screen has a tail you
+                    cannot reach (see `scroller`), and twenty searches
+                    made this one exactly that. The latest few here,
+                    the rest a tap away (UX-12.7). */}
+                {history.length > historyCardRows ? (
+                  <Pressable onPress={() => setHistoryAllOpen(true)} onPressIn={popPressableEvent}>
+                    {({ pressed }) => (
+                      <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
+                        {t.tasks.historySeeAll}
                       </Text>
-                      <Text style={styles.historyMeta}>
-                        {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
-                        {relativeWhen(q.endedAt, t.time.ago)}
-                        {q.status === 'completed' ? ` · ${t.tasks.questPoints(q.rewardPoints)}` : ''}
-                      </Text>
-                    </View>
-                    {q.status === 'completed' ? (
-                      <Text style={styles.historyTickDone}>✓</Text>
-                    ) : (
-                      <Text style={styles.historyTickAbandon}>×</Text>
                     )}
-                  </View>
-                ))}
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -906,11 +939,12 @@ export default function TasksScreen() {
             <Text style={[styles.cardTitle, styles.cardTitleInline]}>
               {t.tasks.dailyTasks}
             </Text>
-            {/* No tally over no rows: "0 / 0" read as a day with nothing
-                in it, when the day had not loaded. */}
+            {/* No tally over no rows: "0/0" read as a day with nothing
+                in it, when the day had not loaded. Unspaced, like every
+                row's count and the bonus under it (UX-11.14). */}
             {taskRows.length > 0 ? (
               <Text style={styles.dailyCount}>
-                {doneCount} / {taskRows.length}
+                {doneCount}/{taskRows.length}
               </Text>
             ) : null}
           </View>
@@ -953,7 +987,12 @@ export default function TasksScreen() {
                   </Text>
                   <Text style={[styles.count, row.done && styles.countDone]}>
                     {countLabel(row)}
-                    {row.done ? ' ✓' : ''}
+                    {row.done ? (
+                      <>
+                        {' '}
+                        <Glyph name="check" />
+                      </>
+                    ) : null}
                   </Text>
                 </View>
                 {/* Ink, done or not. The bar used to be blue while you
@@ -991,7 +1030,12 @@ export default function TasksScreen() {
                 </Text>
                 <Text style={[styles.count, allDone && styles.countDone]}>
                   {doneCount}/{taskRows.length}
-                  {allDone ? ' ✓' : ''}
+                  {allDone ? (
+                    <>
+                      {' '}
+                      <Glyph name="check" />
+                    </>
+                  ) : null}
                 </Text>
               </View>
               <View style={styles.barTrack}>
@@ -1029,6 +1073,13 @@ export default function TasksScreen() {
         youRank={happy?.you.rank ?? null}
         onClose={() => setHappyAll(null)}
       />
+      <FullscreenListModal
+        open={historyAllOpen}
+        title={t.tasks.pastSearches}
+        onClose={() => setHistoryAllOpen(false)}
+      >
+        {history.map(renderHistoryRow)}
+      </FullscreenListModal>
     </SafeAreaView>
   );
 }
@@ -1109,7 +1160,7 @@ const styles = StyleSheet.create({
   historyTitle: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.body,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.black,
     marginBottom: S.s,
     textTransform: 'lowercase',
@@ -1126,7 +1177,7 @@ const styles = StyleSheet.create({
   cardTitle: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.title,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.black,
     marginBottom: S.m,
     textTransform: 'lowercase',
@@ -1149,7 +1200,7 @@ const styles = StyleSheet.create({
   dailyCount: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.small,
-    color: '#777',
+    color: colors.grey,
     fontWeight: '700',
     letterSpacing: 0.3,
   },
@@ -1178,9 +1229,12 @@ const styles = StyleSheet.create({
   icon: { fontSize: TYPE.display },
   iconWrap: { width: 44, alignItems: 'center' },
   label: { flex: 1, fontSize: TYPE.body, color: colors.black },
-  labelDone: { color: '#aaa', textDecorationLine: 'line-through' },
-  count: { fontSize: TYPE.small, color: '#777', fontWeight: '700' },
-  countDone: { color: '#666' },
+  labelDone: { color: colors.greyLight, textDecorationLine: 'line-through' },
+  count: { fontSize: TYPE.small, color: colors.grey, fontWeight: '700' },
+  // Done fades, like the label beside it. It used to go DARKER than
+  // an open row's count, so a finished task read as the loud one
+  // (UX-10.3).
+  countDone: { color: colors.greyLight },
   // WHAT IT PAYS. Sits between the label and the count, quieter than
   // either: it is the reason to do the row, not the state of it.
   reward: {
@@ -1192,7 +1246,7 @@ const styles = StyleSheet.create({
   },
   // Already banked. Faded rather than hidden — a row that drops its
   // number once paid reads as though the reward was withdrawn.
-  rewardPaid: { color: '#9a9a9a' },
+  rewardPaid: { color: colors.greyLight },
   // The bonus row, set off from the six by the same gap the tab uses
   // everywhere else rather than by a rule.
   bonusTask: { marginTop: S.s },
@@ -1230,26 +1284,29 @@ const styles = StyleSheet.create({
   boardSeeAllPressed: { opacity: 0.55 },
   boardRowPressed: { opacity: 0.6 },
   // The index where the silhouette would be: one big number, the
-  // same width as the 92px thumbnail so the rows line up with the
-  // standing above.
+  // same width as the thumbnail (useBoardRowSize, set inline) so the
+  // rows line up with the standing above.
   happyIndex: {
-    width: 92,
     textAlign: 'center',
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.display,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.black,
   },
   // Your row's ink, the same blue BoardRow uses for «ти».
-  happyIndexYou: { color: 'rgba(0,60,255,0.85)' },
+  happyIndexYou: { color: colors.blue },
+  // The longest explanatory text on the tab, so it is set for reading:
+  // small, not caption, with a reading line height and the darker grey
+  // (UX-11.8). It was 11px #777.
   boardHint: {
-    fontSize: TYPE.caption,
-    color: '#777',
+    fontSize: TYPE.small,
+    lineHeight: 18,
+    color: colors.greyDark,
     marginTop: S.s,
   },
   boardEmpty: {
     fontSize: TYPE.small,
-    color: '#777',
+    color: colors.grey,
     paddingVertical: S.m,
   },
   // The daily tasks' progress bars. The standing used to share these —
@@ -1268,7 +1325,7 @@ const styles = StyleSheet.create({
   cardHeaderCount: {
     fontSize: TYPE.small,
     fontWeight: '700',
-    color: '#999',
+    color: colors.grey,
     marginBottom: S.m, // align with cardTitle's marginBottom
   },
   historyRow: {
@@ -1285,17 +1342,17 @@ const styles = StyleSheet.create({
   },
   historyMeta: {
     fontSize: TYPE.small,
-    color: '#777',
+    color: colors.grey,
     marginTop: 2,
   },
   historyTickDone: {
     fontSize: TYPE.body,
-    color: 'rgba(0,60,255,0.85)',
+    color: colors.blue,
     fontWeight: '700',
   },
   historyTickAbandon: {
     fontSize: TYPE.title,
-    color: '#bbb',
+    color: colors.greyLight,
     fontWeight: '700',
   },
 });

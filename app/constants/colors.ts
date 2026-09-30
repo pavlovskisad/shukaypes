@@ -1,6 +1,11 @@
 export const colors = {
   black: '#1a1a1a',
   grey: '#777',
+  // greyDark — secondary text that runs to a sentence or more (the
+  // tasks board's explainer). #777 is 4.48:1 on white, just under AA,
+  // which a three-word meta line gets away with and a paragraph does
+  // not (UX-11.8). #555 is 7.5:1 and still reads as "aside".
+  greyDark: '#555',
   greyLight: '#aaa',
   greyPale: '#ddd',
   greyBg: '#f0f0f0',
@@ -8,8 +13,19 @@ export const colors = {
   accent: '#c8ff00',
   red: '#e84040',
   redBg: '#fde8e8',
+  // BLANKS. What sits where a picture will go, so an empty slot reads
+  // as a slot and not as a hole in the paper (UX-10.13, UX-10.14).
+  // portraitBlank — an undrawn walker portrait (board rows, PlayerCard).
+  // photoBlank — a lost pet with no photo, or a map snapshot still
+  // rendering; warmer, the map's own paper.
+  portraitBlank: '#f4f4f4',
+  photoBlank: '#eeece6',
   amber: '#d9a030',
   amberBg: '#fdf3e0',
+  // green — a paw pickup's colour: the "+1" that rises off a collected
+  // paw, on the same lime family as its glow (the bone's is amber).
+  // Named when the burst's own hand-picked hex was folded in (UX-8.19).
+  green: '#5fa92e',
   // THE BLUES, which the app had for a long time and never named.
   //
   // blue — the interface asking for a tap. CTA pills (constants/

@@ -2,36 +2,41 @@
 // D-75, for the happiness index too (`kind`): the same portrait rows,
 // the silhouette for one and the big number for the other. Opened by
 // the "see all" link under the card's rows on the tasks tab.
-// Floating X in the top-right corner closes; no header bar (the user
-// just came from the card titled "who holds the city" — no need to
-// repeat the label). Same sheet mechanics as LostDogsModal: nullable
-// data doubles as the open flag, opacity-only fade, portal to body.
+// Floating X in the top-right corner closes. No drawn header bar, but a
+// title sits level with the close: the two boards share one layout, so
+// without it a full screen of portraits and numbers never said whether
+// it was the territory standing or the happiness index (UX-11.9). Same
+// sheet mechanics as LostDogsModal: nullable data doubles as the open
+// flag, opacity-only fade, portal to body.
 
-import { useEffect, useState } from 'react';
+import { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import type { HappinessRanking, TerritoryRanking } from '../../services/api';
 import { Z } from '../../constants/z';
-import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
-import { SURFACE } from '../../constants/surface';
+import { SYSTEM_FONT } from '../../constants/fonts';
+import { INK } from '../../constants/surface';
+import { S } from '../../constants/spacing';
 import { playPopThen } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
-import { HandDrawnFrame } from './HandDrawn';
+import { CloseButton } from './CloseButton';
+import { CLOSE_SIZE, CLOSE_INSET, FULLSCREEN_LIST_TOP, ROW_BUTTON } from '../../constants/buttons';
 import { OWN_COLOR_CSS, ownerColorCss } from '../map/territoryColor';
-import { BoardRow } from './BoardRow';
+import { BoardRow, useBoardRowSize } from './BoardRow';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
 
 const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // The happiness index at the row's end, the same width as the
-// territory silhouette so the two boards' rows line up.
+// territory silhouette so the two boards' rows line up — the width
+// comes from useBoardRowSize at the call site, as the silhouette's does.
 const INDEX: React.CSSProperties = {
   display: 'inline-block',
-  width: 92,
   textAlign: 'center',
   fontSize: TYPE.display,
-  fontWeight: 800,
+  fontWeight: 700,
   flex: 'none',
 };
 
@@ -56,6 +61,8 @@ interface Props {
 
 export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, onPick }: Props) {
   const t = useStrings();
+  const titleId = useId();
+  const rowSize = useBoardRowSize();
   const [renderBoard, setRenderBoard] = useState<Row[] | null>(board);
   const [closing, setClosing] = useState(false);
 
@@ -88,6 +95,7 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
     <div
       role="dialog"
       aria-modal="true"
+      aria-labelledby={titleId}
       style={{
         position: 'fixed',
         inset: 0,
@@ -104,13 +112,12 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
             inset: 0,
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch',
-            padding: '20px',
-            // The close button ends at inset + 50 (top 14 + 36 tall),
-            // so 72 left a 22px gap and the board read as starting
-            // late. 60 clears the button by 10 and gets the first
-            // name up where the eye goes first.
-            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 60px)',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+            padding: S.xl,
+            // One start line for every fullscreen list (UX-12.18).
+            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${FULLSCREEN_LIST_TOP}px)`,
+            paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.xl}px)`,
+            // No gap: these are standing rows, which carry their own
+            // S.s padding, not the other two lists' separate cards.
           } as React.CSSProperties
         }
       >
@@ -130,68 +137,87 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
                 avatarUrl={h.avatarUrl}
                 owner={isYou ? null : h.owner}
                 trailing={
-                  <span style={{ ...INDEX, color: isYou ? OWN_COLOR_CSS : undefined }}>{String(h.index)}</span>
+                  <span style={{ ...INDEX, width: rowSize.trailing, color: isYou ? OWN_COLOR_CSS : undefined }}>{String(h.index)}</span>
                 }
               />
             );
           }
           const r = row as TerritoryRanking;
           const pickable = onPick && r.mainPiece && r.mainPiece.length >= 3;
-          return (
-            <div
+          const boardRow = (
+            <BoardRow
+              rank={String(i + 1)}
+              name={isYou ? t.tasks.boardYou : r.name}
+              areaLabel={t.profile.areaValue(r.areaM2)}
+              piece={r.mainPiece}
+              color={isYou ? OWN_COLOR_CSS : ownerColorCss(r.userId)}
+              you={isYou}
+              avatarUrl={r.avatarUrl}
+              owner={isYou ? null : r.owner}
+            />
+          );
+          // A row that opens the walker's ground on the map is a
+          // button (UX-14.11), named by rank, name and area; one with
+          // no ground to show stays a plain row.
+          return pickable ? (
+            <button
+              type="button"
               key={r.userId}
-              onClick={
-                pickable
-                  ? (e) => playPopThen(e.currentTarget, () => onPick(r, isYou))
-                  : undefined
-              }
-              style={{ cursor: pickable ? 'pointer' : 'default' }}
+              aria-label={`${i + 1}. ${isYou ? t.tasks.boardYou : r.name}, ${t.profile.areaValue(r.areaM2)}`}
+              onClick={(e) => playPopThen(e.currentTarget, () => onPick(r, isYou))}
+              style={ROW_BUTTON}
             >
-              <BoardRow
-                rank={String(i + 1)}
-                name={isYou ? t.tasks.boardYou : r.name}
-                areaLabel={t.profile.areaValue(r.areaM2)}
-                piece={r.mainPiece}
-                color={isYou ? OWN_COLOR_CSS : ownerColorCss(r.userId)}
-                you={isYou}
-                avatarUrl={r.avatarUrl}
-                owner={isYou ? null : r.owner}
-              />
-            </div>
+              {boardRow}
+            </button>
+          ) : (
+            <div key={r.userId}>{boardRow}</div>
           );
         })}
       </div>
 
-      <button
-        onClick={(e) => playPopThen(e.currentTarget, onClose)}
-        aria-label={t.modals.common.close}
+      {/* The board's name, on the close's line: same top, same height,
+          centred on it, and stopping short of it so a long name
+          ellipsizes instead of running under the disc. It sits on a
+          white band from the top edge down to the close's bottom, the
+          sheet's own paper: bare text over a scroller, the rows
+          scrolled up through the title and the two read as one line. */}
+      <div
+        id={titleId}
         style={{
           position: 'absolute',
-          top: 'calc(env(safe-area-inset-top, 0px) + 14px)',
-          right: 18,
-          width: 36,
-          height: 36,
-          borderRadius: R.pill,
-          // Drawn ring — see the HandDrawnFrame child. The 2px stays
-          // so the button keeps the size it had.
-          border: '2px solid transparent',
+          top: 0,
+          left: 0,
+          right: 0,
+          boxSizing: 'border-box',
+          height: `calc(env(safe-area-inset-top, 0px) + ${CLOSE_INSET + CLOSE_SIZE}px)`,
+          paddingTop: `calc(env(safe-area-inset-top, 0px) + ${CLOSE_INSET}px)`,
+          paddingLeft: 20,
+          paddingRight: CLOSE_INSET + CLOSE_SIZE + S.s,
           background: '#ffffff',
-          color: '#1a1a1a',
-          padding: 0,
           display: 'flex',
           alignItems: 'center',
-          justifyContent: 'center',
-          cursor: 'pointer',
-          boxShadow: SURFACE.chip,
-          fontSize: TYPE.display,
-          lineHeight: 1,
+          fontFamily: SYSTEM_FONT,
+          fontSize: TYPE.title,
+          fontWeight: 700,
+          color: INK,
           zIndex: 1,
         }}
       >
-        <HandDrawnFrame radius={R.pill} />
-        ×
-      </button>
+        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+          {kind === 'happiness' ? t.tasks.happinessBoard : t.tasks.territoryBoard}
+        </span>
+      </div>
+
+      <CloseButton
+        onPress={onClose}
+        style={{
+          position: 'absolute',
+          top: `calc(env(safe-area-inset-top, 0px) + ${CLOSE_INSET}px)`,
+          right: CLOSE_INSET,
+          zIndex: 1,
+        }}
+      />
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

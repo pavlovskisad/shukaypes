@@ -9,6 +9,9 @@ import { INK, SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { HandDrawnFrame } from './HandDrawn';
+import { Icon } from './Icon';
+import { CLOSE_GLYPH } from '../../constants/buttons';
+import { INLINE_ICON } from '../../constants/sizing';
 
 // Active-quest indicator. Renders nothing when no quest is live; when
 // one is, shows a pill with pet name + progress (2/3) + an X to abandon.
@@ -58,7 +61,10 @@ export function QuestPill() {
     <View style={styles.wrap} pointerEvents="box-none">
       <View style={styles.pill}>
         <HandDrawnFrame radius={R.card} />
-        <Text style={styles.emoji}>🔍</Text>
+        {/* The drawn magnifier from the icon set, not the 🔍 emoji
+            (UX-9.17): the emoji is a different picture on every OS and
+            nobody's drawing. */}
+        <Icon name="search" size={INLINE_ICON.secondary} />
         {/* Wraps to multiple lines on long pet names instead
             of truncating — the pill grows vertically and the
             close X stays inside the row (centred on the
@@ -88,7 +94,10 @@ export function QuestPill() {
               <Text style={styles.closeArmedTxt}>{t.hud.abandonSearchArmed}</Text>
             </View>
           ) : (
-            <Text style={styles.closeTxt}>×</Text>
+            // The shared close glyph (D9). Not the full close CIRCLE:
+            // this one sits inside a one-line chip, and a 44px disc
+            // would double the chip's height. The 44 hit box is here.
+            <Text style={styles.closeTxt}>{CLOSE_GLYPH}</Text>
           )}
         </Pressable>
       </View>
@@ -135,13 +144,10 @@ const styles = StyleSheet.create({
     shadowRadius: 16,
     elevation: 3,
   },
-  emoji: {
-    fontSize: TYPE.small,
-  },
   label: {
     color: colors.black,
     fontSize: TYPE.small,
-    fontWeight: '600',
+    fontWeight: '700',
     // flexShrink + minWidth 0 is the standard "let me
     // ellipsize inside a flex row" trick. Without minWidth 0
     // the label refuses to shrink below its content's
@@ -152,7 +158,7 @@ const styles = StyleSheet.create({
   progress: {
     color: colors.black,
     fontSize: TYPE.small,
-    fontWeight: '800',
+    fontWeight: '700',
     marginLeft: 2,
   },
   // The hit box is 44 tall and at least 44 wide; the drawn × and the
@@ -168,7 +174,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
   },
   closeTxt: {
-    color: '#666',
+    color: colors.grey,
     fontSize: TYPE.hero,
     lineHeight: 22,
     fontWeight: '400',
@@ -186,6 +192,6 @@ const styles = StyleSheet.create({
   closeArmedTxt: {
     color: '#ffffff',
     fontSize: TYPE.small,
-    fontWeight: '600',
+    fontWeight: '700',
   },
 });

@@ -10,11 +10,14 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { VOICE } from '../../constants/voice';
+import { INK, SURFACE } from '../../constants/surface';
+import { HandDrawnFrame } from '../ui/HandDrawn';
 import { playPop } from '../../utils/popOnTap';
 import type { WalkStop } from '../../utils/walk';
 import { useMaplibreMap } from './MapContext';
 import { ROUTE_DRAW_MS } from './CrayonRoute';
 import { distanceMeters } from '../../utils/geo';
+import { clickOnKey } from '../../utils/keyActivate';
 
 // The landmarks a planned walk goes through, on the map.
 //
@@ -181,32 +184,44 @@ function StopMarker({
         {open ? (
           <div
             style={{
+              // WHITE PAPER, the same card SniffPress shows for this
+              // same landmark before it became a stop. It used to switch
+              // to the dog's black voice bubble here, so one story wore
+              // two materials depending on how you found it (UX-10.10).
+              // A stop is a place you can walk to, which is what paper
+              // means in this app; voice is for the dog talking.
               padding: '12px 14px',
-              background: VOICE.background,
-              color: VOICE.color,
-              borderRadius: R.chip,
+              background: SURFACE.fill,
+              color: INK,
+              borderRadius: R.card,
               fontFamily: VOICE.fontFamily,
               fontSize: TYPE.body,
-              lineHeight: 1.4,
-              boxShadow: VOICE.shadow,
-              border: VOICE.border,
+              lineHeight: VOICE.lineHeight,
+              boxShadow: SURFACE.shadow,
               textAlign: 'center',
+              // A long unbroken name or URL wraps instead of running
+              // out of the card (UX-11.19).
+              overflowWrap: 'anywhere',
               // Anchor for the heart in the corner.
               position: 'relative',
             }}
           >
-            <LoreHeart lore={stop} tone="voice" />
+            {/* Drawn edge — see HandDrawn.tsx. */}
+            <HandDrawnFrame radius={R.card} />
+            <LoreHeart lore={stop} tone="paper" />
             <div style={{ fontWeight: 700, marginBottom: 2, padding: `0 ${HEART_INSET}px` }}>
               {stop.title ?? stop.name}
             </div>
             <div>{stop.story}</div>
-            <LoreMore lore={stop} tone="voice" />
+            <LoreMore lore={stop} tone="paper" />
           </div>
         ) : null}
         {/* The dot itself. Bare green, no ring and no number, inside a
             transparent pad that does the catching. */}
         <div
           role="button"
+          tabIndex={0}
+          onKeyDown={clickOnKey}
           aria-label={stop.title ?? stop.name}
           onClick={(e) => {
             e.stopPropagation();

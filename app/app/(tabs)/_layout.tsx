@@ -32,6 +32,12 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
         // Pulled inactive opacity 0.55 → 0.32 so the focused tab
         // dominates more obviously. Grayscale stays for the colour
         // strip on top.
+        //
+        // Kept at 0.32 on purpose (D12, UX-9.18). About 2:1 against
+        // the bar is under the 3:1 non-text contrast guideline, and
+        // the owner chose it anyway: the dim tabs are there to be
+        // found, not read, and the lit one has to win at a glance.
+        // Don't "fix" this without asking.
         filter: focused ? undefined : 'grayscale(1)',
         opacity: focused ? 1 : 0.32,
       }}
@@ -250,12 +256,14 @@ export default function TabsLayout() {
           // as a box drawn around the app instead of a piece of it.
           borderTopWidth: 0,
           // Lifted shadow on all sides (was upward-only since the
-          // bar bled to bottom). Centred 8 px offset + soft radius
-          // matches the chat input pill / HUD pills.
+          // bar bled to bottom). The HUD pills' values ({0,6} / 0.14 /
+          // 20, StatusBar.tsx) so the bars at the top and bottom of
+          // the screen lift the same (UX-9.14) — this still carried the
+          // old {0,4} / 0.10 / 16 the HUD moved off.
           shadowColor: '#000',
-          shadowOffset: { width: 0, height: 4 },
-          shadowOpacity: 0.10,
-          shadowRadius: 16,
+          shadowOffset: { width: 0, height: 6 },
+          shadowOpacity: 0.14,
+          shadowRadius: 20,
           elevation: 6,
         },
         tabBarItemStyle: {

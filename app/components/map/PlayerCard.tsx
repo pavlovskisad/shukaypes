@@ -13,13 +13,18 @@
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { useWindowDimensions } from 'react-native';
+import { portalRoot } from '../../utils/portalRoot';
 import type { NearbyPlayer, PlayerCard as Card } from '@shukajpes/shared';
 import { api } from '../../services/api';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 import { haptic } from '../../utils/haptics';
 import { HandDrawnFrame } from '../ui/HandDrawn';
-import { COLUMN, LINK, OVERLAY, PAPER, Primary } from '../ui/AccountDoor';
+import { COLUMN, OVERLAY, PAPER, Primary } from '../ui/AccountDoor';
+import { CloseButton } from '../ui/CloseButton';
+import { CLOSE_INSET, CLOSE_SIZE } from '../../constants/buttons';
+import { NARROW_SCREEN } from '../../constants/sizing';
 import { ownerColorCss } from './territoryColor';
 import { TerritoryMini } from '../ui/TerritoryMini';
 import { INK } from '../../constants/surface';
@@ -46,9 +51,16 @@ const PORTRAIT = 128;
 // piece on their card, not a cousin of it. Drawn a little under the
 // board's 92 to share the right column with its label.
 const MINI = 80;
+// Below NARROW_SCREEN both give way (UX-12.16). At 320 the 128 face,
+// the 80 thumbnail and the close's clearance left the territory label
+// ~32 px, one letter a line.
+const PORTRAIT_NARROW = 96;
+const MINI_NARROW = 64;
 
 export function PlayerCard({ player, onClose }: Props) {
   const t = useStrings().playerCard;
+  const narrow = useWindowDimensions().width < NARROW_SCREEN;
+  const portraitSize = narrow ? PORTRAIT_NARROW : PORTRAIT;
   const tp = useStrings().profile;
   const pokePlayer = useGameStore((s) => s.pokePlayer);
   const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
@@ -117,10 +129,14 @@ export function PlayerCard({ player, onClose }: Props) {
   };
 
   const portrait: CSSProperties = {
-    width: PORTRAIT,
-    height: PORTRAIT,
+    width: portraitSize,
+    height: portraitSize,
     flex: 'none',
-    borderRadius: R.chip,
+    // A circle, like every portrait in the app (D14). And a blank fill
+    // underneath, so a walker who never drew one leaves a slot rather
+    // than a 128px hole in the paper (UX-10.13).
+    borderRadius: R.pill,
+    backgroundColor: colors.portraitBlank,
     backgroundImage: avatar ? `url("${avatar}")` : undefined,
     backgroundSize: 'cover',
     backgroundPosition: 'center center',
@@ -134,9 +150,27 @@ export function PlayerCard({ player, onClose }: Props) {
       <div style={{ ...COLUMN, bottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.m}px)` }}>
         <div style={{ ...PAPER, padding: S.l }}>
           <HandDrawnFrame seed={`card-${player.id}`} radius={R.card} />
+          {/* The app's one close (D9), in the corner like every sheet's.
+              It was a text link under the wave button — the only card
+              whose way out was a word. */}
+          <CloseButton
+            label={t.close}
+            onPress={onClose}
+            style={{ position: 'absolute', top: CLOSE_INSET, right: CLOSE_INSET, zIndex: 1 }}
+          />
           <div style={{ display: 'flex', alignItems: 'flex-start', gap: S.m }}>
             <div style={portrait} role="img" aria-label={name} />
-            <div style={{ flex: 1, minWidth: 0, display: 'flex', flexDirection: 'column' }}>
+            {/* Right padding keeps the name's ellipsis clear of the
+                close circle in the corner. */}
+            <div
+              style={{
+                flex: 1,
+                minWidth: 0,
+                display: 'flex',
+                flexDirection: 'column',
+                paddingRight: CLOSE_SIZE - S.xs,
+              }}
+            >
               <div
                 style={{
                   font: `700 ${TYPE.hero}px ${SYSTEM_FONT}`,
@@ -148,7 +182,7 @@ export function PlayerCard({ player, onClose }: Props) {
               >
                 {name}
               </div>
-              <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
+              <div style={{ font: `400 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
                 {card ? (card.level === null ? t.levelUnknown : tp.level(card.level)) : failed ? t.levelUnknown : '…'}
                 {isBot ? ` · ${t.bot}` : owner ? ` · ${t.owner(owner)}` : ''}
               </div>
@@ -168,13 +202,15 @@ export function PlayerCard({ player, onClose }: Props) {
                     cursor: piece ? 'pointer' : 'default',
                   }}
                 >
-                  {piece ? <TerritoryMini points={piece} color={ownerColorCss(player.id)} size={MINI} /> : null}
+                  {piece ? <TerritoryMini points={piece} color={ownerColorCss(player.id)} size={narrow ? MINI_NARROW : MINI} /> : null}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ font: `600 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK }}>
+                    {/* Wraps at a word, and inside one only if it must —
+                        «ще без території» in a narrow column. */}
+                    <div style={{ font: `700 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK, overflowWrap: 'anywhere' }}>
                       {card.areaM2 > 0 ? t.territory : t.noTerritory}
                     </div>
                     {card.areaM2 > 0 ? (
-                      <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
+                      <div style={{ font: `400 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
                         {tp.areaValue(card.areaM2)}
                       </div>
                     ) : null}
@@ -184,13 +220,9 @@ export function PlayerCard({ player, onClose }: Props) {
             </div>
           </div>
           <Primary label={pokeLabel} disabled={pokeState !== 'idle'} onClick={poke} />
-          {/* marginTop 0: LINK's own S.m of padding is the gap now. */}
-          <button type="button" style={{ ...LINK, alignSelf: 'center', marginTop: 0 }} onClick={onClose}>
-            {t.close}
-          </button>
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

@@ -18,8 +18,8 @@
 //
 // Built on react-native-reanimated v3 + gesture-handler v2.
 
-import { useState, useEffect, useMemo, useCallback, useRef, memo, type ReactNode } from 'react';
-import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
+import { useState, useEffect, useMemo, useCallback, useRef, memo, type KeyboardEvent, type ReactNode } from 'react';
+import { View, Text, StyleSheet, Image, Pressable, useWindowDimensions } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -29,6 +29,7 @@ import Animated, {
   ReduceMotion,
   cancelAnimation,
   runOnJS,
+  runOnUI,
   interpolate,
   Extrapolation,
   Easing,
@@ -41,9 +42,30 @@ import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { LOOP_VIEW_PROPS } from '../../utils/motion';
+import { useStrings } from '../../i18n/useStrings';
 
 export const CARD_W = 320;
 export const CARD_H = 280;
+// Room under the deck for the peeks' shadow and the counter — the
+// deck's own bottom margin at peekScale 1.
+const DECK_MARGIN = 24;
+// How far above the bottom of a CardStack the cards' bottom edge sits:
+// the wrap's S.s padding plus DECK_MARGIN (peekScale 1, no counter).
+// Exported for a caller that stacks something against the cards rather
+// than against the stack's box — the profile's dog floor ignored it and
+// parked the dog's feet 32 px behind the stat cards on short screens
+// (UX-12.10).
+export const DECK_OFFSET = S.s + DECK_MARGIN;
+
+// A card never wider than the screen minus the S.l gutters and a sliver
+// each side for the peeks (UX-12.15). At a fixed 320 the centre card
+// filled a 320 px screen edge to edge and both peeks sat off it, so
+// nothing said the deck swiped. The cards the callers render are
+// width 100%, so they follow; STEP scales with the width already.
+function useFitCardWidth(want: number): number {
+  const { width } = useWindowDimensions();
+  return Math.min(want, width - 2 * S.l - 2 * S.xs);
+}
 const TAP_TRAVEL_MAX = 16;
 // Projection-based commit (iOS-style paged scroll). At onEnd we
 // project where the swipe would naturally land if its release
@@ -97,6 +119,10 @@ interface Props<T> {
   // category in big-card form. When provided, the counter renders
   // as a Pressable with a chevron hint; otherwise it's plain text.
   onCounterTap?: () => void;
+  // What that counter opens, for its accessible name (UX-14.14) — it
+  // is read with the position after it. Without it the counter is
+  // named by its bare "N / M".
+  counterA11yLabel?: string;
   // Fired on each committed swipe (the carousel advances ±1) with the item
   // now centred (the new top card). Used to dismiss the swipe hint, and by the
   // search carousel to switch which lost dog is being tracked.
@@ -206,17 +232,20 @@ export function CardStack<T>({
   onTap,
   getPhotoUrl,
   showCounter = true,
-  cardWidth = CARD_W,
+  cardWidth: cardWidthProp = CARD_W,
   cardHeight = CARD_H,
   peekScale = 1,
   onCounterTap,
+  counterA11yLabel,
   onSwipe,
   initialId,
   focused = false,
 }: Props<T>) {
+  const t = useStrings();
   // Mount-time anchor: index of initialId in the CURRENT items, or 0.
   // useState initializer (not an effect) so the first paint already has
   // the right card on top — no flash of items[0].
+  const cardWidth = useFitCardWidth(cardWidthProp);
   const [initialIndex] = useState(() => {
     if (!initialId) return 0;
     const idx = items.findIndex((it) => getId(it) === initialId);
@@ -582,6 +611,23 @@ export function CardStack<T>({
     [cardWidth, cardHeight],
   );
 
+  // KEYBOARD (UX-14.6). The deck only knew pointers: a swipe, a tap.
+  // Focused, the arrows step it the way a peek tap does and Enter or
+  // Space is the tap on the centre card. Only for keys on the deck
+  // itself — a control inside a card keeps its own. stepBy is a
+  // worklet, so it runs where the gestures run it.
+  const onDeckKey = (e: KeyboardEvent<HTMLElement>) => {
+    if (e.target !== e.currentTarget) return;
+    if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      if (N < 2) return;
+      e.preventDefault();
+      runOnUI(stepBy)(e.key === 'ArrowRight' ? 1 : -1);
+    } else if (e.key === 'Enter' || e.key === ' ') {
+      e.preventDefault();
+      handleTap();
+    }
+  };
+
   if (!topItem) return null;
 
   const counterIndex = topItemIndex + 1;
@@ -589,7 +635,15 @@ export function CardStack<T>({
   return (
     <View style={styles.wrap}>
       <GestureDetector gesture={Gesture.Race(tap, pan)}>
-        <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
+        <View
+          style={[styles.deck, slotSize, { marginBottom: DECK_MARGIN * peekScale }]}
+          focusable
+          role="group"
+          accessibilityLabel={t.modals.common.deckA11y(counterIndex, items.length)}
+          // react-native-web forwards onKeyDown to the div; RN's own
+          // View types do not list it.
+          {...({ onKeyDown: onDeckKey } as object)}
+        >
           {slotWindow.map(({ virtualIdx, item }) => (
             <ItemSlot
               key={virtualIdx}
@@ -611,6 +665,12 @@ export function CardStack<T>({
             onPress={onCounterTap}
             onPressIn={popPressableEvent}
             style={styles.counterHit}
+            accessibilityRole="button"
+            accessibilityLabel={
+              counterA11yLabel
+                ? t.modals.common.deckCounterA11y(counterA11yLabel, counterIndex, items.length)
+                : undefined
+            }
           >
             {({ pressed }) => (
               <Text style={[styles.counter, styles.counterLink, pressed && styles.counterPressed]}>
@@ -640,12 +700,13 @@ export function CardStackSkeleton({
   cardHeight?: number;
   peekScale?: number;
 }) {
-  const slotSize = { width: CARD_W, height: cardHeight };
-  const STEP = 290 * peekScale;
+  const cardWidth = useFitCardWidth(CARD_W);
+  const slotSize = { width: cardWidth, height: cardHeight };
+  const STEP = ((cardWidth * 290) / CARD_W) * peekScale;
 
   return (
     <View style={styles.wrap}>
-      <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
+      <View style={[styles.deck, slotSize, { marginBottom: DECK_MARGIN * peekScale }]}>
         <View
           style={[
             styles.cardSlot,
@@ -742,7 +803,7 @@ const styles = StyleSheet.create({
   counter: {
     fontSize: TYPE.small,
     color: '#777',
-    fontWeight: '600',
+    fontWeight: '700',
   },
   // Underlined, in ink. It used to be web-hyperlink blue, which made
   // it the only blue control left once the CTA pills went black and

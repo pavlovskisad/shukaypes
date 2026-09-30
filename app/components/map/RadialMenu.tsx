@@ -252,7 +252,7 @@ export function RadialMenu({
         padding: isText ? `0 ${TEXT_ITEM.padX}px` : undefined,
         minHeight: isText ? TEXT_ITEM.height : BUTTON.size,
         height: isText ? undefined : BUTTON.size,
-        // Text pills are capsules; icon buttons are circles. Same
+        // Text pills are rounded rects; icon buttons are circles. Same
         // family, and at 60 tall against the disc's 68 they read as
         // siblings rather than as a chip clipped onto a button.
         // R.button for the text answers — the same corner every other
@@ -274,10 +274,14 @@ export function RadialMenu({
         // one line on screen not in Annex.
         fontFamily: SYSTEM_FONT,
         fontSize: isText ? TYPE.body : TYPE.hero,
+        // 700, the weight the same answers carry when they sit under
+        // the dog in DogPrompt (UX-9.11) — one voice, one recipe.
         fontWeight: isText ? 700 : undefined,
         lineHeight: isText ? 1.25 : undefined,
         cursor: 'pointer',
-        boxShadow: '0 6px 20px rgba(0,0,0,0.12), 0 2px 6px rgba(0,0,0,0.06)',
+        // The card shadow, named — DogPrompt's answers wear the same
+        // one. This was a hand-written two-layer copy of nearly it.
+        boxShadow: SURFACE.shadow,
         display: 'flex',
         alignItems: 'center',
         justifyContent: 'center',
@@ -308,10 +312,17 @@ export function RadialMenu({
   // Shared so text pills and icon discs arrive identically — see the
   // keyframe note in public/index.html for why it is an animation and
   // not only a transition.
+  //
+  // CLOSED MEANS GONE, not just see-through (UX-14.3). At opacity 0 the
+  // buttons were still in the tab order and in the screen reader's
+  // list, answering a question nobody could see. visibility: hidden
+  // takes them out of both; its transition is delayed until the fade
+  // out has played, and on the way in it flips at once.
   const entrance = (i: number) => ({
     opacity: open ? 1 : 0,
     transform: open ? 'scale(1)' : 'scale(0.4)',
-    transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms`,
+    visibility: (open ? 'visible' : 'hidden') as 'visible' | 'hidden',
+    transition: `opacity 220ms ease ${i * 40}ms, transform 220ms ease ${i * 40}ms, visibility 0s linear ${open ? 0 : 220 + i * 40}ms`,
     animation: open ? `radial-item-in 220ms ease ${i * 40}ms both` : undefined,
     pointerEvents: (open ? 'auto' : 'none') as 'auto' | 'none',
   });
@@ -330,6 +341,7 @@ export function RadialMenu({
     colGap: number = gap,
   ) => (
     <div
+      aria-hidden={!open || undefined}
       style={{
         position: 'absolute',
         left: '50%',
@@ -358,7 +370,12 @@ export function RadialMenu({
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            width: showLabels ? ITEM_W : undefined,
+            // A THIRD of the row, not a fixed 100 (UX-12.17). Three
+            // 100 px cells and two gaps are 332 px, and under ~372 px of
+            // screen clampToScreen made the row narrower than that — so
+            // three named spots broke 2 + 1, the odd one out alone under
+            // the other two. A share of the row always fits three.
+            width: showLabels ? `calc((100% - ${2 * ICON_ROW_GAP}px) / 3)` : undefined,
           }}
         >
           {renderButton(a)}
@@ -375,7 +392,7 @@ export function RadialMenu({
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                maxWidth: ITEM_W,
+                maxWidth: '100%',
                 textAlign: 'center',
                 pointerEvents: 'none',
                 userSelect: 'none',
@@ -430,6 +447,7 @@ export function RadialMenu({
 
   return (
     <div
+      aria-hidden={!open || undefined}
       style={{
         position: 'absolute',
         left: '50%',

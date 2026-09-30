@@ -1,21 +1,31 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
-import { INLINE_ICON, ICON_HERO, EMOJI_HERO } from '../../constants/sizing';
+import { INLINE_ICON, ICON_HERO, EMOJI_HERO, TOP_SHEET_MAX_H } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
-import { MODAL_PILL_DARK, MODAL_PILL_DISABLED, MODAL_PILL_LIGHT } from '../../constants/buttons';
+import {
+  CLOSE_INSET,
+  CLOSE_SIZE,
+  MODAL_PILL_DARK,
+  MODAL_PILL_DISABLED,
+  MODAL_PILL_LIGHT,
+} from '../../constants/buttons';
 import { INK, SURFACE } from '../../constants/surface';
 import { colors } from '../../constants/colors';
 import { playPopThen } from '../../utils/popOnTap';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
+import { CloseButton } from './CloseButton';
 import { useSheetBack } from '../../hooks/useSheetBack';
+import { useVisibleHeight } from '../../hooks/useVisibleHeight';
 import { MOTION } from '../../utils/motion';
+import { Glyph } from './Glyph';
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -30,6 +40,14 @@ interface SpotModalProps {
 
 const SHEET_ANIM_MS = MOTION.sheetMs;
 const HERO_HEIGHT_PX = 220;
+// The hero's share of a short screen (UX-12.12). In landscape, or in a
+// short desktop window, a fixed 220 hero plus the name, the address and
+// the action row came to more than TOP_SHEET_MAX_H, and it was the
+// action row — the only part you act on — that got cut off. The hero
+// is decoration; it gives way first.
+const HERO_MAX_SHARE = 0.3;
+// The icon's share of the hero, as at full size (180 / 220).
+const HERO_ICON_SHARE = ICON_HERO.modal / HERO_HEIGHT_PX;
 // Top-anchored modal — bump the badge / close button down by the
 // safe-area inset so they clear the iPhone notch / status bar.
 // The overlay holds the sheet clear of the notch now, so this is
@@ -42,6 +60,7 @@ const SAFE_TOP = 12;
 // timeout runs the slide-down before unmounting.
 export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   const t = useStrings();
+  const heroH = Math.min(HERO_HEIGHT_PX, Math.round(useVisibleHeight() * HERO_MAX_SHARE));
   const [renderSpot, setRenderSpot] = useState<Spot | null>(spot);
   const [closing, setClosing] = useState(false);
   // Which spot a walk is being routed to. The route is a network call,
@@ -135,7 +154,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           maxWidth: 460,
           // Cap so the action pills stay above the tab bar even on
           // short viewports.
-          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: TOP_SHEET_MAX_H as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
@@ -159,7 +178,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           style={{
             position: 'relative',
             width: '100%',
-            height: HERO_HEIGHT_PX,
+            height: heroH,
             // Plain white — the previous grey gradient added visual
             // noise without earning it; the icon + chips already
             // carry the hero's identity.
@@ -171,9 +190,9 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           }}
         >
           {iconSlot ? (
-            <Icon name={iconSlot} size={ICON_HERO.modal} />
+            <Icon name={iconSlot} size={Math.round(heroH * HERO_ICON_SHARE)} />
           ) : (
-            <span style={{ fontSize: EMOJI_HERO.modal, opacity: 0.85 }}>
+            <span style={{ fontSize: Math.round((EMOJI_HERO.modal * heroH) / HERO_HEIGHT_PX), opacity: 0.85 }}>
               {renderSpot.icon ?? '📍'}
             </span>
           )}
@@ -191,65 +210,36 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
               style={{
                 position: 'absolute',
                 top: SAFE_TOP,
-                left: 14,
+                left: CLOSE_INSET,
                 color: INK,
                 fontSize: TYPE.body,
-                fontWeight: 800,
+                fontWeight: 700,
                 letterSpacing: 0.3,
                 display: 'inline-flex',
                 alignItems: 'center',
+                // The close circle's height, so the two share a midline.
+                height: CLOSE_SIZE,
                 gap: 4,
               }}
             >
-              <span style={{ color: colors.amber }}>★</span>
+              <Glyph name="star" color={colors.amber} />
               {renderSpot.rating!.toFixed(1)}
             </span>
           ) : null}
           {/* The close button keeps the right corner to itself, and
               stays full-round: it is a circle and a control, not a
               readout. */}
-          <div
-            style={{
-              position: 'absolute',
-              top: SAFE_TOP,
-              right: 12,
-              display: 'flex',
-              alignItems: 'center',
-              gap: S.s,
-            }}
-          >
-            <button
-              onClick={(e) => playPopThen(e.currentTarget, onClose)}
-              aria-label={t.modals.common.close}
-              style={{
-                width: 36,
-                height: 36,
-                borderRadius: R.pill,
-                // Drawn ring — see the HandDrawnFrame child.
-                border: '2px solid transparent',
-                position: 'relative',
-                background: '#ffffff',
-                color: '#1a1a1a',
-                padding: 0,
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                cursor: 'pointer',
-                boxShadow: SURFACE.chip,
-                fontSize: TYPE.display,
-                lineHeight: 1,
-              }}
-            >
-              <HandDrawnFrame radius={R.pill} />
-              ×
-            </button>
-          </div>
+          <CloseButton
+            onPress={onClose}
+            style={{ position: 'absolute', top: CLOSE_INSET, right: CLOSE_INSET }}
+          />
         </div>
 
         {/* Info section — name + address. Scrolls if needed. */}
         <div
           style={{
-            padding: '20px 22px 8px',
+            // S.l side gutter, shared by every sibling top sheet (UX-10.5).
+            padding: `${S.xl}px ${S.l}px ${S.s}px`,
             overflowY: 'auto',
             flexGrow: 1,
             minHeight: 0,
@@ -259,9 +249,9 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             style={{
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.display,
-              fontWeight: 800,
+              fontWeight: 700,
               lineHeight: 1.15,
-              color: '#1a1a1a',
+              color: INK,
             }}
           >
             {renderSpot.name}
@@ -270,7 +260,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
             <div
               style={{
                 fontSize: TYPE.small,
-                color: '#777',
+                color: colors.grey,
                 marginTop: S.s,
               }}
             >
@@ -285,7 +275,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           style={{
             display: 'flex',
             gap: S.s,
-            padding: '12px 22px 20px',
+            padding: `${S.m}px ${S.l}px ${S.xl}px`,
             flexShrink: 0,
           }}
         >
@@ -315,6 +305,6 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

@@ -20,27 +20,46 @@
 import type { CSSProperties } from 'react';
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
-import { TYPE } from '../../constants/type';
+import { ERROR_TEXT, TYPE } from '../../constants/type';
+import { colors } from '../../constants/colors';
 import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
-import { SURFACE } from '../../constants/surface';
+import { INK, SURFACE } from '../../constants/surface';
 import { api } from '../../services/api';
+import { openExternal } from '../../services/telegram';
+import { splitPhones } from '../../utils/phoneLinks';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
+import { playPop, playPopThen } from '../../utils/popOnTap';
+import { TOP_SHEET_MAX_H } from '../../constants/sizing';
 
 const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // An ad body is the longest continuous prose anywhere in this app, so it
 // gets a reading line-height rather than the tighter one the cards use.
+// overflowWrap: anywhere because ads paste bare links and phone runs
+// with no space in them, and one unbroken URL pushed the whole sheet
+// sideways (UX-11.6).
 const BODY_TEXT: CSSProperties = {
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.body,
   lineHeight: 1.5,
+  overflowWrap: 'anywhere',
+};
+
+// The ad's text can be selected and copied (UX-14.7): an address, a
+// name, a number in a shape the phone links below do not recognise.
+// Said outright because a tap-first app tends to inherit
+// user-select: none from somewhere up the tree.
+const SELECTABLE: CSSProperties = {
+  userSelect: 'text',
+  WebkitUserSelect: 'text',
 };
 
 interface PostModalProps {
@@ -147,7 +166,7 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(20,20,15,0.45)',
+        background: SURFACE.scrim,
         display: 'flex',
         alignItems: 'flex-start',
         // THE SHEET HANGS, IT DOES NOT GROW OUT OF THE BEZEL.
@@ -179,11 +198,11 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: '#ffffff',
+          background: SURFACE.fill,
           borderRadius: R.card,
           width: '100%',
           maxWidth: 460,
-          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: TOP_SHEET_MAX_H as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
@@ -209,8 +228,8 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
             style={{
               fontFamily: SYSTEM_FONT,
               fontSize: TYPE.title,
-              fontWeight: 800,
-              color: '#2B2B26',
+              fontWeight: 700,
+              color: INK,
             }}
           >
             {dogName ? t.modals.post.titleNamed(dogName) : t.modals.post.title}
@@ -226,16 +245,19 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
           style={{
             padding: `0 ${S.l}px ${S.m}px`,
             overflowY: 'auto',
+            // Belt and braces for anything that still will not wrap:
+            // it clips rather than scrolling the sheet sideways.
+            overflowX: 'hidden',
             flex: 1,
             minHeight: 0,
           }}
         >
           {loading ? (
-            <div style={{ ...BODY_TEXT, color: '#8A867C' }}>{t.modals.post.loading}</div>
+            <div style={{ ...BODY_TEXT, color: colors.grey }}>{t.modals.post.loading}</div>
           ) : null}
 
           {failed ? (
-            <div style={{ ...BODY_TEXT, color: '#A2452F' }}>{t.modals.post.failed}</div>
+            <div style={{ ...BODY_TEXT, ...ERROR_TEXT }}>{t.modals.post.failed}</div>
           ) : null}
           {failed ? (
             <button
@@ -246,12 +268,28 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
             </button>
           ) : null}
 
+          {/* Phone numbers are tel: links (UX-14.7): the number is what
+              the walker came for, and one tap dials it. */}
           {post?.body ? (
-            <div style={{ ...BODY_TEXT, color: '#2B2B26', whiteSpace: 'pre-wrap' }}>{post.body}</div>
+            <div style={{ ...BODY_TEXT, ...SELECTABLE, color: INK, whiteSpace: 'pre-wrap' }}>
+              {splitPhones(post.body).map((p, i) =>
+                p.kind === 'phone' ? (
+                  <a
+                    key={i}
+                    href={p.tel}
+                    style={{ color: INK, fontWeight: 700, textDecoration: 'underline' }}
+                  >
+                    {p.value}
+                  </a>
+                ) : (
+                  p.value
+                ),
+              )}
+            </div>
           ) : null}
 
           {post && !post.body ? (
-            <div style={{ ...BODY_TEXT, color: '#5A5750' }}>
+            <div style={{ ...BODY_TEXT, color: colors.grey }}>
               {t.modals.post.notStored}
               {/* No body AND no link means the walker has not reported a
                   sighting yet — the original is behind the same gate the
@@ -277,11 +315,11 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
                 marginTop: S.m,
                 padding: S.s,
                 borderRadius: R.chip,
-                background: '#F3F0E7',
+                background: colors.greyBg,
                 fontFamily: SYSTEM_FONT,
                 fontSize: TYPE.small,
                 lineHeight: 1.45,
-                color: '#5A5750',
+                color: colors.grey,
               }}
             >
               {t.modals.post.contactsMaskedBySource}
@@ -294,21 +332,21 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
                 marginTop: S.m,
                 padding: S.s,
                 borderRadius: R.chip,
-                background: '#F3F0E7',
+                background: colors.greyBg,
                 fontFamily: SYSTEM_FONT,
                 fontSize: TYPE.small,
                 lineHeight: 1.45,
-                color: '#5A5750',
+                color: colors.grey,
               }}
             >
               {t.modals.post.contactsAfterSighting}
               {confirmingSeen && dogName ? (
-                <div style={{ marginTop: S.s, fontWeight: 800, color: '#2B2B26' }}>
+                <div style={{ marginTop: S.s, fontWeight: 700, color: INK }}>
                   {t.modals.lostDog.seenConfirm(dogName)}
                 </div>
               ) : null}
               {seenRefusal ? (
-                <div role="status" style={{ marginTop: S.s, fontWeight: 700, color: '#A2452F' }}>
+                <div role="status" style={{ ...ERROR_TEXT, marginTop: S.s }}>
                   {seenRefusal}
                 </div>
               ) : null}
@@ -316,14 +354,11 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
                 <div style={{ display: 'flex', gap: S.s, marginTop: S.s }}>
                   {confirmingSeen ? (
                     <>
-                      <button onClick={() => setConfirmingSeen(false)} style={MODAL_PILL_LIGHT}>
-                        <HandDrawnFrame radius={R.button} />
-                        {t.modals.lostDog.seenConfirmNo}
-                      </button>
                       <button
                         disabled={sendingSeen}
-                        onClick={() => {
+                        onClick={(e) => {
                           if (sendingSeen) return;
+                          playPop(e.currentTarget);
                           setSendingSeen(true);
                           setSeenRefusal(null);
                           void onReportSighting().then(({ ok, refusal }) => {
@@ -339,9 +374,28 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
                       >
                         {t.modals.lostDog.seenConfirmYes}
                       </button>
+                      {/* Dark answer on the left, like every action row
+                          (D10) — the pet card asks this same question
+                          in the same order. */}
+                      <button
+                        onClick={(e) => {
+                          playPop(e.currentTarget);
+                          setConfirmingSeen(false);
+                        }}
+                        style={MODAL_PILL_LIGHT}
+                      >
+                        <HandDrawnFrame radius={R.button} />
+                        {t.modals.lostDog.seenConfirmNo}
+                      </button>
                     </>
                   ) : (
-                    <button onClick={() => setConfirmingSeen(true)} style={MODAL_PILL_LIGHT}>
+                    <button
+                      onClick={(e) => {
+                        playPop(e.currentTarget);
+                        setConfirmingSeen(true);
+                      }}
+                      style={MODAL_PILL_LIGHT}
+                    >
                       <HandDrawnFrame radius={R.button} />
                       {t.modals.lostDog.iveSeen}
                     </button>
@@ -356,7 +410,11 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
           style={{
             display: 'flex',
             gap: S.s,
-            padding: `${S.s}px ${S.l}px calc(${S.l}px + env(safe-area-inset-bottom, 0px))`,
+            // No bottom safe-area term (UX-12.13): the sheet hangs from
+            // the TOP and ends well above the home indicator, so that
+            // inset only padded an iPhone footer 34 px taller than the
+            // same footer anywhere else.
+            padding: `${S.s}px ${S.l}px ${S.l}px`,
             flexShrink: 0,
           }}
         >
@@ -370,19 +428,29 @@ export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostMod
               recipe LostDogModal and SpotModal use. */}
           {post?.sourceUrl ? (
             <button
-              onClick={() => window.open(post.sourceUrl!, '_blank', 'noopener')}
+              onClick={(e) => {
+                // Pop without the defer: the open has to run inside the
+                // tap itself or a popup blocker eats it. openExternal,
+                // not window.open, so inside Telegram it goes through
+                // the Mini App's own bridge (UX-14.8).
+                playPop(e.currentTarget);
+                openExternal(post.sourceUrl!);
+              }}
               style={MODAL_PILL_DARK}
             >
               {t.modals.post.openOriginal}
             </button>
           ) : null}
-          <button onClick={onClose} style={MODAL_PILL_LIGHT}>
+          <button
+            onClick={(e) => playPopThen(e.currentTarget, onClose)}
+            style={MODAL_PILL_LIGHT}
+          >
             <HandDrawnFrame radius={R.button} />
             {t.modals.common.close}
           </button>
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

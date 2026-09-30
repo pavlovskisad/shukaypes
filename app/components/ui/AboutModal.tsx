@@ -1,16 +1,19 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { INLINE_ICON } from '../../constants/sizing';
+import { INLINE_ICON, TOP_SHEET_MAX_H } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
-import { SURFACE } from '../../constants/surface';
+import { INK, SURFACE } from '../../constants/surface';
+import { colors } from '../../constants/colors';
 import { Z } from '../../constants/z';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
-import { playPopThen } from '../../utils/popOnTap';
+import { CloseButton } from './CloseButton';
+import { CLOSE_INSET, CLOSE_SIZE } from '../../constants/buttons';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
 
@@ -27,11 +30,11 @@ const SHEET_ANIM_MS = MOTION.sheetMs;
 const SAFE_TOP = 12;
 // Close button, and the gap under it. The header strip has to reserve
 // SAFE_TOP + CLOSE_SIZE + CLOSE_GAP of room or the title runs under the
-// badge and the ✕ — which is exactly what happened while this was a
+// badge and the close — which is exactly what happened while this was a
 // `calc()` with an unitless term in it: one bad operand invalidates the
 // whole expression, the declaration is dropped, and the padding silently
 // becomes 0. Plain arithmetic can't fail that way.
-const CLOSE_SIZE = 36;
+// CLOSE_SIZE is the shared close circle's (constants/buttons.ts).
 const CLOSE_GAP = 8;
 const HEADER_TOP = SAFE_TOP + CLOSE_SIZE + CLOSE_GAP;
 
@@ -99,7 +102,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(0,0,0,0.3)',
+        background: SURFACE.scrim,
         display: 'flex',
         alignItems: 'flex-start',
         // THE SHEET HANGS, IT DOES NOT GROW OUT OF THE BEZEL.
@@ -126,14 +129,14 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
       <div
         onClick={(e) => e.stopPropagation()}
         style={{
-          background: '#ffffff',
+          background: SURFACE.fill,
           borderRadius: R.card,
           padding: 0,
           width: '100%',
           maxWidth: 460,
           // Cap so the content scrolls instead of overlapping the
           // floating dashboard.
-          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: TOP_SHEET_MAX_H as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
@@ -156,8 +159,9 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           style={{
             position: 'relative',
             paddingTop: HEADER_TOP,
-            paddingLeft: S.xxl,
-            paddingRight: S.xxl,
+            // S.l, the gutter every sibling top sheet uses (UX-10.5).
+            paddingLeft: S.l,
+            paddingRight: S.l,
             paddingBottom: S.s,
             flexShrink: 0,
           }}
@@ -166,9 +170,10 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             style={{
               position: 'absolute',
               top: SAFE_TOP,
-              left: 14,
-              background: '#ffffff',
-              color: '#555',
+              // Mirrors the close circle's inset on the other side.
+              left: CLOSE_INSET,
+              background: SURFACE.fill,
+              color: colors.grey,
               borderRadius: R.label,
               padding: '6px 12px',
               fontSize: TYPE.small,
@@ -182,39 +187,16 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             <HandDrawnFrame radius={R.label} />
             {t.modals.about.badge}
           </span>
-          <button
-            onClick={(e) => playPopThen(e.currentTarget, onClose)}
-            aria-label={t.modals.common.close}
-            style={{
-              position: 'absolute',
-              top: SAFE_TOP,
-              right: 12,
-              width: CLOSE_SIZE,
-              height: CLOSE_SIZE,
-              borderRadius: R.pill,
-              // Drawn ring — see the HandDrawnFrame child.
-              border: '2px solid transparent',
-              background: '#ffffff',
-              color: '#1a1a1a',
-              padding: 0,
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              cursor: 'pointer',
-              boxShadow: SURFACE.chip,
-              fontSize: TYPE.display,
-              lineHeight: 1,
-            }}
-          >
-            <HandDrawnFrame radius={R.pill} />
-            ×
-          </button>
+          <CloseButton
+            onPress={onClose}
+            style={{ position: 'absolute', top: CLOSE_INSET, right: CLOSE_INSET }}
+          />
 
-          <div style={{ fontFamily: SYSTEM_FONT, fontSize: TYPE.display, fontWeight: 800 }}>
+          <div style={{ fontFamily: SYSTEM_FONT, fontSize: TYPE.display, fontWeight: 700 }}>
             {t.modals.about.header}
           </div>
           <div
-            style={{ fontSize: TYPE.small, color: '#444', marginTop: 6, lineHeight: 1.45 }}
+            style={{ fontSize: TYPE.small, color: colors.grey, marginTop: 6, lineHeight: 1.45 }}
             // Intro contains a <strong> tag for the bot name; render the
             // i18n string as HTML so the markup survives translation.
             dangerouslySetInnerHTML={{ __html: t.modals.about.intro }}
@@ -228,13 +210,13 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
             display: 'flex',
             flexDirection: 'column',
             gap: S.l,
-            padding: '14px 22px 22px',
+            padding: `${S.m}px ${S.l}px ${S.l}px`,
             flexGrow: 1,
             minHeight: 0,
           }}
         >
           {t.modals.about.rows.map((r, i) => (
-            <div key={r.title} style={{ display: 'flex', gap: 14, alignItems: 'flex-start' }}>
+            <div key={r.title} style={{ display: 'flex', gap: S.m, alignItems: 'flex-start' }}>
               <div
                 style={{
                   width: INLINE_ICON.about,
@@ -253,7 +235,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                     fontFamily: SYSTEM_FONT,
                     fontSize: TYPE.body,
                     fontWeight: 700,
-                    color: '#1a1a1a',
+                    color: INK,
                   }}
                 >
                   {r.title}
@@ -261,7 +243,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
                 <div
                   style={{
                     fontSize: TYPE.small,
-                    color: '#555',
+                    color: colors.grey,
                     marginTop: S.xs,
                     lineHeight: 1.5,
                   }}
@@ -274,7 +256,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           <div
             style={{
               fontSize: TYPE.small,
-              color: '#777',
+              color: colors.grey,
               textAlign: 'center',
               marginTop: S.s,
               marginBottom: S.xs,
@@ -287,6 +269,6 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

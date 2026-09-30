@@ -173,6 +173,11 @@ export interface AppStrings {
   map: {
     // Under a collapsed lost-pet cluster, and its accessible name.
     lostPetsCount: (n: number) => string;
+    // Accessible names of the two pickups, and of a collapsed cluster
+    // of places (a tap fans it out). Were hardcoded English.
+    pawA11y: string;
+    boneA11y: string;
+    placesCount: (n: number) => string;
   };
   // The dog's questions during a search, and the answers under them.
   // Every decision point in supersniff is one of these.
@@ -329,9 +334,13 @@ export interface AppStrings {
     boardYou: string;
     boardEmpty: string;
     boardSeeAll: string;
+    // Under the past searches on the lost-pets card; opens all of them.
+    historySeeAll: string;
   };
   spots: {
     nearbySpots: string;
+    // The spot deck's counter, which opens the whole category.
+    seeAll: string;
     nearbyCategory: (category: string) => string;
     emptyAll: string;
     emptyFiltered: (category: string) => string;
@@ -389,6 +398,8 @@ export interface AppStrings {
       en: string;
     };
     sceneA11y: (mode: string) => string;
+    // The dog in that scene, a button of its own: a tap makes it bark.
+    barkA11y: string;
   };
   // The card behind a dog on the map (D-73).
   playerCard: {
@@ -445,7 +456,15 @@ export interface AppStrings {
     loadFailed: string;
   };
   modals: {
-    common: { close: string };
+    common: {
+      close: string;
+      // A card deck, to a keyboard or screen reader (UX-14.6): where in
+      // the deck you are and how to move through it.
+      deckA11y: (i: number, n: number) => string;
+      // The deck's "N / M" counter when it opens the whole list
+      // (UX-14.14): what it opens, then the position it shows.
+      deckCounterA11y: (label: string, i: number, n: number) => string;
+    };
     lostDog: {
       badgeUrgent: string;
       badgeSearching: string;
@@ -568,6 +587,8 @@ export interface AppStrings {
     // Shown when the user picks "meet" in explore and there is nobody
     // around. Was hardcoded English in Companion.tsx.
     noWalkers: string;
+    // The dog's own accessible name on the map: what a tap on it does.
+    dogA11y: string;
     // Accessible names of the icon buttons under the dog.
     ring: {
       walk: string;
@@ -811,6 +832,9 @@ const uk: AppStrings = {
   },
   map: {
     lostPetsCount: (n) => `${n} ${ukPlural(n, 'загублений', 'загублені', 'загублених')}`,
+    pawA11y: 'лапка',
+    boneA11y: 'кісточка',
+    placesCount: (n) => `${n} ${ukPlural(n, 'місце', 'місця', 'місць')} поруч — розгорнути`,
   },
   search: {
     confirm: (name) => `йдемо шукати ${name}?`,
@@ -971,8 +995,8 @@ const uk: AppStrings = {
   sniff: {
     sniffing: 'нюхаю…',
     opening: 'відкриваю…',
-    more: 'ще ▾',
-    less: 'менше ▴',
+    more: 'ще',
+    less: 'менше',
     nothingMore: '*чухає за вухом* більше не пригадую — тільки те, що сказав.',
     wikipedia: 'вікіпедія ↗',
     save: 'зберегти місце',
@@ -1024,15 +1048,17 @@ const uk: AppStrings = {
     boardYou: 'ти',
     boardEmpty: 'місто ще нічиє — познач перший',
     boardSeeAll: 'показати всіх',
+    historySeeAll: 'показати всі',
   },
   spots: {
     nearbySpots: 'місця поряд',
+    seeAll: 'показати всі',
     nearbyCategory: (category) => `${category} поряд`,
     emptyAll: 'поки нічого поряд — посунь мапу в нове місце, я понюхаю ще',
     emptyFiltered: (category) => `${category} поряд немає — спробуй інший фільтр`,
     favourites: 'улюблені місця',
     favouritesEmpty:
-      'поки порожньо. натисни ♡ на місці, яке я винюхав, — і воно чекатиме тут.',
+      'поки порожньо. натисни сердечко на місці, яке я винюхав, — і воно чекатиме тут.',
     filters: {
       all: 'усі',
       cafe: "кав'ярні",
@@ -1092,7 +1118,8 @@ const uk: AppStrings = {
       uk: 'українська',
       en: 'english',
     },
-    sceneA11y: (mode) => `сцена: ${mode}. натисни на пса — гавкне.`,
+    sceneA11y: (mode) => `сцена: ${mode}`,
+    barkA11y: 'пес — гавкнути',
   },
   playerCard: {
     levelUnknown: 'рівень невідомий',
@@ -1139,7 +1166,11 @@ const uk: AppStrings = {
     loadFailed: 'не вдалося завантажити — натисни, щоб спробувати ще',
   },
   modals: {
-    common: { close: 'закрити' },
+    common: {
+      close: 'закрити',
+      deckA11y: (i, n) => `картки, ${i} з ${n}. стрілки вліво і вправо гортають`,
+      deckCounterA11y: (label, i, n) => `${label} (${i} з ${n})`,
+    },
     lostDog: {
       badgeUrgent: 'терміново',
       badgeSearching: 'шукаємо',
@@ -1281,6 +1312,7 @@ const uk: AppStrings = {
       'що більше тримаємо, то густіші тут лапки. і мені спокійніше на своєму',
     ],
     noWalkers: 'поки нікого поруч 👥',
+    dogA11y: 'пес — поговорити',
     ring: {
       walk: 'погуляти',
       visit: 'зайти кудись',
@@ -1327,7 +1359,7 @@ const uk: AppStrings = {
       doneTitle: 'вже на мапі 🐾',
       doneBody: 'кожен, хто зараз гуляє поруч, побачить пін. я також переслав оголошення в наш канал і районні групи.',
       doneNoPhoto: 'фото не вдалося прикріпити — оголошення на мапі без нього.',
-      doneShare: 'переслати оголошення',
+      doneShare: 'переслати',
       doneClose: 'готово',
       botLine: 'зручніше в телеграмі? напиши боту — фото, район, коли бачили.',
       botCta: 'написати боту',
@@ -1492,6 +1524,9 @@ const en: AppStrings = {
   },
   map: {
     lostPetsCount: (n) => `${n} lost ${n === 1 ? 'pet' : 'pets'}`,
+    pawA11y: 'paw',
+    boneA11y: 'bone',
+    placesCount: (n) => `${n} ${n === 1 ? 'place' : 'places'} nearby — expand`,
   },
   search: {
     confirm: (name) => `go looking for ${name}?`,
@@ -1649,8 +1684,8 @@ const en: AppStrings = {
   sniff: {
     sniffing: 'sniffing…',
     opening: 'opening…',
-    more: 'more ▾',
-    less: 'less ▴',
+    more: 'more',
+    less: 'less',
     nothingMore: "*scratches behind the ear* that's all I remember — just what I said.",
     wikipedia: 'wikipedia ↗',
     save: 'save this place',
@@ -1698,14 +1733,16 @@ const en: AppStrings = {
     boardYou: 'you',
     boardEmpty: 'nobody holds the city yet — go and mark',
     boardSeeAll: 'see all',
+    historySeeAll: 'see all',
   },
   spots: {
     nearbySpots: 'nearby spots',
+    seeAll: 'see all',
     nearbyCategory: (category) => `nearby ${category}`,
     emptyAll: "nothing nearby yet — pan the map somewhere new and i'll sniff again",
     emptyFiltered: (category) => `no ${category} nearby — try another filter`,
     favourites: 'favourite places',
-    favouritesEmpty: "empty so far. tap ♡ on a place i've sniffed out and it'll wait for you here.",
+    favouritesEmpty: "empty so far. tap the heart on a place i've sniffed out and it'll wait for you here.",
     filters: {
       all: 'all',
       cafe: 'cafe',
@@ -1750,7 +1787,8 @@ const en: AppStrings = {
       uk: 'українська',
       en: 'english',
     },
-    sceneA11y: (mode) => `scene: ${mode}. tap the dog to make them bark.`,
+    sceneA11y: (mode) => `scene: ${mode}`,
+    barkA11y: 'your dog — bark',
   },
   playerCard: {
     levelUnknown: 'level unknown',
@@ -1792,7 +1830,11 @@ const en: AppStrings = {
     loadFailed: "couldn't load — tap to try again",
   },
   modals: {
-    common: { close: 'close' },
+    common: {
+      close: 'close',
+      deckA11y: (i, n) => `cards, ${i} of ${n}. left and right arrows flip`,
+      deckCounterA11y: (label, i, n) => `${label} (${i} of ${n})`,
+    },
     lostDog: {
       badgeUrgent: 'urgent',
       badgeSearching: 'searching',
@@ -1928,6 +1970,7 @@ const en: AppStrings = {
       'the more we hold, the thicker the paws here. and i rest easier on our own',
     ],
     noWalkers: 'nobody around just yet 👥',
+    dogA11y: 'your dog — talk',
     ring: {
       walk: 'walk',
       visit: 'visit',
@@ -1974,7 +2017,7 @@ const en: AppStrings = {
       doneTitle: 'on the map 🐾',
       doneBody: "everyone walking nearby will see the pin. i've also forwarded the post to our channel and district groups.",
       doneNoPhoto: "the photo didn't attach — the pin is up without it.",
-      doneShare: 'share the post',
+      doneShare: 'share',
       doneClose: 'done',
       botLine: 'prefer telegram? message the bot — a photo, the district, when you saw them.',
       botCta: 'message the bot',

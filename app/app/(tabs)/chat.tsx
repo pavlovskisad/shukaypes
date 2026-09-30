@@ -17,10 +17,11 @@ import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
+import { VOICE } from '../../constants/voice';
 import { TYPE } from '../../constants/type';
 import { INK, SURFACE } from '../../constants/surface';
 import { popPressableEvent } from '../../utils/popOnTap';
-import { pickBottomInset } from '../../services/telegram';
+import { openExternal, pickBottomInset } from '../../services/telegram';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 import { useGameStore } from '../../stores/gameStore';
 import { recordRecentDestination } from '../../utils/walk';
@@ -89,6 +90,9 @@ export default function ChatScreen() {
   const [bootAttempt, setBootAttempt] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const bootedRef = useRef(false);
+  // Ids of the transcript as it loaded. Those are history, read at the
+  // user's own pace; only what the dog says after them is announced.
+  const historyIdsRef = useRef<Set<string>>(new Set());
 
   // Dispatch a structured action attached to the assistant's reply.
   // Each branch calls the same gameStore action the radial menu /
@@ -227,6 +231,7 @@ export default function ChatScreen() {
       try {
         const { messages: history } = await api.getChatHistory();
         if (cancelled) return;
+        historyIdsRef.current = new Set(history.map((m) => m.id));
         setMessages(history);
         if (history.length === 0) {
           setTyping(true);
@@ -397,6 +402,14 @@ export default function ChatScreen() {
   const bottomPad =
     TAB_BAR_HEIGHT + safeBottom + INPUT_GAP_ABOVE_TABS + INPUT_BAND_HEIGHT + 72;
 
+  // The dog's newest reply, for the live region below (UX-14.10). Empty
+  // while the last line is the user's own or came with the history.
+  const lastMsg = messages[messages.length - 1];
+  const liveReply =
+    lastMsg && lastMsg.role === 'assistant' && !historyIdsRef.current.has(lastMsg.id)
+      ? lastMsg.content
+      : '';
+
   return (
     <View style={styles.root}>
       {/* Scroll fills the entire screen — header + input bands sit on
@@ -443,6 +456,15 @@ export default function ChatScreen() {
         ))}
         {typing ? <TypingIndicator /> : null}
       </ScrollView>
+
+      {/* Chat replies, read out (UX-14.10). A region that is already on
+          the page and changes its text is what screen readers reliably
+          announce — a bubble mounted with aria-live on it usually is
+          not — so this one stays mounted, visually hidden, and takes
+          the text of each new reply. */}
+      <View style={styles.srOnly} accessibilityLiveRegion="polite" pointerEvents="none">
+        <Text>{liveReply}</Text>
+      </View>
 
       {/* One fade strip, at the bottom. The top one is gone: there is
           no chrome up there for a message to dissolve into any more,
@@ -500,13 +522,16 @@ export default function ChatScreen() {
                 it, so the paper is this wrapper and the control inside
                 is stripped of its own chrome. Bare, it was white on the
                 white page — a composer with no visible edge. */}
-            <View style={styles.inputPaper}>
+            {/* data-field: the focus ring in index.html (UX-14.13). */}
+            <View style={styles.inputPaper} {...({ dataSet: { field: '' } } as object)}>
               <HandDrawnFrame radius={R.button} />
               <TextInput
                 style={styles.input}
                 value={draft}
                 onChangeText={setDraft}
                 placeholder={t.chat.inputPlaceholder}
+                // A name that stays once something is typed (UX-14.13).
+                accessibilityLabel={t.chat.inputPlaceholder}
                 placeholderTextColor={colors.greyLight}
                 onSubmitEditing={send}
                 editable={!sending}
@@ -576,7 +601,13 @@ function Bubble({ msg }: { msg: ChatMessage }) {
             <Text
               key={i}
               style={[styles.link, isUser ? styles.userText : styles.assistantText]}
-              onPress={() => Linking.openURL(p.value).catch(() => {})}
+              // On the web, openExternal: inside Telegram a bare
+              // window.open (what Linking does there) is unreliable,
+              // and t.me links belong in the real chat (UX-14.8).
+              onPress={() => {
+                if (Platform.OS === 'web') openExternal(p.value);
+                else Linking.openURL(p.value).catch(() => {});
+              }}
             >
               {p.value}
             </Text>
@@ -655,6 +686,15 @@ const TRANSPARENT_BG = 'rgba(255,255,255,0)';
 // to safe-area inset because TG Mini App reports inset.bottom=0.
 const INPUT_GAP_ABOVE_TABS = 10;
 const styles = StyleSheet.create({
+  // Present to a screen reader, invisible and untappable on screen.
+  srOnly: {
+    position: 'absolute',
+    width: 1,
+    height: 1,
+    margin: -1,
+    overflow: 'hidden',
+    // Not opacity: 0 — some screen readers skip what is fully transparent.
+  },
   // WHITE PAPER, like every other surface in the app. The chat sat on
   // grey, which made the dog's ink bubbles read as cards on a table
   // rather than as words on the page — and made the user's white ones
@@ -704,11 +744,15 @@ const styles = StyleSheet.create({
     paddingVertical: S.l,
     paddingHorizontal: S.xl,
     borderRadius: R.card,
+    // Both sides carry the same 2px: ink on the dog's, transparent on
+    // yours (the drawn frame sits in it). The user bubble had none, so
+    // the same line of text made a bubble 4px smaller (UX-10.9).
+    borderWidth: 2,
+    borderColor: 'transparent',
   },
   assistantBubble: {
     alignSelf: 'flex-start',
     backgroundColor: INK,
-    borderWidth: 2,
     borderColor: INK,
     ...CARD_SHADOW,
   },
@@ -721,7 +765,9 @@ const styles = StyleSheet.create({
   bubbleText: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.body,
-    lineHeight: 24,
+    // The voice bubbles' line spacing (15 × 1.4 = 21), not a looser 24
+    // of its own: it is the same dog talking (UX-10.9).
+    lineHeight: Math.round(TYPE.body * VOICE.lineHeight),
   },
   assistantText: {
     color: '#ffffff',

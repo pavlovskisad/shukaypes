@@ -7,7 +7,7 @@ import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
-import { TYPE } from '../../constants/type';
+import { ERROR_TEXT, TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
 import { formatDistance } from '../../utils/geo';
 import { LOOP_VIEW_PROPS } from '../../utils/motion';
@@ -16,12 +16,12 @@ import { api, type TerritoryRanking } from '../../services/api';
 import { useAccessStore } from '../../stores/accessStore';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import { SCENE_SKY, type SceneMode } from '../../components/profile/ProfileSceneBackdrop';
-import { HERO, CHIP, TAB_BAR_STRIP } from '../../constants/sizing';
+import { HERO, CHIP, HUD_TOP, TAB_BAR_STRIP } from '../../constants/sizing';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 import { MeterPill, CounterPill } from '../../components/ui/StatusBar';
 import { useStrings } from '../../i18n/useStrings';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
-import { CardStack, CARD_W } from '../../components/ui/CardStack';
+import { CardStack, DECK_OFFSET } from '../../components/ui/CardStack';
 import { HandDrawnBar, HandDrawnFrame } from '../../components/ui/HandDrawn';
 import { AccountEditSheet } from '../../components/ui/AccountEditSheet';
 import { LangPill, pillStyles } from '../../components/ui/LangPill';
@@ -109,12 +109,14 @@ function StatRow({
       <Text style={styles.statLabel}>{label}</Text>
       {value === undefined || value === null ? (
         failed ? (
-          <Text style={styles.statValue}>—</Text>
+          <Text style={styles.statValue} numberOfLines={1}>—</Text>
         ) : (
           <ShimmerBar width={50} />
         )
       ) : (
-        <Text style={styles.statValue}>{value}</Text>
+        <Text style={styles.statValue} numberOfLines={1}>
+          {value}
+        </Text>
       )}
     </View>
   );
@@ -267,7 +269,7 @@ export default function ProfileScreen() {
               style={({ pressed }) => [styles.editChipHit, pressed && { opacity: 0.7 }]}
             >
               <View style={styles.editChip}>
-                <HandDrawnFrame radius={EDIT_CHIP_H / 2} />
+                <HandDrawnFrame radius={R.label} />
                 <Text style={styles.editChipText}>{t.auth.editChip}</Text>
               </View>
             </Pressable>
@@ -431,7 +433,9 @@ export default function ProfileScreen() {
             // Top edge of the stat deck. The scene keeps the dog above
             // it, so a short viewport can never park the dog behind a
             // card — see groundInset in ProfileDogScene.
-            dogFloorInset={deckBottom + DECK_CARD_H}
+            // DECK_OFFSET: the deck's own padding and margin sit
+            // between deckBottom and the cards (UX-12.10).
+            dogFloorInset={deckBottom + DECK_OFFSET + DECK_CARD_H}
           />
         ) : null}
       </View>
@@ -551,10 +555,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: S.m,
-    paddingTop: S.m,
+    // The map's pill line, not a number of its own: the same three
+    // pills sat ~18 px higher here and jumped on every tab switch
+    // (UX-12.3).
+    paddingTop: HUD_TOP,
+    gap: S.s,
   },
   hudPills: {
     flexDirection: 'row',
+    // At 320 px the three meters and the two chips on the right do not
+    // fit one line; the meters wrap under each other rather than run
+    // under the language pill (UX-12.2).
+    flexWrap: 'wrap',
+    flexShrink: 1,
+    minWidth: 0,
     gap: S.s,
   },
   // Just the row. The pill shape itself is pillStyles in LangPill.tsx,
@@ -577,7 +591,9 @@ const styles = StyleSheet.create({
   editChip: {
     height: EDIT_CHIP_H,
     paddingHorizontal: S.m,
-    borderRadius: EDIT_CHIP_H / 2,
+    // R.label, not a capsule: it sits ON the card, so it is a small
+    // piece of the same paper with a tighter corner (radius.ts, UX-10.6).
+    borderRadius: R.label,
     backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
@@ -601,7 +617,9 @@ const styles = StyleSheet.create({
   // cardHeight prop (150 on profile). Tight paddings since
   // each card has a title + 3 short lines.
   sectionCard: {
-    width: CARD_W,
+    // The slot's width, not CARD_W: the deck narrows on a phone under
+    // ~370 px (UX-12.15) and a fixed 320 would hang out of it.
+    width: '100%',
     height: 150,
     backgroundColor: '#ffffff',
     borderRadius: R.card,
@@ -619,13 +637,15 @@ const styles = StyleSheet.create({
     shadowRadius: 18,
     elevation: 6,
   },
-  // Section titles bumped to match the tasks / spots tabs —
-  // 13 → 16, weight 800, colours.black. Were too quiet for the
-  // smaller 150-tall section cards.
+  // Section titles on the same token as the tasks / spots card
+  // titles (TYPE.title, 700, colours.black) — the comment always said
+  // they matched and the size was 15 (UX-11.5). Measured in Annex: the
+  // title's line is 20 (was 18), so the tallest card, the companion one
+  // with a portrait, comes to 147 of its 150; the stat cards to 134.
   sectionTitle: {
     fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.body,
-    fontWeight: '800',
+    fontSize: TYPE.title,
+    fontWeight: '700',
     color: colors.black,
     marginBottom: S.m,
     textTransform: 'lowercase',
@@ -657,13 +677,13 @@ const styles = StyleSheet.create({
   companionNameBig: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.title,
-    fontWeight: '800',
+    fontWeight: '700',
     color: colors.black,
     marginBottom: 1,
   },
   companionLevel: {
     fontSize: TYPE.small,
-    color: '#555',
+    color: colors.grey,
     marginBottom: S.s,
   },
   // Just the row the bar is drawn into — track and fill are both
@@ -679,18 +699,25 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: S.xs,
   },
+  // The label keeps its width and the value gives way: a long value
+  // (the territory leader's name + area) ellipsizes on one line instead
+  // of spilling out of the fixed-height card (UX-11.7).
   statLabel: {
     fontSize: TYPE.small,
-    color: '#555',
+    color: colors.grey,
+    flexShrink: 0,
   },
   statValue: {
     fontSize: TYPE.body,
     fontWeight: '700',
     color: colors.black,
+    flexShrink: 1,
+    minWidth: 0,
+    marginLeft: S.s,
+    textAlign: 'right',
   },
   error: {
-    fontSize: TYPE.small,
-    color: '#a33',
+    ...ERROR_TEXT,
     textAlign: 'center',
     marginTop: S.s,
   },

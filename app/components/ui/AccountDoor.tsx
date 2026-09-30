@@ -28,6 +28,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import { router } from 'expo-router';
 import { ApiError, auth, type Me } from '../../services/api';
 import { useAccessStore, type DoorSheet } from '../../stores/accessStore';
@@ -40,7 +41,7 @@ import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { SURFACE } from '../../constants/surface';
-import { TYPE } from '../../constants/type';
+import { ERROR_TEXT, TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { HandDrawnFrame } from './HandDrawn';
 import { AvatarStudio, type AvatarStage } from './AvatarStudio';
@@ -184,10 +185,16 @@ export const SCROLL: CSSProperties = {
   padding: `${S.s}px ${S.l}px ${S.m}px`,
 };
 
+// A field is paper nested inside a sheet, so it turns R.button, one
+// step tighter than the sheet's R.card (the nested-corner rule in
+// radius.ts). It used to reuse the card's own 18 (UX-10.6).
+//
+// THE one field recipe: LostFlowModal imports Field and FIELD_INPUT
+// from here rather than keeping a copy (UX-10.7).
 const FIELD_PAPER: CSSProperties = {
   position: 'relative',
   background: SURFACE.fill,
-  borderRadius: R.chip,
+  borderRadius: R.button,
   border: '2px solid transparent',
   marginTop: 4,
 };
@@ -202,7 +209,7 @@ export const FIELD_INPUT: CSSProperties = {
   background: 'transparent',
   border: 'none',
   outline: 'none',
-  padding: `6px ${S.m}px`,
+  padding: `${S.s}px ${S.m}px`,
   display: 'block',
 };
 
@@ -240,10 +247,8 @@ export const LINK: CSSProperties = {
 };
 
 export const ERROR: CSSProperties = {
+  ...ERROR_TEXT,
   marginTop: S.m,
-  fontSize: TYPE.small,
-  fontWeight: 700,
-  color: colors.red,
 };
 
 export const NOTE: CSSProperties = {
@@ -253,10 +258,13 @@ export const NOTE: CSSProperties = {
   lineHeight: 1.4,
 };
 
+// data-field is what index.html's focus ring hangs on (UX-14.13): the
+// control inside is stripped of its own outline, so the paper shows
+// where the typing goes.
 export function Field({ seed, children }: { seed: string; children: ReactNode }) {
   return (
-    <div style={FIELD_PAPER}>
-      <HandDrawnFrame seed={seed} radius={R.chip} />
+    <div style={FIELD_PAPER} data-field="">
+      <HandDrawnFrame seed={seed} radius={R.button} />
       {children}
     </div>
   );
@@ -273,7 +281,10 @@ export function Primary({ label, disabled, onClick }: { label: string; disabled?
       }}
       // The shared disabled pill, not a half-faded dark one (UX-9.3): at
       // 0.5 the ink pill still read as a button you could press.
-      style={{ ...(disabled ? MODAL_PILL_DISABLED : MODAL_PILL_DARK), width: '100%', marginTop: S.m, fontSize: TYPE.body }}
+      //
+      // The pill's own 13px label, not 15 (UX-9.10) — the account forms
+      // were the one place a modal pill spoke up a size.
+      style={{ ...(disabled ? MODAL_PILL_DISABLED : MODAL_PILL_DARK), width: '100%', marginTop: S.m }}
     >
       {label}
     </button>
@@ -296,7 +307,7 @@ export function Secondary({
       type="button"
       disabled={disabled}
       onClick={onClick}
-      style={{ ...MODAL_PILL_LIGHT, width: '100%', marginTop: S.s, fontSize: TYPE.body, opacity: disabled ? 0.5 : 1 }}
+      style={{ ...MODAL_PILL_LIGHT, width: '100%', marginTop: S.s, opacity: disabled ? 0.5 : 1 }}
     >
       <HandDrawnFrame seed={seed} radius={R.button} />
       {label}
@@ -562,6 +573,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.nicknameLabel}</div>
               <Field seed="nick">
                 <input
+                  aria-label={t.nicknameLabel}
                   value={nickname}
                   onChange={(e) => setNickname(e.target.value)}
                   placeholder={t.nicknamePlaceholder}
@@ -577,6 +589,10 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
                   <button
                     key={sp}
                     type="button"
+                    // Selected is the ink pill; this says so to a screen reader
+                    // (UX-14.12). A second tap still clears it — the only way
+                    // to say "no pet".
+                    aria-pressed={species === sp}
                     onClick={() => setSpecies(species === sp ? null : sp)}
                     style={species === sp ? MODAL_PILL_DARK : MODAL_PILL_LIGHT}
                   >
@@ -593,6 +609,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
                     <div style={LABEL}>{t.petNameLabel}</div>
                     <Field seed="petname">
                       <input
+                        aria-label={t.petNameLabel}
                         value={petName}
                         onChange={(e) => setPetName(e.target.value)}
                         placeholder={t.petNamePlaceholder}
@@ -605,6 +622,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
                     <div style={LABEL}>{t.breedLabel}</div>
                     <Field seed="breed">
                       <input
+                        aria-label={t.breedLabel}
                         value={breed}
                         onChange={(e) => setBreed(e.target.value)}
                         placeholder={t.breedPlaceholder}
@@ -619,6 +637,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.emailLabel}</div>
               <Field seed="email">
                 <input
+                  aria-label={t.emailLabel}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t.emailPlaceholder}
@@ -634,6 +653,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.passwordLabel}</div>
               <Field seed="password">
                 <input
+                  aria-label={t.passwordLabel}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={t.passwordPlaceholder}
@@ -694,6 +714,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.emailLabel}</div>
               <Field seed="login-email">
                 <input
+                  aria-label={t.emailLabel}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t.emailPlaceholder}
@@ -708,6 +729,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.passwordLabel}</div>
               <Field seed="login-password">
                 <input
+                  aria-label={t.passwordLabel}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   type="password"
@@ -742,6 +764,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.emailLabel}</div>
               <Field seed="forgot-email">
                 <input
+                  aria-label={t.emailLabel}
                   value={email}
                   onChange={(e) => setEmail(e.target.value)}
                   placeholder={t.emailPlaceholder}
@@ -779,6 +802,7 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
               <div style={LABEL}>{t.newPasswordLabel}</div>
               <Field seed="reset-password">
                 <input
+                  aria-label={t.newPasswordLabel}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                   placeholder={t.passwordPlaceholder}
@@ -808,6 +832,6 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

@@ -144,7 +144,7 @@ const styles = StyleSheet.create({
   },
   previewImage: { width: '100%', height: '100%' },
   // While the snapshot renders: the same paper the map draws on.
-  previewEmpty: { flex: 1, backgroundColor: '#eeece6' },
+  previewEmpty: { flex: 1, backgroundColor: colors.photoBlank },
   dotRing: {
     position: 'absolute',
     left: '50%',
@@ -194,18 +194,21 @@ const styles = StyleSheet.create({
     paddingBottom: S.l,
     gap: 4,
   },
+  // Card-name size (TYPE.hero), like the spot cards below it on the same
+  // tab and the lost-pet cards (UX-11.3). lineHeight 26 keeps the
+  // two-line wrap from touching; the band flexes to fit it.
   title: {
     flex: 1,
     fontFamily: SYSTEM_FONT,
-    fontSize: TYPE.title,
-    fontWeight: '800',
+    fontSize: TYPE.hero,
+    fontWeight: '700',
     color: colors.black,
-    lineHeight: 22,
+    lineHeight: 26,
   },
   story: {
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.small,
-    color: '#666',
+    color: colors.grey,
     lineHeight: 18,
   },
 });

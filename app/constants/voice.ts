@@ -26,4 +26,13 @@ export const VOICE = {
   border: '2px solid #1a1a1a',
   shadow: '0 4px 14px rgba(0,0,0,0.22)',
   fontFamily: SYSTEM_FONT,
+  // The bubble's inside and its line spacing. These were written out
+  // by hand in each bubble and had drifted (12/10 in one, 12/14 in
+  // another, line-height set in some and left to the browser in
+  // others), so the dog's voice came out a slightly different size
+  // depending on where it spoke (UX-10.9). 10 horizontal, not 14: a
+  // wrapping remark hugs its longest line instead of carrying a dead
+  // strip down each side.
+  padding: '12px 10px',
+  lineHeight: 1.4,
 } as const;

@@ -1,8 +1,8 @@
 import { useEffect, useRef, type ReactNode } from 'react';
-import { View, Text, Pressable, StyleSheet } from 'react-native';
+import { View, Text, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
-import { CHIP } from '../../constants/sizing';
+import { CHIP, NARROW_SCREEN } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK, SURFACE } from '../../constants/surface';
@@ -40,6 +40,17 @@ const GLASS_SHADOW_COLOR = '#000';
 // renders crisp at the 38px pill height; smaller (the previous emoji
 // fontSize 14) read as cramped against the value text.
 const ICON_SIZE = CHIP.icon;
+
+// THE 320 px HUD (UX-12.2). Logo, four pills, three gaps and two
+// gutters come to ~370 px, so below NARROW_SCREEN the spots toggle ran
+// off the right edge and the logo slid under the sun pill. Narrow
+// screens get the same pills with the air taken out: smaller icon,
+// S.xs inner padding and gaps, a 40 px floor. Every pill reads the
+// width itself, so the profile tab's copies shrink along with the map's.
+const NARROW_ICON_SIZE = CHIP.icon - 6;
+function useNarrow(): boolean {
+  return useWindowDimensions().width < NARROW_SCREEN;
+}
 
 // Attention ring for hint cues — an expanding outline pulse that blooms
 // OUT FROM a HUD pill while a hint is calling the user's eye to it.
@@ -167,17 +178,25 @@ export function MeterPill({
   const t = useStrings();
   const fillPct = Math.max(0, Math.min(100, Math.round(value)));
   const popRef = usePopOnIncrease(value, glowForIcon(icon));
+  const narrow = useNarrow();
+  const iconSize = narrow ? NARROW_ICON_SIZE : ICON_SIZE;
   return (
     <div ref={popRef} style={{ display: 'inline-flex' }}>
       <PulseWrap active={!!pulse}>
-        <View style={[styles.pill, styles.meterPill, solid && styles.pillSolid]}>
+        {/* The pill itself is the meter to a screen reader (UX-14.5):
+            a progressbar with its name and level. On the pill rather
+            than the number because profile hides the number
+            (showValue false) and the meter went nameless there. */}
+        <View
+          style={[styles.pill, styles.meterPill, solid && styles.pillSolid, narrow && styles.pillNarrow]}
+          accessibilityRole="progressbar"
+          accessibilityLabel={t.hud.meterA11y(label, fillPct)}
+          accessibilityValue={{ min: 0, max: 100, now: fillPct }}
+        >
           <View style={[styles.fill, { width: `${fillPct}%` as unknown as number }]} />
-          <Icon name={icon} size={ICON_SIZE} />
+          <Icon name={icon} size={iconSize} />
           {showValue ? (
-            <Text
-              style={styles.value}
-              accessibilityLabel={t.hud.meterA11y(label, fillPct)}
-            >
+            <Text style={styles.value} aria-hidden>
               {fillPct}%
             </Text>
           ) : null}
@@ -199,11 +218,12 @@ export function MeterPill({
             style={
               [
                 styles.fillInvert,
+                narrow && styles.rowNarrow,
                 { clipPath: `inset(0 ${100 - fillPct}% 0 0)` },
               ] as unknown as object
             }
           >
-            <Icon name={icon} size={ICON_SIZE} inverted />
+            <Icon name={icon} size={iconSize} inverted />
             {showValue ? (
               <Text style={[styles.value, styles.valueInvert]}>{fillPct}%</Text>
             ) : null}
@@ -231,12 +251,16 @@ export function CounterPill({
   pulse?: boolean;
 }) {
   const popRef = usePopOnIncrease(value, glowForIcon(icon));
+  const narrow = useNarrow();
   return (
-    <div ref={popRef} style={{ display: 'inline-flex' }}>
+    // The one pill whose width grows with its number, so the one allowed
+    // to give way: a five-digit paw count ellipsizes before it pushes the
+    // row off the screen.
+    <div ref={popRef} style={{ display: 'inline-flex', minWidth: 0, flexShrink: 1 }}>
       <PulseWrap active={!!pulse}>
-        <View style={[styles.pill, styles.counterPill, solid && styles.pillSolid]}>
-          <Icon name={icon} size={ICON_SIZE} />
-          <Text style={styles.value} accessibilityLabel={`${label} ${Math.round(value)}`}>
+        <View style={[styles.pill, styles.counterPill, solid && styles.pillSolid, narrow && styles.pillNarrow]}>
+          <Icon name={icon} size={narrow ? NARROW_ICON_SIZE : ICON_SIZE} />
+          <Text style={styles.value} numberOfLines={1} accessibilityLabel={`${label} ${Math.round(value)}`}>
             {Math.round(value)}
             {suffix ?? ''}
           </Text>
@@ -257,6 +281,7 @@ function SpotsTogglePill() {
   // (published by the Companion via activeHint).
   const pulse = useGameStore((s) => s.activeHint) === 'map:spots-toggle';
   const t = useStrings();
+  const narrow = useNarrow();
   return (
     <PulseWrap active={pulse}>
       <Pressable
@@ -269,11 +294,12 @@ function SpotsTogglePill() {
           styles.pill,
           styles.togglePill,
           !visible && styles.togglePillOff,
+          narrow && styles.togglePillNarrow,
           pressed && { opacity: 0.7 },
         ]}
       >
         <HandDrawnFrame radius={R.pill} />
-        <Icon name="pin" size={ICON_SIZE} opacity={visible ? 1 : 0.45} />
+        <Icon name="pin" size={narrow ? NARROW_ICON_SIZE : ICON_SIZE} opacity={visible ? 1 : 0.45} />
       </Pressable>
     </PulseWrap>
   );
@@ -287,6 +313,7 @@ export function StatusBar() {
   // names what each one means in its bubble); published by Companion.
   const metersPulse = useGameStore((s) => s.activeHint) === 'map:hud-meters';
   const t = useStrings();
+  const narrow = useNarrow();
 
   return (
     // box-none so the toggle pill receives taps while the wrap itself
@@ -294,7 +321,7 @@ export function StatusBar() {
     // Hunger reads as % (0-100 meter, like happiness) so a +20 bump
     // is obviously "+20% fed", not "I ate 20 bones". Paw pill keeps
     // the lifetime collected count.
-    <View style={styles.wrap} pointerEvents="box-none">
+    <View style={[styles.wrap, narrow && styles.wrapNarrow]} pointerEvents="box-none">
       <MeterPill icon="sun" value={happiness} label={t.hud.happiness} showValue={false} pulse={metersPulse} />
       <MeterPill icon="bone" value={hunger} label={t.hud.hunger} showValue={false} pulse={metersPulse} />
       <CounterPill icon="paws" value={tokensCollected} label={t.hud.paws} pulse={metersPulse} />
@@ -308,6 +335,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: S.s,
+    // May give way to the logo rather than push past the screen edge.
+    flexShrink: 1,
+    minWidth: 0,
+  },
+  wrapNarrow: {
+    gap: S.xs,
+  },
+  // Below NARROW_SCREEN (see useNarrow). On the meter pill this has to
+  // reach the white copy of the row as well — rowNarrow — or the two
+  // stop landing on each other.
+  pillNarrow: {
+    paddingHorizontal: S.xs,
+    minWidth: 40,
+  },
+  rowNarrow: {
+    paddingHorizontal: S.xs,
+  },
+  togglePillNarrow: {
+    paddingHorizontal: S.s,
   },
   pill: {
     height: PILL_HEIGHT,
@@ -342,6 +388,7 @@ const styles = StyleSheet.create({
   pillSolid: {},
   counterPill: {
     minWidth: PILL_MIN_WIDTH,
+    flexShrink: 1,
   },
   togglePill: {
     paddingHorizontal: S.m,

@@ -1,6 +1,8 @@
 import { memo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { MapLibreMarker } from './MapLibreMarker';
+import { TYPE } from '../../constants/type';
+import { colors } from '../../constants/colors';
 
 // One-shot pickup celebration anchored at a collected paw/bone's spot:
 // a shockwave ring, the icon popping up + swelling as it fades, and a
@@ -61,9 +63,11 @@ function CollectBurstImpl({
             position: 'absolute',
             left: 0,
             top: 0,
-            fontSize: 14,
-            fontWeight: 800,
-            color: kind === 'paw' ? '#5fa92e' : '#d99327',
+            // The body size and the palette's own amber / green, not a
+            // 14 and two hexes of its own (UX-8.19).
+            fontSize: TYPE.body,
+            fontWeight: 700,
+            color: kind === 'paw' ? colors.green : colors.amber,
             textShadow: '0 1px 2px rgba(0,0,0,0.25)',
             whiteSpace: 'nowrap',
             animation: 'collect-burst-plus 0.8s ease-out forwards',

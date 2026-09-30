@@ -25,6 +25,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
@@ -40,10 +41,12 @@ import { readScreenCenter, useGameStore } from '../../stores/gameStore';
 import { SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame, PAPER_EDGE } from './HandDrawn';
+import { Field, FIELD_INPUT } from './AccountDoor';
 import { Icon } from './Icon';
 import { colors } from '../../constants/colors';
-import { INLINE_ICON } from '../../constants/sizing';
+import { INLINE_ICON, TOP_SHEET_MAX_H } from '../../constants/sizing';
 import { MOTION } from '../../utils/motion';
+import { playPop, playPopThen } from '../../utils/popOnTap';
 
 // Same figure PostModal / SpotModal / LostDogModal use, so all four sheets
 // open and close on one clock.
@@ -76,35 +79,10 @@ interface LostFlowModalProps {
 // the paper is a wrapper and the control sits inside it stripped of its
 // own chrome. Same recipe as the chat composer, which is white card and
 // a borderless input.
-const FIELD_PAPER: React.CSSProperties = {
-  position: 'relative',
-  background: SURFACE.fill,
-  borderRadius: R.chip,
-  // Transparent, and reserved: the ink is the HandDrawnFrame child, but
-  // the 2px still has to be here or the field loses 4px of height
-  // against the pills it sits above. Same reason MODAL_PILL_LIGHT keeps
-  // one it cannot show.
-  border: '2px solid transparent',
-  marginTop: 4,
-};
-
-// The control itself: no fill, no border, no focus ring. The paper
-// around it is the field.
-const FIELD_INPUT: React.CSSProperties = {
-  width: '100%',
-  boxSizing: 'border-box',
-  fontFamily: SYSTEM_FONT,
-  // 16px, not TYPE.body. Anything under 16 makes iOS Safari zoom the
-  // viewport on focus and never zoom cleanly back — the same off-scale
-  // value, for the same reason, as the chat composer's input.
-  fontSize: 16,
-  color: colors.black,
-  background: 'transparent',
-  border: 'none',
-  outline: 'none',
-  padding: `${S.s}px ${S.m}px`,
-  display: 'block',
-};
+//
+// The paper and the stripped control are AccountDoor's Field and
+// FIELD_INPUT, imported rather than copied: the two copies had already
+// drifted apart on padding (UX-10.7), and a field is a field.
 
 const LABEL_STYLE: React.CSSProperties = {
   fontFamily: SYSTEM_FONT,
@@ -113,18 +91,6 @@ const LABEL_STYLE: React.CSSProperties = {
   color: colors.grey,
   margin: `${S.m}px 0 0`,
 };
-
-// One field: the paper, its drawn edge, and whatever control is inside.
-// `seed` keeps a given field's wobble stable across re-renders — a line
-// that redraws itself on every keystroke is a line that twitches.
-function Field({ seed, children }: { seed: string; children: React.ReactNode }) {
-  return (
-    <div style={FIELD_PAPER}>
-      <HandDrawnFrame seed={seed} radius={R.chip} />
-      {children}
-    </div>
-  );
-}
 
 export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
   const t = useStrings();
@@ -355,12 +321,12 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             {s.pinHint}
           </div>
           <div style={{ display: 'flex', gap: S.s }}>
-            <button onClick={() => setStep('form')} style={MODAL_PILL_LIGHT}>
-              <HandDrawnFrame radius={R.button} />
-              {s.pinBack}
-            </button>
+            {/* Dark primary on the left, as on the form this step
+                returns to (D10). It used to sit on the right here and
+                on the left one step later. */}
             <button
-              onClick={() => {
+              onClick={(e) => {
+                playPop(e.currentTarget);
                 // The point under the crosshair, read now. The bounds
                 // midpoint and then GPS only if the map cannot answer —
                 // no map means nothing was aimed at anyway.
@@ -376,10 +342,17 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             >
               {s.pinConfirm}
             </button>
+            <button
+              onClick={(e) => playPopThen(e.currentTarget, () => setStep('form'))}
+              style={MODAL_PILL_LIGHT}
+            >
+              <HandDrawnFrame radius={R.button} />
+              {s.pinBack}
+            </button>
           </div>
         </div>
       </>,
-      document.body,
+      portalRoot(),
     );
   }
 
@@ -391,7 +364,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
       style={{
         position: 'fixed',
         inset: 0,
-        background: 'rgba(20,20,15,0.45)',
+        background: SURFACE.scrim,
         display: 'flex',
         alignItems: 'flex-start',
         // See the geometry note in HandDrawn.tsx: the sheet hangs under
@@ -411,7 +384,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
           borderRadius: R.card,
           width: '100%',
           maxWidth: 460,
-          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: TOP_SHEET_MAX_H as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
@@ -425,8 +398,10 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
           <div
             style={{
               fontFamily: SYSTEM_FONT,
-              fontSize: TYPE.title,
-              fontWeight: 800,
+              // A hero top sheet like About and Spot, so it leads at
+              // display (D16a, UX-11.4); it was the one at 17.
+              fontSize: TYPE.display,
+              fontWeight: 700,
               color: colors.black,
             }}
           >
@@ -453,7 +428,13 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                 {(['dog', 'cat'] as const).map((sp) => (
                   <button
                     key={sp}
-                    onClick={() => setSpecies(sp)}
+                    onClick={(e) => {
+                      playPop(e.currentTarget);
+                      setSpecies(sp);
+                    }}
+                    // Ink says it to the eye; this says it to a screen
+                    // reader (UX-14.12).
+                    aria-pressed={species === sp}
                     style={species === sp ? MODAL_PILL_DARK : MODAL_PILL_LIGHT}
                   >
                     {species === sp ? null : (
@@ -467,6 +448,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
               <div style={LABEL_STYLE}>{s.nameLabel}</div>
               <Field seed="name">
                 <input
+                  aria-label={s.nameLabel}
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder={s.namePlaceholder}
@@ -478,6 +460,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
               <div style={LABEL_STYLE}>{s.descLabel}</div>
               <Field seed="desc">
                 <textarea
+                  aria-label={s.descLabel}
                   value={desc}
                   onChange={(e) => setDesc(e.target.value)}
                   placeholder={s.descPlaceholder}
@@ -490,6 +473,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
               <div style={LABEL_STYLE}>{s.phoneLabel}</div>
               <Field seed="phone">
                 <input
+                  aria-label={s.phoneLabel}
                   value={phone}
                   onChange={(e) => setPhone(e.target.value)}
                   placeholder={s.phonePlaceholder}
@@ -505,11 +489,22 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                   the dark pill is the primary action and there is only
                   one of those on a sheet, at the bottom. */}
               <div style={{ display: 'flex', gap: S.s, marginTop: S.m }}>
-                <button onClick={() => fileInputRef.current?.click()} style={MODAL_PILL_LIGHT}>
+                <button
+                  onClick={(e) => {
+                    // No defer: the file picker only opens from inside
+                    // the tap itself.
+                    playPop(e.currentTarget);
+                    fileInputRef.current?.click();
+                  }}
+                  style={MODAL_PILL_LIGHT}
+                >
                   <HandDrawnFrame seed="photo-btn" radius={R.button} />
                   {photoDataUrl ? s.photoChange : s.photoLabel}
                 </button>
-                <button onClick={() => setStep('pin')} style={MODAL_PILL_LIGHT}>
+                <button
+                  onClick={(e) => playPopThen(e.currentTarget, () => setStep('pin'))}
+                  style={MODAL_PILL_LIGHT}
+                >
                   <HandDrawnFrame seed="pin-btn" radius={R.button} />
                   {/* The drawn pin, at the secondary size: this is not
                       the sheet's primary action, and INLINE_ICON.cta is
@@ -540,12 +535,14 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                     position: 'relative',
                     marginTop: S.s,
                     background: SURFACE.fill,
-                    borderRadius: R.chip,
+                    // R.button, not the card's R.chip: a thing nested in a
+                    // sheet turns a tighter corner than the sheet (radius.ts).
+                    borderRadius: R.button,
                     border: '2px solid transparent',
                     height: 148,
                   }}
                 >
-                  <HandDrawnFrame seed="photo-preview" radius={R.chip} />
+                  <HandDrawnFrame seed="photo-preview" radius={R.button} />
                   {/* A DIV WITH A BACKGROUND, not an <img> — the same
                       construction the pet card uses, and for a reason
                       worth writing down: an <img> is a replaced element,
@@ -561,7 +558,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                     style={{
                       position: 'absolute',
                       inset: PHOTO_INSET,
-                      borderRadius: Math.max(0, R.chip - PHOTO_INSET),
+                      borderRadius: Math.max(0, R.button - PHOTO_INSET),
                       backgroundImage: `url("${photoDataUrl}")`,
                       backgroundSize: 'cover',
                       backgroundPosition: 'center center',
@@ -607,7 +604,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                     fontFamily: SYSTEM_FONT,
                     fontSize: TYPE.small,
                     color: colors.red,
-                    fontWeight: 600,
+                    fontWeight: 700,
                   }}
                 >
                   {error}
@@ -645,7 +642,11 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
           style={{
             display: 'flex',
             gap: S.s,
-            padding: `${S.s}px ${S.l}px calc(${S.l}px + env(safe-area-inset-bottom, 0px))`,
+            // No bottom safe-area term (UX-12.13): the sheet hangs from
+            // the TOP and ends well above the home indicator, so that
+            // inset only padded an iPhone footer 34 px taller than the
+            // same footer anywhere else.
+            padding: `${S.s}px ${S.l}px ${S.l}px`,
             flexShrink: 0,
           }}
         >
@@ -653,17 +654,21 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             <>
               {result.channelPostUrl ? (
                 <button
-                  onClick={() =>
+                  onClick={(e) => {
+                    playPop(e.currentTarget);
                     openTelegramChat(
                       `https://t.me/share/url?url=${encodeURIComponent(result.channelPostUrl!)}`,
-                    )
-                  }
+                    );
+                  }}
                   style={MODAL_PILL_DARK}
                 >
                   {s.doneShare}
                 </button>
               ) : null}
-              <button onClick={onClose} style={MODAL_PILL_LIGHT}>
+              <button
+                onClick={(e) => playPopThen(e.currentTarget, onClose)}
+                style={MODAL_PILL_LIGHT}
+              >
                 <HandDrawnFrame radius={R.button} />
                 {s.doneClose}
               </button>
@@ -672,10 +677,22 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             <>
               {/* The shared disabled pill while it sends (UX-9.3), not the
                   dark one faded — that still read as pressable. */}
-              <button onClick={() => void submit()} disabled={sending} style={sending ? MODAL_PILL_DISABLED : MODAL_PILL_DARK}>
+              <button
+                onClick={(e) => {
+                  playPop(e.currentTarget);
+                  void submit();
+                }}
+                disabled={sending}
+                style={sending ? MODAL_PILL_DISABLED : MODAL_PILL_DARK}
+              >
                 {sending ? s.submitting : s.submit}
               </button>
-              <button onClick={close} disabled={sending} style={{ ...MODAL_PILL_LIGHT, opacity: sending ? 0.6 : 1 }}>
+              <button
+                // Disabled while sending, so this is only ever onClose.
+                onClick={(e) => playPopThen(e.currentTarget, onClose)}
+                disabled={sending}
+                style={{ ...MODAL_PILL_LIGHT, opacity: sending ? 0.6 : 1 }}
+              >
                 <HandDrawnFrame radius={R.button} />
                 {s.close}
               </button>
@@ -684,6 +701,6 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

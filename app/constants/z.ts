@@ -137,4 +137,16 @@ export const Z = {
   // Portaled to <body> (UX-7.7) so body-level sheets cannot paint over
   // it during the first second.
   SPLASH: 100,
+
+  // #portal-root's own z-index on DESKTOP only (public/index.html — CSS
+  // cannot import this, so the number is written there too). Above the
+  // column it hosts, every portal is one stacking context (UX-12.11), so
+  // the layer as a whole sits over #root's top tier (HUD_PILLS_OVERLAY)
+  // and the tiers above keep their order within it. That changes no
+  // pairing: RN-web's AppContainer is a View with z-index 0, so
+  // everything in #root is already ONE context at 0 against any portal,
+  // and a portal at 38 (the companion chip) beat #root's 54 on a phone
+  // before this layer existed too. On a phone the root has no style and
+  // this number does nothing. The splash stays on <body> (Splash.tsx).
+  PORTAL_ROOT: 55,
 } as const;

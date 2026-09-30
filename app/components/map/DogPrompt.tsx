@@ -22,7 +22,7 @@
 // earlier placements both lost to the card: mid-screen they covered
 // the photo the question was about, and at the bottom they fought the
 // deck for its ground. The buttons are sized to the strip — pill
-// height matching the nav HUD's, weight 800 — and they POP in with a
+// height matching the nav HUD's, weight 700 — and they POP in with a
 // stagger, so a question appearing reads as the interface stepping
 // forward rather than two pills quietly materialising.
 
@@ -32,26 +32,24 @@ import { TYPE } from '../../constants/type';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { INK, SURFACE } from '../../constants/surface';
 import { HandDrawnFrame } from '../ui/HandDrawn';
-
-// The nav HUD's ✕ chip, same number. See `close` below.
-const CLOSE_SIZE = 44;
+import { CLOSE_CHIP, CLOSE_GLYPH } from '../../constants/buttons';
 
 export interface PromptAction {
   label: string;
   onPress: () => void;
-  // Draw it as the house close button — the round ✕ chip — instead of a
+  // Draw it as the house close button — the round close chip — instead of a
   // pill with a sentence in it. For the way OUT of a question whose
   // answer is "not now": «ще подивлюсь» read as a second thing to
   // consider rather than as the dismissal it is, and it sat the same
   // size as the answer while being the opposite of one.
   //
-  // The chip is not invented here. It is the nav HUD's own ✕ (MapView,
-  // the distance-and-exit row) down to the number: 44 round, drawn ring,
-  // chip shadow, 20px glyph at weight 700. That row and this one are the
-  // same strip and never show together — a question replaces the running
-  // search's HUD — so the way out must not change shape between them.
-  // The modals' close is the same chip one step smaller (36, ×); this
-  // one takes the HUD size because it is pressed outdoors while walking.
+  // The chip is not invented here. It is the app's one close button
+  // (CLOSE_CHIP in constants/buttons.ts, D9) — the same circle the nav
+  // HUD's distance-and-exit row and every sheet use. That row and this
+  // one are the same strip and never show together — a question replaces
+  // the running search's HUD — so the way out must not change shape
+  // between them. Spread here rather than rendered as <CloseButton>
+  // because it has to take part in this row's pop-in and disabled state.
   close?: boolean;
   // The one that carries the conversation forward. Solid ink; everything
   // else is white with the same edge, so there is never a question about
@@ -118,30 +116,16 @@ export function DogPrompt({
             background: a.primary ? INK : SURFACE.fill,
             color: a.primary ? '#ffffff' : INK,
             fontFamily: SYSTEM_FONT,
-            // A circle of this size — pill radius on a square box — with
-            // the HUD's glyph and weight. Everything below that differs
-            // from the answer pills is the chip recipe, not a variation
-            // on the pill.
+            // The close chip wholesale — everything that differs from
+            // the answer pills is that recipe, not a variation on the
+            // pill.
             ...(a.close
-              ? {
-                  padding: 0,
-                  width: CLOSE_SIZE,
-                  height: CLOSE_SIZE,
-                  minHeight: CLOSE_SIZE,
-                  boxSizing: 'border-box' as const,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  borderRadius: R.pill,
-                  fontSize: 20,
-                  fontWeight: 700,
-                  boxShadow: SURFACE.chip,
-                }
+              ? CLOSE_CHIP
               : {
                   padding: '14px 22px',
                   borderRadius: R.button,
                   fontSize: TYPE.body,
-                  fontWeight: 800,
+                  fontWeight: 700,
                   // Past the 44px tap target — these are pressed
                   // outdoors, one-handed, usually while walking — and
                   // matched to the corner logo's height so the strip
@@ -164,7 +148,7 @@ export function DogPrompt({
           {a.primary ? null : (
             <HandDrawnFrame radius={a.close ? R.pill : R.button} />
           )}
-          {a.close ? '✕' : a.label}
+          {a.close ? CLOSE_GLYPH : a.label}
         </button>
       ))}
     </div>

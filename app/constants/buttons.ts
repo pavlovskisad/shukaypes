@@ -1,7 +1,7 @@
 // Shared button styles for modal CTAs. Two flavours (dark / light) +
 // a disabled state, all on the same tight pill recipe:
 //   - 10×18 padding, 13px text, 999 radius
-//   - subtle drop shadow
+//   - the chip shadow (SURFACE.chip), the same on dark and light
 //   - icon on the left at INLINE_ICON.cta sized to land ~1.6× the
 //     label height
 // The styles are flex-row friendly (flex:1) so two side-by-side
@@ -11,6 +11,18 @@
 //
 // One file so a future tweak (radius, colour, shadow) ships to
 // every modal in one diff.
+//
+// ORDER (D10): in a two-button row the dark primary is on the LEFT,
+// the light one on the right — on every sheet, and on every step of a
+// multi-step sheet. That was already the majority (SpotModal, PostModal,
+// the report form); the pet card and the report flow's pin step had it
+// the other way round, so the same thumb found the opposite answer
+// depending on which sheet was open.
+//
+// SEGMENTED TOGGLES (D11) reuse these two as well: selected is the
+// filled dark pill, unselected the light one. Deliberately no third
+// "segment" style — filled-for-selected is the pattern people already
+// read, and a toggle row never shares a line with an action row.
 
 import type { CSSProperties } from 'react';
 import { SYSTEM_FONT } from './fonts';
@@ -37,12 +49,25 @@ export const MODAL_PILL_BASE: CSSProperties = {
   fontSize: TYPE.small,
   fontWeight: 700,
   cursor: 'pointer',
-  whiteSpace: 'nowrap',
+  // WRAPS, centred, rather than nowrap (UX-12.5). Two flex:1 pills on a
+  // 320-375 px sheet have ~130 px each, and a nowrap label like
+  // "туди й назад" or "переслати оголошення" pushed its pill — and the
+  // one beside it — past the sheet's edge. minWidth 0 lets flex actually
+  // hand out the even split; a long label takes a second line inside
+  // its own pill instead.
+  whiteSpace: 'normal',
+  textAlign: 'center',
+  lineHeight: 1.15,
+  minWidth: 0,
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
   gap: S.s,
-  boxShadow: '0 4px 12px rgba(0,0,0,0.10)',
+  // The chip shadow, on dark and light alike (UX-9.14). The two used to
+  // be written out separately — 0.10 here, 0.22 on the light pill — so
+  // the white half of every action row cast twice the shadow of the
+  // dark half sat beside it.
+  boxShadow: SURFACE.chip,
 };
 
 export const MODAL_PILL_DARK: CSSProperties = {
@@ -71,7 +96,6 @@ export const MODAL_PILL_LIGHT: CSSProperties = {
   // carries an ink-on-ink border it cannot show.
   border: '2px solid transparent',
   position: 'relative',
-  boxShadow: '0 4px 12px rgba(0,0,0,0.22)',
 };
 
 // There is no third colour. A blue pill used to be the "primary" for
@@ -96,10 +120,13 @@ export const MODAL_PILL_DISABLED: CSSProperties = {
 //
 // A separate recipe from the modal pills on purpose: these sit on the
 // MAP rather than inside a card, so they are white with a slightly
-// stronger shadow to lift off the basemap, and a touch quieter in
-// weight because they are ways OUT of a state rather than the primary
-// action in it. `pointerEvents: auto` because the row they live in is
-// pass-through, so the map underneath stays draggable between them.
+// stronger shadow to lift off the basemap, and white rather than ink
+// because they are ways OUT of a state rather than the primary action
+// in it. (They used to be quieter in weight too, at 600, but with only
+// Annex Regular shipped 600 and 700 fake to the same stroke; see the
+// weight note in constants/type.ts.) `pointerEvents: auto` because the
+// row they live in is pass-through, so the map underneath stays
+// draggable between them.
 export const HUD_OVERLAY_PILL: CSSProperties = {
   pointerEvents: 'auto',
   cursor: 'pointer',
@@ -109,7 +136,7 @@ export const HUD_OVERLAY_PILL: CSSProperties = {
   borderRadius: R.pill,
   fontFamily: SYSTEM_FONT,
   fontSize: TYPE.small,
-  fontWeight: 600,
+  fontWeight: 700,
   boxShadow: SURFACE.chip,
   // Drawn, like the modal pills — see MODAL_PILL_LIGHT.
   border: '2px solid transparent',
@@ -123,4 +150,91 @@ export const HUD_OVERLAY_PILL: CSSProperties = {
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
+};
+
+// THE CLOSE BUTTON (D9). One shape for every "close this" in the app:
+// a 44px white circle with the drawn ink ring and a × in Annex, on the
+// chip shadow. It used to come in five-plus versions — a 36px circle
+// with a × on the sheets, a 44px one with ✕ (a glyph Annex doesn't
+// have, so it fell back to whatever the phone had) on the nav HUD, a
+// 52px rounded square on the dog's answers, a text link on the player
+// card — and a way out that changes shape between screens is one people
+// have to look for.
+//
+// THE GLYPH IS × AND NOT <Icon name="close">, although D9 picked the
+// icon. `close.svg` is not a cross: it is the radial menu's "walk
+// somewhere CLOSE BY" pin (a dotted line into a map pin, the short twin
+// of `far.svg`). Checked by rendering it, not by its name. Shipping it
+// here would put a map pin where every close button is. × is in
+// Annex's own character set (checked against the font's cmap; ✕ is
+// not), so it renders in the brand face everywhere. If the icon set
+// gains a real cross, swap it in inside CloseButton and DogPrompt.
+//
+// 44 rather than the sheets' old 36 because that is the touch floor,
+// and the nav HUD's copy is pressed outdoors while walking. The
+// component is `components/ui/CloseButton.tsx`; DogPrompt spreads the
+// recipe directly because its answers carry their own pop-in and
+// disabled handling.
+export const CLOSE_SIZE = 44;
+export const CLOSE_GLYPH = '×';
+// Distance from a sheet's top and right edges to the button. The
+// sheets had drifted to two pairs (12/12 and 14/18); one number now.
+export const CLOSE_INSET = 12;
+
+// Where a fullscreen "see all" list starts its content (the boards, the
+// nearby pets, a spot category): just under the floating close, which
+// ends at CLOSE_INSET + CLOSE_SIZE (56), with S.m of air. Add the top
+// safe-area inset at the call site. The three lists sat at 60, 66 and
+// 72, so the same kind of sheet started a different distance down each
+// time (UX-12.18). With S.xl side and bottom padding and an S.xl gap
+// between cards, on all three.
+export const FULLSCREEN_LIST_TOP = CLOSE_INSET + CLOSE_SIZE + S.m;
+
+export const CLOSE_CHIP: CSSProperties = {
+  appearance: 'none',
+  width: CLOSE_SIZE,
+  height: CLOSE_SIZE,
+  minHeight: CLOSE_SIZE,
+  flexShrink: 0,
+  boxSizing: 'border-box',
+  padding: 0,
+  borderRadius: R.pill,
+  // Drawn, like MODAL_PILL_LIGHT: the call site puts a HandDrawnFrame
+  // inside, and the transparent 2px keeps the box the same size either
+  // way.
+  border: '2px solid transparent',
+  position: 'relative',
+  background: SURFACE.fill,
+  color: INK,
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  cursor: 'pointer',
+  boxShadow: SURFACE.chip,
+  // The glyph: Annex named outright (a <button> takes the UA font
+  // otherwise), at the size the sheets' × already had.
+  fontFamily: SYSTEM_FONT,
+  fontSize: TYPE.display,
+  fontWeight: 400,
+  lineHeight: 1,
+};
+
+// A whole row or card that is one tap target — the rows of the "see all"
+// sheets (UX-14.11). A real <button>, so a keyboard reaches it and Enter
+// and Space press it, with every piece of the UA's button chrome taken
+// off: the card inside draws itself, and the button is only the hit box
+// and the name. Put an aria-label on it; the card's contents are too
+// much to read out as a name.
+export const ROW_BUTTON: CSSProperties = {
+  appearance: 'none',
+  display: 'block',
+  width: '100%',
+  margin: 0,
+  padding: 0,
+  border: 'none',
+  background: 'none',
+  font: 'inherit',
+  color: 'inherit',
+  textAlign: 'inherit',
+  cursor: 'pointer',
 };
