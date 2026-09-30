@@ -4,6 +4,7 @@ import { View, Text, StyleSheet, ScrollView } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
+import { useAccessStore } from '../../stores/accessStore';
 import type { Spot, SpotCategory } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { S } from '../../constants/spacing';
@@ -125,6 +126,14 @@ export default function SpotsScreen() {
 
   const onPickSpot = useCallback(
     (s: Spot) => {
+      // Leave the cold-start gate first (door open only), or answering
+      // its ring on arrival runs the clear-slate reducer and drops the
+      // selection. Same rule as leaveGateForAction in chat.tsx.
+      const g = useGameStore.getState();
+      if (g.appMode === 'gate' && useAccessStore.getState().door === 'open') {
+        g.setAppMode('explore');
+        g.setMenuOpen(false);
+      }
       setSelectedSpot(s.id);
       router.push('/');
     },

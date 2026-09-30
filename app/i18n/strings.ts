@@ -351,6 +351,15 @@ export interface AppStrings {
     // Same, for a walk that also passes landmarks worth stopping at.
     walkingToVia: (name: string, stops: number) => string;
     cantReachWalk: () => string;
+    // The chat call itself failed (offline, 5xx). Not cantReachWalk:
+    // most messages have nothing to do with a walk, and blaming the route
+    // for a dropped connection sends the user looking in the wrong place.
+    cantReachDog: string;
+    // A start_quest action the server refused, or that never got there.
+    // Said instead of "starting search…", and the map is not opened.
+    couldntStartSearch: string;
+    // Under the boot failure bubble: runs the history load again.
+    retry: string;
     inputPlaceholder: string;
   };
   // Shown by the connection banner when calls stop getting through.
@@ -953,6 +962,9 @@ const uk: AppStrings = {
     // bubble. The detail belongs in the crash report, not in the mouth of
     // a cartoon dog talking to somebody looking for a lost pet.
     cantReachWalk: () => '*нюх-нюх* — зараз не дістаємось до маршруту, спробуймо ще раз',
+    cantReachDog: '*нюх-нюх* — не чую тебе, звʼязок загубився. спробуй ще раз',
+    couldntStartSearch: 'не вийшло почати пошук — спробуй ще раз',
+    retry: 'ще раз',
     inputPlaceholder: 'скажи що хочеш…',
   },
   connection: {
@@ -1522,6 +1534,9 @@ const en: AppStrings = {
     walkingToVia: (name, stops) =>
       `walking to ${name} — ${stops} ${stops === 1 ? 'stop' : 'stops'} on the way`,
     cantReachWalk: () => "*sniff sniff* — can't reach the walk right now, let's try again",
+    cantReachDog: "*sniff sniff* — can't hear you, the connection dropped. try again",
+    couldntStartSearch: "couldn't start the search — try again",
+    retry: 'try again',
     inputPlaceholder: 'say anything…',
   },
   connection: {
