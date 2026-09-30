@@ -2,6 +2,7 @@ import { memo, useEffect, useRef, useState } from 'react';
 import { petPhotoAt } from '../../utils/petPhoto';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { colors } from '../../constants/colors';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
@@ -155,7 +156,9 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
                 height: 54,
                 marginLeft: -27,
                 borderRadius: R.pill,
-                border: `1.5px solid ${halo.ring}`,
+                // 2px, not 1.5: Chrome floors border widths to whole px,
+                // so the ripple rendered at 1 (UX-8.14).
+                border: `2px solid ${halo.ring}`,
                 animation: `sos-pulse ${BEEP_DURATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1) forwards`,
                 pointerEvents: 'none',
               }}
@@ -169,7 +172,7 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
                 height: 54,
                 marginLeft: -27,
                 borderRadius: R.pill,
-                border: `1.5px solid ${halo.ring}`,
+                border: `2px solid ${halo.ring}`,
                 animation: `sos-pulse ${BEEP_DURATION_MS}ms cubic-bezier(0.22, 1, 0.36, 1) ${BEEP_DURATION_MS / 2}ms forwards`,
                 pointerEvents: 'none',
                 opacity: 0,
@@ -239,9 +242,11 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
         </div>
         <div
           style={{
-            width: 1.5,
+            // The stem is a div, not a border, but it snaps to a
+            // whole pixel all the same — 2 on the grey token (UX-8.14).
+            width: 2,
             height: selected ? 8 : 5,
-            background: '#aaa',
+            background: colors.greyLight,
             transition: 'height 320ms ease-out',
           }}
         />

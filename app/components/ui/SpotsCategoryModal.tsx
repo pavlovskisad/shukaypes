@@ -10,13 +10,15 @@
 
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
+import { S } from '../../constants/spacing';
 import type { Spot } from '../../services/places';
 import { Z } from '../../constants/z';
 import { playPopThen } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { SpotCardView } from './SpotCardStack';
 import { CloseButton } from './CloseButton';
-import { CLOSE_INSET } from '../../constants/buttons';
+import { CLOSE_INSET, FULLSCREEN_LIST_TOP } from '../../constants/buttons';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
 
@@ -88,12 +90,13 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
             // Top padding leaves room for the floating X +
             // safe-area inset so the first card never hides
             // behind the close button.
-            padding: '20px',
-            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 72px)',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+            padding: S.xl,
+            // One start line for every fullscreen list (UX-12.18).
+            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${FULLSCREEN_LIST_TOP}px)`,
+            paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.xl}px)`,
             display: 'flex',
             flexDirection: 'column',
-            gap: '20px',
+            gap: S.xl,
           } as React.CSSProperties
         }
       >
@@ -126,6 +129,6 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
         }}
       />
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

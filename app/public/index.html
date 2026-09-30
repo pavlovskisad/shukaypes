@@ -201,6 +201,29 @@
           margin: 0 auto;
           box-shadow: 0 0 60px rgba(0, 0, 0, 0.4);
         }
+        /* The portal layer, laid over the column (D17a, UX-12.11; see
+           utils/portalRoot.ts). The transform makes it the containing
+           block for its position:fixed children, so a sheet's
+           "fixed, inset 0" scrim and a chip docked at "right: 1%" land
+           on the column instead of the window's edges.
+           It is also, necessarily, ONE stacking context: 55 puts the
+           whole layer above #root's highest tier (HUD_PILLS_OVERLAY, 54)
+           and keeps every portal's own order inside it — Z.PORTAL_ROOT
+           in constants/z.ts, keep the two in step. Hit-transparent
+           itself; only what is portaled into it takes taps. */
+        #portal-root {
+          position: fixed;
+          top: 0;
+          bottom: 0;
+          left: 50%;
+          width: 430px;
+          transform: translateX(-50%);
+          z-index: 55;
+          pointer-events: none;
+        }
+        #portal-root > * {
+          pointer-events: auto;
+        }
       }
 
       /* The chrome's bubble-in / bubble-out, used by the HUD pills, the
@@ -389,6 +412,9 @@
       You need to enable JavaScript to run this app.
     </noscript>
     <div id="root"></div>
+    <!-- Where sheets, toasts and chips are portaled (utils/portalRoot.ts).
+         Unstyled on a phone; the desktop column's overlay above 900px. -->
+    <div id="portal-root"></div>
     <!-- Removed by the root layout the moment React has mounted; see the
          #splash note in the stylesheet above. Both languages, because the
          user's choice lives in localStorage and nothing here can read it. -->

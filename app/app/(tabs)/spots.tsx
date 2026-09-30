@@ -19,6 +19,9 @@ import { useHint } from '../../hooks/useHint';
 import type { LoreFavourite } from '../../services/api';
 import { CardStack } from '../../components/ui/CardStack';
 import { LoreFavouriteCard } from '../../components/ui/LoreFavouriteCard';
+import { useVisibleHeight } from '../../hooks/useVisibleHeight';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
+import { safeAreaTopPx } from '../../utils/safeArea';
 
 // Fixed display order — matches the FILTERS chip order from the
 // previous tab layout so users coming from older sessions land on
@@ -281,10 +284,24 @@ export default function SpotsScreen() {
   }, [userPos, syncSpots]);
   const favouritesPending = !favouritesLoaded || favRetrying;
 
+  // THE TASKS TAB'S LAYOUT, ported (UX-12.8). Each card is a screenful
+  // tall and centres its own content, and the tail pad is exactly the
+  // strip the tab bar covers — see pageH / tailPad in tasks.tsx for the
+  // long version. This tab kept the older recipe (cards hung from a
+  // 32 px snap line with a 60 px gap and a `100vh - 200px` bottom pad),
+  // so the same flick landed a card in a different place on each tab.
+  const visibleH = useVisibleHeight();
+  const tabClearance = useTabBarClearance();
+  const pageH = Math.max(360, visibleH - safeAreaTopPx() - tabClearance);
+  const card = [styles.card, { minHeight: pageH }];
+
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
-      <ScrollView contentContainerStyle={styles.content} style={styles.scroller}>
-        <View nativeID="snap-card-spots-favourites" style={styles.card}>
+      <ScrollView
+        contentContainerStyle={[styles.content, { paddingBottom: tabClearance }]}
+        style={styles.scroller}
+      >
+        <View nativeID="snap-card-spots-favourites" style={card}>
           <Text style={styles.cardTitle}>{t.spots.favourites}</Text>
           {/* Skeleton while the list loads (it used to show nothing, then
               pop in), the retry line when it failed, and only then the
@@ -313,7 +330,7 @@ export default function SpotsScreen() {
 
         {isLoading
           ? CATEGORY_ORDER.map((cat) => (
-              <View key={cat} nativeID={`snap-card-spots-${cat}`} style={styles.card}>
+              <View key={cat} nativeID={`snap-card-spots-${cat}`} style={card}>
                 <Text style={styles.cardTitle}>{cardTitle(t, cat)}</Text>
                 <SpotCardStackSkeleton />
               </View>
@@ -321,7 +338,7 @@ export default function SpotsScreen() {
           : null}
 
         {isFailed ? (
-          <View nativeID="snap-card-spots-empty" style={styles.card}>
+          <View nativeID="snap-card-spots-empty" style={card}>
             <Text style={styles.cardTitle}>{t.spots.nearbySpots}</Text>
             <Pressable onPress={retrySpots} accessibilityRole="button">
               <Text style={styles.placeholder}>{t.connection.loadFailed}</Text>
@@ -330,7 +347,7 @@ export default function SpotsScreen() {
         ) : null}
 
         {isEmpty ? (
-          <View nativeID="snap-card-spots-empty" style={styles.card}>
+          <View nativeID="snap-card-spots-empty" style={card}>
             <Text style={styles.cardTitle}>{t.spots.nearbySpots}</Text>
             <Text style={styles.placeholder}>
               {userPos ? t.spots.emptyAll : t.hud.locating}
@@ -344,7 +361,7 @@ export default function SpotsScreen() {
               if (list.length === 0) return null;
               const showSwipe = cat === firstSwipeCat && swipeHint.visible;
               return (
-                <View key={cat} nativeID={`snap-card-spots-${cat}`} style={styles.card}>
+                <View key={cat} nativeID={`snap-card-spots-${cat}`} style={card}>
                   <Text style={styles.cardTitle}>{cardTitle(t, cat)}</Text>
                   <View style={styles.deckWrap}>
                     <SpotCardStack
@@ -375,32 +392,25 @@ export default function SpotsScreen() {
 
 const styles = StyleSheet.create({
   root: { flex: 1, backgroundColor: '#ffffff' },
-  // Same snap-scroll setup as the tasks tab — see tasks.tsx for the
-  // longer explanation of why scrollPaddingTop has to match the
-  // contentContainer's paddingTop.
+  // Same snap-scroll setup as the tasks tab — see `scroller` there.
+  // No scroll padding: a card is a screenful and centres itself, so any
+  // padding would push that centre off by the same amount on every card.
   scroller: {
     flex: 1,
     scrollSnapType: 'y mandatory',
-    // 60 → 32 to lift the snapped card higher and free up bottom
-    // room for the next card's title to peek above the tab bar.
-    // See tasks.tsx for the longer reasoning.
-    scrollPaddingTop: 32,
+    scrollPaddingTop: 0,
   } as unknown as object,
+  // No top padding and no gap — the separation between sections is the
+  // empty part of each full-height card. The bottom pad is set inline
+  // (the tab bar's strip), as on the tasks tab.
   content: {
     paddingHorizontal: S.l,
-    paddingTop: S.xxxl,
-    // Generous bottom padding so any last category card can
-    // snap to the top, even if its content is short. Without
-    // this, a small last card (e.g. a category with only 2
-    // spots) couldn't scroll up to the snap position because
-    // the page didn't have enough room below it.
-    paddingBottom: 'calc(100vh - 200px)' as unknown as number,
-    gap: 60,
   },
-  // Snap block — no white card frame. Title + category stack
-  // sit straight on the page bg.
+  // Snap block — no white card frame. Title + category stack sit
+  // straight on the page bg, centred in a screenful (minHeight inline).
   card: {
     paddingHorizontal: S.xs,
+    justifyContent: 'center',
     scrollSnapAlign: 'start',
     scrollSnapStop: 'always',
   } as unknown as object,

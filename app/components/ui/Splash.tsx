@@ -31,6 +31,12 @@ export function Splash() {
   // whatever the z-index — so the reset paper showed over the logo for
   // the whole first second (UX-7.7). Fixed, so it covers the screen
   // rather than the desktop column.
+  //
+  // The one portal that does NOT go to #portal-root (UX-12.11): on
+  // desktop that layer is the 430 px column, and the splash has to
+  // cover the whole window as index.html's #splash does, or the
+  // hand-off from one to the other flashes the dark wings in a second
+  // early. Z.SPLASH (100) still clears the portal layer (55) from here.
   return createPortal(
     <View
       style={[

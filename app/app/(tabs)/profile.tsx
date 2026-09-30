@@ -16,12 +16,12 @@ import { api, type TerritoryRanking } from '../../services/api';
 import { useAccessStore } from '../../stores/accessStore';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import { SCENE_SKY, type SceneMode } from '../../components/profile/ProfileSceneBackdrop';
-import { HERO, CHIP, TAB_BAR_STRIP } from '../../constants/sizing';
+import { HERO, CHIP, HUD_TOP, TAB_BAR_STRIP } from '../../constants/sizing';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 import { MeterPill, CounterPill } from '../../components/ui/StatusBar';
 import { useStrings } from '../../i18n/useStrings';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
-import { CardStack, CARD_W } from '../../components/ui/CardStack';
+import { CardStack, DECK_OFFSET } from '../../components/ui/CardStack';
 import { HandDrawnBar, HandDrawnFrame } from '../../components/ui/HandDrawn';
 import { AccountEditSheet } from '../../components/ui/AccountEditSheet';
 import { LangPill, pillStyles } from '../../components/ui/LangPill';
@@ -433,7 +433,9 @@ export default function ProfileScreen() {
             // Top edge of the stat deck. The scene keeps the dog above
             // it, so a short viewport can never park the dog behind a
             // card — see groundInset in ProfileDogScene.
-            dogFloorInset={deckBottom + DECK_CARD_H}
+            // DECK_OFFSET: the deck's own padding and margin sit
+            // between deckBottom and the cards (UX-12.10).
+            dogFloorInset={deckBottom + DECK_OFFSET + DECK_CARD_H}
           />
         ) : null}
       </View>
@@ -553,10 +555,20 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'flex-start',
     paddingHorizontal: S.m,
-    paddingTop: S.m,
+    // The map's pill line, not a number of its own: the same three
+    // pills sat ~18 px higher here and jumped on every tab switch
+    // (UX-12.3).
+    paddingTop: HUD_TOP,
+    gap: S.s,
   },
   hudPills: {
     flexDirection: 'row',
+    // At 320 px the three meters and the two chips on the right do not
+    // fit one line; the meters wrap under each other rather than run
+    // under the language pill (UX-12.2).
+    flexWrap: 'wrap',
+    flexShrink: 1,
+    minWidth: 0,
     gap: S.s,
   },
   // Just the row. The pill shape itself is pillStyles in LangPill.tsx,
@@ -605,7 +617,9 @@ const styles = StyleSheet.create({
   // cardHeight prop (150 on profile). Tight paddings since
   // each card has a title + 3 short lines.
   sectionCard: {
-    width: CARD_W,
+    // The slot's width, not CARD_W: the deck narrows on a phone under
+    // ~370 px (UX-12.15) and a fixed 320 would hang out of it.
+    width: '100%',
     height: 150,
     backgroundColor: '#ffffff',
     borderRadius: R.card,

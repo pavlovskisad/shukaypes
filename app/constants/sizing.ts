@@ -125,3 +125,43 @@ export const TAB_BAR_STRIP = 82;
 // because it sets the HUD row's height, which the off-screen companion
 // chip has to stay below (MapView).
 export const HUD_ICON_SIZE = 59;
+
+// Where a HUD pill's top edge sits: the HUD row's S.xxl top padding plus
+// half the difference between the logo and a pill, since the row centres
+// the pills on the logo's midline. The profile tab has no logo but draws
+// the same meter pills, and it used to hang them at S.m — so the three
+// pills jumped ~18 px every time you switched tab (UX-12.3). Both read
+// this now. 24 is S.xxl, spelled out so this file needs no import.
+export const HUD_TOP = 24 + (HUD_ICON_SIZE - CHIP.height) / 2;
+
+// SCREEN-WIDTH BREAKPOINTS. The layout is drawn for 375-430 px phones,
+// and a handful of rows (the HUD, the standing rows, the player card)
+// only fit that because nothing smaller was ever looked at. Below these
+// widths those rows switch to a compact variant. Read against the
+// WINDOW, which on a phone is the screen; on desktop the app is a 430
+// column and the window is wider, so a desktop never goes compact.
+//   narrow  — 320-359: iPhone SE 1st gen, small Androids.
+//   compact — under 400: every common phone in portrait but the Max/Plus.
+export const NARROW_SCREEN = 360;
+export const COMPACT_SCREEN = 400;
+
+// HOW TALL A TOP SHEET MAY GROW (SpotModal, About, the post reader, the
+// report form): the visible screen less the floating dashboard's 118 px
+// and both safe-area insets, so the footer pills stay above the tab bar
+// and the body scrolls instead.
+//
+// dvh, not vh (UX-12.4). On iOS Safari 100vh is the screen with the
+// toolbars HIDDEN, so with them showing the sheet ran ~80 px past the
+// bottom of what you can see and its action row sat behind the toolbar.
+// 100dvh follows the toolbars. One string, four sheets, so the next fix
+// lands everywhere at once.
+export const TOP_SHEET_MAX_H =
+  'calc(100dvh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))';
+
+// Transparent padding around a map pickup (paw, bone) — the tap target,
+// not the art. The art is 22-24 px, and the collect loop is the one tap
+// a walker makes over and over, on the move, one-handed; a 46-48 px
+// target is what the walk stops already get from their own 12
+// (STOP_DOT_HIT_PAD in WalkStops) (UX-8.12). The pickup markers are
+// centre-anchored, so even padding needs no offset back.
+export const PICKUP_HIT_PAD = 12;

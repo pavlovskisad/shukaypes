@@ -1,6 +1,7 @@
 import { memo } from 'react';
 import type { LatLng } from '@shukajpes/shared';
 import { MapLibreMarker } from './MapLibreMarker';
+import { PICKUP_HIT_PAD } from '../../constants/sizing';
 
 // Deterministic 0..1 phase from the item's position so bones bob on their
 // own offset rather than all together. Slightly longer cycle than paws so
@@ -28,8 +29,9 @@ function FoodMarkerImpl({
         role="button"
         tabIndex={0}
         aria-label="bone"
-        style={{ position: 'relative', width: 24, height: 24, cursor: 'pointer', userSelect: 'none' }}
+        style={{ padding: PICKUP_HIT_PAD, cursor: 'pointer', userSelect: 'none' }}
       >
+        <div style={{ position: 'relative', width: 24, height: 24 }}>
         <div
           aria-hidden
           style={{
@@ -58,6 +60,7 @@ function FoodMarkerImpl({
             willChange: 'transform',
           }}
         />
+        </div>
       </div>
     </MapLibreMarker>
   );

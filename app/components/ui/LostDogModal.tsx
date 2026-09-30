@@ -1,6 +1,7 @@
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react';
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { colors } from '../../constants/colors';
@@ -580,6 +581,6 @@ export function LostDogModal({
         `}</style>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

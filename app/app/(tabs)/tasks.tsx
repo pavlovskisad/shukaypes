@@ -27,11 +27,12 @@ import type { LatLng } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColor';
-import { BoardRow } from '../../components/ui/BoardRow';
+import { BoardRow, useBoardRowSize } from '../../components/ui/BoardRow';
 import { useVisibleHeight } from '../../hooks/useVisibleHeight';
 import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 import { safeAreaTopPx } from '../../utils/safeArea';
 import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
+import { FullscreenListModal } from '../../components/ui/FullscreenListModal';
 import { Glyph } from '../../components/ui/Glyph';
 import { useHint } from '../../hooks/useHint';
 import { useAccessStore } from '../../stores/accessStore';
@@ -191,6 +192,7 @@ export default function TasksScreen() {
   const setSearchIntent = useGameStore((s) => s.setSearchIntent);
   const currentScreen = useGameStore((s) => s.currentScreen);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
+  const [historyAllOpen, setHistoryAllOpen] = useState(false);
   // The territory standing. Null until the first fetch lands; until
   // then the card shows its title over skeleton rows, and if the fetch
   // failed, a retry line (boardFailed) — it used to not render at all,
@@ -405,6 +407,7 @@ export default function TasksScreen() {
         setSeeAllDogsOpen(false);
         setBoardAll(null);
         setHappyAll(null);
+        setHistoryAllOpen(false);
       },
       [],
     ),
@@ -514,6 +517,40 @@ export default function TasksScreen() {
   // the bar. The old layout padded the bottom by `calc(100vh - 200px)`
   // for the same reason; full-height cards need only the difference.
   const tailPad = tabClearance;
+  // The happiness index stands where a standing row's silhouette would,
+  // at the same width — which narrows on a small phone (UX-12.6).
+  const boardRowSize = useBoardRowSize();
+  // Past searches shown on the lost-pets card. That card already holds
+  // the deck, so on a short phone there is room for one row under it
+  // before the card outgrows the screen; three otherwise.
+  const historyCardRows = pageH < 600 ? 1 : 3;
+  // One past search. Drawn on the card and, all of them, in the
+  // fullscreen list behind «показати всі» (UX-12.7).
+  const renderHistoryRow = (q: QuestHistoryRow, i: number) => (
+    <View
+      key={q.id}
+      style={[styles.historyRow, i > 0 && styles.taskDivider]}
+    >
+      <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
+      <View style={styles.historyBody}>
+        <Text style={styles.historyName} numberOfLines={1}>
+          {q.dogName ?? t.tasks.unknownPet}
+        </Text>
+        <Text style={styles.historyMeta}>
+          {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
+          {relativeWhen(q.endedAt, t.time.ago)}
+          {q.status === 'completed' ? ` · ${t.tasks.questPoints(q.rewardPoints)}` : ''}
+        </Text>
+      </View>
+      {q.status === 'completed' ? (
+        <Text style={styles.historyTickDone}>
+          <Glyph name="check" />
+        </Text>
+      ) : (
+        <Text style={styles.historyTickAbandon}>×</Text>
+      )}
+    </View>
+  );
 
   const taskRows = dailyTasks.tasks;
   const doneCount = taskRows.filter((row) => row.done).length;
@@ -776,7 +813,7 @@ export default function TasksScreen() {
                 you
                 avatarUrl={myAvatarUrl}
                 trailing={
-                  <Text style={[styles.happyIndex, styles.happyIndexYou]}>
+                  <Text style={[styles.happyIndex, { width: boardRowSize.trailing }, styles.happyIndexYou]}>
                     {happy.you.index === null ? t.profile.unranked : String(happy.you.index)}
                   </Text>
                 }
@@ -799,7 +836,7 @@ export default function TasksScreen() {
                     avatarUrl={row.avatarUrl}
                     owner={isYou ? null : row.owner}
                     trailing={
-                      <Text style={[styles.happyIndex, isYou && styles.happyIndexYou]}>{String(row.index)}</Text>
+                      <Text style={[styles.happyIndex, { width: boardRowSize.trailing }, isYou && styles.happyIndexYou]}>{String(row.index)}</Text>
                     }
                   />
                 );
@@ -872,31 +909,20 @@ export default function TasksScreen() {
                   <Text style={styles.historyTitle}>{t.tasks.pastSearches}</Text>
                   <Text style={styles.cardHeaderCount}>{history.length}</Text>
                 </View>
-                {history.map((q, i) => (
-                  <View
-                    key={q.id}
-                    style={[styles.historyRow, i > 0 && styles.taskDivider]}
-                  >
-                    <Text style={styles.icon}>{q.dogEmoji ?? '🐶'}</Text>
-                    <View style={styles.historyBody}>
-                      <Text style={styles.historyName} numberOfLines={1}>
-                        {q.dogName ?? t.tasks.unknownPet}
+                {history.slice(0, historyCardRows).map(renderHistoryRow)}
+                {/* A snap-card taller than the screen has a tail you
+                    cannot reach (see `scroller`), and twenty searches
+                    made this one exactly that. The latest few here,
+                    the rest a tap away (UX-12.7). */}
+                {history.length > historyCardRows ? (
+                  <Pressable onPress={() => setHistoryAllOpen(true)} onPressIn={popPressableEvent}>
+                    {({ pressed }) => (
+                      <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
+                        {t.tasks.historySeeAll}
                       </Text>
-                      <Text style={styles.historyMeta}>
-                        {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
-                        {relativeWhen(q.endedAt, t.time.ago)}
-                        {q.status === 'completed' ? ` · ${t.tasks.questPoints(q.rewardPoints)}` : ''}
-                      </Text>
-                    </View>
-                    {q.status === 'completed' ? (
-                      <Text style={styles.historyTickDone}>
-                        <Glyph name="check" />
-                      </Text>
-                    ) : (
-                      <Text style={styles.historyTickAbandon}>×</Text>
                     )}
-                  </View>
-                ))}
+                  </Pressable>
+                ) : null}
               </View>
             ) : null}
           </View>
@@ -1047,6 +1073,13 @@ export default function TasksScreen() {
         youRank={happy?.you.rank ?? null}
         onClose={() => setHappyAll(null)}
       />
+      <FullscreenListModal
+        open={historyAllOpen}
+        title={t.tasks.pastSearches}
+        onClose={() => setHistoryAllOpen(false)}
+      >
+        {history.map(renderHistoryRow)}
+      </FullscreenListModal>
     </SafeAreaView>
   );
 }
@@ -1251,10 +1284,9 @@ const styles = StyleSheet.create({
   boardSeeAllPressed: { opacity: 0.55 },
   boardRowPressed: { opacity: 0.6 },
   // The index where the silhouette would be: one big number, the
-  // same width as the 92px thumbnail so the rows line up with the
-  // standing above.
+  // same width as the thumbnail (useBoardRowSize, set inline) so the
+  // rows line up with the standing above.
   happyIndex: {
-    width: 92,
     textAlign: 'center',
     fontFamily: SYSTEM_FONT,
     fontSize: TYPE.display,

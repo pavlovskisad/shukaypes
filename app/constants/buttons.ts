@@ -49,7 +49,16 @@ export const MODAL_PILL_BASE: CSSProperties = {
   fontSize: TYPE.small,
   fontWeight: 700,
   cursor: 'pointer',
-  whiteSpace: 'nowrap',
+  // WRAPS, centred, rather than nowrap (UX-12.5). Two flex:1 pills on a
+  // 320-375 px sheet have ~130 px each, and a nowrap label like
+  // "туди й назад" or "переслати оголошення" pushed its pill — and the
+  // one beside it — past the sheet's edge. minWidth 0 lets flex actually
+  // hand out the even split; a long label takes a second line inside
+  // its own pill instead.
+  whiteSpace: 'normal',
+  textAlign: 'center',
+  lineHeight: 1.15,
+  minWidth: 0,
   display: 'inline-flex',
   alignItems: 'center',
   justifyContent: 'center',
@@ -171,6 +180,15 @@ export const CLOSE_GLYPH = '×';
 // Distance from a sheet's top and right edges to the button. The
 // sheets had drifted to two pairs (12/12 and 14/18); one number now.
 export const CLOSE_INSET = 12;
+
+// Where a fullscreen "see all" list starts its content (the boards, the
+// nearby pets, a spot category): just under the floating close, which
+// ends at CLOSE_INSET + CLOSE_SIZE (56), with S.m of air. Add the top
+// safe-area inset at the call site. The three lists sat at 60, 66 and
+// 72, so the same kind of sheet started a different distance down each
+// time (UX-12.18). With S.xl side and bottom padding and an S.xl gap
+// between cards, on all three.
+export const FULLSCREEN_LIST_TOP = CLOSE_INSET + CLOSE_SIZE + S.m;
 
 export const CLOSE_CHIP: CSSProperties = {
   appearance: 'none',

@@ -11,6 +11,7 @@
 
 import { useEffect, useId, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import type { HappinessRanking, TerritoryRanking } from '../../services/api';
 import { Z } from '../../constants/z';
 import { TYPE } from '../../constants/type';
@@ -20,19 +21,19 @@ import { S } from '../../constants/spacing';
 import { playPopThen } from '../../utils/popOnTap';
 import { useStrings } from '../../i18n/useStrings';
 import { CloseButton } from './CloseButton';
-import { CLOSE_SIZE, CLOSE_INSET } from '../../constants/buttons';
+import { CLOSE_SIZE, CLOSE_INSET, FULLSCREEN_LIST_TOP } from '../../constants/buttons';
 import { OWN_COLOR_CSS, ownerColorCss } from '../map/territoryColor';
-import { BoardRow } from './BoardRow';
+import { BoardRow, useBoardRowSize } from './BoardRow';
 import { useSheetBack } from '../../hooks/useSheetBack';
 import { MOTION } from '../../utils/motion';
 
 const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // The happiness index at the row's end, the same width as the
-// territory silhouette so the two boards' rows line up.
+// territory silhouette so the two boards' rows line up — the width
+// comes from useBoardRowSize at the call site, as the silhouette's does.
 const INDEX: React.CSSProperties = {
   display: 'inline-block',
-  width: 92,
   textAlign: 'center',
   fontSize: TYPE.display,
   fontWeight: 700,
@@ -61,6 +62,7 @@ interface Props {
 export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, onPick }: Props) {
   const t = useStrings();
   const titleId = useId();
+  const rowSize = useBoardRowSize();
   const [renderBoard, setRenderBoard] = useState<Row[] | null>(board);
   const [closing, setClosing] = useState(false);
 
@@ -110,13 +112,12 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
             inset: 0,
             overflowY: 'auto',
             WebkitOverflowScrolling: 'touch',
-            padding: '20px',
-            // The close button ends at inset + 56 (top 12 + 44 tall),
-            // so 72 left a gap wide enough that the board read as
-            // starting late. 66 clears the button by 10 and gets the
-            // first name up where the eye goes first.
-            paddingTop: 'calc(env(safe-area-inset-top, 0px) + 66px)',
-            paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 20px)',
+            padding: S.xl,
+            // One start line for every fullscreen list (UX-12.18).
+            paddingTop: `calc(env(safe-area-inset-top, 0px) + ${FULLSCREEN_LIST_TOP}px)`,
+            paddingBottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.xl}px)`,
+            // No gap: these are standing rows, which carry their own
+            // S.s padding, not the other two lists' separate cards.
           } as React.CSSProperties
         }
       >
@@ -136,7 +137,7 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
                 avatarUrl={h.avatarUrl}
                 owner={isYou ? null : h.owner}
                 trailing={
-                  <span style={{ ...INDEX, color: isYou ? OWN_COLOR_CSS : undefined }}>{String(h.index)}</span>
+                  <span style={{ ...INDEX, width: rowSize.trailing, color: isYou ? OWN_COLOR_CSS : undefined }}>{String(h.index)}</span>
                 }
               />
             );
@@ -211,6 +212,6 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
         }}
       />
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

@@ -22,6 +22,10 @@ export const colors = {
   photoBlank: '#eeece6',
   amber: '#d9a030',
   amberBg: '#fdf3e0',
+  // green — a paw pickup's colour: the "+1" that rises off a collected
+  // paw, on the same lime family as its glow (the bone's is amber).
+  // Named when the burst's own hand-picked hex was folded in (UX-8.19).
+  green: '#5fa92e',
   // THE BLUES, which the app had for a long time and never named.
   //
   // blue — the interface asking for a tap. CTA pills (constants/

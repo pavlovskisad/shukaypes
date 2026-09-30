@@ -5,6 +5,7 @@ import { ICON_HERO } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { INK } from '../../constants/surface';
+import { colors } from '../../constants/colors';
 import { Z } from '../../constants/z';
 import { Icon, iconForCategory } from '../ui/Icon';
 import { MapLibreMarker } from './MapLibreMarker';
@@ -77,8 +78,11 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
       >
         <div
           style={{
-            width: 44,
-            height: 44,
+            // The disc IS the icon's size (UX-8.13): ICON_HERO.marker is
+            // 47, and a 44 disc under it clipped the art's edge against
+            // the rim. PoiCluster's disc already sized off the token.
+            width: ICON_HERO.marker,
+            height: ICON_HERO.marker,
             borderRadius: R.pill,
             // Selected: solid INK with an inverted (white) icon, so
             // the chosen spot reads instantly against the grid of
@@ -103,7 +107,9 @@ function PoiMarkerImpl({ position, emoji, category, name, selected, onTap }: Poi
         </div>
         {selected ? (
           <>
-            <div style={{ width: 1.5, height: 5, background: '#aaa' }} />
+            {/* A 2px stem on the grey token — 1.5 floored to 1 in
+                Chrome (UX-8.14). */}
+            <div style={{ width: 2, height: 5, background: colors.greyLight }} />
             <div
               style={{
                 fontFamily: SYSTEM_FONT,

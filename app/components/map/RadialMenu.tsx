@@ -362,7 +362,12 @@ export function RadialMenu({
             display: 'flex',
             flexDirection: 'column',
             alignItems: 'center',
-            width: showLabels ? ITEM_W : undefined,
+            // A THIRD of the row, not a fixed 100 (UX-12.17). Three
+            // 100 px cells and two gaps are 332 px, and under ~372 px of
+            // screen clampToScreen made the row narrower than that — so
+            // three named spots broke 2 + 1, the odd one out alone under
+            // the other two. A share of the row always fits three.
+            width: showLabels ? `calc((100% - ${2 * ICON_ROW_GAP}px) / 3)` : undefined,
           }}
         >
           {renderButton(a)}
@@ -379,7 +384,7 @@ export function RadialMenu({
                 whiteSpace: 'nowrap',
                 overflow: 'hidden',
                 textOverflow: 'ellipsis',
-                maxWidth: ITEM_W,
+                maxWidth: '100%',
                 textAlign: 'center',
                 pointerEvents: 'none',
                 userSelect: 'none',

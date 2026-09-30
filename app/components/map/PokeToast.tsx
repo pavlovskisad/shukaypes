@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import type { LatLng } from '@shukajpes/shared';
 import { useGameStore } from '../../stores/gameStore';
 import { DogSprite } from './DogSprite';
@@ -122,6 +123,6 @@ export function PokeToast({ onGoTo, top }: Props) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

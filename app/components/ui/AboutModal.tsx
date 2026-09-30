@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import { SYSTEM_FONT } from '../../constants/fonts';
-import { INLINE_ICON } from '../../constants/sizing';
+import { INLINE_ICON, TOP_SHEET_MAX_H } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
@@ -135,7 +136,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
           maxWidth: 460,
           // Cap so the content scrolls instead of overlapping the
           // floating dashboard.
-          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: TOP_SHEET_MAX_H as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           position: 'relative',
@@ -268,6 +269,6 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

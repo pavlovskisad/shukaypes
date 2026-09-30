@@ -65,7 +65,11 @@ function buildVisitLeaves(
     id: `visit:spot:${s.id}`,
     iconName,
     icon: s.icon ?? '📍',
-    label: s.name.slice(0, 16),
+    // The whole name. It was hard-cut at 16 characters, mid-word and
+    // with no mark that anything was missing, while the ring's own
+    // ellipsis sat unused; the cell ellipsizes what does not fit, and a
+    // screen reader gets the name the place actually has (UX-12.17).
+    label: s.name,
   }));
 }
 

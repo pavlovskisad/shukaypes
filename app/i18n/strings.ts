@@ -329,6 +329,8 @@ export interface AppStrings {
     boardYou: string;
     boardEmpty: string;
     boardSeeAll: string;
+    // Under the past searches on the lost-pets card; opens all of them.
+    historySeeAll: string;
   };
   spots: {
     nearbySpots: string;
@@ -1024,6 +1026,7 @@ const uk: AppStrings = {
     boardYou: 'ти',
     boardEmpty: 'місто ще нічиє — познач перший',
     boardSeeAll: 'показати всіх',
+    historySeeAll: 'показати всі',
   },
   spots: {
     nearbySpots: 'місця поряд',
@@ -1327,7 +1330,7 @@ const uk: AppStrings = {
       doneTitle: 'вже на мапі 🐾',
       doneBody: 'кожен, хто зараз гуляє поруч, побачить пін. я також переслав оголошення в наш канал і районні групи.',
       doneNoPhoto: 'фото не вдалося прикріпити — оголошення на мапі без нього.',
-      doneShare: 'переслати оголошення',
+      doneShare: 'переслати',
       doneClose: 'готово',
       botLine: 'зручніше в телеграмі? напиши боту — фото, район, коли бачили.',
       botCta: 'написати боту',
@@ -1698,6 +1701,7 @@ const en: AppStrings = {
     boardYou: 'you',
     boardEmpty: 'nobody holds the city yet — go and mark',
     boardSeeAll: 'see all',
+    historySeeAll: 'see all',
   },
   spots: {
     nearbySpots: 'nearby spots',
@@ -1974,7 +1978,7 @@ const en: AppStrings = {
       doneTitle: 'on the map 🐾',
       doneBody: "everyone walking nearby will see the pin. i've also forwarded the post to our channel and district groups.",
       doneNoPhoto: "the photo didn't attach — the pin is up without it.",
-      doneShare: 'share the post',
+      doneShare: 'share',
       doneClose: 'done',
       botLine: 'prefer telegram? message the bot — a photo, the district, when you saw them.',
       botCta: 'message the bot',

@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import type { Spot } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
-import { INLINE_ICON, ICON_HERO, EMOJI_HERO } from '../../constants/sizing';
+import { INLINE_ICON, ICON_HERO, EMOJI_HERO, TOP_SHEET_MAX_H } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
@@ -22,6 +23,7 @@ import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { CloseButton } from './CloseButton';
 import { useSheetBack } from '../../hooks/useSheetBack';
+import { useVisibleHeight } from '../../hooks/useVisibleHeight';
 import { MOTION } from '../../utils/motion';
 import { Glyph } from './Glyph';
 
@@ -38,6 +40,14 @@ interface SpotModalProps {
 
 const SHEET_ANIM_MS = MOTION.sheetMs;
 const HERO_HEIGHT_PX = 220;
+// The hero's share of a short screen (UX-12.12). In landscape, or in a
+// short desktop window, a fixed 220 hero plus the name, the address and
+// the action row came to more than TOP_SHEET_MAX_H, and it was the
+// action row — the only part you act on — that got cut off. The hero
+// is decoration; it gives way first.
+const HERO_MAX_SHARE = 0.3;
+// The icon's share of the hero, as at full size (180 / 220).
+const HERO_ICON_SHARE = ICON_HERO.modal / HERO_HEIGHT_PX;
 // Top-anchored modal — bump the badge / close button down by the
 // safe-area inset so they clear the iPhone notch / status bar.
 // The overlay holds the sheet clear of the notch now, so this is
@@ -50,6 +60,7 @@ const SAFE_TOP = 12;
 // timeout runs the slide-down before unmounting.
 export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   const t = useStrings();
+  const heroH = Math.min(HERO_HEIGHT_PX, Math.round(useVisibleHeight() * HERO_MAX_SHARE));
   const [renderSpot, setRenderSpot] = useState<Spot | null>(spot);
   const [closing, setClosing] = useState(false);
   // Which spot a walk is being routed to. The route is a network call,
@@ -143,7 +154,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           maxWidth: 460,
           // Cap so the action pills stay above the tab bar even on
           // short viewports.
-          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: TOP_SHEET_MAX_H as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
@@ -167,7 +178,7 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           style={{
             position: 'relative',
             width: '100%',
-            height: HERO_HEIGHT_PX,
+            height: heroH,
             // Plain white — the previous grey gradient added visual
             // noise without earning it; the icon + chips already
             // carry the hero's identity.
@@ -179,9 +190,9 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
           }}
         >
           {iconSlot ? (
-            <Icon name={iconSlot} size={ICON_HERO.modal} />
+            <Icon name={iconSlot} size={Math.round(heroH * HERO_ICON_SHARE)} />
           ) : (
-            <span style={{ fontSize: EMOJI_HERO.modal, opacity: 0.85 }}>
+            <span style={{ fontSize: Math.round((EMOJI_HERO.modal * heroH) / HERO_HEIGHT_PX), opacity: 0.85 }}>
               {renderSpot.icon ?? '📍'}
             </span>
           )}
@@ -294,6 +305,6 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

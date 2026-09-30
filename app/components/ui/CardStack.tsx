@@ -19,7 +19,7 @@
 // Built on react-native-reanimated v3 + gesture-handler v2.
 
 import { useState, useEffect, useMemo, useCallback, useRef, memo, type ReactNode } from 'react';
-import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
+import { View, Text, StyleSheet, Image, Pressable, useWindowDimensions } from 'react-native';
 import Animated, {
   useSharedValue,
   useAnimatedStyle,
@@ -44,6 +44,26 @@ import { LOOP_VIEW_PROPS } from '../../utils/motion';
 
 export const CARD_W = 320;
 export const CARD_H = 280;
+// Room under the deck for the peeks' shadow and the counter — the
+// deck's own bottom margin at peekScale 1.
+const DECK_MARGIN = 24;
+// How far above the bottom of a CardStack the cards' bottom edge sits:
+// the wrap's S.s padding plus DECK_MARGIN (peekScale 1, no counter).
+// Exported for a caller that stacks something against the cards rather
+// than against the stack's box — the profile's dog floor ignored it and
+// parked the dog's feet 32 px behind the stat cards on short screens
+// (UX-12.10).
+export const DECK_OFFSET = S.s + DECK_MARGIN;
+
+// A card never wider than the screen minus the S.l gutters and a sliver
+// each side for the peeks (UX-12.15). At a fixed 320 the centre card
+// filled a 320 px screen edge to edge and both peeks sat off it, so
+// nothing said the deck swiped. The cards the callers render are
+// width 100%, so they follow; STEP scales with the width already.
+function useFitCardWidth(want: number): number {
+  const { width } = useWindowDimensions();
+  return Math.min(want, width - 2 * S.l - 2 * S.xs);
+}
 const TAP_TRAVEL_MAX = 16;
 // Projection-based commit (iOS-style paged scroll). At onEnd we
 // project where the swipe would naturally land if its release
@@ -206,7 +226,7 @@ export function CardStack<T>({
   onTap,
   getPhotoUrl,
   showCounter = true,
-  cardWidth = CARD_W,
+  cardWidth: cardWidthProp = CARD_W,
   cardHeight = CARD_H,
   peekScale = 1,
   onCounterTap,
@@ -217,6 +237,7 @@ export function CardStack<T>({
   // Mount-time anchor: index of initialId in the CURRENT items, or 0.
   // useState initializer (not an effect) so the first paint already has
   // the right card on top — no flash of items[0].
+  const cardWidth = useFitCardWidth(cardWidthProp);
   const [initialIndex] = useState(() => {
     if (!initialId) return 0;
     const idx = items.findIndex((it) => getId(it) === initialId);
@@ -589,7 +610,7 @@ export function CardStack<T>({
   return (
     <View style={styles.wrap}>
       <GestureDetector gesture={Gesture.Race(tap, pan)}>
-        <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
+        <View style={[styles.deck, slotSize, { marginBottom: DECK_MARGIN * peekScale }]}>
           {slotWindow.map(({ virtualIdx, item }) => (
             <ItemSlot
               key={virtualIdx}
@@ -640,12 +661,13 @@ export function CardStackSkeleton({
   cardHeight?: number;
   peekScale?: number;
 }) {
-  const slotSize = { width: CARD_W, height: cardHeight };
-  const STEP = 290 * peekScale;
+  const cardWidth = useFitCardWidth(CARD_W);
+  const slotSize = { width: cardWidth, height: cardHeight };
+  const STEP = ((cardWidth * 290) / CARD_W) * peekScale;
 
   return (
     <View style={styles.wrap}>
-      <View style={[styles.deck, slotSize, { marginBottom: 24 * peekScale }]}>
+      <View style={[styles.deck, slotSize, { marginBottom: DECK_MARGIN * peekScale }]}>
         <View
           style={[
             styles.cardSlot,

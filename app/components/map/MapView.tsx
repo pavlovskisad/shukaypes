@@ -1,6 +1,7 @@
 import type { CSSProperties } from 'react';
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -2762,10 +2763,21 @@ const DECK_ANIM_MS = MOTION.sheetMs;
     const spot = spots.find((s) => s.id === selectedSpotId);
     if (!spot) return;
     const current = map.getZoom() ?? balance.mapZoomDefault;
+    // SCALED TO THE SCREEN (UX-8.16). 460 is the sheet's cover on a
+    // tall phone; on a short one the sheet's hero gives way (SpotModal,
+    // UX-12.12) and a fixed 460 + 110 left the spot a sliver of map —
+    // or, under ~600 px, more padding than map, which MapLibre answers
+    // by ignoring the padding altogether. So: never more than 60% of
+    // the map, and always a strip of SPOT_MIN_STRIP left to land in.
+    const mapH = map.getContainer().clientHeight;
+    const padTop = Math.max(
+      0,
+      Math.min(SPOT_SHEET_COVER, Math.round(mapH * 0.6), mapH - SPOT_TAB_PAD - SPOT_MIN_STRIP),
+    );
     easeCamera(map, 'short', {
       center: [spot.position.lng, spot.position.lat],
       zoom: Math.max(current, 17),
-      padding: { top: 460, bottom: 110, left: 20, right: 20 },
+      padding: { top: padTop, bottom: SPOT_TAB_PAD, left: 20, right: 20 },
       duration: 500,
     });
   }, [selectedSpotId, spots]);
@@ -3643,8 +3655,9 @@ const DECK_ANIM_MS = MOTION.sheetMs;
               setMapAttempt((n) => n + 1);
             }}
             style={styles.retry}
+            accessibilityRole="button"
           >
-            <Text style={styles.t}>{t.hud.retry}</Text>
+            <Text style={styles.retryText}>{t.hud.retry}</Text>
           </Pressable>
         ) : null}
       </View>
@@ -4507,6 +4520,15 @@ const DECK_ANIM_MS = MOTION.sheetMs;
               fontWeight: 700,
               letterSpacing: 0.3,
               boxShadow: SURFACE.chip,
+              // Holds its width across GPS ticks (UX-8.18): "95 m" →
+              // "105 m" → "1.1 km" re-sized the pill every few seconds,
+              // and the close beside it — centred as a pair — jumped
+              // sideways with it. Tabular figures keep the digits still
+              // inside the floor.
+              minWidth: 72,
+              boxSizing: 'border-box',
+              textAlign: 'center',
+              fontVariantNumeric: 'tabular-nums',
             }}
           >
             {navDistance ?? '…'}
@@ -4635,7 +4657,7 @@ const DECK_ANIM_MS = MOTION.sheetMs;
           the chip's edge-side to the screen edge so dropping
           topReserve to 0 doesn't clip half the chip. */}
       {offscreenIndicator && typeof document !== 'undefined' ? createPortal(
-        // Portaled to document.body so the chip's z-index lives
+        // Portaled out (utils/portalRoot) so the chip's z-index lives
         // at the page root. Setting zIndex on the chip inside
         // MapView wasn't enough — the parent stacking contexts
         // (mapLayer, possibly MapLibre's canvas wrapper) trapped
@@ -4759,7 +4781,7 @@ const DECK_ANIM_MS = MOTION.sheetMs;
             </div>
           ) : null}
         </div>,
-        document.body,
+        portalRoot(),
       ) : null}
 
       {/* Keyframes for things only the map draws. The shell's shared
@@ -4985,6 +5007,13 @@ const DECK_ANIM_MS = MOTION.sheetMs;
   );
 }
 
+// Spot-select camera padding (see the selectedSpotId effect): the top
+// sheet's cover on a tall phone, the tab bar's strip, and the least map
+// the chosen spot is allowed to land in.
+const SPOT_SHEET_COVER = 460;
+const SPOT_TAB_PAD = 110;
+const SPOT_MIN_STRIP = 120;
+
 const styles = StyleSheet.create({
   msg: {
     flex: 1,
@@ -4996,12 +5025,20 @@ const styles = StyleSheet.create({
   t: { fontSize: TYPE.body, color: colors.black },
   s: { fontSize: TYPE.small, color: colors.grey, marginTop: 6, textAlign: 'center' },
   problem: { textAlign: 'center', maxWidth: 320, lineHeight: 22 },
+  // The one button on a screen that has nothing else (UX-8.15): a
+  // 1.5px edge (drawn at 1 in Chrome) and a regular-weight label made
+  // it the faintest control in the app. The app's 2px ink edge, a 44px
+  // floor, and a label at the pills' 13/700.
   retry: {
     marginTop: S.xl,
-    paddingVertical: S.m,
+    minHeight: 44,
+    justifyContent: 'center',
+    paddingVertical: S.s,
     paddingHorizontal: S.xl,
     borderRadius: R.pill,
-    borderWidth: 1.5,
-    borderColor: colors.black,
+    borderWidth: 2,
+    borderColor: INK,
+    backgroundColor: colors.white,
   },
+  retryText: { fontSize: TYPE.small, fontWeight: '700', color: INK },
 });

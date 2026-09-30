@@ -12,6 +12,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import { ApiError, auth } from '../../services/api';
 import { isInTelegram } from '../../services/telegram';
 import { useAccessStore } from '../../stores/accessStore';
@@ -428,6 +429,6 @@ export function AccountEditSheet({ onClose, onSaved, onLoggedOut }: Props) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

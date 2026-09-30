@@ -1,7 +1,44 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { VOICE } from '../../constants/voice';
 import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
+import { S } from '../../constants/spacing';
+
+// KEPT ON SCREEN (UX-8.17). The bubble is centred on the dog, and a dog
+// near the left or right edge of the map put half a sentence off the
+// screen. Measured once the line has laid out and nudged sideways by
+// however much it overhangs the app's column (#root — the screen on a
+// phone, the 430 px column on desktop), less an S.s margin. Re-measured
+// when the line changes or the window resizes; a line lives a few
+// seconds, so a pan mid-line is left to the next one.
+function useEdgeNudge(ref: React.RefObject<HTMLDivElement | null>, text: string | null): number {
+  const [dx, setDx] = useState(0);
+  const dxRef = useRef(0);
+  useLayoutEffect(() => {
+    const measure = () => {
+      const el = ref.current;
+      if (!el || typeof document === 'undefined') return;
+      const col = (document.getElementById('root') ?? document.body).getBoundingClientRect();
+      const r = el.getBoundingClientRect();
+      // Where it would sit with no nudge.
+      const left = r.left - dxRef.current;
+      const right = r.right - dxRef.current;
+      let next = 0;
+      if (left < col.left + S.s) next = col.left + S.s - left;
+      else if (right > col.right - S.s) next = col.right - S.s - right;
+      next = Math.round(next);
+      if (next !== dxRef.current) {
+        dxRef.current = next;
+        setDx(next);
+      }
+    };
+    measure();
+    if (typeof window === 'undefined') return;
+    window.addEventListener('resize', measure);
+    return () => window.removeEventListener('resize', measure);
+  }, [ref, text]);
+  return dx;
+}
 
 interface SpeechBubbleProps {
   text: string | null;
@@ -52,6 +89,7 @@ export function SpeechBubble({ text, bottom = '85%', onHeight }: SpeechBubblePro
     return () => ro.disconnect();
   }, [onHeight, text]);
   useEffect(() => () => onHeight?.(null), [onHeight]);
+  const dx = useEdgeNudge(ref, text);
   if (!text) return null;
   return (
     <div
@@ -60,7 +98,7 @@ export function SpeechBubble({ text, bottom = '85%', onHeight }: SpeechBubblePro
         position: 'absolute',
         left: '50%',
         bottom,
-        transform: 'translateX(-50%)',
+        transform: `translateX(calc(-50% + ${dx}px))`,
         background: VOICE.background,
         color: VOICE.color,
         // VOICE.padding — see voice.ts for why 10 horizontal.

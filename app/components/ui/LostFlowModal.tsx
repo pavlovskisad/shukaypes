@@ -25,6 +25,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
@@ -43,7 +44,7 @@ import { HandDrawnFrame, PAPER_EDGE } from './HandDrawn';
 import { Field, FIELD_INPUT } from './AccountDoor';
 import { Icon } from './Icon';
 import { colors } from '../../constants/colors';
-import { INLINE_ICON } from '../../constants/sizing';
+import { INLINE_ICON, TOP_SHEET_MAX_H } from '../../constants/sizing';
 import { MOTION } from '../../utils/motion';
 import { playPop, playPopThen } from '../../utils/popOnTap';
 
@@ -351,7 +352,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
           </div>
         </div>
       </>,
-      document.body,
+      portalRoot(),
     );
   }
 
@@ -383,7 +384,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
           borderRadius: R.card,
           width: '100%',
           maxWidth: 460,
-          maxHeight: 'calc(100vh - 118px - env(safe-area-inset-top) - env(safe-area-inset-bottom))' as unknown as number,
+          maxHeight: TOP_SHEET_MAX_H as unknown as number,
           display: 'flex',
           flexDirection: 'column',
           animation: `top-sheet-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.4,0,0.2,1) forwards`,
@@ -635,7 +636,11 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
           style={{
             display: 'flex',
             gap: S.s,
-            padding: `${S.s}px ${S.l}px calc(${S.l}px + env(safe-area-inset-bottom, 0px))`,
+            // No bottom safe-area term (UX-12.13): the sheet hangs from
+            // the TOP and ends well above the home indicator, so that
+            // inset only padded an iPhone footer 34 px taller than the
+            // same footer anywhere else.
+            padding: `${S.s}px ${S.l}px ${S.l}px`,
             flexShrink: 0,
           }}
         >
@@ -690,6 +695,6 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

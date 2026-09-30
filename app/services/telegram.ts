@@ -45,6 +45,11 @@ interface TelegramWebApp {
   // Makes Telegram ask "close anyway?" before the Mini App goes. SDK 6.2.
   enableClosingConfirmation?: () => void;
   disableClosingConfirmation?: () => void;
+  // Event bus. 'viewportChanged' fires while the Mini App's sheet is
+  // dragged or resized, with isStateStable false mid-drag and true once
+  // it settles. SDK 6.0.
+  onEvent?: (event: string, cb: (payload?: { isStateStable?: boolean }) => void) => void;
+  offEvent?: (event: string, cb: (payload?: { isStateStable?: boolean }) => void) => void;
 }
 
 declare global {
@@ -56,6 +61,21 @@ declare global {
 export function getTelegramWebApp(): TelegramWebApp | null {
   if (typeof window === 'undefined') return null;
   return window.Telegram?.WebApp ?? null;
+}
+
+// Subscribes to Telegram's settled viewport changes (the Mini App sheet
+// expanded, collapsed or dragged to a new height) — only the stable
+// ones, so a listener is not re-laying out the page on every frame of
+// the drag. Returns the unsubscribe; a no-op outside Telegram.
+export function onTelegramViewportSettled(cb: () => void): () => void {
+  const wa = getTelegramWebApp();
+  if (!wa?.onEvent || !wa.offEvent) return () => {};
+  const handler = (payload?: { isStateStable?: boolean }) => {
+    if (payload?.isStateStable === false) return;
+    cb();
+  };
+  wa.onEvent('viewportChanged', handler);
+  return () => wa.offEvent?.('viewportChanged', handler);
 }
 
 export function getTelegramInitData(): string | null {

@@ -20,15 +20,32 @@
 // names stay in a column.
 
 import type { ReactNode } from 'react';
-import { View, Text, Image, StyleSheet } from 'react-native';
+import { View, Text, Image, StyleSheet, useWindowDimensions } from 'react-native';
 import { colors } from '../../constants/colors';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { COMPACT_SCREEN } from '../../constants/sizing';
 import { TerritoryMini } from './TerritoryMini';
 
 // Twice the profile card's 44: on the board the face is the identity
 // and the silhouette is the second read, so the face gets the size.
 const PORTRAIT = 88;
+// The silhouette (or the happiness index in its place) at the row's end.
+const TRAILING = 92;
+
+// THE ROW ON A SMALL PHONE (UX-12.6). Rank 30 + face 88 + silhouette 92
+// + three S.m gaps and the card's padding left ~34 px for the name at
+// 320 and ~74 at 360 — «ти» fitted, nobody else's name did. Under
+// COMPACT_SCREEN the face and the end column shrink and the gaps
+// tighten, which hands the name ~70 px more. The callers that draw their
+// own trailing column (the happiness index) read the same width from
+// here, or the two boards' rows stop lining up.
+export function useBoardRowSize(): { portrait: number; trailing: number; gap: number } {
+  const compact = useWindowDimensions().width < COMPACT_SCREEN;
+  return compact
+    ? { portrait: 56, trailing: 64, gap: S.s }
+    : { portrait: PORTRAIT, trailing: TRAILING, gap: S.m };
+}
 
 export function BoardRow({
   rank,
@@ -56,17 +73,19 @@ export function BoardRow({
   // number there.
   trailing?: ReactNode;
 }) {
+  const size = useBoardRowSize();
+  const face = { width: size.portrait, height: size.portrait, borderRadius: size.portrait / 2 };
   return (
-    <View style={styles.boardRow}>
+    <View style={[styles.boardRow, { gap: size.gap }]}>
       <Text
         style={[styles.boardRank, styles.boardRankStrong, you && styles.boardYouText]}
         numberOfLines={1}
       >
         {rank}
       </Text>
-      <View style={styles.portrait}>
+      <View style={[styles.portrait, face]}>
         {avatarUrl ? (
-          <Image source={{ uri: avatarUrl }} style={styles.portraitImage} accessibilityLabel={name} />
+          <Image source={{ uri: avatarUrl }} style={face} accessibilityLabel={name} />
         ) : null}
       </View>
       <View style={styles.boardText}>
@@ -77,7 +96,7 @@ export function BoardRow({
           {owner ? `${areaLabel} · ${owner}` : areaLabel}
         </Text>
       </View>
-      {trailing !== undefined ? trailing : <TerritoryMini points={piece} color={color} size={92} />}
+      {trailing !== undefined ? trailing : <TerritoryMini points={piece} color={color} size={size.trailing} />}
     </View>
   );
 }
@@ -86,22 +105,15 @@ const styles = StyleSheet.create({
   boardRow: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: S.m,
+    // gap from useBoardRowSize.
     paddingVertical: S.s,
   },
   // The face: as tall as the name and counter together, like the
-  // profile card's. Blank paper when nobody has drawn one.
+  // profile card's. Blank paper when nobody has drawn one. Size and
+  // circle from useBoardRowSize.
   portrait: {
-    width: PORTRAIT,
-    height: PORTRAIT,
-    borderRadius: PORTRAIT / 2,
     backgroundColor: colors.portraitBlank,
     flexShrink: 0,
-  },
-  portraitImage: {
-    width: PORTRAIT,
-    height: PORTRAIT,
-    borderRadius: PORTRAIT / 2,
   },
   boardRank: {
     // 22 fitted a single digit and nothing else, so a two-character rank

@@ -28,6 +28,7 @@
 
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from 'react';
 import { createPortal } from 'react-dom';
+import { portalRoot } from '../../utils/portalRoot';
 import { router } from 'expo-router';
 import { ApiError, auth, type Me } from '../../services/api';
 import { useAccessStore, type DoorSheet } from '../../stores/accessStore';
@@ -815,6 +816,6 @@ function AccountSheet({ requested }: { requested: DoorSheet }) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }

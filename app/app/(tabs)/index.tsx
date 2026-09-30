@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useFocusEffect } from 'expo-router';
-import { View, Pressable, StyleSheet } from 'react-native';
+import { View, Pressable, StyleSheet, useWindowDimensions } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import MapView from '../../components/map';
 import { StatusBar, PillPulseRing } from '../../components/ui/StatusBar';
@@ -13,7 +13,7 @@ import { useGameStore } from '../../stores/gameStore';
 import { useAccessStore } from '../../stores/accessStore';
 import { LangPill } from '../../components/ui/LangPill';
 import { useStrings } from '../../i18n/useStrings';
-import { CHIP, HUD_ICON_SIZE } from '../../constants/sizing';
+import { CHIP, HUD_ICON_SIZE, HUD_TOP, NARROW_SCREEN } from '../../constants/sizing';
 
 // Easing for the HUD pills as the mode changes. A decelerating curve
 // with NO overshoot of its own — the 1% cross-over lives in the
@@ -22,6 +22,10 @@ import { CHIP, HUD_ICON_SIZE } from '../../constants/sizing';
 // public/index.html, because the dashboard shares them and outlives
 // this screen; it uses the same curve, and the two have to match.
 const POP_IN = 'cubic-bezier(0.22, 1, 0.36, 1)';
+
+// The corner logo's width below NARROW_SCREEN — CHIP.height, so on a
+// 320 px phone it is the same size as the pills beside it.
+const NARROW_LOGO = CHIP.height;
 
 export default function MapScreen() {
   // `strings`, not `t`: `t` is the timer's name in the effects below.
@@ -118,6 +122,10 @@ export default function MapScreen() {
   }, []));
 
   const handleLostFlowClose = useCallback(() => setLostFlowOpen(false), [setLostFlowOpen]);
+  // Below NARROW_SCREEN the logo is drawn smaller (UX-12.2) — its BOX
+  // keeps HUD_ICON_SIZE's height, so the row, the pills centred on it
+  // (HUD_TOP) and the off-screen chip clearance in MapView all hold.
+  const logoW = useWindowDimensions().width < NARROW_SCREEN ? NARROW_LOGO : HUD_ICON_SIZE;
 
   return (
     <View style={styles.root}>
@@ -198,7 +206,7 @@ export default function MapScreen() {
             <div
               data-loop
               style={{
-                width: HUD_ICON_SIZE,
+                width: logoW,
                 height: HUD_ICON_SIZE,
                 backgroundImage: 'url(/icons/logo.svg)',
                 backgroundRepeat: 'no-repeat',
@@ -225,6 +233,11 @@ export default function MapScreen() {
           <div
             style={{
               transformOrigin: 'right center',
+              // Gives way before the row does (UX-12.2): the pills
+              // shrink inside the gap left beside the logo instead of
+              // pushing the spots toggle off the edge.
+              flexShrink: 1,
+              minWidth: 0,
               opacity: immersive ? 0 : 1,
               transform: immersive ? 'scale(0)' : 'scale(1)',
               // Stagger: HUD collapses immediately on mode-on; on mode-off it
@@ -316,6 +329,9 @@ const styles = StyleSheet.create({
     // S.l, the side gutter the quest pill and the tab bar use too:
     // the three sat at 12 / 28 / 16 and no edge lined up (UX-10.16).
     paddingHorizontal: S.l,
+    // A floor between the logo and the pills, so a squeezed row never
+    // lets the two touch (UX-12.2).
+    gap: S.s,
     // Middle ground between the original 32 and the brought-up 12 —
     // header elements sit comfortably under the OS status bar without
     // crowding it.
@@ -325,7 +341,7 @@ const styles = StyleSheet.create({
   gateLang: {
     position: 'absolute',
     right: S.l,
-    top: S.xxl + (HUD_ICON_SIZE - CHIP.height) / 2,
+    top: HUD_TOP,
   },
   questRow: {
     flexDirection: 'row',

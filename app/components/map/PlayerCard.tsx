@@ -13,6 +13,8 @@
 
 import { useEffect, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
+import { useWindowDimensions } from 'react-native';
+import { portalRoot } from '../../utils/portalRoot';
 import type { NearbyPlayer, PlayerCard as Card } from '@shukajpes/shared';
 import { api } from '../../services/api';
 import { useStrings } from '../../i18n/useStrings';
@@ -22,6 +24,7 @@ import { HandDrawnFrame } from '../ui/HandDrawn';
 import { COLUMN, OVERLAY, PAPER, Primary } from '../ui/AccountDoor';
 import { CloseButton } from '../ui/CloseButton';
 import { CLOSE_INSET, CLOSE_SIZE } from '../../constants/buttons';
+import { NARROW_SCREEN } from '../../constants/sizing';
 import { ownerColorCss } from './territoryColor';
 import { TerritoryMini } from '../ui/TerritoryMini';
 import { INK } from '../../constants/surface';
@@ -48,9 +51,16 @@ const PORTRAIT = 128;
 // piece on their card, not a cousin of it. Drawn a little under the
 // board's 92 to share the right column with its label.
 const MINI = 80;
+// Below NARROW_SCREEN both give way (UX-12.16). At 320 the 128 face,
+// the 80 thumbnail and the close's clearance left the territory label
+// ~32 px, one letter a line.
+const PORTRAIT_NARROW = 96;
+const MINI_NARROW = 64;
 
 export function PlayerCard({ player, onClose }: Props) {
   const t = useStrings().playerCard;
+  const narrow = useWindowDimensions().width < NARROW_SCREEN;
+  const portraitSize = narrow ? PORTRAIT_NARROW : PORTRAIT;
   const tp = useStrings().profile;
   const pokePlayer = useGameStore((s) => s.pokePlayer);
   const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
@@ -119,8 +129,8 @@ export function PlayerCard({ player, onClose }: Props) {
   };
 
   const portrait: CSSProperties = {
-    width: PORTRAIT,
-    height: PORTRAIT,
+    width: portraitSize,
+    height: portraitSize,
     flex: 'none',
     // A circle, like every portrait in the app (D14). And a blank fill
     // underneath, so a walker who never drew one leaves a slot rather
@@ -192,9 +202,11 @@ export function PlayerCard({ player, onClose }: Props) {
                     cursor: piece ? 'pointer' : 'default',
                   }}
                 >
-                  {piece ? <TerritoryMini points={piece} color={ownerColorCss(player.id)} size={MINI} /> : null}
+                  {piece ? <TerritoryMini points={piece} color={ownerColorCss(player.id)} size={narrow ? MINI_NARROW : MINI} /> : null}
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ font: `700 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK }}>
+                    {/* Wraps at a word, and inside one only if it must —
+                        «ще без території» in a narrow column. */}
+                    <div style={{ font: `700 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK, overflowWrap: 'anywhere' }}>
                       {card.areaM2 > 0 ? t.territory : t.noTerritory}
                     </div>
                     {card.areaM2 > 0 ? (
@@ -211,6 +223,6 @@ export function PlayerCard({ player, onClose }: Props) {
         </div>
       </div>
     </div>,
-    document.body,
+    portalRoot(),
   );
 }
