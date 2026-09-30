@@ -19,8 +19,10 @@ import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { OWN_COLOR_CSS, ownerColorCss } from '../map/territoryColor';
 import { BoardRow } from './BoardRow';
+import { useSheetBack } from '../../hooks/useSheetBack';
+import { MOTION } from '../../utils/motion';
 
-const SHEET_ANIM_MS = 240;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // The happiness index at the row's end, the same width as the
 // territory silhouette so the two boards' rows line up.
@@ -47,7 +49,9 @@ interface Props {
   onClose: () => void;
   // Tap a row → the parent jumps the map to that owner's ground. Rows
   // without geometry aren't tappable.
-  onPick?: (row: TerritoryRanking) => void;
+  // `isYou` so the caller can send your own row to your ground rather
+  // than pinning you as a guest on your own map (UX-1.9).
+  onPick?: (row: TerritoryRanking, isYou: boolean) => void;
 }
 
 export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, onPick }: Props) {
@@ -74,11 +78,16 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [board]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!board, onClose);
+
   if (!renderBoard) return null;
   if (typeof document === 'undefined') return null;
 
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       style={{
         position: 'fixed',
         inset: 0,
@@ -133,7 +142,7 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
               key={r.userId}
               onClick={
                 pickable
-                  ? (e) => playPopThen(e.currentTarget, () => onPick(r))
+                  ? (e) => playPopThen(e.currentTarget, () => onPick(r, isYou))
                   : undefined
               }
               style={{ cursor: pickable ? 'pointer' : 'default' }}
@@ -155,7 +164,7 @@ export function LeaderboardModal({ board, kind = 'territory', youRank, onClose, 
 
       <button
         onClick={(e) => playPopThen(e.currentTarget, onClose)}
-        aria-label="Close"
+        aria-label={t.modals.common.close}
         style={{
           position: 'absolute',
           top: 'calc(env(safe-area-inset-top, 0px) + 14px)',

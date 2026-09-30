@@ -1,20 +1,23 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { useFocusEffect, useRouter } from 'expo-router';
+import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { popPressableEvent } from '../../utils/popOnTap';
+import { formatDistance } from '../../utils/geo';
+import { LOOP_VIEW_PROPS } from '../../utils/motion';
 import { useGameStore } from '../../stores/gameStore';
 import { api, type TerritoryRanking } from '../../services/api';
 import { useAccessStore } from '../../stores/accessStore';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import { SCENE_SKY, type SceneMode } from '../../components/profile/ProfileSceneBackdrop';
-import { HERO, CHIP } from '../../constants/sizing';
+import { HERO, CHIP, TAB_BAR_STRIP } from '../../constants/sizing';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 import { MeterPill, CounterPill } from '../../components/ui/StatusBar';
 import { useStrings } from '../../i18n/useStrings';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
@@ -65,18 +68,14 @@ interface TerritoryBoard {
   you: { areaM2: number; rank: number | null };
 }
 
-function formatDistance(m: number): string {
-  if (m < 1000) return `${Math.round(m)} m`;
-  return `${(m / 1000).toFixed(1)} km`;
-}
-
 // Small shimmer bar used in place of a stat value while the
-// profile fetch is in flight. Reuses the same lost-dog-shimmer
-// keyframe injected once on mount below so only one stylesheet
-// is in <head> regardless of which tab the user lands on first.
+// profile fetch is in flight. The `shimmer` keyframe is global, in
+// public/index.html. It used to name `lost-dog-shimmer`, which
+// nothing defined, so the bars sat still.
 function ShimmerBar({ width = 56 }: { width?: number }) {
   return (
     <View
+      {...LOOP_VIEW_PROPS}
       style={
         {
           width,
@@ -87,19 +86,33 @@ function ShimmerBar({ width = 56 }: { width?: number }) {
             'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.75) 50%, transparent 70%)',
           backgroundSize: '200% 100%',
           backgroundRepeat: 'no-repeat',
-          animation: 'lost-dog-shimmer 1.8s ease-in-out infinite',
+          animation: 'shimmer 1.8s ease-in-out infinite',
         } as unknown as object
       }
     />
   );
 }
 
-function StatRow({ label, value }: { label: string; value: string | number | undefined }) {
+// `failed`: the fetch behind this value gave up, so the row settles on a
+// dash instead of shimmering for as long as the tab is open.
+function StatRow({
+  label,
+  value,
+  failed = false,
+}: {
+  label: string;
+  value: string | number | undefined;
+  failed?: boolean;
+}) {
   return (
     <View style={styles.statRow}>
       <Text style={styles.statLabel}>{label}</Text>
       {value === undefined || value === null ? (
-        <ShimmerBar width={50} />
+        failed ? (
+          <Text style={styles.statValue}>—</Text>
+        ) : (
+          <ShimmerBar width={50} />
+        )
       ) : (
         <Text style={styles.statValue}>{value}</Text>
       )}
@@ -110,6 +123,8 @@ function StatRow({ label, value }: { label: string; value: string | number | und
 // The «змінити» chip on the dog card: smaller than the HUD pills, it
 // is a corner affordance and not a control row.
 const EDIT_CHIP_H = 28;
+// (44 - 28) / 2 — grows the chip's tap target to 44 without moving it.
+const EDIT_CHIP_PAD = (44 - EDIT_CHIP_H) / 2;
 // The pet's portrait beside its name: as tall as the name and level
 // lines together. No drawn ring — the drawing's own marker line is the
 // edge (the owner asked for the border dropped, 14 Sep); the same rule
@@ -120,29 +135,36 @@ const PORTRAIT_INSET = 0;
 export default function ProfileScreen() {
   const t = useStrings();
   const companionName = useGameStore((s) => s.companionName);
+  // The HUD's own live values, for the meters until /profile/me lands —
+  // a 0 there read as a starving, miserable dog on every visit.
+  const liveHappiness = useGameStore((s) => s.happiness);
+  const liveHunger = useGameStore((s) => s.hunger);
+  const livePaws = useGameStore((s) => s.tokensCollected);
   const setAboutOpen = useGameStore((s) => s.setAboutOpen);
   const avatarUrl = useAccessStore((s) => s.me?.avatarUrl ?? null);
-  const nudgeDoor = useAccessStore((s) => s.nudgeDoor);
-  const setAppMode = useGameStore((s) => s.setAppMode);
-  const router = useRouter();
   // The account sheet — nickname, the pet, a new password, and the way
   // out — opens from the small «змінити» chip on the dog card.
   const [editOpen, setEditOpen] = useState(false);
   // After «вийти з акаунта» in that sheet: back to the gate, where the
   // dog asks «ми знайомі?» again and, with the door up, asks the person
-  // to log in (or register) before the map.
+  // to log in (or register) before the map. A full reload rather than
+  // a navigate (UX-2.11, D4): the chat transcript and the paw total in
+  // memory are the account that just left, and on a shared phone the
+  // next one saw both. A reload is the reset that cannot miss a store.
   const afterLogout = useCallback(() => {
-    setEditOpen(false);
-    nudgeDoor();
-    setAppMode('gate');
-    router.navigate('/');
-  }, [nudgeDoor, setAppMode, router]);
+    window.location.replace('/');
+  }, []);
   const [data, setData] = useState<ProfileData | null>(null);
-  const [error, setError] = useState<string | null>(null);
+  // The last /profile/me read failed. A flag, not the message: the raw
+  // exception text ("Failed to fetch", a server string) used to be
+  // printed under the deck, untranslated. It goes to the console now,
+  // and the page says the translated thing.
+  const [failed, setFailed] = useState(false);
   // Territory standing. Its own fetch rather than a field on /profile/me
   // because the board is cached server-side on a different clock — and
   // a failure here should cost the territory card, not the whole page.
   const [board, setBoard] = useState<TerritoryBoard | null>(null);
+  const [boardFailed, setBoardFailed] = useState(false);
 
   // Mount the dog scene only when this tab is BOTH the focused screen
   // AND the document is visible. Without this, the scene runs forever
@@ -162,13 +184,25 @@ export default function ProfileScreen() {
     return () => document.removeEventListener('visibilitychange', onChange);
   }, []);
   const sceneActive = isFocused && docVisible;
+  // The edit sheet is portaled to the body, so it outlives the tab.
+  // The tap-out layer keeps the bar from being tapped under it, but the
+  // app can still leave the profile on its own — the door closing
+  // mid-session sends it to the gate (UX-2.7), a verify sheet to the
+  // map (UX-2.13) — and the sheet then floated over whatever came next.
+  // Leaving the tab closes it.
+  useEffect(() => {
+    if (!isFocused) setEditOpen(false);
+  }, [isFocused]);
 
   // Mirror the dog scene's day / night mode so the page bg colour
   // matches its sky — gives the full-bleed look where the scene's
   // landscape sits inside one continuous sky instead of a tiny
   // 200-px strip glued to a flat-coloured page.
   const [sceneMode, setSceneMode] = useState<SceneMode>('day');
-  const insets = useSafeAreaInsets();
+  // The tab bar's top edge (hooks/useTabBarClearance.ts) — the same
+  // inset the bar is placed with, so inside Telegram the deck no longer
+  // pads for an iOS strip the bar itself ignores.
+  const tabClearance = useTabBarClearance();
   // Installed-PWA root is extended down by the bottom inset so the scene
   // bleeds through the home-indicator strip; lift the floating deck back
   // up by the same amount. 0 in browser / TG. See usePwaInsetOvershoot.
@@ -178,21 +212,24 @@ export default function ProfileScreen() {
     try {
       const fresh = (await api.getProfile()) as ProfileData | { error: string };
       if ('error' in fresh) {
-        setError(fresh.error);
+        console.warn('[profile] load failed:', fresh.error);
+        setFailed(true);
         return;
       }
       setData(fresh);
-      setError(null);
+      setFailed(false);
     } catch (err) {
-      setError((err as Error).message);
+      console.warn('[profile] load failed:', err);
+      setFailed(true);
     }
     // Territory is a separate trip and a separate failure: if the board
     // is unreachable the card just shows dashes, and the rest of the
-    // profile is unaffected.
+    // profile is unaffected. A board already read stays up.
     try {
       setBoard(await api.territoryLeaderboard());
+      setBoardFailed(false);
     } catch {
-      setBoard(null);
+      setBoardFailed(true);
     }
   }, []);
 
@@ -227,10 +264,12 @@ export default function ProfileScreen() {
               onPressIn={popPressableEvent}
               accessibilityRole="button"
               accessibilityLabel={t.auth.editChip}
-              style={({ pressed }) => [styles.editChip, pressed && { opacity: 0.7 }]}
+              style={({ pressed }) => [styles.editChipHit, pressed && { opacity: 0.7 }]}
             >
-              <HandDrawnFrame radius={EDIT_CHIP_H / 2} />
-              <Text style={styles.editChipText}>{t.auth.editChip}</Text>
+              <View style={styles.editChip}>
+                <HandDrawnFrame radius={EDIT_CHIP_H / 2} />
+                <Text style={styles.editChipText}>{t.auth.editChip}</Text>
+              </View>
             </Pressable>
             <Text style={styles.sectionTitle}>{t.profile.stats.companionStats}</Text>
             <View style={styles.companionRow}>
@@ -273,7 +312,7 @@ export default function ProfileScreen() {
                 />
               </View>
             ) : null}
-            <StatRow label={t.profile.stats.daysPlayed} value={data?.stats.daysPlayed} />
+            <StatRow label={t.profile.stats.daysPlayed} value={data?.stats.daysPlayed} failed={failed} />
           </View>
         ),
       },
@@ -285,10 +324,11 @@ export default function ProfileScreen() {
             <Text style={styles.sectionTitle}>{t.profile.stats.walksTogether}</Text>
             <StatRow
               label={t.profile.stats.distanceWalked}
-              value={data ? formatDistance(data.user.totalDistanceMeters) : undefined}
+              value={data ? formatDistance(data.user.totalDistanceMeters, t.units, { snap: false }) : undefined}
+              failed={failed}
             />
-            <StatRow label={t.profile.stats.pawsCollected} value={data?.stats.pawsCollected} />
-            <StatRow label={t.profile.stats.bonesEaten} value={data?.stats.bonesEaten} />
+            <StatRow label={t.profile.stats.pawsCollected} value={data?.stats.pawsCollected} failed={failed} />
+            <StatRow label={t.profile.stats.bonesEaten} value={data?.stats.bonesEaten} failed={failed} />
           </View>
         ),
       },
@@ -301,6 +341,7 @@ export default function ProfileScreen() {
             <StatRow
               label={t.profile.stats.territoryArea}
               value={board ? t.profile.areaValue(board.you.areaM2) : undefined}
+              failed={boardFailed}
             />
             <StatRow
               label={t.profile.stats.territoryRank}
@@ -311,6 +352,7 @@ export default function ProfileScreen() {
                     : t.profile.unranked
                   : undefined
               }
+              failed={boardFailed}
             />
             {/* Who's ahead. One name is enough on a card this size — the
                 point is "someone holds more than you", not a full board. */}
@@ -323,6 +365,7 @@ export default function ProfileScreen() {
                     : t.profile.unranked
                   : undefined
               }
+              failed={boardFailed}
             />
           </View>
         ),
@@ -333,20 +376,22 @@ export default function ProfileScreen() {
           <View style={styles.sectionCard}>
             <HandDrawnFrame radius={R.card} />
             <Text style={styles.sectionTitle}>{t.profile.stats.helpingPets}</Text>
-            <StatRow label={t.profile.stats.petsSearched} value={data?.stats.petsSearched} />
+            <StatRow label={t.profile.stats.petsSearched} value={data?.stats.petsSearched} failed={failed} />
             <StatRow
               label={t.profile.stats.searchesCompleted}
               value={data?.stats.questsCompleted}
+              failed={failed}
             />
             <StatRow
               label={t.profile.stats.sightingsReported}
               value={data?.stats.sightingsReported}
+              failed={failed}
             />
           </View>
         ),
       },
     ],
-    [t, data, board, companionName, avatarUrl],
+    [t, data, failed, board, boardFailed, companionName, avatarUrl],
   );
 
   const skyColor = SCENE_SKY[sceneMode];
@@ -354,7 +399,11 @@ export default function ProfileScreen() {
   // dog walks on runs out. Named once because three things need to agree
   // on it: the deck's own offset, the card height it renders at, and the
   // floor the dog scene is not allowed to sink below.
-  const deckBottom = HERO.size + insets.bottom + pwaOvershoot;
+  // HERO.size above the inset is where it has always sat: 18 px lower
+  // than the bar's top edge, with the deck's own 24 px bottom margin
+  // (CardStack) lifting the cards clear of it. Written against the bar
+  // so the two cannot drift apart again.
+  const deckBottom = tabClearance - TAB_BAR_STRIP + HERO.size + pwaOvershoot;
 
   return (
     // Full-bleed scene: the dog's habitat takes the entire screen
@@ -395,21 +444,21 @@ export default function ProfileScreen() {
         <View style={styles.hudPills}>
           <MeterPill
             icon="sun"
-            value={data?.companion.happiness ?? 0}
+            value={data?.companion.happiness ?? liveHappiness}
             label={t.hud.happiness}
             solid
             showValue={false}
           />
           <MeterPill
             icon="bone"
-            value={data?.companion.hunger ?? 0}
+            value={data?.companion.hunger ?? liveHunger}
             label={t.hud.hunger}
             solid
             showValue={false}
           />
           <CounterPill
             icon="paws"
-            value={data?.stats.pawsCollected ?? 0}
+            value={data?.stats.pawsCollected ?? livePaws}
             label={t.hud.paws}
             solid
           />
@@ -456,7 +505,15 @@ export default function ProfileScreen() {
         />
       </View>
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {/* Only when there is nothing to show: with an earlier read on
+          screen, a failed refresh changes nothing the page says, and the
+          connection banner already covers being offline. The line is
+          the retry. */}
+      {failed && !data ? (
+        <Pressable onPress={() => void refetch()} accessibilityRole="button">
+          <Text style={styles.error}>{t.connection.loadFailed}</Text>
+        </Pressable>
+      ) : null}
       {editOpen ? (
         <AccountEditSheet onClose={() => setEditOpen(false)} onSaved={() => void refetch()} onLoggedOut={afterLogout} />
       ) : null}
@@ -506,17 +563,24 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     gap: S.s,
   },
-  editChip: {
+  // The chip is 28 tall; the Pressable around it is the 44px tap
+  // target. The pad is taken back out of the corner offset so the chip
+  // itself lands exactly where it always did. (hitSlop was the obvious
+  // tool and does nothing on react-native-web 0.19 — UX-9.1.)
+  editChipHit: {
     position: 'absolute',
-    top: S.m,
-    right: S.m,
+    top: S.m - EDIT_CHIP_PAD,
+    right: S.m - EDIT_CHIP_PAD,
+    padding: EDIT_CHIP_PAD,
+    zIndex: 1,
+  },
+  editChip: {
     height: EDIT_CHIP_H,
     paddingHorizontal: S.m,
     borderRadius: EDIT_CHIP_H / 2,
     backgroundColor: '#ffffff',
     justifyContent: 'center',
     alignItems: 'center',
-    zIndex: 1,
   },
   editChipText: {
     fontFamily: SYSTEM_FONT,

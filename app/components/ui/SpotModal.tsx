@@ -7,13 +7,15 @@ import { INLINE_ICON, ICON_HERO, EMOJI_HERO } from '../../constants/sizing';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
-import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
+import { MODAL_PILL_DARK, MODAL_PILL_DISABLED, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { INK, SURFACE } from '../../constants/surface';
 import { colors } from '../../constants/colors';
 import { playPopThen } from '../../utils/popOnTap';
 import { Icon, iconForCategory } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
+import { useSheetBack } from '../../hooks/useSheetBack';
+import { MOTION } from '../../utils/motion';
 
 interface SpotModalProps {
   spot: Spot | null;
@@ -21,11 +23,12 @@ interface SpotModalProps {
   // Triggers a walking-route fetch + render to this spot. Modal
   // closes itself afterward. Caller decides whether the route is a
   // one-way or roundtrip — modal default is one-way; long-press
-  // could differentiate later.
-  onWalkHere?: (spot: Spot, shape: 'roundtrip' | 'oneway') => void;
+  // could differentiate later. May return a promise; the pills stay
+  // disabled until it settles.
+  onWalkHere?: (spot: Spot, shape: 'roundtrip' | 'oneway') => void | Promise<void>;
 }
 
-const SHEET_ANIM_MS = 280;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 const HERO_HEIGHT_PX = 220;
 // Top-anchored modal — bump the badge / close button down by the
 // safe-area inset so they clear the iPhone notch / status bar.
@@ -41,6 +44,19 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   const t = useStrings();
   const [renderSpot, setRenderSpot] = useState<Spot | null>(spot);
   const [closing, setClosing] = useState(false);
+  // Which spot a walk is being routed to. The route is a network call,
+  // and with nothing to show for it the pills invited a second tap (and
+  // a second route). Keyed by id so opening another spot meanwhile
+  // gets live pills, not this one's wait.
+  const [routingFor, setRoutingFor] = useState<string | null>(null);
+  const routing = renderSpot != null && routingFor === renderSpot.id;
+  const walk = (s: Spot, shape: 'roundtrip' | 'oneway') => {
+    if (routing || !onWalkHere) return;
+    setRoutingFor(s.id);
+    void Promise.resolve(onWalkHere(s, shape)).finally(() =>
+      setRoutingFor((cur) => (cur === s.id ? null : cur)),
+    );
+  };
 
   useEffect(() => {
     if (spot) {
@@ -58,6 +74,9 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
     }
   }, [spot]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!spot, onClose);
+
   if (!renderSpot) return null;
   if (typeof document === 'undefined') return null;
 
@@ -67,6 +86,8 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
   // Portal to document.body — see LostDogModal for the rationale.
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
       style={{
         position: 'fixed',
@@ -270,37 +291,28 @@ export function SpotModal({ spot, onClose, onWalkHere }: SpotModalProps) {
         >
           <button
             onClick={(e) =>
-              playPopThen(e.currentTarget, () => onWalkHere?.(renderSpot, 'oneway'))
+              playPopThen(e.currentTarget, () => walk(renderSpot, 'oneway'))
             }
-            style={MODAL_PILL_DARK}
+            disabled={routing}
+            style={routing ? MODAL_PILL_DISABLED : MODAL_PILL_DARK}
           >
-            <Icon name="walk" size={INLINE_ICON.cta} inverted />
+            <Icon name="walk" size={INLINE_ICON.cta} inverted={!routing} />
             <span>{t.modals.spot.walkHere}</span>
           </button>
           <button
             onClick={(e) =>
-              playPopThen(e.currentTarget, () => onWalkHere?.(renderSpot, 'roundtrip'))
+              playPopThen(e.currentTarget, () => walk(renderSpot, 'roundtrip'))
             }
-            style={MODAL_PILL_LIGHT}
+            disabled={routing}
+            style={routing ? MODAL_PILL_DISABLED : MODAL_PILL_LIGHT}
           >
-            <HandDrawnFrame radius={R.button} />
+            {routing ? null : <HandDrawnFrame radius={R.button} />}
             {/* Not inverted any more — the pill under it went from blue
                 to white, and a white icon on white is nothing. */}
             <Icon name="roundtrip" size={INLINE_ICON.cta} />
             <span>{t.modals.spot.roundtrip}</span>
           </button>
         </div>
-
-        <style>{`
-          @keyframes top-sheet-in {
-            from { transform: translateY(-100%); }
-            to { transform: translateY(0); }
-          }
-          @keyframes top-sheet-out {
-            from { transform: translateY(0); }
-            to { transform: translateY(-100%); }
-          }
-        `}</style>
       </div>
     </div>,
     document.body,

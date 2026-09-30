@@ -5,6 +5,8 @@ import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
+import { useElementBox } from '../../hooks/useElementBox';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
@@ -16,8 +18,9 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { DEV_TOOLS } from '../../constants/devTools';
-import { useGameStore } from '../../stores/gameStore';
+import { setScreenCenterReader, useGameStore } from '../../stores/gameStore';
 import { useAccessStore } from '../../stores/accessStore';
+import { useConnectionStore } from '../../stores/connectionStore';
 import { MapContext } from './MapContext';
 import {
   LIGHT_PALETTE,
@@ -37,7 +40,8 @@ import {
   pointAheadOnRoute,
   remainingRouteMeters,
 } from '../../utils/geo';
-import { playPop } from '../../utils/popOnTap';
+import { playPop, playPopThen } from '../../utils/popOnTap';
+import { MOTION } from '../../utils/motion';
 import { Companion } from './Companion';
 import { CrayonRoute } from './CrayonRoute';
 import logoNose from '../../assets/logo-nose.png';
@@ -69,14 +73,15 @@ import {
   FLAT_GROUND_CAM,
 } from '../../constants/experiments';
 import { LostDogMarker } from './LostDogMarker';
+import { MARKER_CLASS } from './MapLibreMarker';
 import { LostDogCluster, URGENCY_RANK } from './LostDogCluster';
 import { LostDogModal } from '../ui/LostDogModal';
 import { SpotModal } from '../ui/SpotModal';
 import { PostModal } from '../ui/PostModal';
 import { getDeepLinkDogId } from '../../services/telegram';
-import { useStrings } from '../../i18n/useStrings';
+import { getStrings, useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
-import { fetchWalkingRoute } from '../../services/directions';
+import { fetchWalkingRoute, fetchWalkingRouteOrLine } from '../../services/directions';
 import { api, type NearbyLostDog } from '../../services/api';
 import { PoiMarker } from './PoiMarker';
 import { PoiCluster } from './PoiCluster';
@@ -87,6 +92,7 @@ import { WalkStops } from './WalkStops';
 import { TerritoryLayer } from './TerritoryLayer';
 import type { LatLng, NearbyPlayer } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
+import { HUD_ICON_SIZE } from '../../constants/sizing';
 import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { INK, SURFACE } from '../../constants/surface';
@@ -386,6 +392,13 @@ export default function MapViewWeb() {
   // needs to know, because `location.position` is already the position
   // to act on.
   const gpsHeld = location.held === 'jammed';
+  // No real fix at all — the browser refused or never answered, and the
+  // map is standing on the Kyiv fallback. Before this chip the only word
+  // about it lived on the "locating…" screen, which by then is gone (the
+  // fallback IS a position), so a person with location off was shown
+  // Maidan with no hint why. A jammed GPS has its own pill and says
+  // enough on its own.
+  const noLocation = location.usingFallback && !gpsHeld;
   // A top-edge chip has to clear the iOS status bar (clock, signal,
   // battery) — taps inside that strip are intercepted by the system
   // (scroll-to-top), so a chip overlapping it feels dead. The HUD
@@ -407,19 +420,10 @@ export default function MapViewWeb() {
   const [mapInstance, setMapInstance] = useState<maplibregl.Map | null>(null);
   // The dog whose card is open (D-73), from a tap on its chip.
   const [cardPlayer, setCardPlayer] = useState<NearbyPlayer | null>(null);
-  // Map fires its own click on the canvas independently of DOM event
-  // propagation from markers — `stopPropagation` inside a marker
-  // child doesn't reach it. At low zoom the companion overlaps the
-  // map surface enough that opening the radial menu also triggers a
-  // "background click" that closes it ~1 frame later. Record every
-  // companion tap and suppress the map click for a short window.
-  const companionTappedAtRef = useRef<number>(0);
   // How long the lost-pet deck takes to slide out of the menu's way, and
 // back. Matches the modal family's 280ms so the whole app moves on one
 // clock.
-const DECK_ANIM_MS = 280;
-
-const SUPPRESS_MAP_CLICK_MS = 300;
+const DECK_ANIM_MS = MOTION.sheetMs;
   // Which cluster is currently "spiderified" — tapping a cluster pops its
   // pets out around the center. Tapping elsewhere (the map background or
   // another cluster) collapses it. Lives locally because nothing else in
@@ -433,6 +437,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   const [mapProblem, setMapProblem] = useState<'unsupported' | 'failed' | null>(null);
   // Bumped by the retry button; a dep of the construction effect.
   const [mapAttempt, setMapAttempt] = useState(0);
+  // Tell the dashboard, which otherwise hides for the gate's ring — a
+  // ring this map cannot draw. Cleared on unmount so a stale "blocked"
+  // never outlives the screen that said it.
+  const setMapBlocked = useGameStore((s) => s.setMapBlocked);
+  useEffect(() => {
+    setMapBlocked(mapProblem != null);
+  }, [mapProblem, setMapBlocked]);
+  useEffect(() => () => setMapBlocked(false), [setMapBlocked]);
   const userPos = location.position;
   // Map intervals (companion lerp, auto-collect, /sync/map poll) all
   // gate on this — when the user is on Profile/Chat/Quests we stop
@@ -451,6 +463,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   const menuOpen = useGameStore((s) => s.menuOpen);
   // The lost-pet sheet has stepped aside so the owner can aim the map.
   const lostPinning = useGameStore((s) => s.lostPinning);
+  // Whether the first pets answer is in, and whether calls are getting
+  // through — together they tell an empty supersniff deck apart from a
+  // loading one, and a quiet area from a dead connection.
+  const lostDogsLoaded = useGameStore((s) => s.lostDogsLoaded);
+  const connection = useConnectionStore((s) => s.status);
   // Sniff-and-lead search mode assignment (which lost dog + spot). Set by the
   // search controller below while dogCam is on.
   const searchTarget = useGameStore((s) => s.searchTarget);
@@ -472,7 +489,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // is what unlocks the owner's contact, and the server checks it
     // again before sending anything.
     | { kind: 'done'; text: string; dog: NearbyLostDog; canSeePost: boolean }
+    // "I saw it" did not reach the server. Its own kind rather than a
+    // 'done' with different words, because it has different answers:
+    // try again, or let it go — never the owner's contact, which only a
+    // sighting the server actually holds can unlock.
+    | { kind: 'failed'; dog: NearbyLostDog }
   >(null);
+  // True while a finishSearch request is on the wire. The ref is the
+  // guard (a second tap lands before React re-renders); the state is
+  // what greys the answers out so the walker can see the first one took.
+  const finishingRef = useRef(false);
+  const [finishing, setFinishing] = useState(false);
   // The pet whose post is open, if any. Its own state rather than a
   // prompt variant, because it is reached from two unrelated places —
   // the pet card mid-search and the end-of-search prompt.
@@ -529,7 +556,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           ? t.search.leaveAsk
           : prompt.kind === 'arrived'
             ? t.search.arrivedAsk(prompt.dog.name)
-            : prompt.text;
+            : prompt.kind === 'failed'
+              ? t.search.sendFailed
+              : prompt.text;
   const setSearchTarget = useGameStore((s) => s.setSearchTarget);
   const searchRoute = useGameStore((s) => s.searchRoute);
   const setSearchRoute = useGameStore((s) => s.setSearchRoute);
@@ -642,6 +671,12 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // asked in, and neither does a fan of expanded pins. The store drops
   // the search itself on a flip; this drops what MapView holds of its
   // own. Skip the first run so mounting doesn't count as a flip.
+  //
+  // openSeqRef is openPlayer's "which walker read is still wanted"
+  // counter (see there). Declared here so the flip can bump it too: a
+  // /players/:id read still in flight when the user leaves must not pin
+  // that walker's district and fly the camera there afterwards.
+  const openSeqRef = useRef(0);
   const overlayEpoch = useGameStore((s) => s.overlayEpoch);
   const overlayEpochInitRef = useRef(true);
   useEffect(() => {
@@ -651,6 +686,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     }
     setPrompt(null);
     setExpandedSpotKeys((prev) => (prev.size === 0 ? prev : new Set()));
+    // The post reader and a walker's card are map-only overlays too.
+    // MapView stays mounted behind the other tabs, so without this they
+    // came back on return, over whatever the user had picked meanwhile.
+    setPostDog(null);
+    setCardPlayer(null);
+    openSeqRef.current += 1;
+    // …and a spiderified cluster, whose pets belong to the old view.
+    setExpandedClusterKey(null);
   }, [overlayEpoch]);
   const tokens = useGameStore((s) => s.tokens);
   const foodItems = useGameStore((s) => s.foodItems);
@@ -683,6 +726,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       ? formatDistance(
           remainingRouteMeters(searchRoute, userPos) ??
             distanceMeters(userPos, searchTarget.spot),
+          t.units,
         )
       : null;
   // Whether the map tab is the active screen. The offscreen companion
@@ -781,7 +825,6 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   const forceAdvanceActiveWaypoint = useGameStore((s) => s.forceAdvanceActiveWaypoint);
   const walkRoute = useGameStore((s) => s.walkRoute);
   const walkRouteMeta = useGameStore((s) => s.walkRouteMeta);
-  const abandonActiveQuest = useGameStore((s) => s.abandonActiveQuest);
 
   // Snapshot of the walk-destination Spot. spots refetch when the
   // viewport pans, and viewport-driven fetches don't necessarily
@@ -895,6 +938,36 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   }, []);
 
   useGameLoop(showBubble);
+
+  // "I've seen them", after its confirm — from the pet card, and from
+  // the ad reader's contacts note (UX-5.5). One place for the report and
+  // the thanks it says, so the two cannot drift. `ok` is whether the
+  // server took the report; `refusal` is the line said when it did not
+  // (null for a tap whose first report is still on the wire), so the
+  // reader — which sits above the map, over the bubble — can say it too.
+  const reportSeen = useCallback(
+    async (d: { id: string; name: string }): Promise<{ ok: boolean; refusal: string | null }> => {
+      const res = await useGameStore.getState().reportSighting(d.id);
+      // The first tap's report is still on the wire; it will say
+      // its own thanks.
+      if (res?.reason === 'in-flight') return { ok: false, refusal: null };
+      if (res?.ok && res.trusted) {
+        showBubble(t.bubbles.sightingMoved(d.name), 5000);
+      } else if (res?.ok) {
+        showBubble(t.bubbles.sightingLogged, 5000);
+      } else if (res?.reason === 'no-location') {
+        // Not a failure to send — a refusal to invent. Say which,
+        // or the walker retries a thing that cannot work.
+        showBubble(t.bubbles.sightingNoLocation, 6000);
+        return { ok: false, refusal: t.bubbles.sightingNoLocation };
+      } else {
+        showBubble(t.bubbles.sightingFailed, 5000);
+        return { ok: false, refusal: t.bubbles.sightingFailed };
+      }
+      return { ok: true, refusal: null };
+    },
+    [showBubble, t],
+  );
 
   // Dev affordance: `?terrReset=1` wipes YOUR territory once on load, so
   // the mechanic can be re-tested from a clean slate without hunting rows
@@ -1272,6 +1345,29 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     syncSpots,
   ]);
 
+  // The EXACT point under the middle of the window, for the lost-pet pin
+  // step (UX-1.4). The bounds midpoint above is not it: every mode tilts
+  // the camera at some point, and at game pitch that midpoint lands a
+  // street or more up-screen of the crosshair — which is where a real
+  // owner's report was being saved. The crosshair is drawn at 50%/50% of
+  // the WINDOW, so this unprojects that pixel, translated into the map
+  // container's own coordinates (the container is not guaranteed to
+  // start at the window's corner). Read at the moment of confirm, not on
+  // idle, so a pan that has not settled yet still counts.
+  useEffect(() => {
+    if (!mapInstance) return;
+    setScreenCenterReader(() => {
+      if (typeof window === 'undefined') return null;
+      const rect = mapInstance.getContainer().getBoundingClientRect();
+      const ll = mapInstance.unproject([
+        window.innerWidth / 2 - rect.left,
+        window.innerHeight / 2 - rect.top,
+      ]);
+      return { lat: ll.lat, lng: ll.lng };
+    });
+    return () => setScreenCenterReader(null);
+  }, [mapInstance]);
+
   // Pull the active quest (if any) on mount so a refreshed tab sees the
   // quest the user started earlier. No polling — quest state only changes
   // on explicit user actions (start / advance / abandon).
@@ -1411,6 +1507,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       if (Date.now() - lastUserRotateAt < DOGCAM_TICK) return;
       // A swipe's or the entry swing's own move is still easing → let it land.
       if (Date.now() < cameraHoldUntilRef.current) return;
+      // The owner is aiming the map at where their pet was last seen
+      // (UX-1.4). A chase tick would snap the dog back to the middle and
+      // throw the aim away every 250 ms — the loop stands down entirely
+      // until the pin is confirmed or abandoned, then picks up again.
+      if (useGameStore.getState().lostPinning) return;
       // Preview → stay TIED to the dog but zoomed out, facing the fragment we're
       // eyeing (so the blue beacon sits up-screen). Committed → tight chase cam
       // with heading-up. Either way the camera is glued to the dog, so it never
@@ -1476,6 +1577,29 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       }
     };
   }, [dogCam]);
+
+  // AIM FLAT. Supersniff's chase camera sits at a steep tilt, and aiming a
+  // pin into a tilted city means aiming at a street seen edge-on, with the
+  // horizon a thumb's width above the crosshair. For as long as the pin
+  // step is up the camera lies flat; on the way out the pitch it had goes
+  // back (and in supersniff the chase loop above re-asserts its own on
+  // its next tick anyway). The flat modes are already at FLAT_PITCH, so
+  // this is a no-op there.
+  useEffect(() => {
+    if (!lostPinning) return;
+    const map = mapRef.current;
+    if (!map) return;
+    const before = map.getPitch();
+    if (before <= FLAT_PITCH_SETTLED_DEG) return;
+    easeCamera(map, 'cinematic', { pitch: FLAT_PITCH, duration: 400 });
+    return () => {
+      try {
+        easeCamera(map, 'cinematic', { pitch: before, duration: 400 });
+      } catch {
+        /* map tearing down */
+      }
+    };
+  }, [lostPinning]);
 
   // ── The flat ground camera: walks ('explore') and territory ('play') ─────
   //
@@ -1558,6 +1682,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // under the thumb is the thing being aimed. It holds the camera for
   // its own reason, so it stays beside the list rather than in it.
   const flatCamHeld = !onMapScreen || lostPinning || reading;
+  // MARKERS THAT MUST NOT ANSWER A TAP (UX-2.3). Two states where the map
+  // is on screen but is not the thing being used: the lost-pet pin step
+  // (the map is being aimed, and a pet's or a walker's sheet opening
+  // under the pin card undoes that) and the account sheet (the dog is
+  // framed above the paper, and a marker tap opened a second sheet under
+  // the first). Pets and walkers step out of the frame; spots stay drawn
+  // — a walk's destination is part of the picture — but go inert.
+  const markersInert = lostPinning || doorSheetUp;
   const flatCamHeldRef = useRef(flatCamHeld);
   flatCamHeldRef.current = flatCamHeld;
   // When the camera is next allowed to move itself. Pushed forward by every
@@ -1784,6 +1916,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       const origin = userPos ?? dog.lastSeen.position;
       setSearchRoute([origin, spot]);
       void fetchWalkingRoute(origin, [spot]).then((r) => {
+        // Only if this is still the search it was asked for. A slow
+        // Directions answer used to redraw the line of a search the
+        // walker had already finished, left, or swapped for another pet.
+        const cur = useGameStore.getState().searchTarget;
+        if (!cur || cur.dogId !== dog.id || cur.spot !== spot) return;
         if (r && r.length >= 2) setSearchRoute(r);
       });
       // Recentre on the dog and point the camera along the fresh route so the
@@ -1806,13 +1943,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         });
       }
       if (announce) {
-        const leadLines = [
-          `беремо слід ${dog.name}! ходімо 🐾`,
-          `шукаємо ${dog.name} — за мною!`,
-          `${dog.name} десь тут… чую запах 🐽`,
-          `на пошук ${dog.name}, тримайся поруч!`,
-          `on the trail of ${dog.name} — this way! 🐾`,
-        ];
+        // getStrings, not `t`: this callback is memoised without it,
+        // and the pools are per language now (UX-4.3).
+        const leadLines = getStrings().bubbles.searchLead(dog.name);
         showBubble(leadLines[Math.floor(Math.random() * leadLines.length)]!, 3500);
       }
     },
@@ -1864,12 +1997,25 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // the client only reports what happened.
   const finishSearch = useCallback(
     async (dog: NearbyLostDog, seen: boolean) => {
+      // One answer per question. Each call writes a real sighting and
+      // pays paws, and on a slow connection the pills stay up for the
+      // whole request — so "yes" twice, or "yes" then "no", would file
+      // two rows (or two contradictory ones).
+      if (finishingRef.current) return;
+      finishingRef.current = true;
+      setFinishing(true);
       setSearchTarget(null);
       setSearchRoute(null);
       let paws = 0;
+      let ok = false;
+      // A mode flip or tab switch while the request is out clears the
+      // question (see the overlayEpoch effect); an answer landing after
+      // it must not raise a new one on a dog that is no longer asking.
+      const epoch = useGameStore.getState().overlayEpoch;
       try {
         const res = await api.finishSearch(dog.id, seen, userPosRef.current);
         paws = res.paws;
+        ok = true;
         // `res.sourceUrl` is deliberately ignored now. It was the OLX
         // link this prompt used to open; /dogs/:id/post carries its own
         // copy, gated by the same sighting check, so reading it from two
@@ -1878,6 +2024,26 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // Offline or the server said no. The search still ends — stranding
         // someone in a quest because a request failed is the worse outcome
         // — they just do not get told a number.
+      } finally {
+        finishingRef.current = false;
+        setFinishing(false);
+      }
+      // A sighting that never arrived is not "logged". Say so and offer
+      // the retry; a "no, nobody" that failed is only a lost count, and
+      // falls through to the ordinary thanks.
+      const stale = useGameStore.getState().overlayEpoch !== epoch;
+      if (!ok && seen) {
+        // Not dropped with the rest of a stale answer: this is a sighting
+        // that never arrived, and saying nothing would let the walker
+        // believe it did. Still in supersniff (a tab switch, or out and
+        // back) the retry is answerable, so it is asked; flipped out of
+        // it, there is nowhere to answer, so the dog just says so.
+        if (stale && !(DOG_CAM && useGameStore.getState().dogCam)) {
+          showBubble(t.search.sendFailed, 5000);
+          return;
+        }
+        setPrompt({ kind: 'failed', dog });
+        return;
       }
       // THE PAYOUT, ONE PAW AT A TIME.
       //
@@ -1887,6 +2053,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       // second and a half — so the reward arrives as a run of pickups
       // rather than a number changing.
       if (paws > 0) useGameStore.getState().awardPaws(paws);
+      if (stale) return;
       setPrompt({
         kind: 'done',
         text: seen ? t.search.thanksSeen(paws) : t.search.thanksMissed(paws),
@@ -1897,7 +2064,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         canSeePost: seen,
       });
     },
-    [setSearchTarget, setSearchRoute, t],
+    [setSearchTarget, setSearchRoute, showBubble, t],
   );
 
   // Preview (carousel SWIPE, or the initial mode-on pick): pick the candidate
@@ -2007,29 +2174,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       return;
     }
     const NUDGE_MS = 9000;
-    // Generic "keep following me" barks (mix of uk + en, matching the app).
-    const generic = [
-      'сюди! 🐾',
-      'ходімо, ніс не бреше!',
-      'this way — I caught a scent!',
-      'давай, за мною!',
-      'нюхом чую, туди!',
-      'майже там, не відставай! 🐕',
-      'слід свіжий, швидше!',
-      'keep up — the trail is warm! 🐾',
-      'туди-туди, ще трохи!',
-      'не зупиняйся, я веду!',
-      'almost there — stay with me!',
-      'ще пару кроків, ходімо 🐽',
-    ];
-    // Name-aware barks — only usable when we can resolve the active dog.
-    const named = (name: string) => [
-      `${name} десь поруч — за мною! 🐾`,
-      `нюхаю ${name}, сюди!`,
-      `не губи слід ${name}!`,
-      `${name} чекає — ходімо!`,
-      `closing in on ${name} — this way!`,
-    ];
+    // "Keep following me" barks, generic and name-aware. Read from
+    // getStrings() on each tick rather than captured here, so a
+    // language switch mid-search takes on the next bark (UX-4.3).
     const id = setInterval(() => {
       const st = useGameStore.getState().searchTarget;
       const up = userPosRef.current;
@@ -2040,8 +2187,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       // Only bark if you haven't meaningfully closed the gap since last check.
       if (prev === null || prev - dist < 12) {
         const name = lostDogsRef.current.find((d) => d.id === st.dogId)?.name;
+        const b = getStrings().bubbles;
         // Weave name-aware lines in when we know who we're after.
-        const pool = name ? [...generic, ...named(name)] : generic;
+        const pool = name ? [...b.searchNudge, ...b.searchNudgeNamed(name)] : b.searchNudge;
         showBubble(pool[Math.floor(Math.random() * pool.length)]!, 3200);
       }
       lastNudgeDistRef.current = dist;
@@ -2716,7 +2864,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // the biggest. Only when it is NOT drawn — which is the interesting
   // case, a dog standing on ground the view cap dropped — does this go
   // to /players/:id, and that is the read the card is making anyway.
-  const openSeqRef = useRef(0);
+  // (openSeqRef is declared up by the overlayEpoch effect, which bumps it.)
   const openPlayer = useCallback(
     (player: NearbyPlayer) => {
       setCardPlayer(player);
@@ -2811,8 +2959,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
       // question the standing asks. It reads /players/:id, which is a
       // plain server read — so it works for an owner who is offline,
       // which is most of the ones worth jumping to.
+      // Only when the jump asked for it: the card's own "show ground"
+      // closes the card so the flight is visible, and reopening it here
+      // put it straight back over the view it had got out of the way of.
       const guest = useGameStore.getState().pinnedGuest;
-      if (guest && guest.ownerId === focusedTerritory.ownerId) {
+      if (focusedTerritory.openCard && guest && guest.ownerId === focusedTerritory.ownerId) {
         setCardPlayer({
           id: guest.ownerId,
           position: guest.at,
@@ -3246,17 +3397,48 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         // settles (sniff jumps, snaps, pans all fire move start/end).
         map.on('movestart', () => setMapMoving(true));
         map.on('moveend', () => setMapMoving(false));
-        map.on('click', () => {
+        map.on('click', (e) => {
           // While the dog is asking, a tap on the map is not a dismiss.
           // The ring closes by being answered and by nothing else — this
           // is the "tap-to-discard blocked" half of the gate, and it has
           // to sit here rather than under an overlay, because the ring
           // and the dog are themselves children of the map.
           if (useGameStore.getState().appMode === 'gate') return;
+          // A TAP ON A MARKER IS THE MARKER'S, NOT THE MAP'S (UX-8.1).
+          //
+          // MapLibre hears every click on its canvas container natively,
+          // before React's root listener dispatches the marker's own
+          // onClick — so a marker's `stopPropagation` never reached this.
+          // Every marker tap was ALSO a background tap: the cluster badge
+          // was collapsed here and re-opened by its own toggle a moment
+          // later, so it could not be closed from the badge, and a tap on
+          // any drill-down of the dog's menu closed the menu it was in.
+          // (A 300ms timestamp stamped by the dog papered over the dog's
+          // own tap and nothing else.)
+          //
+          // So a marker tap stops here, and only closes what it does not
+          // own. Owner decision D8: tapping ANOTHER marker still closes an
+          // open menu or cluster — done explicitly, by asking which marker
+          // it was. An open walk-stop story is left alone: the story is
+          // itself a marker full of buttons (the heart, "more").
+          //
+          // "Inside" means on something the marker drew, or on a wrapper
+          // that listens itself. A bare wrapper hit is empty map: the open
+          // cluster's wrapper spans its whole 240px ring box, and a tap in
+          // the gaps between its discs has to still close it.
+          const target = e.originalEvent?.target;
+          const marker =
+            target instanceof Element ? target.closest('.maplibregl-marker') : null;
           if (
-            Date.now() - companionTappedAtRef.current <
-            SUPPRESS_MAP_CLICK_MS
+            marker &&
+            (marker !== target || marker.classList.contains(MARKER_CLASS.tappable))
           ) {
+            if (!marker.classList.contains(MARKER_CLASS.companion)) {
+              useGameStore.getState().setMenuOpen(false);
+            }
+            if (!marker.classList.contains(MARKER_CLASS.openCluster)) {
+              setExpandedClusterKey(null);
+            }
             return;
           }
           setExpandedClusterKey(null);
@@ -3398,6 +3580,38 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos; version drives re-nudge
   }, [nearbyPlayers, mapBounds, userPos?.lat, userPos?.lng, onMapScreen, buildingIndexVersion, pinnedGuest]);
 
+  // THE ROWS THE MAP'S OVERLAYS HAVE TO CLEAR. The quest pill lives in
+  // the HUD (a sibling of this component, app/(tabs)/index.tsx) and
+  // grows a line for a long pet name, so it is measured, not assumed.
+  const questBox = useElementBox(activeQuest ? 'map-hud-quest' : null);
+  // The walk / GPS pill row. The quest has no pill here any more: its
+  // own × on the quest pill is the way out (UX-7.1), and two centred
+  // pills for the same thing stacked on top of each other.
+  const overlayPillsLive =
+    !!(walkRoute || gpsHeld || noLocation) &&
+    !(DOG_CAM && dogCam) &&
+    !doorSheetUp &&
+    !lostPinning;
+  // Keyed on the early returns below too: the row does not exist while
+  // the map is still waiting for a position or has failed, and the
+  // lookup has to run again once it does.
+  const pillsBox = useElementBox(
+    overlayPillsLive && userPos && !mapProblem ? 'map-overlay-pills' : null,
+  );
+  // 100 below the safe area, as before — or under the quest pill when
+  // one is showing, which used to sit exactly where this row did.
+  const overlayTop = Math.max(insets.top + 100, questBox ? questBox.bottom + S.s : 0);
+  // The poke toast goes under whichever of those is lowest. Height, not
+  // bottom, for the pill row: it MOVES when the quest row comes and
+  // goes, and a resize observer only hears about size.
+  const pokeToastTop =
+    overlayPillsLive && pillsBox
+      ? `${overlayTop + pillsBox.height + S.s}px`
+      : questBox
+        ? `${questBox.bottom + S.s}px`
+        : 'calc(env(safe-area-inset-top, 0px) + 96px)';
+  const tabClearance = useTabBarClearance();
+
   if (!userPos) {
     return (
       <View style={styles.msg}>
@@ -3436,8 +3650,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // sticks to the screen edge nearest to the companion. Tap recenters.
   // `mapBounds` is the latest snapshot from the map's `idle` event; the
   // edge position is computed against the current companion lat/lng.
-  // `topReserve` clears the iPhone dynamic island / OS status bar — at
-  // 0 the bookmark was clipping under the curved system bar.
+  //
+  // KEPT OUT OF THE CHROME'S BANDS (UX-7.2). The chip is portaled above
+  // the HUD and the tab bar, so wherever it lands it takes the taps: at
+  // the old 2% / 8% reserves a tab under it recentred the map instead
+  // of navigating, and at the top it sat on the logo or the pills. The
+  // reserves are pixels now — the HUD row (and the quest pill under it)
+  // at the top, the tab bar's clearance at the bottom — and the side
+  // chips, which centre on their point, keep half a chip clear of both.
   const offscreenIndicator = (() => {
     // Portaled to document.body — suppress off the map tab so the chip
     // doesn't paint over other screens.
@@ -3446,6 +3666,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // the star of this view (it's leading you), and the camera keeps it framed.
     // Recentring on each new route (below) keeps it on-screen.
     if (DOG_CAM && dogCam) return null;
+    // Aiming a lost-pet pin: the dog has stepped out of frame on purpose,
+    // and this chip's tap recentres on it — which would undo the aim.
+    if (lostPinning) return null;
     if (!mapBounds || !companionPos) return null;
     const { n, s, e, w } = mapBounds;
     if (
@@ -3460,12 +3683,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     const ny = (n - companionPos.lat) / (n - s);
     const dx = nx - 0.5;
     const dy = ny - 0.5;
-    // Reserves push the bookmark in from the edge — kept
-    // tight per user request so the chip hugs the screen
-    // sides + the dashboard.
+    // Side reserve kept tight per user request so the chip hugs the
+    // screen sides. Top and bottom are the chrome's bands, in px,
+    // turned into fractions of the viewport the fixed chip lives in.
+    const vh = typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : 800;
+    const chipHalf = 28;
+    const topReservePx =
+      Math.max(insets.top + S.xxl + HUD_ICON_SIZE, questBox?.bottom ?? 0) + S.s;
+    const bottomReservePx = tabClearance + S.s;
     const sideReserve = 0.01;
-    const topReserve = 0.02;
-    const bottomReserve = 0.08;
+    const topReserve = topReservePx / vh;
+    const bottomReserve = bottomReservePx / vh;
     const xBound = dx > 0 ? 1 - sideReserve - 0.5 : 0.5 - sideReserve;
     const yBound = dy > 0 ? 1 - bottomReserve - 0.5 : 0.5 - topReserve;
     const tx = Math.abs(xBound / Math.max(Math.abs(dx), 1e-6));
@@ -3476,7 +3704,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (tx < ty) {
       edge = dx > 0 ? 'right' : 'left';
       leftPct = edge === 'right' ? 1 - sideReserve : sideReserve;
-      topPct = 0.5 + dy * tx;
+      topPct = Math.min(
+        Math.max(0.5 + dy * tx, (topReservePx + chipHalf) / vh),
+        1 - (bottomReservePx + chipHalf) / vh,
+      );
     } else {
       edge = dy > 0 ? 'bottom' : 'top';
       leftPct = 0.5 + dx * ty;
@@ -3484,14 +3715,31 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     }
     return {
       left: `${leftPct * 100}%`,
-      // Same safe-area shift for top-edge companion chip — keeps
-      // it out of the iOS status-bar tap dead-zone.
-      top:
-        edge === 'top'
-          ? `calc(${topPct * 100}% + ${insets.top}px)`
-          : `${topPct * 100}%`,
+      // The safe-area inset is already inside topReservePx.
+      top: `${topPct * 100}%`,
       edge,
+      // The chip's centre in px, for the restack pill that shares the
+      // right edge with it (UX-7.12).
+      centerY:
+        edge === 'top'
+          ? topPct * vh + chipHalf
+          : edge === 'bottom'
+            ? topPct * vh - chipHalf
+            : topPct * vh,
     };
+  })();
+  // The restack pill sits at 50% on the right edge. When the chip is
+  // docked on that edge near the middle, the pill steps 72 px away from
+  // it — down when the chip is at or above the middle, up when below —
+  // so neither covers the other. The chip is placed along the line to
+  // the dog, so it is not always at 50% itself; a fixed "drop 72" landed
+  // the pill on a chip sitting just under the middle.
+  const restackTop = (() => {
+    if (offscreenIndicator?.edge !== 'right') return '50%';
+    const mid = (typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : 800) / 2;
+    const off = offscreenIndicator.centerY - mid;
+    if (Math.abs(off) > 56) return '50%';
+    return off <= 0 ? 'calc(50% + 72px)' : 'calc(50% - 72px)';
   })();
 
   const recenterOnCompanion = () => {
@@ -3538,10 +3786,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             pointerEvents: 'none',
           }}
         >
-          <div style={mapPulseRing(0)} />
-          <div style={mapPulseRing(0.9)} />
+          <div data-loop style={mapPulseRing(0)} />
+          <div data-loop style={mapPulseRing(0.9)} />
           {/* Fingertip dot pressing in the centre. */}
           <div
+            data-loop
             style={{
               position: 'absolute',
               left: '50%',
@@ -3570,8 +3819,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
 
         {/* Other players' dogs (real + bots) — multiplayer presence. Glide
             between the ~15s presence updates so they read as people walking.
-            Hidden in supersniff so the whole focus is the dog search. */}
-        {DOG_CAM && dogCam
+            Hidden in supersniff so the whole focus is the dog search.
+            Also while a lost-pet pin is being aimed and under the account
+            sheet (see markersInert): a walker's card would open over
+            either. */}
+        {(DOG_CAM && dogCam) || markersInert
           ? null
           : otherWalkers.map((p) => <OtherWalker key={p.id} player={p} onOpen={openPlayer} />)}
 
@@ -3586,7 +3838,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             while the cinematic dog view is open (a pet selected): only the
             selected pet's BIG pin shows (below), so the framed zone isn't
             cluttered by neighbours. */}
-        {(!LOST_DOG_PINS || (DOG_CAM && dogCam) || selectedDogId ? [] : clusters).flatMap((c) => {
+        {(!LOST_DOG_PINS || (DOG_CAM && dogCam) || selectedDogId || markersInert ? [] : clusters).flatMap((c) => {
           if (c.items.length === 1) {
             const d = c.items[0]!.dog;
             const pos = displayPositions.get(d.id) ?? d.lastSeen.position;
@@ -3729,7 +3981,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                 category={s.category}
                 name={s.name}
                 selected={s.id === selectedSpotId}
-                onTap={() => setSelectedSpot(s.id === selectedSpotId ? null : s.id)}
+                onTap={() => {
+                  if (markersInert) return;
+                  setSelectedSpot(s.id === selectedSpotId ? null : s.id);
+                }}
               />
             ));
           }
@@ -3740,13 +3995,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               category={c.category}
               emoji={c.items[0]?.icon ?? '📍'}
               count={c.items.length}
-              onTap={() =>
+              onTap={() => {
+                if (markersInert) return;
                 setExpandedSpotKeys((prev) => {
                   const next = new Set(prev);
                   next.add(c.key);
                   return next;
-                })
-              }
+                });
+              }}
             />,
           ];
         })}
@@ -3796,8 +4052,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                   // server's 60m check (force=true) so we can walk
                   // through the flow from a desk. Passive pins (reached
                   // / future) don't get a handler — nothing to do on tap.
+                  // DEV_TOOLS only: for anyone else a tap would complete
+                  // the step, or the whole search, without walking there.
                   onTap={
-                    state === 'active'
+                    DEV_TOOLS && state === 'active'
                       ? async () => {
                           const { advanced, completed, narration } =
                             await forceAdvanceActiveWaypoint();
@@ -3832,7 +4090,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             on the line, each expanding into the dog's sentence about
             the place and, under that, its Wikipedia summary. Empty for
             a walk through a district kyiv_lore has nothing near. */}
-        <WalkStops />
+        {/* Not over the lost-pet close-up: the selected pet is the one
+            subject of that view, and the walk's dots and open stories sat
+            on top of it (UX-8.7). The walk itself is untouched — they
+            come back when the card closes. */}
+        {selectedDogId ? null : <WalkStops />}
 
 
         {/* Long-press anywhere on the bare map → dog sniffs the area
@@ -3875,16 +4137,16 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // ordinary bubble so the Companion can rank it above the
             // lines that would otherwise talk over it.
             bubble={bubble}
-            question={promptText}
+            // Supersniff only: the answers live in supersniff's HUD, so a
+            // question anywhere else is one nobody can answer.
+            question={DOG_CAM && dogCam ? promptText : null}
             // Out of the frame while the owner aims at the place their
             // pet was last seen: the crosshair marks the centre of the
             // map and so does the dog, and only one of them is the
             // subject.
             hideBubble={offscreenIndicator != null || lostPinning}
             hidden={offscreenIndicator != null || lostPinning}
-            onTap={() => {
-              companionTappedAtRef.current = Date.now();
-            }}
+            hasSearchDogs={searchDogs.length > 0}
             onTapCompanion={() => {
               showBubble(t.bubbles.simpleWoof, 4000);
               // Snap the camera back to the dog whenever the user
@@ -3904,13 +4166,22 @@ const SUPPRESS_MAP_CLICK_MS = 300;
 
       {/* A tapped dog's card (D-73). Portaled to body like the toast. */}
       {MULTIPLAYER && onMapScreen && cardPlayer ? (
-        <PlayerCard player={cardPlayer} onClose={() => setCardPlayer(null)} />
+        <PlayerCard
+          player={cardPlayer}
+          onClose={() => {
+            // Closing before the walker's read lands cancels it — the
+            // user said no to this dog, so no pin and no flight.
+            openSeqRef.current += 1;
+            setCardPlayer(null);
+          }}
+        />
       ) : null}
 
       {/* "X poked you!" notification (multiplayer). Portaled to body; taps
           fly the camera to the poker if they're still online. */}
       {MULTIPLAYER && onMapScreen ? (
         <PokeToast
+          top={pokeToastTop}
           onGoTo={(p) =>
             easeCamera(mapRef.current, 'cinematic', {
               center: [p.lng, p.lat],
@@ -3999,6 +4270,31 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                 />
               </Pressable>
             </View>
+          ) : searchDogs.length === 0 && lostDogsLoaded ? (
+            // NOTHING TO SWIPE. An empty deck used to render as nothing at
+            // all, under a dog saying "swipe for the next dog" — over an
+            // empty map. Stands in the card's own box and says which kind
+            // of empty this is: a quiet area, or a connection that is not
+            // bringing anyone back. Not shown before the first answer, so
+            // a loading deck does not claim there is nobody.
+            <View
+              accessibilityRole="text"
+              style={{
+                width: 288,
+                height: 252,
+                marginBottom: 30,
+                borderRadius: R.card,
+                backgroundColor: '#ffffff',
+                alignItems: 'center',
+                justifyContent: 'center',
+                padding: S.xl,
+                boxShadow: '0 3px 8px rgba(0,0,0,0.24), 0 14px 32px rgba(0,0,0,0.30)',
+              } as unknown as object}
+            >
+              <Text style={[styles.t, styles.problem]}>
+                {connection === 'offline' ? t.search.emptyDeckOffline : t.search.emptyDeck}
+              </Text>
+            </View>
           ) : (
             // The deck STAYS MOUNTED through the confirm prompt — tapping
             // a card focuses it in place (it grows and lifts, its
@@ -4038,8 +4334,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           control in supersniff already lives. They floated mid-screen
           once (covered the card) and at the bottom once (covered the
           card's ground and fought the deck) — the logo line is the one
-          strip of this mode that is always clear. */}
-      {DOG_CAM && dogCam && onMapScreen && prompt ? (
+          strip of this mode that is always clear.
+          Not while the ring is open: the deck slides away for it, and
+          answers about a pet whose card has gone are answers to nothing. */}
+      {DOG_CAM && dogCam && onMapScreen && prompt && !menuOpen ? (
         <View
           style={
             {
@@ -4056,6 +4354,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           pointerEvents="box-none"
         >
           <DogPrompt
+            disabled={finishing}
             actions={
               prompt.kind === 'confirm'
                 ? [
@@ -4076,6 +4375,19 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                   ]
                 : prompt.kind === 'leave' || prompt.kind === 'arrived'
                   ? [
+                      // The ✕ that raised "leave" is easy to brush, and
+                      // both answers end the search — one of them by
+                      // filing a sighting. So leaving has a way back.
+                      // Not on "arrived": there the walk is over.
+                      ...(prompt.kind === 'leave'
+                        ? [
+                            {
+                              label: t.search.keepGoing,
+                              close: true,
+                              onPress: () => setPrompt(null),
+                            },
+                          ]
+                        : []),
                       {
                         label: t.search.no,
                         onPress: () => {
@@ -4095,6 +4407,18 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                       },
                       {
                         label: t.search.yes,
+                        primary: true,
+                        onPress: () => void finishSearch(prompt.dog, true),
+                      },
+                    ]
+                : prompt.kind === 'failed'
+                  ? [
+                      {
+                        label: t.search.close,
+                        onPress: () => setPrompt(null),
+                      },
+                      {
+                        label: t.search.retry,
                         primary: true,
                         onPress: () => void finishSearch(prompt.dog, true),
                       },
@@ -4217,9 +4541,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         </div>
       ) : null}
 
-      {/* The overlay that drops in below the HUD while a route or quest
-          is running: the ways OUT of that state on the HUD's own line,
-          and under them whatever the state has to show.
+      {/* The overlay that drops in below the HUD while a route is
+          running or the GPS is out: the ways OUT of that state on the
+          HUD's own line, and under them whatever the state has to show.
 
           THE CONTAINER SETS NO z-index, deliberately. A positioned
           ancestor with one opens a stacking context that traps every
@@ -4230,8 +4554,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           other. Don't add a z-index here. */}
       {/* Not under the account sheet either: the HUD is already gone
           there, and a pill at top:100 landed between the dog's line and
-          the dog. */}
-      {(walkRoute || activeQuest || gpsHeld) && !(DOG_CAM && dogCam) && !doorSheetUp ? (
+          the dog. Nor while a lost-pet pin is being aimed — the rest of
+          the chrome has bubbled out for that, and this pill is chrome. */}
+      {overlayPillsLive ? (
         <div
           style={{
             position: 'absolute',
@@ -4242,7 +4567,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // is. Invisible in a browser tab, where Safari's chrome is
             // outside the viewport and the inset is 0; only the INSTALLED
             // PWA has a notch to clear, which is exactly where it showed.
-            top: insets.top + 100,
+            //
+            // And under the quest pill when there is one (overlayTop).
+            top: overlayTop,
             left: 0,
             right: 0,
             display: 'flex',
@@ -4256,6 +4583,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               right under the HUD — whether or not the walk has a list
               of stops under it. */}
           <div
+            id="map-overlay-pills"
             style={{
               position: 'relative',
               zIndex: Z.HUD_PILLS_OVERLAY,
@@ -4273,29 +4601,36 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                 role="status"
                 style={{ ...HUD_OVERLAY_PILL, cursor: 'default', pointerEvents: 'none' }}
               >
+                {/* The drawn edge the recipe reserves 2px for (UX-9.7):
+                    without it these were the only white pills on the map
+                    with no line round them. */}
+                <HandDrawnFrame radius={R.pill} />
                 📡 {t.hud.gpsHeld}
+              </div>
+            ) : null}
+            {/* Same slot and recipe as the jammed pill: a status, not a
+                button. The fix is in the browser's settings, which a web
+                page cannot open for anyone. */}
+            {noLocation ? (
+              <div
+                role="status"
+                style={{ ...HUD_OVERLAY_PILL, cursor: 'default', pointerEvents: 'none' }}
+              >
+                <HandDrawnFrame radius={R.pill} />
+                📍 {t.hud.noLocation}
               </div>
             ) : null}
             {walkRoute ? (
               <div
                 role="button"
-                aria-label={t.hud.cancelWalk}
-                onClick={() => setWalkRoute(null, null)}
+                aria-label={t.hud.finishWalk}
+                // The pop every other button in the app gives, then the
+                // walk ends (UX-9.7).
+                onClick={(e) => playPopThen(e.currentTarget, () => setWalkRoute(null, null))}
                 style={HUD_OVERLAY_PILL}
               >
-                × {t.hud.cancelWalk}
-              </div>
-            ) : null}
-            {activeQuest ? (
-              <div
-                role="button"
-                aria-label={t.hud.abandonQuest}
-                onClick={() => {
-                  void abandonActiveQuest();
-                }}
-                style={HUD_OVERLAY_PILL}
-              >
-                × {t.hud.abandonQuest}
+                <HandDrawnFrame radius={R.pill} />
+                × {t.hud.finishWalk}
               </div>
             ) : null}
           </div>
@@ -4387,50 +4722,52 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             />
           </div>
           </div>
+          {/* When the dog is off-screen we mirror his current bubble
+              next to the edge chip so the user keeps hearing him while
+              they pan around looking at other neighborhoods. Inside the
+              chip's own fixed wrapper and positioned off the chip
+              (UX-7.11): it used to be absolute in the map while the chip
+              was fixed in <body>, and wherever the map is not the
+              viewport — the installed PWA, the desktop column — the two
+              drifted apart. The gaps (4 / 10 px) are the old offsets
+              less the 56 px chip. */}
+          {bubble ? (
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                ...(offscreenIndicator.edge === 'top'
+                  ? { top: 'calc(100% + 4px)', left: '50%', transform: 'translateX(-50%)' }
+                  : offscreenIndicator.edge === 'bottom'
+                    ? { bottom: 'calc(100% + 4px)', left: '50%', transform: 'translateX(-50%)' }
+                    : offscreenIndicator.edge === 'left'
+                      ? { left: 'calc(100% + 10px)', top: '50%', transform: 'translateY(-50%)' }
+                      : { right: 'calc(100% + 10px)', top: '50%', transform: 'translateY(-50%)' }),
+                // Its own width, not the 56 px chip's: an absolute box
+                // shrinks to its containing block otherwise.
+                width: 'max-content',
+                zIndex: Z.HUD_CHIP_BUBBLE,
+                // Same dimensions / type as the in-map SpeechBubble.
+                padding: '12px 10px',
+                background: VOICE.background,
+                color: VOICE.color,
+                borderRadius: R.chip,
+                fontFamily: VOICE.fontFamily,
+                fontSize: TYPE.body,
+                lineHeight: 1.4,
+                boxShadow: VOICE.shadow,
+                border: VOICE.border,
+                pointerEvents: 'none',
+                maxWidth: 'min(60vw, 320px)',
+                whiteSpace: 'pre-line',
+                cursor: 'default',
+              }}
+            >
+              {bubble}
+            </div>
+          ) : null}
         </div>,
         document.body,
-      ) : null}
-
-      {/* When the dog is off-screen we mirror his current bubble next
-          to the edge chip so the user keeps hearing him while they pan
-          around looking at other neighborhoods. Anchored to the same
-          edge as the chip but pushed inward so it doesn't clip the
-          screen border. */}
-      {offscreenIndicator && bubble ? (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            left: offscreenIndicator.left,
-            top: offscreenIndicator.top,
-            transform:
-              offscreenIndicator.edge === 'top'
-                ? 'translate(-50%, 60px)'
-                : offscreenIndicator.edge === 'bottom'
-                  ? 'translate(-50%, calc(-100% - 60px))'
-                  : offscreenIndicator.edge === 'left'
-                    ? 'translate(66px, -50%)'
-                    : 'translate(calc(-100% - 66px), -50%)',
-            transition:
-              'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-            zIndex: Z.HUD_CHIP_BUBBLE,
-            // Same dimensions / type as the in-map SpeechBubble.
-            padding: '12px 10px',
-            background: VOICE.background,
-            color: VOICE.color,
-            borderRadius: R.chip,
-            fontFamily: VOICE.fontFamily,
-            fontSize: TYPE.body,
-            lineHeight: 1.4,
-            boxShadow: VOICE.shadow,
-            border: VOICE.border,
-            pointerEvents: 'none',
-            maxWidth: 'min(60vw, 320px)' as unknown as number,
-            whiteSpace: 'pre-line',
-          }}
-        >
-          {bubble}
-        </div>
       ) : null}
 
       {/* Keyframes for things only the map draws. The shell's shared
@@ -4505,10 +4842,13 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         <div
           onClick={() => setExpandedSpotKeys(new Set())}
           role="button"
-          aria-label="restack all expanded spot clusters"
+          aria-label={t.hud.restack}
           style={{
             position: 'absolute',
-            top: '50%',
+            // Stepped off the off-screen companion chip while that is
+            // docked near the middle of the same right edge, which it
+            // otherwise sits on (UX-7.12). See restackTop.
+            top: restackTop,
             right: 0,
             transform: 'translateY(-50%)',
             // Bumped to match the chip + companion-bookmark layer so
@@ -4576,20 +4916,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           setSelectedDog(null);
           setPostDog({ id: d.id, name: d.name });
         }}
-        onReportSighting={async (d) => {
+        onReportSighting={(d) => {
           setSelectedDog(null);
-          const res = await useGameStore.getState().reportSighting(d.id);
-          if (res?.ok && res.trusted) {
-            showBubble(`thanks — moved ${d.name}'s pin 📍`, 5000);
-          } else if (res?.ok) {
-            showBubble(`thanks — sighting logged 👀`, 5000);
-          } else if (res?.reason === 'no-location') {
-            // Not a failure to send — a refusal to invent. Say which,
-            // or the walker retries a thing that cannot work.
-            showBubble(`i can't see where you are — turn location on 📍`, 6000);
-          } else {
-            showBubble(`couldn't report that one — try again`, 5000);
-          }
+          void reportSeen(d);
         }}
         onStartSearch={(d) => {
           // The generated 4-step quest is retired here for now (chat can
@@ -4611,6 +4940,11 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         dogId={postDog?.id ?? null}
         dogName={postDog?.name}
         onClose={() => setPostDog(null)}
+        // The reader's "i've seen them" under its contacts note (UX-5.5).
+        // Same report and same thanks as the pet card's; the reader
+        // stays open and reloads, since a sighting is what opens the
+        // rest of the ad.
+        onReportSighting={postDog ? () => reportSeen(postDog) : undefined}
       />
 
       <SpotModal
@@ -4618,7 +4952,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         onClose={() => setSelectedSpot(null)}
         onWalkHere={async (spot, shape) => {
           if (!userPos) {
-            showBubble("can't walk without knowing where we are", 5000);
+            showBubble(t.bubbles.walkNoLocation, 5000);
             return;
           }
           // Generate the walking polyline first, then close the modal
@@ -4627,15 +4961,24 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           // user has feedback while Directions fetches.
           showBubble(
             shape === 'roundtrip'
-              ? `roundtrip to ${spot.name} 🚶`
-              : `walking to ${spot.name} 🚶`,
+              ? t.bubbles.roundtripTo(spot.name)
+              : t.bubbles.walkingTo(spot.name),
             3000,
           );
           const waypoints =
             shape === 'roundtrip' ? [spot.position, userPos] : [spot.position];
-          const route = await fetchWalkingRoute(userPos, waypoints);
+          // What the answer is for. Checked after the await: a late route
+          // used to install itself and close whatever spot the user had
+          // opened meanwhile, or land in a mode they had flipped to.
+          const epoch = useGameStore.getState().overlayEpoch;
+          // OrLine, as SniffPress does: when Google cannot route, a
+          // straight line still takes the user there. The plain fetch
+          // returned null and the tap simply did nothing.
+          const route = await fetchWalkingRouteOrLine(userPos, waypoints);
+          const now = useGameStore.getState();
+          if (now.overlayEpoch !== epoch || now.selectedSpotId !== spot.id) return;
           if (route) {
-            useGameStore.getState().setWalkRoute(route, { shape, spotId: spot.id });
+            now.setWalkRoute(route, { shape, spotId: spot.id, destination: spot.position });
           }
           setSelectedSpot(null);
         }}

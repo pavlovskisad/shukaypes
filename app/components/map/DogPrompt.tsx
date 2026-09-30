@@ -59,7 +59,16 @@ export interface PromptAction {
   primary?: boolean;
 }
 
-export function DogPrompt({ actions }: { actions: PromptAction[] }) {
+export function DogPrompt({
+  actions,
+  disabled,
+}: {
+  actions: PromptAction[];
+  // The answer already given is on the wire. Every button goes dead and
+  // dims, so a second tap cannot file a second sighting and the walker
+  // can see the first one landed.
+  disabled?: boolean;
+}) {
   return (
     <div
       style={{
@@ -90,7 +99,8 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
       {actions.map((a, i) => (
         <button
           key={a.label}
-          onClick={a.onPress}
+          onClick={disabled ? undefined : a.onPress}
+          disabled={disabled}
           aria-label={a.label}
           // A close button carries its glyph, not the sentence — the
           // label stays as the accessible name so it is still readable
@@ -139,7 +149,10 @@ export function DogPrompt({ actions }: { actions: PromptAction[] }) {
                   minHeight: 52,
                   boxShadow: SURFACE.shadow,
                 }),
-            cursor: 'pointer',
+            cursor: disabled ? 'default' : 'pointer',
+            // A filter, not `opacity`: the pop-in keyframe fills
+            // `both` and owns opacity, so an inline value would lose.
+            filter: disabled ? 'opacity(0.5)' : undefined,
             // Staggered pop-in, the way-out first and the answer landing
             // on top of it a beat later.
             animation: `dog-prompt-pop 360ms cubic-bezier(0.34, 1.56, 0.64, 1) ${i * 70}ms both`,

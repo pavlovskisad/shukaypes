@@ -4,8 +4,9 @@ import { MapLibreMarker } from './MapLibreMarker';
 import { useMaplibreMap } from './MapContext';
 import { DogSprite } from './DogSprite';
 import { Z } from '../../constants/z';
-import { ownerColorCss, ownerColorRgb } from './territoryColor';
+import { ownerColorCss, ownerColorRgb, ownerTextColor } from './territoryColor';
 import { SYSTEM_FONT } from '../../constants/fonts';
+import { TYPE } from '../../constants/type';
 import { useGameStore } from '../../stores/gameStore';
 import { haptic } from '../../utils/haptics';
 import { R } from '../../constants/radius';
@@ -165,7 +166,9 @@ export function OtherWalker({ player, onOpen }: Props) {
         anchor="center"
         cullNearHorizon
         cullSkyMarginPx={CHIP}
-        zIndex={Z.HUD_CHIPS - 2}
+        // On the marker floor, under every lost pet (UX-8.2). It was the
+        // HUD tier's 33 and painted over the pins the map exists to show.
+        zIndex={Z.MARKER_DEFAULT}
         onClick={onTap}
       >
         <div
@@ -258,7 +261,8 @@ export function OtherWalker({ player, onOpen }: Props) {
       // horizon, not when its sprite pokes up — so close dogs never vanish at
       // steep pitch. We accept a little float on the truly-distant ones.
       cullSkyMarginPx={40}
-      zIndex={Z.HUD_CHIPS - 2}
+      // Marker floor, under the lost pets — see the chip above.
+      zIndex={Z.MARKER_DEFAULT}
       onClick={onTap}
     >
       <div
@@ -301,14 +305,16 @@ export function OtherWalker({ player, onOpen }: Props) {
             double the weight it carries on a card label anyway. */}
         <div
           style={{
-            font: `600 10px ${SYSTEM_FONT}`,
-            color: territoryVisible ? '#ffffff' : INK,
+            // Caption size, and the ink picked per owner colour: white
+            // on the pale tones and the yellows was ~1.2:1 (UX-8.8).
+            font: `600 ${TYPE.caption}px ${SYSTEM_FONT}`,
+            color: territoryVisible ? ownerTextColor(player.id) : INK,
             background: territoryVisible ? ownerColorCss(player.id) : SURFACE.fill,
             borderRadius: R.label,
             padding: '1px 6px',
             marginBottom: 2,
             whiteSpace: 'nowrap',
-            maxWidth: 96,
+            maxWidth: 104,
             overflow: 'hidden',
             textOverflow: 'ellipsis',
             boxShadow: '0 1px 3px rgba(0,0,0,0.18)',

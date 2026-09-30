@@ -90,6 +90,31 @@ export interface WalkRouteMeta {
   // flow sets it; the "walk me to this one place" paths don't need it,
   // since the thing they route to is already on screen and named.
   destinationName?: string;
+  // The point the walk goes OUT to. A roundtrip's polyline ends back at
+  // the origin, so its last point is the one place the walk is not
+  // "to" — and the server's daily task refuses a plan under 300 m from
+  // where we stand, so sending that endpoint made every roundtrip
+  // count for nothing. Every creator sets it; the endpoint is only the
+  // fallback for one that does not.
+  destination?: LatLng;
+}
+
+// Pets a lost-dog sync must not drop even when the server's nearby list
+// leaves them out. The syncs replace the list wholesale, and a pet
+// reached by deep link can sit well outside their radius: the one open
+// in its modal, and the one a search is running on or previewing
+// (UX-2.16). Selection was the only carve-out, but starting a search
+// closes the modal and clears it — so the pet you were now walking to
+// vanished on the next tick, and the search card went with it.
+function keepPinnedDogs(
+  s: Pick<GameState, 'lostDogs' | 'selectedDogId' | 'searchTarget' | 'searchPreview'>,
+  dogs: NearbyLostDog[],
+): NearbyLostDog[] {
+  const ids = [s.selectedDogId, s.searchTarget?.dogId, s.searchPreview?.dogId];
+  const missing = s.lostDogs.filter(
+    (d) => ids.includes(d.id) && !dogs.some((x) => x.id === d.id),
+  );
+  return missing.length ? [...dogs, ...missing] : dogs;
 }
 
 function todayLocal(): string {
@@ -236,6 +261,10 @@ interface GameState {
   // from "fetched but zero nearby" so the per-category snap cards can
   // render skeletons up-front instead of popping in and reordering.
   spotsLoaded: boolean;
+  // The last syncSpots call failed. Settled is not the same as empty:
+  // with this set and no spots, the tab says "couldn't load" rather
+  // than "nothing nearby", which offline is a claim nobody checked.
+  spotsError: boolean;
   selectedSpotId: string | null;
   // A territory the map should fly to and frame — set by tapping a row
   // on the standing (the owner's largest piece rides along from the
@@ -244,7 +273,16 @@ interface GameState {
   // it never needs to join the setScreen/toggleDogCam clear-lists —
   // the lists whose interplay is exactly what keeps biting the spot
   // modal.
-  focusedTerritory: { ownerId: string; ring: LatLng[]; mark?: LatLng; pos?: LatLng } | null;
+  // `openCard` asks MapView to open the owner's card once it lands — the
+  // standing sets it; the card's own "show ground" does not, because it
+  // has just closed that card so the flight can be seen.
+  focusedTerritory: {
+    ownerId: string;
+    ring: LatLng[];
+    mark?: LatLng;
+    pos?: LatLng;
+    openCard?: boolean;
+  } | null;
   // THE DOG YOU WENT TO SEE, KEPT ON SCREEN UNTIL YOU LEAVE.
   //
   // focusedTerritory above is a camera command: it flies and clears. That
@@ -281,6 +319,9 @@ interface GameState {
   // and toggles optimistically.
   loreFavourites: LoreFavourite[];
   loreFavouritesLoaded: boolean;
+  // Same split for the hearted list: the last load failed, so an empty
+  // list is unknown rather than "nothing saved yet".
+  loreFavouritesError: boolean;
   // A saved place to put back on the map. ONE-SHOT, like
   // focusedTerritory: the spots tab sets it and routes to the map, the
   // sniff bubble shows it and clears it.
@@ -359,6 +400,13 @@ interface GameState {
   // person marking where they lost their pet does it over a sprite
   // asking whether they would like to go for a coffee.
   lostPinning: boolean;
+  // The map could not be drawn (no WebGL2, or the style never arrived)
+  // and MapView is showing its problem screen instead. Published so the
+  // dashboard can stop deferring to the gate: the gate's ring lives on
+  // the map, and with no map there is no ring — hiding the tab bar then
+  // left a retry button (or, on an unsupported browser, nothing at all)
+  // as the whole app.
+  mapBlocked: boolean;
   // Currently-visible one-shot hint id (or null). Published by the
   // component that owns the hint's primary surface (the companion's
   // speech bubble) so OTHER components can render a matching visual
@@ -413,6 +461,13 @@ interface GameState {
   // reopened from the pill under the HUD — closing it must never be a
   // one-way door, which is what "seen" used to make it.
   dailyTasks: DailyTasks;
+  // Whether dailyTasks is the server's answer yet. The blank day it
+  // starts as has no rows, so without this the card could not tell
+  // "still asking" or "the call failed" from a day with nothing in it,
+  // and showed a bare "0 / 0" for all three. Once a read has landed a
+  // later failure keeps it 'ready' — the rows on screen are still
+  // today's, just not the freshest.
+  dailyTasksStatus: 'loading' | 'ready' | 'error';
   syncing: boolean;
   lastSyncError: string | null;
   // Bumped every time a paw or bone gets collected (auto OR forced).
@@ -465,17 +520,21 @@ interface GameState {
   // every few seconds, while the territory in the other 94% changes every
   // few minutes and is expensive to compute.
   syncPresence: (pos: LatLng) => Promise<void>;
-  pokePlayer: (targetId: string) => Promise<void>;
+  // Resolves true when the server took the wave, false when it did not,
+  // so the button only says "waved!" about a wave that went out.
+  pokePlayer: (targetId: string) => Promise<boolean>;
   setSelectedDog: (id: string | null) => void;
   // See searchIntentDogId. Pass null to drop an intent unacted on.
   setSearchIntent: (id: string | null) => void;
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
-  setFocusedTerritory: (v: { ownerId: string; ring: LatLng[]; mark?: LatLng; pos?: LatLng } | null) => void;
+  setFocusedTerritory: (v: GameState['focusedTerritory']) => void;
   setPinnedGuest: (v: GameState['pinnedGuest']) => void;
   loadLoreFavourites: () => Promise<void>;
-  toggleLoreFavourite: (lore: LoreRef) => Promise<void>;
+  // Resolves false when the server refused and the heart was put back,
+  // so the heart can say so instead of silently undoing itself.
+  toggleLoreFavourite: (lore: LoreRef) => Promise<boolean>;
   setFocusedLore: (lore: LoreRef | null) => void;
   // The one mode switch. Every entry into a mode goes through here so the
   // clear-slate rules below are applied exactly once, in one place.
@@ -495,6 +554,7 @@ interface GameState {
   setAboutOpen: (open: boolean) => void;
   setLostFlowOpen: (open: boolean) => void;
   setLostPinning: (pinning: boolean) => void;
+  setMapBlocked: (blocked: boolean) => void;
   // Credit paws won somewhere other than the pavement (finishing a
   // search). The server has already banked them; this is the HUD
   // catching up, one pickup pulse at a time so it reads as a run of
@@ -572,6 +632,30 @@ let playersSeq = 0;
 // they had just flown the map to, drop the tapped spot from the array,
 // and silently kill its pin and open modal.
 let spotsSeq = 0;
+// Pet ids with a sighting POST on the wire — see reportSighting.
+const sightingsInFlight = new Set<string>();
+
+// THE POINT UNDER THE MIDDLE OF THE SCREEN, read on demand (UX-1.4).
+// `viewportCenter` above is the midpoint of the map's BOUNDS, which on a
+// tilted camera sits far up-screen of the middle — fine for "roughly
+// which area is being browsed", wrong for "the place the crosshair is
+// on". The lost-pet pin step needs the second, and needs it at the
+// moment of confirm rather than as of the last idle, so MapView
+// registers a reader here (it owns the map) and the sheet calls it.
+// A slot rather than store state: it is a function, never rendered,
+// and nothing should re-render when it is swapped.
+let screenCenterReader: (() => LatLng | null) | null = null;
+export function setScreenCenterReader(fn: (() => LatLng | null) | null) {
+  screenCenterReader = fn;
+}
+export function readScreenCenter(): LatLng | null {
+  try {
+    return screenCenterReader?.() ?? null;
+  } catch {
+    // Map mid-teardown or style not ready — the caller falls back.
+    return null;
+  }
+}
 
 export const useGameStore = create<GameState>((set, get) => ({
   hunger: balance.hunger.start,
@@ -615,11 +699,13 @@ export const useGameStore = create<GameState>((set, get) => ({
   lastSpotsFetchPos: null,
   spotsLoading: false,
   spotsLoaded: false,
+  spotsError: false,
   selectedSpotId: null,
   focusedTerritory: null,
   pinnedGuest: null,
   loreFavourites: [],
   loreFavouritesLoaded: false,
+  loreFavouritesError: false,
   focusedLore: null,
   // Default OFF — the app opens on a clean 3D city view; users turn the
   // spots layer on via the HUD pin toggle (there's a one-shot hint for it).
@@ -637,6 +723,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   aboutOpen: false,
   lostFlowOpen: false,
   lostPinning: false,
+  mapBlocked: false,
   activeHint: null,
   menuCamera: null,
   hintsAllowed: false,
@@ -650,6 +737,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   // Initial state is empty for today's date; refreshDailyTasks() pulls
   // from the server on first app load and again on map-tab refocus.
   dailyTasks: blankTasks(),
+  dailyTasksStatus: 'loading',
   syncing: false,
   lastSyncError: null,
   collectPulse: 0,
@@ -1009,18 +1097,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   syncLostDogs: async (pos) => {
     try {
       const { dogs } = await api.getLostDogsNearby(pos);
-      // Preserve the currently-selected dog across the sync — if the
+      // Preserve the selected / searched-for dog across the sync — if the
       // user opened a deep-link to a pet outside the synced radius
       // (e.g. Lukianivka pin while GPS sits on Maidan), wholesale
       // replacement would drop it from lostDogs and the marker would
       // disappear mid-session. Carve it back in if missing.
-      set((s) => {
-        if (!s.selectedDogId || dogs.find((d) => d.id === s.selectedDogId)) {
-          return { lostDogs: dogs };
-        }
-        const stillThere = s.lostDogs.find((d) => d.id === s.selectedDogId);
-        return { lostDogs: stillThere ? [...dogs, stillThere] : dogs };
-      });
+      set((s) => ({ lostDogs: keepPinnedDogs(s, dogs) }));
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
     } finally {
@@ -1113,7 +1195,7 @@ export const useGameStore = create<GameState>((set, get) => ({
       // pass. Previously the four parallel sync* calls each fired
       // their own set, producing up to four re-renders per tick.
       set((prev) => {
-        // Same selectedDogId carve-out as syncLostDogs — a deep-
+        // Same keepPinnedDogs carve-out as syncLostDogs — a deep-
         // linked pin outside this sync's radius must survive the
         // wholesale replacement, otherwise the marker vanishes on
         // the next 15s tick.
@@ -1124,14 +1206,10 @@ export const useGameStore = create<GameState>((set, get) => ({
         // empty list would clear every pin on the map on the first
         // unchanged tick.
         const dogs = res.dogs ?? prev.lostDogs;
-        const keepSelected =
-          prev.selectedDogId && !dogs.find((d) => d.id === prev.selectedDogId)
-            ? prev.lostDogs.find((d) => d.id === prev.selectedDogId)
-            : null;
         return {
           tokens: filteredTokens,
           foodItems: res.food,
-          lostDogs: keepSelected ? [...dogs, keepSelected] : dogs,
+          lostDogs: keepPinnedDogs(prev, dogs),
           // Only advance on a tag we were actually given. An older server
           // sends none, which must leave the stored one untouched rather
           // than wiping it to null and re-requesting the full list forever.
@@ -1174,19 +1252,29 @@ export const useGameStore = create<GameState>((set, get) => ({
                 }
               : prev.lastRaid,
           lastSyncError: null,
+          // This loop is the one that actually delivers pets now —
+          // syncLostDogs only runs after a sighting — so it has to say
+          // the first answer is in. Without it the quests tab could not
+          // tell "no pets nearby" from "not asked yet" and showed its
+          // skeleton forever in a quiet area.
+          lostDogsLoaded: true,
         };
       });
     } catch (err) {
       if (seq !== syncMapSeq) return;
-      set({ lastSyncError: (err as Error).message });
+      // Settled, if badly — same rule syncLostDogs follows.
+      set({ lastSyncError: (err as Error).message, lostDogsLoaded: true });
     }
   },
 
   pokePlayer: async (targetId) => {
     try {
       await api.poke(targetId);
+      return true;
     } catch {
-      // Best-effort — a failed poke is a no-op.
+      // Nothing to undo — a failed poke is a no-op — but the caller
+      // must not tell the walker it was sent.
+      return false;
     }
   },
 
@@ -1210,7 +1298,7 @@ export const useGameStore = create<GameState>((set, get) => ({
     if (get().spots.length > 0 && !movedFar) {
       // Cache hit — still mark loaded so the spots tab knows it can
       // stop showing skeletons.
-      set({ spotsLoaded: true });
+      set({ spotsLoaded: true, spotsError: false });
       return;
     }
     set({ spotsLoading: true });
@@ -1232,13 +1320,20 @@ export const useGameStore = create<GameState>((set, get) => ({
         const kept = s.selectedSpotId ? s.spots.find((x) => x.id === s.selectedSpotId) : null;
         const next =
           kept && !spots.some((x) => x.id === kept.id) ? [...spots, kept] : spots;
-        return { spots: next, lastSpotsFetchPos: pos, spotsLoading: false, spotsLoaded: true };
+        return {
+          spots: next,
+          lastSpotsFetchPos: pos,
+          spotsLoading: false,
+          spotsLoaded: true,
+          spotsError: false,
+        };
       });
     } catch (err) {
       if (seq !== spotsSeq) return;
       set({
         spotsLoading: false,
         spotsLoaded: true,
+        spotsError: true,
         lastSyncError: (err as Error).message,
       });
     }
@@ -1255,12 +1350,12 @@ export const useGameStore = create<GameState>((set, get) => ({
   loadLoreFavourites: async () => {
     try {
       const { favourites } = await api.loreFavourites();
-      set({ loreFavourites: favourites, loreFavouritesLoaded: true });
+      set({ loreFavourites: favourites, loreFavouritesLoaded: true, loreFavouritesError: false });
     } catch {
       // Offline or a 5xx: the hearts simply read as unsaved until the
-      // next load. Marked loaded so the list shows its empty state
-      // rather than a skeleton forever.
-      set({ loreFavouritesLoaded: true });
+      // next load. Marked loaded so the list leaves its skeleton, and
+      // flagged so it says the load failed rather than "nothing saved".
+      set({ loreFavouritesLoaded: true, loreFavouritesError: true });
     }
   },
 
@@ -1273,10 +1368,11 @@ export const useGameStore = create<GameState>((set, get) => ({
       set({ loreFavourites: was.filter((f) => f.id !== lore.id) });
       try {
         await api.unsaveLore(lore.id);
+        return true;
       } catch {
         set({ loreFavourites: was });
+        return false;
       }
-      return;
     }
     const entry: LoreFavourite = {
       id: lore.id,
@@ -1293,8 +1389,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     set({ loreFavourites: [entry, ...was] });
     try {
       await api.saveLore(lore.id);
+      return true;
     } catch {
       set({ loreFavourites: was });
+      return false;
     }
   },
 
@@ -1423,6 +1521,7 @@ export const useGameStore = create<GameState>((set, get) => ({
   // you get a coffee question on top of a lost-pet report.
   setLostPinning: (lostPinning) =>
     set(lostPinning ? { lostPinning, menuOpen: false } : { lostPinning }),
+  setMapBlocked: (mapBlocked) => set({ mapBlocked }),
   awardPaws: (n) => {
     const step = (left: number) => {
       if (left <= 0) return;
@@ -1468,7 +1567,10 @@ export const useGameStore = create<GameState>((set, get) => ({
     // only way "build a route and finish it" can be a task that pays.
     // Fire-and-forget: a walk whose plan did not register is still a
     // walk, it just does not count toward the day.
-    const end = walkRoute && walkRoute.length ? walkRoute[walkRoute.length - 1] : null;
+    const end =
+      walkRoute && walkRoute.length
+        ? walkRouteMeta?.destination ?? walkRoute[walkRoute.length - 1]
+        : null;
     if (end) {
       void api.planWalk(end.lat, end.lng, walkRouteMeta?.destinationName ?? null).catch(() => {});
     }
@@ -1483,6 +1585,11 @@ export const useGameStore = create<GameState>((set, get) => ({
     // it files a report nobody made, and the server would move the pet
     // onto the one coordinate the map filters out.
     if (isFallbackPosition(userPosition)) return { ok: false, reason: 'no-location' };
+    // One report per pet at a time. The server does not dedupe, so a
+    // double tap on a slow connection would file two real sightings for
+    // someone's lost animal; the second call is dropped here instead.
+    if (sightingsInFlight.has(dogId)) return { ok: false, reason: 'in-flight' };
+    sightingsInFlight.add(dogId);
     try {
       const res = await api.reportSighting(dogId, userPosition);
       // If the server accepted it as close-enough, the dog's last-seen
@@ -1493,16 +1600,22 @@ export const useGameStore = create<GameState>((set, get) => ({
     } catch (err) {
       set({ lastSyncError: (err as Error).message });
       return { ok: false };
+    } finally {
+      sightingsInFlight.delete(dogId);
     }
   },
 
   refreshDailyTasks: async () => {
+    // A retry after a failure shows the skeleton again while it asks,
+    // so the tap visibly did something.
+    if (get().dailyTasksStatus === 'error') set({ dailyTasksStatus: 'loading' });
     try {
       const day = await api.getDailyTasks();
-      set({ dailyTasks: day });
+      set({ dailyTasks: day, dailyTasksStatus: 'ready' });
     } catch {
       // Network blip — keep what we last read. The next refresh-on-
-      // focus reconciles.
+      // focus reconciles. With nothing read yet, the card says so.
+      if (get().dailyTasksStatus !== 'ready') set({ dailyTasksStatus: 'error' });
     }
     // One-time legacy localStorage cleanup. Cheap, idempotent.
     dropLegacyStorage();

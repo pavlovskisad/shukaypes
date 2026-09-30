@@ -19,8 +19,11 @@ import { playPopThen } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { SpotCardView } from './SpotCardStack';
 import { HandDrawnFrame } from './HandDrawn';
+import { useSheetBack } from '../../hooks/useSheetBack';
+import { useStrings } from '../../i18n/useStrings';
+import { MOTION } from '../../utils/motion';
 
-const SHEET_ANIM_MS = 240;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 
 interface Props {
   // null = closed. Non-null array = open showing those spots.
@@ -32,6 +35,7 @@ interface Props {
 }
 
 export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
+  const t = useStrings();
   const userPos = useGameStore((s) => s.userPosition);
   // Mount/unmount split so the close animation plays before the
   // node disappears. Cached spots persist through the fade-out.
@@ -54,11 +58,16 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
     }
   }, [spots]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!spots, onClose);
+
   if (!renderSpots) return null;
   if (typeof document === 'undefined') return null;
 
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       style={{
         position: 'fixed',
         inset: 0,
@@ -113,7 +122,7 @@ export function SpotsCategoryModal({ spots, onClose, onPick }: Props) {
           + lifted shadow family as the in-card chips. */}
       <button
         onClick={(e) => playPopThen(e.currentTarget, onClose)}
-        aria-label="Close"
+        aria-label={t.modals.common.close}
         style={{
           position: 'absolute',
           top: 'calc(env(safe-area-inset-top, 0px) + 14px)',

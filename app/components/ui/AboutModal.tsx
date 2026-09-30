@@ -6,17 +6,20 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { SURFACE } from '../../constants/surface';
+import { Z } from '../../constants/z';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
 import { playPopThen } from '../../utils/popOnTap';
+import { useSheetBack } from '../../hooks/useSheetBack';
+import { MOTION } from '../../utils/motion';
 
 interface AboutModalProps {
   open: boolean;
   onClose: () => void;
 }
 
-const SHEET_ANIM_MS = 280;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 // Top-anchored modal — bump the badge / close button down by the
 // safe-area inset so they clear the iPhone notch / status bar.
 // The overlay holds the sheet clear of the notch now, so this is
@@ -77,6 +80,9 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
     }
   }, [open]);
 
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(open, onClose);
+
   if (!rendered) return null;
   if (typeof document === 'undefined') return null;
 
@@ -87,6 +93,8 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
   // slides down from off-screen-top.
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
       style={{
         position: 'fixed',
@@ -110,7 +118,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         padding: 'calc(env(safe-area-inset-top, 0px) + 8px) 10px 0',
         boxSizing: 'border-box',
         justifyContent: 'center',
-        zIndex: 1000,
+        zIndex: Z.MODAL_INFO,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
       }}
@@ -270,23 +278,13 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
               textAlign: 'center',
               marginTop: S.s,
               marginBottom: S.xs,
-              fontStyle: 'italic',
+              // No italic: Annex has none, so the browser would slant
+              // the upright glyphs. The grey is the de-emphasis.
             }}
           >
             {t.modals.about.footer}
           </div>
         </div>
-
-        <style>{`
-          @keyframes top-sheet-in {
-            from { transform: translateY(-100%); }
-            to { transform: translateY(0); }
-          }
-          @keyframes top-sheet-out {
-            from { transform: translateY(0); }
-            to { transform: translateY(-100%); }
-          }
-        `}</style>
       </div>
     </div>,
     document.body,

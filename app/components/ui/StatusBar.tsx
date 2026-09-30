@@ -56,6 +56,7 @@ export function PillPulseRing() {
     <>
       <div
         aria-hidden
+        data-loop
         style={{
           position: 'absolute',
           left: '50%',
@@ -163,6 +164,7 @@ export function MeterPill({
   // Show the hint attention ring (driven by the HUD-meters hint).
   pulse?: boolean;
 }) {
+  const t = useStrings();
   const fillPct = Math.max(0, Math.min(100, Math.round(value)));
   const popRef = usePopOnIncrease(value, glowForIcon(icon));
   return (
@@ -174,7 +176,7 @@ export function MeterPill({
           {showValue ? (
             <Text
               style={styles.value}
-              accessibilityLabel={`${label} ${fillPct} percent`}
+              accessibilityLabel={t.hud.meterA11y(label, fillPct)}
             >
               {fillPct}%
             </Text>

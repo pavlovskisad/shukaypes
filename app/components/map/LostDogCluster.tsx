@@ -1,5 +1,5 @@
 import { memo } from 'react';
-import { MapLibreMarker } from './MapLibreMarker';
+import { MapLibreMarker, MARKER_CLASS } from './MapLibreMarker';
 import type { LatLng, UrgencyLevel } from '@shukajpes/shared';
 import type { NearbyLostDog } from '../../services/api';
 import { SYSTEM_FONT } from '../../constants/fonts';
@@ -7,6 +7,8 @@ import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { Z } from '../../constants/z';
 import { playPopThen } from '../../utils/popOnTap';
+import { petPhotoAt } from '../../utils/petPhoto';
+import { useStrings } from '../../i18n/useStrings';
 
 // Dominant-urgency wins the glow color. Urgent beats medium beats resolved
 // so the cluster reads "there's an urgent pet in here" at a glance.
@@ -28,13 +30,16 @@ const PIN_URGENCY_SHADOW: Record<UrgencyLevel, string> = {
   resolved: '0 2px 8px rgba(0,0,0,0.15)',
 };
 
-// Ring geometry — matches the companion RadialMenu proportions so the two
-// expansion patterns feel like one language. 210x210 container centered on
-// the cluster badge, buttons arranged on a circle of radius 75.
-const CONTAINER_SIZE = 210;
-const CONTAINER_CENTER = 105;
-const RING_RADIUS = 75;
-const BUTTON_SIZE = 40;
+// Ring geometry. The members are the same 54px photo discs as a single
+// lost-pet pin (LostDogMarker's DISC_PX) — they used to be 40px emoji-only
+// buttons, so opening a cluster made the pets LESS recognisable than they
+// were on their own (UX-8.10). The radius grew 75 → 85 with them: at 75,
+// eight 54px discs on the circle already touched. 240x240 container
+// centred on the badge, so the outer discs stay inside it.
+const CONTAINER_SIZE = 240;
+const CONTAINER_CENTER = 120;
+const RING_RADIUS = 85;
+const BUTTON_SIZE = 54;
 
 interface LostDogClusterProps {
   position: LatLng;
@@ -65,9 +70,21 @@ function LostDogClusterImpl({
   onToggle,
   onSelectItem,
 }: LostDogClusterProps) {
+  const t = useStrings();
   const count = items.length;
   return (
-    <MapLibreMarker position={position} cullNearHorizon>
+    <MapLibreMarker
+      position={position}
+      cullNearHorizon
+      // The tier has to be on the MARKER: the one on the badge below is
+      // local to this element's own stacking context and never reached
+      // the map, so an open ring painted under the next pin over
+      // (UX-8.3). Collapsed, it sits with the other lost pets.
+      zIndex={expanded ? Z.MARKER_CLUSTER_CHILD : Z.MARKER_LOST_PET}
+      // Lets the map tell a tap inside this open ring from a tap on some
+      // other marker, which closes it (D8). See MARKER_CLASS.
+      className={expanded ? MARKER_CLASS.openCluster : undefined}
+    >
       <div
         style={{
           position: 'relative',
@@ -81,6 +98,10 @@ function LostDogClusterImpl({
         <div
           role="button"
           tabIndex={0}
+          // The badge is an emoji and a bare number; this is what it
+          // means, and whether the ring is out (UX-4.4).
+          aria-label={t.map.lostPetsCount(count)}
+          aria-expanded={expanded}
           onClick={(e) => {
             e.stopPropagation();
             onToggle();
@@ -135,7 +156,7 @@ function LostDogClusterImpl({
               pointerEvents: 'none',
             }}
           >
-            {count} lost pets
+            {t.map.lostPetsCount(count)}
           </div>
         )}
 
@@ -163,7 +184,10 @@ function LostDogClusterImpl({
                 borderRadius: R.pill,
                 border: 'none',
                 background: '#ffffff',
-                fontSize: TYPE.hero,
+                fontSize: TYPE.display,
+                // Clip the photo to the disc, as the single pin does.
+                overflow: 'hidden',
+                padding: 0,
                 cursor: 'pointer',
                 opacity: expanded ? 1 : 0,
                 transform: expanded ? 'scale(1)' : 'scale(0.4)',
@@ -177,8 +201,38 @@ function LostDogClusterImpl({
                 zIndex: Z.MARKER_DEFAULT,
               }}
               aria-label={d.name}
+              // Collapsed, the ring is still in the DOM (it animates out
+              // of the badge) but invisible: keep it out of the tab order
+              // and away from screen readers until it is open.
+              tabIndex={expanded ? 0 : -1}
+              aria-hidden={!expanded}
             >
-              {d.emoji}
+              {/* Same layering as LostDogMarker: the emoji sits behind
+                  the photo, so a slow or failed image still shows it.
+                  Only while open: the collapsed ring is still in the DOM
+                  (it animates out of the badge), and every cluster on the
+                  map fetching every member's photo for nothing is the
+                  bytes utils/petPhoto.ts exists to save. */}
+              <span style={{ position: 'absolute' }}>{d.emoji}</span>
+              {expanded && d.photoUrl ? (
+                <img
+                  src={petPhotoAt(d.photoUrl, BUTTON_SIZE) ?? d.photoUrl}
+                  alt=""
+                  draggable={false}
+                  referrerPolicy="no-referrer"
+                  loading="lazy"
+                  style={{
+                    position: 'relative',
+                    width: '100%',
+                    height: '100%',
+                    objectFit: 'cover',
+                    transform: 'scale(1.2)',
+                  }}
+                  onError={(e) => {
+                    (e.currentTarget as HTMLImageElement).style.display = 'none';
+                  }}
+                />
+              ) : null}
             </button>
           );
         })}

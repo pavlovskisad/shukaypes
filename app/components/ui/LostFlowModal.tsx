@@ -6,11 +6,12 @@
 // placement_source 'owner', the post is crossposted to our channel and
 // the wired district groups, and the app owner gets an expire control.
 //
-// THE PIN STEP borrows the map instead of embedding one. The store
-// already tracks viewportCenter (set by MapView on idle), so "point at
-// the place" is: hide this sheet, draw a crosshair over the map's
-// centre, let the person pan the map underneath it, and read
-// viewportCenter on confirm. No second map, no MapView surgery.
+// THE PIN STEP borrows the map instead of embedding one: hide this
+// sheet, draw a crosshair over the middle of the window, let the person
+// pan the map underneath it, and on confirm ask MapView for the point
+// under that exact pixel (readScreenCenter). No second map. It used to
+// read viewportCenter — the midpoint of the map's bounds — which on a
+// tilted camera is a street or more up-screen of the crosshair (UX-1.4).
 //
 // THE PHOTO is downscaled client-side (canvas, longest side 1600px,
 // JPEG) before travelling as base64 — a phone camera original is
@@ -29,22 +30,24 @@ import { Z } from '../../constants/z';
 import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
-import { MODAL_PILL_DARK, MODAL_PILL_LIGHT } from '../../constants/buttons';
+import { MODAL_PILL_DARK, MODAL_PILL_DISABLED, MODAL_PILL_LIGHT } from '../../constants/buttons';
 import { env } from '../../constants/env';
-import { openTelegramChat } from '../../services/telegram';
+import { openTelegramChat, setTelegramClosingConfirmation } from '../../services/telegram';
+import { useSheetBack } from '../../hooks/useSheetBack';
 import { api } from '../../services/api';
 import { fileToJpegBase64 } from '../../services/photoFile';
-import { useGameStore } from '../../stores/gameStore';
+import { readScreenCenter, useGameStore } from '../../stores/gameStore';
 import { SURFACE } from '../../constants/surface';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame, PAPER_EDGE } from './HandDrawn';
 import { Icon } from './Icon';
 import { colors } from '../../constants/colors';
 import { INLINE_ICON } from '../../constants/sizing';
+import { MOTION } from '../../utils/motion';
 
 // Same figure PostModal / SpotModal / LostDogModal use, so all four sheets
 // open and close on one clock.
-const SHEET_ANIM_MS = 280;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // How far the picture sits inside its mount: the paper margin the drawn
 // line is measured from, plus the line. Same figure, same name, as the
@@ -137,8 +140,20 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null);
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<{ channelPostUrl: string | null; photoStored: boolean } | null>(null);
+  // `photoDropped` is worked out at submit time, not read off the photo
+  // field on the done screen: the fields are cleared the moment a report
+  // lands (see submit), so by then there is no photo left to look at.
+  const [result, setResult] = useState<{ channelPostUrl: string | null; photoDropped: boolean } | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Which opening of the sheet this is. Bumped on every close, and
+  // captured by submit — an answer that lands after the sheet was closed
+  // belongs to an opening that is over, and must not flip the NEXT one
+  // straight to the "done" screen (UX-1.3).
+  const openGenRef = useRef(0);
+  // Where the sheet is showing. The pin step's crosshair and card are
+  // portalled to <body>, so without this they would follow the owner
+  // onto any other screen they reached (UX-2.2).
+  const currentScreen = useGameStore((st) => st.currentScreen);
 
   // The three-state open/closing/unmount dance shared by the modal
   // family — the sheet has to outlive `open` long enough to animate out.
@@ -149,12 +164,15 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
       return;
     }
     if (rendered && !closing) {
+      openGenRef.current += 1;
       setClosing(true);
       const timer = setTimeout(() => {
         setRendered(false);
         setClosing(false);
-        // A finished (or abandoned) flow starts fresh next time; a pet
-        // is not usually lost twice in one session.
+        // A finished (or abandoned) flow starts on the form next time. The
+        // FIELDS are not touched here: an abandoned draft is kept, so a
+        // brushed backdrop does not cost somebody their description. A
+        // report that went through has already cleared them (submit).
         setStep('form');
         setError(null);
         setSending(false);
@@ -179,11 +197,43 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
   // flip) would otherwise strand the map with no HUD and no dog.
   useEffect(() => () => setLostPinning(false), [setLostPinning]);
 
+  // Back and Escape step out the way the pills do (UX-2.5, UX-14.1): off
+  // the pin step to the form, off the form to the map. Refused while a
+  // report is on the wire, for the reason `close` gives below.
+  useSheetBack(open, () => {
+    if (sending) return;
+    if (step === 'pin') setStep('form');
+    else onClose();
+  });
+
+  // A draft outlives the sheet (see the close effect) but not the Mini
+  // App: while one is typed, Telegram asks before it closes, so a back
+  // press too many does not throw somebody's description away.
+  const hasDraft =
+    name.trim().length > 0 || desc.trim().length > 0 || phone.trim().length > 0 || !!photoDataUrl || !!pin;
+  useEffect(() => {
+    setTelegramClosingConfirmation(hasDraft);
+  }, [hasDraft]);
+  useEffect(() => () => setTelegramClosingConfirmation(false), []);
+
   if (!rendered) return null;
   if (typeof document === 'undefined') return null;
 
   const s = t.modes.lostSheet;
   const botUrl = env.telegramBotUrl;
+
+  // Everything that describes the pet. Only ever called once a report has
+  // gone through — then these fields are somebody's published report,
+  // and carrying them into the next one is how a second, duplicate
+  // public post gets made (UX-1.3).
+  const clearFields = () => {
+    setSpecies('dog');
+    setName('');
+    setDesc('');
+    setPhone('');
+    setPhotoDataUrl(null);
+    setPin(null);
+  };
 
   const onPickPhoto = async (file: File | undefined) => {
     if (!file) return;
@@ -208,6 +258,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
       setError(s.errNoPin);
       return;
     }
+    const gen = openGenRef.current;
     setSending(true);
     setError(null);
     try {
@@ -220,18 +271,33 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
         contactPhone: phone.trim() || undefined,
         photoBase64: photoDataUrl ?? undefined,
       });
-      setResult({ channelPostUrl: r.channelPostUrl, photoStored: r.photoStored });
+      // Published either way, so the fields go either way — even when
+      // the sheet was closed while this was on the wire.
+      clearFields();
+      if (gen !== openGenRef.current) return;
+      setResult({ channelPostUrl: r.channelPostUrl, photoDropped: !r.photoStored && !!photoDataUrl });
       setStep('done');
     } catch (err) {
+      if (gen !== openGenRef.current) return;
       const msg = err instanceof Error ? err.message : '';
       setError(msg.includes('429') ? s.errLimit : s.errGeneric);
     } finally {
-      setSending(false);
+      if (gen === openGenRef.current) setSending(false);
     }
   };
 
+  // Closing is refused while a report is on the wire. The request cannot
+  // be taken back once sent, so a close there did not cancel anything:
+  // it only hid the outcome, and a reopen before it landed offered a
+  // live form to post the same pet twice (UX-1.3).
+  const close = sending ? undefined : onClose;
+
   // ---- PIN MODE: the map does the work, we draw two things over it ----
   if (step === 'pin') {
+    // Off the map there is nothing under the crosshair to aim at. The
+    // step is kept rather than dropped: coming back to the map finds
+    // the aim where it was left.
+    if (currentScreen !== 'map') return null;
     return createPortal(
       <>
         {/* Crosshair over the map's centre. pointerEvents: none — the
@@ -295,8 +361,11 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             </button>
             <button
               onClick={() => {
+                // The point under the crosshair, read now. The bounds
+                // midpoint and then GPS only if the map cannot answer —
+                // no map means nothing was aimed at anyway.
                 const { viewportCenter, userPosition } = useGameStore.getState();
-                const center = viewportCenter ?? userPosition;
+                const center = readScreenCenter() ?? viewportCenter ?? userPosition;
                 if (center) {
                   setPin({ lat: center.lat, lng: center.lng });
                   setError(null);
@@ -316,7 +385,9 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
 
   return createPortal(
     <div
-      onClick={onClose}
+      role="dialog"
+      aria-modal="true"
+      onClick={close}
       style={{
         position: 'fixed',
         inset: 0,
@@ -367,7 +438,7 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
           {step === 'done' && result ? (
             <div style={{ fontFamily: SYSTEM_FONT, fontSize: TYPE.body, lineHeight: 1.5, color: colors.black }}>
               {s.doneBody}
-              {!result.photoStored && photoDataUrl ? (
+              {result.photoDropped ? (
                 <div style={{ marginTop: S.s, fontSize: TYPE.small, color: colors.grey }}>{s.doneNoPhoto}</div>
               ) : null}
             </div>
@@ -453,7 +524,12 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                 type="file"
                 accept="image/*"
                 style={{ display: 'none' }}
-                onChange={(e) => void onPickPhoto(e.target.files?.[0])}
+                onChange={(e) => {
+                  void onPickPhoto(e.target.files?.[0]);
+                  // So the same file can be picked again — after an error,
+                  // or after «remove photo». Same as AvatarStudio (UX-5.12).
+                  e.target.value = '';
+                }}
               />
               {/* The photo, on paper. Same construction as the pet card:
                   white margin, then the drawn line, then the picture —
@@ -493,6 +569,32 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
                     }}
                   />
                 </div>
+              ) : null}
+              {/* A way to take the photo back off (UX-5.12). "Different
+                  photo" only swaps it — an owner who attached the wrong
+                  picture and has no right one had no way to send none.
+                  A quiet text link, not a third pill: it is the least of
+                  the things on this sheet. */}
+              {photoDataUrl ? (
+                <button
+                  onClick={() => setPhotoDataUrl(null)}
+                  disabled={sending}
+                  style={{
+                    // Quiet to look at, full-size to hit.
+                    minHeight: 44,
+                    padding: 0,
+                    background: 'none',
+                    border: 'none',
+                    fontFamily: SYSTEM_FONT,
+                    fontSize: TYPE.small,
+                    fontWeight: 700,
+                    color: colors.grey,
+                    textDecoration: 'underline',
+                    cursor: 'pointer',
+                  }}
+                >
+                  {s.photoRemove}
+                </button>
               ) : null}
 
               {error ? (
@@ -568,10 +670,12 @@ export function LostFlowModal({ open, onClose }: LostFlowModalProps) {
             </>
           ) : (
             <>
-              <button onClick={() => void submit()} disabled={sending} style={{ ...MODAL_PILL_DARK, opacity: sending ? 0.6 : 1 }}>
+              {/* The shared disabled pill while it sends (UX-9.3), not the
+                  dark one faded — that still read as pressable. */}
+              <button onClick={() => void submit()} disabled={sending} style={sending ? MODAL_PILL_DISABLED : MODAL_PILL_DARK}>
                 {sending ? s.submitting : s.submit}
               </button>
-              <button onClick={onClose} style={MODAL_PILL_LIGHT}>
+              <button onClick={close} disabled={sending} style={{ ...MODAL_PILL_LIGHT, opacity: sending ? 0.6 : 1 }}>
                 <HandDrawnFrame radius={R.button} />
                 {s.close}
               </button>

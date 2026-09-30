@@ -52,6 +52,10 @@ export function AvatarStudio({ seed, onStage, onClose }: Props) {
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  // Which photo a drawing belongs to (UX-1.11). Bumped on every pick,
+  // so a drawing that comes back after the person picked another
+  // photo is not shown as the drawing OF that photo.
+  const reqRef = useRef(0);
 
   const describe = (err: unknown): string => {
     if (err instanceof ApiError && err.code && t.errors[err.code]) return t.errors[err.code]!;
@@ -63,6 +67,7 @@ export function AvatarStudio({ seed, onStage, onClose }: Props) {
 
   const pick = async (file: File | undefined) => {
     if (!file) return;
+    reqRef.current += 1;
     try {
       setPhoto(await fileToJpegBase64(file, PHOTO_MAX_SIDE));
       setDrawn(null);
@@ -78,9 +83,13 @@ export function AvatarStudio({ seed, onStage, onClose }: Props) {
     if (!photo || busy) return;
     setBusy(true);
     setError(null);
+    const req = reqRef.current;
     try {
       const r = await auth.drawAvatar(photo);
+      // The server has saved it either way, so the account follows;
+      // only this studio's «here it is» waits for the photo it drew.
       setMe(r.me);
+      if (req !== reqRef.current) return;
       setDrawn(r.me.avatarUrl);
       onStage?.('done');
     } catch (err) {
@@ -167,12 +176,25 @@ export function AvatarStudio({ seed, onStage, onClose }: Props) {
       ) : !drawn ? (
         <>
           <Primary label={busy ? t.avatarDrawing : t.avatarDraw} disabled={busy} onClick={() => void draw()} />
-          <Secondary label={t.avatarChange} seed={`${seed}-change`} onClick={() => fileInputRef.current?.click()} />
-          <div style={{ ...NOTE, textAlign: 'center' }}>
-            <button type="button" style={LINK} onClick={onClose}>
-              {t.avatarLater}
-            </button>
-          </div>
+          {/* Held while drawing (UX-1.11): the request is already with
+              the model and will be saved whatever is tapped here, so
+              «another photo» and «later» would both be promises the
+              screen could not keep. */}
+          <Secondary
+            label={t.avatarChange}
+            seed={`${seed}-change`}
+            disabled={busy}
+            onClick={() => {
+              if (!busy) fileInputRef.current?.click();
+            }}
+          />
+          {busy ? null : (
+            <div style={{ ...NOTE, textAlign: 'center' }}>
+              <button type="button" style={LINK} onClick={onClose}>
+                {t.avatarLater}
+              </button>
+            </div>
+          )}
         </>
       ) : (
         <>

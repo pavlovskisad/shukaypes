@@ -316,6 +316,13 @@ export function LoreMore({
     };
   }, [open, hasWiki, extract, failed, lore.sourceLang, lore.wikipediaTitle]);
 
+  // A failed lead is forgotten when the block closes, so reopening asks
+  // again. It used to latch for the life of the bubble: one dropped
+  // request and "read more" could never fetch the lead again.
+  useEffect(() => {
+    if (!open) setFailed(false);
+  }, [open]);
+
   const paper = tone === 'paper';
   const hairline = paper ? '1px solid rgba(0,0,0,0.12)' : '1px solid rgba(255,255,255,0.12)';
   const fadeTo = paper ? '#ffffff' : VOICE.background;
@@ -355,7 +362,7 @@ export function LoreMore({
           >
             {lore.detail ? <div>{lore.detail}</div> : null}
             {hasWiki && loading ? (
-              <div style={{ opacity: 0.6, fontStyle: 'italic' }}>{t.sniff.opening}</div>
+              <div style={{ opacity: 0.6 }}>{t.sniff.opening}</div>
             ) : null}
             {extract ? (
               <div style={lore.detail ? { opacity: 0.8, borderTop: hairline, paddingTop: S.xs } : undefined}>
@@ -363,7 +370,9 @@ export function LoreMore({
               </div>
             ) : null}
             {empty ? <div>{t.sniff.nothingMore}</div> : null}
-            {hasWiki && !failed ? (
+            {/* Whenever there is an article, lead or no lead: when the
+                fetch failed the link is the one way left to the text. */}
+            {hasWiki ? (
               <a
                 href={wikipediaArticleUrl(lore.sourceLang!, lore.wikipediaTitle!)}
                 target="_blank"
@@ -402,19 +411,40 @@ export function LoreMore({
           ) : null}
         </div>
       ) : null}
+      {/* A ~40px target (UX-9.6): the padding is the hit box and the
+          negative margins give the room back, so the bubble — which is
+          measured around this line — keeps its height. It was an 11px
+          line at 0.7, the smallest and faintest thing on the bubble for
+          the one control that opens it. Reachable by keyboard too, and
+          it says whether it is open. */}
       <div
         ref={toggleRef}
         role="button"
+        tabIndex={0}
+        aria-expanded={open}
         onClick={(e) => {
           e.stopPropagation();
           playPop(e.currentTarget);
           setOpen((v) => !v);
         }}
+        onKeyDown={(e) => {
+          if (e.key !== 'Enter' && e.key !== ' ') return;
+          e.preventDefault();
+          e.stopPropagation();
+          playPop(e.currentTarget);
+          setOpen((v) => !v);
+        }}
         style={{
-          marginTop: S.s,
-          fontSize: TYPE.caption,
+          display: 'inline-flex',
+          alignItems: 'center',
+          padding: `${S.m}px ${S.l}px`,
+          marginTop: S.s - S.m,
+          marginBottom: -S.m,
+          marginLeft: -S.l,
+          marginRight: -S.l,
+          fontSize: TYPE.small,
           fontWeight: 700,
-          opacity: 0.7,
+          opacity: 0.85,
           textTransform: 'lowercase',
           cursor: 'pointer',
           userSelect: 'none',
@@ -436,11 +466,26 @@ export function LoreMore({
 // so a long name wraps clear of it instead of underneath it.
 export const HEART_INSET = 26;
 
+// How long "couldn't save" stays under the heart after a refused toggle.
+const SAVE_FAILED_MS = 2500;
+
 export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
   const t = useStrings();
   const saved = useGameStore((s) => s.loreFavourites.some((f) => f.id === lore.id));
   const toggle = useGameStore((s) => s.toggleLoreFavourite);
+  // The toggle is optimistic, so a refused one flips the heart back on
+  // its own — which, unexplained, read as the tap not having counted.
+  // A short line under the heart says it did, and did not go through.
+  const [saveFailed, setSaveFailed] = useState(false);
+  const failTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (failTimer.current) clearTimeout(failTimer.current);
+    },
+    [],
+  );
   return (
+    <>
     <div
       role="button"
       aria-label={saved ? t.sniff.saved : t.sniff.save}
@@ -448,14 +493,22 @@ export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
       onClick={(e) => {
         e.stopPropagation();
         playPop(e.currentTarget);
-        void toggle(lore);
+        setSaveFailed(false);
+        void toggle(lore).then((ok) => {
+          if (ok) return;
+          setSaveFailed(true);
+          if (failTimer.current) clearTimeout(failTimer.current);
+          failTimer.current = setTimeout(() => setSaveFailed(false), SAVE_FAILED_MS);
+        });
       }}
       style={{
         position: 'absolute',
-        top: 6,
-        right: 8,
-        // A ~40 px target around an 18 px glyph.
-        padding: 8,
+        // A 40 px target around an 18 px glyph (18 + 2 × 11). It was
+        // padding 8 — 34 px, under its own comment (UX-9.6). The corner
+        // offsets drop by the same 3 so the glyph has not moved.
+        top: 3,
+        right: 5,
+        padding: 11,
         fontSize: 18,
         lineHeight: 1,
         cursor: 'pointer',
@@ -466,5 +519,30 @@ export function LoreHeart({ lore, tone }: { lore: LoreRef; tone: Tone }) {
     >
       {saved ? '♥' : '♡'}
     </div>
+    {saveFailed ? (
+      <div
+        role="status"
+        style={{
+          position: 'absolute',
+          // Just under the heart's 40 px target, right-aligned to it.
+          top: 42,
+          right: 8,
+          fontSize: TYPE.caption,
+          fontWeight: 700,
+          whiteSpace: 'nowrap',
+          pointerEvents: 'none',
+          color: 'inherit',
+          // The bubble's own ground, so the line reads over the title
+          // it may overlap for its moment on screen.
+          background: tone === 'paper' ? '#ffffff' : VOICE.background,
+          padding: `2px ${S.xs}px`,
+          borderRadius: 6,
+          zIndex: 1,
+        }}
+      >
+        {t.sniff.saveFailed}
+      </div>
+    ) : null}
+    </>
   );
 }

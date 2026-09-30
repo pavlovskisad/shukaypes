@@ -25,6 +25,12 @@ export const MODAL_PILL_BASE: CSSProperties = {
   // (now 34) dominates the silhouette — the icon should be doing
   // most of the glance-weight, the label is a quiet confirmation.
   padding: '8px 14px',
+  // A 44px floor (UX-9.4). With an icon the pill is taller than this
+  // anyway; a text-only one ("close", "no", the species toggles) came
+  // out ~36, under the touch minimum. border-box so the 2px edges are
+  // inside the 44, and a dark and a light pill still line up.
+  minHeight: 44,
+  boxSizing: 'border-box',
   borderRadius: R.button,
   border: 'none',
   fontFamily: SYSTEM_FONT,
@@ -110,4 +116,11 @@ export const HUD_OVERLAY_PILL: CSSProperties = {
   position: 'relative',
   userSelect: 'none',
   whiteSpace: 'nowrap',
+  // A 40px floor, centred (UX-9.7). Bare padding on 13px text came out
+  // ~36, and these are the ways OUT of a running walk.
+  minHeight: 40,
+  boxSizing: 'border-box',
+  display: 'inline-flex',
+  alignItems: 'center',
+  justifyContent: 'center',
 };

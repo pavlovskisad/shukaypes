@@ -30,8 +30,10 @@ import { SURFACE } from '../../constants/surface';
 import { api } from '../../services/api';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
+import { useSheetBack } from '../../hooks/useSheetBack';
+import { MOTION } from '../../utils/motion';
 
-const SHEET_ANIM_MS = 280;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // An ad body is the longest continuous prose anywhere in this app, so it
 // gets a reading line-height rather than the tighter one the cards use.
@@ -46,6 +48,13 @@ interface PostModalProps {
   dogId: string | null;
   dogName?: string;
   onClose: () => void;
+  // Files "I've seen them" for this pet. `ok` when it went through;
+  // `refusal` is what to say when it did not (null: nothing to say, an
+  // earlier tap is still sending). The contacts note below tells the
+  // walker a sighting opens the rest of the ad, and it used to offer no
+  // way to make one from here. Optional: without it the note stands
+  // alone, as before.
+  onReportSighting?: () => Promise<{ ok: boolean; refusal: string | null }>;
 }
 
 interface PostState {
@@ -58,12 +67,22 @@ interface PostState {
   sourceUrl: string | null;
 }
 
-export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
+export function PostModal({ dogId, dogName, onClose, onReportSighting }: PostModalProps) {
   const t = useStrings();
   const [renderId, setRenderId] = useState<string | null>(dogId);
   const [closing, setClosing] = useState(false);
   const [post, setPost] = useState<PostState | null>(null);
   const [failed, setFailed] = useState(false);
+  // Bumped by the retry button (and by a sighting that went through) to
+  // run the load again for the same pet.
+  const [attempt, setAttempt] = useState(0);
+  // "I've seen them" asks first, like the pet card's (D1): a sighting
+  // is a real report about someone's animal, and one tap is too easy.
+  const [confirmingSeen, setConfirmingSeen] = useState(false);
+  const [sendingSeen, setSendingSeen] = useState(false);
+  // Why the last sighting from here did not go through. The map's
+  // bubble says it too, but it sits under this sheet.
+  const [seenRefusal, setSeenRefusal] = useState<string | null>(null);
 
   // Same open/close dance as SpotModal and LostDogModal, so the three
   // read as one family rather than three different sheets.
@@ -82,6 +101,8 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
         // the previous pet's ad while the new one loads.
         setPost(null);
         setFailed(false);
+        setConfirmingSeen(false);
+        setSeenRefusal(null);
       }, SHEET_ANIM_MS);
       return () => clearTimeout(timer);
     }
@@ -92,6 +113,8 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
     let cancelled = false;
     setPost(null);
     setFailed(false);
+    setConfirmingSeen(false);
+    setSeenRefusal(null);
     api
       .getDogPost(dogId)
       .then((res) => {
@@ -106,7 +129,10 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
     return () => {
       cancelled = true;
     };
-  }, [dogId]);
+  }, [dogId, attempt]);
+
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!dogId, onClose);
 
   if (!renderId) return null;
   if (typeof document === 'undefined') return null;
@@ -115,6 +141,8 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
 
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
       style={{
         position: 'fixed',
@@ -209,6 +237,14 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
           {failed ? (
             <div style={{ ...BODY_TEXT, color: '#A2452F' }}>{t.modals.post.failed}</div>
           ) : null}
+          {failed ? (
+            <button
+              onClick={() => setAttempt((n) => n + 1)}
+              style={{ ...MODAL_PILL_DARK, marginTop: S.m }}
+            >
+              {t.modals.post.retry}
+            </button>
+          ) : null}
 
           {post?.body ? (
             <div style={{ ...BODY_TEXT, color: '#2B2B26', whiteSpace: 'pre-wrap' }}>{post.body}</div>
@@ -266,6 +302,52 @@ export function PostModal({ dogId, dogName, onClose }: PostModalProps) {
               }}
             >
               {t.modals.post.contactsAfterSighting}
+              {confirmingSeen && dogName ? (
+                <div style={{ marginTop: S.s, fontWeight: 800, color: '#2B2B26' }}>
+                  {t.modals.lostDog.seenConfirm(dogName)}
+                </div>
+              ) : null}
+              {seenRefusal ? (
+                <div role="status" style={{ marginTop: S.s, fontWeight: 700, color: '#A2452F' }}>
+                  {seenRefusal}
+                </div>
+              ) : null}
+              {onReportSighting ? (
+                <div style={{ display: 'flex', gap: S.s, marginTop: S.s }}>
+                  {confirmingSeen ? (
+                    <>
+                      <button onClick={() => setConfirmingSeen(false)} style={MODAL_PILL_LIGHT}>
+                        <HandDrawnFrame radius={R.button} />
+                        {t.modals.lostDog.seenConfirmNo}
+                      </button>
+                      <button
+                        disabled={sendingSeen}
+                        onClick={() => {
+                          if (sendingSeen) return;
+                          setSendingSeen(true);
+                          setSeenRefusal(null);
+                          void onReportSighting().then(({ ok, refusal }) => {
+                            setSendingSeen(false);
+                            setConfirmingSeen(false);
+                            setSeenRefusal(refusal);
+                            // The server now reads this walker as having
+                            // seen the pet: ask again for the whole ad.
+                            if (ok) setAttempt((n) => n + 1);
+                          });
+                        }}
+                        style={{ ...MODAL_PILL_DARK, opacity: sendingSeen ? 0.6 : 1 }}
+                      >
+                        {t.modals.lostDog.seenConfirmYes}
+                      </button>
+                    </>
+                  ) : (
+                    <button onClick={() => setConfirmingSeen(true)} style={MODAL_PILL_LIGHT}>
+                      <HandDrawnFrame radius={R.button} />
+                      {t.modals.lostDog.iveSeen}
+                    </button>
+                  )}
+                </div>
+              ) : null}
             </div>
           ) : null}
         </div>

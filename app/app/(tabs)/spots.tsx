@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
-import { View, Text, StyleSheet, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, ScrollView, Pressable } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { useGameStore } from '../../stores/gameStore';
+import { useAccessStore } from '../../stores/accessStore';
 import type { Spot, SpotCategory } from '../../services/places';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { S } from '../../constants/spacing';
@@ -56,6 +57,8 @@ export default function SpotsScreen() {
   const userPos = useGameStore((s) => s.userPosition);
   const spots = useGameStore((s) => s.spots);
   const spotsLoaded = useGameStore((s) => s.spotsLoaded);
+  const spotsLoading = useGameStore((s) => s.spotsLoading);
+  const spotsError = useGameStore((s) => s.spotsError);
   const syncSpots = useGameStore((s) => s.syncSpots);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   // Category whose "see all" fullscreen modal is currently open.
@@ -70,11 +73,28 @@ export default function SpotsScreen() {
     void useGameStore.getState().loadLoreFavourites();
   }, []));
 
+  // The "see all" sheet is portalled over everything, so it would stay
+  // painted over whichever tab the user left for. Leaving the tab closes
+  // it (UX-2.5).
+  useFocusEffect(useCallback(() => () => setExpandedCategory(null), []));
+
   // The hearted landmarks, newest first, at the top of the tab. Tapping
   // one hands it to the map as a one-shot focus and switches tabs; the
   // sniff bubble shows it as if the dog had just found it.
   const favourites = useGameStore((s) => s.loreFavourites);
   const favouritesLoaded = useGameStore((s) => s.loreFavouritesLoaded);
+  const favouritesError = useGameStore((s) => s.loreFavouritesError);
+  // A retry of a failed favourites load in flight. The store keeps
+  // `loaded` true through it (the map's hearts read that flag and would
+  // fire a second load), so the skeleton rides on this instead.
+  const [favRetrying, setFavRetrying] = useState(false);
+  const retryFavourites = useCallback(() => {
+    setFavRetrying(true);
+    void useGameStore
+      .getState()
+      .loadLoreFavourites()
+      .finally(() => setFavRetrying(false));
+  }, []);
   const setFocusedLore = useGameStore((s) => s.setFocusedLore);
   const onPickFavourite = useCallback(
     (f: LoreFavourite) => {
@@ -104,6 +124,13 @@ export default function SpotsScreen() {
   // server order. Map preserves insertion order so we feed it
   // CATEGORY_ORDER and the render walks it in the same fixed
   // sequence.
+  // Sorted from a ~110m grid point, as the quests tab sorts its pets. On
+  // the raw position the carousels and the "see all" feed re-sorted on
+  // every GPS fix, so two places at a similar distance kept trading
+  // places under the user's thumb. The distances on the cards still read
+  // the live position.
+  const latBucket = userPos ? Math.round(userPos.lat * 1000) / 1000 : null;
+  const lngBucket = userPos ? Math.round(userPos.lng * 1000) / 1000 : null;
   const byCategory = useMemo(() => {
     const map = new Map<SpotCategory, Spot[]>();
     for (const cat of CATEGORY_ORDER) map.set(cat, []);
@@ -111,20 +138,29 @@ export default function SpotsScreen() {
       const list = map.get(s.category);
       if (list) list.push(s);
     }
-    if (userPos) {
+    if (latBucket != null && lngBucket != null) {
+      const from = { lat: latBucket, lng: lngBucket };
       for (const list of map.values()) {
         list.sort(
           (a, b) =>
-            distanceMeters(userPos, a.position) -
-            distanceMeters(userPos, b.position),
+            distanceMeters(from, a.position) -
+            distanceMeters(from, b.position),
         );
       }
     }
     return map;
-  }, [spots, userPos?.lat, userPos?.lng]);
+  }, [spots, latBucket, lngBucket]);
 
   const onPickSpot = useCallback(
     (s: Spot) => {
+      // Leave the cold-start gate first (door open only), or answering
+      // its ring on arrival runs the clear-slate reducer and drops the
+      // selection. Same rule as leaveGateForAction in chat.tsx.
+      const g = useGameStore.getState();
+      if (g.appMode === 'gate' && useAccessStore.getState().door === 'open') {
+        g.setAppMode('explore');
+        g.setMenuOpen(false);
+      }
       setSelectedSpot(s.id);
       router.push('/');
     },
@@ -145,6 +181,22 @@ export default function SpotsScreen() {
     autoDismissMs: 5000,
     persist: false,
   });
+
+  // Four view states drive the render:
+  //   loading      — !spotsLoaded, or a retry in flight with nothing
+  //                  cached: show a skeleton snap card per category so
+  //                  the snap order is stable from the first paint, no
+  //                  late-arriving cards shoving the layout around.
+  //   failed       —  settled on an error with nothing cached: one
+  //                   "couldn't load, tap to retry" card. Not the empty
+  //                   card — offline, "nothing nearby" is a guess.
+  //   empty        —  settled fine with spots.length === 0: single
+  //                   "nothing nearby" card.
+  //   loaded       —  spots.length > 0: one snap card per non-empty
+  //                   category, in CATEGORY_ORDER.
+  const isLoading = !spotsLoaded || (spotsLoading && spots.length === 0);
+  const isFailed = !isLoading && spotsError && spots.length === 0;
+  const isEmpty = !isLoading && !spotsError && spots.length === 0;
 
   // Snap-pop on dominant card change — same IntersectionObserver +
   // Web Animations pattern as the tasks tab. Cards have stable
@@ -218,27 +270,34 @@ export default function SpotsScreen() {
       if (retryTimer) clearTimeout(retryTimer);
       clearTimeout(initTimer);
     };
-  }, [spotsLoaded, spots.length === 0]);
+    // isLoading too: a retry after a failed load swaps the failed card
+    // for skeletons and back (or for the empty card) with neither of
+    // the other two changing, and the observer would be left watching
+    // nodes that are gone.
+  }, [spotsLoaded, spots.length === 0, isLoading]);
 
-  // Three view states drive the render:
-  //   loading      — !spotsLoaded: show a skeleton snap card per
-  //                  category so the snap order is stable from the
-  //                  first paint, no late-arriving cards shoving the
-  //                  layout around.
-  //   empty        —  spotsLoaded && spots.length === 0: single
-  //                   "nothing nearby" card.
-  //   loaded       —  spotsLoaded && spots.length > 0: one snap card
-  //                   per non-empty category, in CATEGORY_ORDER.
-  const isLoading = !spotsLoaded;
-  const isEmpty = spotsLoaded && spots.length === 0;
+  const retrySpots = useCallback(() => {
+    if (userPos) void syncSpots(userPos);
+  }, [userPos, syncSpots]);
+  const favouritesPending = !favouritesLoaded || favRetrying;
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView contentContainerStyle={styles.content} style={styles.scroller}>
         <View nativeID="snap-card-spots-favourites" style={styles.card}>
           <Text style={styles.cardTitle}>{t.spots.favourites}</Text>
-          {favouritesLoaded && favourites.length === 0 ? (
-            <Text style={styles.placeholder}>{t.spots.favouritesEmpty}</Text>
+          {/* Skeleton while the list loads (it used to show nothing, then
+              pop in), the retry line when it failed, and only then the
+              empty state. */}
+          {favouritesPending && favourites.length === 0 ? <SpotCardStackSkeleton /> : null}
+          {!favouritesPending && favourites.length === 0 ? (
+            favouritesError ? (
+              <Pressable onPress={retryFavourites} accessibilityRole="button">
+                <Text style={styles.placeholder}>{t.connection.loadFailed}</Text>
+              </Pressable>
+            ) : (
+              <Text style={styles.placeholder}>{t.spots.favouritesEmpty}</Text>
+            )
           ) : null}
           {favourites.length > 0 ? (
             <View style={styles.deckWrap}>
@@ -261,6 +320,15 @@ export default function SpotsScreen() {
             ))
           : null}
 
+        {isFailed ? (
+          <View nativeID="snap-card-spots-empty" style={styles.card}>
+            <Text style={styles.cardTitle}>{t.spots.nearbySpots}</Text>
+            <Pressable onPress={retrySpots} accessibilityRole="button">
+              <Text style={styles.placeholder}>{t.connection.loadFailed}</Text>
+            </Pressable>
+          </View>
+        ) : null}
+
         {isEmpty ? (
           <View nativeID="snap-card-spots-empty" style={styles.card}>
             <Text style={styles.cardTitle}>{t.spots.nearbySpots}</Text>
@@ -270,7 +338,7 @@ export default function SpotsScreen() {
           </View>
         ) : null}
 
-        {!isLoading && !isEmpty
+        {!isLoading && spots.length > 0
           ? CATEGORY_ORDER.map((cat) => {
               const list = byCategory.get(cat) ?? [];
               if (list.length === 0) return null;

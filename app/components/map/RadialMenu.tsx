@@ -3,6 +3,7 @@ import { balance } from '../../constants/balance';
 import { BUTTON } from '../../constants/sizing';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
+import { SYSTEM_FONT } from '../../constants/fonts';
 import { SURFACE } from '../../constants/surface';
 import { R } from '../../constants/radius';
 import { playPopThen } from '../../utils/popOnTap';
@@ -268,6 +269,10 @@ export function RadialMenu({
         boxSizing: 'border-box',
         background: bg,
         color: fg,
+        // Named, not inherited: a <button> takes the UA's system font
+        // unless told otherwise, so the answers the dog offers were the
+        // one line on screen not in Annex.
+        fontFamily: SYSTEM_FONT,
         fontSize: isText ? TYPE.body : TYPE.hero,
         fontWeight: isText ? 700 : undefined,
         lineHeight: isText ? 1.25 : undefined,

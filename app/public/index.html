@@ -50,6 +50,10 @@
       type="font/woff2"
       crossorigin
     />
+    <!-- The logo the pre-React splash below shows. Preloaded so it is
+         in hand by the time the parser reaches #splash, rather than
+         blinking in a beat after the white page. -->
+    <link rel="preload" href="/logo-full.png" as="image" />
 
     <!-- iOS PWA: apple-touch-icon is what shows on the home screen,
          the apple-mobile-web-app meta block makes the launched site
@@ -134,6 +138,17 @@
            explicit fontFamily style still inherits Annex Regular
            instead of dropping back to the browser default serif. */
         font-family: 'Annex Regular', system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      }
+      /* Form controls do NOT inherit font-family from body — the UA
+         stylesheet gives them the system font. Every raw <button> with
+         no fontFamily of its own (the dog's ring answers, the modal
+         `×` closes) was drawing its label in the system face while the
+         rest of the screen was Annex. */
+      button,
+      input,
+      textarea,
+      select {
+        font-family: inherit;
       }
       /* These styles make the root element full-height */
       #root {
@@ -267,6 +282,44 @@
         }
       }
 
+      /* The top sheets' slide (SpotModal, AboutModal, PostModal,
+         LostFlowModal). Global for the same reason as pop-in above: the
+         keyframes used to live in a <style> inside SpotModal and
+         AboutModal only, so PostModal and LostFlowModal — which named
+         them but never defined them — snapped open instead of sliding,
+         unless one of the other two happened to be mounted. */
+      @keyframes top-sheet-in {
+        from { transform: translateY(-100%); }
+        to { transform: translateY(0); }
+      }
+      @keyframes top-sheet-out {
+        from { transform: translateY(0); }
+        to { transform: translateY(-100%); }
+      }
+
+      /* The one loading shimmer: a light band sweeping across a grey
+         placeholder (the card-stack skeleton, the profile stat bars).
+         Pair it with a 200%-wide linear-gradient background. */
+      @keyframes shimmer {
+        0%   { background-position: -150% 0; }
+        100% { background-position: 250% 0; }
+      }
+
+      /* Reduce motion, for the UI's endless loops: the pulsing hint
+         rings, the bobbing collectibles, the shimmer, the profile
+         birds. Each loop carries a `data-loop` attribute and stands
+         still here. Only LOOPS: the sheets' in/out animations are left
+         alone on purpose, because their unmount waits on the
+         out-animation or a timer of the same length — killing the
+         animation would leave them to vanish rather than close.
+         A two-frame loop (a wing up, a wing down) marks its second
+         frame `data-loop="alt"`, which is hidden while still so the
+         two frames are not drawn on top of each other. */
+      @media (prefers-reduced-motion: reduce) {
+        [data-loop] { animation: none !important; }
+        [data-loop="alt"] { opacity: 0 !important; }
+      }
+
       /* SOMETHING ON SCREEN WHILE THE BUNDLE DOWNLOADS.
          The app is one deferred script of about a megabyte compressed.
          On a good 4G that is a second; on the 3G a phone drops to in a
@@ -275,13 +328,14 @@
          a broken link, and the moment people close the tab. Nothing
          React draws can help, because React is inside that megabyte.
 
-         So the shell paints the wordmark itself, in CSS only, and the
+         So the shell paints the logo itself, in HTML and CSS only, and the
          root layout removes it on mount (app/_layout.tsx), handing over
          to the React Splash underneath. No JS here on purpose: if the
          bundle fails to parse on some old engine this is the last thing
          the user sees, so after twelve seconds it also admits the wait
-         is long. White ground and the brand font match the React splash
-         so the hand-off is invisible. */
+         is long. White ground and the same logo image, at the same size,
+         as the React splash so the hand-off is invisible — it used to
+         show the wordmark in type and then swap to the PNG logo. */
       #splash {
         position: fixed;
         inset: 0;
@@ -297,13 +351,19 @@
         user-select: none;
         -webkit-user-select: none;
       }
-      #splash .wordmark {
-        font-size: 28px;
-        letter-spacing: 0.01em;
+      #splash .logo {
+        width: 300px;
+        height: 300px;
+        object-fit: contain;
         animation: splash-breathe 1.6s ease-in-out infinite;
       }
+      /* Out of the flow, just under the logo, so the logo sits dead
+         centre exactly where the React splash puts its own. */
       #splash .slow {
-        margin-top: 14px;
+        position: absolute;
+        left: 0;
+        right: 0;
+        top: calc(50% + 150px + 14px);
         padding: 0 24px;
         font-size: 14px;
         text-align: center;
@@ -319,7 +379,7 @@
         to { opacity: 1; }
       }
       @media (prefers-reduced-motion: reduce) {
-        #splash .wordmark { animation: none; opacity: 1; }
+        #splash .logo { animation: none; opacity: 1; }
       }
     </style>
   </head>
@@ -333,7 +393,7 @@
          #splash note in the stylesheet above. Both languages, because the
          user's choice lives in localStorage and nothing here can read it. -->
     <div id="splash" aria-hidden="true">
-      <div class="wordmark">шукайпес</div>
+      <img class="logo" src="/logo-full.png" alt="" />
       <div class="slow">повільна мережа, ще трохи… · slow connection, hang on…</div>
     </div>
   </body>

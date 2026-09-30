@@ -1,4 +1,4 @@
-import { useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Tabs } from 'expo-router';
 import { View, type ViewStyle } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -9,6 +9,7 @@ import { HERO } from '../../constants/sizing';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import { pickBottomInset } from '../../services/telegram';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
+import { isFallbackPosition, useLocation } from '../../hooks/useLocation';
 import { useStrings } from '../../i18n/useStrings';
 import { useGameStore } from '../../stores/gameStore';
 
@@ -40,8 +41,51 @@ function TabIcon({ name, focused }: { name: IconName; focused: boolean }) {
   );
 }
 
+// A COLD START OFF THE MAP HAS NO POSITION. The only thing that ever
+// wrote `userPosition` was MapView, and the map tab mounts lazily — so a
+// reload on /spots or /tasks left every position-driven card (spots,
+// lost pets) as a skeleton until the user happened to open the map.
+//
+// This asks for ONE fix, only on the two tabs that read position, and
+// only while there is no real one; then it lets go. It is not a second
+// GPS loop: on the map MapView's own watch owns position exactly as
+// before. Pets are fetched with it for the quests tab; the map's sync
+// takes over from there.
+//
+// "No real one" includes the Kyiv fallback. useLocation drops to it
+// after 6 s of silence, and a first-time permission prompt easily takes
+// longer than that to answer — letting go on the fallback cleared the
+// watch under the prompt, so the "allow" landed nowhere and spots sat
+// sorted from Maidan until the map was opened. The watch stays up until
+// a real fix replaces it (or the tab changes), and that fix re-asks for
+// pets, since the first answer was for Maidan.
+//
+// Not chat or profile. Chat's first-load effect restarts on every
+// position change and a write mid-boot cancelled its only run (UX-2.10);
+// neither screen needs a position to render.
+function useOffMapFirstFix() {
+  const needFix = useGameStore(
+    (s) =>
+      (s.currentScreen === 'spots' || s.currentScreen === 'tasks') &&
+      (s.userPosition == null || isFallbackPosition(s.userPosition)),
+  );
+  const location = useLocation(needFix);
+  const pos = location.position;
+  useEffect(() => {
+    if (!needFix || !pos) return;
+    const s = useGameStore.getState();
+    const upgrade = isFallbackPosition(s.userPosition) && !isFallbackPosition(pos);
+    // Fallback over fallback: nothing new to say, and a fresh object
+    // would re-render every position reader for nothing.
+    if (s.userPosition && !upgrade) return;
+    s.setUserPosition(pos);
+    if (!s.lostDogsLoaded || upgrade) void s.syncLostDogs(pos);
+  }, [needFix, pos]);
+}
+
 export default function TabsLayout() {
   const t = useStrings();
+  useOffMapFirstFix();
   // Read the actual bottom safe-area inset (iOS home-indicator
   // height) so we can extend the tab bar's bg into that strip
   // and pad the icons up by the same amount. The previous
@@ -62,8 +106,10 @@ export default function TabsLayout() {
   const pwaOvershoot = usePwaInsetOvershoot();
   // Supersniff hides the dashboard (this floating tab bar) so the map and
   // the lost-dogs carousel get the full screen; it returns when sniff is
-  // toggled off via the corner logo. Only ever on the map tab, so this
-  // doesn't strand navigation elsewhere.
+  // toggled off via the corner logo. Scoped to the map tab below, like
+  // the gate: supersniff can be left ON while another tab is showing
+  // (quests → tap a pet → back gesture), and that screen has no logo to
+  // turn it off with — unscoped, it had no way out at all.
   const dogCam = useGameStore((s) => s.dogCam);
   // …and the gate hides it for the same reason: while the dog is asking,
   // the four answers are the only navigation there is.
@@ -76,9 +122,21 @@ export default function TabsLayout() {
   // dog to tap and no ring to answer: no way back, and the only way out
   // a reload. The ring lives on the map, so the bar only defers to it
   // there.
+  //
+  // Not when the map could not be drawn, either: then there is no ring to
+  // answer, and the bar is the only way to anything else in the app.
   const appMode = useGameStore((s) => s.appMode);
   const currentScreen = useGameStore((s) => s.currentScreen);
-  const hidden = dogCam || (appMode === 'gate' && currentScreen === 'map');
+  const mapBlocked = useGameStore((s) => s.mapBlocked);
+  // …and while a lost-pet pin is being aimed (UX-2.2). The pin card sits
+  // right above the bar, and a live bar let the owner walk off to chat
+  // or tasks mid-aim with the crosshair and card following them there —
+  // where "confirm" saved the hidden map's stale centre. Back and
+  // confirm on the card are the two ways out of the step, as the four
+  // answers are for the gate.
+  const lostPinning = useGameStore((s) => s.lostPinning);
+  const hidden =
+    currentScreen === 'map' && !mapBlocked && (dogCam || appMode === 'gate' || lostPinning);
 
   // THE BAR USED TO JUST VANISH. `display: none` is not animatable, so
   // for as long as this bar has existed it cut out instantly while the

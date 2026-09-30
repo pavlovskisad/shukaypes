@@ -46,6 +46,7 @@ function FoodMarkerImpl({
           }}
         />
         <div
+          data-loop
           style={{
             width: 24,
             height: 24,

@@ -121,8 +121,10 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
       onClick={onTap}
       cullNearHorizon
       // The big selected pin is the subject of the cinematic zone shot —
-      // lift it above every other marker (companion included).
-      {...(selected ? { zIndex: Z.MARKER_COMPANION + 1 } : {})}
+      // lift it above every other marker (companion included). Every
+      // other pin still gets a tier of its own: left unset it stacked at
+      // 0, and the other walkers on the floor above it covered the pet.
+      zIndex={selected ? Z.MARKER_SELECTED : Z.MARKER_LOST_PET}
     >
       <div
         role="button"
@@ -255,6 +257,11 @@ function LostDogMarkerImpl({ position, emoji, name, urgency, photoUrl, onTap, ac
               color: NAME_COLOUR_DAY,
               textShadow: NAME_SHADOW_DAY,
               whiteSpace: 'nowrap',
+              // Capped: an ad title parsed as a name ran on for a whole
+              // screen width over its neighbours (UX-8.9).
+              maxWidth: 150,
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
             }}
           >
             {name}

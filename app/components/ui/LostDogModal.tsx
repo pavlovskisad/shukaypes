@@ -10,17 +10,16 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { INK, SURFACE } from '../../constants/surface';
+import { MODAL_PILL_DISABLED } from '../../constants/buttons';
 import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { useGameStore } from '../../stores/gameStore';
-import { distanceMeters } from '../../utils/geo';
+import { distanceMeters, formatDistance } from '../../utils/geo';
 import { playPopThen } from '../../utils/popOnTap';
 import { HandDrawnFrame } from './HandDrawn';
-
-function formatDistance(m: number): string {
-  if (m < 1000) return `${Math.round(m / 50) * 50} m`;
-  return `${(m / 1000).toFixed(1)} km`;
-}
+import { Icon } from './Icon';
+import { useSheetBack } from '../../hooks/useSheetBack';
+import { MOTION } from '../../utils/motion';
 
 interface LostDogModalProps {
   dog: NearbyLostDog | null;
@@ -46,7 +45,7 @@ interface LostDogModalProps {
 // enough that a stray diagonal drag doesn't trip a cycle.
 const SWIPE_THRESHOLD_PX = 60;
 
-const SHEET_ANIM_MS = 240;
+const SHEET_ANIM_MS = MOTION.sheetMs;
 
 // The stack hangs from the TOP, just below the HUD row (logo + pills):
 // safe-area inset + HUD height + a breathing gap. The camera (MapView's
@@ -95,15 +94,18 @@ const PILL_SECONDARY: CSSProperties = {
   boxShadow: SURFACE.onPhoto,
 };
 
+// The shared disabled colours (grey paper, grey text, grey edge) at
+// this card's pill size, with the on-photo shadow the other two wear.
+// It used to be white-on-translucent, a ghost meant for a dark bubble:
+// over the pale basemap "searching…" could not be read at all (UX-9.2).
+// The grey edge rather than the ink one still says "not a button".
 const PILL_DISABLED: CSSProperties = {
   ...PILL_BASE,
-  background: 'rgba(255,255,255,0.25)',
-  color: 'rgba(255,255,255,0.8)',
-  // Its own translucent edge rather than the ink one — a solid black
-  // outline around a ghosted pill reads as enabled.
-  border: '2px solid rgba(255,255,255,0.45)',
+  background: MODAL_PILL_DISABLED.background,
+  color: MODAL_PILL_DISABLED.color,
+  border: MODAL_PILL_DISABLED.border,
   cursor: 'default',
-  boxShadow: 'none',
+  boxShadow: SURFACE.onPhoto,
 };
 
 // Status tint. This was '#8fb0ff' — brand blue lightened to survive on
@@ -148,6 +150,15 @@ export function LostDogModal({
   // animation doesn't compose with a horizontal slide.
   const [slideDir, setSlideDir] = useState<'left' | 'right' | null>(null);
   const touchStartXRef = useRef<number | null>(null);
+  // "I've seen" is two taps on purpose: the first asks, the second
+  // files. A sighting is a real report on someone's lost pet, placed at
+  // wherever the walker is standing, and it can move the pet's public
+  // pin — one stray tap on a card is not enough to say that.
+  const [confirmingSeen, setConfirmingSeen] = useState(false);
+  // Latched by the confirming tap, so the ~360 ms between it and the
+  // card being gone (pop delay + close animation) cannot fire a second
+  // report. Cleared when the card moves to another pet.
+  const firedRef = useRef(false);
 
   // Three transitions matter:
   //   prop dog: A   →  prop dog: B    (swap content, slide animation)
@@ -158,6 +169,12 @@ export function LostDogModal({
       // Only clear slideDir on a fresh open (renderDog was null). For
       // A → B cycle swaps, leave it set so the new track mount slides.
       if (!renderDog) setSlideDir(null);
+      // A new pet, or the same one reopened mid-fade: either way a
+      // fresh card, so the question and the latch start over.
+      if (dog.id !== renderDog?.id || closing) {
+        setConfirmingSeen(false);
+        firedRef.current = false;
+      }
       setRenderDog(dog);
       setClosing(false);
       return;
@@ -172,6 +189,9 @@ export function LostDogModal({
       return () => clearTimeout(timer);
     }
   }, [dog]);
+
+  // Back and Escape close it, like its close pill (UX-2.5, UX-14.1).
+  useSheetBack(!!dog, onClose);
 
   if (!renderDog) return null;
   if (typeof document === 'undefined') return null;
@@ -206,13 +226,15 @@ export function LostDogModal({
   const badgeText = urgent ? t.modals.lostDog.badgeUrgent : t.modals.lostDog.badgeSearching;
   const badgeFg = BADGE_TINT;
   const distLabel = userPos
-    ? formatDistance(distanceMeters(userPos, renderDog.lastSeen.position))
+    ? formatDistance(distanceMeters(userPos, renderDog.lastSeen.position), t.units)
     : null;
 
   // Portal to document.body so the stack escapes the MapView / tab-page
   // stacking context (the HUD pills would otherwise paint over it).
   return createPortal(
     <div
+      role="dialog"
+      aria-modal="true"
       onClick={onClose}
       style={{
         position: 'fixed',
@@ -237,7 +259,10 @@ export function LostDogModal({
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
-          pointerEvents: 'auto',
+          // Dead while it fades out: the pills are still painted for
+          // the close animation, and a tap on them then would act on a
+          // card that is already going.
+          pointerEvents: closing ? 'none' : 'auto',
           animation: `dog-bubble-${closing ? 'out' : 'in'} ${SHEET_ANIM_MS}ms cubic-bezier(0.34, 1.2, 0.64, 1) forwards`,
         }}
       >
@@ -260,7 +285,9 @@ export function LostDogModal({
               line, reward. */}
           <div
             style={{
-              padding: '14px 18px',
+              // Wider at the sides than the top so a long name, centred,
+              // never runs under the close disc on the corner.
+              padding: '14px 30px',
               background: SURFACE.fill,
               color: INK,
               borderRadius: R.card,
@@ -269,8 +296,40 @@ export function LostDogModal({
               border: VOICE.border,
               textAlign: 'center',
               maxWidth: 300,
+              // Anchors the close disc on the corner.
+              position: 'relative',
             }}
           >
+            {/* A VISIBLE CLOSE (UX-9.21). Tapping the map around the card
+                always closed it, but nothing said so — people looking at
+                a lost pet's card had no drawn way out. The app's close
+                shape (D9): a 44px drawn circle with the close icon, sat
+                on the bubble's corner like a badge so it takes no room
+                from the text. */}
+            <button
+              onClick={(e) => playPopThen(e.currentTarget, onClose)}
+              aria-label={t.modals.common.close}
+              style={{
+                position: 'absolute',
+                top: -S.l,
+                right: -S.l,
+                width: 44,
+                height: 44,
+                boxSizing: 'border-box',
+                borderRadius: R.pill,
+                border: '2px solid transparent',
+                background: '#ffffff',
+                padding: 0,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+                cursor: 'pointer',
+                boxShadow: SURFACE.chip,
+              }}
+            >
+              <HandDrawnFrame radius={R.pill} />
+              <Icon name="close" size={18} />
+            </button>
             <div
               style={{
                 fontSize: 19,
@@ -327,13 +386,23 @@ export function LostDogModal({
               <button
                 onClick={() => onOpenPost(renderDog)}
                 style={{
-                  marginTop: 8,
-                  padding: 0,
+                  // The padding is the tap target (~40px tall) and the
+                  // negative margin hands it back, so the line sits where
+                  // the old 11px bare-text link did (UX-9.6). In ink:
+                  // blue here means the map, not "tap me" — the same
+                  // rule as the deck counter.
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  marginTop: 8 - S.m,
+                  marginBottom: -S.m,
+                  marginLeft: -S.l,
+                  marginRight: -S.l,
+                  padding: `${S.m}px ${S.l}px`,
                   border: 'none',
                   background: 'none',
-                  color: BADGE_TINT,
+                  color: INK,
                   fontFamily: SYSTEM_FONT,
-                  fontSize: TYPE.caption,
+                  fontSize: TYPE.small,
                   fontWeight: 700,
                   textDecoration: 'underline',
                   cursor: 'pointer',
@@ -342,32 +411,59 @@ export function LostDogModal({
                 {t.modals.lostDog.readPost}
               </button>
             ) : null}
+            {confirmingSeen ? (
+              <div
+                style={{
+                  marginTop: 8,
+                  fontSize: TYPE.small,
+                  fontWeight: 800,
+                }}
+              >
+                {t.modals.lostDog.seenConfirm(renderDog.name)}
+              </div>
+            ) : null}
           </div>
 
           {/* Action pills — ink primary (start search), white secondary
-              (i've seen), side by side under the bubble. */}
-          <div style={{ display: 'flex', gap: S.s }}>
-            <button
-              onClick={(e) =>
-                playPopThen(e.currentTarget, () => onReportSighting?.(renderDog))
-              }
-              style={PILL_SECONDARY}
-            >
-              <HandDrawnFrame radius={R.button} />
-              {t.modals.lostDog.iveSeen}
-            </button>
-            <button
-              onClick={(e) =>
-                playPopThen(e.currentTarget, () => onStartSearch?.(renderDog))
-              }
-              disabled={searchActive}
-              style={searchActive ? PILL_DISABLED : PILL_PRIMARY}
-            >
-              {searchActive
-                ? t.modals.lostDog.searchingCta
-                : `${t.modals.lostDog.startSearch} →`}
-            </button>
-          </div>
+              (i've seen), side by side under the bubble. While "i've
+              seen" is being confirmed the pair becomes no / yes, just
+              now, and the question sits at the foot of the bubble. */}
+          {confirmingSeen ? (
+            <div style={{ display: 'flex', gap: S.s }}>
+              <button onClick={() => setConfirmingSeen(false)} style={PILL_SECONDARY}>
+                <HandDrawnFrame radius={R.button} />
+                {t.modals.lostDog.seenConfirmNo}
+              </button>
+              <button
+                onClick={(e) => {
+                  if (firedRef.current) return;
+                  firedRef.current = true;
+                  playPopThen(e.currentTarget, () => onReportSighting?.(renderDog));
+                }}
+                style={PILL_PRIMARY}
+              >
+                {t.modals.lostDog.seenConfirmYes}
+              </button>
+            </div>
+          ) : (
+            <div style={{ display: 'flex', gap: S.s }}>
+              <button onClick={() => setConfirmingSeen(true)} style={PILL_SECONDARY}>
+                <HandDrawnFrame radius={R.button} />
+                {t.modals.lostDog.iveSeen}
+              </button>
+              <button
+                onClick={(e) =>
+                  playPopThen(e.currentTarget, () => onStartSearch?.(renderDog))
+                }
+                disabled={searchActive}
+                style={searchActive ? PILL_DISABLED : PILL_PRIMARY}
+              >
+                {searchActive
+                  ? t.modals.lostDog.searchingCta
+                  : `${t.modals.lostDog.startSearch} →`}
+              </button>
+            </div>
+          )}
         </div>
         {/* end content track */}
 

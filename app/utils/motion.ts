@@ -42,3 +42,19 @@ export function prefersReducedMotion(): boolean {
   query();
   return current;
 }
+
+// Shared timings. One sheet duration for every sheet: the top sheets
+// and the map's deck ran 280 ms while the lost-pet sheet and the three
+// list sheets ran 240, so two sheets opened back to back moved at
+// visibly different speeds. Each sheet's unmount timer reads the same
+// number as its animation, so they cannot drift apart either.
+export const MOTION = {
+  sheetMs: 280,
+} as const;
+
+// Spread onto an RN <View> whose CSS animation is an endless loop, so
+// the reduce-motion rule in public/index.html (`[data-loop]`) stills
+// it. RN-web renders `dataSet` as data-* attributes; RN's own types do
+// not know the prop, hence the cast. Plain DOM elements just take a
+// `data-loop` attribute.
+export const LOOP_VIEW_PROPS = { dataSet: { loop: 'true' } } as object;

@@ -31,10 +31,33 @@ import { distanceMeters } from '../../utils/geo';
 import type { ChatMessage } from '@shukajpes/shared';
 import { useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
+import { useAccessStore } from '../../stores/accessStore';
 import { HandDrawnFrame } from '../../components/ui/HandDrawn';
 
 const URL_RE = /(https?:\/\/[^\s]+)/g;
 
+
+// A chat action that puts something on the map (a walk, a selected
+// spot) has to leave the cold-start gate first. setAppMode is the
+// clear-slate reducer: left in 'gate', the user's answer to the ring
+// when they reach the map would wipe the walk they just asked for.
+// Only when the door is open — an unanswered auth question is not ours
+// to skip. The ring 'explore' opens is closed again: the user asked for
+// one specific thing, not the walking verbs. Same rule in spots.tsx.
+function leaveGateForAction() {
+  const s = useGameStore.getState();
+  if (s.appMode !== 'gate' || useAccessStore.getState().door !== 'open') return;
+  s.setAppMode('explore');
+  s.setMenuOpen(false);
+}
+
+// Open the map only if the user is still in the chat. An action can land
+// seconds after the reply was requested; by then they may be on another
+// tab, and yanking them to the map from there is a surprise. The effect
+// is on the map either way and waits for them.
+function goToMapIfStillHere(router: ReturnType<typeof useRouter>) {
+  if (useGameStore.getState().currentScreen === 'chat') router.push('/');
+}
 
 function linkify(text: string): Array<{ kind: 'text' | 'link'; value: string }> {
   const parts: Array<{ kind: 'text' | 'link'; value: string }> = [];
@@ -60,7 +83,10 @@ export default function ChatScreen() {
   const [draft, setDraft] = useState('');
   const [sending, setSending] = useState(false);
   const [typing, setTyping] = useState(false);
-  const [bootError, setBootError] = useState<string | null>(null);
+  const [bootError, setBootError] = useState(false);
+  // Bumped by the retry under the boot failure bubble; the boot effect
+  // re-runs on it and on nothing else.
+  const [bootAttempt, setBootAttempt] = useState(0);
   const scrollRef = useRef<ScrollView>(null);
   const bootedRef = useRef(false);
 
@@ -73,14 +99,29 @@ export default function ChatScreen() {
     async (action: CompanionAction): Promise<string | null> => {
       try {
         switch (action.name) {
-          case 'start_quest':
-            await startQuest(action.args.dogId);
-            router.push('/');
+          case 'start_quest': {
+            // startQuest never throws — a refusal or no GPS comes back as
+            // a null quest. Saying "starting search" and opening the map
+            // on that showed a search that did not exist.
+            if (!useGameStore.getState().userPosition) return `🔍 ${t.chat.needLocation}`;
+            const { quest } = await startQuest(action.args.dogId);
+            if (!quest) return `🔍 ${t.chat.couldntStartSearch}`;
+            goToMapIfStillHere(router);
             return `🔍 ${t.chat.startingSearch}`;
-          case 'highlight_spot':
+          }
+          case 'highlight_spot': {
+            // The id comes from the model. If the map has no such spot
+            // there is nothing to show, so say so rather than open a map
+            // with no selection on it.
+            const exists = useGameStore
+              .getState()
+              .spots.some((s) => s.id === action.args.spotId);
+            if (!exists) return `📍 ${t.chat.lostTrackOfSpot}`;
+            leaveGateForAction();
             setSelectedSpot(action.args.spotId);
-            router.push('/');
+            goToMapIfStillHere(router);
             return `📍 ${t.chat.showingSpot}`;
+          }
           case 'walk': {
             // Same flow the radial menu's walk leaf runs — a small local
             // tour out of our own tables. Note it takes parks, not
@@ -97,16 +138,18 @@ export default function ChatScreen() {
               distance: action.args.distance,
             });
             if (!walk) return `🚶 ${t.chat.couldntPlotRoute}`;
+            leaveGateForAction();
             useGameStore.getState().setWalkRoute(
               walk.route,
               {
                 shape: 'roundtrip',
                 spotId: null,
                 destinationName: walk.primary.name,
+                destination: walk.primary.position,
               },
               walk.stops,
             );
-            router.push('/');
+            goToMapIfStillHere(router);
             return walk.stops.length
               ? `🚶 ${t.chat.walkingToVia(walk.primary.name, walk.stops.length)}`
               : `🚶 ${t.chat.walkingTo(walk.primary.name)}`;
@@ -126,12 +169,14 @@ export default function ChatScreen() {
                 : [pos, target.position];
             const route = await fetchWalkingRoute(pos, waypoints);
             if (!route) return `🚶 ${t.chat.couldntPlotRoute}`;
+            leaveGateForAction();
             useGameStore.getState().setWalkRoute(route, {
               shape: action.args.shape,
               spotId: target.id,
+              destination: target.position,
             });
             recordRecentDestination(target.id);
-            router.push('/');
+            goToMapIfStillHere(router);
             return `🚶 ${t.chat.walkingTo(target.name)}`;
           }
           default:
@@ -168,6 +213,12 @@ export default function ChatScreen() {
       .slice(0, 8);
   }, []);
 
+  // Runs once per mount (and again on retry). Position and language are
+  // read from the stores INSIDE the run, not taken as deps: with them as
+  // deps, a GPS fix or a language toggle mid-boot cancelled the only run
+  // while bootedRef kept a second one from starting — the history never
+  // loaded and the typing dots stayed up until a reload. `cancelled` is
+  // for unmount only now.
   useEffect(() => {
     if (bootedRef.current) return;
     bootedRef.current = true;
@@ -181,11 +232,11 @@ export default function ChatScreen() {
           setTyping(true);
           const res = await api.sendChat(
             '',
-            userPosition,
+            useGameStore.getState().userPosition,
             buildSpotsPayload(),
             true,
             useGameStore.getState().viewportCenter,
-            lang,
+            useLangStore.getState().lang,
           );
           if (cancelled) return;
           setMessages([
@@ -199,7 +250,11 @@ export default function ChatScreen() {
           ]);
         }
       } catch (err) {
-        if (!cancelled) setBootError((err as Error).message);
+        // Detail to the console; the page gets the dog's line and a
+        // retry, not the raw exception text.
+        // eslint-disable-next-line no-console
+        console.warn('[chat] boot failed', err);
+        if (!cancelled) setBootError(true);
       } finally {
         if (!cancelled) setTyping(false);
       }
@@ -207,7 +262,13 @@ export default function ChatScreen() {
     return () => {
       cancelled = true;
     };
-  }, [userPosition, lang]);
+  }, [bootAttempt, buildSpotsPayload]);
+
+  const retryBoot = useCallback(() => {
+    bootedRef.current = false;
+    setBootError(false);
+    setBootAttempt((n) => n + 1);
+  }, []);
 
   useEffect(() => {
     requestAnimationFrame(() => scrollRef.current?.scrollToEnd({ animated: true }));
@@ -227,8 +288,9 @@ export default function ChatScreen() {
     setMessages((m) => [...m, optimistic]);
     setSending(true);
     setTyping(true);
+    let res: Awaited<ReturnType<typeof api.sendChat>>;
     try {
-      const res = await api.sendChat(
+      res = await api.sendChat(
         text,
         userPosition,
         buildSpotsPayload(),
@@ -236,6 +298,29 @@ export default function ChatScreen() {
         useGameStore.getState().viewportCenter,
         lang,
       );
+    } catch (err) {
+      // The detail goes where a developer will read it, not into the
+      // dog's speech bubble — see the note on cantReachWalk in strings.
+      // The message never reached the dog, so it comes back out of the
+      // transcript and into the composer, to be sent again as it was.
+      // eslint-disable-next-line no-console
+      console.warn('[chat] send failed', err);
+      setMessages((m) => [
+        ...m.filter((x) => x.id !== optimistic.id),
+        {
+          id: `err-${Date.now()}`,
+          role: 'assistant',
+          content: t.chat.cantReachDog,
+          mode: 'active',
+          createdAt: new Date().toISOString(),
+        },
+      ]);
+      setDraft((d) => (d ? d : text));
+      setSending(false);
+      setTyping(false);
+      return;
+    }
+    try {
       setMessages((m) => [
         ...m,
         {
@@ -266,10 +351,11 @@ export default function ChatScreen() {
         }
       }
     } catch (err) {
-      // The detail goes where a developer will read it, not into the
-      // dog's speech bubble — see the note on cantReachWalk in strings.
+      // The reply already landed; only the action behind it failed. That
+      // is the walk (or search) not being reachable, which is what
+      // cantReachWalk says. The user's message stays — it was delivered.
       // eslint-disable-next-line no-console
-      console.warn('[chat] walk request failed', err);
+      console.warn('[chat] action failed', err);
       setMessages((m) => [
         ...m,
         {
@@ -284,7 +370,7 @@ export default function ChatScreen() {
       setSending(false);
       setTyping(false);
     }
-  }, [draft, sending, userPosition, dispatchAction, t, lang]);
+  }, [draft, sending, userPosition, dispatchAction, t, lang, buildSpotsPayload]);
 
 
   const iosInsets = useSafeAreaInsets();
@@ -325,7 +411,33 @@ export default function ChatScreen() {
         ]}
         keyboardShouldPersistTaps="handled"
       >
-        {bootError ? <Text style={styles.error}>{bootError}</Text> : null}
+        {/* Boot failure: the dog says it, in the user's language, and
+            the retry sits under it. Boot only fails with the transcript
+            still empty, so this goes first — where the first message
+            would have been — and anything sent afterwards lands below
+            it in order instead of above it. */}
+        {bootError ? (
+          <>
+            <Bubble
+              msg={{
+                id: 'boot-error',
+                role: 'assistant',
+                content: t.chat.cantReachDog,
+                mode: 'active',
+                createdAt: '',
+              }}
+            />
+            <Pressable
+              style={styles.retryBtn}
+              onPress={retryBoot}
+              onPressIn={popPressableEvent}
+              accessibilityRole="button"
+            >
+              <HandDrawnFrame radius={R.pill} />
+              <Text style={styles.retryText}>{t.chat.retry}</Text>
+            </Pressable>
+          </>
+        ) : null}
         {messages.map((m) => (
           <Bubble key={m.id} msg={m} />
         ))}
@@ -383,34 +495,52 @@ export default function ChatScreen() {
       >
         <View style={styles.bottomBand} pointerEvents="box-none">
           <View style={styles.inputCard} pointerEvents="auto">
-            <TextInput
-              style={styles.input}
-              value={draft}
-              onChangeText={setDraft}
-              placeholder={t.chat.inputPlaceholder}
-              placeholderTextColor="#999"
-              onSubmitEditing={send}
-              editable={!sending}
-              returnKeyType="send"
-              onFocus={() => {
-                // Force the conversation to the bottom on focus
-                // so when the iOS keyboard raises the input pill,
-                // the last bubble doesn't end up sandwiched
-                // against (or behind) the input. Two raf hops:
-                // first to let the keyboard layout settle, second
-                // to scroll once the new viewport height has
-                // taken effect.
-                requestAnimationFrame(() => {
+            {/* The Field recipe (see LostFlowModal): white paper with a
+                drawn edge. An <input> cannot hold the SVG that draws
+                it, so the paper is this wrapper and the control inside
+                is stripped of its own chrome. Bare, it was white on the
+                white page — a composer with no visible edge. */}
+            <View style={styles.inputPaper}>
+              <HandDrawnFrame radius={R.button} />
+              <TextInput
+                style={styles.input}
+                value={draft}
+                onChangeText={setDraft}
+                placeholder={t.chat.inputPlaceholder}
+                placeholderTextColor={colors.greyLight}
+                onSubmitEditing={send}
+                editable={!sending}
+                returnKeyType="send"
+                onFocus={() => {
+                  // Force the conversation to the bottom on focus
+                  // so when the iOS keyboard raises the input pill,
+                  // the last bubble doesn't end up sandwiched
+                  // against (or behind) the input. Two raf hops:
+                  // first to let the keyboard layout settle, second
+                  // to scroll once the new viewport height has
+                  // taken effect.
                   requestAnimationFrame(() => {
-                    scrollRef.current?.scrollToEnd({ animated: true });
+                    requestAnimationFrame(() => {
+                      scrollRef.current?.scrollToEnd({ animated: true });
+                    });
                   });
-                });
-              }}
-            />
-            <Pressable style={styles.sendBtn} onPress={send} onPressIn={popPressableEvent} disabled={sending}>
+                }}
+              />
+            </View>
+            <Pressable
+              style={styles.sendBtn}
+              onPress={send}
+              onPressIn={popPressableEvent}
+              disabled={sending}
+              // The face is a bare → (or a spinner); this is its name.
+              accessibilityRole="button"
+              accessibilityLabel={t.chat.send}
+            >
               <HandDrawnFrame radius={R.pill} />
               {sending ? (
-                <ActivityIndicator size="small" color="#fff" />
+                // Ink: the button is white paper, and a white spinner on
+                // it was invisible — sending looked like nothing happening.
+                <ActivityIndicator size="small" color={INK} />
               ) : (
                 <Text style={styles.sendBtnText}>→</Text>
               )}
@@ -460,16 +590,26 @@ function Bubble({ msg }: { msg: ChatMessage }) {
 }
 
 function TypingIndicator() {
+  const t = useStrings();
+  // The shared word, with its own ellipsis taken off: the animated dots
+  // below are the ellipsis here.
+  const word = t.sniff.sniffing.replace(/(…|\.+)$/, '');
   const [dots, setDots] = useState('.');
   useEffect(() => {
-    const t = setInterval(() => {
+    const id = setInterval(() => {
       setDots((d) => (d.length >= 3 ? '.' : d + '.'));
     }, 400);
-    return () => clearInterval(t);
+    return () => clearInterval(id);
   }, []);
   return (
     <View style={[styles.bubble, styles.assistantBubble, styles.typing]}>
-      <Text style={[styles.bubbleText, styles.assistantText]}>sniffing{dots}</Text>
+      <Text style={[styles.bubbleText, styles.assistantText]}>
+        {word}{dots}
+        {/* The dots still to come, present but see-through, so the
+            bubble keeps the width of "..." instead of changing on
+            every tick. */}
+        <Text style={{ opacity: 0 }}>{'.'.repeat(3 - dots.length)}</Text>
+      </Text>
     </View>
   );
 }
@@ -595,11 +735,22 @@ const styles = StyleSheet.create({
   typing: {
     opacity: 0.85,
   },
-  error: {
-    color: '#a33',
-    fontSize: TYPE.small,
-    alignSelf: 'center',
-    marginVertical: S.s,
+  // The retry under the boot failure bubble — same white disc-and-line
+  // paper as the send button, sized to its label.
+  retryBtn: {
+    alignSelf: 'flex-start',
+    minHeight: 44,
+    paddingHorizontal: S.xl,
+    borderRadius: R.pill,
+    backgroundColor: SURFACE.fill,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  retryText: {
+    fontFamily: SYSTEM_FONT,
+    fontSize: TYPE.body,
+    fontWeight: '700',
+    color: INK,
   },
   // Input row — no white card backdrop. Just the input + send
   // button floating directly on the fade so it doesn't stack as
@@ -614,8 +765,13 @@ const styles = StyleSheet.create({
     paddingHorizontal: S.m,
     paddingVertical: S.m,
   },
-  input: {
+  // White paper with a drawn edge — see the note in the composer.
+  inputPaper: {
     flex: 1,
+    backgroundColor: SURFACE.fill,
+    borderRadius: R.button,
+  },
+  input: {
     paddingHorizontal: S.l,
     paddingVertical: S.m,
     // 16px keeps iOS Safari from auto-zooming on focus. Anything < 16

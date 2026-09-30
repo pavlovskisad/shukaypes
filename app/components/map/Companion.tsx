@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'expo-router';
-import { MapLibreMarker } from './MapLibreMarker';
+import { MapLibreMarker, MARKER_CLASS } from './MapLibreMarker';
 import { useMaplibreMap } from './MapContext';
 import { useGameStore } from '../../stores/gameStore';
 import { useAccessStore } from '../../stores/accessStore';
@@ -9,6 +9,7 @@ import { iconForCategory } from '../ui/Icon';
 import { SpeechBubble } from '../ui/SpeechBubble';
 import { useHint } from '../../hooks/useHint';
 import { useStrings } from '../../i18n/useStrings';
+import type { AppStrings } from '../../i18n/strings';
 import {
   RadialMenu,
   EXPLORE_ACTIONS,
@@ -31,6 +32,16 @@ import {
 import { DogSprite, type DogAnim } from './DogSprite';
 
 const VISIT_LEAVES_PER_CATEGORY = 3;
+
+// True only when we KNOW a visit category has nothing in it: spots have
+// loaded and none carry that category. Before the first load an empty
+// list is "not yet", not "none", so the drill goes ahead and fills in
+// when the spots land (UX-2.17).
+function visitCategoryEmpty(categoryId: string, spots: Spot[], loaded: boolean): boolean {
+  if (!loaded) return false;
+  const category = categoryId.replace('visit:', '');
+  return !spots.some((s) => s.category === category);
+}
 
 // Builds the visit-leaf actions for the current category. Pulled out
 // so it can be memoised + cached separately from the rest of the menu
@@ -58,25 +69,45 @@ function buildVisitLeaves(
   }));
 }
 
+// The ring's static levels carry English words in RadialMenu.tsx; they
+// are only ever read as accessible names (the icon discs show no text),
+// but a screen reader in uk still read "walk", "far", "pet store"
+// (UX-4.8). Swapped for the strings here, keyed on the action id.
+function localizeRing(actions: RadialAction[], t: AppStrings): RadialAction[] {
+  const labels: Record<string, string> = {
+    walk: t.modes.ring.walk,
+    visit: t.modes.ring.visit,
+    meet: t.modes.ring.meet,
+    ':close': t.modes.ring.close,
+    ':far': t.modes.ring.far,
+    'visit:cafe': t.modals.spot.categories.cafe,
+    'visit:restaurant': t.modals.spot.categories.restaurant,
+    'visit:bar': t.modals.spot.categories.bar,
+    'visit:pet_store': t.modals.spot.categories.pet_store,
+    'visit:veterinary_care': t.modals.spot.categories.veterinary_care,
+  };
+  return actions.map((a) => ({ ...a, label: labels[a.id] ?? a.label }));
+}
+
 // Resolves the actions for the non-leaf menu levels. Visit leaves are
 // computed separately in the component so they can be ref-cached.
-function getNonVisitActions(path: string[]): RadialAction[] | null {
+function getNonVisitActions(path: string[], t: AppStrings): RadialAction[] | null {
   const head = path[0];
-  if (!head) return EXPLORE_ACTIONS;
+  if (!head) return localizeRing(EXPLORE_ACTIONS, t);
   if (head === 'walk' || head === 'meet') {
     // One level, not two: the shape question is gone (see
     // WALK_DISTANCE_ACTIONS). Every walk from here is a roundtrip, so all
     // that is left to ask is how far — and «meet» asks exactly the same
     // thing, because it is the same walk to a different kind of place.
-    return WALK_DISTANCE_ACTIONS.map((a) => ({
+    return localizeRing(WALK_DISTANCE_ACTIONS, t).map((a) => ({
       ...a,
       id: `${head}${a.id}`, // a.id starts with ':', e.g. ':close'
     }));
   }
-  if (head === 'visit' && path.length === 1) return VISIT_CATEGORY_ACTIONS;
+  if (head === 'visit' && path.length === 1) return localizeRing(VISIT_CATEGORY_ACTIONS, t);
   // null = caller falls through to visit-leaf logic
   if (head === 'visit') return null;
-  return EXPLORE_ACTIONS;
+  return localizeRing(EXPLORE_ACTIONS, t);
 }
 
 
@@ -101,12 +132,12 @@ interface CompanionProps {
   // beyond-horizon position projects up into the sky, so the sprite must
   // be hidden or it floats in the air.
   hidden?: boolean;
+  // Supersniff's deck has at least one pet in it. The intro hint teaches
+  // swiping that deck, and waits for one — "swipe for the next dog" over
+  // an empty map (a quiet area, or no connection) is a line about
+  // nothing. Defaults true so any other caller keeps the old behaviour.
+  hasSearchDogs?: boolean;
   onTapCompanion?: () => void;
-  // Fires on EVERY tap (open and close), before the menu state changes.
-  // Parent uses it to record a timestamp and suppress the map-level
-  // onClick that Google Maps fires independently of DOM event flow —
-  // without this, low-zoom taps open the menu and immediately close it.
-  onTap?: () => void;
 }
 
 // Companion overlay — float keyframe, tap-to-open radial menu. All children
@@ -119,8 +150,8 @@ export function Companion({
   question,
   hideBubble,
   hidden,
+  hasSearchDogs = true,
   onTapCompanion,
-  onTap,
 }: CompanionProps) {
   const t = useStrings();
   const router = useRouter();
@@ -129,6 +160,7 @@ export function Companion({
   const setSelectedDog = useGameStore((s) => s.setSelectedDog);
   const setSelectedSpot = useGameStore((s) => s.setSelectedSpot);
   const spots = useGameStore((s) => s.spots);
+  const spotsLoaded = useGameStore((s) => s.spotsLoaded);
   const userPosition = useGameStore((s) => s.userPosition);
   // Supersniff (dog-cam search) mode — used to fire the one-time "how it works"
   // intro hint on entry.
@@ -209,6 +241,10 @@ export function Companion({
   // root from any depth (matches user expectation: "essentials are
   // always one tap away on the dog").
   const [menuPath, setMenuPath] = useState<string[]>([]);
+  // The visit category the user just picked that has nothing nearby.
+  // The ring stays on the category level and the dog says so, rather
+  // than drilling into a level holding nothing but the re-roll disc.
+  const [emptyVisit, setEmptyVisit] = useState<string | null>(null);
   // Track the "coming soon" bubble timeout so rapid menu taps don't
   // accumulate dangling timers — each new tap cancels the previous one.
   const bubbleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -367,6 +403,7 @@ export function Companion({
     if (!menuOpen) {
       setMenuPath([]);
       setAtModes(false);
+      setEmptyVisit(null);
     }
   }, [menuOpen]);
 
@@ -387,10 +424,10 @@ export function Companion({
   const handleTap = useCallback(
     (e: React.MouseEvent) => {
       e.stopPropagation();
-      // Fire the parent-side suppress hook BEFORE we mutate menu state —
-      // Google's map-level onClick can race against ours at low zoom and
-      // would otherwise close the menu we just opened.
-      onTap?.();
+      // The map's own click also sees this tap (it listens natively,
+      // below React), and it leaves the menu alone because the tap
+      // landed inside this marker — see MARKER_CLASS. That replaced a
+      // 300ms "ignore the map" timestamp this handler used to stamp.
       // The gate is a question, and a question you can tap away is not a
       // question. The dog does not react, does not woof, does not close
       // the ring — the only way out is one of the four answers.
@@ -445,7 +482,7 @@ export function Companion({
     },
     // `t` and `flash` left with the supersniff woof — the bubble carries
     // the question now, so this handler no longer says anything.
-    [menuOpen, atModes, setMenuOpen, onTapCompanion, onTap]
+    [menuOpen, atModes, setMenuOpen, onTapCompanion]
   );
 
   const fireLeafAction = useCallback(
@@ -455,7 +492,7 @@ export function Companion({
       switch (id) {
         case 'search': {
           if (!ctxPos || lostDogs.length === 0) {
-            flash('no lost pets in range yet');
+            flash(t.modes.noLostPetsYet);
             return;
           }
           const closest = lostDogs.reduce((best, d) => {
@@ -464,7 +501,7 @@ export function Companion({
             return dd < bd ? d : best;
           }, lostDogs[0]!);
           setSelectedDog(closest.id);
-          flash(`sniffed out ${closest.name} 🔍`);
+          flash(t.modes.sniffedOut(closest.name));
           return;
         }
         case 'chat': {
@@ -513,7 +550,7 @@ export function Companion({
         const shape: WalkShape = 'roundtrip';
         const distance = (parts[1] ?? 'close') as WalkDistance;
         if (!ctxPos) {
-          flash("can't walk without knowing where we are");
+          flash(t.bubbles.walkNoLocation);
           return;
         }
         const ctxParks = useGameStore.getState().parks;
@@ -522,13 +559,14 @@ export function Companion({
         // The landmark step is a round-trip to the server, so say
         // something now rather than leaving the tap unanswered; the
         // real label lands when the route does.
-        flash(
-          kind === 'meet'
-            ? 'sniffing out where the dogs are 🐕'
-            : `${distance === 'far' ? 'long' : 'short'} walk, sniffing the way 🚶`,
-        );
+        flash(kind === 'meet' ? t.modes.meetSniffing : t.modes.walkSniffing(distance === 'far'));
+        // A mode flip or tab switch while the server is thinking means
+        // the user moved on. Landing the walk anyway drew it into the new
+        // mode — supersniff included, where nothing can cancel it.
+        const epoch = useGameStore.getState().overlayEpoch;
         void startExplorationWalk({ origin: ctxPos, parks: ctxParks, shape, distance, kind }).then(
           (walk) => {
+            if (useGameStore.getState().overlayEpoch !== epoch) return;
             if (!walk) {
               // A meet with nothing to show is NOT the same miss as a
               // tour with nothing to show, and saying "try the other
@@ -537,7 +575,7 @@ export function Companion({
               flash(
                 kind === 'meet'
                   ? t.modes.noWalkers
-                  : 'nothing worth walking to at that distance — try the other one',
+                  : t.modes.walkNothing,
               );
               return;
             }
@@ -552,25 +590,17 @@ export function Companion({
                   shape,
                   spotId: null,
                   destinationName: walk.primary.name,
+                  destination: walk.primary.position,
                 },
                 walk.stops,
               );
             // No shape in the line any more: every walk is a roundtrip,
             // and naming the only option it could have been is noise.
-            const distLabel = distance === 'far' ? 'long' : 'short';
             const n = walk.stops.length;
-            if (kind === 'meet') {
-              flash(
-                n
-                  ? `${walk.primary.name} — dogs walk there. ${n} ${n === 1 ? 'stop' : 'stops'} on the way 🐾`
-                  : `${walk.primary.name} — dogs walk there 🐕`,
-              );
-              return;
-            }
             flash(
-              n
-                ? `${distLabel} walk to ${walk.primary.name} — ${n} ${n === 1 ? 'stop' : 'stops'} on the way 🐾`
-                : `${distLabel} walk to ${walk.primary.name} 🚶`,
+              kind === 'meet'
+                ? t.modes.meetTo(walk.primary.name, n)
+                : t.modes.walkTo(distance === 'far', walk.primary.name, n),
             );
           },
         );
@@ -582,7 +612,7 @@ export function Companion({
         const spotId = id.replace('visit:spot:', '');
         const spot = ctxSpots.find((s) => s.id === spotId);
         if (!spot) {
-          flash("can't find that one anymore");
+          flash(t.modes.spotGone);
           return;
         }
         // Feed the recent-visit list so next time the user opens the
@@ -590,16 +620,16 @@ export function Companion({
         // ranking and other names surface.
         recordRecentVisit(spot.id);
         setSelectedSpot(spot.id);
-        flash(`let's check out ${spot.name} ${spot.icon ?? '📍'}`);
+        flash(t.modes.visitSpot(spot.name, spot.icon ?? '📍'));
         return;
       }
 
-      const label = EXPLORE_ACTIONS.find((a) => a.id === id)?.label ?? id;
-      flash(`${label}! coming soon 🐾`);
+      const label = localizeRing(EXPLORE_ACTIONS, t).find((a) => a.id === id)?.label ?? id;
+      flash(t.modes.comingSoon(label));
     },
-    // `t` joined the list when the "nobody around" line stopped being a
-    // hardcoded English string. It only changes when the user switches
-    // language, so it costs one rebuild of this callback per toggle.
+    // `t` is in the list because every line this says comes from it
+    // (UX-4.2). It only changes when the user switches language, so it
+    // costs one rebuild of this callback per toggle.
     [router, setSelectedDog, setSelectedSpot, flash, t]
   );
 
@@ -658,6 +688,7 @@ export function Companion({
       if (menuPath.length === 0) {
         if (id === 'walk' || id === 'meet' || id === 'visit') {
           setMenuPath([id]);
+          setEmptyVisit(null);
           // Both branches need spots populated for their leaves. Lazy-
           // fetch here so the user doesn't have to manually visit the
           // Spots tab first. No-op if already loaded.
@@ -684,6 +715,12 @@ export function Companion({
           setMenuOpen(false);
           return;
         }
+        const { spots: ctxSpots, spotsLoaded: ctxLoaded } = useGameStore.getState();
+        if (visitCategoryEmpty(id, ctxSpots, ctxLoaded)) {
+          setEmptyVisit(id);
+          return;
+        }
+        setEmptyVisit(null);
         setMenuPath([...menuPath, id]);
         return;
       }
@@ -715,6 +752,16 @@ export function Companion({
   useEffect(() => {
     if (!menuOpen) visitLeavesCacheRef.current = null;
   }, [menuOpen]);
+  // A category drilled into before the spots had loaded can turn out
+  // empty once they land. Step back up to the categories and say so,
+  // the same as a tap on an already-known empty one.
+  useEffect(() => {
+    const [head, second] = menuPath;
+    if (head !== 'visit' || !second) return;
+    if (!visitCategoryEmpty(second, spots, spotsLoaded)) return;
+    setMenuPath(['visit']);
+    setEmptyVisit(second);
+  }, [menuPath, spots, spotsLoaded]);
 
   // The four intents, labelled from i18n. Built here rather than in
   // RadialMenu because only the ids are static — the words are Ukrainian
@@ -746,7 +793,7 @@ export function Companion({
   const currentActions = useMemo(() => {
     if (authGate) return authActions;
     if (showModes) return modeActions;
-    const nonVisit = getNonVisitActions(menuPath);
+    const nonVisit = getNonVisitActions(menuPath, t);
     if (nonVisit) return nonVisit;
     // We're at visit:<category>. Use the cached picks if the category
     // hasn't changed; otherwise compute + cache.
@@ -755,8 +802,13 @@ export function Companion({
     const cached = visitLeavesCacheRef.current;
     if (cached && cached.key === visitKey) return cached.leaves;
     const category = menuPath[1]!.replace('visit:', '') as SpotCategory;
+    const picks = buildVisitLeaves(category, spots, userPosition);
+    // Nothing to pick (the spots are still loading): no re-roll disc on
+    // its own, and no caching, so the level fills in when they arrive
+    // instead of staying empty until the menu is reopened (UX-2.17).
+    if (picks.length === 0) return [];
     const leaves = [
-      ...buildVisitLeaves(category, spots, userPosition),
+      ...picks,
       // Last, so re-rolling never moves the spots out from under a
       // thumb already on its way to one.
       {
@@ -847,7 +899,7 @@ export function Companion({
   // per-swipe bubble. Fires right away and takes priority over any bark that
   // happens to be up (see activeBubble below).
   const supersniffIntroHint = useHint('map:supersniff-intro', {
-    ready: dogCam,
+    ready: dogCam && hasSearchDogs,
     showDelayMs: 150,
     autoDismissMs: 6500,
     // FIXME(hints): persist:false while iterating — fires once per session
@@ -939,10 +991,11 @@ export function Companion({
     if (head === 'walk') return t.modes.walkDistanceAsk;
     if (head === 'meet') return t.modes.meetDistanceAsk;
     if (head === 'visit') {
-      return second ? t.modes.visitSpotAsk : t.modes.visitCategoryAsk;
+      if (second) return t.modes.visitSpotAsk;
+      return emptyVisit ? t.modes.visitCategoryEmpty : t.modes.visitCategoryAsk;
     }
     return null;
-  }, [menuOpen, showModes, menuPath, t]);
+  }, [menuOpen, showModes, menuPath, emptyVisit, t]);
   // Supersniff intro bubble — shown over ambient/real barks for its window.
   const supersniffIntro =
     dogCam && supersniffIntroHint.visible ? t.hints.supersniffIntro : null;
@@ -1013,7 +1066,13 @@ export function Companion({
   useEffect(() => () => setMenuCamera(null), [setMenuCamera]);
 
   return (
-    <MapLibreMarker position={position} zIndex={Z.MARKER_COMPANION}>
+    <MapLibreMarker
+      position={position}
+      zIndex={Z.MARKER_COMPANION}
+      // A tap anywhere in here — the dog, its bubble, any level of the
+      // menu — is not a tap on the map, so it never closes the menu.
+      className={MARKER_CLASS.companion}
+    >
       {/* Outer container is 140×140 — the entire box is the tap target
           even though the visible nose glyph is only 55×55 centered.
           At map-zoomed-out the companion sits on top of the UserMarker's

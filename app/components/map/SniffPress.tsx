@@ -17,7 +17,7 @@ import { Z } from '../../constants/z';
 import { playPop } from '../../utils/popOnTap';
 import { distanceMeters } from '../../utils/geo';
 import type { WalkStop } from '../../utils/walk';
-import { useStrings } from '../../i18n/useStrings';
+import { getStrings, useStrings } from '../../i18n/useStrings';
 import { VOICE } from '../../constants/voice';
 import { INK, SURFACE } from '../../constants/surface';
 import { HandDrawnFrame } from '../ui/HandDrawn';
@@ -89,6 +89,24 @@ interface DiscoveredLore {
   distM: number;
 }
 
+// A card with no place behind it: "nothing here", or "the sniff
+// failed". The '__none__' id is what hides the heart and the walk
+// button — there is nowhere to save or go.
+function emptyCard(position: LatLng, name: string, story: string): DiscoveredLore {
+  return {
+    id: '__none__',
+    name,
+    title: null,
+    category: 'none',
+    story,
+    detail: null,
+    wikipediaTitle: null,
+    sourceLang: null,
+    position,
+    distM: 0,
+  };
+}
+
 export function SniffPress() {
   const map = useMaplibreMap();
   const t = useStrings();
@@ -111,6 +129,10 @@ export function SniffPress() {
   const SNIFFING_BUBBLE_DELAY_MS = 350;
 
   const [discovered, setDiscovered] = useState<DiscoveredLore | null>(null);
+  // The live discovery, for goHere to check after its await: a newer
+  // find that landed meanwhile must not be wiped by the older one's walk.
+  const discoveredRef = useRef(discovered);
+  discoveredRef.current = discovered;
   const [routing, setRouting] = useState(false);
   // Read-more state lives in LoreMore, keyed by the discovery's id so a
   // new find never inherits the last one's expanded article.
@@ -161,6 +183,21 @@ export function SniffPress() {
   }, [discovered, sniffingAt, setSniffActive]);
   useEffect(() => () => setSniffActive(false), [setSniffActive]);
 
+  // The lost-pet close-up is the one subject on screen while it is open,
+  // so a story left up from a sniff goes away with it rather than
+  // painting over the selected pet (UX-8.7). Cleared, not unmounted —
+  // the press gesture lives in this component and has to keep working.
+  const selectedDogId = useGameStore((s) => s.selectedDogId);
+  useEffect(() => {
+    if (selectedDogId) setDiscovered(null);
+  }, [selectedDogId]);
+
+  // The dog's menu outranks the sniff card the way it outranks the walk
+  // stops (WalkStops): the ring cannot paint out of the companion's own
+  // stacking context, so the card steps down to the floor while it is
+  // open (UX-8.4).
+  const menuOpen = useGameStore((s) => s.menuOpen);
+
   // A discovery belongs to the mode it was sniffed in. Flipping to
   // supersniff (or back) used to leave the story bubble and its ring
   // hanging over the new view — the press was over, but nothing ever
@@ -176,6 +213,10 @@ export function SniffPress() {
     setDiscovered(null);
     setSniffingAt(null);
     pressLatLngRef.current = null;
+    startPxRef.current = null;
+    // A flip that lands mid-hold, after the commit locked one-finger
+    // pan, would otherwise leave it locked until the next press ended.
+    map?.dragPan.enable();
     if (rafRef.current != null) {
       cancelAnimationFrame(rafRef.current);
       rafRef.current = null;
@@ -303,9 +344,15 @@ export function SniffPress() {
       // discovery reads as "found".
       clearVisuals();
       if (!ll) return;
+      // A flip or tab switch while the server looks means the user has
+      // moved on; the find must not pop up in the new context. Not
+      // excluded either, so the place can still be offered next time.
+      const epoch = useGameStore.getState().overlayEpoch;
+      const moved = () => useGameStore.getState().overlayEpoch !== epoch;
       try {
         const exclude = Array.from(excludeRef.current);
         const { lore } = await api.discoverLore(ll.lat, ll.lng, exclude);
+        if (moved()) return;
         if (lore) {
           excludeRef.current.add(lore.id);
           setDiscovered(lore);
@@ -325,21 +372,17 @@ export function SniffPress() {
         } else {
           // Nothing within range — give a tiny prompt so the gesture
           // doesn't read as broken.
-          setDiscovered({
-            id: '__none__',
-            name: 'тут поки тиша',
-            title: null,
-            category: 'none',
-            story: '*ніс у землю* нічого знайомого. далі від цього кутка є щось — спробуй там.',
-            detail: null,
-            wikipediaTitle: null,
-            sourceLang: null,
-            position: ll,
-            distM: 0,
-          });
+          const s = getStrings().sniff;
+          setDiscovered(emptyCard(ll, s.nothingTitle, s.nothingStory));
         }
       } catch {
-        /* swallow — gesture is best-effort */
+        if (moved()) return;
+        // The request failed. Said as that, not as "nothing here" — and
+        // not as silence, which after a three-second hold reads as the
+        // gesture being broken (UX-5.7). getStrings, not `t`: this
+        // closure lives as long as the map listeners do.
+        const s = getStrings().sniff;
+        setDiscovered(emptyCard(ll, s.failedTitle, s.failedStory));
       } finally {
         setSniffingAt(null);
       }
@@ -373,8 +416,11 @@ export function SniffPress() {
       if (target && !target.classList.contains('maplibregl-canvas')) {
         return;
       }
-      // Clear previous discovery before starting a new sniff.
-      setDiscovered(null);
+      // The previous discovery is NOT cleared here. Every drag and pinch
+      // starts with this same press, and wiping the story on each one
+      // lost it for good — its place is excluded from later sniffs. It
+      // goes when a new hold commits (the timer below) or on a plain
+      // tap (onUp).
       const ll = { lat: e.lngLat.lat, lng: e.lngLat.lng };
       pressLatLngRef.current = ll;
       startPxRef.current = { x: e.point.x, y: e.point.y };
@@ -389,6 +435,7 @@ export function SniffPress() {
       bubbleTimerRef.current = setTimeout(() => {
         bubbleTimerRef.current = null;
         if (pressLatLngRef.current) {
+          setDiscovered(null);
           setSniffingAt(ll);
           lockMapGestures();
         }
@@ -427,8 +474,13 @@ export function SniffPress() {
 
     const onUp = () => {
       // Up before the timer fires = cancel. If finishHold has already
-      // claimed the ref, this is a no-op.
-      if (pressLatLngRef.current) cancelHold();
+      // claimed the ref, this is a no-op. A drag or pinch has already
+      // cleared the ref (cancelHold), so reaching here with it set is a
+      // tap that stayed put — that one does put the story away.
+      if (pressLatLngRef.current) {
+        setDiscovered(null);
+        cancelHold();
+      }
     };
 
     map.on('mousedown', startHold);
@@ -461,12 +513,19 @@ export function SniffPress() {
     if (!discovered || !userPos || routing) return;
     if (discovered.id === '__none__') return;
     setRouting(true);
+    // Checked after the await: a dismissal, a flip or a newer sniff in
+    // the meantime means this walk is no longer wanted, and installing
+    // it would also wipe whatever discovery is up now.
+    const epoch = useGameStore.getState().overlayEpoch;
+    const forId = discovered.id;
     try {
       // Falls back to a straight line when Google can't route, so
       // "ходімо сюди" always puts something on the map — the place we
       // are pointing at is ours, only the way there was Google's.
       const line = await fetchWalkingRouteOrLine(userPos, [discovered.position]);
       if (!line) return;
+      if (useGameStore.getState().overlayEpoch !== epoch) return;
+      if (discoveredRef.current?.id !== forId) return;
       // The place goes on the walk as its one stop, at the end of the
       // line: the green dot the walk planner uses, which pops when the
       // route reaches it and opens the same story, heart and read-more
@@ -489,7 +548,11 @@ export function SniffPress() {
         alongM,
         offRouteM: 0,
       };
-      setWalkRoute(line, { shape: 'oneway', spotId: null }, [stop]);
+      setWalkRoute(
+        line,
+        { shape: 'oneway', spotId: null, destination: discovered.position },
+        [stop],
+      );
       setDiscovered(null);
     } finally {
       setRouting(false);
@@ -501,7 +564,11 @@ export function SniffPress() {
   }
   if (!discovered) return null;
   return (
-    <MapLibreMarker position={discovered.position} anchor="bottom" zIndex={Z.HUD_SNIFF_BUBBLE}>
+    <MapLibreMarker
+      position={discovered.position}
+      anchor="bottom"
+      zIndex={menuOpen ? Z.MARKER_DEFAULT : Z.HUD_SNIFF_BUBBLE}
+    >
       <div
         style={{
           display: 'flex',
@@ -614,6 +681,8 @@ function SniffingBubble({ position }: { position: LatLng }) {
   // Strip any static trailing ellipsis from the i18n label so the
   // animated "." → ".." → "..." cycle doesn't double up.
   const sniffingBase = t.sniff.sniffing.replace(/[.…]+$/, '');
+  // Yields to the dog's menu like the discovery card above.
+  const menuOpen = useGameStore((s) => s.menuOpen);
   useEffect(() => {
     const id = setInterval(() => {
       setDots((d) => (d.length >= 3 ? '.' : d + '.'));
@@ -629,7 +698,7 @@ function SniffingBubble({ position }: { position: LatLng }) {
       // anchors the gesture visually; the small dot we used to render
       // here was redundant once that fill is in.
       offset={[0, -60]}
-      zIndex={Z.HUD_SNIFF_BUBBLE}
+      zIndex={menuOpen ? Z.MARKER_DEFAULT : Z.HUD_SNIFF_BUBBLE}
     >
       <div
         style={{
@@ -641,13 +710,18 @@ function SniffingBubble({ position }: { position: LatLng }) {
           borderRadius: R.chip,
           fontFamily: VOICE.fontFamily,
           fontSize: TYPE.body,
-          fontStyle: 'italic',
+          // Upright, like every other voice bubble: Annex has no italic,
+          // so `fontStyle: italic` was only the browser shearing it.
           boxShadow: VOICE.shadow,
           border: VOICE.border,
           pointerEvents: 'none',
         }}
       >
         {sniffingBase}{dots}
+        {/* The dots not yet shown, kept in the line but invisible, so
+            the bubble holds the width of "..." on every tick instead of
+            growing and snapping back. */}
+        <span style={{ visibility: 'hidden' }}>{'.'.repeat(3 - dots.length)}</span>
       </div>
     </MapLibreMarker>
   );

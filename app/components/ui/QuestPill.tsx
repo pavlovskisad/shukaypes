@@ -1,3 +1,4 @@
+import { useEffect, useState } from 'react';
 import { View, Text, Pressable, StyleSheet } from 'react-native';
 import { useGameStore } from '../../stores/gameStore';
 import { colors } from '../../constants/colors';
@@ -16,12 +17,33 @@ import { HandDrawnFrame } from './HandDrawn';
 
 const GLASS_BG = SURFACE.fill;
 
+// How long the × stays armed after its first tap. Long enough to read
+// "sure? tap again" and press it; short enough that a brush against it
+// on the way to something else has lapsed by the time it happens again.
+const ARM_MS = 3000;
+
 export function QuestPill() {
   const activeQuest = useGameStore((s) => s.activeQuest);
   const lostDogs = useGameStore((s) => s.lostDogs);
   const abandon = useGameStore((s) => s.abandonActiveQuest);
 
   const t = useStrings();
+
+  // TWO TAPS TO ABANDON (UX-7.1). This × is the only way out of a
+  // search now that the map's own "abandon quest" pill is gone, and one
+  // stray tap used to drop somebody's lost-pet search on the spot. The
+  // first tap arms it and says so; the second, within ARM_MS, abandons.
+  const [armed, setArmed] = useState(false);
+  useEffect(() => {
+    if (!armed) return;
+    const tm = setTimeout(() => setArmed(false), ARM_MS);
+    return () => clearTimeout(tm);
+  }, [armed]);
+  // A new quest, or none, starts disarmed.
+  const questId = activeQuest?.id;
+  useEffect(() => {
+    setArmed(false);
+  }, [questId]);
 
   if (!activeQuest) return null;
 
@@ -49,13 +71,25 @@ export function QuestPill() {
           {done}/{total}
         </Text>
         <Pressable
-          onPress={abandon}
+          onPress={() => {
+            if (!armed) {
+              setArmed(true);
+              return;
+            }
+            setArmed(false);
+            void abandon();
+          }}
           onPressIn={popPressableEvent}
-          hitSlop={8}
-          accessibilityLabel={t.hud.abandonSearch}
-          style={styles.close}
+          accessibilityLabel={armed ? t.hud.abandonSearchArmed : t.hud.abandonSearch}
+          style={styles.closeHit}
         >
-          <Text style={styles.closeTxt}>×</Text>
+          {armed ? (
+            <View style={styles.closeArmed}>
+              <Text style={styles.closeArmedTxt}>{t.hud.abandonSearchArmed}</Text>
+            </View>
+          ) : (
+            <Text style={styles.closeTxt}>×</Text>
+          )}
         </Pressable>
       </View>
     </View>
@@ -121,18 +155,37 @@ const styles = StyleSheet.create({
     fontWeight: '800',
     marginLeft: 2,
   },
-  close: {
-    width: 26,
-    height: 26,
-    borderRadius: R.pill,
+  // The hit box is 44 tall and at least 44 wide; the drawn × and the
+  // armed capsule inside it stay 26. hitSlop used to do this job and
+  // does nothing on react-native-web 0.19 (UX-9.1), so the box is real
+  // and the negative vertical margin (44 - 26 = 18, half each side)
+  // keeps it from growing the pill.
+  closeHit: {
+    minWidth: 44,
+    height: 44,
+    marginVertical: -9,
     alignItems: 'center',
     justifyContent: 'center',
-    marginLeft: S.xs,
   },
   closeTxt: {
     color: '#666',
     fontSize: TYPE.hero,
     lineHeight: 22,
     fontWeight: '400',
+  },
+  // The armed ×: a small inked capsule with the question in it, so the
+  // second tap has something that plainly reads as "yes, stop".
+  closeArmed: {
+    height: 26,
+    paddingHorizontal: S.s,
+    borderRadius: R.pill,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: INK,
+  },
+  closeArmedTxt: {
+    color: '#ffffff',
+    fontSize: TYPE.small,
+    fontWeight: '600',
   },
 });

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,12 +12,8 @@ import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { useAccessStore } from '../../stores/accessStore';
 import { LangPill } from '../../components/ui/LangPill';
-import { CHIP } from '../../constants/sizing';
-
-// Logo is the brand anchor in the top-left. Prototype has it roughly
-// pill-height; matching that so it reads as a peer of the status pill
-// rather than dominating the map.
-const HUD_ICON_SIZE = 59;
+import { useStrings } from '../../i18n/useStrings';
+import { CHIP, HUD_ICON_SIZE } from '../../constants/sizing';
 
 // Easing for the HUD pills as the mode changes. A decelerating curve
 // with NO overshoot of its own — the 1% cross-over lives in the
@@ -28,6 +24,8 @@ const HUD_ICON_SIZE = 59;
 const POP_IN = 'cubic-bezier(0.22, 1, 0.36, 1)';
 
 export default function MapScreen() {
+  // `strings`, not `t`: `t` is the timer's name in the effects below.
+  const strings = useStrings();
   // Supersniff is one of the three the corner logo rotates through.
   const dogCam = useGameStore((s) => s.dogCam);
   const cycleAppMode = useGameStore((s) => s.cycleAppMode);
@@ -46,6 +44,12 @@ export default function MapScreen() {
   // the other two rather than by a path of its own.
   const lostPinning = useGameStore((s) => s.lostPinning);
   const immersive = dogCam || gateOpen || lostPinning;
+  // The logo leaves for the gate AND for the pin step (UX-2.3). It is a
+  // mode switch, and a mode switch mid-aim ran setAppMode, whose clean
+  // slate closes the lost-pet sheet — the owner's half-written report
+  // was discarded with no word, and the mode flipped under them. It is
+  // still NOT keyed on supersniff: there the logo is the way back out.
+  const logoHidden = gateOpen || lostPinning;
   // THE ONE CONTROL THAT SURVIVES THE QUESTION — and the only one that
   // may. Everything else in this row bubbles out at the gate precisely
   // so that nothing can answer the dog behind the ring's back; the
@@ -95,7 +99,7 @@ export default function MapScreen() {
 
   // The logo needs its OWN window, not `sniffJustChanged`. It stays put
   // through a mode change — it IS the mode switch — and only bubbles for
-  // the gate, so keying it on `immersive` would animate it out and back
+  // the gate and the pin step, so keying it on `immersive` would animate it out and back
   // every time somebody tapped it.
   const [gateJustChanged, setGateJustChanged] = useState(false);
   const gateInitRef = useRef(true);
@@ -107,7 +111,7 @@ export default function MapScreen() {
     setGateJustChanged(true);
     const t = setTimeout(() => setGateJustChanged(false), 700);
     return () => clearTimeout(t);
-  }, [gateOpen]);
+  }, [logoHidden]);
 
   useFocusEffect(useCallback(() => {
     useGameStore.getState().setScreen('map');
@@ -117,9 +121,14 @@ export default function MapScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.mapLayer}>
+      {/* A plain <div>, NOT a View (UX-7.4). RN-web gives every View
+          z-index 0, which makes it a stacking context: as a View this
+          layer capped every marker and in-map pill at 0, under the HUD
+          at 30, whatever tier z.ts gave them. Without one, MapView's
+          children are compared against the HUD directly. */}
+      <div style={MAP_LAYER}>
         <MapView />
-      </View>
+      </div>
       {/* Map renders full-screen under the phone status bar (becomes
           the bg for it — design thing). HUD itself still respects the
           top safe-area inset via `edges={['top']}` so the logo / pills
@@ -139,11 +148,7 @@ export default function MapScreen() {
             and the status pill at the other — the empty middle is
             layout, not a surface, and it was swallowing every tap that
             landed there. Nothing lived in that strip until the search
-            HUD did, and raising the HUD's z-index is no way out: the
-            map's parent stacking contexts trap MapView's children
-            below this container regardless of the number (see the
-            portal comment on the off-screen companion chip). Its two
-            real children keep their own hit areas. */}
+            HUD did. Its two real children keep their own hit areas. */}
         <View style={styles.hudRow} nativeID="map-hud-row" pointerEvents="box-none">
           {/* The logo is a mode switch, so it leaves with the rest of the
               chrome while the gate is up — otherwise the one control that
@@ -153,14 +158,14 @@ export default function MapScreen() {
           <div
             style={{
               transformOrigin: 'left center',
-              opacity: gateOpen ? 0 : 1,
-              transform: gateOpen ? 'scale(0)' : 'scale(1)',
+              opacity: logoHidden ? 0 : 1,
+              transform: logoHidden ? 'scale(0)' : 'scale(1)',
               animation: gateJustChanged
-                ? gateOpen
+                ? logoHidden
                   ? `pop-out 320ms ease-in forwards`
                   : `pop-in 360ms ${POP_IN} 200ms both`
                 : 'none',
-              pointerEvents: gateOpen ? 'none' : 'auto',
+              pointerEvents: logoHidden ? 'none' : 'auto',
             }}
           >
           <Pressable
@@ -171,12 +176,13 @@ export default function MapScreen() {
             // button's whole job is the thing it is about to do.
             accessibilityLabel={
               appMode === 'explore'
-                ? 'show the district'
+                ? strings.hud.logoExplore
                 : appMode === 'play'
-                  ? 'turn supersniff on'
-                  : 'back to walking'
+                  ? strings.hud.logoPlay
+                  : strings.hud.logoBack
             }
-            hitSlop={8}
+            // No hitSlop: react-native-web 0.19 ignores it (UX-9.1), and
+            // the logo is HUD_ICON_SIZE (59) square, target enough.
             style={{ position: 'relative' }}
           >
             {/* Super-sniff hint cue — the same blooming ring the HUD pills
@@ -190,6 +196,7 @@ export default function MapScreen() {
                 potrace-traced from the original PNG for crisp
                 scaling. */}
             <div
+              data-loop
               style={{
                 width: HUD_ICON_SIZE,
                 height: HUD_ICON_SIZE,
@@ -269,9 +276,22 @@ export default function MapScreen() {
   );
 }
 
+// The flex column is what the View gave for free, and MapView's own
+// "locating…" / "map failed" screens (flex: 1) need it to fill the layer
+// — without it they shrank to their text at the top, under the HUD.
+// Deliberately no z-index (see above).
+const MAP_LAYER: CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  display: 'flex',
+  flexDirection: 'column',
+};
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  mapLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   hud: {
     position: 'absolute',
     top: 0,

@@ -10,6 +10,16 @@
 //
 // Gaps of 5 between values so we can insert mid-tier without
 // renumbering everything.
+//
+// RN-web gives EVERY <View> `position: relative; z-index: 0`, which
+// makes each one a stacking context. A View anywhere between a layer
+// and the tab screen's root caps that layer at the View's own level,
+// whatever number it carries. The map tab's `mapLayer` was exactly that
+// (UX-7.4): every marker and in-map pill below sat under the HUD at 30
+// regardless of its tier. It is a plain <div> now, so the tiers below
+// really are compared against each other — which means the companion
+// (42), the lost-pet deck (35) and the sniff bubble (52) DO paint over
+// the corner logo and the status pills, as this file always said.
 
 export const Z = {
   // ───────────────────────────────────────────────────────────────
@@ -20,6 +30,12 @@ export const Z = {
   // set; this explicit value gives every marker the same floor so
   // we can lift specific ones above the rest.
   MARKER_DEFAULT: 10,
+  // Every lost-pet pin and collapsed cluster. One notch over the floor
+  // so the other walkers (which sit ON the floor) can never paint over
+  // a pet: the pets are what the map is for, the walkers are company
+  // (UX-8.2). It has to be set on every pin, not just some — a marker
+  // with no z-index stacks at 0, under anything that has one.
+  MARKER_LOST_PET: 12,
   // The dog. Sits above other markers in dense areas — when the
   // map's covered in POI clusters the companion should still be
   // the visual anchor. Bumped 15 → 42 so it (and the SpeechBubble
@@ -27,6 +43,10 @@ export const Z = {
   // (HUD_CHIPS = 35) when the dog speaks near the viewport edge.
   // Still well below MODAL_MAP (60).
   MARKER_COMPANION: 42,
+  // The one thing the person has picked on the map — the lost pet whose
+  // close-up is open, the spot the Spots tab sent them to. One step over
+  // the dog, so the chosen pin is never under anything (UX-8.6).
+  MARKER_SELECTED: 43,
   // Spiderified children of an expanded cluster — local to the
   // cluster's stacking context, but bumped here so they paint
   // above other map markers while expanded.
@@ -57,29 +77,48 @@ export const Z = {
   HUD_CHIPS: 35,
   // Bubble that mirrors the dog's current remark next to the
   // off-screen companion chip. One notch above chips so it reads
-  // as the chip's speech.
+  // as the chip's speech. It now renders INSIDE the chip's portal
+  // wrapper (UX-7.11), whose transform makes a stacking context, so
+  // in practice it paints at the wrapper's HUD_CHIP_COMPANION; the
+  // number is kept for anything that mirrors it outside a chip.
   HUD_CHIP_BUBBLE: 37,
   // Companion bookmark sits above the lost-pet chips so it never
   // drowns underneath a stack of pet photos when the dog drifts
   // off-screen at the same edge as several pets.
   HUD_CHIP_COMPANION: 38,
-  // Cancel-walk / abandon-quest / restack-all pills. Above chips
+  // Cancel-walk / GPS-status / restack-all pills. Above chips
   // because they're contextual actions and the user is reaching
   // for them — and above the walk stops, which is the one exception
   // to "the dots are on top": the route runs across the whole
   // viewport, so a dot can land exactly on the pill that leaves the
   // walk, and leaving must never be the thing you cannot press.
   HUD_PILLS_OVERLAY: 54,
+  // The "X waved at you" toast (multiplayer). Portaled to <body>. Above
+  // the overlay pills it is offset below, so a wrapped pill row can
+  // never sit on top of it, but BELOW MODAL_MAP: it used to carry a raw
+  // 9000 and painted over every open sheet, where a tap on it panned a
+  // map the person could not see (UX-7.3).
+  TOAST: 56,
   // Sniff "sniffing…" indicator + discovered-place story bubble.
-  // Top of the HUD tier so it dominates marker re-renders during
-  // viewport refetches.
-  HUD_SNIFF_BUBBLE: 45,
+  // Above the walk stops (46/50), so a story you just sniffed up is not
+  // covered by the dots of a walk that happens to pass it — it was 45
+  // and called itself "top of the tier" while sitting under both
+  // (UX-8.5). It YIELDS to the dog's menu the way the stops do: while
+  // the ring is open SniffPress drops to MARKER_DEFAULT (UX-8.4),
+  // because the menu cannot climb out of the companion's own context.
+  HUD_SNIFF_BUBBLE: 52,
   //
   // NB the walk-stop numbers above only clear this tier because the
   // container they live in sets no z-index of its own. A positioned
   // ancestor WITH one opens a new stacking context and traps every
   // descendant at the ancestor's level, no matter how high they
   // number themselves.
+
+  // The offline / slow-connection banner (app/_layout.tsx). Lives in
+  // #root, anchored above the tab bar. Above the map chrome, and below
+  // every modal on purpose: a sheet the person opened is the thing they
+  // are reading, and the banner will still be there when it closes.
+  BANNER: 50,
 
   // ───────────────────────────────────────────────────────────────
   // TIER 3 — modals over the map (cover the map, not global UI)
@@ -90,5 +129,12 @@ export const Z = {
   // TIER 4 — global overlays
   // ───────────────────────────────────────────────────────────────
   MODAL_GLOBAL: 80,
+  // The about sheet. Its own step rather than MODAL_GLOBAL: it has to
+  // clear every global sheet (the account edit sheet included), and at
+  // an equal number the winner is whichever mounted last. It carried a
+  // raw 1000 before, which also put it over the splash.
+  MODAL_INFO: 90,
+  // Portaled to <body> (UX-7.7) so body-level sheets cannot paint over
+  // it during the first second.
   SPLASH: 100,
 } as const;

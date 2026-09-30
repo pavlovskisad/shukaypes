@@ -28,6 +28,7 @@ import { R } from '../../constants/radius';
 import { TYPE } from '../../constants/type';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { colors } from '../../constants/colors';
+import { useSheetBack } from '../../hooks/useSheetBack';
 
 interface Props {
   player: NearbyPlayer;
@@ -54,7 +55,10 @@ export function PlayerCard({ player, onClose }: Props) {
   const setAppMode = useGameStore((s) => s.setAppMode);
   const [card, setCard] = useState<Card | null>(null);
   const [failed, setFailed] = useState(false);
-  const [poked, setPoked] = useState(false);
+  // idle → sending → waved (or failed) → idle. The label only says
+  // "waved!" once the server has the wave: it used to say so on the tap,
+  // offline too, about a notification that never went out.
+  const [pokeState, setPokeState] = useState<'idle' | 'sending' | 'waved' | 'failed'>('idle');
 
   useEffect(() => {
     let alive = true;
@@ -73,6 +77,9 @@ export function PlayerCard({ player, onClose }: Props) {
     };
   }, [player.id]);
 
+  // Back and Escape close it, like the tap outside (UX-2.5, UX-14.1).
+  useSheetBack(true, onClose);
+
   const avatar = card?.avatarUrl ?? player.avatarUrl ?? null;
   const name = card?.name ?? player.name;
   // The person behind the dog's name (D-73): the nickname on the small
@@ -81,11 +88,19 @@ export function PlayerCard({ player, onClose }: Props) {
   const isBot = card?.bot ?? !!player.bot;
 
   const poke = () => {
+    // Each poke is a notification on a real person's phone. The button
+    // stays disabled from the tap through the cooldown, or a thumb
+    // drumming on it sends one per tap.
+    if (pokeState !== 'idle') return;
     haptic('medium');
-    setPoked(true);
-    setTimeout(() => setPoked(false), 1500);
-    void pokePlayer(player.id);
+    setPokeState('sending');
+    void pokePlayer(player.id).then((ok) => {
+      setPokeState(ok ? 'waved' : 'failed');
+      setTimeout(() => setPokeState('idle'), 1500);
+    });
   };
+  const pokeLabel =
+    pokeState === 'waved' ? t.poked : pokeState === 'failed' ? t.pokeFailed : t.poke;
 
   // Tap the ground → the map lands on it, the same jump a row on the
   // standing makes (tasks.tsx onPickOwner): into the territory view
@@ -113,7 +128,7 @@ export function PlayerCard({ player, onClose }: Props) {
   };
 
   return createPortal(
-    <div style={OVERLAY}>
+    <div style={OVERLAY} role="dialog" aria-modal="true">
       {/* Tap outside the paper: close. */}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'auto' }} onClick={onClose} />
       <div style={{ ...COLUMN, bottom: `calc(env(safe-area-inset-bottom, 0px) + ${S.m}px)` }}>
@@ -137,7 +152,11 @@ export function PlayerCard({ player, onClose }: Props) {
                 {card ? (card.level === null ? t.levelUnknown : tp.level(card.level)) : failed ? t.levelUnknown : '…'}
                 {isBot ? ` · ${t.bot}` : owner ? ` · ${t.owner(owner)}` : ''}
               </div>
-              {card || failed ? (
+              {/* Only once the card has answered. On a failed load the row
+                  used to say "no territory yet" — a claim about a dog
+                  whose ground was never asked about. The level line
+                  above already says it is unknown. */}
+              {card ? (
                 <div
                   role={piece ? 'button' : undefined}
                   onClick={piece ? showGround : undefined}
@@ -152,9 +171,9 @@ export function PlayerCard({ player, onClose }: Props) {
                   {piece ? <TerritoryMini points={piece} color={ownerColorCss(player.id)} size={MINI} /> : null}
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ font: `600 ${TYPE.body}px ${SYSTEM_FONT}`, color: INK }}>
-                      {card && card.areaM2 > 0 ? t.territory : t.noTerritory}
+                      {card.areaM2 > 0 ? t.territory : t.noTerritory}
                     </div>
-                    {card && card.areaM2 > 0 ? (
+                    {card.areaM2 > 0 ? (
                       <div style={{ font: `500 ${TYPE.small}px ${SYSTEM_FONT}`, color: colors.grey, marginTop: 2 }}>
                         {tp.areaValue(card.areaM2)}
                       </div>
@@ -164,8 +183,9 @@ export function PlayerCard({ player, onClose }: Props) {
               ) : null}
             </div>
           </div>
-          <Primary label={poked ? t.poked : t.poke} onClick={poke} />
-          <button type="button" style={{ ...LINK, alignSelf: 'center', marginTop: S.m }} onClick={onClose}>
+          <Primary label={pokeLabel} disabled={pokeState !== 'idle'} onClick={poke} />
+          {/* marginTop 0: LINK's own S.m of padding is the gap now. */}
+          <button type="button" style={{ ...LINK, alignSelf: 'center', marginTop: 0 }} onClick={onClose}>
             {t.close}
           </button>
         </div>

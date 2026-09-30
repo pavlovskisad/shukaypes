@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useFocusEffect, useRouter } from 'expo-router';
 import { View, Text, StyleSheet, ScrollView, Pressable, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -28,13 +28,14 @@ import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColor';
 import { BoardRow } from '../../components/ui/BoardRow';
-import { TAB_BAR_STRIP } from '../../constants/sizing';
 import { useVisibleHeight } from '../../hooks/useVisibleHeight';
-import { safeAreaBottomPx, safeAreaTopPx } from '../../utils/safeArea';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
+import { safeAreaTopPx } from '../../utils/safeArea';
 import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
 import { useHint } from '../../hooks/useHint';
 import { useAccessStore } from '../../stores/accessStore';
 import { HandDrawnBar } from '../../components/ui/HandDrawn';
+import { LOOP_VIEW_PROPS } from '../../utils/motion';
 
 interface QuestHistoryRow {
   id: string;
@@ -45,14 +46,15 @@ interface QuestHistoryRow {
   rewardPoints: number;
 }
 
-function relativeWhen(iso: string): string {
+// The words come from t.time.ago, so a uk row reads «5хв тому» rather
+// than "5m ago" (UX-4.6).
+function relativeWhen(iso: string, ago: AppStrings['time']['ago']): string {
   const then = new Date(iso).getTime();
   const diffM = Math.max(0, Math.round((Date.now() - then) / 60000));
-  if (diffM < 60) return `${diffM}m ago`;
+  if (diffM < 60) return ago(diffM, 'm');
   const diffH = Math.round(diffM / 60);
-  if (diffH < 24) return `${diffH}h ago`;
-  const diffD = Math.round(diffH / 24);
-  return `${diffD}d ago`;
+  if (diffH < 24) return ago(diffH, 'h');
+  return ago(Math.round(diffH / 24), 'd');
 }
 
 // THE BOARD IS COLOURED LIKE THE MAP.
@@ -141,6 +143,37 @@ const TASK_ICON: Record<DailyTaskKey, IconName> = {
 // own row sits above them, so it reads as you against the podium — and
 // the rest of the city is one tap away in the fullscreen board.
 const BOARD_CARD_ROWS = 3;
+// About a BoardRow's height, so the skeleton holds the card's shape.
+const BOARD_SKELETON_ROW_H = 44;
+
+// Grey shimmer rows standing in for a card's list while it loads, so a
+// card is there, titled, from the first paint instead of popping in and
+// shoving the deck down. The `shimmer` keyframe is global
+// (public/index.html), the same one the profile's stat bars use.
+function SkeletonRows({ count, height }: { count: number; height: number }) {
+  return (
+    <View style={{ gap: S.m }}>
+      {Array.from({ length: count }, (_, i) => (
+        <View
+          key={i}
+          {...LOOP_VIEW_PROPS}
+          style={
+            {
+              height,
+              borderRadius: 8,
+              backgroundColor: '#eeeeee',
+              backgroundImage:
+                'linear-gradient(110deg, transparent 30%, rgba(255,255,255,0.75) 50%, transparent 70%)',
+              backgroundSize: '200% 100%',
+              backgroundRepeat: 'no-repeat',
+              animation: 'shimmer 1.8s ease-in-out infinite',
+            } as unknown as object
+          }
+        />
+      ))}
+    </View>
+  );
+}
 
 // One bar on the standing: the owner's colour, a length, and the shine.
 //
@@ -148,6 +181,7 @@ export default function TasksScreen() {
   const t = useStrings();
   const router = useRouter();
   const dailyTasks = useGameStore((s) => s.dailyTasks);
+  const dailyTasksStatus = useGameStore((s) => s.dailyTasksStatus);
   const refresh = useGameStore((s) => s.refreshDailyTasks);
   const lostDogs = useGameStore((s) => s.lostDogs);
   const lostDogsLoaded = useGameStore((s) => s.lostDogsLoaded);
@@ -155,19 +189,22 @@ export default function TasksScreen() {
   const setSearchIntent = useGameStore((s) => s.setSearchIntent);
   const currentScreen = useGameStore((s) => s.currentScreen);
   const [history, setHistory] = useState<QuestHistoryRow[]>([]);
-  // The territory standing. Null until the first fetch settles; a
-  // failed fetch leaves it null and the card simply doesn't render,
-  // same as the quest history above.
+  // The territory standing. Null until the first fetch lands; until
+  // then the card shows its title over skeleton rows, and if the fetch
+  // failed, a retry line (boardFailed) — it used to not render at all,
+  // which offline read as "there is no standing".
   const [board, setBoard] = useState<{
     board: TerritoryRanking[];
     you: { areaM2: number; rank: number | null };
   } | null>(null);
   // The happiness index board (D-75), same lifecycle as the standing:
-  // null until fetched, and a failed fetch leaves the card unrendered.
+  // null until fetched, skeleton meanwhile, retry line on failure.
   const [happy, setHappy] = useState<{
     board: HappinessRanking[];
     you: { index: number | null; activeS: number; rank: number | null };
   } | null>(null);
+  const [boardFailed, setBoardFailed] = useState(false);
+  const [happyFailed, setHappyFailed] = useState(false);
   // Open the "see all" fullscreen list when truthy.
   const [seeAllDogsOpen, setSeeAllDogsOpen] = useState(false);
   // The full standing — nullable data doubles as the modal's open flag,
@@ -262,17 +299,37 @@ export default function TasksScreen() {
   const setFocusedTerritory = useGameStore((s) => s.setFocusedTerritory);
   const setPinnedGuest = useGameStore((s) => s.setPinnedGuest);
   const setAppMode = useGameStore((s) => s.setAppMode);
+  const setTerritoryVisible = useGameStore((s) => s.setTerritoryVisible);
+  // INTO THE TERRITORY VIEW, WITHOUT THROWING A WALK AWAY (UX-6.13).
+  //
+  // setAppMode is the clear-slate reducer, and a planned walk is part of
+  // the slate it clears — so a glance at somebody's ground from the
+  // standing used to cost you the route you were on. Mid-walk, only the
+  // territory lens comes on; the walk stays drawn and you stay in the
+  // mode you were in. Search mode is left out: it hides territory
+  // outright, so there the switch is the only way to see any.
+  //
+  // Guarded because re-entering the mode you are already in would wipe
+  // the screen for nothing.
+  const enterTerritoryView = useCallback(() => {
+    const { appMode, walkRoute, territoryVisible } = useGameStore.getState();
+    if (walkRoute && appMode !== 'search') {
+      if (!territoryVisible) setTerritoryVisible(true);
+      return;
+    }
+    if (appMode !== 'play') setAppMode('play');
+  }, [setAppMode, setTerritoryVisible]);
   // Your own row flies the camera and pins NOTHING: your dog is the one
   // the map already draws, and your ground now comes through the
   // uncapped own-ground read, so there is nothing a pin could add.
   const onFocusOwnGround = useCallback(
     (ring?: { lat: number; lng: number }[]) => {
       if (!ring || ring.length < 3) return;
-      if (useGameStore.getState().appMode !== 'play') setAppMode('play');
+      enterTerritoryView();
       setFocusedTerritory({ ownerId: 'you', ring });
       router.push('/');
     },
-    [setFocusedTerritory, setAppMode, router],
+    [setFocusedTerritory, enterTerritoryView, router],
   );
 
   const onPickOwner = useCallback(
@@ -286,12 +343,16 @@ export default function TasksScreen() {
       // in the territory view. Flying somebody to a piece of ground they
       // then cannot see is the same as not going. Switching first also
       // hands them the dog's line explaining the mechanic, which is the
-      // right thing to hear on the way to a stranger's district.
-      //
-      // Guarded because setAppMode is the clear-slate reducer: re-entering
-      // the mode you are already in would wipe the screen for nothing.
-      if (useGameStore.getState().appMode !== 'play') setAppMode('play');
-      setFocusedTerritory({ ownerId, ring, ...(mark ? { mark } : {}), ...(pos ? { pos } : {}) });
+      // right thing to hear on the way to a stranger's district. See
+      // enterTerritoryView for what happens mid-walk.
+      enterTerritoryView();
+      setFocusedTerritory({
+        ownerId,
+        ring,
+        ...(mark ? { mark } : {}),
+        ...(pos ? { pos } : {}),
+        openCard: true,
+      });
       // PIN WHAT THE JUMP WENT TO SEE.
       //
       // The camera command above lands you there and clears. On its own
@@ -321,7 +382,7 @@ export default function TasksScreen() {
       });
       router.push('/');
     },
-    [setFocusedTerritory, setPinnedGuest, setAppMode, router],
+    [setFocusedTerritory, setPinnedGuest, enterTerritoryView, router],
   );
 
   useFocusEffect(
@@ -331,6 +392,20 @@ export default function TasksScreen() {
       // counters to today's date if the stored entry is from yesterday.
       refresh();
     }, [refresh])
+  );
+
+  // The full-screen boards are portalled over everything, so they would
+  // stay painted over whichever tab the user left for. Leaving the tab
+  // closes them (UX-2.5).
+  useFocusEffect(
+    useCallback(
+      () => () => {
+        setSeeAllDogsOpen(false);
+        setBoardAll(null);
+        setHappyAll(null);
+      },
+      [],
+    ),
   );
 
   // Refetch quest history on focus so a freshly completed quest shows
@@ -365,29 +440,40 @@ export default function TasksScreen() {
   // The territory standing, refetched on focus. Its own trip and its
   // own failure: the board lives behind a different query from the
   // quest history, and one being down should not blank the other.
+  // A ticket rather than a closure flag so the retry line can call it
+  // too; leaving the tab bumps it, and anything still in flight lands
+  // on nothing.
+  const boardsSeq = useRef(0);
+  const loadBoards = useCallback(() => {
+    const seq = ++boardsSeq.current;
+    setBoardFailed(false);
+    setHappyFailed(false);
+    api
+      .territoryLeaderboard()
+      .then((res) => {
+        if (seq === boardsSeq.current) setBoard(res);
+      })
+      .catch(() => {
+        // A board already on screen stays up; only an empty card says
+        // it failed.
+        if (seq === boardsSeq.current) setBoardFailed(true);
+      });
+    api
+      .happinessLeaderboard()
+      .then((res) => {
+        if (seq === boardsSeq.current) setHappy(res);
+      })
+      .catch(() => {
+        if (seq === boardsSeq.current) setHappyFailed(true);
+      });
+  }, []);
   useFocusEffect(
     useCallback(() => {
-      let cancelled = false;
-      api
-        .territoryLeaderboard()
-        .then((res) => {
-          if (!cancelled) setBoard(res);
-        })
-        .catch(() => {
-          /* fail silent — the card just doesn't render */
-        });
-      api
-        .happinessLeaderboard()
-        .then((res) => {
-          if (!cancelled) setHappy(res);
-        })
-        .catch(() => {
-          /* same: no card */
-        });
+      loadBoards();
       return () => {
-        cancelled = true;
+        boardsSeq.current++;
       };
-    }, []),
+    }, [loadBoards]),
   );
 
   // Your own silhouette, when the board already carries it: if you sit in
@@ -412,9 +498,12 @@ export default function TasksScreen() {
   // tab bar covers the bottom strip — none of which a viewport unit
   // knows about. Floor so a tiny window cannot produce a negative box.
   const visibleH = useVisibleHeight();
+  // The bar's top edge, from the one hook everything that clears the
+  // bar reads — the same inset the bar itself is placed with.
+  const tabClearance = useTabBarClearance();
   const pageH = Math.max(
     360,
-    visibleH - safeAreaTopPx() - safeAreaBottomPx() - TAB_BAR_STRIP,
+    visibleH - safeAreaTopPx() - tabClearance,
   );
   // AND THE LAST CARD HAS TO REACH THE TOP. The scrollport is taller
   // than a card by exactly the strip the tab bar covers, so without
@@ -422,7 +511,7 @@ export default function TasksScreen() {
   // with the previous card still peeking and its own last row under
   // the bar. The old layout padded the bottom by `calc(100vh - 200px)`
   // for the same reason; full-height cards need only the difference.
-  const tailPad = safeAreaBottomPx() + TAB_BAR_STRIP;
+  const tailPad = tabClearance;
 
   const taskRows = dailyTasks.tasks;
   const doneCount = taskRows.filter((row) => row.done).length;
@@ -433,7 +522,6 @@ export default function TasksScreen() {
   // cannot check an expression written inline in a dependency array, and
   // getting this set wrong means the pop animation silently stops.
   const noLostDogs = lostDogsLoaded && sortedDogs.length === 0;
-  const hasBoard = board != null;
 
   // Pop the dominant snap-card when it changes. Uses
   // IntersectionObserver against the cards' stable nativeIDs to
@@ -529,14 +617,14 @@ export default function TasksScreen() {
     };
     // Re-run only when the SET of rendered snap-cards changes —
     // i.e. when a card disappears (lost-pets hidden after a
-    // load-with-zero, the standing before its first fetch) or
-    // reappears. The lost-pets card is now always rendered upfront
+    // load-with-zero) or reappears. The two boards are always
+    // rendered now, skeleton first, so they no longer flip it. The lost-pets card is now always rendered upfront
     // via the skeleton placeholder, so the dogs fetch settling no
     // longer flips this — the same DOM node carries the data swap
     // without needing a fresh observer. Past searches used to be on
     // this list; they are a section of the lost-pets card now, so
     // they change its height and never the set.
-  }, [noLostDogs, hasBoard]);
+  }, [noLostDogs]);
 
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
@@ -608,7 +696,13 @@ export default function TasksScreen() {
                   return (
                     <Pressable
                       key={row.userId}
-                      onPress={() => onPickOwner(row)}
+                      // Your own row, wherever it ranks, does what the
+                      // pinned "you" row above does. Picking it as an
+                      // owner pinned a second dog with your nickname and
+                      // repainted your ground in a rival's hue (UX-1.9).
+                      onPress={() =>
+                        isYou ? onFocusOwnGround(row.mainPiece) : onPickOwner(row)
+                      }
                       disabled={!row.mainPiece || row.mainPiece.length < 3}
                       style={({ pressed }) => (pressed ? styles.boardRowPressed : undefined)}
                     >
@@ -629,18 +723,34 @@ export default function TasksScreen() {
                     affordance as the carousel counter. It carries real
                     weight now that the card shows a handful: the board
                     is the district's shape, the sheet is its full
-                    census. */}
-                <Pressable onPress={openFullBoard} hitSlop={8}>
-                  {({ pressed }) => (
-                    <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
-                      {t.tasks.boardSeeAll}
-                    </Text>
-                  )}
-                </Pressable>
+                    census. Only when there IS more than the card
+                    shows, same guard as the happiness card below:
+                    "show all" over a board that already fits opened a
+                    sheet repeating the same rows (UX-12.20). */}
+                {board.board.length > BOARD_CARD_ROWS ? (
+                  <Pressable onPress={openFullBoard}>
+                    {({ pressed }) => (
+                      <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
+                        {t.tasks.boardSeeAll}
+                      </Text>
+                    )}
+                  </Pressable>
+                ) : null}
               </>
             )}
           </View>
-        ) : null}
+        ) : (
+          <View nativeID="snap-card-board" style={[styles.card, { minHeight: pageH }]}>
+            <Text style={styles.cardTitle}>{t.tasks.territoryBoard}</Text>
+            {boardFailed ? (
+              <Pressable onPress={loadBoards} accessibilityRole="button">
+                <Text style={styles.boardEmpty}>{t.connection.loadFailed}</Text>
+              </Pressable>
+            ) : (
+              <SkeletonRows count={BOARD_CARD_ROWS + 1} height={BOARD_SKELETON_ROW_H} />
+            )}
+          </View>
+        )}
 
         {/* The happiness index (D-75): whose dog lives the happiest
             life — an all-time, time-weighted average of the meter over
@@ -691,7 +801,7 @@ export default function TasksScreen() {
               })
             )}
             {happy.board.length > BOARD_CARD_ROWS ? (
-              <Pressable onPress={openFullHappy} hitSlop={8}>
+              <Pressable onPress={openFullHappy}>
                 {({ pressed }) => (
                   <Text style={[styles.boardSeeAll, pressed && styles.boardSeeAllPressed]}>
                     {t.tasks.boardSeeAll}
@@ -701,7 +811,18 @@ export default function TasksScreen() {
             ) : null}
             <Text style={styles.boardHint}>{t.tasks.happinessHint}</Text>
           </View>
-        ) : null}
+        ) : (
+          <View nativeID="snap-card-happy" style={[styles.card, { minHeight: pageH }]}>
+            <Text style={styles.cardTitle}>{t.tasks.happinessBoard}</Text>
+            {happyFailed ? (
+              <Pressable onPress={loadBoards} accessibilityRole="button">
+                <Text style={styles.boardEmpty}>{t.connection.loadFailed}</Text>
+              </Pressable>
+            ) : (
+              <SkeletonRows count={BOARD_CARD_ROWS + 1} height={BOARD_SKELETON_ROW_H} />
+            )}
+          </View>
+        )}
 
         {/* Lost pets nearby — the most actionable thing on the screen,
             under the standing. Always rendered (even while the dogs
@@ -758,8 +879,8 @@ export default function TasksScreen() {
                       </Text>
                       <Text style={styles.historyMeta}>
                         {q.status === 'completed' ? t.tasks.finished : t.tasks.abandoned} ·{' '}
-                        {relativeWhen(q.endedAt)}
-                        {q.status === 'completed' ? ` · +${q.rewardPoints}pts` : ''}
+                        {relativeWhen(q.endedAt, t.time.ago)}
+                        {q.status === 'completed' ? ` · ${t.tasks.questPoints(q.rewardPoints)}` : ''}
                       </Text>
                     </View>
                     {q.status === 'completed' ? (
@@ -785,10 +906,22 @@ export default function TasksScreen() {
             <Text style={[styles.cardTitle, styles.cardTitleInline]}>
               {t.tasks.dailyTasks}
             </Text>
-            <Text style={styles.dailyCount}>
-              {doneCount} / {taskRows.length}
-            </Text>
+            {/* No tally over no rows: "0 / 0" read as a day with nothing
+                in it, when the day had not loaded. */}
+            {taskRows.length > 0 ? (
+              <Text style={styles.dailyCount}>
+                {doneCount} / {taskRows.length}
+              </Text>
+            ) : null}
           </View>
+          {taskRows.length === 0 && dailyTasksStatus === 'error' ? (
+            <Pressable onPress={() => void refresh()} accessibilityRole="button">
+              <Text style={styles.boardEmpty}>{t.connection.loadFailed}</Text>
+            </Pressable>
+          ) : null}
+          {taskRows.length === 0 && dailyTasksStatus === 'loading' ? (
+            <SkeletonRows count={6} height={48} />
+          ) : null}
           {/* Nothing else up here. The header is a label and a tally;
               what the day is worth was a third number saying what the
               six rows below already say one at a time, and the summary
@@ -883,9 +1016,11 @@ export default function TasksScreen() {
         board={boardAll}
         youRank={board?.you.rank ?? null}
         onClose={() => setBoardAll(null)}
-        onPick={(row) => {
+        onPick={(row, isYou) => {
           setBoardAll(null);
-          onPickOwner(row);
+          // Same split as the card's rows (UX-1.9).
+          if (isYou) onFocusOwnGround(row.mainPiece);
+          else onPickOwner(row);
         }}
       />
       <LeaderboardModal
@@ -1087,6 +1222,9 @@ const styles = StyleSheet.create({
     color: INK,
     textDecorationLine: 'underline',
     textAlign: 'center',
+    // The padding IS the tap target (~41px, full card width). These
+    // links used to lean on hitSlop as well, which react-native-web
+    // 0.19 ignores (UX-9.1).
     paddingVertical: S.m,
   },
   boardSeeAllPressed: { opacity: 0.55 },

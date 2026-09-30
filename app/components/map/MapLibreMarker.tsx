@@ -29,6 +29,9 @@ interface Props {
   zIndex?: number;
   // Optional click handler on the marker wrapper.
   onClick?: () => void;
+  // Class added to the wrapper div. Used to tell the map's own click
+  // handler which marker a tap landed on — see MARKER_CLASS.
+  className?: string;
   // Hide this marker while it projects into the top "sky" band at steep
   // pitch. At the game-camera tilt, distant markers compress toward the
   // horizon and pile up at the top of the screen; culling them keeps the
@@ -45,6 +48,26 @@ interface Props {
   children: ReactNode;
 }
 
+// Wrapper classes the map click handler reads (MapView, UX-8.1). A tap
+// on a marker reaches MapLibre's own click too — it listens on the
+// canvas container, natively, before React's root listener has run, so
+// no `stopPropagation` inside a marker can stop it. The handler ignores
+// taps that land inside any `.maplibregl-marker`, and uses these to know
+// which open thing the tapped marker owns: a tap on the dog keeps its
+// menu, a tap inside the open cluster keeps the ring, and a tap on any
+// OTHER marker closes both (owner decision D8).
+//
+// `tappable` marks a wrapper with its own onClick. The wrapper is sized
+// by its content, and some content is a pointer-events:none box much
+// bigger than what it draws (the cluster's 240px ring box), so a tap on
+// empty map next to a marker can land on the bare wrapper. That tap is
+// the map's — unless the wrapper itself is what listens.
+export const MARKER_CLASS = {
+  companion: 'shk-marker-companion',
+  openCluster: 'shk-marker-cluster-open',
+  tappable: 'shk-marker-tappable',
+} as const;
+
 // Below this pitch there's effectively no horizon in view, so nothing is
 // culled (a flat map's "top of screen" is just north, not the sky).
 const CULL_MIN_PITCH = 60;
@@ -58,6 +81,7 @@ export function MapLibreMarker({
   offset,
   zIndex,
   onClick,
+  className,
   cullNearHorizon,
   cullSkyMarginPx = 0,
   children,
@@ -103,7 +127,16 @@ export function MapLibreMarker({
     if (!el) return;
     el.style.zIndex = zIndex != null ? String(zIndex) : '';
     el.style.cursor = onClick ? 'pointer' : '';
+    el.classList.toggle(MARKER_CLASS.tappable, !!onClick);
   }, [el, zIndex, onClick]);
+
+  // classList, not className: MapLibre owns `maplibregl-marker` and its
+  // anchor classes on this same element.
+  useEffect(() => {
+    if (!el || !className) return;
+    el.classList.add(className);
+    return () => el.classList.remove(className);
+  }, [el, className]);
 
   // Horizon cull. While pitched steeply, hide the marker if it projects
   // into the top sky band (or off the top entirely). The band grows with
