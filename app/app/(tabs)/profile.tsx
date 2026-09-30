@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { View, Text, StyleSheet, Pressable, Image } from 'react-native';
-import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { colors } from '../../constants/colors';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { R } from '../../constants/radius';
@@ -14,7 +14,8 @@ import { api, type TerritoryRanking } from '../../services/api';
 import { useAccessStore } from '../../stores/accessStore';
 import { ProfileDogScene } from '../../components/profile/ProfileDogScene';
 import { SCENE_SKY, type SceneMode } from '../../components/profile/ProfileSceneBackdrop';
-import { HERO, CHIP } from '../../constants/sizing';
+import { HERO, CHIP, TAB_BAR_STRIP } from '../../constants/sizing';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
 import { MeterPill, CounterPill } from '../../components/ui/StatusBar';
 import { useStrings } from '../../i18n/useStrings';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
@@ -174,7 +175,10 @@ export default function ProfileScreen() {
   // landscape sits inside one continuous sky instead of a tiny
   // 200-px strip glued to a flat-coloured page.
   const [sceneMode, setSceneMode] = useState<SceneMode>('day');
-  const insets = useSafeAreaInsets();
+  // The tab bar's top edge (hooks/useTabBarClearance.ts) — the same
+  // inset the bar is placed with, so inside Telegram the deck no longer
+  // pads for an iOS strip the bar itself ignores.
+  const tabClearance = useTabBarClearance();
   // Installed-PWA root is extended down by the bottom inset so the scene
   // bleeds through the home-indicator strip; lift the floating deck back
   // up by the same amount. 0 in browser / TG. See usePwaInsetOvershoot.
@@ -360,7 +364,11 @@ export default function ProfileScreen() {
   // dog walks on runs out. Named once because three things need to agree
   // on it: the deck's own offset, the card height it renders at, and the
   // floor the dog scene is not allowed to sink below.
-  const deckBottom = HERO.size + insets.bottom + pwaOvershoot;
+  // HERO.size above the inset is where it has always sat: 18 px lower
+  // than the bar's top edge, with the deck's own 24 px bottom margin
+  // (CardStack) lifting the cards clear of it. Written against the bar
+  // so the two cannot drift apart again.
+  const deckBottom = tabClearance - TAB_BAR_STRIP + HERO.size + pwaOvershoot;
 
   return (
     // Full-bleed scene: the dog's habitat takes the entire screen

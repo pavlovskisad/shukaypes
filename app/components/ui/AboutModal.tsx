@@ -6,6 +6,7 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { TYPE } from '../../constants/type';
 import { SURFACE } from '../../constants/surface';
+import { Z } from '../../constants/z';
 import { Icon, type IconName } from './Icon';
 import { useStrings } from '../../i18n/useStrings';
 import { HandDrawnFrame } from './HandDrawn';
@@ -110,7 +111,7 @@ export function AboutModal({ open, onClose }: AboutModalProps) {
         padding: 'calc(env(safe-area-inset-top, 0px) + 8px) 10px 0',
         boxSizing: 'border-box',
         justifyContent: 'center',
-        zIndex: 1000,
+        zIndex: Z.MODAL_INFO,
         opacity: closing ? 0 : 1,
         transition: `opacity ${SHEET_ANIM_MS}ms ease-out`,
       }}

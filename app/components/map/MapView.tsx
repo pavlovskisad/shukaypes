@@ -5,6 +5,8 @@ import { useFocusEffect } from 'expo-router';
 import { useIsFocused } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
+import { useElementBox } from '../../hooks/useElementBox';
 import maplibregl from 'maplibre-gl';
 import 'maplibre-gl/dist/maplibre-gl.css';
 import { View, Text, StyleSheet, Image, Pressable } from 'react-native';
@@ -88,6 +90,7 @@ import { WalkStops } from './WalkStops';
 import { TerritoryLayer } from './TerritoryLayer';
 import type { LatLng, NearbyPlayer } from '@shukajpes/shared';
 import { Z } from '../../constants/z';
+import { HUD_ICON_SIZE } from '../../constants/sizing';
 import { VOICE } from '../../constants/voice';
 import { SYSTEM_FONT } from '../../constants/fonts';
 import { INK, SURFACE } from '../../constants/surface';
@@ -814,7 +817,6 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   const forceAdvanceActiveWaypoint = useGameStore((s) => s.forceAdvanceActiveWaypoint);
   const walkRoute = useGameStore((s) => s.walkRoute);
   const walkRouteMeta = useGameStore((s) => s.walkRouteMeta);
-  const abandonActiveQuest = useGameStore((s) => s.abandonActiveQuest);
 
   // Snapshot of the walk-destination Spot. spots refetch when the
   // viewport pans, and viewport-driven fetches don't necessarily
@@ -3509,6 +3511,38 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     // eslint-disable-next-line react-hooks/exhaustive-deps -- bucketed userPos; version drives re-nudge
   }, [nearbyPlayers, mapBounds, userPos?.lat, userPos?.lng, onMapScreen, buildingIndexVersion, pinnedGuest]);
 
+  // THE ROWS THE MAP'S OVERLAYS HAVE TO CLEAR. The quest pill lives in
+  // the HUD (a sibling of this component, app/(tabs)/index.tsx) and
+  // grows a line for a long pet name, so it is measured, not assumed.
+  const questBox = useElementBox(activeQuest ? 'map-hud-quest' : null);
+  // The walk / GPS pill row. The quest has no pill here any more: its
+  // own × on the quest pill is the way out (UX-7.1), and two centred
+  // pills for the same thing stacked on top of each other.
+  const overlayPillsLive =
+    !!(walkRoute || gpsHeld || noLocation) &&
+    !(DOG_CAM && dogCam) &&
+    !doorSheetUp &&
+    !lostPinning;
+  // Keyed on the early returns below too: the row does not exist while
+  // the map is still waiting for a position or has failed, and the
+  // lookup has to run again once it does.
+  const pillsBox = useElementBox(
+    overlayPillsLive && userPos && !mapProblem ? 'map-overlay-pills' : null,
+  );
+  // 100 below the safe area, as before — or under the quest pill when
+  // one is showing, which used to sit exactly where this row did.
+  const overlayTop = Math.max(insets.top + 100, questBox ? questBox.bottom + S.s : 0);
+  // The poke toast goes under whichever of those is lowest. Height, not
+  // bottom, for the pill row: it MOVES when the quest row comes and
+  // goes, and a resize observer only hears about size.
+  const pokeToastTop =
+    overlayPillsLive && pillsBox
+      ? `${overlayTop + pillsBox.height + S.s}px`
+      : questBox
+        ? `${questBox.bottom + S.s}px`
+        : 'calc(env(safe-area-inset-top, 0px) + 96px)';
+  const tabClearance = useTabBarClearance();
+
   if (!userPos) {
     return (
       <View style={styles.msg}>
@@ -3547,8 +3581,14 @@ const SUPPRESS_MAP_CLICK_MS = 300;
   // sticks to the screen edge nearest to the companion. Tap recenters.
   // `mapBounds` is the latest snapshot from the map's `idle` event; the
   // edge position is computed against the current companion lat/lng.
-  // `topReserve` clears the iPhone dynamic island / OS status bar — at
-  // 0 the bookmark was clipping under the curved system bar.
+  //
+  // KEPT OUT OF THE CHROME'S BANDS (UX-7.2). The chip is portaled above
+  // the HUD and the tab bar, so wherever it lands it takes the taps: at
+  // the old 2% / 8% reserves a tab under it recentred the map instead
+  // of navigating, and at the top it sat on the logo or the pills. The
+  // reserves are pixels now — the HUD row (and the quest pill under it)
+  // at the top, the tab bar's clearance at the bottom — and the side
+  // chips, which centre on their point, keep half a chip clear of both.
   const offscreenIndicator = (() => {
     // Portaled to document.body — suppress off the map tab so the chip
     // doesn't paint over other screens.
@@ -3574,12 +3614,17 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     const ny = (n - companionPos.lat) / (n - s);
     const dx = nx - 0.5;
     const dy = ny - 0.5;
-    // Reserves push the bookmark in from the edge — kept
-    // tight per user request so the chip hugs the screen
-    // sides + the dashboard.
+    // Side reserve kept tight per user request so the chip hugs the
+    // screen sides. Top and bottom are the chrome's bands, in px,
+    // turned into fractions of the viewport the fixed chip lives in.
+    const vh = typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : 800;
+    const chipHalf = 28;
+    const topReservePx =
+      Math.max(insets.top + S.xxl + HUD_ICON_SIZE, questBox?.bottom ?? 0) + S.s;
+    const bottomReservePx = tabClearance + S.s;
     const sideReserve = 0.01;
-    const topReserve = 0.02;
-    const bottomReserve = 0.08;
+    const topReserve = topReservePx / vh;
+    const bottomReserve = bottomReservePx / vh;
     const xBound = dx > 0 ? 1 - sideReserve - 0.5 : 0.5 - sideReserve;
     const yBound = dy > 0 ? 1 - bottomReserve - 0.5 : 0.5 - topReserve;
     const tx = Math.abs(xBound / Math.max(Math.abs(dx), 1e-6));
@@ -3590,7 +3635,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     if (tx < ty) {
       edge = dx > 0 ? 'right' : 'left';
       leftPct = edge === 'right' ? 1 - sideReserve : sideReserve;
-      topPct = 0.5 + dy * tx;
+      topPct = Math.min(
+        Math.max(0.5 + dy * tx, (topReservePx + chipHalf) / vh),
+        1 - (bottomReservePx + chipHalf) / vh,
+      );
     } else {
       edge = dy > 0 ? 'bottom' : 'top';
       leftPct = 0.5 + dx * ty;
@@ -3598,14 +3646,31 @@ const SUPPRESS_MAP_CLICK_MS = 300;
     }
     return {
       left: `${leftPct * 100}%`,
-      // Same safe-area shift for top-edge companion chip — keeps
-      // it out of the iOS status-bar tap dead-zone.
-      top:
-        edge === 'top'
-          ? `calc(${topPct * 100}% + ${insets.top}px)`
-          : `${topPct * 100}%`,
+      // The safe-area inset is already inside topReservePx.
+      top: `${topPct * 100}%`,
       edge,
+      // The chip's centre in px, for the restack pill that shares the
+      // right edge with it (UX-7.12).
+      centerY:
+        edge === 'top'
+          ? topPct * vh + chipHalf
+          : edge === 'bottom'
+            ? topPct * vh - chipHalf
+            : topPct * vh,
     };
+  })();
+  // The restack pill sits at 50% on the right edge. When the chip is
+  // docked on that edge near the middle, the pill steps 72 px away from
+  // it — down when the chip is at or above the middle, up when below —
+  // so neither covers the other. The chip is placed along the line to
+  // the dog, so it is not always at 50% itself; a fixed "drop 72" landed
+  // the pill on a chip sitting just under the middle.
+  const restackTop = (() => {
+    if (offscreenIndicator?.edge !== 'right') return '50%';
+    const mid = (typeof window !== 'undefined' && window.innerHeight > 0 ? window.innerHeight : 800) / 2;
+    const off = offscreenIndicator.centerY - mid;
+    if (Math.abs(off) > 56) return '50%';
+    return off <= 0 ? 'calc(50% + 72px)' : 'calc(50% - 72px)';
   })();
 
   const recenterOnCompanion = () => {
@@ -4035,6 +4100,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           fly the camera to the poker if they're still online. */}
       {MULTIPLAYER && onMapScreen ? (
         <PokeToast
+          top={pokeToastTop}
           onGoTo={(p) =>
             easeCamera(mapRef.current, 'cinematic', {
               center: [p.lng, p.lat],
@@ -4392,9 +4458,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
         </div>
       ) : null}
 
-      {/* The overlay that drops in below the HUD while a route or quest
-          is running: the ways OUT of that state on the HUD's own line,
-          and under them whatever the state has to show.
+      {/* The overlay that drops in below the HUD while a route is
+          running or the GPS is out: the ways OUT of that state on the
+          HUD's own line, and under them whatever the state has to show.
 
           THE CONTAINER SETS NO z-index, deliberately. A positioned
           ancestor with one opens a stacking context that traps every
@@ -4407,7 +4473,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           there, and a pill at top:100 landed between the dog's line and
           the dog. Nor while a lost-pet pin is being aimed — the rest of
           the chrome has bubbled out for that, and this pill is chrome. */}
-      {(walkRoute || activeQuest || gpsHeld || noLocation) && !(DOG_CAM && dogCam) && !doorSheetUp && !lostPinning ? (
+      {overlayPillsLive ? (
         <div
           style={{
             position: 'absolute',
@@ -4418,7 +4484,9 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             // is. Invisible in a browser tab, where Safari's chrome is
             // outside the viewport and the inset is 0; only the INSTALLED
             // PWA has a notch to clear, which is exactly where it showed.
-            top: insets.top + 100,
+            //
+            // And under the quest pill when there is one (overlayTop).
+            top: overlayTop,
             left: 0,
             right: 0,
             display: 'flex',
@@ -4432,6 +4500,7 @@ const SUPPRESS_MAP_CLICK_MS = 300;
               right under the HUD — whether or not the walk has a list
               of stops under it. */}
           <div
+            id="map-overlay-pills"
             style={{
               position: 'relative',
               zIndex: Z.HUD_PILLS_OVERLAY,
@@ -4471,18 +4540,6 @@ const SUPPRESS_MAP_CLICK_MS = 300;
                 style={HUD_OVERLAY_PILL}
               >
                 × {t.hud.cancelWalk}
-              </div>
-            ) : null}
-            {activeQuest ? (
-              <div
-                role="button"
-                aria-label={t.hud.abandonQuest}
-                onClick={() => {
-                  void abandonActiveQuest();
-                }}
-                style={HUD_OVERLAY_PILL}
-              >
-                × {t.hud.abandonQuest}
               </div>
             ) : null}
           </div>
@@ -4574,50 +4631,52 @@ const SUPPRESS_MAP_CLICK_MS = 300;
             />
           </div>
           </div>
+          {/* When the dog is off-screen we mirror his current bubble
+              next to the edge chip so the user keeps hearing him while
+              they pan around looking at other neighborhoods. Inside the
+              chip's own fixed wrapper and positioned off the chip
+              (UX-7.11): it used to be absolute in the map while the chip
+              was fixed in <body>, and wherever the map is not the
+              viewport — the installed PWA, the desktop column — the two
+              drifted apart. The gaps (4 / 10 px) are the old offsets
+              less the 56 px chip. */}
+          {bubble ? (
+            <div
+              aria-hidden
+              style={{
+                position: 'absolute',
+                ...(offscreenIndicator.edge === 'top'
+                  ? { top: 'calc(100% + 4px)', left: '50%', transform: 'translateX(-50%)' }
+                  : offscreenIndicator.edge === 'bottom'
+                    ? { bottom: 'calc(100% + 4px)', left: '50%', transform: 'translateX(-50%)' }
+                    : offscreenIndicator.edge === 'left'
+                      ? { left: 'calc(100% + 10px)', top: '50%', transform: 'translateY(-50%)' }
+                      : { right: 'calc(100% + 10px)', top: '50%', transform: 'translateY(-50%)' }),
+                // Its own width, not the 56 px chip's: an absolute box
+                // shrinks to its containing block otherwise.
+                width: 'max-content',
+                zIndex: Z.HUD_CHIP_BUBBLE,
+                // Same dimensions / type as the in-map SpeechBubble.
+                padding: '12px 10px',
+                background: VOICE.background,
+                color: VOICE.color,
+                borderRadius: R.chip,
+                fontFamily: VOICE.fontFamily,
+                fontSize: TYPE.body,
+                lineHeight: 1.4,
+                boxShadow: VOICE.shadow,
+                border: VOICE.border,
+                pointerEvents: 'none',
+                maxWidth: 'min(60vw, 320px)',
+                whiteSpace: 'pre-line',
+                cursor: 'default',
+              }}
+            >
+              {bubble}
+            </div>
+          ) : null}
         </div>,
         document.body,
-      ) : null}
-
-      {/* When the dog is off-screen we mirror his current bubble next
-          to the edge chip so the user keeps hearing him while they pan
-          around looking at other neighborhoods. Anchored to the same
-          edge as the chip but pushed inward so it doesn't clip the
-          screen border. */}
-      {offscreenIndicator && bubble ? (
-        <div
-          aria-hidden
-          style={{
-            position: 'absolute',
-            left: offscreenIndicator.left,
-            top: offscreenIndicator.top,
-            transform:
-              offscreenIndicator.edge === 'top'
-                ? 'translate(-50%, 60px)'
-                : offscreenIndicator.edge === 'bottom'
-                  ? 'translate(-50%, calc(-100% - 60px))'
-                  : offscreenIndicator.edge === 'left'
-                    ? 'translate(66px, -50%)'
-                    : 'translate(calc(-100% - 66px), -50%)',
-            transition:
-              'left 380ms cubic-bezier(0.22, 1, 0.36, 1), top 380ms cubic-bezier(0.22, 1, 0.36, 1)',
-            zIndex: Z.HUD_CHIP_BUBBLE,
-            // Same dimensions / type as the in-map SpeechBubble.
-            padding: '12px 10px',
-            background: VOICE.background,
-            color: VOICE.color,
-            borderRadius: R.chip,
-            fontFamily: VOICE.fontFamily,
-            fontSize: TYPE.body,
-            lineHeight: 1.4,
-            boxShadow: VOICE.shadow,
-            border: VOICE.border,
-            pointerEvents: 'none',
-            maxWidth: 'min(60vw, 320px)' as unknown as number,
-            whiteSpace: 'pre-line',
-          }}
-        >
-          {bubble}
-        </div>
       ) : null}
 
       {/* Keyframes for things only the map draws. The shell's shared
@@ -4695,7 +4754,10 @@ const SUPPRESS_MAP_CLICK_MS = 300;
           aria-label="restack all expanded spot clusters"
           style={{
             position: 'absolute',
-            top: '50%',
+            // Stepped off the off-screen companion chip while that is
+            // docked near the middle of the same right edge, which it
+            // otherwise sits on (UX-7.12). See restackTop.
+            top: restackTop,
             right: 0,
             transform: 'translateY(-50%)',
             // Bumped to match the chip + companion-bookmark layer so

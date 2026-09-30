@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { View, Image, StyleSheet } from 'react-native';
 import logoFull from '../../assets/logo-full.png';
 import { Z } from '../../constants/z';
@@ -22,9 +23,15 @@ export function Splash() {
     };
   }, []);
 
-  if (phase === 'hidden') return null;
+  if (phase === 'hidden' || typeof document === 'undefined') return null;
 
-  return (
+  // Portaled to <body>, not left in #root. The sheets that open on a
+  // cold start (the account paper on a `?reset=` link) portal to <body>
+  // too, and a later sibling of #root paints over anything inside it
+  // whatever the z-index — so the reset paper showed over the logo for
+  // the whole first second (UX-7.7). Fixed, so it covers the screen
+  // rather than the desktop column.
+  return createPortal(
     <View
       style={[
         styles.overlay,
@@ -33,13 +40,15 @@ export function Splash() {
       pointerEvents={phase === 'fading' ? 'none' : 'auto'}
     >
       <Image source={logoFull} resizeMode="contain" style={styles.logo} />
-    </View>
+    </View>,
+    document.body,
   );
 }
 
 const styles = StyleSheet.create({
   overlay: {
-    position: 'absolute',
+    // RN's types stop at 'absolute'; RN-web hands 'fixed' to CSS.
+    position: 'fixed' as 'absolute',
     top: 0,
     left: 0,
     right: 0,

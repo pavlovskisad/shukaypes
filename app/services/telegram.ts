@@ -123,15 +123,24 @@ export function getTelegramSafeAreaInset(): TelegramSafeAreaInset | null {
 // actually ours to pad for — using it doubles the inset and pushes
 // the tab bar's anchor below TG's content area. Caller passes in the
 // iOS inset (from useSafeAreaInsets) as the fallback for plain web.
+//
+// Gated on isInTelegram(), not on the SDK being present: index.html
+// loads telegram-web-app.js on EVERY page, and outside Telegram its
+// WebApp object still exists and reports a safe area of all zeros. So
+// the installed iOS PWA got 0 here, and the tab bar and chat composer
+// sat in the home-indicator strip (UX-12.1).
 export function pickBottomInset(iosBottom: number): number {
+  if (!isInTelegram()) return iosBottom;
   const tg = getTelegramSafeAreaInset();
   if (tg) return tg.bottom;
   return iosBottom;
 }
 
 // Same idea for the top: when in TG, TG's chrome strip takes the top
-// so the inset should come from TG, not iOS's status-bar env.
+// so the inset should come from TG, not iOS's status-bar env. Same
+// isInTelegram() gate, for the same reason.
 export function pickTopInset(iosTop: number): number {
+  if (!isInTelegram()) return iosTop;
   const tg = getTelegramSafeAreaInset();
   if (tg) return tg.top;
   return iosTop;

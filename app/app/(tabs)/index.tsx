@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { useFocusEffect } from 'expo-router';
 import { View, Pressable, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -12,12 +12,7 @@ import { popPressableEvent } from '../../utils/popOnTap';
 import { useGameStore } from '../../stores/gameStore';
 import { useAccessStore } from '../../stores/accessStore';
 import { LangPill } from '../../components/ui/LangPill';
-import { CHIP } from '../../constants/sizing';
-
-// Logo is the brand anchor in the top-left. Prototype has it roughly
-// pill-height; matching that so it reads as a peer of the status pill
-// rather than dominating the map.
-const HUD_ICON_SIZE = 59;
+import { CHIP, HUD_ICON_SIZE } from '../../constants/sizing';
 
 // Easing for the HUD pills as the mode changes. A decelerating curve
 // with NO overshoot of its own — the 1% cross-over lives in the
@@ -123,9 +118,14 @@ export default function MapScreen() {
 
   return (
     <View style={styles.root}>
-      <View style={styles.mapLayer}>
+      {/* A plain <div>, NOT a View (UX-7.4). RN-web gives every View
+          z-index 0, which makes it a stacking context: as a View this
+          layer capped every marker and in-map pill at 0, under the HUD
+          at 30, whatever tier z.ts gave them. Without one, MapView's
+          children are compared against the HUD directly. */}
+      <div style={MAP_LAYER}>
         <MapView />
-      </View>
+      </div>
       {/* Map renders full-screen under the phone status bar (becomes
           the bg for it — design thing). HUD itself still respects the
           top safe-area inset via `edges={['top']}` so the logo / pills
@@ -145,11 +145,7 @@ export default function MapScreen() {
             and the status pill at the other — the empty middle is
             layout, not a surface, and it was swallowing every tap that
             landed there. Nothing lived in that strip until the search
-            HUD did, and raising the HUD's z-index is no way out: the
-            map's parent stacking contexts trap MapView's children
-            below this container regardless of the number (see the
-            portal comment on the off-screen companion chip). Its two
-            real children keep their own hit areas. */}
+            HUD did. Its two real children keep their own hit areas. */}
         <View style={styles.hudRow} nativeID="map-hud-row" pointerEvents="box-none">
           {/* The logo is a mode switch, so it leaves with the rest of the
               chrome while the gate is up — otherwise the one control that
@@ -275,9 +271,22 @@ export default function MapScreen() {
   );
 }
 
+// The flex column is what the View gave for free, and MapView's own
+// "locating…" / "map failed" screens (flex: 1) need it to fill the layer
+// — without it they shrank to their text at the top, under the HUD.
+// Deliberately no z-index (see above).
+const MAP_LAYER: CSSProperties = {
+  position: 'absolute',
+  top: 0,
+  left: 0,
+  right: 0,
+  bottom: 0,
+  display: 'flex',
+  flexDirection: 'column',
+};
+
 const styles = StyleSheet.create({
   root: { flex: 1 },
-  mapLayer: { position: 'absolute', top: 0, left: 0, right: 0, bottom: 0 },
   hud: {
     position: 'absolute',
     top: 0,

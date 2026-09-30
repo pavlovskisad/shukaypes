@@ -128,8 +128,10 @@ export interface AppStrings {
     spotsHidden: string;
     findingPet: (name: string) => string;
     abandonSearch: string;
+    // The quest pill's × after one tap: a second tap within a few
+    // seconds is what actually abandons the search (UX-7.1).
+    abandonSearchArmed: string;
     cancelWalk: string;
-    abandonQuest: string;
     recenterOnCompanion: string;
     locating: string;
     usingKyivFallback: string;
@@ -344,6 +346,13 @@ export interface AppStrings {
     poked: string;
     close: string;
     owner: (nick: string) => string;
+  };
+  // The toast when another dog waves at yours. The name and the verb
+  // are separate so a long name ellipsizes without taking the verb.
+  poke: {
+    verb: string;
+    nearby: string;
+    wasNearby: string;
   };
   chat: {
     needLocation: string;
@@ -686,8 +695,8 @@ const uk: AppStrings = {
     spotsHidden: 'місця сховано',
     findingPet: (name) => `шукаємо ${name}`,
     abandonSearch: 'припинити пошук',
+    abandonSearchArmed: 'точно? ще раз',
     cancelWalk: 'припинити прогулянку',
-    abandonQuest: 'припинити пошук',
     recenterOnCompanion: 'повернутись до пса',
     locating: 'шукаю себе…',
     usingKyivFallback: 'опускаюсь на Київ',
@@ -954,6 +963,11 @@ const uk: AppStrings = {
     close: 'закрити',
     owner: (nick) => `господар ${nick}`,
   },
+  poke: {
+    verb: 'махає тобі! 👋',
+    nearby: '🐾 поруч — натисни, щоб знайти',
+    wasNearby: '🐾 гуляли поруч',
+  },
   chat: {
     needLocation: 'потрібна твоя геолокація',
     noNearbySpots: 'поряд поки нічого',
@@ -977,7 +991,7 @@ const uk: AppStrings = {
     inputPlaceholder: 'скажи що хочеш…',
   },
   connection: {
-    offline: 'звʼязку немає — мапа зачекає',
+    offline: 'звʼязку немає — наздоженемо, щойно зʼявиться',
     slow: 'звʼязок повільний…',
   },
   modals: {
@@ -1286,8 +1300,8 @@ const en: AppStrings = {
     spotsHidden: 'spots hidden',
     findingPet: (name) => `finding ${name}`,
     abandonSearch: 'abandon search',
+    abandonSearchArmed: 'sure? tap again',
     cancelWalk: 'cancel walk',
-    abandonQuest: 'abandon quest',
     recenterOnCompanion: 'recenter on companion',
     locating: 'locating…',
     usingKyivFallback: 'using kyiv fallback',
@@ -1534,6 +1548,11 @@ const en: AppStrings = {
     close: 'close',
     owner: (nick) => `owner ${nick}`,
   },
+  poke: {
+    verb: 'waved at you! 👋',
+    nearby: '🐾 nearby — tap to find them',
+    wasNearby: '🐾 they were nearby',
+  },
   chat: {
     needLocation: 'need your location first',
     noNearbySpots: 'no nearby spots yet',
@@ -1552,7 +1571,7 @@ const en: AppStrings = {
     inputPlaceholder: 'say anything…',
   },
   connection: {
-    offline: 'no connection — the map will wait',
+    offline: "no connection — we'll catch up when it's back",
     slow: 'connection is slow…',
   },
   modals: {

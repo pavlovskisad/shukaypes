@@ -28,9 +28,9 @@ import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { OWN_COLOR_CSS, ownerColorCss } from '../../components/map/territoryColor';
 import { BoardRow } from '../../components/ui/BoardRow';
-import { TAB_BAR_STRIP } from '../../constants/sizing';
 import { useVisibleHeight } from '../../hooks/useVisibleHeight';
-import { safeAreaBottomPx, safeAreaTopPx } from '../../utils/safeArea';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
+import { safeAreaTopPx } from '../../utils/safeArea';
 import { LeaderboardModal } from '../../components/ui/LeaderboardModal';
 import { useHint } from '../../hooks/useHint';
 import { useAccessStore } from '../../stores/accessStore';
@@ -412,9 +412,12 @@ export default function TasksScreen() {
   // tab bar covers the bottom strip — none of which a viewport unit
   // knows about. Floor so a tiny window cannot produce a negative box.
   const visibleH = useVisibleHeight();
+  // The bar's top edge, from the one hook everything that clears the
+  // bar reads — the same inset the bar itself is placed with.
+  const tabClearance = useTabBarClearance();
   const pageH = Math.max(
     360,
-    visibleH - safeAreaTopPx() - safeAreaBottomPx() - TAB_BAR_STRIP,
+    visibleH - safeAreaTopPx() - tabClearance,
   );
   // AND THE LAST CARD HAS TO REACH THE TOP. The scrollport is taller
   // than a card by exactly the strip the tab bar covers, so without
@@ -422,7 +425,7 @@ export default function TasksScreen() {
   // with the previous card still peeking and its own last row under
   // the bar. The old layout padded the bottom by `calc(100vh - 200px)`
   // for the same reason; full-height cards need only the difference.
-  const tailPad = safeAreaBottomPx() + TAB_BAR_STRIP;
+  const tailPad = tabClearance;
 
   const taskRows = dailyTasks.tasks;
   const doneCount = taskRows.filter((row) => row.done).length;

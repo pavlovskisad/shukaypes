@@ -118,3 +118,10 @@ export const INLINE_ICON = {
 // in sync. This is where a fourth copy would have gone; anything new
 // should read it from here.
 export const TAB_BAR_STRIP = 82;
+
+// The corner logo on the map HUD — the brand anchor in the top-left.
+// Prototype has it roughly pill-height; matching that so it reads as a
+// peer of the status pill rather than dominating the map. Exported
+// because it sets the HUD row's height, which the off-screen companion
+// chip has to stay below (MapView).
+export const HUD_ICON_SIZE = 59;
