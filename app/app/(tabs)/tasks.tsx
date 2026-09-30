@@ -310,7 +310,13 @@ export default function TasksScreen() {
       // right thing to hear on the way to a stranger's district. See
       // enterTerritoryView for what happens mid-walk.
       enterTerritoryView();
-      setFocusedTerritory({ ownerId, ring, ...(mark ? { mark } : {}), ...(pos ? { pos } : {}) });
+      setFocusedTerritory({
+        ownerId,
+        ring,
+        ...(mark ? { mark } : {}),
+        ...(pos ? { pos } : {}),
+        openCard: true,
+      });
       // PIN WHAT THE JUMP WENT TO SEE.
       //
       // The camera command above lands you there and clears. On its own

@@ -81,7 +81,7 @@ import { PostModal } from '../ui/PostModal';
 import { getDeepLinkDogId } from '../../services/telegram';
 import { getStrings, useStrings } from '../../i18n/useStrings';
 import { useLangStore } from '../../stores/langStore';
-import { fetchWalkingRoute } from '../../services/directions';
+import { fetchWalkingRoute, fetchWalkingRouteOrLine } from '../../services/directions';
 import { api, type NearbyLostDog } from '../../services/api';
 import { PoiMarker } from './PoiMarker';
 import { PoiCluster } from './PoiCluster';
@@ -671,6 +671,12 @@ const DECK_ANIM_MS = MOTION.sheetMs;
   // asked in, and neither does a fan of expanded pins. The store drops
   // the search itself on a flip; this drops what MapView holds of its
   // own. Skip the first run so mounting doesn't count as a flip.
+  //
+  // openSeqRef is openPlayer's "which walker read is still wanted"
+  // counter (see there). Declared here so the flip can bump it too: a
+  // /players/:id read still in flight when the user leaves must not pin
+  // that walker's district and fly the camera there afterwards.
+  const openSeqRef = useRef(0);
   const overlayEpoch = useGameStore((s) => s.overlayEpoch);
   const overlayEpochInitRef = useRef(true);
   useEffect(() => {
@@ -680,6 +686,14 @@ const DECK_ANIM_MS = MOTION.sheetMs;
     }
     setPrompt(null);
     setExpandedSpotKeys((prev) => (prev.size === 0 ? prev : new Set()));
+    // The post reader and a walker's card are map-only overlays too.
+    // MapView stays mounted behind the other tabs, so without this they
+    // came back on return, over whatever the user had picked meanwhile.
+    setPostDog(null);
+    setCardPlayer(null);
+    openSeqRef.current += 1;
+    // …and a spiderified cluster, whose pets belong to the old view.
+    setExpandedClusterKey(null);
   }, [overlayEpoch]);
   const tokens = useGameStore((s) => s.tokens);
   const foodItems = useGameStore((s) => s.foodItems);
@@ -1872,6 +1886,11 @@ const DECK_ANIM_MS = MOTION.sheetMs;
       const origin = userPos ?? dog.lastSeen.position;
       setSearchRoute([origin, spot]);
       void fetchWalkingRoute(origin, [spot]).then((r) => {
+        // Only if this is still the search it was asked for. A slow
+        // Directions answer used to redraw the line of a search the
+        // walker had already finished, left, or swapped for another pet.
+        const cur = useGameStore.getState().searchTarget;
+        if (!cur || cur.dogId !== dog.id || cur.spot !== spot) return;
         if (r && r.length >= 2) setSearchRoute(r);
       });
       // Recentre on the dog and point the camera along the fresh route so the
@@ -1959,6 +1978,10 @@ const DECK_ANIM_MS = MOTION.sheetMs;
       setSearchRoute(null);
       let paws = 0;
       let ok = false;
+      // A mode flip or tab switch while the request is out clears the
+      // question (see the overlayEpoch effect); an answer landing after
+      // it must not raise a new one on a dog that is no longer asking.
+      const epoch = useGameStore.getState().overlayEpoch;
       try {
         const res = await api.finishSearch(dog.id, seen, userPosRef.current);
         paws = res.paws;
@@ -1978,7 +2001,17 @@ const DECK_ANIM_MS = MOTION.sheetMs;
       // A sighting that never arrived is not "logged". Say so and offer
       // the retry; a "no, nobody" that failed is only a lost count, and
       // falls through to the ordinary thanks.
+      const stale = useGameStore.getState().overlayEpoch !== epoch;
       if (!ok && seen) {
+        // Not dropped with the rest of a stale answer: this is a sighting
+        // that never arrived, and saying nothing would let the walker
+        // believe it did. Still in supersniff (a tab switch, or out and
+        // back) the retry is answerable, so it is asked; flipped out of
+        // it, there is nowhere to answer, so the dog just says so.
+        if (stale && !(DOG_CAM && useGameStore.getState().dogCam)) {
+          showBubble(t.search.sendFailed, 5000);
+          return;
+        }
         setPrompt({ kind: 'failed', dog });
         return;
       }
@@ -1990,6 +2023,7 @@ const DECK_ANIM_MS = MOTION.sheetMs;
       // second and a half — so the reward arrives as a run of pickups
       // rather than a number changing.
       if (paws > 0) useGameStore.getState().awardPaws(paws);
+      if (stale) return;
       setPrompt({
         kind: 'done',
         text: seen ? t.search.thanksSeen(paws) : t.search.thanksMissed(paws),
@@ -2000,7 +2034,7 @@ const DECK_ANIM_MS = MOTION.sheetMs;
         canSeePost: seen,
       });
     },
-    [setSearchTarget, setSearchRoute, t],
+    [setSearchTarget, setSearchRoute, showBubble, t],
   );
 
   // Preview (carousel SWIPE, or the initial mode-on pick): pick the candidate
@@ -2800,7 +2834,7 @@ const DECK_ANIM_MS = MOTION.sheetMs;
   // the biggest. Only when it is NOT drawn — which is the interesting
   // case, a dog standing on ground the view cap dropped — does this go
   // to /players/:id, and that is the read the card is making anyway.
-  const openSeqRef = useRef(0);
+  // (openSeqRef is declared up by the overlayEpoch effect, which bumps it.)
   const openPlayer = useCallback(
     (player: NearbyPlayer) => {
       setCardPlayer(player);
@@ -2895,8 +2929,11 @@ const DECK_ANIM_MS = MOTION.sheetMs;
       // question the standing asks. It reads /players/:id, which is a
       // plain server read — so it works for an owner who is offline,
       // which is most of the ones worth jumping to.
+      // Only when the jump asked for it: the card's own "show ground"
+      // closes the card so the flight is visible, and reopening it here
+      // put it straight back over the view it had got out of the way of.
       const guest = useGameStore.getState().pinnedGuest;
-      if (guest && guest.ownerId === focusedTerritory.ownerId) {
+      if (focusedTerritory.openCard && guest && guest.ownerId === focusedTerritory.ownerId) {
         setCardPlayer({
           id: guest.ownerId,
           position: guest.at,
@@ -4070,7 +4107,9 @@ const DECK_ANIM_MS = MOTION.sheetMs;
             // ordinary bubble so the Companion can rank it above the
             // lines that would otherwise talk over it.
             bubble={bubble}
-            question={promptText}
+            // Supersniff only: the answers live in supersniff's HUD, so a
+            // question anywhere else is one nobody can answer.
+            question={DOG_CAM && dogCam ? promptText : null}
             // Out of the frame while the owner aims at the place their
             // pet was last seen: the crosshair marks the centre of the
             // map and so does the dog, and only one of them is the
@@ -4097,7 +4136,15 @@ const DECK_ANIM_MS = MOTION.sheetMs;
 
       {/* A tapped dog's card (D-73). Portaled to body like the toast. */}
       {MULTIPLAYER && onMapScreen && cardPlayer ? (
-        <PlayerCard player={cardPlayer} onClose={() => setCardPlayer(null)} />
+        <PlayerCard
+          player={cardPlayer}
+          onClose={() => {
+            // Closing before the walker's read lands cancels it — the
+            // user said no to this dog, so no pin and no flight.
+            openSeqRef.current += 1;
+            setCardPlayer(null);
+          }}
+        />
       ) : null}
 
       {/* "X poked you!" notification (multiplayer). Portaled to body; taps
@@ -4257,8 +4304,10 @@ const DECK_ANIM_MS = MOTION.sheetMs;
           control in supersniff already lives. They floated mid-screen
           once (covered the card) and at the bottom once (covered the
           card's ground and fought the deck) — the logo line is the one
-          strip of this mode that is always clear. */}
-      {DOG_CAM && dogCam && onMapScreen && prompt ? (
+          strip of this mode that is always clear.
+          Not while the ring is open: the deck slides away for it, and
+          answers about a pet whose card has gone are answers to nothing. */}
+      {DOG_CAM && dogCam && onMapScreen && prompt && !menuOpen ? (
         <View
           style={
             {
@@ -4897,11 +4946,18 @@ const DECK_ANIM_MS = MOTION.sheetMs;
           );
           const waypoints =
             shape === 'roundtrip' ? [spot.position, userPos] : [spot.position];
-          const route = await fetchWalkingRoute(userPos, waypoints);
+          // What the answer is for. Checked after the await: a late route
+          // used to install itself and close whatever spot the user had
+          // opened meanwhile, or land in a mode they had flipped to.
+          const epoch = useGameStore.getState().overlayEpoch;
+          // OrLine, as SniffPress does: when Google cannot route, a
+          // straight line still takes the user there. The plain fetch
+          // returned null and the tap simply did nothing.
+          const route = await fetchWalkingRouteOrLine(userPos, waypoints);
+          const now = useGameStore.getState();
+          if (now.overlayEpoch !== epoch || now.selectedSpotId !== spot.id) return;
           if (route) {
-            useGameStore
-              .getState()
-              .setWalkRoute(route, { shape, spotId: spot.id, destination: spot.position });
+            now.setWalkRoute(route, { shape, spotId: spot.id, destination: spot.position });
           }
           setSelectedSpot(null);
         }}

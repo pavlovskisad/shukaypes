@@ -560,8 +560,13 @@ export function Companion({
         // something now rather than leaving the tap unanswered; the
         // real label lands when the route does.
         flash(kind === 'meet' ? t.modes.meetSniffing : t.modes.walkSniffing(distance === 'far'));
+        // A mode flip or tab switch while the server is thinking means
+        // the user moved on. Landing the walk anyway drew it into the new
+        // mode — supersniff included, where nothing can cancel it.
+        const epoch = useGameStore.getState().overlayEpoch;
         void startExplorationWalk({ origin: ctxPos, parks: ctxParks, shape, distance, kind }).then(
           (walk) => {
+            if (useGameStore.getState().overlayEpoch !== epoch) return;
             if (!walk) {
               // A meet with nothing to show is NOT the same miss as a
               // tour with nothing to show, and saying "try the other

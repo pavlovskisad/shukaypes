@@ -269,7 +269,16 @@ interface GameState {
   // it never needs to join the setScreen/toggleDogCam clear-lists —
   // the lists whose interplay is exactly what keeps biting the spot
   // modal.
-  focusedTerritory: { ownerId: string; ring: LatLng[]; mark?: LatLng; pos?: LatLng } | null;
+  // `openCard` asks MapView to open the owner's card once it lands — the
+  // standing sets it; the card's own "show ground" does not, because it
+  // has just closed that card so the flight can be seen.
+  focusedTerritory: {
+    ownerId: string;
+    ring: LatLng[];
+    mark?: LatLng;
+    pos?: LatLng;
+    openCard?: boolean;
+  } | null;
   // THE DOG YOU WENT TO SEE, KEPT ON SCREEN UNTIL YOU LEAVE.
   //
   // focusedTerritory above is a camera command: it flies and clears. That
@@ -504,7 +513,7 @@ interface GameState {
   syncSpots: (pos: LatLng) => Promise<void>;
   setSelectedSpot: (id: string | null) => void;
   setSpotsVisible: (visible: boolean) => void;
-  setFocusedTerritory: (v: { ownerId: string; ring: LatLng[]; mark?: LatLng; pos?: LatLng } | null) => void;
+  setFocusedTerritory: (v: GameState['focusedTerritory']) => void;
   setPinnedGuest: (v: GameState['pinnedGuest']) => void;
   loadLoreFavourites: () => Promise<void>;
   toggleLoreFavourite: (lore: LoreRef) => Promise<void>;

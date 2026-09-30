@@ -110,6 +110,13 @@ export default function SpotsScreen() {
   // server order. Map preserves insertion order so we feed it
   // CATEGORY_ORDER and the render walks it in the same fixed
   // sequence.
+  // Sorted from a ~110m grid point, as the quests tab sorts its pets. On
+  // the raw position the carousels and the "see all" feed re-sorted on
+  // every GPS fix, so two places at a similar distance kept trading
+  // places under the user's thumb. The distances on the cards still read
+  // the live position.
+  const latBucket = userPos ? Math.round(userPos.lat * 1000) / 1000 : null;
+  const lngBucket = userPos ? Math.round(userPos.lng * 1000) / 1000 : null;
   const byCategory = useMemo(() => {
     const map = new Map<SpotCategory, Spot[]>();
     for (const cat of CATEGORY_ORDER) map.set(cat, []);
@@ -117,17 +124,18 @@ export default function SpotsScreen() {
       const list = map.get(s.category);
       if (list) list.push(s);
     }
-    if (userPos) {
+    if (latBucket != null && lngBucket != null) {
+      const from = { lat: latBucket, lng: lngBucket };
       for (const list of map.values()) {
         list.sort(
           (a, b) =>
-            distanceMeters(userPos, a.position) -
-            distanceMeters(userPos, b.position),
+            distanceMeters(from, a.position) -
+            distanceMeters(from, b.position),
         );
       }
     }
     return map;
-  }, [spots, userPos?.lat, userPos?.lng]);
+  }, [spots, latBucket, lngBucket]);
 
   const onPickSpot = useCallback(
     (s: Spot) => {
