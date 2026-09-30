@@ -53,13 +53,17 @@ export const EXPLORE_ACTIONS: RadialAction[] = [
   { id: 'meet', iconName: 'meet', icon: '👥', label: 'meet' },
 ];
 
-// Walk drills two levels deep: shape (roundtrip / one-way) → distance
-// (close ~1km / far ~3km). Leaf fires the route flow.
-export const WALK_SHAPE_ACTIONS: RadialAction[] = [
-  { id: 'walk:roundtrip', iconName: 'roundtrip', icon: '🔄', label: 'roundtrip' },
-  { id: 'walk:oneway', iconName: 'oneway', icon: '➡️', label: 'one-way' },
-];
-
+// Walk drills ONE level: distance (close ~1km / far ~3km). Leaf fires the
+// route flow.
+//
+// There used to be a shape level above this — roundtrip or one-way — and
+// it is gone. A walk from the companion is a walk you come back from, so
+// one-way was the wrong half of a question nobody was asking: you would
+// answer it before you knew where you were going, and the answer that
+// leaves you a kilometre from home is not one a dog walker wants. Going
+// ONE WAY to a named place is still a thing the app does — the spot card's
+// route button, the chat's walk_to_spot — because there the destination is
+// the point and you chose it.
 export const WALK_DISTANCE_ACTIONS: RadialAction[] = [
   { id: ':close', iconName: 'close', icon: '🏘', label: 'close' },
   { id: ':far', iconName: 'far', icon: '🌆', label: 'far' },

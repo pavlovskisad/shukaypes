@@ -141,10 +141,8 @@ export type PetSpecies = 'dog' | 'cat';
 export type CompanionAction =
   | { name: 'start_quest'; args: { dogId: string } }
   | { name: 'highlight_spot'; args: { spotId: string } }
-  | {
-      name: 'walk';
-      args: { shape: 'roundtrip' | 'oneway'; distance: 'close' | 'far' };
-    }
+  // No shape: an exploration walk is always a roundtrip.
+  | { name: 'walk'; args: { distance: 'close' | 'far' } }
   | {
       name: 'walk_to_spot';
       args: { spotId: string; shape: 'roundtrip' | 'oneway' };
@@ -1110,6 +1108,29 @@ export const api = {
       }>;
     }>(
       `/walk/destinations?${new URLSearchParams({
+        lat: String(center.lat),
+        lng: String(center.lng),
+        radius: String(Math.round(radiusM)),
+      }).toString()}`,
+    ),
+
+  // Where other dogs have actually been this fortnight — the pool behind
+  // the walk menu's «meet» leaf. Unlike walkDestinations this has no list
+  // behind it: the server clusters the marks walkers left and names the
+  // clusters, so the answer moves as people play. An empty array is a
+  // real answer, not a failure — see routes/social.ts.
+  gatheringSpots: (center: LatLng, radiusM: number) =>
+    req<{
+      gatherings: Array<{
+        id: string;
+        name: string;
+        category: string;
+        position: LatLng;
+        distM: number;
+        walkers: number;
+      }>;
+    }>(
+      `/social/gathering?${new URLSearchParams({
         lat: String(center.lat),
         lng: String(center.lng),
         radius: String(Math.round(radiusM)),

@@ -91,14 +91,16 @@ export default function ChatScreen() {
             const walk = await startExplorationWalk({
               origin: pos,
               parks: ctxParks,
-              shape: action.args.shape,
+              // Always a roundtrip — the shape choice is gone from the
+              // menu and from this action's args alike.
+              shape: 'roundtrip',
               distance: action.args.distance,
             });
             if (!walk) return `🚶 ${t.chat.couldntPlotRoute}`;
             useGameStore.getState().setWalkRoute(
               walk.route,
               {
-                shape: action.args.shape,
+                shape: 'roundtrip',
                 spotId: null,
                 destinationName: walk.primary.name,
               },

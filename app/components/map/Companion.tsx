@@ -12,7 +12,6 @@ import { useStrings } from '../../i18n/useStrings';
 import {
   RadialMenu,
   EXPLORE_ACTIONS,
-  WALK_SHAPE_ACTIONS,
   WALK_DISTANCE_ACTIONS,
   VISIT_CATEGORY_ACTIONS,
   MODE_ACTION_IDS,
@@ -21,7 +20,7 @@ import {
 import type { LatLng } from '@shukajpes/shared';
 import { distanceMeters } from '../../utils/geo';
 import type { SpotCategory, Spot } from '../../services/places';
-import { startExplorationWalk } from '../../services/exploreWalk';
+import { startExplorationWalk, type WalkKind } from '../../services/exploreWalk';
 import {
   pickVisitCandidates,
   recordRecentVisit,
@@ -63,12 +62,14 @@ function buildVisitLeaves(
 function getNonVisitActions(path: string[]): RadialAction[] | null {
   const head = path[0];
   if (!head) return EXPLORE_ACTIONS;
-  if (head === 'walk') {
-    if (path.length === 1) return WALK_SHAPE_ACTIONS;
-    const shape = path[1]!.replace('walk:', ''); // 'roundtrip' | 'oneway'
+  if (head === 'walk' || head === 'meet') {
+    // One level, not two: the shape question is gone (see
+    // WALK_DISTANCE_ACTIONS). Every walk from here is a roundtrip, so all
+    // that is left to ask is how far — and «meet» asks exactly the same
+    // thing, because it is the same walk to a different kind of place.
     return WALK_DISTANCE_ACTIONS.map((a) => ({
       ...a,
-      id: `walk:${shape}${a.id}`, // a.id starts with ':', e.g. ':close'
+      id: `${head}${a.id}`, // a.id starts with ':', e.g. ':close'
     }));
   }
   if (head === 'visit' && path.length === 1) return VISIT_CATEGORY_ACTIONS;
@@ -469,10 +470,6 @@ export function Companion({
           router.push('/chat');
           return;
         }
-        case 'meet': {
-          flash(t.modes.noWalkers);
-          return;
-        }
         case 'about': {
           // Promoted from the logo tap (which now toggles sniff mode).
           // Companion → ? → about sheet.
@@ -498,10 +495,22 @@ export function Companion({
       // answer with the vet. We also deliberately don't setSelectedSpot:
       // that's the "open details modal" channel and a walk shouldn't pop
       // a modal.
-      if (id.startsWith('walk:')) {
-        const parts = id.split(':'); // ['walk', shape, distance]
-        const shape = (parts[1] ?? 'roundtrip') as WalkShape;
-        const distance = (parts[2] ?? 'close') as WalkDistance;
+      // «meet» and «walk» are the SAME walk. Same roundtrip, same
+      // landmark stops, same routing and the same fallbacks when
+      // directions are unavailable — the only difference is where the
+      // destination comes from, which is why this shares the branch
+      // rather than copying it. A tour goes to a park or a landmark we
+      // know about; a meet goes where other dogs have actually been this
+      // fortnight, clustered out of the marks walkers left.
+      if (id.startsWith('walk:') || id.startsWith('meet:')) {
+        const kind: WalkKind = id.startsWith('meet:') ? 'meet' : 'tour';
+        const parts = id.split(':'); // ['walk' | 'meet', distance]
+        // ALWAYS a roundtrip. The shape used to be the level above this
+        // one; see WALK_DISTANCE_ACTIONS for why it went. WalkShape is
+        // still a real type — going one way to a NAMED place is a
+        // different mechanic and keeps it.
+        const shape: WalkShape = 'roundtrip';
+        const distance = (parts[1] ?? 'close') as WalkDistance;
         if (!ctxPos) {
           flash("can't walk without knowing where we are");
           return;
@@ -512,11 +521,23 @@ export function Companion({
         // The landmark step is a round-trip to the server, so say
         // something now rather than leaving the tap unanswered; the
         // real label lands when the route does.
-        flash(`${distance === 'far' ? 'long' : 'short'} walk, sniffing the way 🚶`);
-        void startExplorationWalk({ origin: ctxPos, parks: ctxParks, shape, distance }).then(
+        flash(
+          kind === 'meet'
+            ? 'sniffing out where the dogs are 🐕'
+            : `${distance === 'far' ? 'long' : 'short'} walk, sniffing the way 🚶`,
+        );
+        void startExplorationWalk({ origin: ctxPos, parks: ctxParks, shape, distance, kind }).then(
           (walk) => {
             if (!walk) {
-              flash('nothing worth walking to at that distance — try the other one');
+              // A meet with nothing to show is NOT the same miss as a
+              // tour with nothing to show, and saying "try the other
+              // distance" would be a lie: nobody has walked near here
+              // lately at any distance. Say that instead.
+              flash(
+                kind === 'meet'
+                  ? t.modes.noWalkers
+                  : 'nothing worth walking to at that distance — try the other one',
+              );
               return;
             }
             // spotId stays null: a tour's destination is never a spots-
@@ -533,13 +554,22 @@ export function Companion({
                 },
                 walk.stops,
               );
-            const shapeLabel = shape === 'roundtrip' ? 'roundtrip' : 'one-way';
+            // No shape in the line any more: every walk is a roundtrip,
+            // and naming the only option it could have been is noise.
             const distLabel = distance === 'far' ? 'long' : 'short';
             const n = walk.stops.length;
+            if (kind === 'meet') {
+              flash(
+                n
+                  ? `${walk.primary.name} — dogs walk there. ${n} ${n === 1 ? 'stop' : 'stops'} on the way 🐾`
+                  : `${walk.primary.name} — dogs walk there 🐕`,
+              );
+              return;
+            }
             flash(
               n
-                ? `${distLabel} ${shapeLabel} to ${walk.primary.name} — ${n} ${n === 1 ? 'stop' : 'stops'} on the way 🐾`
-                : `${distLabel} ${shapeLabel} to ${walk.primary.name} 🚶`,
+                ? `${distLabel} walk to ${walk.primary.name} — ${n} ${n === 1 ? 'stop' : 'stops'} on the way 🐾`
+                : `${distLabel} walk to ${walk.primary.name} 🚶`,
             );
           },
         );
@@ -622,9 +652,10 @@ export function Companion({
             return;
         }
       }
-      // At root: walk and visit branch deeper, everything else is a leaf.
+      // At root: walk, meet and visit branch deeper, everything else is
+      // a leaf.
       if (menuPath.length === 0) {
-        if (id === 'walk' || id === 'visit') {
+        if (id === 'walk' || id === 'meet' || id === 'visit') {
           setMenuPath([id]);
           // Both branches need spots populated for their leaves. Lazy-
           // fetch here so the user doesn't have to manually visit the
@@ -641,10 +672,17 @@ export function Companion({
         setMenuOpen(false);
         return;
       }
-      // At level 2 (under a branch root): every option drills one
-      // level deeper — walk shapes branch to distances, visit
-      // categories branch to spot lists.
+      // At level 2, how deep the branch goes depends on WHICH branch.
+      // Walk and meet are one level deep — they ask the distance and
+      // that is the whole question, since the shape choice above them is
+      // gone. Visit is still two: a category, then the spots in it.
       if (menuPath.length === 1) {
+        const root = menuPath[0];
+        if (root === 'walk' || root === 'meet') {
+          fireLeafAction(id);
+          setMenuOpen(false);
+          return;
+        }
         setMenuPath([...menuPath, id]);
         return;
       }

@@ -10,7 +10,7 @@ export type CompanionAction =
   | { name: 'highlight_spot'; args: { spotId: string } }
   | {
       name: 'walk';
-      args: { shape: 'roundtrip' | 'oneway'; distance: 'close' | 'far' };
+      args: { distance: 'close' | 'far' };
     }
   | {
       name: 'walk_to_spot';
@@ -59,11 +59,13 @@ function validate(name: string | undefined, args: unknown): CompanionAction | nu
       return { name: 'highlight_spot', args: { spotId } };
     }
     case 'walk': {
-      const shape = a.shape;
+      // No shape: an exploration walk is always a roundtrip now (see the
+      // app's WALK_DISTANCE_ACTIONS). The model may still emit a shape
+      // from an older prompt — it is ignored rather than rejected, so a
+      // stale phrasing still produces a walk instead of nothing.
       const distance = a.distance;
-      if (shape !== 'roundtrip' && shape !== 'oneway') return null;
       if (distance !== 'close' && distance !== 'far') return null;
-      return { name: 'walk', args: { shape, distance } };
+      return { name: 'walk', args: { distance } };
     }
     case 'walk_to_spot': {
       const spotId = a.spotId;
