@@ -69,6 +69,19 @@ export const WALK_DISTANCE_ACTIONS: RadialAction[] = [
   { id: ':far', iconName: 'far', icon: '🌆', label: 'far' },
 ];
 
+// One more leaf alongside the spots themselves: draw a different three.
+//
+// The three are a random sample of the twenty best-scoring spots in the
+// category (pickVisitCandidates), so there is nearly always somewhere
+// else worth offering — but until now the only way to see it was to back
+// out of the ring and come in again, which also re-asks the question you
+// already answered. This re-rolls in place.
+//
+// It takes the roundtrip icon, which the walk menu stopped using when
+// the shape level went: an arrow chasing its own tail is already the
+// picture for "go round again".
+export const VISIT_REGENERATE_ID = 'visit:regen';
+
 // Visit drills two levels deep: category → 3 closest spots in that
 // category. Closest-spots level is computed at runtime in Companion.
 export const VISIT_CATEGORY_ACTIONS: RadialAction[] = [

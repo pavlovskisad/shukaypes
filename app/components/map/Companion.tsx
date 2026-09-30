@@ -13,6 +13,7 @@ import {
   RadialMenu,
   EXPLORE_ACTIONS,
   WALK_DISTANCE_ACTIONS,
+  VISIT_REGENERATE_ID,
   VISIT_CATEGORY_ACTIONS,
   MODE_ACTION_IDS,
   type RadialAction,
@@ -686,6 +687,13 @@ export function Companion({
         setMenuPath([...menuPath, id]);
         return;
       }
+      // Draw a different three, and STAY OPEN. This is the one leaf that
+      // is not a destination — closing the ring on it would undo the tap
+      // that asked to keep looking.
+      if (id === VISIT_REGENERATE_ID) {
+        setVisitRoll((n) => n + 1);
+        return;
+      }
       // Level 3 = leaves only.
       fireLeafAction(id);
       setMenuOpen(false);
@@ -700,6 +708,10 @@ export function Companion({
   // them. Cleared whenever the menu closes so the next open gets a
   // fresh sample.
   const visitLeavesCacheRef = useRef<{ key: string; leaves: RadialAction[] } | null>(null);
+  // Bumped by the regenerate leaf. It is part of the cache key rather
+  // than a ref the memo reads, because the whole point is to recompute:
+  // a ref would change without telling React anything.
+  const [visitRoll, setVisitRoll] = useState(0);
   useEffect(() => {
     if (!menuOpen) visitLeavesCacheRef.current = null;
   }, [menuOpen]);
@@ -739,14 +751,24 @@ export function Companion({
     // We're at visit:<category>. Use the cached picks if the category
     // hasn't changed; otherwise compute + cache.
     if (!userPosition) return [];
-    const visitKey = menuPath[1]!;
+    const visitKey = `${menuPath[1]!}#${visitRoll}`;
     const cached = visitLeavesCacheRef.current;
     if (cached && cached.key === visitKey) return cached.leaves;
-    const category = visitKey.replace('visit:', '') as SpotCategory;
-    const leaves = buildVisitLeaves(category, spots, userPosition);
+    const category = menuPath[1]!.replace('visit:', '') as SpotCategory;
+    const leaves = [
+      ...buildVisitLeaves(category, spots, userPosition),
+      // Last, so re-rolling never moves the spots out from under a
+      // thumb already on its way to one.
+      {
+        id: VISIT_REGENERATE_ID,
+        iconName: 'roundtrip' as const,
+        icon: '🔄',
+        label: t.modes.visitRegenerate,
+      },
+    ];
     visitLeavesCacheRef.current = { key: visitKey, leaves };
     return leaves;
-  }, [authGate, authActions, showModes, modeActions, menuPath, spots, userPosition]);
+  }, [authGate, authActions, showModes, modeActions, menuPath, spots, userPosition, visitRoll, t]);
 
   // Hide bubbles while the radial menu is open — otherwise the bubble
   // (above the companion) and the top "search" button fight for the
@@ -911,9 +933,11 @@ export function Companion({
     if (!menuOpen || showModes) return null;
     const [head, second] = menuPath;
     if (!head) return t.modes.exploreAsk;
-    if (head === 'walk') {
-      return second ? t.modes.walkDistanceAsk : t.modes.walkShapeAsk;
-    }
+    // One level under each of these now, so there is no `second` to
+    // branch on. This used to ask "there and back, or one way?" at the
+    // distance level, which the shape removal left behind.
+    if (head === 'walk') return t.modes.walkDistanceAsk;
+    if (head === 'meet') return t.modes.meetDistanceAsk;
     if (head === 'visit') {
       return second ? t.modes.visitSpotAsk : t.modes.visitCategoryAsk;
     }

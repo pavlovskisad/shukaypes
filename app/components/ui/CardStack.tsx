@@ -405,23 +405,27 @@ export function CardStack<T>({
   // any low-travel release. Peek taps also route to onTap(topItem);
   // simpler than per-slot hit-testing and matches carousel
   // expectations ("the centre card is what you interact with").
-  // THE PAN freezes while focused: a deck that still swiped under the
-  // confirmation's answers could change WHICH dog is centred out from
-  // under the question being asked.
+  // NEITHER FREEZES WHILE FOCUSED, and the pan used to.
   //
-  // The tap does not. It was frozen alongside the pan and did not need
-  // to be — a tap moves nothing, so the question keeps its pet either
-  // way. What it cost was the one card on screen during the question
-  // being deaf, when the obvious thing to want from a photo of a lost
-  // animal is to read what its owner wrote. The caller decides what a
-  // tap means while focused; here it just still arrives.
+  // The reasoning for freezing it was that a deck swiping under the
+  // confirmation's answers could change WHICH dog is centred out from
+  // under the question being asked. True — but disabling the pan did not
+  // stop the swipe, it only stopped it WORKING: the gestures race, so
+  // with the pan out the race a sideways drag was collected by the tap
+  // instead and opened the pet's advert. Asking to see the next dog got
+  // you a full-screen sheet about this one.
+  //
+  // So the pan stays live, and the answer to "which dog is the question
+  // about" is that the swipe takes the question with it: the caller
+  // hears onSwipe and drops the prompt, so there is never a question
+  // hanging over a pet it was not asked about. A tap moves nothing and
+  // never needed freezing either — the caller decides what it means.
   const tap = Gesture.Tap()
     .onEnd(() => {
       runOnJS(handleTap)();
     });
 
   const pan = Gesture.Pan()
-    .enabled(!focused)
     // Horizontal / vertical gesture mediation so a carousel
     // can coexist with the tab's vertical scroll-snap container.
     //   activeOffsetX — claim the touch on >5 px horizontal
