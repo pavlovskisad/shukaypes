@@ -12,7 +12,6 @@ import { useStrings } from '../../i18n/useStrings';
 import {
   RadialMenu,
   EXPLORE_ACTIONS,
-  WALK_SHAPE_ACTIONS,
   WALK_DISTANCE_ACTIONS,
   VISIT_CATEGORY_ACTIONS,
   MODE_ACTION_IDS,
@@ -64,11 +63,12 @@ function getNonVisitActions(path: string[]): RadialAction[] | null {
   const head = path[0];
   if (!head) return EXPLORE_ACTIONS;
   if (head === 'walk') {
-    if (path.length === 1) return WALK_SHAPE_ACTIONS;
-    const shape = path[1]!.replace('walk:', ''); // 'roundtrip' | 'oneway'
+    // One level, not two: the shape question is gone (see
+    // WALK_DISTANCE_ACTIONS). Every walk from here is a roundtrip, so all
+    // that is left to ask is how far.
     return WALK_DISTANCE_ACTIONS.map((a) => ({
       ...a,
-      id: `walk:${shape}${a.id}`, // a.id starts with ':', e.g. ':close'
+      id: `walk${a.id}`, // a.id starts with ':', e.g. ':close'
     }));
   }
   if (head === 'visit' && path.length === 1) return VISIT_CATEGORY_ACTIONS;
@@ -499,9 +499,13 @@ export function Companion({
       // that's the "open details modal" channel and a walk shouldn't pop
       // a modal.
       if (id.startsWith('walk:')) {
-        const parts = id.split(':'); // ['walk', shape, distance]
-        const shape = (parts[1] ?? 'roundtrip') as WalkShape;
-        const distance = (parts[2] ?? 'close') as WalkDistance;
+        const parts = id.split(':'); // ['walk', distance]
+        // ALWAYS a roundtrip. The shape used to be the level above this
+        // one; see WALK_DISTANCE_ACTIONS for why it went. WalkShape is
+        // still a real type — going one way to a NAMED place is a
+        // different mechanic and keeps it.
+        const shape: WalkShape = 'roundtrip';
+        const distance = (parts[1] ?? 'close') as WalkDistance;
         if (!ctxPos) {
           flash("can't walk without knowing where we are");
           return;
@@ -533,13 +537,14 @@ export function Companion({
                 },
                 walk.stops,
               );
-            const shapeLabel = shape === 'roundtrip' ? 'roundtrip' : 'one-way';
+            // No shape in the line any more: every walk is a roundtrip,
+            // and naming the only option it could have been is noise.
             const distLabel = distance === 'far' ? 'long' : 'short';
             const n = walk.stops.length;
             flash(
               n
-                ? `${distLabel} ${shapeLabel} to ${walk.primary.name} — ${n} ${n === 1 ? 'stop' : 'stops'} on the way 🐾`
-                : `${distLabel} ${shapeLabel} to ${walk.primary.name} 🚶`,
+                ? `${distLabel} walk to ${walk.primary.name} — ${n} ${n === 1 ? 'stop' : 'stops'} on the way 🐾`
+                : `${distLabel} walk to ${walk.primary.name} 🚶`,
             );
           },
         );

@@ -141,10 +141,8 @@ export type PetSpecies = 'dog' | 'cat';
 export type CompanionAction =
   | { name: 'start_quest'; args: { dogId: string } }
   | { name: 'highlight_spot'; args: { spotId: string } }
-  | {
-      name: 'walk';
-      args: { shape: 'roundtrip' | 'oneway'; distance: 'close' | 'far' };
-    }
+  // No shape: an exploration walk is always a roundtrip.
+  | { name: 'walk'; args: { distance: 'close' | 'far' } }
   | {
       name: 'walk_to_spot';
       args: { spotId: string; shape: 'roundtrip' | 'oneway' };
