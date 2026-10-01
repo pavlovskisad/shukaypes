@@ -111,7 +111,10 @@ function tabBarTop(): number | null {
 }
 
 // Where the HUD ends: the pill row's bottom, or the quest row's when
-// it is showing something. The whole strip is the last resort.
+// it is showing something, or the map's own pill row under them («×
+// завершити прогулянку», the GPS notices) when it holds a pill. That
+// last row was left out, and on a walk an expanded stop story slid up
+// under the finish-walk pill. The whole strip is the last resort.
 function hudBottom(): number | null {
   const row = document.getElementById('map-hud-row')?.getBoundingClientRect();
   const questEl = document.getElementById('map-hud-quest');
@@ -122,9 +125,19 @@ function hudBottom(): number | null {
     questContent && questContent.getBoundingClientRect().height > 0
       ? questEl!.getBoundingClientRect()
       : null;
-  if (row) return quest ? Math.max(row.bottom, quest.bottom) : row.bottom;
+  // Same rule for the overlay pills: the row exists while any of its
+  // pills might, and counts only when one is drawn.
+  const pillsEl = document.getElementById('map-overlay-pills');
+  const pills =
+    pillsEl && pillsEl.childElementCount > 0 && pillsEl.getBoundingClientRect().height > 0
+      ? pillsEl.getBoundingClientRect()
+      : null;
   const strip = document.getElementById('map-hud')?.getBoundingClientRect();
-  return strip ? strip.bottom : null;
+  const base = row ? row.bottom : strip ? strip.bottom : null;
+  const edges = [base, quest?.bottom ?? null, pills?.bottom ?? null].filter(
+    (v): v is number => v !== null,
+  );
+  return edges.length ? Math.max(...edges) : null;
 }
 
 // The strip of viewport between the HUD and the tab bar, in viewport px.
