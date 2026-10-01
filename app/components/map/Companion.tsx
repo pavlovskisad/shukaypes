@@ -91,7 +91,20 @@ function localizeRing(actions: RadialAction[], t: AppStrings): RadialAction[] {
     'visit:pet_store': t.modals.spot.categories.pet_store,
     'visit:veterinary_care': t.modals.spot.categories.veterinary_care,
   };
-  return actions.map((a) => ({ ...a, label: labels[a.id] ?? a.label }));
+  // Drawn under the discs (RadialMenu showLabels). Categories are
+  // already nouns, so their label doubles as the caption.
+  const captions: Record<string, string> = {
+    walk: t.modes.ringCaption.walk,
+    visit: t.modes.ringCaption.visit,
+    meet: t.modes.ringCaption.meet,
+    ':close': t.modes.ringCaption.close,
+    ':far': t.modes.ringCaption.far,
+  };
+  return actions.map((a) => ({
+    ...a,
+    label: labels[a.id] ?? a.label,
+    caption: captions[a.id] ?? labels[a.id] ?? a.caption,
+  }));
 }
 
 // Resolves the actions for the non-leaf menu levels. Visit leaves are
@@ -1162,10 +1175,11 @@ export function Companion({
           // invert filter, so leaving it off is what turns the glyphs
           // black; the two cannot be set apart.
           inverted={false}
-          // Show readable names at the named-spot leaves only — every
-          // other level has self-explanatory icons and a label below
-          // each ring item would clutter the cardinal slots.
-          showLabels={menuPath.length === 2 && menuPath[0] === 'visit'}
+          // Every icon level is captioned (owner's call). It started at
+          // the named spots, where one cafe disc looks like another; the
+          // other levels' icons turned out not to be self-explanatory
+          // either. The word pills (showModes) are their own label.
+          showLabels={!showModes}
           variant={showModes ? 'text' : 'icon'}
           // Every level hangs under the dog now — the four intents in two
           // columns, and every level of icons in a row. The ring is gone
