@@ -16,8 +16,10 @@ export const colors = {
   // BLANKS. What sits where a picture will go, so an empty slot reads
   // as a slot and not as a hole in the paper (UX-10.13, UX-10.14).
   // portraitBlank — an undrawn walker portrait (board rows, PlayerCard).
-  // photoBlank — a lost pet with no photo, or a map snapshot still
-  // rendering; warmer, the map's own paper.
+  // photoBlank — a map snapshot still rendering; warmer, the map's own
+  // paper. NOT a lost pet with no photo: that card stays white paper
+  // under its emoji dog (owner's call) — a tinted slot there read as a
+  // stained photo rather than as "no photo yet".
   portraitBlank: '#f4f4f4',
   photoBlank: '#eeece6',
   amber: '#d9a030',

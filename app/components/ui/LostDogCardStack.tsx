@@ -270,10 +270,11 @@ const styles = StyleSheet.create({
     bottom: PICTURE_INSET,
     borderRadius: Math.max(0, R.card - PICTURE_INSET),
   },
-  // A pet with no photo gets the map's paper behind its emoji, not a
-  // blank white card that reads as a failed load (UX-10.14).
+  // A pet with no photo: white paper behind its emoji dog. UX-10.14
+  // tinted this with the map's paper; the owner saw it on a phone and
+  // it read as a stained photo, so it is back to the card's own white.
   photoFallback: {
-    backgroundColor: colors.photoBlank,
+    backgroundColor: colors.white,
     alignItems: 'center',
     justifyContent: 'center',
   },

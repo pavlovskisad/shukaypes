@@ -439,6 +439,14 @@ export function SniffPress() {
           setDiscovered(null);
           setSniffingAt(ll);
           lockMapGestures();
+          // A committed sniff puts the dog's menu away, the way a tap on
+          // the map does. The press started on bare canvas, so it never
+          // reached the map's click handler that would have closed it,
+          // and the ring stayed open over the landmark's story — two
+          // things the dog was saying at once. Only here, at commit:
+          // a drag or pinch that merely starts with this press must not
+          // cost the open menu.
+          useGameStore.getState().setMenuOpen(false);
         }
       }, SNIFFING_BUBBLE_DELAY_MS);
 

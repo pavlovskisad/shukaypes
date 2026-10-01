@@ -14,6 +14,7 @@ import type { AppStrings } from '../../i18n/strings';
 import { SpotCardStack, SpotCardStackSkeleton } from '../../components/ui/SpotCardStack';
 import { SpotsCategoryModal } from '../../components/ui/SpotsCategoryModal';
 import { SwipeHintCallout } from '../../components/ui/SwipeHintCallout';
+import { ScrollHintCallout } from '../../components/ui/ScrollHintCallout';
 import { distanceMeters } from '../../utils/geo';
 import { useHint } from '../../hooks/useHint';
 import type { LoreFavourite } from '../../services/api';
@@ -185,6 +186,27 @@ export default function SpotsScreen() {
     persist: false,
   });
 
+  // «гортай вниз» — the first page is a full screen with nothing peeking
+  // up from under it, so nothing says the tab goes on. Never over the
+  // sideways hint (two voices at once is noise): its later delay lets
+  // that one speak first, and a pending show is cancelled while it is
+  // up and restarts once it is down. Goes on the first scroll — that
+  // scroll is what it was asking for.
+  const scrollHint = useHint('spots:scroll-down', {
+    ready: currentScreen === 'spots' && !swipeHint.visible,
+    showDelayMs: 1200,
+    autoDismissMs: 6000,
+    persist: false,
+  });
+  const onScrollPage = useCallback(
+    (e: { nativeEvent: { contentOffset: { y: number } } }) => {
+      if (e.nativeEvent.contentOffset.y > 24) scrollHint.dismiss();
+    },
+    // dismiss is a fresh closure each render but only flips state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [],
+  );
+
   // Four view states drive the render:
   //   loading      — !spotsLoaded, or a retry in flight with nothing
   //                  cached: show a skeleton snap card per category so
@@ -298,6 +320,8 @@ export default function SpotsScreen() {
   return (
     <SafeAreaView style={styles.root} edges={['top']}>
       <ScrollView
+        onScroll={onScrollPage}
+        scrollEventThrottle={64}
         contentContainerStyle={[styles.content, { paddingBottom: tabClearance }]}
         style={styles.scroller}
       >
@@ -377,6 +401,9 @@ export default function SpotsScreen() {
             })
           : null}
       </ScrollView>
+      {scrollHint.visible ? (
+        <ScrollHintCallout text={t.hints.scrollMore} bottom={tabClearance} />
+      ) : null}
 
       <SpotsCategoryModal
         spots={expandedCategory ? byCategory.get(expandedCategory) ?? [] : null}
