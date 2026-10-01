@@ -444,10 +444,35 @@
          drag that starts on the tab bar (which no inner scroller owns)
          scrolled the whole app up by that inset and left it there: the
          bar parked ~34px high, the screen's top cut off by the same.
-         So any scroll of the document is put straight back.
+
+         Putting a scroll back after it happened was not enough: about one
+         drag in ten still parked the bar high, because a momentum scroll
+         on iOS keeps going after our scrollTo and its last frame can be
+         the one that sticks. So the drag is now refused before it moves
+         anything, in three layers:
+           1. A touch that starts on something that cannot scroll — the
+              tab bar, a pill, the strip between the bar and the screen's
+              bottom — gets its touchmove cancelled. Nothing moves, so
+              there is nothing to put back. Decided once per touch, at
+              touchstart, by walking up to the nearest element that can
+              actually scroll (overflow auto/scroll AND more content than
+              box); a touch inside a scroller is left entirely alone.
+           2. Every scroller contains its own overscroll (the CSS rule
+              below), so pulling a list past its end bounces the list and
+              does not chain on to the document.
+           3. And if anything still moves the document, it is put back —
+              at every scroll event and once more after the finger lifts
+              (past any momentum).
          Not while a text field has focus: iOS scrolls the document to
          lift a focused input above the keyboard, and undoing that would
-         hide what is being typed. It settles back on blur. -->
+         hide what is being typed. It settles back on blur.
+         Two-finger touches are never cancelled (the map's pinch). -->
+    <style>
+      #root *,
+      #portal-root * {
+        overscroll-behavior: contain;
+      }
+    </style>
     <script>
       (function () {
         function editing() {
@@ -460,10 +485,38 @@
           if (editing()) return;
           if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
         }
-        window.addEventListener('scroll', settle, { passive: true });
-        document.addEventListener('focusout', function () {
+        function scrollerAbove(el) {
+          for (; el && el !== document.body && el !== document.documentElement; el = el.parentElement) {
+            if (el.nodeType !== 1) continue;
+            var cs = window.getComputedStyle(el);
+            if (/(auto|scroll)/.test(cs.overflowY) && el.scrollHeight > el.clientHeight + 1) return true;
+            if (/(auto|scroll)/.test(cs.overflowX) && el.scrollWidth > el.clientWidth + 1) return true;
+          }
+          return false;
+        }
+        var refuse = false;
+        document.addEventListener(
+          'touchstart',
+          function (e) {
+            refuse = e.touches.length === 1 && !editing() && !scrollerAbove(e.target);
+          },
+          { passive: true },
+        );
+        document.addEventListener(
+          'touchmove',
+          function (e) {
+            if (refuse && e.touches.length === 1 && e.cancelable) e.preventDefault();
+          },
+          { passive: false },
+        );
+        function settleSoon() {
           setTimeout(settle, 50);
-        });
+          setTimeout(settle, 400);
+        }
+        window.addEventListener('scroll', settle, { passive: true });
+        document.addEventListener('touchend', settleSoon, { passive: true });
+        document.addEventListener('touchcancel', settleSoon, { passive: true });
+        document.addEventListener('focusout', settleSoon);
       })();
     </script>
   </body>
