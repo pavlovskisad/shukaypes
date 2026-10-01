@@ -81,9 +81,19 @@ const COMMIT_RATIO = 0.25;      // commit if projection > 25 % of a card-step
 const SETTLE_MS = 360;
 const SETTLE_EASE = Easing.out(Easing.cubic);
 
-const TOP_SCALE = 0.88;
-const PEEK_SCALE = 0.74;
-const OFF_SCALE = 0.62;
+// Every card 10% bigger than it was (owner's call: 0.88 / 0.74 / 0.62
+// read small on a phone). The centre card still fits its slot box —
+// 0.968 of it — so nothing below the deck moves.
+const TOP_SCALE = 0.968;
+const PEEK_SCALE = 0.814;
+const OFF_SCALE = 0.682;
+// Distance between slot centres at the default 320 width, scaled with
+// the width (see STEP). Picked for a ~16 px gap between the centre
+// card's edge and the peek's at these scales: 0.968·160 + 16 + 0.814·160
+// ≈ 301. Was 290 at the old scales, a ~31 px gap — the owner wanted the
+// cards closer, with the side cards' edges still on screen (about 24 px
+// of each peek on a 390 px phone, as before).
+const STEP_AT_320 = 301;
 
 // Confirmation focus — the deck's answer to "make this one the card".
 // The centre card grows past TOP_SCALE while its neighbours slide off
@@ -99,7 +109,7 @@ const OFF_SCALE = 0.62;
 // grew to 1.12 and the confirmation photo loomed bigger than the quest
 // it became. LIFT is a nudge, not a move: the answers live in the top
 // HUD, so the card has nothing at the bottom to clear.
-const FOCUS_GROW = 0.12; // centre scale: TOP_SCALE 0.88 -> 1.0
+const FOCUS_GROW = 1 - TOP_SCALE; // centre scale: TOP_SCALE -> 1.0
 const FOCUS_LIFT = 8;
 const FOCUS_SPREAD = 1.8; // how much faster neighbours leave than they came
 const FOCUS_MS = 420;
@@ -286,11 +296,10 @@ export function CardStack<T>({
   const dragStartPos = useSharedValue(0);
 
   // Carousel step — horizontal distance between adjacent slot
-  // centres. Scales with cardWidth (290 at the default 320) so the
-  // peek gap stays proportional at narrower widths instead of
-  // collapsing. 290 with TOP_SCALE 0.88 + PEEK_SCALE 0.74 leaves a
-  // ~31 px gap between the centre's right edge and the peek's left.
-  const STEP = ((cardWidth * 290) / CARD_W) * peekScale;
+  // centres. Scales with cardWidth (STEP_AT_320 at the default 320) so
+  // the peek gap stays proportional at narrower widths instead of
+  // collapsing.
+  const STEP = ((cardWidth * STEP_AT_320) / CARD_W) * peekScale;
 
   const ids = useMemo(() => items.map(getId).join(','), [items, getId]);
   const idsInitRef = useRef(true);
@@ -702,7 +711,7 @@ export function CardStackSkeleton({
 }) {
   const cardWidth = useFitCardWidth(CARD_W);
   const slotSize = { width: cardWidth, height: cardHeight };
-  const STEP = ((cardWidth * 290) / CARD_W) * peekScale;
+  const STEP = ((cardWidth * STEP_AT_320) / CARD_W) * peekScale;
 
   return (
     <View style={styles.wrap}>
