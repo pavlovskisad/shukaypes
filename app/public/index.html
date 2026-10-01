@@ -105,6 +105,10 @@
         height: 100dvh;
         margin: 0;
         padding: 0;
+        /* No rubber-band on the document: it is a fixed frame (see the
+           scroll guard at the end of <body>). Inner scrollers keep their
+           own. */
+        overscroll-behavior: none;
       }
       /* Paint the iOS home-indicator safe-area strip white BEFORE
          React mounts. Once mounted, the full-bleed world (map / dog
@@ -432,5 +436,35 @@
       <img class="logo" src="/logo-full.png" alt="" />
       <div class="slow">повільна мережа, ще трохи… · slow connection, hang on…</div>
     </div>
+    <!-- THE PAGE ITSELF NEVER SCROLLS. Every scroller is inside #root; the
+         document is a fixed frame. But the installed PWA sizes the frame
+         to 100dvh + the home-indicator inset (see the standalone rule
+         above), one inset taller than the screen, and iOS lets a finger
+         scroll a document by its overflow even under overflow:hidden. A
+         drag that starts on the tab bar (which no inner scroller owns)
+         scrolled the whole app up by that inset and left it there: the
+         bar parked ~34px high, the screen's top cut off by the same.
+         So any scroll of the document is put straight back.
+         Not while a text field has focus: iOS scrolls the document to
+         lift a focused input above the keyboard, and undoing that would
+         hide what is being typed. It settles back on blur. -->
+    <script>
+      (function () {
+        function editing() {
+          var el = document.activeElement;
+          if (!el) return false;
+          var tag = el.tagName;
+          return tag === 'INPUT' || tag === 'TEXTAREA' || el.isContentEditable;
+        }
+        function settle() {
+          if (editing()) return;
+          if (window.scrollX !== 0 || window.scrollY !== 0) window.scrollTo(0, 0);
+        }
+        window.addEventListener('scroll', settle, { passive: true });
+        document.addEventListener('focusout', function () {
+          setTimeout(settle, 50);
+        });
+      })();
+    </script>
   </body>
 </html>

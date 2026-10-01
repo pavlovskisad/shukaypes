@@ -4,19 +4,24 @@ import { R } from '../../constants/radius';
 import { S } from '../../constants/spacing';
 import { VOICE } from '../../constants/voice';
 import { Z } from '../../constants/z';
+import { useTabBarClearance } from '../../hooks/useTabBarClearance';
+import { usePwaInsetOvershoot } from '../../hooks/usePwaInsetOvershoot';
 
-// "There is more below" — the vertical sibling of SwipeHintCallout. The
-// quests and spots tabs are a stack of full-page cards that snap, and
-// the first page is a complete screenful: nothing peeks up from under
-// it, so nothing says the page goes on. This pill sits just above the
+// "There is more below". The quests and spots tabs are a stack of
+// full-page cards that snap, and the first page is a complete
+// screenful: nothing peeks up from under it, so nothing says the page
+// goes on. This pill sits just above the
 // tab bar with an arrow that bobs downward, in the dog's voice like the
 // other hints.
 //
-// The parent places it (a position:relative root) and passes the tab
-// bar's clearance so it lands above the bar rather than under it.
-// Render only while the hint is visible; the parent dismisses it on the
-// first scroll.
-export function ScrollHintCallout({ text, bottom }: { text: string; bottom: number }) {
+// Placed from the tab screen's root, whose bottom edge in an installed
+// PWA sits BELOW the visible screen by the home-indicator inset
+// (usePwaInsetOvershoot). The first version left that out and sat
+// tucked under the tab bar on an iPhone; the bar itself adds it, so
+// this does too. Render only while the hint is visible; the parent
+// dismisses it on the first scroll.
+export function ScrollHintCallout({ text }: { text: string }) {
+  const bottom = useTabBarClearance() + usePwaInsetOvershoot();
   return (
     <div
       aria-hidden

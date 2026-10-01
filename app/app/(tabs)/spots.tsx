@@ -13,7 +13,6 @@ import { useStrings } from '../../i18n/useStrings';
 import type { AppStrings } from '../../i18n/strings';
 import { SpotCardStack, SpotCardStackSkeleton } from '../../components/ui/SpotCardStack';
 import { SpotsCategoryModal } from '../../components/ui/SpotsCategoryModal';
-import { SwipeHintCallout } from '../../components/ui/SwipeHintCallout';
 import { ScrollHintCallout } from '../../components/ui/ScrollHintCallout';
 import { distanceMeters } from '../../utils/geo';
 import { useHint } from '../../hooks/useHint';
@@ -171,29 +170,14 @@ export default function SpotsScreen() {
     [setSelectedSpot, router],
   );
 
-  // First category whose deck has more than one card — that's where the
-  // swipe nudge rides. Shares the 'cards:swipe' id with the dogs deck,
-  // so it shows on whichever carousel the user reaches first, not both.
-  const firstSwipeCat = useMemo(
-    () => CATEGORY_ORDER.find((cat) => (byCategory.get(cat)?.length ?? 0) > 1) ?? null,
-    [byCategory],
-  );
   const currentScreen = useGameStore((s) => s.currentScreen);
-  const swipeHint = useHint('cards:swipe', {
-    ready: currentScreen === 'spots' && firstSwipeCat != null,
-    showDelayMs: 900,
-    autoDismissMs: 5000,
-    persist: false,
-  });
-
   // «гортай вниз» — the first page is a full screen with nothing peeking
-  // up from under it, so nothing says the tab goes on. Never over the
-  // sideways hint (two voices at once is noise): its later delay lets
-  // that one speak first, and a pending show is cancelled while it is
-  // up and restarts once it is down. Goes on the first scroll — that
-  // scroll is what it was asking for.
+  // up from under it, so nothing says the tab goes on. Goes on the first
+  // scroll — that scroll is what it was asking for. (The sideways
+  // «гортай вбік» nudge on the decks is gone, owner's call: the peeking
+  // neighbour cards already say it.)
   const scrollHint = useHint('spots:scroll-down', {
-    ready: currentScreen === 'spots' && !swipeHint.visible,
+    ready: currentScreen === 'spots',
     showDelayMs: 1200,
     autoDismissMs: 6000,
     persist: false,
@@ -383,7 +367,6 @@ export default function SpotsScreen() {
           ? CATEGORY_ORDER.map((cat) => {
               const list = byCategory.get(cat) ?? [];
               if (list.length === 0) return null;
-              const showSwipe = cat === firstSwipeCat && swipeHint.visible;
               return (
                 <View key={cat} nativeID={`snap-card-spots-${cat}`} style={card}>
                   <Text style={styles.cardTitle}>{cardTitle(t, cat)}</Text>
@@ -392,9 +375,7 @@ export default function SpotsScreen() {
                       spots={list}
                       onTap={onPickSpot}
                       onCounterTap={() => setExpandedCategory(cat)}
-                      onSwipe={swipeHint.dismiss}
                     />
-                    {showSwipe ? <SwipeHintCallout text={t.hints.swipeCards} /> : null}
                   </View>
                 </View>
               );
@@ -402,7 +383,7 @@ export default function SpotsScreen() {
           : null}
       </ScrollView>
       {scrollHint.visible ? (
-        <ScrollHintCallout text={t.hints.scrollMore} bottom={tabClearance} />
+        <ScrollHintCallout text={t.hints.scrollMore} />
       ) : null}
 
       <SpotsCategoryModal
