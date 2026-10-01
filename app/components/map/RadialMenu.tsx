@@ -19,6 +19,10 @@ export interface RadialAction {
   iconName?: IconName;
   icon?: string;
   label: string;
+  // What is written under an icon disc, when it differs from the
+  // accessible name (a noun under the disc, a verb for the screen
+  // reader). Falls back to `label`.
+  caption?: string;
 }
 
 // L1 — the four intents. The angle formula below puts index 0 at twelve
@@ -166,9 +170,10 @@ interface RadialMenuProps {
   onSelect: (id: string) => void;
   radius?: number;
   inverted?: boolean;
-  // When true, render the action's label below the icon. Used at the
-  // deepest drill-down (named spots) where the icon alone can't tell
-  // a cafe from another cafe.
+  // When true, write each action's caption (or label) under its icon.
+  // Every icon level does now (owner's call): the named spots started
+  // it, because one cafe disc looks like another, and the rest of the
+  // menu read as a puzzle next to them.
   showLabels?: boolean;
   // 'icon' is the ring the app has always had. 'text' is the L1 intent
   // menu — word pills, no icons.
@@ -379,8 +384,7 @@ export function RadialMenu({
           }}
         >
           {renderButton(a)}
-          {/* The named-spot level needs its names: one cafe disc looks
-              exactly like another. */}
+          {/* Every disc is named under it — see showLabels. */}
           {showLabels ? (
             <span
               style={{
@@ -398,7 +402,7 @@ export function RadialMenu({
                 userSelect: 'none',
               }}
             >
-              {a.label}
+              {a.caption ?? a.label}
             </span>
           ) : null}
         </div>
@@ -497,7 +501,7 @@ export function RadialMenu({
                   userSelect: 'none',
                 }}
               >
-                {a.label}
+                {a.caption ?? a.label}
               </span>
             ) : null}
           </div>

@@ -599,6 +599,16 @@ export interface AppStrings {
       close: string;
       far: string;
     };
+    // The captions drawn UNDER those buttons. Nouns and short
+    // adverbs, not the verbs above: a caption names the thing the disc
+    // is, while the accessible name says what pressing it does.
+    ringCaption: {
+      walk: string;
+      visit: string;
+      meet: string;
+      close: string;
+      far: string;
+    };
     // What the dog says as a ring leaf fires. Also hardcoded English
     // in Companion.tsx until the i18n sweep.
     noLostPetsYet: string;
@@ -1322,6 +1332,13 @@ const uk: AppStrings = {
       close: 'поруч',
       far: 'далі',
     },
+    ringCaption: {
+      walk: 'прогулянка',
+      visit: 'місця',
+      meet: 'зустрічі',
+      close: 'поряд',
+      far: 'подалі',
+    },
     noLostPetsYet: 'поряд поки ніхто не загубився',
     sniffedOut: (name) => `винюхав: ${name} 🔍`,
     meetSniffing: 'нюхаю, де гуляють пси 🐕',
@@ -1979,6 +1996,13 @@ const en: AppStrings = {
       meet: 'meet',
       close: 'close by',
       far: 'far',
+    },
+    ringCaption: {
+      walk: 'walk',
+      visit: 'places',
+      meet: 'meet-ups',
+      close: 'close by',
+      far: 'farther',
     },
     noLostPetsYet: 'no lost pets in range yet',
     sniffedOut: (name) => `sniffed out ${name} 🔍`,
