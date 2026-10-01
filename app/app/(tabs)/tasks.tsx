@@ -29,7 +29,6 @@ import {
   LostDogCardStackSkeleton,
 } from '../../components/ui/LostDogCardStack';
 import { LostDogsModal } from '../../components/ui/LostDogsModal';
-import { SwipeHintCallout } from '../../components/ui/SwipeHintCallout';
 import { ScrollHintCallout } from '../../components/ui/ScrollHintCallout';
 import { Icon, type IconName } from '../../components/ui/Icon';
 import type { LatLng } from '@shukajpes/shared';
@@ -160,11 +159,13 @@ const TASK_ICON: Record<DailyTaskKey, IconName> = {
 // showed a quarter of a screen of white under «показати всіх»). So the
 // card measures itself — the height of everything that is not a row,
 // and the pitch of one row — and shows as many neighbours as fit the
-// page, three at the least and BOARD_CARD_MAX at the most. Measured,
+// page, three at the least and BOARD_CARD_MAX at the most (five, the
+// owner's ceiling: more than that and the card reads as the full board,
+// which «показати всіх» is for). Measured,
 // not estimated, for the same reason the 104 above was measured: the
 // row's height moves with the compact portrait size and the font.
 const BOARD_CARD_ROWS = 3;
-const BOARD_CARD_MAX = 7;
+const BOARD_CARD_MAX = 5;
 // Kept clear under the fitted rows, so a row that fits by a pixel does
 // not push the card a pixel past its page and break the snap.
 const BOARD_FIT_MARGIN = 16;
@@ -314,25 +315,13 @@ export default function TasksScreen() {
     [lostDogs, userLatBucket, userLngBucket],
   );
 
-  // Soft fan-out, step 3: nudge that the lost-pets deck is swipeable.
-  // Only arms while the tasks tab is the active screen AND there's
-  // more than one card to swipe to. Gentle timing + dev-mode
-  // persist:false to match the map hints.
-  const swipeHint = useHint('cards:swipe', {
-    ready: currentScreen === 'tasks' && sortedDogs.length > 1,
-    showDelayMs: 900,
-    autoDismissMs: 5000,
-    persist: false,
-  });
-
   // «гортай вниз» — the first page is a full screen with nothing peeking
-  // up from under it, so nothing says the tab goes on. Never over the
-  // sideways hint (two voices at once is noise): its later delay lets
-  // that one speak first, and a pending show is cancelled while it is
-  // up and restarts once it is down. Goes on the first scroll — that
-  // scroll is what it was asking for.
+  // up from under it, so nothing says the tab goes on. Goes on the first
+  // scroll — that scroll is what it was asking for. (The sideways
+  // «гортай вбік» nudge on the decks is gone, owner's call: the peeking
+  // neighbour cards already say it.)
   const scrollHint = useHint('tasks:scroll-down', {
-    ready: currentScreen === 'tasks' && !swipeHint.visible,
+    ready: currentScreen === 'tasks',
     showDelayMs: 1200,
     autoDismissMs: 6000,
     persist: false,
@@ -972,14 +961,7 @@ export default function TasksScreen() {
                   dogs={sortedDogs}
                   onTap={onPickDog}
                   onCounterTap={() => setSeeAllDogsOpen(true)}
-                  onSwipe={swipeHint.dismiss}
                 />
-                {/* Swipe nudge — one-shot, coordinates with the spots
-                    deck via the shared 'cards:swipe' id (shows on
-                    whichever carousel the user hits first, not both). */}
-                {swipeHint.visible ? (
-                  <SwipeHintCallout text={t.hints.swipeCards} />
-                ) : null}
               </View>
             )}
             {/* THE SEARCHES THAT ALREADY HAPPENED, on the same page as
@@ -1134,7 +1116,7 @@ export default function TasksScreen() {
 
       </ScrollView>
       {scrollHint.visible ? (
-        <ScrollHintCallout text={t.hints.scrollMore} bottom={tabClearance} />
+        <ScrollHintCallout text={t.hints.scrollMore} />
       ) : null}
 
       <LostDogsModal
